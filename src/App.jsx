@@ -67,7 +67,7 @@ function isPast(d) { const t = new Date(); t.setHours(0, 0, 0, 0); return new Da
 // ════════════════════════════════════════════════════════════════
 
 
-const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com/' ;
+const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com' ;
 
 
 const BRAND = {
