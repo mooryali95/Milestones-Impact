@@ -861,10 +861,7 @@ export default function App() {
         <div className="mi-text" style={{ marginTop: "1rem" }}>Milestone<br />Impact</div>
         <h1>مصفوفة التأثير</h1>
         <p className="sub">هندسة اجتماعية • ١٦ عملية استراتيجية</p>
-        <div style={{ background: "rgba(107,157,173,0.06)", borderRadius: "10px", padding: "0.7rem 1.2rem", marginBottom: "1rem", textAlign: "center" }}>
-          <p style={{ fontSize: "0.82rem", color: "#6B6560", marginBottom: "0.2rem" }}>للتواصل والاستفسارات</p>
-          <p style={{ fontSize: "0.88rem", direction: "ltr" }}><a href="tel:0532134539" style={{ color: BRAND.dark, textDecoration: "none", fontWeight: 600 }}>📞 0532134539</a> &nbsp;|&nbsp; <a href="mailto:omar@sunkvalue.com" style={{ color: BRAND.dark, textDecoration: "none", fontWeight: 600 }}>✉ omar@sunkvalue.com</a></p>
-        </div>
+        
         <div className="s-actions">
           <button className="s-btn s-btn-main" onClick={() => setScreen("register")}>🚀 تسجيل جديد</button>
           <button className="s-btn s-btn-main" style={{ borderColor: "#5B7B3A", color: "#5B7B3A" }} onClick={() => setScreen("resume")}>↩ استئناف</button>
