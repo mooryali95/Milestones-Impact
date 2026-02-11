@@ -66,10 +66,9 @@ function isPast(d) { const t = new Date(); t.setHours(0, 0, 0, 0); return new Da
 // CONFIG
 // ════════════════════════════════════════════════════════════════
 
-const ADMIN_CONFIG = {
-  username: "admin",
-  password: "MI@2026"
-};
+
+const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com/' ;
+
 
 const BRAND = {
   color: "#6B9DAD",
@@ -694,16 +693,28 @@ export default function App() {
   };
 
   // ── Admin Login ──
-  const handleAdminLogin = (e) => {
-    e.preventDefault();
-    if (adminUser === ADMIN_CONFIG.username && adminPass === ADMIN_CONFIG.password) {
-      setAdminError("");
+  const handleAdminLogin = async (e) => {
+  e.preventDefault();
+  setAdminError("");
+  try {
+    const res = await fetch(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: adminUser, password: adminPass }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      sessionStorage.setItem('mi_admin_token', data.token);
       setScreen("admin");
       loadRegs();
     } else {
-      setAdminError("اسم المستخدم أو كلمة المرور غير صحيحة");
+      setAdminError(data.message);
     }
-  };
+  } catch (err) {
+    setAdminError("خطأ في الاتصال بالسيرفر");
+  }
+};
+
 
   // ── Save Date ──
   const saveDate = async (key, dateStr) => {
