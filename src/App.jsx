@@ -116,30 +116,69 @@ const OPERATIONS = {
     { nameAr: "الإطلاق", dur: 3, desc: "الإطلاق الرسمي والتشغيل الكامل" },
   ],
 };
-
 // ════════════════════════════════════════════════════════════════
-// DATABASE (localStorage for production / window.storage for Claude)
+// DATABASE — Supabase (centralized, all devices see same data)
 // ════════════════════════════════════════════════════════════════
+// Setup: see SUPABASE-GUIDE.md
+// 1. Create free account at supabase.com
+// 2. Create table "registrations" 
+// 3. Paste your URL and anon key below
 
-const useClaudeStorage = typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
+const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';      // ← غيّر هذا
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';                          // ← غيّر هذا
 
-const DB = useClaudeStorage ? {
-  // Claude Artifacts environment
+const supabase = {
+  async query(method, path, body) {
+    const opts = {
+      method,
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': method === 'POST' ? 'return=representation' : undefined,
+      },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    // Clean undefined headers
+    Object.keys(opts.headers).forEach(k => opts.headers[k] === undefined && delete opts.headers[k]);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, opts);
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
+  }
+};
+
+const isSupabaseConfigured = !SUPABASE_URL.includes('YOUR_PROJECT');
+
+// Fallback to localStorage if Supabase not configured yet
+const DB = isSupabaseConfigured ? {
   async getAll(prefix) {
     try {
-      const res = await window.storage.list(prefix);
-      if (!res || !res.keys) return [];
-      const items = [];
-      for (const k of res.keys) {
-        try { const r = await window.storage.get(k); if (r && r.value) items.push(JSON.parse(r.value)); } catch (e) {}
-      }
-      return items;
+      const data = await supabase.query('GET', `registrations?id=like.${prefix}*&select=*`);
+      return data || [];
     } catch (e) { return []; }
   },
-  async save(key, data) { try { await window.storage.set(key, JSON.stringify(data)); return true; } catch (e) { return false; } },
-  async get(key) { try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; } catch (e) { return null; } },
+  async save(key, data) {
+    try {
+      // Upsert: insert or update
+      const payload = { ...data, id: key };
+      const existing = await supabase.query('GET', `registrations?id=eq.${key}&select=id`);
+      if (existing && existing.length > 0) {
+        await supabase.query('PATCH', `registrations?id=eq.${key}`, payload);
+      } else {
+        await supabase.query('POST', 'registrations', payload);
+      }
+      return true;
+    } catch (e) { return false; }
+  },
+  async get(key) {
+    try {
+      const data = await supabase.query('GET', `registrations?id=eq.${key}&select=*`);
+      return data && data.length > 0 ? data[0] : null;
+    } catch (e) { return null; }
+  },
 } : {
-  // Production localStorage environment
+  // Fallback: localStorage (for local dev before Supabase setup)
   async getAll(prefix) {
     try {
       const items = [];
@@ -155,6 +194,7 @@ const DB = useClaudeStorage ? {
   async save(key, data) { try { localStorage.setItem(key, JSON.stringify(data)); return true; } catch (e) { return false; } },
   async get(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
 };
+
 
 // ════════════════════════════════════════════════════════════════
 // MI LOGO SVG COMPONENT
