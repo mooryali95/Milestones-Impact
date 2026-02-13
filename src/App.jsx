@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+
 /*
 ╔══════════════════════════════════════════════════════════════╗
 ║  Milestone Impact — مصفوفة التأثير                          ║
 ║  Version 5.0 — Production Ready                             ║
 ║                                                              ║
-║  Admin Credentials:                                          ║
-║    Username: admin                                           ║
-║    Password: MI@2026                                         ║
-║                                                              ║
-║  To change: update ADMIN_CONFIG below                        ║
-║  In production: move to environment variables / backend API  ║
+║  Admin: Secured via AWS Lambda (API_URL)                     ║
+║  To change password: AWS Console → Lambda → Env Variables    ║
 ║                                                              ║
 ║  © 2026 Milestone Impact. All rights reserved.               ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -65,9 +62,7 @@ function isPast(d) { const t = new Date(); t.setHours(0, 0, 0, 0); return new Da
 // CONFIG
 // ════════════════════════════════════════════════════════════════
 
-
-const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com' ;
-
+const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com';
 
 const BRAND = {
   color: "#6B9DAD",
@@ -116,6 +111,7 @@ const OPERATIONS = {
     { nameAr: "الإطلاق", dur: 3, desc: "الإطلاق الرسمي والتشغيل الكامل" },
   ],
 };
+
 // ════════════════════════════════════════════════════════════════
 // DATABASE — Supabase (centralized, all devices see same data)
 // ════════════════════════════════════════════════════════════════
@@ -124,8 +120,32 @@ const OPERATIONS = {
 // 2. Create table "registrations" 
 // 3. Paste your URL and anon key below
 
-const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';      // ← غيّر هذا
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';                          // ← غيّر هذا
+const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';
+
+// OTP Helper - calls Edge Function
+const OTP = {
+  async send(email) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: 'send' }),
+      });
+      return await res.json();
+    } catch (e) { return { success: false, message: 'خطأ في الاتصال' }; }
+  },
+  async verify(email, otp) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp, action: 'verify' }),
+      });
+      return await res.json();
+    } catch (e) { return { success: false, message: 'خطأ في الاتصال' }; }
+  },
+};
 
 const supabase = {
   async query(method, path, body) {
@@ -194,7 +214,6 @@ const DB = isSupabaseConfigured ? {
   async save(key, data) { try { localStorage.setItem(key, JSON.stringify(data)); return true; } catch (e) { return false; } },
   async get(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
 };
-
 
 // ════════════════════════════════════════════════════════════════
 // MI LOGO SVG COMPONENT
@@ -634,6 +653,13 @@ export default function App() {
   const [resumeLoading, setResumeLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // {title, message, onConfirm}
 
+  // OTP states
+  const [otpStep, setOtpStep] = useState("form"); // "form" | "otp"
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpPending, setOtpPending] = useState(null); // stores pending data during OTP verification
+
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
   // Build process list
@@ -673,7 +699,7 @@ export default function App() {
     setLoading(false);
   };
 
-  // ── Resume Session ──
+  // ── Resume Session: Step 1 - Find & Send OTP ──
   const handleResume = async (e) => {
     e.preventDefault();
     const phone = resumePhone.replace(/\s/g, "");
@@ -682,10 +708,35 @@ export default function App() {
     setResumeError("");
     const existing = await DB.getAll("reg:");
     const found = existing.find(r => r.phone === phone);
+    if (!found) { setResumeLoading(false); setResumeError("لا يوجد تسجيل بهذا الرقم"); return; }
+
+    // Send OTP to registered email
+    const res = await OTP.send(found.email);
     setResumeLoading(false);
-    if (!found) { setResumeError("لا يوجد تسجيل بهذا الرقم"); return; }
-    // Restore full session
+    if (!res.success) { setResumeError("خطأ في إرسال رمز التحقق"); return; }
+
+    // Store found user and switch to OTP input
     setUser({ name: found.name, phone: found.phone, email: found.email });
+    setOtpPending({ type: "resume", data: found });
+    setOtpStep("otp");
+    setOtpCode("");
+    setOtpError("");
+    showToast(`تم إرسال رمز التحقق إلى ${found.email.replace(/(.{2}).*(@.*)/, "$1***$2")} ✉`);
+  };
+
+  // ── Resume: Step 2 - Verify OTP ──
+  const handleResumeVerify = async (e) => {
+    e.preventDefault();
+    if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
+
+    setOtpSending(true);
+    setOtpError("");
+    const found = otpPending?.data;
+    const res = await OTP.verify(found.email, otpCode);
+    setOtpSending(false);
+    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
+
+    // Restore session
     setSessionId(found.id);
     setDates(found.dates || {});
     setConfirmed(found.confirmed || {});
@@ -693,10 +744,11 @@ export default function App() {
     setReopenRequested(found.reopenRequested || false);
     setScreen("main");
     if (found.submitted) setTab("output");
+    setOtpStep("form"); setOtpCode(""); setOtpPending(null);
     showToast(`مرحباً مجدداً ${found.name}! تم استعادة بياناتك`);
   };
 
-  // ── Register ──
+  // ── Register: Step 1 - Validate & Send OTP ──
   const handleRegister = async (e) => {
     e.preventDefault();
     const errs = {};
@@ -705,55 +757,89 @@ export default function App() {
     if (!validEmail(user.email)) errs.email = "بريد إلكتروني غير صحيح";
     if (Object.keys(errs).length) { setRegErrors(errs); return; }
 
+    // Check duplicate → auto-resume via OTP
     const existing = await DB.getAll("reg:");
     const dup = existing.find(r => r.email === user.email || r.phone === user.phone);
-    if (dup) {
-      // Auto-resume instead of blocking
+
+    setOtpSending(true);
+    setOtpError("");
+    const res = await OTP.send(user.email);
+    setOtpSending(false);
+    if (!res.success) { setRegErrors({ email: res.message || "خطأ في إرسال رمز التحقق" }); return; }
+
+    setOtpPending(dup ? { type: "resume", data: dup } : { type: "new" });
+    setOtpStep("otp");
+    setOtpCode("");
+    setRegErrors({});
+    showToast("تم إرسال رمز التحقق إلى بريدك الإلكتروني ✉");
+  };
+
+  // ── Register: Step 2 - Verify OTP & Complete ──
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
+
+    setOtpSending(true);
+    setOtpError("");
+    const res = await OTP.verify(user.email, otpCode);
+    setOtpSending(false);
+    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
+
+    // OTP verified — complete registration or resume
+    if (otpPending?.type === "resume") {
+      const dup = otpPending.data;
       setUser({ name: dup.name, phone: dup.phone, email: dup.email });
       setSessionId(dup.id);
       setDates(dup.dates || {});
       setConfirmed(dup.confirmed || {});
       setSubmitted(dup.submitted || false);
       setReopenRequested(dup.reopenRequested || false);
-      setRegErrors({});
       setScreen("main");
       if (dup.submitted) setTab("output");
-      showToast(`مرحباً مجدداً ${dup.name}! تم استعادة بياناتك السابقة`);
-      return;
+      showToast(`مرحباً مجدداً ${dup.name}! تم استعادة بياناتك`);
+    } else {
+      const id = `reg:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const record = { id, ...user, registeredAt: new Date().toISOString(), dates: {}, confirmed: {}, submitted: false };
+      await DB.save(id, record);
+      setSessionId(id);
+      setScreen("main");
+      showToast(`أهلاً ${user.name}! تم تسجيلك بنجاح`);
     }
-
-    const id = `reg:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const record = { id, ...user, registeredAt: new Date().toISOString(), dates: {}, confirmed: {}, submitted: false };
-    await DB.save(id, record);
-    setSessionId(id);
-    setRegErrors({});
-    setScreen("main");
-    showToast(`أهلاً ${user.name}! تم تسجيلك بنجاح`);
+    setOtpStep("form"); setOtpCode(""); setOtpPending(null); setRegErrors({});
   };
 
-  // ── Admin Login ──
-  const handleAdminLogin = async (e) => {
-  e.preventDefault();
-  setAdminError("");
-  try {
-    const res = await fetch(`${API_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: adminUser, password: adminPass }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      sessionStorage.setItem('mi_admin_token', data.token);
-      setScreen("admin");
-      loadRegs();
-    } else {
-      setAdminError(data.message);
-    }
-  } catch (err) {
-    setAdminError("خطأ في الاتصال بالسيرفر");
-  }
-};
+  // ── Resend OTP ──
+  const handleResendOtp = async () => {
+    setOtpSending(true);
+    setOtpError("");
+    const res = await OTP.send(user.email);
+    setOtpSending(false);
+    if (res.success) showToast("تم إعادة إرسال الرمز ✉");
+    else setOtpError("خطأ في إعادة الإرسال");
+  };
 
+  // ── Admin Login (via Lambda) ──
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setAdminError("");
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: adminUser, password: adminPass }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        sessionStorage.setItem('mi_admin_token', data.token);
+        setScreen("admin");
+        loadRegs();
+      } else {
+        setAdminError(data.message);
+      }
+    } catch (err) {
+      setAdminError("خطأ في الاتصال بالسيرفر");
+    }
+  };
 
   // ── Save Date ──
   const saveDate = async (key, dateStr) => {
@@ -804,6 +890,7 @@ export default function App() {
     setSubmitted(false); setReopenRequested(false); setSessionId(null); setTab("matrix"); setRegErrors({});
     setAdminUser(""); setAdminPass(""); setAdminError(""); setExpandedReg(null);
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
+    setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
   };
 
   const logout = () => {
@@ -861,7 +948,6 @@ export default function App() {
         <div className="mi-text" style={{ marginTop: "1rem" }}>Milestone<br />Impact</div>
         <h1>مصفوفة التأثير</h1>
         <p className="sub">هندسة اجتماعية • ١٦ عملية استراتيجية</p>
-        
         <div className="s-actions">
           <button className="s-btn s-btn-main" onClick={() => setScreen("register")}>🚀 تسجيل جديد</button>
           <button className="s-btn s-btn-main" style={{ borderColor: "#5B7B3A", color: "#5B7B3A" }} onClick={() => setScreen("resume")}>↩ استئناف</button>
@@ -877,15 +963,35 @@ export default function App() {
     <><style>{CSS}</style><div className="app"><div className="splash">
       <MILogo size={50} color={BRAND.color} />
       <h1 style={{ marginTop: "0.8rem" }}>مصفوفة التأثير</h1>
-      <p className="sub">سجّل بياناتك للبدء</p>
-      <div className="card"><h2>التسجيل</h2>
-        <form onSubmit={handleRegister}>
-          <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
-          <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
-          <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
-          <button type="submit" className="btn">ابدأ الآن ←</button>
-        </form>
-        <div className="back-link"><button onClick={() => setScreen("splash")}>→ العودة</button></div>
+      <p className="sub">{otpStep === "form" ? "سجّل بياناتك للبدء" : "أدخل رمز التحقق"}</p>
+      <div className="card">
+        {otpStep === "form" ? <>
+          <h2>التسجيل</h2>
+          <form onSubmit={handleRegister}>
+            <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
+            <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
+            <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
+            <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
+          </form>
+        </> : <>
+          <h2>✉ رمز التحقق</h2>
+          <p style={{ fontSize: "0.85rem", color: "#6B6560", marginBottom: "1rem", textAlign: "center" }}>تم إرسال رمز مكون من 6 أرقام إلى<br /><strong style={{ color: BRAND.color, direction: "ltr", display: "inline-block" }}>{user.email}</strong></p>
+          <form onSubmit={handleVerifyOtp}>
+            <div className={`fg ${otpError ? "fg-err" : ""}`}>
+              <label>رمز التحقق</label>
+              <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
+                style={{ direction: "ltr", textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: 700 }} />
+              {otpError && <div className="fg-msg">{otpError}</div>}
+            </div>
+            <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+          </form>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.8rem" }}>
+            <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+            <button style={{ background: "none", border: "none", color: "#6B6560", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← تغيير البيانات</button>
+          </div>
+        </>}
+        <div className="back-link"><button onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة</button></div>
       </div>
     </div></div></>
   );
@@ -897,25 +1003,45 @@ export default function App() {
     <><style>{CSS}</style><div className="app"><div className="splash">
       <MILogo size={50} color="#5B7B3A" />
       <h1 style={{ color: "#5B7B3A", marginTop: "0.8rem" }}>استئناف الجلسة</h1>
-      <p className="sub">أدخل رقم جوالك لاستعادة بياناتك</p>
-      <div className="card"><h2>↩ استئناف</h2>
-        <form onSubmit={handleResume}>
-          <div className={`fg ${resumeError ? "fg-err" : ""}`}>
-            <label>رقم الجوال المسجل</label>
-            <input type="tel" placeholder="05XXXXXXXX" value={resumePhone}
-              onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
-              style={{ direction: "ltr", textAlign: "right" }} />
-            {resumeError && <div className="fg-msg">{resumeError}</div>}
+      <p className="sub">{otpStep === "form" ? "أدخل رقم جوالك لاستعادة بياناتك" : "أدخل رمز التحقق"}</p>
+      <div className="card">
+        {otpStep === "form" ? <>
+          <h2>↩ استئناف</h2>
+          <form onSubmit={handleResume}>
+            <div className={`fg ${resumeError ? "fg-err" : ""}`}>
+              <label>رقم الجوال المسجل</label>
+              <input type="tel" placeholder="05XXXXXXXX" value={resumePhone}
+                onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
+                style={{ direction: "ltr", textAlign: "right" }} />
+              {resumeError && <div className="fg-msg">{resumeError}</div>}
+            </div>
+            <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={resumeLoading}>
+              {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
+            </button>
+          </form>
+        </> : <>
+          <h2>✉ رمز التحقق</h2>
+          <p style={{ fontSize: "0.85rem", color: "#6B6560", marginBottom: "1rem", textAlign: "center" }}>تم إرسال رمز إلى<br /><strong style={{ color: "#5B7B3A", direction: "ltr", display: "inline-block" }}>{user.email?.replace(/(.{2}).*(@.*)/, "$1***$2")}</strong></p>
+          <form onSubmit={handleResumeVerify}>
+            <div className={`fg ${otpError ? "fg-err" : ""}`}>
+              <label>رمز التحقق</label>
+              <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
+                style={{ direction: "ltr", textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: 700 }} />
+              {otpError && <div className="fg-msg">{otpError}</div>}
+            </div>
+            <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+          </form>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.8rem" }}>
+            <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+            <button style={{ background: "none", border: "none", color: "#6B6560", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← رقم آخر</button>
           </div>
-          <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={resumeLoading}>
-            {resumeLoading ? "جارٍ البحث..." : "استعادة البيانات ←"}
-          </button>
-        </form>
+        </>}
         <div style={{ textAlign: "center", marginTop: "1rem", padding: "0.8rem", background: "rgba(107,157,173,0.04)", borderRadius: "8px" }}>
           <p style={{ fontSize: "0.78rem", color: "#6B6560", marginBottom: "0.3rem" }}>ليس لديك حساب؟</p>
-          <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }} onClick={() => setScreen("register")}>🚀 سجّل الآن</button>
+          <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }} onClick={() => { setScreen("register"); setOtpStep("form"); }}>🚀 سجّل الآن</button>
         </div>
-        <div className="back-link"><button onClick={() => setScreen("splash")}>→ العودة</button></div>
+        <div className="back-link"><button onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة</button></div>
       </div>
     </div></div></>
   );
