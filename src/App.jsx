@@ -598,6 +598,19 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .app-footer { text-align: center; padding: 1.5rem; border-top: 1px solid var(--sa); margin-top: 1rem; }
 .app-footer p { font-size: 0.75rem; color: #999; }
 
+/* ── Smart Suggestions ── */
+.smart-box { border-radius: 13px; padding: 1rem 1.2rem; margin-bottom: 1rem; animation: fadeIn 0.5s; }
+.smart-welcome { background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border: 1.5px dashed var(--mi); text-align: center; }
+.smart-welcome h3 { font-family: 'Amiri', serif; color: var(--mi-d); font-size: 1.1rem; margin-bottom: 0.3rem; }
+.smart-welcome p { font-size: 0.82rem; color: var(--wg); line-height: 1.6; margin-bottom: 0.5rem; }
+.smart-progress { background: rgba(91,123,58,0.04); border: 1.5px solid rgba(91,123,58,0.15); }
+.smart-progress h4 { color: var(--ok); font-size: 0.9rem; margin-bottom: 0.3rem; }
+.smart-progress p { font-size: 0.8rem; color: var(--wg); line-height: 1.5; }
+.smart-suggest { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+.smart-chip { font-size: 0.75rem; padding: 0.3rem 0.65rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 500; border: 1.5px solid; }
+.smart-chip:hover { transform: translateY(-1px); opacity: 0.85; }
+.smart-counter { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--mi-d); font-weight: 600; margin-top: 0.4rem; }
+
 /* ── Cell Hover Tooltip ── */
 .cell { position: relative; }
 .cell-insight { position: absolute; bottom: -2px; left: 4px; right: 4px; padding: 0.3rem 0.45rem; font-size: 0.62rem; line-height: 1.3; color: #fff; border-radius: 0 0 8px 8px; opacity: 0; transform: translateY(4px); transition: all 0.25s ease; pointer-events: none; z-index: 10; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -687,21 +700,30 @@ export default function App() {
   // Process details from Supabase (rich data)
   const [processDetails, setProcessDetails] = useState({});
   const [highlightedKeys, setHighlightedKeys] = useState([]);
+  const [appContent, setAppContent] = useState({});
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
-  // Load rich process details from Supabase
+  // Load rich process details + app content from Supabase
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     (async () => {
       try {
-        const data = await supabase.query('GET', 'process_details?select=*');
-        if (data && data.length) {
+        const [details, content] = await Promise.all([
+          supabase.query('GET', 'process_details?select=*'),
+          supabase.query('GET', 'app_content?select=*'),
+        ]);
+        if (details && details.length) {
           const map = {};
-          data.forEach(d => { map[d.process_key] = d; });
+          details.forEach(d => { map[d.process_key] = d; });
           setProcessDetails(map);
         }
-      } catch (e) { console.log('Process details not loaded:', e); }
+        if (content && content.length) {
+          const map = {};
+          content.forEach(c => { map[c.key] = c.value; });
+          setAppContent(map);
+        }
+      } catch (e) { console.log('Data not loaded:', e); }
     })();
   }, []);
 
@@ -1202,6 +1224,56 @@ export default function App() {
           <div className="banner-item"><h4>المبدأ الرابع</h4><p>الزمن استراتيجي</p></div>
           <div className="banner-item"><h4>المبدأ السابع</h4><p>المال والمجتمع يجمعهما العقل</p></div>
         </div>
+
+        {/* ── Smart Suggestions ── */}
+        {!submitted && datedCount === 0 && <div className="smart-box smart-welcome">
+          <h3>{appContent.welcome_title || 'ابدأ رحلة التحول'}</h3>
+          <p>{appContent.welcome_desc || 'اختر أول عملية لبدء بناء خطتك الاستراتيجية'}</p>
+          <p style={{ fontSize: "0.78rem", color: BRAND.dark }}>💡 {appContent.welcome_hint || 'يبدأ معظم العملاء بـ:'}</p>
+          <div className="smart-suggest">
+            {(appContent.starter_processes || 'creation-1,establishment-1').split(',').map(k => k.trim()).map(k => { const p = procs.find(x => x.key === k); return p ? <span key={k} className="smart-chip" style={{ borderColor: p.trackColor + '50', color: p.trackColor, background: p.trackColor + '0A' }} onClick={() => { setSelectedCell(p); setTempDate(""); setDateError(""); setHighlightedKeys([...(p.feeds || []), ...(p.fedBy || [])]); }}>{p.trackIcon} {p.nameAr}</span> : null; })}
+          </div>
+          <div className="smart-counter" style={{ marginTop: "0.6rem", color: "#999" }}>0 من 16 عملية</div>
+        </div>}
+
+        {!submitted && datedCount >= 1 && datedCount <= 2 && <div className="smart-box smart-progress">
+          <h4>{appContent.progress_title || '🌱 بداية ممتازة!'}</h4>
+          <p>{appContent.progress_desc || 'أكمل 3 حجوزات على الأقل لنكشف لك نمط تفكيرك التحويلي'}</p>
+          {(() => {
+            const booked = Object.keys(dates);
+            const suggestions = new Set();
+            booked.forEach(k => {
+              const p = procs.find(x => x.key === k);
+              if (p) { (p.feeds || []).forEach(f => { if (!dates[f]) suggestions.add(f); }); }
+            });
+            const sugList = [...suggestions].slice(0, 3).map(k => procs.find(x => x.key === k)).filter(Boolean);
+            return sugList.length > 0 ? <>
+              <p style={{ fontSize: "0.76rem", color: BRAND.dark, marginTop: "0.4rem" }}>{appContent.suggest_label || '🔗 بناءً على اختياراتك، قد يهمك أيضاً:'}</p>
+              <div className="smart-suggest">
+                {sugList.map(p => <span key={p.key} className="smart-chip" style={{ borderColor: p.trackColor + '50', color: p.trackColor, background: p.trackColor + '0A' }} onClick={() => { setSelectedCell(p); setTempDate(""); setDateError(""); setHighlightedKeys([...(p.feeds || []), ...(p.fedBy || [])]); }}>{p.trackIcon} {p.nameAr}</span>)}
+              </div>
+            </> : null;
+          })()}
+        </div>}
+
+        {!submitted && datedCount >= 3 && datedCount < 16 && (() => {
+          const booked = Object.keys(dates);
+          const suggestions = new Set();
+          booked.forEach(k => {
+            const p = procs.find(x => x.key === k);
+            if (p) { (p.feeds || []).forEach(f => { if (!dates[f]) suggestions.add(f); }); }
+          });
+          const sugList = [...suggestions].slice(0, 4).map(k => procs.find(x => x.key === k)).filter(Boolean);
+          return sugList.length > 0 ? <div className="smart-box" style={{ background: "rgba(107,157,173,0.03)", border: "1px solid rgba(107,157,173,0.1)", borderRadius: "13px", padding: "0.8rem 1.1rem", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.3rem" }}>
+              <span style={{ fontSize: "0.8rem", color: BRAND.dark, fontWeight: 600 }}>{appContent.suggest_deps_label || '🔗 اقتراحات بناءً على التبعيات'}</span>
+              <span className="smart-counter">{datedCount}/16</span>
+            </div>
+            <div className="smart-suggest" style={{ marginTop: "0.4rem" }}>
+              {sugList.map(p => <span key={p.key} className="smart-chip" style={{ borderColor: p.trackColor + '50', color: p.trackColor, background: p.trackColor + '0A' }} onClick={() => { setSelectedCell(p); setTempDate(""); setDateError(""); setHighlightedKeys([...(p.feeds || []), ...(p.fedBy || [])]); }}>{p.trackIcon} {p.nameAr}</span>)}
+            </div>
+          </div> : null;
+        })()}
         <div className="mx-groups"><div className="mx-grp mx-grp-c" style={{ flex: 2 }}>الهوية الحالية</div><div className="mx-grp mx-grp-n" style={{ flex: 2 }}>الهوية الاعتبارية الجديدة</div></div>
         <div className="mx-phases">{PHASES.map(p => <div key={p.id} className="mx-ph">{p.nameAr}</div>)}</div>
         <div className="mx-grid">{TRACKS.map(tr => <div key={tr.id} className="mx-row">
