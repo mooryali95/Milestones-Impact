@@ -113,6 +113,171 @@ const OPERATIONS = {
 };
 
 // ════════════════════════════════════════════════════════════════
+// ANALYSIS ENGINE — Pattern Detection + Recommendations
+// ════════════════════════════════════════════════════════════════
+
+const PATTERNS = {
+  sequential: {
+    id: 'sequential', nameAr: 'تسلسلي', icon: '→',
+    desc: 'تفضّل إكمال مسار كامل قبل الانتقال لغيره — تفكير عميق ومركز. هذا النمط يعكس شخصية منهجية تؤمن بأن الإتقان يسبق التوسع.',
+  },
+  breadthFirst: {
+    id: 'breadthFirst', nameAr: 'استكشافي عرضي', icon: '⟷',
+    desc: 'تستكشف المسارات المتعددة قبل التعمق — رؤية شمولية. هذا النمط يعكس تفكيراً استراتيجياً يرى الصورة الكاملة قبل التفاصيل.',
+  },
+  integrative: {
+    id: 'integrative', nameAr: 'تكاملي', icon: '◈',
+    desc: 'تبحث عن نقاط التقاطع بين المسارات — تفكير منظومي. هذا النمط يعكس وعياً بأن المسارات مترابطة وأن القيمة الحقيقية في التكامل.',
+  },
+  foundationFocused: {
+    id: 'foundationFocused', nameAr: 'تأسيسي', icon: '▣',
+    desc: 'تبني أساساً قوياً قبل الانطلاق — حكمة البناء المتين. هذا النمط يعكس إدراكاً بأن التحول الحقيقي يبدأ من الجذور.',
+  },
+  outcomeDriven: {
+    id: 'outcomeDriven', nameAr: 'موجه بالنتائج', icon: '◎',
+    desc: 'تهتم بالمخرجات النهائية والتطبيق العملي. هذا النمط يعكس توجهاً عملياتياً يركز على القيمة الملموسة.',
+  },
+  diagnostic: {
+    id: 'diagnostic', nameAr: 'تشخيصي', icon: '◉',
+    desc: 'تريد فهم الصورة الكاملة قبل أي تنفيذ — نهج استراتيجي. هذا النمط يعكس تفكيراً تحليلياً يؤمن بأن التشخيص الدقيق نصف العلاج.',
+  },
+  reEvaluating: {
+    id: 'reEvaluating', nameAr: 'معاد التقييم', icon: '↺',
+    desc: 'تعيد تقييم أولوياتك — مرحلة نضج في التفكير. هذا النمط يعكس مرونة ذهنية وقدرة على التكيف مع المعطيات الجديدة.',
+  },
+};
+
+const RECOMMENDATIONS_TABLE = [
+  { id: 'no_phase1', condition: (ctx) => !ctx.phases.has(1), text: 'يُنصح بالبدء من المرحلة الأولى لبناء أساس واقعي للتحول' },
+  { id: 'single_track', condition: (ctx) => ctx.tracks.size === 1, text: 'يُنصح بالتوسع لمسارات إضافية لتحقيق تكامل بين أبعاد التحول' },
+  { id: 'skipped_phases', condition: (ctx) => (ctx.phases.has(3) || ctx.phases.has(4)) && !ctx.phases.has(1) && !ctx.phases.has(2), text: 'البناء على مراحل سابقة يضمن نضجاً أعمق — يُنصح بتغطية الفجوة' },
+  { id: 'theory_only', condition: (ctx) => ctx.tracks.has('creation') && ctx.tracks.has('innovation') && !ctx.tracks.has('establishment') && !ctx.tracks.has('making'), text: 'التحليل بدون تنفيذ يبقى نظرياً — يُنصح بالانتقال لمسارات التجسيد' },
+  { id: 'exec_only', condition: (ctx) => !ctx.tracks.has('creation') && !ctx.tracks.has('innovation') && (ctx.tracks.has('establishment') || ctx.tracks.has('making')), text: 'التنفيذ بدون تأسيس هوياتي قد يفتقر للعمق — يُنصح بتغطية مسارات الهوية' },
+  { id: 'full_coverage', condition: (ctx) => ctx.tracks.size === 4 && ctx.phases.size === 4, text: 'تغطية شاملة ممتازة — المسار جاهز لبناء خطة تنفيذ متكاملة' },
+  { id: 'current_only', condition: (ctx) => ctx.phases.size > 0 && [...ctx.phases].every(p => p <= 2), text: 'الفهم العميق للواقع أساس ممتاز — الخطوة التالية الانتقال لبناء الهوية الجديدة' },
+  { id: 'new_only', condition: (ctx) => ctx.phases.size > 0 && [...ctx.phases].every(p => p >= 3), text: 'بناء هوية جديدة دون فهم الحالية قد ينتج هوية منفصلة عن الواقع' },
+  { id: 'integrative_deep', condition: (ctx) => ctx.patternId === 'integrative' && ctx.tracks.size >= 3, text: 'نمط منظومي متقدم — يُنصح بتعميق كل مسار بعد الاستكشاف الأولي' },
+  { id: 'has_dep_gaps', condition: (ctx) => ctx.depGaps.length > 0, text: 'هناك عمليات تتغذى على عمليات سابقة لم تُحجز — يُنصح بتغطية التبعيات' },
+];
+
+function analyzeBookings(procs, dates, confirmed) {
+  const booked = procs.filter(p => dates[p.key]);
+  const bookedKeys = new Set(booked.map(p => p.key));
+  const count = booked.length;
+
+  if (count < 3) return null;
+
+  // Sort by date booked
+  const sorted = [...booked].sort((a, b) => new Date(dates[a.key]) - new Date(dates[b.key]));
+
+  // Track/Phase coverage
+  const tracks = new Set(booked.map(p => p.trackId));
+  const phases = new Set(booked.map(p => p.phaseId));
+
+  // ── Pattern Detection ──
+  let patternId = 'integrative'; // default
+
+  // Check Sequential: consecutive in same track (1→2→3→4)
+  const trackSequences = {};
+  sorted.forEach(p => {
+    if (!trackSequences[p.trackId]) trackSequences[p.trackId] = [];
+    trackSequences[p.trackId].push(p.phaseId);
+  });
+  const hasSequential = Object.values(trackSequences).some(seq => {
+    if (seq.length < 3) return false;
+    for (let i = 1; i < seq.length; i++) { if (seq[i] !== seq[i-1] + 1) return false; }
+    return true;
+  });
+  if (hasSequential) patternId = 'sequential';
+
+  // Check Breadth-First: same phase from different tracks first
+  else {
+    const firstPhases = sorted.slice(0, Math.min(4, count)).map(p => p.phaseId);
+    const firstTracks = new Set(sorted.slice(0, Math.min(4, count)).map(p => p.trackId));
+    if (firstTracks.size >= 3 && new Set(firstPhases).size <= 2) patternId = 'breadthFirst';
+  }
+
+  // Check Foundation-Focused: mostly phase 1-2
+  const p12Count = booked.filter(p => p.phaseId <= 2).length;
+  if (p12Count >= count * 0.75 && count >= 3) patternId = 'foundationFocused';
+
+  // Check Outcome-Driven: mostly phase 3-4
+  const p34Count = booked.filter(p => p.phaseId >= 3).length;
+  if (p34Count >= count * 0.75 && count >= 3) patternId = 'outcomeDriven';
+
+  // Check Diagnostic: phase 1 from 3+ tracks
+  const phase1Tracks = new Set(booked.filter(p => p.phaseId === 1).map(p => p.trackId));
+  if (phase1Tracks.size >= 3) patternId = 'diagnostic';
+
+  const pattern = PATTERNS[patternId];
+
+  // ── Dimensions ──
+  const trackCoverage = { total: 4, covered: tracks.size, pct: Math.round((tracks.size / 4) * 100) };
+  const phaseCoverage = { total: 4, covered: phases.size, pct: Math.round((phases.size / 4) * 100) };
+
+  // Weight balance
+  const TRACK_WEIGHTS = { creation: 19, innovation: 2, establishment: 27, making: 13 };
+  const totalWeight = Object.values(TRACK_WEIGHTS).reduce((s, w) => s + w, 0);
+  const coveredWeight = [...tracks].reduce((s, t) => s + (TRACK_WEIGHTS[t] || 0), 0);
+  const weightBalance = { totalWeight, coveredWeight, pct: Math.round((coveredWeight / totalWeight) * 100) };
+
+  // Average phase
+  const avgPhase = (booked.reduce((s, p) => s + p.phaseId, 0) / count).toFixed(1);
+
+  // Readiness
+  let readiness = 'early', readinessAr = 'مبكرة';
+  if (tracks.size >= 2 && phases.has(1) && phases.has(2)) { readiness = 'medium'; readinessAr = 'متوسطة'; }
+  if (tracks.size >= 3 && phases.size >= 3) { readiness = 'advanced'; readinessAr = 'متقدمة'; }
+  if (tracks.size === 4 && phases.size === 4) { readiness = 'complete'; readinessAr = 'شاملة'; }
+
+  // ── Dependency Gaps ──
+  const depGaps = [];
+  booked.forEach(p => {
+    (p.fedBy || []).forEach(depKey => {
+      if (!bookedKeys.has(depKey)) {
+        const depProc = procs.find(x => x.key === depKey);
+        if (depProc) {
+          depGaps.push({
+            process: p.nameAr, processKey: p.key,
+            missing: depProc.nameAr, missingKey: depKey,
+            missingTrack: depProc.trackNameAr, missingIcon: depProc.trackIcon,
+          });
+        }
+      }
+    });
+  });
+
+  // ── Recommendations ──
+  const ctx = { tracks, phases, patternId, depGaps, count, booked };
+  const recommendations = RECOMMENDATIONS_TABLE.filter(r => r.condition(ctx)).map(r => r.text).slice(0, 4);
+
+  // ── Booking Timeline ──
+  const timeline = sorted.map((p, i) => ({
+    step: i + 1, key: p.key, nameAr: p.nameAr,
+    trackId: p.trackId, trackNameAr: p.trackNameAr, trackColor: p.trackColor, trackIcon: p.trackIcon,
+    phaseId: p.phaseId, phaseNameAr: p.phaseNameAr,
+    date: dates[p.key], isConfirmed: !!confirmed[p.key],
+  }));
+
+  // ── Track Distribution ──
+  const trackDist = TRACKS.map(t => ({
+    id: t.id, nameAr: t.nameAr, icon: t.icon, color: t.color, weight: t.weight,
+    count: booked.filter(p => p.trackId === t.id).length,
+    total: 4, pct: Math.round((booked.filter(p => p.trackId === t.id).length / 4) * 100),
+  }));
+
+  return {
+    pattern, patternId,
+    trackCoverage, phaseCoverage, weightBalance, avgPhase,
+    readiness, readinessAr,
+    depGaps, recommendations,
+    timeline, trackDist,
+    totalBooked: count, totalProcesses: 16,
+    isComplete: count === 16,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
 // DATABASE — Supabase (centralized, all devices see same data)
 // ════════════════════════════════════════════════════════════════
 // Setup: see SUPABASE-GUIDE.md
@@ -597,6 +762,31 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 /* ── Footer ── */
 .app-footer { text-align: center; padding: 1.5rem; border-top: 1px solid var(--sa); margin-top: 1rem; }
 .app-footer p { font-size: 0.75rem; color: #999; }
+
+/* ── Report ── */
+.rpt-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: 0 3px 14px rgba(0,0,0,0.05); margin-bottom: 1rem; }
+.rpt-pattern { text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border-radius: 14px; margin-bottom: 1.2rem; border: 1.5px solid rgba(107,157,173,0.12); }
+.rpt-pattern-icon { font-size: 2.5rem; margin-bottom: 0.3rem; }
+.rpt-pattern-name { font-family: 'Amiri', serif; font-size: 1.6rem; color: var(--mi-d); margin-bottom: 0.4rem; }
+.rpt-pattern-desc { font-size: 0.85rem; color: var(--wg); line-height: 1.7; max-width: 500px; margin: 0 auto; }
+.rpt-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 1.2rem; }
+.rpt-stat { background: var(--cr); border-radius: 11px; padding: 0.9rem 0.6rem; text-align: center; }
+.rpt-stat-v { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.1rem; }
+.rpt-stat-l { font-size: 0.72rem; color: var(--wg); }
+.rpt-bar-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.rpt-bar-label { width: 90px; font-size: 0.78rem; font-weight: 600; text-align: left; flex-shrink: 0; }
+.rpt-bar-track { flex: 1; height: 22px; background: var(--sa); border-radius: 6px; overflow: hidden; }
+.rpt-bar-fill { height: 100%; border-radius: 6px; transition: width 0.8s ease; display: flex; align-items: center; justify-content: flex-end; padding-left: 0.4rem; }
+.rpt-bar-pct { font-size: 0.65rem; font-weight: 700; color: #fff; padding-left: 0.3rem; }
+.rpt-bar-count { font-size: 0.72rem; color: var(--wg); width: 35px; text-align: center; flex-shrink: 0; }
+.rpt-gap { background: rgba(192,57,43,0.04); border: 1.5px solid rgba(192,57,43,0.12); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; font-size: 0.8rem; line-height: 1.6; }
+.rpt-rec { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(91,123,58,0.04); border-radius: 9px; margin-bottom: 0.4rem; font-size: 0.82rem; line-height: 1.6; }
+.rpt-rec-icon { color: var(--ok); font-size: 1rem; flex-shrink: 0; margin-top: 0.1rem; }
+.rpt-empty { text-align: center; padding: 3rem 1.5rem; }
+.rpt-empty h3 { font-family: 'Amiri', serif; color: var(--mi-d); font-size: 1.2rem; margin-bottom: 0.5rem; }
+.rpt-empty p { color: var(--wg); font-size: 0.88rem; line-height: 1.6; }
+.rpt-section-title { font-family: 'Amiri', serif; font-size: 1.1rem; color: var(--mi-d); margin-bottom: 0.7rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--sa); }
+@media (max-width: 640px) { .rpt-stats { grid-template-columns: repeat(2, 1fr); } .rpt-bar-label { width: 70px; font-size: 0.7rem; } }
 
 /* ── Smart Suggestions ── */
 .smart-box { border-radius: 13px; padding: 1rem 1.2rem; margin-bottom: 1rem; animation: fadeIn 0.5s; }
@@ -1200,7 +1390,7 @@ export default function App() {
   );
 
   // ════════ USER MAIN ════════
-  const userTabs = [["matrix", "المصفوفة"], ["schedule", "الجدول"], ["summary", "المخرجات"]];
+  const userTabs = [["matrix", "المصفوفة"], ["schedule", "الجدول"], ["report", "📊 التقرير"], ["summary", "المخرجات"]];
   if (submitted) userTabs.push(["output", "📋 النموذج النهائي"]);
 
   return (
@@ -1333,6 +1523,99 @@ export default function App() {
               </div>
             </div>);
           })}</div>}
+      </div>}
+
+      {/* ═══ REPORT ═══ */}
+      {tab === "report" && <div className="sec" style={{ animation: "fadeIn 0.4s" }}>
+        <div className="sec-head"><h2 className="sec-title">📊 التقرير التحليلي</h2></div>
+        {(() => {
+          const analysis = analyzeBookings(procs, dates, confirmed);
+          if (!analysis) return <div className="rpt-card rpt-empty">
+            <h3>تحتاج حجوزات إضافية</h3>
+            <p>أكمل <strong>3 حجوزات</strong> على الأقل لتوليد تحليل دقيق لنمط تفكيرك التحويلي</p>
+            <div className="smart-counter" style={{ justifyContent: "center", marginTop: "0.8rem", color: "#999" }}>{datedCount} من 3 مطلوبة</div>
+          </div>;
+
+          const { pattern, trackCoverage, phaseCoverage, weightBalance, avgPhase, readinessAr, depGaps, recommendations, timeline, trackDist, totalBooked, isComplete } = analysis;
+
+          return <>
+            {/* القسم 1 — الترويسة */}
+            <div className="rpt-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div><div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><MILogo size={20} color={BRAND.color} /><strong style={{ fontFamily: "'Amiri',serif", color: BRAND.dark }}>Milestone Impact</strong></div><div style={{ fontSize: "0.78rem", color: "#999", marginTop: "0.2rem" }}>تقرير مولّد تلقائياً بناءً على نمط الحجز</div></div>
+              <div style={{ textAlign: "left" }}><div style={{ fontSize: "0.82rem", fontWeight: 600 }}>{user.name}</div><div style={{ fontSize: "0.72rem", color: "#999" }}>{new Date().toLocaleDateString('ar-SA')} • {totalBooked} حجوزات</div></div>
+            </div>
+
+            {/* القسم 2 — نمط التفكير */}
+            <div className="rpt-card">
+              <div className="rpt-pattern">
+                <div className="rpt-pattern-icon">{pattern.icon}</div>
+                <div className="rpt-pattern-name">نمط {pattern.nameAr}</div>
+                <div className="rpt-pattern-desc">{pattern.desc}</div>
+              </div>
+              {isComplete && <div style={{ textAlign: "center", padding: "0.6rem", background: "rgba(91,123,58,0.06)", borderRadius: "10px", marginTop: "-0.5rem" }}>
+                <strong style={{ color: "#5B7B3A", fontSize: "0.9rem" }}>🏆 رحلة تحول كاملة</strong>
+                <p style={{ fontSize: "0.78rem", color: "#666", marginTop: "0.2rem" }}>ترتيب حجوزاتك يكشف أولوياتك الحقيقية حتى مع التغطية الكاملة</p>
+              </div>}
+            </div>
+
+            {/* القسم 3 — الإحصائيات */}
+            <div className="rpt-card">
+              <h3 className="rpt-section-title">الإحصائيات</h3>
+              <div className="rpt-stats">
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{ color: BRAND.color }}>{totalBooked}</div><div className="rpt-stat-l">عمليات محجوزة</div></div>
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{ color: "#5B7B3A" }}>{trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات مشمولة</div></div>
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{ color: "#8B6914" }}>{avgPhase}</div><div className="rpt-stat-l">متوسط المرحلة</div></div>
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{ color: "#6B4E3D" }}>{readinessAr}</div><div className="rpt-stat-l">مستوى الجاهزية</div></div>
+              </div>
+            </div>
+
+            {/* القسم 4 — رحلة الحجز (Timeline) */}
+            <div className="rpt-card">
+              <h3 className="rpt-section-title">رحلة الحجز</h3>
+              {timeline.map((t, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.5rem 0", borderBottom: i < timeline.length - 1 ? "1px solid var(--sa)" : "none" }}>
+                <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: t.trackColor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 700, flexShrink: 0 }}>{t.step}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t.nameAr}</div>
+                  <div style={{ fontSize: "0.72rem", color: "#999" }}>{t.trackIcon} {t.trackNameAr} • {t.phaseNameAr}</div>
+                </div>
+                <div style={{ textAlign: "left", flexShrink: 0 }}>
+                  <div style={{ fontSize: "0.75rem", color: BRAND.dark }}>{fmtShort(t.date)}</div>
+                  {t.isConfirmed && <div style={{ fontSize: "0.62rem", color: "#5B7B3A" }}>✓ مؤكد</div>}
+                </div>
+              </div>)}
+            </div>
+
+            {/* القسم 5 — توزيع الاهتمام */}
+            <div className="rpt-card">
+              <h3 className="rpt-section-title">توزيع الاهتمام</h3>
+              {trackDist.map(t => <div key={t.id} className="rpt-bar-row">
+                <div className="rpt-bar-label" style={{ color: t.color }}>{t.icon} {t.nameAr}</div>
+                <div className="rpt-bar-track"><div className="rpt-bar-fill" style={{ width: `${t.pct}%`, background: t.color }}>{t.pct > 15 && <span className="rpt-bar-pct">{t.pct}%</span>}</div></div>
+                <div className="rpt-bar-count">{t.count}/4</div>
+              </div>)}
+            </div>
+
+            {/* القسم 6 — فجوات التبعية */}
+            {depGaps.length > 0 && <div className="rpt-card">
+              <h3 className="rpt-section-title">⚠ فجوات التبعية</h3>
+              {depGaps.map((g, i) => <div key={i} className="rpt-gap">
+                حجزت <strong>{g.process}</strong> لكن لم تحجز <strong>{g.missing}</strong> ({g.missingIcon} {g.missingTrack}) التي تغذيها <span className="rpt-gap-arrow">←</span> يُنصح بتغطية هذه الفجوة
+              </div>)}
+            </div>}
+
+            {/* القسم 7 — التوصيات */}
+            {recommendations.length > 0 && <div className="rpt-card">
+              <h3 className="rpt-section-title">التوصيات</h3>
+              {recommendations.map((r, i) => <div key={i} className="rpt-rec"><span className="rpt-rec-icon">💡</span><span>{r}</span></div>)}
+            </div>}
+
+            {/* القسم 8 — التذييل */}
+            <div className="rpt-card" style={{ textAlign: "center", padding: "1rem" }}>
+              <MILogo size={18} color={BRAND.color} />
+              <div style={{ fontSize: "0.72rem", color: "#999", marginTop: "0.3rem" }}>Milestone Impact — تقرير مولّد تلقائياً بناءً على نمط الحجز</div>
+            </div>
+          </>;
+        })()}
       </div>}
 
       {/* ═══ SUMMARY ═══ */}
