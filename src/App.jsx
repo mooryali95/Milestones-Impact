@@ -598,6 +598,30 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .app-footer { text-align: center; padding: 1.5rem; border-top: 1px solid var(--sa); margin-top: 1rem; }
 .app-footer p { font-size: 0.75rem; color: #999; }
 
+/* ── Cell Hover Tooltip ── */
+.cell { position: relative; }
+.cell-insight { position: absolute; bottom: -2px; left: 4px; right: 4px; padding: 0.3rem 0.45rem; font-size: 0.62rem; line-height: 1.3; color: #fff; border-radius: 0 0 8px 8px; opacity: 0; transform: translateY(4px); transition: all 0.25s ease; pointer-events: none; z-index: 10; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell:hover .cell-insight { opacity: 1; transform: translateY(0); }
+@media (max-width: 640px) { .cell-insight { display: none; } }
+
+/* ── Cell Highlight (connected processes) ── */
+.cell.highlighted { box-shadow: 0 0 0 2px rgba(107,157,173,0.5), 0 0 12px rgba(107,157,173,0.25); transform: translateY(-1px); }
+.cell.highlighted .cell-name { color: var(--mi-d); }
+
+/* ── Modal Enhanced Sections ── */
+.modal-section { margin-bottom: 1rem; }
+.modal-section-title { font-size: 0.8rem; font-weight: 700; color: var(--mi-d); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
+.modal-insight-box { background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border-right: 3px solid var(--mi); border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.85rem; font-weight: 600; color: var(--mi-d); line-height: 1.6; }
+.modal-why { font-size: 0.82rem; color: var(--wg); line-height: 1.7; padding: 0.5rem 0; }
+.modal-outputs { display: flex; flex-direction: column; gap: 0.35rem; }
+.modal-output-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--ch); padding: 0.35rem 0.6rem; background: rgba(107,157,173,0.04); border-radius: 7px; }
+.modal-output-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.modal-related { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.modal-related-chip { font-size: 0.72rem; padding: 0.25rem 0.55rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; border: 1.5px solid; font-weight: 500; }
+.modal-related-chip:hover { transform: translateY(-1px); opacity: 0.85; }
+.modal-related-label { font-size: 0.65rem; color: var(--wg); margin-bottom: 0.2rem; }
+.modal-divider { height: 1px; background: var(--sa); margin: 0.8rem 0; }
+
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes slideR { from { opacity: 0; transform: translateX(-15px) } to { opacity: 1; transform: translateX(0) } }
@@ -658,28 +682,57 @@ export default function App() {
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSending, setOtpSending] = useState(false);
-  const [otpPending, setOtpPending] = useState(null); // stores pending data during OTP verification
+  const [otpPending, setOtpPending] = useState(null);
+
+  // Process details from Supabase (rich data)
+  const [processDetails, setProcessDetails] = useState({});
+  const [highlightedKeys, setHighlightedKeys] = useState([]);
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
-  // Build process list
+  // Load rich process details from Supabase
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    (async () => {
+      try {
+        const data = await supabase.query('GET', 'process_details?select=*');
+        if (data && data.length) {
+          const map = {};
+          data.forEach(d => { map[d.process_key] = d; });
+          setProcessDetails(map);
+        }
+      } catch (e) { console.log('Process details not loaded:', e); }
+    })();
+  }, []);
+
+  // Build process list (merge local + Supabase data)
   const procs = useMemo(() => {
     const list = [];
     let idx = 0;
     for (const ph of PHASES) {
       for (const tr of TRACKS) {
         const op = OPERATIONS[tr.id][ph.id - 1];
+        const key = `${tr.id}-${ph.id}`;
+        const detail = processDetails[key] || {};
         list.push({
-          key: `${tr.id}-${ph.id}`, trackId: tr.id, trackNameAr: tr.nameAr,
+          key, trackId: tr.id, trackNameAr: tr.nameAr,
           trackColor: tr.color, trackWeight: tr.weight, trackIcon: tr.icon,
           trackContentAr: tr.contentAr, phaseId: ph.id, phaseNameAr: ph.nameAr,
           groupAr: ph.groupAr, group: ph.group, ...op, index: idx,
+          // Rich data from Supabase
+          insight: detail.insight || '',
+          whyItMatters: detail.why_it_matters || '',
+          fullDesc: detail.description || op.desc,
+          outputs: detail.outputs || [],
+          duration: detail.duration || `${op.dur} أيام`,
+          feeds: detail.feeds || [],
+          fedBy: detail.fed_by || [],
         });
         idx++;
       }
     }
     return list;
-  }, []);
+  }, [processDetails]);
 
   const confirmedCount = Object.values(confirmed).filter(Boolean).length;
   const datedCount = Object.keys(dates).length;
@@ -1156,10 +1209,20 @@ export default function App() {
           <div className="mx-cells">{PHASES.map(ph => {
             const op = OPERATIONS[tr.id][ph.id - 1], key = `${tr.id}-${ph.id}`, proc = procs.find(p => p.key === key);
             const hasD = !!dates[key], isDone = !!confirmed[key];
-            return (<div key={key} className={`cell ${isDone ? "done" : ""} ${hasD && !isDone ? "dated" : ""}`} onClick={() => { if (submitted) { showToast("تم قفل الخطة بعد التقديم النهائي"); return; } setSelectedCell(proc); setTempDate(dates[key] || ""); setDateError(""); }}>
+            const isHL = highlightedKeys.includes(key);
+            return (<div key={key} className={`cell ${isDone ? "done" : ""} ${hasD && !isDone ? "dated" : ""} ${isHL ? "highlighted" : ""}`}
+              onClick={() => {
+                if (submitted) { showToast("تم قفل الخطة بعد التقديم النهائي"); return; }
+                setSelectedCell(proc);
+                setTempDate(dates[key] || ""); setDateError("");
+                // Highlight connected processes
+                setHighlightedKeys([...(proc.feeds || []), ...(proc.fedBy || [])]);
+              }}
+              onMouseLeave={() => { if (!selectedCell) setHighlightedKeys([]); }}>
               <div className="bar" style={{ background: tr.color }} /><span className="num">{proc.index + 1}</span>
               <div><div className="cell-name">{op.nameAr}</div><div className="cell-desc">{op.desc.slice(0, 35)}…</div></div>
               <div className="cell-meta"><span className="cell-dur">{op.dur} أيام</span>{hasD && <span className="cell-date">{fmtShort(dates[key])}</span>}</div>
+              {proc.insight && <div className="cell-insight" style={{ background: `${tr.color}E6` }}>{proc.insight}</div>}
             </div>);
           })}</div>
         </div>)}</div>
@@ -1239,15 +1302,58 @@ export default function App() {
       </div>}
 
       {/* ═══ MODAL ═══ */}
-      {selectedCell && <div className="overlay" onClick={() => setSelectedCell(null)}><div className="modal" onClick={e => e.stopPropagation()}>
+      {selectedCell && <div className="overlay" onClick={() => { setSelectedCell(null); setHighlightedKeys([]); }}><div className="modal" onClick={e => e.stopPropagation()}>
         <span className="modal-badge" style={{ background: selectedCell.trackColor }}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
-        <h2>{selectedCell.nameAr}</h2><p className="modal-desc">{selectedCell.desc}</p>
+        <h2>{selectedCell.nameAr}</h2>
+
+        {/* البصيرة المنهجية */}
+        {selectedCell.insight && <div className="modal-section">
+          <div className="modal-insight-box">💡 {selectedCell.insight}</div>
+        </div>}
+
+        {/* الوصف التفصيلي */}
+        <p className="modal-desc">{selectedCell.fullDesc || selectedCell.desc}</p>
+
+        {/* لماذا يهم */}
+        {selectedCell.whyItMatters && <div className="modal-section">
+          <div className="modal-section-title">⚡ لماذا يهم</div>
+          <div className="modal-why">{selectedCell.whyItMatters}</div>
+        </div>}
+
         <div className="modal-grid">
-          <div className="modal-item"><div className="modal-item-label">المدة</div><div className="modal-item-value">{selectedCell.dur} أيام</div></div>
+          <div className="modal-item"><div className="modal-item-label">المدة</div><div className="modal-item-value">{selectedCell.duration || `${selectedCell.dur} أيام`}</div></div>
           <div className="modal-item"><div className="modal-item-label">الوزن</div><div className="modal-item-value">{selectedCell.trackWeight}%</div></div>
-          <div className="modal-item"><div className="modal-item-label">المجموعة</div><div className="modal-item-value">{selectedCell.groupAr}</div></div>
+          <div className="modal-item"><div className="modal-item-label">المنطقة</div><div className="modal-item-value" style={{ fontSize: "0.78rem" }}>{selectedCell.groupAr}</div></div>
           <div className="modal-item"><div className="modal-item-label">الترتيب</div><div className="modal-item-value">#{selectedCell.index + 1}</div></div>
         </div>
+
+        {/* المخرجات المتوقعة */}
+        {selectedCell.outputs && selectedCell.outputs.length > 0 && <div className="modal-section">
+          <div className="modal-section-title">📋 المخرجات المتوقعة</div>
+          <div className="modal-outputs">
+            {selectedCell.outputs.map((out, i) => <div key={i} className="modal-output-item"><div className="modal-output-dot" style={{ background: selectedCell.trackColor }} />{out}</div>)}
+          </div>
+        </div>}
+
+        {/* العمليات المرتبطة */}
+        {((selectedCell.feeds && selectedCell.feeds.length > 0) || (selectedCell.fedBy && selectedCell.fedBy.length > 0)) && <div className="modal-section">
+          <div className="modal-section-title">🔗 شبكة الترابط</div>
+          {selectedCell.fedBy && selectedCell.fedBy.length > 0 && <>
+            <div className="modal-related-label">← تتغذى من:</div>
+            <div className="modal-related" style={{ marginBottom: "0.4rem" }}>
+              {selectedCell.fedBy.map(k => { const p = procs.find(x => x.key === k); return p ? <span key={k} className="modal-related-chip" style={{ borderColor: p.trackColor + '60', color: p.trackColor, background: p.trackColor + '08' }} onClick={() => { setSelectedCell(p); setTempDate(dates[p.key] || ""); setDateError(""); setHighlightedKeys([...(p.feeds || []), ...(p.fedBy || [])]); }}>{p.trackIcon} {p.nameAr}</span> : null; })}
+            </div>
+          </>}
+          {selectedCell.feeds && selectedCell.feeds.length > 0 && <>
+            <div className="modal-related-label">→ تغذي:</div>
+            <div className="modal-related">
+              {selectedCell.feeds.map(k => { const p = procs.find(x => x.key === k); return p ? <span key={k} className="modal-related-chip" style={{ borderColor: p.trackColor + '60', color: p.trackColor, background: p.trackColor + '08' }} onClick={() => { setSelectedCell(p); setTempDate(dates[p.key] || ""); setDateError(""); setHighlightedKeys([...(p.feeds || []), ...(p.fedBy || [])]); }}>{p.trackIcon} {p.nameAr}</span> : null; })}
+            </div>
+          </>}
+        </div>}
+
+        <div className="modal-divider" />
+
         <div className="date-section"><h4>📅 تحديد تاريخ البدء</h4>
           <div className="date-row">
             <input type="date" value={tempDate} min={todayISO()} onChange={e => { setTempDate(e.target.value); setDateError(""); }} />
@@ -1268,7 +1374,7 @@ export default function App() {
         </div>
         <div className="modal-actions">
           <button className={`btn ${confirmed[selectedCell.key] ? "btn-danger" : ""}`} onClick={() => toggleConfirm(selectedCell.key)} disabled={!dates[selectedCell.key]}>{confirmed[selectedCell.key] ? "إلغاء التأكيد ✕" : "تأكيد الموعد ✓"}</button>
-          <button className="btn btn-outline" onClick={() => setSelectedCell(null)}>إغلاق</button>
+          <button className="btn btn-outline" onClick={() => { setSelectedCell(null); setHighlightedKeys([]); }}>إغلاق</button>
         </div>
         {!dates[selectedCell.key] && <p style={{ fontSize: "0.72rem", color: "#A0522D", marginTop: "0.4rem", textAlign: "center" }}>حدد التاريخ أولاً</p>}
       </div></div>}
