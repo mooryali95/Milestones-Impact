@@ -788,6 +788,21 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .rpt-section-title { font-family: 'Amiri', serif; font-size: 1.1rem; color: var(--mi-d); margin-bottom: 0.7rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--sa); }
 @media (max-width: 640px) { .rpt-stats { grid-template-columns: repeat(2, 1fr); } .rpt-bar-label { width: 70px; font-size: 0.7rem; } }
 
+/* ── Admin Content Editor ── */
+.adm-edit-card { background: var(--sw); border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; border: 1px solid var(--sa); }
+.adm-edit-card:hover { border-color: var(--mi); }
+.adm-edit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; cursor: pointer; }
+.adm-edit-header h4 { font-size: 0.88rem; color: var(--mi-d); margin: 0; }
+.adm-field { margin-bottom: 0.6rem; }
+.adm-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--wg); margin-bottom: 0.2rem; }
+.adm-field input, .adm-field textarea { width: 100%; padding: 0.5rem 0.6rem; border: 1.5px solid var(--sa); border-radius: 8px; font-family: 'Tajawal', sans-serif; font-size: 0.82rem; direction: rtl; resize: vertical; box-sizing: border-box; }
+.adm-field input:focus, .adm-field textarea:focus { border-color: var(--mi); outline: none; }
+.adm-field textarea { min-height: 60px; }
+.adm-actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.5rem; }
+.adm-consultant { background: linear-gradient(135deg, rgba(107,157,173,0.04), rgba(107,157,173,0.01)); border: 1.5px solid rgba(107,157,173,0.15); border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; }
+.adm-consultant h4 { color: var(--mi-d); font-size: 0.9rem; margin-bottom: 0.4rem; }
+.adm-note { font-size: 0.78rem; color: var(--wg); padding: 0.4rem 0.6rem; background: rgba(139,105,20,0.04); border-radius: 7px; margin-bottom: 0.4rem; }
+
 /* ── Smart Suggestions ── */
 .smart-box { border-radius: 13px; padding: 1rem 1.2rem; margin-bottom: 1rem; animation: fadeIn 0.5s; }
 .smart-welcome { background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border: 1.5px dashed var(--mi); text-align: center; }
@@ -855,6 +870,10 @@ export default function App() {
   const [screen, setScreen] = useState("splash");
   const [tab, setTab] = useState("matrix");
   const [adminTab, setAdminTab] = useState("regs");
+  const [adminEditProcess, setAdminEditProcess] = useState(null);
+  const [adminEditContent, setAdminEditContent] = useState(null);
+  const [adminSaving, setAdminSaving] = useState(false);
+  const [adminReportReg, setAdminReportReg] = useState(null);
 
   const [user, setUser] = useState({ name: "", phone: "", email: "" });
   const [regErrors, setRegErrors] = useState({});
@@ -962,6 +981,31 @@ export default function App() {
     const regs = await DB.getAll("reg:");
     setAllRegs(regs.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
     setLoading(false);
+  };
+
+  // ── Admin: Save process detail ──
+  const adminSaveProcess = async (processKey, updates) => {
+    if (!isSupabaseConfigured) return;
+    setAdminSaving(true);
+    try {
+      await supabase.query('PATCH', `process_details?process_key=eq.${processKey}`, updates);
+      // Refresh local state
+      setProcessDetails(prev => ({ ...prev, [processKey]: { ...prev[processKey], ...updates } }));
+      showToast('تم الحفظ ✓');
+    } catch (e) { showToast('خطأ في الحفظ'); }
+    setAdminSaving(false);
+  };
+
+  // ── Admin: Save app content ──
+  const adminSaveContent = async (key, value) => {
+    if (!isSupabaseConfigured) return;
+    setAdminSaving(true);
+    try {
+      await supabase.query('PATCH', `app_content?key=eq.${key}`, { value, updated_at: new Date().toISOString() });
+      setAppContent(prev => ({ ...prev, [key]: value }));
+      showToast('تم الحفظ ✓');
+    } catch (e) { showToast('خطأ في الحفظ'); }
+    setAdminSaving(false);
   };
 
   // ── Resume Session: Step 1 - Find & Send OTP ──
@@ -1333,7 +1377,7 @@ export default function App() {
     <><style>{CSS}</style><div className="app">
       <nav className="nav nav-admin">
         <div className="nav-brand"><div className="nav-logo"><MILogo size={16} color="#6B9DAD" /></div><div className="nav-text"><h3>لوحة الإدارة</h3><span>Milestone Impact</span></div></div>
-        <div className="nav-right"><div className="tabs"><button className={`tab ${adminTab === "regs" ? "on" : ""}`} onClick={() => setAdminTab("regs")}>المسجلين</button><button className={`tab ${adminTab === "stats" ? "on" : ""}`} onClick={() => setAdminTab("stats")}>إحصائيات</button></div><button className="btn-logout" onClick={logout}>← خروج</button></div>
+        <div className="nav-right"><div className="tabs"><button className={`tab ${adminTab === "regs" ? "on" : ""}`} onClick={() => setAdminTab("regs")}>المسجلين</button><button className={`tab ${adminTab === "reports" ? "on" : ""}`} onClick={() => setAdminTab("reports")}>📊 التقارير</button><button className={`tab ${adminTab === "content" ? "on" : ""}`} onClick={() => setAdminTab("content")}>✏ المحتوى</button><button className={`tab ${adminTab === "stats" ? "on" : ""}`} onClick={() => setAdminTab("stats")}>إحصائيات</button></div><button className="btn-logout" onClick={logout}>← خروج</button></div>
       </nav>
       <div className="sec" style={{ animation: "fadeIn 0.4s" }}>
         <div className="stat-grid">
@@ -1376,6 +1420,105 @@ export default function App() {
                   </React.Fragment>)}
             </tbody>
           </table></div>
+        </>}
+
+        {adminTab === "reports" && <>
+          <div className="sec-head"><h2 className="sec-title">📊 تقارير العملاء — نسخة المستشار</h2></div>
+          {allRegs.length === 0 && <p style={{ color: "#999", textAlign: "center" }}>لا يوجد مسجلين</p>}
+          {allRegs.map(reg => {
+            const regAnalysis = analyzeBookings(procs, reg.dates || {}, reg.confirmed || {});
+            const bookedCount = Object.keys(reg.dates || {}).length;
+            const isOpen = adminReportReg === reg.id;
+            return <div key={reg.id} className="adm-consultant">
+              <div className="adm-edit-header" onClick={() => setAdminReportReg(isOpen ? null : reg.id)}>
+                <h4>{reg.name} — {bookedCount} حجوزات {regAnalysis ? `• نمط ${regAnalysis.pattern.nameAr}` : '• أقل من 3'}</h4>
+                <span>{isOpen ? '▲' : '▼'}</span>
+              </div>
+              {isOpen && <>
+                {!regAnalysis ? <p style={{ color: "#999", fontSize: "0.82rem" }}>أقل من 3 حجوزات — لا يمكن توليد تقرير</p> : <>
+                  {/* النمط */}
+                  <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: BRAND.color, fontSize: "1.1rem" }}>{regAnalysis.pattern.icon} {regAnalysis.pattern.nameAr}</div><div className="rpt-stat-l">النمط</div></div>
+                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "#5B7B3A" }}>{regAnalysis.trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
+                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "#6B4E3D" }}>{regAnalysis.readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
+                  </div>
+
+                  {/* بيانات المستشار الإضافية */}
+                  <div className="adm-note">⏱ <strong>الزمن بين الحجوزات:</strong> {(() => {
+                    const dateVals = Object.values(reg.dates || {}).sort();
+                    if (dateVals.length < 2) return 'حجز واحد فقط';
+                    const first = new Date(dateVals[0]), last = new Date(dateVals[dateVals.length - 1]);
+                    const diffDays = Math.round((last - first) / (1000 * 60 * 60 * 24));
+                    return diffDays === 0 ? 'حجز كل المواعيد دفعة واحدة — قرار محسوم' : `${diffDays} يوم بين أول وآخر موعد — ${diffDays <= 7 ? 'قرار سريع' : 'استكشاف متأنٍ'}`;
+                  })()}</div>
+
+                  {/* نقاط النقاش */}
+                  <div className="adm-note">💬 <strong>نقاط نقاش مقترحة:</strong> {regAnalysis.patternId === 'sequential' ? 'يميل للتعمق في مسار واحد — ناقش التوسع الأفقي' : regAnalysis.patternId === 'breadthFirst' ? 'يميل للاستكشاف الأفقي — ناقش التعمق في مسار محدد' : regAnalysis.patternId === 'foundationFocused' ? 'يركز على التأسيس — ناقش الانتقال للمراحل المتقدمة' : regAnalysis.patternId === 'outcomeDriven' ? 'يركز على النتائج — تحقق من متانة الأساس' : regAnalysis.patternId === 'diagnostic' ? 'يريد الصورة الكاملة أولاً — ادعم بخطة تنفيذ واضحة' : 'نمط تكاملي — ناقش أولويات التنفيذ'}</div>
+
+                  {/* فجوات التبعية */}
+                  {regAnalysis.depGaps.length > 0 && <div className="adm-note" style={{ background: "rgba(192,57,43,0.04)" }}>⚠ <strong>تبعيات مفقودة يجب مناقشتها:</strong> {regAnalysis.depGaps.map(g => `${g.process} ← ${g.missing}`).join(' | ')}</div>}
+
+                  {/* التوصيات */}
+                  {regAnalysis.recommendations.length > 0 && <div style={{ marginTop: "0.4rem" }}>{regAnalysis.recommendations.map((r, i) => <div key={i} className="rpt-rec" style={{ fontSize: "0.78rem" }}><span className="rpt-rec-icon">💡</span><span>{r}</span></div>)}</div>}
+                </>}
+              </>}
+            </div>;
+          })}
+        </>}
+
+        {adminTab === "content" && <>
+          <div className="sec-head"><h2 className="sec-title">✏ إدارة المحتوى</h2></div>
+
+          {/* تعديل نصوص الحالات */}
+          <div className="adm-edit-card">
+            <h4 style={{ color: BRAND.dark, marginBottom: "0.8rem" }}>📝 نصوص الحالات الخاصة</h4>
+            {[
+              { key: 'welcome_title', label: 'عنوان الترحيب (0 حجوزات)' },
+              { key: 'welcome_desc', label: 'وصف الترحيب' },
+              { key: 'welcome_hint', label: 'تلميح البداية' },
+              { key: 'starter_processes', label: 'عمليات البداية المقترحة (process keys مفصولة بفاصلة)' },
+              { key: 'progress_title', label: 'عنوان (1-2 حجوزات)' },
+              { key: 'progress_desc', label: 'وصف (1-2 حجوزات)' },
+              { key: 'suggest_label', label: 'نص الاقتراحات الذكية' },
+              { key: 'suggest_deps_label', label: 'نص شريط التبعيات (3+)' },
+            ].map(item => <div key={item.key} className="adm-field">
+              <label>{item.label}</label>
+              <input value={appContent[item.key] || ''} onChange={e => setAppContent(prev => ({ ...prev, [item.key]: e.target.value }))} onBlur={e => adminSaveContent(item.key, e.target.value)} />
+            </div>)}
+          </div>
+
+          {/* تعديل بيانات العمليات */}
+          <div className="adm-edit-card">
+            <h4 style={{ color: BRAND.dark, marginBottom: "0.8rem" }}>🔧 بيانات العمليات الـ 16</h4>
+            {procs.map(p => {
+              const detail = processDetails[p.key] || {};
+              const isOpen = adminEditProcess === p.key;
+              return <div key={p.key} style={{ borderBottom: "1px solid var(--sa)", paddingBottom: "0.5rem", marginBottom: "0.5rem" }}>
+                <div className="adm-edit-header" onClick={() => setAdminEditProcess(isOpen ? null : p.key)}>
+                  <span style={{ fontSize: "0.82rem" }}><span style={{ color: p.trackColor }}>{p.trackIcon}</span> {p.nameAr} <span style={{ fontSize: "0.68rem", color: "#999" }}>({p.key})</span></span>
+                  <span>{isOpen ? '▲' : '▼'}</span>
+                </div>
+                {isOpen && <div style={{ padding: "0.5rem 0" }}>
+                  {[
+                    { field: 'insight', label: 'البصيرة المنهجية', type: 'input' },
+                    { field: 'description', label: 'الوصف التفصيلي', type: 'textarea' },
+                    { field: 'why_it_matters', label: 'لماذا يهم', type: 'textarea' },
+                    { field: 'duration', label: 'المدة الزمنية', type: 'input' },
+                  ].map(f => <div key={f.field} className="adm-field">
+                    <label>{f.label}</label>
+                    {f.type === 'input'
+                      ? <input defaultValue={detail[f.field] || ''} onBlur={e => adminSaveProcess(p.key, { [f.field]: e.target.value })} />
+                      : <textarea defaultValue={detail[f.field] || ''} onBlur={e => adminSaveProcess(p.key, { [f.field]: e.target.value })} />}
+                  </div>)}
+                  <div className="adm-field">
+                    <label>المخرجات (مفصولة بـ |)</label>
+                    <input defaultValue={(detail.outputs || []).join(' | ')} onBlur={e => adminSaveProcess(p.key, { outputs: e.target.value.split('|').map(s => s.trim()).filter(Boolean) })} />
+                  </div>
+                  {adminSaving && <span style={{ fontSize: "0.72rem", color: BRAND.color }}>جاري الحفظ...</span>}
+                </div>}
+              </div>;
+            })}
+          </div>
         </>}
 
         {adminTab === "stats" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "0.75rem" }}>
