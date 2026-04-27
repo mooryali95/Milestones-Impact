@@ -909,6 +909,32 @@ const LocalSession = {
   },
 };
 
+const ADMIN_SESSION_KEY = 'mi_admin_session';
+const ADMIN_SESSION_TTL = 4 * 60 * 60 * 1000; // 4 hours
+
+const AdminSession = {
+  save(token) {
+    try {
+      localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ token, savedAt: Date.now() }));
+    } catch (e) {}
+  },
+  load() {
+    try {
+      const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+      if (!raw) return null;
+      const payload = JSON.parse(raw);
+      if (!payload?.savedAt || Date.now() - payload.savedAt > ADMIN_SESSION_TTL) {
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        return null;
+      }
+      return payload.token;
+    } catch (e) { return null; }
+  },
+  clear() {
+    try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch (e) {}
+  },
+};
+
 // ════════════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════════════
@@ -961,8 +987,16 @@ export default function App() {
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
-  // ── Auto-restore local session (24h) ──
+  // ── Auto-restore local session ──
   useEffect(() => {
+    // Restore admin session (4h)
+    const adminToken = AdminSession.load();
+    if (adminToken) {
+      setScreen("admin");
+      loadRegs();
+      return;
+    }
+    // Restore user session (24h)
     const session = LocalSession.load();
     if (session?.sessionId && session?.user) {
       setUser(session.user);
@@ -1216,7 +1250,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        sessionStorage.setItem('mi_admin_token', data.token);
+        AdminSession.save(data.token);
         setScreen("admin");
         loadRegs();
       } else {
@@ -1275,6 +1309,7 @@ export default function App() {
   // ── Logout ──
   const doLogout = () => {
     LocalSession.clear();
+    AdminSession.clear();
     setScreen("splash"); setUser({ name: "", phone: "", email: "" }); setDates({}); setConfirmed({});
     setSubmitted(false); setReopenRequested(false); setSessionId(null); setTab("matrix"); setRegErrors({});
     setAdminUser(""); setAdminPass(""); setAdminError(""); setExpandedReg(null);
