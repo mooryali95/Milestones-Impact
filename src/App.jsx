@@ -862,6 +862,54 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 `;
 
 // ════════════════════════════════════════════════════════════════
+// LOCAL SESSION MANAGER (24-hour persistence)
+// ════════════════════════════════════════════════════════════════
+
+const SESSION_KEY = 'mi_local_session';
+const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+const LocalSession = {
+  save(userData, sessionId, dates, confirmed, submitted, reopenRequested) {
+    try {
+      const payload = {
+        user: userData,
+        sessionId,
+        dates,
+        confirmed,
+        submitted,
+        reopenRequested,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    } catch (e) { console.log('LocalSession save error:', e); }
+  },
+  load() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const payload = JSON.parse(raw);
+      if (!payload?.savedAt) return null;
+      if (Date.now() - payload.savedAt > SESSION_TTL) {
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return payload;
+    } catch (e) { return null; }
+  },
+  update(fields) {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...payload, ...fields, savedAt: Date.now() }));
+    } catch (e) { console.log('LocalSession update error:', e); }
+  },
+  clear() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════════════
 
@@ -912,6 +960,21 @@ export default function App() {
   const [appContent, setAppContent] = useState({});
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
+
+  // ── Auto-restore local session (24h) ──
+  useEffect(() => {
+    const session = LocalSession.load();
+    if (session?.sessionId && session?.user) {
+      setUser(session.user);
+      setSessionId(session.sessionId);
+      setDates(session.dates || {});
+      setConfirmed(session.confirmed || {});
+      setSubmitted(session.submitted || false);
+      setReopenRequested(session.reopenRequested || false);
+      setScreen('main');
+      if (session.submitted) setTab('output');
+    }
+  }, []);
 
   // Load rich process details + app content from Supabase
   useEffect(() => {
@@ -1054,6 +1117,11 @@ export default function App() {
     setScreen("main");
     if (found.submitted) setTab("output");
     setOtpStep("form"); setOtpCode(""); setOtpPending(null);
+    LocalSession.save(
+      { name: found.name, phone: found.phone, email: found.email },
+      found.id, found.dates || {}, found.confirmed || {},
+      found.submitted || false, found.reopenRequested || false
+    );
     showToast(`مرحباً مجدداً ${found.name}! تم استعادة بياناتك`);
   };
 
@@ -1105,12 +1173,21 @@ export default function App() {
       setReopenRequested(dup.reopenRequested || false);
       setScreen("main");
       if (dup.submitted) setTab("output");
+      LocalSession.save(
+        { name: dup.name, phone: dup.phone, email: dup.email },
+        dup.id, dup.dates || {}, dup.confirmed || {},
+        dup.submitted || false, dup.reopenRequested || false
+      );
       showToast(`مرحباً مجدداً ${dup.name}! تم استعادة بياناتك`);
     } else {
       const id = `reg:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const record = { id, ...user, registeredAt: new Date().toISOString(), dates: {}, confirmed: {}, submitted: false };
       await DB.save(id, record);
       setSessionId(id);
+      LocalSession.save(
+        { name: user.name, phone: user.phone, email: user.email },
+        id, {}, {}, false, false
+      );
       setScreen("main");
       showToast(`أهلاً ${user.name}! تم تسجيلك بنجاح`);
     }
@@ -1159,6 +1236,7 @@ export default function App() {
     const newDates = { ...dates, [key]: dateStr };
     setDates(newDates);
     if (sessionId) { const rec = await DB.get(sessionId); if (rec) { rec.dates = newDates; await DB.save(sessionId, rec); } }
+    LocalSession.update({ dates: newDates });
     return true;
   };
 
@@ -1168,6 +1246,7 @@ export default function App() {
     if (!newConf[key]) delete newConf[key];
     setConfirmed(newConf);
     if (sessionId) { const rec = await DB.get(sessionId); if (rec) { rec.confirmed = newConf; await DB.save(sessionId, rec); } }
+    LocalSession.update({ confirmed: newConf });
     setSelectedCell(null);
     showToast(newConf[key] ? "تم تأكيد الموعد ✓" : "تم إلغاء التأكيد");
   };
@@ -1195,6 +1274,7 @@ export default function App() {
 
   // ── Logout ──
   const doLogout = () => {
+    LocalSession.clear();
     setScreen("splash"); setUser({ name: "", phone: "", email: "" }); setDates({}); setConfirmed({});
     setSubmitted(false); setReopenRequested(false); setSessionId(null); setTab("matrix"); setRegErrors({});
     setAdminUser(""); setAdminPass(""); setAdminError(""); setExpandedReg(null);
