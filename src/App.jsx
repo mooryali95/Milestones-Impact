@@ -840,6 +840,55 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .modal-related-label { font-size: 0.65rem; color: var(--wg); margin-bottom: 0.2rem; }
 .modal-divider { height: 1px; background: var(--sa); margin: 0.8rem 0; }
 
+/* ── Demo CTA in Modal ── */
+.demo-cta { background: linear-gradient(135deg, #8B691408, #8B691415); border: 1.5px solid #8B691430; border-radius: 12px; padding: 1rem 1.1rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.demo-cta:hover { border-color: #8B6914; background: linear-gradient(135deg, #8B691415, #8B691422); transform: translateY(-1px); }
+.demo-cta-icon { font-size: 1.6rem; flex-shrink: 0; }
+.demo-cta-text { flex: 1; }
+.demo-cta-title { font-weight: 700; font-size: 0.88rem; color: #8B6914; margin-bottom: 0.15rem; }
+.demo-cta-desc { font-size: 0.75rem; color: var(--wg); line-height: 1.4; }
+.demo-cta-arrow { color: #8B6914; font-size: 1.1rem; flex-shrink: 0; }
+.demo-screen { position: fixed; inset: 0; background: var(--cr); z-index: 200; display: flex; flex-direction: column; overflow: hidden; }
+.demo-header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+.demo-header-back { background: rgba(255,255,255,0.12); border: none; color: #fff; border-radius: 8px; padding: 0.4rem 0.8rem; cursor: pointer; font-family: Tajawal,sans-serif; font-size: 0.82rem; display: flex; align-items: center; gap: 0.3rem; }
+.demo-header-info { flex: 1; }
+.demo-header-title { font-family: Amiri,serif; font-size: 1.1rem; font-weight: 700; }
+.demo-header-sub { font-size: 0.72rem; opacity: 0.7; margin-top: 0.15rem; }
+.demo-header-badge { background: #8B6914; padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
+.demo-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+.demo-intro { background: var(--sw); border-radius: 14px; padding: 1.1rem 1.3rem; margin-bottom: 1.5rem; border-right: 4px solid #8B6914; }
+.demo-intro-title { font-weight: 700; color: #8B6914; margin-bottom: 0.3rem; font-size: 0.9rem; }
+.demo-intro-text { font-size: 0.82rem; color: var(--wg); line-height: 1.7; }
+.demo-card { background: var(--sw); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1.5px solid var(--sa); }
+.demo-card-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--sa); }
+.demo-card-num { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg,#8B6914,#A07820); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+.demo-card-name { font-weight: 700; font-size: 0.9rem; color: var(--mi-d); flex: 1; }
+.demo-card-remove { background: none; border: none; color: #C0392B; cursor: pointer; font-size: 0.8rem; padding: 0.2rem 0.4rem; border-radius: 6px; }
+.demo-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1rem; }
+.demo-fields-3 { grid-template-columns: 1fr 1fr 1fr; }
+.demo-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.demo-field label { font-size: 0.7rem; font-weight: 600; color: var(--wg); }
+.demo-field input,.demo-field select { border: 1.5px solid var(--sa); border-radius: 8px; padding: 0.45rem 0.6rem; font-family: Tajawal,sans-serif; font-size: 0.82rem; background: var(--cr); color: var(--mi-d); }
+.demo-field input:focus,.demo-field select:focus { outline: none; border-color: #8B6914; }
+.demo-section-label { font-size: 0.75rem; font-weight: 700; color: var(--mi-d); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.6rem; background: var(--cr); border-radius: 8px; }
+.demo-scores { display: grid; grid-template-columns: repeat(5,1fr); gap: 0.5rem; margin-bottom: 0.8rem; }
+.demo-scores-4 { grid-template-columns: repeat(4,1fr); }
+.demo-score { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+.demo-score label { font-size: 0.65rem; color: var(--wg); text-align: center; }
+.demo-score input[type=number] { width: 100%; border: 1.5px solid var(--sa); border-radius: 8px; padding: 0.35rem; text-align: center; font-family: Tajawal,sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--mi-d); background: var(--cr); }
+.demo-score input[type=number]:focus { outline: none; border-color: #8B6914; }
+.demo-targets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.demo-target-chip { display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1.5px solid var(--sa); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; user-select: none; }
+.demo-target-chip.active { border-color: #8B6914; background: #8B691415; color: #8B6914; font-weight: 600; }
+.demo-footer { background: var(--sw); border-top: 1px solid var(--sa); padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-shrink: 0; }
+.demo-add-btn { background: none; border: 1.5px dashed var(--sa); border-radius: 10px; padding: 0.5rem 1rem; color: var(--wg); cursor: pointer; font-family: Tajawal,sans-serif; font-size: 0.82rem; }
+.demo-add-btn:hover { border-color: #8B6914; color: #8B6914; }
+.demo-admin-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin-top: 0.5rem; overflow-x: auto; display: block; }
+.demo-admin-table th { background: #1a1a2e; color: #fff; padding: 0.5rem 0.6rem; font-weight: 600; text-align: right; white-space: nowrap; }
+.demo-admin-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--sa); vertical-align: top; }
+.demo-score-pill { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 700; font-size: 0.72rem; }
+.demo-empty-state { text-align: center; padding: 2rem; color: var(--wg); font-size: 0.85rem; }
+
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes slideR { from { opacity: 0; transform: translateX(-15px) } to { opacity: 1; transform: translateX(0) } }
@@ -984,6 +1033,12 @@ export default function App() {
   const [processDetails, setProcessDetails] = useState({});
   const [highlightedKeys, setHighlightedKeys] = useState([]);
   const [appContent, setAppContent] = useState({});
+
+  // ── التحليل الديموغرافي ──
+  const [demoScreen, setDemoScreen] = useState(false); // هل شاشة النموذج مفتوحة
+  const [demoRows, setDemoRows] = useState([]); // صفوف البيانات
+  const [demoSaving, setDemoSaving] = useState(false);
+  const DEMO_KEY = "demographic_analysis"; // مفتاح الحفظ في DB
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
@@ -1261,6 +1316,56 @@ export default function App() {
     }
   };
 
+  // ══ التحليل الديموغرافي — منطق البيانات ══
+
+  const emptyDemoRow = () => ({
+    id: Date.now() + Math.random(),
+    name: "", entity: "", position: "", relation: "",
+    age: "", location: "", sharedEvent: "",
+    strength: { knowledge: 0, social: 0, financial: 0, economic: 0, sovereign: 0 },
+    myRelation: { knowledge: 0, social: 0, financial: 0, economic: 0 },
+    target: { knowledge: false, social: false, financial: false, economic: false },
+  });
+
+  const loadDemoData = async () => {
+    if (!sessionId) return;
+    const rec = await DB.get(sessionId);
+    const saved = rec?.[DEMO_KEY];
+    if (saved && saved.length > 0) {
+      setDemoRows(saved);
+    } else {
+      setDemoRows([emptyDemoRow(), emptyDemoRow(), emptyDemoRow()]);
+    }
+  };
+
+  const saveDemoData = async () => {
+    if (!sessionId) return;
+    setDemoSaving(true);
+    try {
+      const rec = await DB.get(sessionId);
+      if (rec) { rec[DEMO_KEY] = demoRows; await DB.save(sessionId, rec); }
+      LocalSession.update({ [DEMO_KEY]: demoRows });
+      showToast("تم حفظ التحليل الديموغرافي ✓");
+    } catch(e) { showToast("خطأ في الحفظ"); }
+    setDemoSaving(false);
+  };
+
+  const openDemoScreen = () => { loadDemoData(); setDemoScreen(true); setSelectedCell(null); };
+
+  const updateDemoRow = (id, field, value) => {
+    setDemoRows(rows => rows.map(r => {
+      if (r.id !== id) return r;
+      if (Array.isArray(field)) {
+        const [group, key] = field;
+        return { ...r, [group]: { ...r[group], [key]: value } };
+      }
+      return { ...r, [field]: value };
+    }));
+  };
+
+  const addDemoRow = () => setDemoRows(rows => [...rows, emptyDemoRow()]);
+  const removeDemoRow = (id) => { if (demoRows.length > 1) setDemoRows(rows => rows.filter(r => r.id !== id)); };
+
   // ── Save Date ──
   const saveDate = async (key, dateStr) => {
     if (isPast(dateStr)) { setDateError("لا يمكن اختيار تاريخ في الماضي"); return false; }
@@ -1530,6 +1635,70 @@ export default function App() {
                           ); })}</tbody>
                         </table>
                         {r.submittedAt && <div className="output-stamp"><p>تم التقديم: <strong style={{ color: BRAND.color }}>{fmtBoth(r.submittedAt).both}</strong></p></div>}
+
+                        {/* ── التحليل الديموغرافي ── */}
+                        {r[DEMO_KEY] && r[DEMO_KEY].filter(x => x.name?.trim()).length > 0 && (
+                          <div style={{ marginTop: "1.2rem" }}>
+                            <h4 style={{ fontFamily: "'Amiri',serif", color: "#8B6914", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                              🗺️ التحليل الديموغرافي — {r[DEMO_KEY].filter(x => x.name?.trim()).length} شخص
+                            </h4>
+                            <div style={{ overflowX: "auto" }}>
+                              <table className="demo-admin-table">
+                                <thead><tr>
+                                  <th>#</th><th>الاسم</th><th>الجهة</th><th>المنصب</th><th>العلاقة</th><th>العمر</th><th>الموقع</th><th>الحدث</th>
+                                  <th colSpan={5}>قوة الشخص</th>
+                                  <th colSpan={4}>علاقتي به</th>
+                                  <th>المستهدف</th>
+                                </tr>
+                                <tr>
+                                  <th colSpan={8}></th>
+                                  <th>معرفي</th><th>مجتمعي</th><th>مالي</th><th>اقتصادي</th><th>سيادي</th>
+                                  <th>معرفي</th><th>مجتمعي</th><th>مالي</th><th>اقتصادي</th>
+                                  <th></th>
+                                </tr></thead>
+                                <tbody>
+                                  {r[DEMO_KEY].filter(x => x.name?.trim()).map((row, ri) => {
+                                    const targets = ['knowledge','social','financial','economic'].filter(k => row.target?.[k]);
+                                    const targetLabels = { knowledge: 'معرفي', social: 'مجتمعي', financial: 'مالي', economic: 'اقتصادي' };
+                                    const scoreColor = (v) => v >= 70 ? '#27ae60' : v >= 40 ? '#2E6B8A' : '#999';
+                                    return (
+                                      <tr key={ri}>
+                                        <td style={{ fontWeight: 700, color: "#8B6914" }}>{ri + 1}</td>
+                                        <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{row.name}</td>
+                                        <td>{row.entity || "—"}</td>
+                                        <td>{row.position || "—"}</td>
+                                        <td>{row.relation || "—"}</td>
+                                        <td>{row.age || "—"}</td>
+                                        <td>{row.location || "—"}</td>
+                                        <td style={{ maxWidth: "120px", fontSize: "0.68rem" }}>{row.sharedEvent || "—"}</td>
+                                        {['knowledge','social','financial','economic','sovereign'].map(k => (
+                                          <td key={k} style={{ textAlign: "center" }}>
+                                            <span className="demo-score-pill" style={{ background: scoreColor(row.strength?.[k] || 0) + '20', color: scoreColor(row.strength?.[k] || 0) }}>
+                                              {row.strength?.[k] ?? "—"}
+                                            </span>
+                                          </td>
+                                        ))}
+                                        {['knowledge','social','financial','economic'].map(k => (
+                                          <td key={k} style={{ textAlign: "center" }}>
+                                            <span className="demo-score-pill" style={{ background: '#2E6B8A20', color: '#2E6B8A' }}>
+                                              {row.myRelation?.[k] ?? "—"}
+                                            </span>
+                                          </td>
+                                        ))}
+                                        <td>{targets.length > 0 ? targets.map(k => targetLabels[k]).join(' • ') : "—"}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                        {(!r[DEMO_KEY] || r[DEMO_KEY].filter(x => x.name?.trim()).length === 0) && (
+                          <div className="demo-empty-state" style={{ marginTop: "1rem" }}>
+                            🗺️ لم يُكمل العميل التحليل الديموغرافي بعد
+                          </div>
+                        )}
                       </div>
                     </td></tr>}
                   </React.Fragment>)}
@@ -1985,6 +2154,19 @@ export default function App() {
             }}>✕ حذف التاريخ</button>
           </div>}
         </div>
+
+        {/* CTA التحليل الديموغرافي — تظهر فقط لعملية تحليل ديموغرافي */}
+        {selectedCell && selectedCell.nameAr === "تحليل ديموغرافي" && (
+          <div className="demo-cta" onClick={openDemoScreen}>
+            <div className="demo-cta-icon">🗺️</div>
+            <div className="demo-cta-text">
+              <div className="demo-cta-title">ابدأ تحليلك الديموغرافي</div>
+              <div className="demo-cta-desc">رسّم شبكتك البشرية — من حولك، وما قوتهم، وكيف تتحرك القيمة عبرهم</div>
+            </div>
+            <div className="demo-cta-arrow">←</div>
+          </div>
+        )}
+
         <div className="modal-actions">
           <button className={`btn ${confirmed[selectedCell.key] ? "btn-danger" : ""}`} onClick={() => toggleConfirm(selectedCell.key)} disabled={!dates[selectedCell.key]}>{confirmed[selectedCell.key] ? "إلغاء التأكيد ✕" : "تأكيد الموعد ✓"}</button>
           <button className="btn btn-outline" onClick={() => { setSelectedCell(null); setHighlightedKeys([]); }}>إغلاق</button>
@@ -2006,6 +2188,132 @@ export default function App() {
 
       {toast && <div className="toast">{toast}</div>}
       <Footer />
+
+      {/* ═══ شاشة التحليل الديموغرافي ═══ */}
+      {demoScreen && (
+        <div className="demo-screen">
+          {/* Header */}
+          <div className="demo-header">
+            <button className="demo-header-back" onClick={() => setDemoScreen(false)}>← رجوع</button>
+            <div className="demo-header-info">
+              <div className="demo-header-title">◈ التحليل الديموغرافي</div>
+              <div className="demo-header-sub">تفكيك البنية البشرية التي تتحرك داخلها قيمتك</div>
+            </div>
+            <div className="demo-header-badge">{demoRows.filter(r => r.name.trim()).length} شخص</div>
+          </div>
+
+          {/* Body */}
+          <div className="demo-body">
+            <div className="demo-intro">
+              <div className="demo-intro-title">🧭 ما هذا النموذج؟</div>
+              <div className="demo-intro-text">
+                هذه خريطة شبكتك البشرية — كل شخص حولك يحمل قيمة كامنة تنتظر التفعيل.
+                سجّل من تعرفهم، وحدد قوتهم في أربعة أبعاد، ونوع علاقتك بهم، وما تستهدف تفعيله معهم.
+                البيانات محفوظة بشكل آمن ولا يمكن تصديرها.
+              </div>
+            </div>
+
+            {demoRows.map((row, idx) => (
+              <div key={row.id} className="demo-card">
+                {/* Card Header */}
+                <div className="demo-card-header">
+                  <div className="demo-card-num">{idx + 1}</div>
+                  <div className="demo-card-name">{row.name || `الشخص ${idx + 1}`}</div>
+                  <button className="demo-card-remove" onClick={() => removeDemoRow(row.id)} title="حذف">✕</button>
+                </div>
+
+                {/* الهوية */}
+                <div className="demo-section-label">👤 البيانات الأساسية</div>
+                <div className="demo-fields demo-fields-3" style={{ marginBottom: "0.6rem" }}>
+                  <div className="demo-field">
+                    <label>الاسم *</label>
+                    <input placeholder="اسم الشخص" value={row.name} onChange={e => updateDemoRow(row.id, 'name', e.target.value)} />
+                  </div>
+                  <div className="demo-field">
+                    <label>الجهة / المؤسسة</label>
+                    <input placeholder="الشركة أو الجهة" value={row.entity} onChange={e => updateDemoRow(row.id, 'entity', e.target.value)} />
+                  </div>
+                  <div className="demo-field">
+                    <label>المنصب</label>
+                    <input placeholder="الدور أو المنصب" value={row.position} onChange={e => updateDemoRow(row.id, 'position', e.target.value)} />
+                  </div>
+                </div>
+                <div className="demo-fields demo-fields-3">
+                  <div className="demo-field">
+                    <label>طبيعة العلاقة</label>
+                    <select value={row.relation} onChange={e => updateDemoRow(row.id, 'relation', e.target.value)}>
+                      <option value="">اختر</option>
+                      <option>أقارب</option><option>زملاء</option><option>أصدقاء</option>
+                      <option>عملاء</option><option>شركاء</option><option>معارف</option><option>أخرى</option>
+                    </select>
+                  </div>
+                  <div className="demo-field">
+                    <label>العمر التقريبي</label>
+                    <input type="number" min="15" max="99" placeholder="45" value={row.age} onChange={e => updateDemoRow(row.id, 'age', e.target.value)} />
+                  </div>
+                  <div className="demo-field">
+                    <label>الموقع الجغرافي</label>
+                    <input placeholder="المدينة / الدولة" value={row.location} onChange={e => updateDemoRow(row.id, 'location', e.target.value)} />
+                  </div>
+                </div>
+                <div className="demo-fields" style={{ marginTop: "0.6rem" }}>
+                  <div className="demo-field" style={{ gridColumn: "1/-1" }}>
+                    <label>الحدث المشترك (كيف التقيتما؟)</label>
+                    <input placeholder="مثال: زميل عمل، حضرنا نفس البرنامج..." value={row.sharedEvent} onChange={e => updateDemoRow(row.id, 'sharedEvent', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* قوة الشخص */}
+                <div className="demo-section-label" style={{ marginTop: "1rem" }}>⚡ قوة الشخص بشكل عام (0–100)</div>
+                <div className="demo-scores">
+                  {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي'],['sovereign','سيادي']].map(([k, label]) => (
+                    <div key={k} className="demo-score">
+                      <label>{label}</label>
+                      <input type="number" min="0" max="100" value={row.strength[k]}
+                        onChange={e => updateDemoRow(row.id, ['strength', k], Math.min(100, Math.max(0, +e.target.value || 0)))}
+                        style={{ borderColor: row.strength[k] > 60 ? '#8B6914' : row.strength[k] > 30 ? '#2E6B8A' : undefined }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* نوع العلاقة الشخصية */}
+                <div className="demo-section-label">🤝 نوع علاقتي به (0–100)</div>
+                <div className="demo-scores demo-scores-4">
+                  {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي']].map(([k, label]) => (
+                    <div key={k} className="demo-score">
+                      <label>{label}</label>
+                      <input type="number" min="0" max="100" value={row.myRelation[k]}
+                        onChange={e => updateDemoRow(row.id, ['myRelation', k], Math.min(100, Math.max(0, +e.target.value || 0)))}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* المستهدف */}
+                <div className="demo-section-label">🎯 ما أستهدف تفعيله معه</div>
+                <div className="demo-targets">
+                  {[['knowledge','معرفي 🧠'],['social','مجتمعي 🤝'],['financial','مالي 💰'],['economic','اقتصادي 📈']].map(([k, label]) => (
+                    <div key={k}
+                      className={`demo-target-chip ${row.target[k] ? 'active' : ''}`}
+                      onClick={() => updateDemoRow(row.id, ['target', k], !row.target[k])}
+                    >{label}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="demo-footer">
+            <button className="demo-add-btn" onClick={addDemoRow}>+ إضافة شخص</button>
+            <span className="demo-count-badge">{demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل</span>
+            <button className="btn btn-gold" onClick={saveDemoData} disabled={demoSaving}>
+              {demoSaving ? "جاري الحفظ..." : "💾 حفظ التحليل"}
+            </button>
+          </div>
+        </div>
+      )}
     </div></>
   );
 }
