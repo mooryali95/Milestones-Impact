@@ -1105,7 +1105,7 @@ export default function App() {
           // Rich data from Supabase
           insight: detail.insight || '',
           whyItMatters: detail.why_it_matters || '',
-          fullDesc: detail.description || op.desc,
+          fullDesc: op.desc || detail.description || '',
           outputs: detail.outputs || [],
           duration: detail.duration || `${op.dur} أيام`,
           feeds: detail.feeds || [],
@@ -2335,7 +2335,7 @@ export default function App() {
         </div>
 
         {/* CTA التحليل الديموغرافي — تظهر فقط لعملية تحليل ديموغرافي */}
-        {selectedCell && selectedCell.nameAr === "تحليل ديموغرافي" && (
+        {selectedCell && (selectedCell.nameAr === "تحليل ديموغرافي" || selectedCell.key === "creation-1") && (
           <div className="demo-cta" onClick={openDemoScreen}>
             <div className="demo-cta-icon">🗺️</div>
             <div className="demo-cta-text">
