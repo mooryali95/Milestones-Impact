@@ -936,7 +936,66 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
   .banner { flex-direction: column; text-align: center; }
   .output-info { grid-template-columns: 1fr; }
 }
-`;
+
+/* ══ ADMIN PANEL — Mobile First ══ */
+.admin-bottom-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;border-top:1px solid rgba(255,255,255,0.08);z-index:200;padding:.3rem 0;}
+.admin-bottom-bar button{flex:1;background:none;border:none;color:rgba(255,255,255,0.4);font-family:Tajawal,sans-serif;font-size:.65rem;padding:.35rem 0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:.15rem;transition:color .2s;}
+.admin-bottom-bar button.on{color:#6B9DAD;}
+.admin-bottom-bar .bar-icon{font-size:1rem;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.2rem;}
+.stat{background:var(--sw);border-radius:var(--radius);padding:1rem .8rem;box-shadow:var(--shadow-sm);text-align:center;border-top:3px solid;}
+.stat-v{font-size:1.7rem;font-weight:800;margin-bottom:.1rem;}
+.stat-l{font-size:.72rem;color:var(--wg);}
+.reg-list{display:flex;flex-direction:column;gap:.55rem;}
+.reg-card{background:var(--sw);border-radius:var(--radius);padding:.9rem 1rem;box-shadow:var(--shadow-sm);border:1.5px solid var(--sa);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:.7rem;}
+.reg-card:hover{border-color:var(--mi);box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.reg-card.has-alert{border-color:rgba(192,57,43,.3);background:rgba(192,57,43,.02);}
+.reg-card-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:Amiri,serif;font-size:1rem;font-weight:700;color:#fff;flex-shrink:0;}
+.reg-card-info{flex:1;min-width:0;}
+.reg-card-name{font-weight:700;font-size:.88rem;color:var(--ch);margin-bottom:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.reg-card-meta{font-size:.7rem;color:var(--wg);display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;}
+.reg-card-right{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;}
+.reg-progress-mini{width:56px;height:4px;background:var(--sa);border-radius:4px;overflow:hidden;}
+.reg-progress-fill{height:100%;border-radius:4px;transition:width .4s;}
+.reg-progress-pct{font-size:.63rem;color:var(--wg);font-weight:700;}
+.reg-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(5px);z-index:1200;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s;padding:0;}
+.reg-modal{background:var(--sw);width:100%;max-width:820px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;animation:slideUp .3s cubic-bezier(.22,1,.36,1);border-radius:20px 20px 0 0;}
+.reg-modal-header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:.9rem 1.1rem;display:flex;align-items:center;gap:.65rem;flex-shrink:0;border-radius:20px 20px 0 0;}
+.reg-modal-close{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:.28rem .65rem;cursor:pointer;font-family:Tajawal,sans-serif;font-size:.76rem;flex-shrink:0;}
+.reg-modal-info{flex:1;min-width:0;}
+.reg-modal-name{font-family:Amiri,serif;font-size:1rem;font-weight:700;}
+.reg-modal-phone{font-size:.68rem;opacity:.55;direction:ltr;}
+.reg-modal-tabs{display:flex;background:rgba(0,0,0,.2);border-radius:7px;padding:2px;flex-shrink:0;}
+.reg-modal-tab{padding:.28rem .65rem;border:none;border-radius:5px;font-family:Tajawal,sans-serif;font-size:.72rem;color:rgba(255,255,255,.5);background:transparent;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.reg-modal-tab.on{background:rgba(255,255,255,.18);color:#fff;font-weight:700;}
+.reg-modal-body{flex:1;overflow-y:auto;padding:1.1rem;}
+.reg-modal-actions{padding:.8rem 1.1rem;border-top:1px solid var(--sa);display:flex;gap:.5rem;flex-shrink:0;}
+.demo-person-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem;}
+.demo-person-card{background:var(--cr);border-radius:12px;padding:1rem;border:1.5px solid var(--sa);}
+.demo-person-header{display:flex;align-items:center;gap:.55rem;margin-bottom:.85rem;}
+.demo-person-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#8B6914,#C4A24E);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;}
+.demo-person-name{font-weight:700;font-size:.88rem;color:var(--ch);}
+.demo-person-role{font-size:.7rem;color:var(--wg);margin-top:.04rem;}
+.demo-bar-row{display:flex;align-items:center;gap:.45rem;margin-bottom:.3rem;}
+.demo-bar-label{font-size:.63rem;color:var(--wg);width:40px;flex-shrink:0;text-align:right;}
+.demo-bar-track{flex:1;height:9px;background:var(--sa);border-radius:5px;overflow:hidden;}
+.demo-bar-fill{height:100%;border-radius:5px;transition:width .6s ease;}
+.demo-bar-val{font-size:.63rem;font-weight:700;width:22px;text-align:left;flex-shrink:0;}
+.demo-person-chips{display:flex;flex-wrap:wrap;gap:.28rem;margin-top:.65rem;padding-top:.55rem;border-top:1px solid var(--sa);}
+.demo-person-chip{font-size:.63rem;padding:.15rem .45rem;border-radius:10px;font-weight:700;}
+.demo-section-head{font-size:.7rem;font-weight:700;color:var(--wg);margin-bottom:.5rem;letter-spacing:.5px;text-transform:uppercase;}
+@media(max-width:640px){
+  .admin-bottom-bar{display:flex;}
+  .admin-desktop-tabs{display:none!important;}
+  .sec{padding-bottom:5rem;}
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:.5rem;}
+  .demo-person-grid{grid-template-columns:1fr;}
+  .reg-modal{border-radius:20px 20px 0 0;}
+}
+@media(min-width:641px){
+  .reg-modal-overlay{align-items:center;padding:1rem;}
+  .reg-modal{border-radius:20px;}
+}`;
 
 // ════════════════════════════════════════════════════════════════
 // LOCAL SESSION MANAGER (24-hour persistence)
@@ -1095,6 +1154,8 @@ export default function App() {
   const [demoRows, setDemoRows] = useState([]); // صفوف البيانات
   const [demoSaving, setDemoSaving] = useState(false);
   const DEMO_KEY = "demographic_analysis"; // مفتاح الحفظ في DB
+  const [selectedReg, setSelectedReg] = useState(null); // المسجّل المفتوح في Modal الأدمن
+  const [selectedRegTab, setSelectedRegTab] = useState('schedule'); // تبويب Modal الأدمن
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
@@ -1852,223 +1913,263 @@ export default function App() {
   // ════════ ADMIN PANEL ════════
   if (screen === "admin") return (
     <><style>{CSS}</style><div className="app">
+
+      {/* ── Nav ── */}
       <nav className="nav nav-admin">
-        <div className="nav-brand"><div className="nav-logo"><MILogo size={16} color="#6B9DAD" /></div><div className="nav-text"><h3>لوحة الإدارة</h3><span>Milestone Impact</span></div></div>
-        <div className="nav-right"><div className="tabs"><button className={`tab ${adminTab === "regs" ? "on" : ""}`} onClick={() => setAdminTab("regs")}>المسجلين</button><button className={`tab ${adminTab === "reports" ? "on" : ""}`} onClick={() => setAdminTab("reports")}>📊 التقارير</button><button className={`tab ${adminTab === "content" ? "on" : ""}`} onClick={() => setAdminTab("content")}>✏ المحتوى</button><button className={`tab ${adminTab === "stats" ? "on" : ""}`} onClick={() => setAdminTab("stats")}>إحصائيات</button></div><button className="btn-logout" onClick={logout}>← خروج</button></div>
+        <div className="nav-brand">
+          <div className="nav-logo"><MILogo size={15} color="#6B9DAD"/></div>
+          <div>
+            <div style={{fontSize:"0.82rem",color:"#fff",fontWeight:700}}>لوحة الإدارة</div>
+            <div style={{fontSize:"0.62rem",color:"rgba(255,255,255,0.4)"}}>Milestone Impact</div>
+          </div>
+        </div>
+        <div className="nav-center admin-desktop-tabs">
+          <div className="tabs">
+            {[["regs","المسجلين"],["reports","التقارير"],["content","المحتوى"],["stats","إحصائيات"]].map(([k,v])=>(
+              <button key={k} className={`tab ${adminTab===k?"on":""}`} onClick={()=>setAdminTab(k)}>{v}</button>
+            ))}
+          </div>
+        </div>
+        <div className="nav-right">
+          <button className="btn-logout" onClick={logout}>خروج</button>
+        </div>
       </nav>
-      <div className="sec" style={{ animation: "fadeIn 0.4s" }}>
+
+      {/* ── Bottom Bar (mobile) ── */}
+      <div className="admin-bottom-bar">
+        {[["regs","👥","المسجلين"],["reports","📊","التقارير"],["content","✏","المحتوى"],["stats","📈","إحصائيات"]].map(([k,icon,label])=>(
+          <button key={k} className={adminTab===k?"on":""} onClick={()=>setAdminTab(k)}>
+            <span className="bar-icon">{icon}</span>{label}
+          </button>
+        ))}
+      </div>
+
+      <div className="sec" style={{animation:"fadeIn 0.4s"}}>
+
+        {/* ── Stats ── */}
         <div className="stat-grid">
-          <div className="stat" style={{ borderTopColor: BRAND.color }}><div className="stat-v" style={{ color: BRAND.color }}>{allRegs.length}</div><div className="stat-l">إجمالي المسجلين</div></div>
-          <div className="stat" style={{ borderTopColor: "#5B7B3A" }}><div className="stat-v" style={{ color: "#5B7B3A" }}>{allRegs.filter(r => r.submitted).length}</div><div className="stat-l">خطط مكتملة</div></div>
-          <div className="stat" style={{ borderTopColor: "#8B6914" }}><div className="stat-v" style={{ color: "#8B6914" }}>{allRegs.filter(r => !r.submitted).length}</div><div className="stat-l">قيد التخطيط</div></div>
-          <div className="stat" style={{ borderTopColor: "#C0392B" }}><div className="stat-v" style={{ color: "#C0392B" }}>{allRegs.filter(r => r.reopenRequested).length}</div><div className="stat-l">طلبات إعادة فتح</div></div>
+          <div className="stat" style={{borderTopColor:BRAND.color}}><div className="stat-v" style={{color:BRAND.color}}>{allRegs.length}</div><div className="stat-l">إجمالي المسجلين</div></div>
+          <div className="stat" style={{borderTopColor:"#5B7B3A"}}><div className="stat-v" style={{color:"#5B7B3A"}}>{allRegs.filter(r=>r.submitted).length}</div><div className="stat-l">خطط مكتملة</div></div>
+          <div className="stat" style={{borderTopColor:"#8B6914"}}><div className="stat-v" style={{color:"#8B6914"}}>{allRegs.filter(r=>!r.submitted).length}</div><div className="stat-l">قيد التخطيط</div></div>
+          <div className="stat" style={{borderTopColor:"#C0392B"}}><div className="stat-v" style={{color:"#C0392B"}}>{allRegs.filter(r=>r.reopenRequested).length}</div><div className="stat-l">طلبات فتح</div></div>
         </div>
 
+        {/* ══ TAB: المسجلون ══ */}
         {adminTab === "regs" && <>
-          <div className="sec-head"><h2 className="sec-title">سجل المشاركين</h2><button className="btn btn-s btn-outline" onClick={loadRegs}>↻ تحديث</button></div>
-          <div className="admin-table"><table>
-            <thead><tr><th>#</th><th>الاسم</th><th>الجوال</th><th>البريد</th><th>التسجيل</th><th>المواعيد</th><th>الحالة</th><th>إجراء</th><th></th></tr></thead>
-            <tbody>
-              {loading ? <tr><td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "#999" }}>جارٍ التحميل...</td></tr>
-                : allRegs.length === 0 ? <tr><td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "#999" }}>لا يوجد مسجلين</td></tr>
-                  : allRegs.map((r, i) => <React.Fragment key={r.id}>
-                    <tr style={{ background: r.reopenRequested ? "rgba(192,57,43,0.04)" : "transparent" }}>
-                      <td>{i + 1}</td><td style={{ fontWeight: 600 }}>{r.name}</td><td style={{ direction: "ltr" }}>{r.phone}</td>
-                      <td style={{ direction: "ltr", fontSize: "0.72rem" }}>{r.email}</td>
-                      <td style={{ fontSize: "0.72rem" }}>{r.registeredAt ? fmtBoth(r.registeredAt).hijri : "—"}</td>
-                      <td>{r.dates ? Object.keys(r.dates).length : 0}/16</td>
-                      <td>{r.submitted ? <span className="badge badge-ok">✓ مكتمل</span> : <span className="badge badge-wait">قيد التخطيط</span>}{r.reopenRequested && <span className="badge" style={{ background: "rgba(192,57,43,0.1)", color: "#C0392B", marginRight: "0.3rem" }}>🔓 طلب فتح</span>}</td>
-                      <td>{r.submitted && <button className="btn btn-s" style={{ padding: "0.2rem 0.5rem", fontSize: "0.68rem", background: "linear-gradient(135deg, #C0392B, #E74C3C)" }} onClick={() => adminUnlock(r.id)}>فتح التعديل</button>}</td>
-                      <td><button className="btn btn-s btn-outline" style={{ padding: "0.25rem 0.5rem", fontSize: "0.7rem" }} onClick={() => setExpandedReg(expandedReg === r.id ? null : r.id)}>{expandedReg === r.id ? "▲" : "▼"}</button></td>
-                    </tr>
-                    {expandedReg === r.id && <tr><td colSpan={9} style={{ padding: "0.5rem" }}>
-                      <div className="output-card" style={{ border: "1px solid var(--sa)" }}>
-                        <h3 style={{ fontFamily: "'Amiri',serif", color: BRAND.dark, marginBottom: "0.6rem" }}>📋 جدول {r.name}</h3>
-                        <table className="output-table"><thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>المرحلة</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
-                          <tbody>{procs.map((p, j) => { const d = r.dates?.[p.key]; const c = r.confirmed?.[p.key]; return (
-                            <tr key={p.key}><td>{j + 1}</td><td style={{ fontWeight: 600 }}>{p.nameAr}</td><td style={{ color: p.trackColor }}>{p.trackIcon} {p.trackNameAr}</td><td>{p.phaseNameAr}</td>
-                              <td>{d ? fmtGregorian(d) : "—"}</td><td style={{ color: "#8B6914" }}>{d ? gregorianToHijri(d).formatted : "—"}</td>
-                              <td>{c ? <span className="badge badge-ok">✓</span> : d ? <span className="badge badge-wait">محدد</span> : "—"}</td></tr>
-                          ); })}</tbody>
-                        </table>
-                        {r.submittedAt && <div className="output-stamp"><p>تم التقديم: <strong style={{ color: BRAND.color }}>{fmtBoth(r.submittedAt).both}</strong></p></div>}
-
-                        {/* ── التحليل الديموغرافي ── */}
-                        {r[DEMO_KEY] && r[DEMO_KEY].filter(x => x.name?.trim()).length > 0 && (
-                          <div style={{ marginTop: "1.2rem" }}>
-                            <h4 style={{ fontFamily: "'Amiri',serif", color: "#8B6914", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                              🗺️ {appContent.demo_admin_title || 'التحليل الديموغرافي'} — {r[DEMO_KEY].filter(x => x.name?.trim()).length} شخص
-                            </h4>
-                            <div style={{ overflowX: "auto" }}>
-                              <table className="demo-admin-table">
-                                <thead><tr>
-                                  <th>#</th><th>الاسم</th><th>الجهة</th><th>المنصب</th><th>العلاقة</th><th>العمر</th><th>الموقع</th><th>الحدث</th>
-                                  <th colSpan={5}>قوة الشخص</th>
-                                  <th colSpan={4}>علاقتي به</th>
-                                  <th>المستهدف</th>
-                                </tr>
-                                <tr>
-                                  <th colSpan={8}></th>
-                                  <th>معرفي</th><th>مجتمعي</th><th>مالي</th><th>اقتصادي</th><th>سيادي</th>
-                                  <th>معرفي</th><th>مجتمعي</th><th>مالي</th><th>اقتصادي</th>
-                                  <th></th>
-                                </tr></thead>
-                                <tbody>
-                                  {r[DEMO_KEY].filter(x => x.name?.trim()).map((row, ri) => {
-                                    const targets = ['knowledge','social','financial','economic'].filter(k => row.target?.[k]);
-                                    const targetLabels = { knowledge: 'معرفي', social: 'مجتمعي', financial: 'مالي', economic: 'اقتصادي' };
-                                    const scoreColor = (v) => v >= 70 ? '#27ae60' : v >= 40 ? '#2E6B8A' : '#999';
-                                    return (
-                                      <tr key={ri}>
-                                        <td style={{ fontWeight: 700, color: "#8B6914" }}>{ri + 1}</td>
-                                        <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{row.name}</td>
-                                        <td>{row.entity || "—"}</td>
-                                        <td>{row.position || "—"}</td>
-                                        <td>{row.relation || "—"}</td>
-                                        <td>{row.age || "—"}</td>
-                                        <td>{row.location || "—"}</td>
-                                        <td style={{ maxWidth: "120px", fontSize: "0.68rem" }}>{row.sharedEvent || "—"}</td>
-                                        {['knowledge','social','financial','economic','sovereign'].map(k => (
-                                          <td key={k} style={{ textAlign: "center" }}>
-                                            <span className="demo-score-pill" style={{ background: scoreColor(row.strength?.[k] || 0) + '20', color: scoreColor(row.strength?.[k] || 0) }}>
-                                              {row.strength?.[k] ?? "—"}
-                                            </span>
-                                          </td>
-                                        ))}
-                                        {['knowledge','social','financial','economic'].map(k => (
-                                          <td key={k} style={{ textAlign: "center" }}>
-                                            <span className="demo-score-pill" style={{ background: '#2E6B8A20', color: '#2E6B8A' }}>
-                                              {row.myRelation?.[k] ?? "—"}
-                                            </span>
-                                          </td>
-                                        ))}
-                                        <td>{targets.length > 0 ? targets.map(k => targetLabels[k]).join(' • ') : "—"}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                        {(!r[DEMO_KEY] || r[DEMO_KEY].filter(x => x.name?.trim()).length === 0) && (
-                          <div className="demo-empty-state" style={{ marginTop: "1rem" }}>
-                            🗺️ {appContent.demo_empty_state || 'لم يُكمل العميل التحليل الديموغرافي بعد'}
-                          </div>
-                        )}
-                      </div>
-                    </td></tr>}
-                  </React.Fragment>)}
-            </tbody>
-          </table></div>
+          <div className="sec-head">
+            <h2 className="sec-title">سجل المشاركين</h2>
+            <button className="btn btn-s btn-outline" onClick={loadRegs}>↻ تحديث</button>
+          </div>
+          {loading ? <div className="empty"><p>جارٍ التحميل...</p></div>
+          : allRegs.length === 0 ? <div className="empty"><h3>لا يوجد مسجلين</h3></div>
+          : <div className="reg-list">
+            {allRegs.map((r,i) => {
+              const datesCount = r.dates ? Object.keys(r.dates).length : 0;
+              const pct = Math.round((datesCount/16)*100);
+              const initials = r.name ? r.name.split(" ").slice(0,2).map(w=>w[0]).join("") : "?";
+              const trackColors = ["#8B6914","#5B7B3A","#2E6B8A","#6B4E3D"];
+              const avatarColor = trackColors[i % 4];
+              return (
+                <div key={r.id} className={`reg-card ${r.reopenRequested?"has-alert":""}`}
+                  onClick={()=>{ setSelectedReg(r); setSelectedRegTab("schedule"); }}>
+                  <div className="reg-card-avatar" style={{background:avatarColor}}>{initials}</div>
+                  <div className="reg-card-info">
+                    <div className="reg-card-name">{r.name}</div>
+                    <div className="reg-card-meta">
+                      <span style={{direction:"ltr"}}>{r.phone}</span>
+                      <span>•</span>
+                      <span>{r.registeredAt ? fmtBoth(r.registeredAt).hijri : "—"}</span>
+                      {r.reopenRequested && <span style={{color:"#C0392B",fontWeight:700}}>🔓 طلب فتح</span>}
+                    </div>
+                  </div>
+                  <div className="reg-card-right">
+                    {r.submitted
+                      ? <span className="badge badge-ok">✓ مكتمل</span>
+                      : <span className="badge badge-wait">جارٍ</span>}
+                    <div className="reg-progress-mini">
+                      <div className="reg-progress-fill" style={{width:`${pct}%`,background:avatarColor}}/>
+                    </div>
+                    <div className="reg-progress-pct">{datesCount}/16</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>}
         </>}
 
+        {/* ══ TAB: التقارير ══ */}
         {adminTab === "reports" && <>
-          <div className="sec-head"><h2 className="sec-title">📊 تقارير العملاء — نسخة المستشار</h2></div>
-          {allRegs.length === 0 && <p style={{ color: "#999", textAlign: "center" }}>لا يوجد مسجلين</p>}
+          <div className="sec-head"><h2 className="sec-title">تقارير العملاء</h2></div>
+          {allRegs.length === 0 && <div className="empty"><h3>لا يوجد مسجلين</h3></div>}
           {allRegs.map(reg => {
             const regAnalysis = analyzeBookings(procs, reg.dates || {}, reg.confirmed || {});
             const bookedCount = Object.keys(reg.dates || {}).length;
             const isOpen = adminReportReg === reg.id;
             return <div key={reg.id} className="adm-consultant">
               <div className="adm-edit-header" onClick={() => setAdminReportReg(isOpen ? null : reg.id)}>
-                <h4>{reg.name} — {bookedCount} حجوزات {regAnalysis ? `• نمط ${regAnalysis.pattern.nameAr}` : '• أقل من 3'}</h4>
-                <span>{isOpen ? '▲' : '▼'}</span>
+                <h4>{reg.name} — {bookedCount} حجوزات {regAnalysis ? `• نمط ${regAnalysis.pattern.nameAr}` : "• أقل من 3"}</h4>
+                <span>{isOpen ? "▲" : "▼"}</span>
               </div>
               {isOpen && <>
-                {!regAnalysis ? <p style={{ color: "#999", fontSize: "0.82rem" }}>أقل من 3 حجوزات — لا يمكن توليد تقرير</p> : <>
-                  {/* النمط */}
-                  <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
-                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: BRAND.color, fontSize: "1.1rem" }}>{regAnalysis.pattern.icon} {regAnalysis.pattern.nameAr}</div><div className="rpt-stat-l">النمط</div></div>
-                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "#5B7B3A" }}>{regAnalysis.trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
-                    <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "#6B4E3D" }}>{regAnalysis.readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
+                {!regAnalysis ? <p style={{color:"#999",fontSize:"0.82rem"}}>أقل من 3 حجوزات</p> : <>
+                  <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.6rem"}}>
+                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:BRAND.color,fontSize:"1.1rem"}}>{regAnalysis.pattern.icon} {regAnalysis.pattern.nameAr}</div><div className="rpt-stat-l">النمط</div></div>
+                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:"#5B7B3A"}}>{regAnalysis.trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
+                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:"#6B4E3D"}}>{regAnalysis.readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
                   </div>
-
-                  {/* بيانات المستشار الإضافية */}
-                  <div className="adm-note">⏱ <strong>الزمن بين الحجوزات:</strong> {(() => {
-                    const dateVals = Object.values(reg.dates || {}).sort();
-                    if (dateVals.length < 2) return 'حجز واحد فقط';
-                    const first = new Date(dateVals[0]), last = new Date(dateVals[dateVals.length - 1]);
-                    const diffDays = Math.round((last - first) / (1000 * 60 * 60 * 24));
-                    return diffDays === 0 ? 'حجز كل المواعيد دفعة واحدة — قرار محسوم' : `${diffDays} يوم بين أول وآخر موعد — ${diffDays <= 7 ? 'قرار سريع' : 'استكشاف متأنٍ'}`;
-                  })()}</div>
-
-                  {/* نقاط النقاش */}
-                  <div className="adm-note">💬 <strong>نقاط نقاش مقترحة:</strong> {regAnalysis.patternId === 'sequential' ? 'يميل للتعمق في مسار واحد — ناقش التوسع الأفقي' : regAnalysis.patternId === 'breadthFirst' ? 'يميل للاستكشاف الأفقي — ناقش التعمق في مسار محدد' : regAnalysis.patternId === 'foundationFocused' ? 'يركز على التأسيس — ناقش الانتقال للمراحل المتقدمة' : regAnalysis.patternId === 'outcomeDriven' ? 'يركز على النتائج — تحقق من متانة الأساس' : regAnalysis.patternId === 'diagnostic' ? 'يريد الصورة الكاملة أولاً — ادعم بخطة تنفيذ واضحة' : 'نمط تكاملي — ناقش أولويات التنفيذ'}</div>
-
-                  {/* فجوات التبعية */}
-                  {regAnalysis.depGaps.length > 0 && <div className="adm-note" style={{ background: "rgba(192,57,43,0.04)" }}>⚠ <strong>تبعيات مفقودة يجب مناقشتها:</strong> {regAnalysis.depGaps.map(g => `${g.process} ← ${g.missing}`).join(' | ')}</div>}
-
-                  {/* التوصيات */}
-                  {regAnalysis.recommendations.length > 0 && <div style={{ marginTop: "0.4rem" }}>{regAnalysis.recommendations.map((r, i) => <div key={i} className="rpt-rec" style={{ fontSize: "0.78rem" }}><span className="rpt-rec-icon">💡</span><span>{r}</span></div>)}</div>}
+                  <div className="adm-note">⏱ <strong>الزمن بين الحجوزات:</strong> {(()=>{ const dateVals = Object.values(reg.dates||{}).sort(); if(dateVals.length<2) return "حجز واحد فقط"; const diffDays = Math.round((new Date(dateVals[dateVals.length-1])-new Date(dateVals[0]))/(1000*60*60*24)); return diffDays===0?"حجز كل المواعيد دفعة واحدة":diffDays<=7?`${diffDays} يوم — قرار سريع`:`${diffDays} يوم — استكشاف متأنٍ`; })()}</div>
+                  <div className="adm-note">💬 <strong>نقاط نقاش:</strong> {regAnalysis.patternId==="sequential"?"يميل للتعمق — ناقش التوسع":regAnalysis.patternId==="breadthFirst"?"يميل للاستكشاف — ناقش التعمق":regAnalysis.patternId==="foundationFocused"?"يركز على التأسيس — ناقش الانتقال":"نمط تكاملي — ناقش الأولويات"}</div>
+                  {regAnalysis.depGaps.length>0 && <div className="adm-note" style={{background:"rgba(192,57,43,0.04)"}}>⚠ <strong>تبعيات مفقودة:</strong> {regAnalysis.depGaps.map(g=>`${g.process} ← ${g.missing}`).join(" | ")}</div>}
+                  {regAnalysis.recommendations.length>0 && regAnalysis.recommendations.map((rec,i)=><div key={i} className="rpt-rec"><span className="rpt-rec-icon">💡</span><span>{rec}</span></div>)}
                 </>}
               </>}
             </div>;
           })}
         </>}
 
+        {/* ══ TAB: المحتوى ══ */}
         {adminTab === "content" && <>
-          <div className="sec-head"><h2 className="sec-title">✏ إدارة المحتوى</h2></div>
-
-          {/* تعديل نصوص الحالات */}
-          <div className="adm-edit-card">
-            <h4 style={{ color: BRAND.dark, marginBottom: "0.8rem" }}>📝 نصوص الحالات الخاصة</h4>
-            {[
-              { key: 'welcome_title', label: 'عنوان الترحيب (0 حجوزات)' },
-              { key: 'welcome_desc', label: 'وصف الترحيب' },
-              { key: 'welcome_hint', label: 'تلميح البداية' },
-              { key: 'starter_processes', label: 'عمليات البداية المقترحة (process keys مفصولة بفاصلة)' },
-              { key: 'progress_title', label: 'عنوان (1-2 حجوزات)' },
-              { key: 'progress_desc', label: 'وصف (1-2 حجوزات)' },
-              { key: 'suggest_label', label: 'نص الاقتراحات الذكية' },
-              { key: 'suggest_deps_label', label: 'نص شريط التبعيات (3+)' },
-            ].map(item => <div key={item.key} className="adm-field">
-              <label>{item.label}</label>
-              <input value={appContent[item.key] || ''} onChange={e => setAppContent(prev => ({ ...prev, [item.key]: e.target.value }))} onBlur={e => adminSaveContent(item.key, e.target.value)} />
-            </div>)}
-          </div>
-
-          {/* تعديل بيانات العمليات */}
-          <div className="adm-edit-card">
-            <h4 style={{ color: BRAND.dark, marginBottom: "0.8rem" }}>🔧 بيانات العمليات الـ 16</h4>
-            {procs.map(p => {
-              const detail = processDetails[p.key] || {};
-              const isOpen = adminEditProcess === p.key;
-              return <div key={p.key} style={{ borderBottom: "1px solid var(--sa)", paddingBottom: "0.5rem", marginBottom: "0.5rem" }}>
-                <div className="adm-edit-header" onClick={() => setAdminEditProcess(isOpen ? null : p.key)}>
-                  <span style={{ fontSize: "0.82rem" }}><span style={{ color: p.trackColor }}>{p.trackIcon}</span> {p.nameAr} <span style={{ fontSize: "0.68rem", color: "#999" }}>({p.key})</span></span>
-                  <span>{isOpen ? '▲' : '▼'}</span>
-                </div>
-                {isOpen && <div style={{ padding: "0.5rem 0" }}>
-                  {[
-                    { field: 'insight', label: 'البصيرة المنهجية', type: 'input' },
-                    { field: 'description', label: 'الوصف التفصيلي', type: 'textarea' },
-                    { field: 'why_it_matters', label: 'لماذا يهم', type: 'textarea' },
-                    { field: 'duration', label: 'المدة الزمنية', type: 'input' },
-                  ].map(f => <div key={f.field} className="adm-field">
-                    <label>{f.label}</label>
-                    {f.type === 'input'
-                      ? <input defaultValue={detail[f.field] || ''} onBlur={e => adminSaveProcess(p.key, { [f.field]: e.target.value })} />
-                      : <textarea defaultValue={detail[f.field] || ''} onBlur={e => adminSaveProcess(p.key, { [f.field]: e.target.value })} />}
-                  </div>)}
-                  <div className="adm-field">
-                    <label>المخرجات (مفصولة بـ |)</label>
-                    <input defaultValue={(detail.outputs || []).join(' | ')} onBlur={e => adminSaveProcess(p.key, { outputs: e.target.value.split('|').map(s => s.trim()).filter(Boolean) })} />
+          <div className="sec-head"><h2 className="sec-title">إدارة المحتوى</h2></div>
+          <div className="adm-consultant"><h4>🔒 المحتوى يُدار من قاعدة البيانات مباشرة عبر Supabase</h4><p className="adm-note" style={{marginTop:"0.5rem"}}>جميع النصوص محفوظة في جداول <strong>app_content</strong> و<strong>process_details</strong>. لا يمكن تعديلها من هنا لحماية الملكية الفكرية.</p></div>
+          {procs.map((proc) => {
+            const isOpen = expandedContent === proc.key;
+            return <div key={proc.key} className="adm-edit-card">
+              <div className="adm-edit-header" onClick={() => setExpandedContent(isOpen ? null : proc.key)}>
+                <h4 style={{color:proc.trackColor}}>{proc.trackIcon} {proc.nameAr}</h4>
+                <span>{isOpen ? "▲" : "▼"}</span>
+              </div>
+              {isOpen && <>
+                {["insight","why_it_matters","description"].map(field => (
+                  <div key={field} className="adm-field">
+                    <label>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
+                    <textarea defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
+                      onBlur={async(e)=>{ try{ const {supabase} = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"); } catch(err){} showToast("التعديل يتم عبر Supabase مباشرة"); }} readOnly />
                   </div>
-                  {adminSaving && <span style={{ fontSize: "0.72rem", color: BRAND.color }}>جاري الحفظ...</span>}
-                </div>}
+                ))}
+              </>}
+            </div>;
+          })}
+        </>}
+
+        {/* ══ TAB: الإحصائيات ══ */}
+        {adminTab === "stats" && <>
+          <div className="sec-head"><h2 className="sec-title">إحصائيات</h2></div>
+          <div className="adm-consultant">
+            <h4>📊 توزيع المسارات</h4>
+            {TRACKS.map(tr => {
+              const count = allRegs.reduce((acc,r) => acc + Object.keys(r.dates||{}).filter(k=>k.startsWith(tr.id)).length, 0);
+              const max = 16 * (allRegs.length || 1);
+              return <div key={tr.id} className="rpt-bar-row" style={{marginTop:"0.5rem"}}>
+                <div className="rpt-bar-label" style={{color:tr.color,fontWeight:700}}>{tr.nameAr}</div>
+                <div className="rpt-bar-track"><div className="rpt-bar-fill" style={{width:`${(count/max)*100}%`,background:tr.color}}/></div>
+                <div className="rpt-bar-count">{count}</div>
               </div>;
             })}
           </div>
         </>}
 
-        {adminTab === "stats" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "0.75rem" }}>
-          {TRACKS.map(t => (<div key={t.id} className="sum-card" style={{ padding: "1rem", borderRight: `3px solid ${t.color}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}><span style={{ fontWeight: 700, color: t.color }}>{t.icon} {t.nameAr}</span><span style={{ fontWeight: 700, color: t.color }}>{t.weight}%</span></div>
-            <div style={{ fontSize: "0.78rem", color: "#6B6560" }}>مواعيد: <strong>{allRegs.reduce((s, r) => s + (r.dates ? procs.filter(p => p.trackId === t.id && r.dates[p.key]).length : 0), 0)}</strong> • مؤكدة: <strong>{allRegs.reduce((s, r) => s + (r.confirmed ? procs.filter(p => p.trackId === t.id && r.confirmed[p.key]).length : 0), 0)}</strong></div>
-          </div>))}
-        </div>}
       </div>
+
+      {/* ══ REG MODAL ══ */}
+      {selectedReg && (
+        <div className="reg-modal-overlay" onClick={()=>setSelectedReg(null)}>
+          <div className="reg-modal" onClick={e=>e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="reg-modal-header">
+              <button className="reg-modal-close" onClick={()=>setSelectedReg(null)}>✕ إغلاق</button>
+              <div className="reg-modal-info">
+                <div className="reg-modal-name">{selectedReg.name}</div>
+                <div className="reg-modal-phone">{selectedReg.phone} | {selectedReg.email}</div>
+              </div>
+              <div className="reg-modal-tabs">
+                <button className={`reg-modal-tab ${selectedRegTab==="schedule"?"on":""}`} onClick={()=>setSelectedRegTab("schedule")}>📅 المواعيد</button>
+                <button className={`reg-modal-tab ${selectedRegTab==="demo"?"on":""}`} onClick={()=>setSelectedRegTab("demo")}>🗺️ التحليل</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="reg-modal-body">
+
+              {/* ── تبويب المواعيد ── */}
+              {selectedRegTab === "schedule" && <>
+                <div className="demo-section-head">جدول المواعيد الـ 16</div>
+                <div style={{overflowX:"auto"}}>
+                  <table className="output-table" style={{minWidth:"540px"}}>
+                    <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
+                    <tbody>{procs.map((p,j)=>{
+                      const d = selectedReg.dates?.[p.key];
+                      const c = selectedReg.confirmed?.[p.key];
+                      return <tr key={p.key}>
+                        <td>{j+1}</td>
+                        <td style={{fontWeight:600}}>{p.nameAr}</td>
+                        <td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td>
+                        <td>{d ? fmtGregorian(d) : "—"}</td>
+                        <td style={{color:"#8B6914"}}>{d ? gregorianToHijri(d).formatted : "—"}</td>
+                        <td>{c ? <span className="badge badge-ok">✓</span> : d ? <span className="badge badge-wait">محدد</span> : "—"}</td>
+                      </tr>;
+                    })}</tbody>
+                  </table>
+                </div>
+                {selectedReg.submittedAt && <div className="output-stamp" style={{marginTop:"0.8rem"}}>
+                  <p>تم التقديم: <strong style={{color:BRAND.color}}>{fmtBoth(selectedReg.submittedAt).both}</strong></p>
+                </div>}
+                {selectedReg.submitted && <div style={{marginTop:"0.8rem",textAlign:"center"}}>
+                  <button className="btn btn-s" style={{background:"linear-gradient(135deg,#C0392B,#E74C3C)",width:"auto"}} onClick={()=>{ adminUnlock(selectedReg.id); setSelectedReg(null); }}>🔓 فتح التعديل</button>
+                </div>}
+              </>}
+
+              {/* ── تبويب التحليل الديموغرافي ── */}
+              {selectedRegTab === "demo" && <>
+                {(!selectedReg[DEMO_KEY] || selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length === 0)
+                  ? <div className="empty"><h3>🗺️</h3><p>لم يُكمل العميل التحليل الديموغرافي بعد</p></div>
+                  : <>
+                    <div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
+                    <div className="demo-person-grid">
+                      {selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).map((person, pi) => {
+                        const scoreColor = (v) => v>=70?"#27ae60":v>=40?"#2E6B8A":"#aaa";
+                        const targets = ["knowledge","social","financial","economic"].filter(k=>person.target?.[k]);
+                        const targetLabels = {knowledge:"معرفي",social:"مجتمعي",financial:"مالي",economic:"اقتصادي"};
+                        return (
+                          <div key={pi} className="demo-person-card">
+                            <div className="demo-person-header">
+                              <div className="demo-person-num">{pi+1}</div>
+                              <div>
+                                <div className="demo-person-name">{person.name}</div>
+                                <div className="demo-person-role">{[person.position,person.entity,person.relation].filter(Boolean).join(" • ") || "—"}</div>
+                              </div>
+                              {person.location && <div style={{marginRight:"auto",fontSize:"0.65rem",color:"var(--wg)"}}>📍{person.location}</div>}
+                            </div>
+
+                            <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
+                            {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{
+                              const val = person.strength?.[k] || 0;
+                              return <div key={k} className="demo-bar-row">
+                                <div className="demo-bar-label">{label}</div>
+                                <div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div>
+                                <div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div>
+                              </div>;
+                            })}
+
+                            {targets.length > 0 && <div className="demo-person-chips">
+                              <span style={{fontSize:"0.62rem",color:"var(--wg)",marginLeft:"0.3rem"}}>المستهدف:</span>
+                              {targets.map(k=><span key={k} className="demo-person-chip" style={{background:"#8B691415",color:"#8B6914",border:"1px solid #8B691430"}}>{targetLabels[k]}</span>)}
+                            </div>}
+
+                            {person.sharedEvent && <div style={{marginTop:"0.5rem",fontSize:"0.68rem",color:"var(--wg)",fontStyle:"italic"}}>"{person.sharedEvent}"</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                }
+              </>}
+
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div></>
   );
