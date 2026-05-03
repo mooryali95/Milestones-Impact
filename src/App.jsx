@@ -889,15 +889,16 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .demo-cta-arrow { color:#8B6914; font-size:1.1rem; flex-shrink:0; }
 
 /* ── Demo Screen ── */
-.demo-screen { position:fixed; inset:0; background:var(--cr); z-index:200; display:flex; flex-direction:column; overflow:hidden; }
-.demo-header { background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:1rem 1.5rem; display:flex; align-items:center; gap:1rem; flex-shrink:0; }
-.demo-header-back { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; border-radius:8px; padding:0.4rem 0.9rem; cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.82rem; transition:background 0.2s; }
-.demo-header-back:hover { background:rgba(255,255,255,0.18); }
+.demo-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; z-index:1500; padding:1rem; animation:fadeIn 0.2s; }
+.demo-screen { background:var(--sw); border-radius:20px; width:100%; max-width:720px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,0.2); animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1); }
+.demo-header { background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:1rem 1.4rem; display:flex; align-items:center; gap:0.8rem; flex-shrink:0; border-radius:20px 20px 0 0; }
+.demo-header-back { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); color:#fff; border-radius:8px; padding:0.35rem 0.8rem; cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.78rem; transition:background 0.2s; }
+.demo-header-back:hover { background:rgba(255,255,255,0.2); }
 .demo-header-info { flex:1; }
-.demo-header-title { font-family:Amiri,serif; font-size:1.1rem; font-weight:700; }
-.demo-header-sub { font-size:0.72rem; opacity:0.65; margin-top:0.1rem; }
-.demo-header-badge { background:#8B6914; padding:0.3rem 0.75rem; border-radius:20px; font-size:0.72rem; font-weight:700; }
-.demo-body { flex:1; overflow-y:auto; padding:1.5rem; max-width:900px; margin:0 auto; width:100%; }
+.demo-header-title { font-family:Amiri,serif; font-size:1rem; font-weight:700; }
+.demo-header-sub { font-size:0.68rem; opacity:0.6; margin-top:0.08rem; }
+.demo-header-badge { background:#8B6914; padding:0.25rem 0.65rem; border-radius:20px; font-size:0.7rem; font-weight:700; white-space:nowrap; }
+.demo-body { flex:1; overflow-y:auto; padding:1.2rem 1.4rem; }
 .demo-intro { background:var(--sw); border-radius:14px; padding:1.1rem 1.3rem; margin-bottom:1.5rem; border-right:4px solid #8B6914; box-shadow:var(--shadow-sm); }
 .demo-intro-title { font-weight:700; color:#8B6914; margin-bottom:0.35rem; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem; }
 .demo-intro-text { font-size:0.82rem; color:var(--wg); line-height:1.75; }
@@ -2417,15 +2418,34 @@ export default function App() {
           </div>}
         </div>
 
-        {/* CTA التحليل الديموغرافي — تظهر فقط لعملية تحليل ديموغرافي */}
+        {/* CTA التحليل الديموغرافي */}
         {selectedCell && (selectedCell.nameAr === "تحليل ديموغرافي" || selectedCell.key === "creation-1") && (
-          <div className="demo-cta" onClick={openDemoScreen}>
-            <div className="demo-cta-icon">🗺️</div>
-            <div className="demo-cta-text">
-              <div className="demo-cta-title">{appContent.demo_cta_title || 'ابدأ تحليلك الديموغرافي'}</div>
-              <div className="demo-cta-desc">{appContent.demo_cta_desc || 'رسّم شبكتك البشرية'}</div>
-            </div>
-            <div className="demo-cta-arrow">←</div>
+          <div style={{ margin: "0.8rem 0" }}>
+            <div style={{ fontSize: "0.68rem", color: "var(--wg)", fontWeight: 600, letterSpacing: "0.5px", marginBottom: "0.5rem", textTransform: "uppercase" }}>أداة مرتبطة بهذه العملية</div>
+            <button
+              onClick={openDemoScreen}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: "0.75rem",
+                padding: "0.85rem 1rem", border: "none", borderRadius: "12px",
+                background: "linear-gradient(135deg, #8B6914, #C4A24E)",
+                color: "#fff", cursor: "pointer", transition: "all 0.25s",
+                boxShadow: "0 4px 16px rgba(139,105,20,0.3)",
+                fontFamily: "Tajawal, sans-serif",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 22px rgba(139,105,20,0.4)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 4px 16px rgba(139,105,20,0.3)"; }}
+            >
+              <span style={{ fontSize: "1.3rem", flexShrink: 0 }}>🗺️</span>
+              <span style={{ flex: 1, textAlign: "right" }}>
+                <span style={{ display: "block", fontWeight: 700, fontSize: "0.88rem", marginBottom: "0.1rem" }}>
+                  {appContent.demo_cta_title || 'ابدأ تحليلك الديموغرافي'}
+                </span>
+                <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.85 }}>
+                  {appContent.demo_cta_desc || 'رسّم شبكتك البشرية'}
+                </span>
+              </span>
+              <span style={{ fontSize: "1rem", flexShrink: 0, opacity: 0.8 }}>←</span>
+            </button>
           </div>
         )}
 
@@ -2453,7 +2473,8 @@ export default function App() {
 
       {/* ═══ شاشة التحليل الديموغرافي ═══ */}
       {demoScreen && (
-        <div className="demo-screen">
+        <div className="demo-overlay" onClick={() => setDemoScreen(false)}>
+        <div className="demo-screen" onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div className="demo-header">
             <button className="demo-header-back" onClick={() => setDemoScreen(false)}>← رجوع</button>
@@ -2468,7 +2489,7 @@ export default function App() {
           <div className="demo-body">
             <div className="demo-intro">
               <div className="demo-intro-title">🧭 {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
-              <div className="demo-intro-text">{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
+              <div className="demo-intro-text" style={{fontSize:"0.8rem"}}>{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
             </div>
 
             {demoRows.map((row, idx) => (
@@ -2570,6 +2591,7 @@ export default function App() {
               {demoSaving ? "جارٍ الحفظ..." : `💾 ${appContent.demo_save_btn || 'حفظ التحليل'}`}
             </button>
           </div>
+        </div>
         </div>
       )}
     </div></>
