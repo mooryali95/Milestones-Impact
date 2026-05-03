@@ -878,11 +878,43 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .demo-footer { background: var(--sw); border-top: 1px solid var(--sa); padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-shrink: 0; }
 .demo-add-btn { background: none; border: 1.5px dashed var(--sa); border-radius: 10px; padding: 0.5rem 1rem; color: var(--wg); cursor: pointer; font-family: Tajawal,sans-serif; font-size: 0.82rem; }
 .demo-add-btn:hover { border-color: #8B6914; color: #8B6914; }
-.demo-admin-table { width: 100%; border-collapse: collapse; font-size: 0.74rem; margin-top: 0.5rem; overflow-x: auto; display: block; }
-.demo-admin-table th { background: #1a1a2e; color: #fff; padding: 0.5rem 0.6rem; font-weight: 600; text-align: right; white-space: nowrap; }
-.demo-admin-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--sa); vertical-align: top; }
-.demo-score-pill { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 700; font-size: 0.72rem; }
-.demo-empty-state { text-align: center; padding: 2rem; color: var(--wg); font-size: 0.85rem; }
+
+/* ── Demo CTA ── */
+.demo-cta { background: linear-gradient(135deg,#8B691408,#8B691415); border:1.5px solid #8B691430; border-radius:12px; padding:1rem 1.1rem; margin-top:0.8rem; display:flex; align-items:center; gap:0.75rem; cursor:pointer; transition:all 0.2s; }
+.demo-cta:hover { border-color:#8B6914; background:linear-gradient(135deg,#8B691415,#8B691422); transform:translateY(-1px); box-shadow:0 4px 16px rgba(139,105,20,0.15); }
+.demo-cta-icon { font-size:1.6rem; flex-shrink:0; }
+.demo-cta-text { flex:1; }
+.demo-cta-title { font-weight:700; font-size:0.88rem; color:#8B6914; margin-bottom:0.15rem; }
+.demo-cta-desc { font-size:0.75rem; color:var(--wg); line-height:1.4; }
+.demo-cta-arrow { color:#8B6914; font-size:1.1rem; flex-shrink:0; }
+
+/* ── Demo Screen ── */
+.demo-screen { position:fixed; inset:0; background:var(--cr); z-index:200; display:flex; flex-direction:column; overflow:hidden; }
+.demo-header { background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:1rem 1.5rem; display:flex; align-items:center; gap:1rem; flex-shrink:0; }
+.demo-header-back { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; border-radius:8px; padding:0.4rem 0.9rem; cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.82rem; transition:background 0.2s; }
+.demo-header-back:hover { background:rgba(255,255,255,0.18); }
+.demo-header-info { flex:1; }
+.demo-header-title { font-family:Amiri,serif; font-size:1.1rem; font-weight:700; }
+.demo-header-sub { font-size:0.72rem; opacity:0.65; margin-top:0.1rem; }
+.demo-header-badge { background:#8B6914; padding:0.3rem 0.75rem; border-radius:20px; font-size:0.72rem; font-weight:700; }
+.demo-body { flex:1; overflow-y:auto; padding:1.5rem; max-width:900px; margin:0 auto; width:100%; }
+.demo-intro { background:var(--sw); border-radius:14px; padding:1.1rem 1.3rem; margin-bottom:1.5rem; border-right:4px solid #8B6914; box-shadow:var(--shadow-sm); }
+.demo-intro-title { font-weight:700; color:#8B6914; margin-bottom:0.35rem; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem; }
+.demo-intro-text { font-size:0.82rem; color:var(--wg); line-height:1.75; }
+.demo-card { background:var(--sw); border-radius:16px; padding:1.3rem; margin-bottom:1rem; box-shadow:var(--shadow-sm); border:1.5px solid var(--sa); transition:border-color 0.2s; }
+.demo-card:hover { border-color:#8B691430; }
+.demo-card-header { display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:1px solid var(--sa); }
+.demo-card-num { width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg,#8B6914,#A07820); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.78rem; font-weight:700; flex-shrink:0; }
+.demo-card-name { font-weight:700; font-size:0.92rem; color:var(--ch); flex:1; }
+.demo-card-remove { background:none; border:none; color:#C0392B; cursor:pointer; font-size:0.8rem; padding:0.2rem 0.5rem; border-radius:6px; transition:background 0.2s; }
+.demo-card-remove:hover { background:rgba(192,57,43,0.08); }
+
+/* ── Demo Admin Table ── */
+.demo-admin-table { width:100%; border-collapse:collapse; font-size:0.74rem; margin-top:0.5rem; overflow-x:auto; display:block; }
+.demo-admin-table th { background:#1a1a2e; color:#fff; padding:0.5rem 0.6rem; font-weight:600; text-align:right; white-space:nowrap; }
+.demo-admin-table td { padding:0.5rem 0.6rem; border-bottom:1px solid var(--sa); vertical-align:top; }
+.demo-score-pill { display:inline-block; padding:0.15rem 0.4rem; border-radius:4px; font-weight:700; font-size:0.72rem; }
+.demo-empty-state { text-align:center; padding:2rem; color:var(--wg); font-size:0.85rem; }
 
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(15px) } to { opacity: 1; transform: translateY(0) } }
@@ -1864,7 +1896,7 @@ export default function App() {
                         {r[DEMO_KEY] && r[DEMO_KEY].filter(x => x.name?.trim()).length > 0 && (
                           <div style={{ marginTop: "1.2rem" }}>
                             <h4 style={{ fontFamily: "'Amiri',serif", color: "#8B6914", marginBottom: "0.6rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                              🗺️ التحليل الديموغرافي — {r[DEMO_KEY].filter(x => x.name?.trim()).length} شخص
+                              🗺️ {appContent.demo_admin_title || 'التحليل الديموغرافي'} — {r[DEMO_KEY].filter(x => x.name?.trim()).length} شخص
                             </h4>
                             <div style={{ overflowX: "auto" }}>
                               <table className="demo-admin-table">
@@ -1920,7 +1952,7 @@ export default function App() {
                         )}
                         {(!r[DEMO_KEY] || r[DEMO_KEY].filter(x => x.name?.trim()).length === 0) && (
                           <div className="demo-empty-state" style={{ marginTop: "1rem" }}>
-                            🗺️ لم يُكمل العميل التحليل الديموغرافي بعد
+                            🗺️ {appContent.demo_empty_state || 'لم يُكمل العميل التحليل الديموغرافي بعد'}
                           </div>
                         )}
                       </div>
@@ -2390,8 +2422,8 @@ export default function App() {
           <div className="demo-cta" onClick={openDemoScreen}>
             <div className="demo-cta-icon">🗺️</div>
             <div className="demo-cta-text">
-              <div className="demo-cta-title">ابدأ تحليلك الديموغرافي</div>
-              <div className="demo-cta-desc">رسّم شبكتك البشرية — من حولك، وما قوتهم، وكيف تتحرك القيمة عبرهم</div>
+              <div className="demo-cta-title">{appContent.demo_cta_title || 'ابدأ تحليلك الديموغرافي'}</div>
+              <div className="demo-cta-desc">{appContent.demo_cta_desc || 'رسّم شبكتك البشرية'}</div>
             </div>
             <div className="demo-cta-arrow">←</div>
           </div>
@@ -2426,8 +2458,8 @@ export default function App() {
           <div className="demo-header">
             <button className="demo-header-back" onClick={() => setDemoScreen(false)}>← رجوع</button>
             <div className="demo-header-info">
-              <div className="demo-header-title">◈ التحليل الديموغرافي</div>
-              <div className="demo-header-sub">تفكيك البنية البشرية التي تتحرك داخلها قيمتك</div>
+              <div className="demo-header-title">◈ {appContent.demo_screen_title || 'التحليل الديموغرافي'}</div>
+              <div className="demo-header-sub">{appContent.demo_screen_sub || 'تفكيك البنية البشرية التي تتحرك داخلها قيمتك'}</div>
             </div>
             <div className="demo-header-badge">{demoRows.filter(r => r.name.trim()).length} شخص</div>
           </div>
@@ -2435,12 +2467,8 @@ export default function App() {
           {/* Body */}
           <div className="demo-body">
             <div className="demo-intro">
-              <div className="demo-intro-title">🧭 ما هذا النموذج؟</div>
-              <div className="demo-intro-text">
-                هذه خريطة شبكتك البشرية — كل شخص حولك يحمل قيمة كامنة تنتظر التفعيل.
-                سجّل من تعرفهم، وحدد قوتهم في أربعة أبعاد، ونوع علاقتك بهم، وما تستهدف تفعيله معهم.
-                البيانات محفوظة بشكل آمن ولا يمكن تصديرها.
-              </div>
+              <div className="demo-intro-title">🧭 {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
+              <div className="demo-intro-text">{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
             </div>
 
             {demoRows.map((row, idx) => (
@@ -2536,10 +2564,10 @@ export default function App() {
 
           {/* Footer */}
           <div className="demo-footer">
-            <button className="demo-add-btn" onClick={addDemoRow}>+ إضافة شخص</button>
-            <span className="demo-count-badge">{demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل</span>
-            <button className="btn btn-gold" onClick={saveDemoData} disabled={demoSaving}>
-              {demoSaving ? "جاري الحفظ..." : "💾 حفظ التحليل"}
+            <button className="demo-add-btn" onClick={addDemoRow}>+ {appContent.demo_add_btn || 'إضافة شخص'}</button>
+            <span style={{fontSize:"0.78rem",color:"var(--wg)"}}>{demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل</span>
+            <button className="btn btn-gold btn-s" onClick={saveDemoData} disabled={demoSaving}>
+              {demoSaving ? "جارٍ الحفظ..." : `💾 ${appContent.demo_save_btn || 'حفظ التحليل'}`}
             </button>
           </div>
         </div>
