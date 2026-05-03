@@ -1617,7 +1617,7 @@ export default function App() {
         <div className="lp-hero-content">
           <div className="lp-eyebrow lp-a1">مصفوفة التأثير</div>
           <div className="lp-hero-logo lp-a2"><MILogo size={72} color="#C4A24E"/></div>
-          <h1 className="lp-hero-title lp-a3">هندسة القيمة الكامنة</h1>
+          <h1 className="lp-hero-title lp-a3">هندسة القيمة</h1>
           <div className="lp-hero-en lp-a3">MILESTONE IMPACT</div>
           <p className="lp-hero-sub lp-a4">نموذج تحولي من ستة عشر عملية استراتيجية —<br/>يشتغل على القيمة الكامنة داخل الإنسان، ويحوّلها إلى أثر قابل للقياس</p>
           <div className="lp-hero-line lp-a4"/>
