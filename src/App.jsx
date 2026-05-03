@@ -555,75 +555,94 @@ const CSS = `
 :root {
   --mi: ${BRAND.color}; --mi-d: ${BRAND.dark}; --mi-l: ${BRAND.light}; --mi-dd: ${BRAND.deep};
   --ol: #6B7B3A; --ol-d: #4A5628; --go: #C4A24E; --go-d: #8B6914;
-  --cr: #F8F5EE; --sa: #EDE8DC; --ch: #2C2C2C; --wg: #6B6560; --sw: #FAFAF7;
+  --cr: #F8F4ED; --sa: #EAE3D6; --ch: #1E1E1E; --wg: #6B6458; --sw: #FAFAF7;
   --ok: #5B7B3A; --no: #A0522D; --rd: #C0392B;
+  --radius: 14px; --shadow-sm: 0 2px 8px rgba(0,0,0,0.04); --shadow-md: 0 6px 24px rgba(0,0,0,0.07);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: var(--ch); direction: rtl; min-height: 100vh; }
-.app { min-height: 100vh; }
+.app { min-height: 100vh; display: flex; flex-direction: column; }
 
-/* ── Splash ── */
-.splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; animation: fadeIn 0.6s; }
-.splash h1 { font-family: 'Amiri', serif; font-size: 2.2rem; color: var(--mi-d); text-align: center; margin-bottom: 0.3rem; }
-.splash .sub { color: var(--wg); font-size: 0.95rem; margin-bottom: 0.5rem; text-align: center; }
-.splash .mi-text { font-family: 'Tajawal', sans-serif; font-size: 1.8rem; font-weight: 300; color: var(--mi); letter-spacing: 3px; text-align: center; margin: 1rem 0; line-height: 1.3; }
-.s-actions { display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center; }
-.s-btn { padding: 0.75rem 2.2rem; border: 2px solid; border-radius: 12px; font-family: 'Tajawal'; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.3s; background: transparent; }
-.s-btn:hover { transform: translateY(-2px); }
-.s-btn-main { border-color: var(--mi); color: var(--mi); }
-.s-btn-main:hover { background: var(--mi); color: #fff; }
-.s-btn-admin { border-color: var(--mi-dd); color: var(--mi-dd); }
-.s-btn-admin:hover { background: var(--mi-dd); color: #fff; }
+/* ── Auth Screens (Split Layout) ── */
+.auth-screen { min-height: 100vh; display: grid; grid-template-columns: 1fr 480px; }
+@media(max-width: 800px) { .auth-screen { grid-template-columns: 1fr; } }
+.auth-left {
+  background: linear-gradient(160deg, #1a2535 0%, #0f1923 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 3rem; position: relative; overflow: hidden;
+}
+@media(max-width: 800px) { .auth-left { display: none; } }
+.auth-left-grid {
+  position: absolute; inset: 0; opacity: .04;
+  background-image: linear-gradient(rgba(139,105,20,1) 1px,transparent 1px), linear-gradient(90deg,rgba(139,105,20,1) 1px,transparent 1px);
+  background-size: 48px 48px;
+}
+.auth-left-content { position: relative; z-index: 1; text-align: center; max-width: 340px; }
+.auth-left-quote { font-family: 'Amiri', serif; font-size: 1.35rem; color: rgba(255,255,255,0.85); line-height: 1.9; margin: 1.8rem 0; }
+.auth-left-quote span { color: #C4A24E; }
+.auth-left-attr { font-size: 0.68rem; letter-spacing: 3px; color: rgba(255,255,255,0.3); text-transform: uppercase; }
+.auth-left-tracks { display: flex; gap: 0.5rem; justify-content: center; margin-top: 2rem; }
+.auth-left-track { padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.68rem; font-weight: 600; letter-spacing: 1px; }
+.auth-right { background: var(--sw); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2.5rem 2rem; }
+.auth-form-wrap { width: 100%; max-width: 360px; }
+.auth-logo { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 2rem; justify-content: center; }
+.auth-logo-text { font-family: 'Amiri', serif; font-size: 1.1rem; color: var(--mi-d); }
+.auth-title { font-family: 'Amiri', serif; font-size: 1.7rem; color: var(--ch); margin-bottom: 0.3rem; }
+.auth-sub { font-size: 0.85rem; color: var(--wg); margin-bottom: 2rem; line-height: 1.6; }
+.auth-back { background: none; border: none; color: var(--wg); font-family: 'Tajawal'; font-size: 0.8rem; cursor: pointer; margin-top: 1.2rem; display: block; text-align: center; transition: color 0.2s; }
+.auth-back:hover { color: var(--mi-d); }
 
 /* ── Card ── */
-.card { background: var(--sw); border-radius: 20px; padding: 2rem; width: 100%; max-width: 440px; box-shadow: 0 6px 30px rgba(0,0,0,0.05); border: 1px solid rgba(107,157,173,0.1); }
+.card { background: var(--sw); border-radius: 20px; padding: 2rem; width: 100%; max-width: 440px; box-shadow: var(--shadow-md); border: 1px solid rgba(107,157,173,0.1); }
 .card h2 { font-family: 'Amiri', serif; font-size: 1.4rem; color: var(--mi-d); margin-bottom: 1.2rem; text-align: center; }
 .back-link { text-align: center; margin-top: 1rem; }
 .back-link button { background: none; border: none; color: var(--wg); font-family: 'Tajawal'; font-size: 0.85rem; cursor: pointer; text-decoration: underline; }
 
 /* ── Form ── */
 .fg { margin-bottom: 1rem; }
-.fg label { display: block; font-weight: 500; font-size: 0.85rem; color: var(--wg); margin-bottom: 0.3rem; }
-.fg input { width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--sa); border-radius: 10px; font-family: 'Tajawal'; font-size: 0.92rem; color: var(--ch); background: var(--sw); transition: all 0.3s; }
-.fg input:focus { outline: none; border-color: var(--mi); box-shadow: 0 0 0 3px rgba(107,157,173,0.12); }
+.fg label { display: block; font-weight: 600; font-size: 0.8rem; color: var(--wg); margin-bottom: 0.35rem; letter-spacing: 0.3px; }
+.fg input { width: 100%; padding: 0.8rem 1rem; border: 1.5px solid var(--sa); border-radius: 10px; font-family: 'Tajawal'; font-size: 0.92rem; color: var(--ch); background: var(--cr); transition: all 0.25s; }
+.fg input:focus { outline: none; border-color: var(--mi); background: var(--sw); box-shadow: 0 0 0 3px rgba(107,157,173,0.1); }
 .fg-err input { border-color: var(--rd) !important; }
-.fg-msg { font-size: 0.73rem; color: var(--rd); margin-top: 0.2rem; }
+.fg-msg { font-size: 0.72rem; color: var(--rd); margin-top: 0.25rem; }
 
 /* ── Buttons ── */
-.btn { width: 100%; padding: 0.9rem; border: none; border-radius: 12px; font-family: 'Tajawal'; font-size: 1rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--mi-d), var(--mi)); cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 16px rgba(107,157,173,0.3); }
-.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(107,157,173,0.4); }
+.btn { width: 100%; padding: 0.9rem; border: none; border-radius: 11px; font-family: 'Tajawal'; font-size: 0.95rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--mi-d), var(--mi)); cursor: pointer; transition: all 0.25s; box-shadow: 0 4px 14px rgba(107,157,173,0.25); letter-spacing: 0.3px; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(107,157,173,0.35); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.btn-s { width: auto; padding: 0.55rem 1.1rem; font-size: 0.85rem; border-radius: 9px; }
-.btn-gold { background: linear-gradient(135deg, var(--go-d), var(--go)); box-shadow: 0 4px 16px rgba(139,105,20,0.3); }
-.btn-outline { background: none; border: 2px solid var(--sa); color: var(--wg); box-shadow: none; }
+.btn-s { width: auto; padding: 0.5rem 1rem; font-size: 0.82rem; border-radius: 8px; }
+.btn-gold { background: linear-gradient(135deg, var(--go-d), var(--go)); box-shadow: 0 4px 14px rgba(139,105,20,0.25); }
+.btn-gold:hover { box-shadow: 0 6px 20px rgba(139,105,20,0.35); }
+.btn-outline { background: none; border: 1.5px solid var(--sa); color: var(--wg); box-shadow: none; }
 .btn-outline:hover { border-color: var(--mi); color: var(--mi); transform: none; box-shadow: none; }
 .btn-danger { background: linear-gradient(135deg, var(--no), #C0724D); }
 .btn-print { background: linear-gradient(135deg, #2C3E50, #34495E); }
 
-/* ── Nav ── */
-.nav { background: linear-gradient(135deg, var(--mi-dd), var(--mi-d)); padding: 0.8rem 1.5rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 3px 15px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; flex-wrap: wrap; gap: 0.5rem; }
+/* ── Nav — Unified Compact ── */
+.nav {
+  background: linear-gradient(135deg, var(--mi-dd), var(--mi-d));
+  padding: 0 1.5rem;
+  height: 54px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  position: sticky; top: 0; z-index: 100;
+  gap: 0.5rem;
+}
 .nav-admin { background: linear-gradient(135deg, #1a1a2e, #16213e); }
-.nav-brand { display: flex; align-items: center; gap: 0.5rem; }
-.nav-logo { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; }
-.nav-text h3 { font-size: 1rem; color: #fff; font-weight: 600; }
-.nav-text span { font-size: 0.72rem; color: rgba(255,255,255,0.65); }
-.nav-right { display: flex; align-items: center; gap: 0.7rem; }
-.tabs { display: flex; gap: 2px; background: rgba(0,0,0,0.2); border-radius: 9px; padding: 2px; }
-.tab { padding: 0.4rem 0.9rem; border: none; border-radius: 7px; font-family: 'Tajawal'; font-size: 0.8rem; font-weight: 500; color: rgba(255,255,255,0.6); background: transparent; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
-.tab.on { background: rgba(255,255,255,0.2); color: #fff; }
-.btn-logout { padding: 0.45rem 0.9rem; border: 1.5px solid rgba(255,255,255,0.4); border-radius: 8px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); font-family: 'Tajawal'; font-size: 0.78rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-.btn-logout:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.6); }
-
-/* ── Progress ── */
-.prog-wrap { padding: 1rem 1.5rem 0; }
-.prog-box { background: var(--sw); border-radius: 13px; padding: 1rem 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
-.prog-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.prog-label { font-weight: 600; font-size: 0.88rem; color: var(--mi-d); }
-.prog-pct { font-size: 1.3rem; font-weight: 800; color: var(--mi-d); }
-.prog-bar { height: 7px; background: var(--sa); border-radius: 7px; overflow: hidden; }
-.prog-fill { height: 100%; background: linear-gradient(90deg, var(--mi-d), var(--mi)); border-radius: 7px; transition: width 0.6s ease; }
-.prog-stats { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.76rem; color: var(--wg); flex-wrap: wrap; }
-.prog-stats strong { color: var(--ch); }
+.nav-brand { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.nav-logo { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; }
+.nav-user { font-size: 0.78rem; color: rgba(255,255,255,0.85); font-weight: 600; }
+.nav-center { flex: 1; display: flex; justify-content: center; }
+.tabs { display: flex; gap: 1px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 2px; }
+.tab { padding: 0.35rem 0.8rem; border: none; border-radius: 6px; font-family: 'Tajawal'; font-size: 0.78rem; font-weight: 500; color: rgba(255,255,255,0.55); background: transparent; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.tab.on { background: rgba(255,255,255,0.18); color: #fff; font-weight: 600; }
+.nav-right { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+.nav-prog { display: flex; align-items: center; gap: 0.5rem; }
+.nav-prog-bar { width: 80px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; }
+.nav-prog-fill { height: 100%; background: linear-gradient(90deg, #C4A24E, #E8D48A); border-radius: 4px; transition: width 0.5s ease; }
+.nav-prog-pct { font-size: 0.72rem; color: rgba(255,255,255,0.7); font-weight: 600; min-width: 28px; }
+.btn-logout { padding: 0.35rem 0.8rem; border: 1px solid rgba(255,255,255,0.25); border-radius: 7px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); font-family: 'Tajawal'; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; }
+.btn-logout:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.4); }
 
 /* ── Section ── */
 .sec { padding: 1.2rem 1.5rem 1.5rem; }
@@ -631,242 +650,218 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .sec-title { font-family: 'Amiri', serif; font-size: 1.2rem; color: var(--mi-d); }
 
 /* ── Banner ── */
-.banner { background: linear-gradient(135deg, ${BRAND.color}, ${BRAND.light}); border-radius: 13px; padding: 0.9rem 1.3rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; color: #fff; }
+.banner { background: linear-gradient(135deg, ${BRAND.color}, ${BRAND.light}); border-radius: var(--radius); padding: 0.9rem 1.3rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; color: #fff; }
 .banner-item { text-align: center; }
 .banner-item h4 { font-family: 'Amiri', serif; font-size: 0.95rem; }
 .banner-item p { font-size: 0.75rem; opacity: 0.85; }
 
 /* ── Matrix ── */
-.mx-groups { display: flex; margin-bottom: 0.4rem; padding-right: 130px; gap: 3px; }
-.mx-grp { flex: 1; text-align: center; padding: 0.5rem; font-family: 'Amiri', serif; font-weight: 700; font-size: 0.88rem; color: #fff; border-radius: 9px 9px 0 0; }
+.mx-groups { display: flex; margin-bottom: 0.4rem; padding-right: 110px; gap: 3px; }
+.mx-grp { flex: 1; text-align: center; padding: 0.45rem; font-family: 'Amiri', serif; font-weight: 700; font-size: 0.82rem; color: #fff; border-radius: 8px 8px 0 0; }
 .mx-grp-c { background: linear-gradient(135deg, var(--mi-d), var(--mi)); }
 .mx-grp-n { background: linear-gradient(135deg, var(--ol-d), var(--ol)); }
-.mx-phases { display: flex; margin-bottom: 5px; padding-right: 130px; }
-.mx-ph { flex: 1; text-align: center; padding: 0.35rem; font-size: 0.72rem; font-weight: 500; color: var(--wg); background: rgba(0,0,0,0.02); }
-.mx-grid { display: flex; flex-direction: column; gap: 5px; }
+.mx-phases { display: flex; margin-bottom: 4px; padding-right: 110px; }
+.mx-ph { flex: 1; text-align: center; padding: 0.3rem; font-size: 0.68rem; font-weight: 600; color: var(--wg); background: rgba(0,0,0,0.02); letter-spacing: 0.3px; }
+.mx-grid { display: flex; flex-direction: column; gap: 4px; }
 .mx-row { display: flex; gap: 0; }
-.mx-track { width: 130px; min-width: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.75rem 0.4rem; border-radius: 0 10px 10px 0; color: #fff; }
-.mx-tw { font-size: 1.2rem; font-weight: 800; }
-.mx-tn { font-size: 0.78rem; font-weight: 600; }
-.mx-tc { font-size: 0.65rem; opacity: 0.6; }
+.mx-track { width: 110px; min-width: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.6rem 0.3rem; border-radius: 0 10px 10px 0; color: #fff; gap: 1px; }
+.mx-tw { font-size: 1.1rem; font-weight: 800; line-height: 1; }
+.mx-tn { font-size: 0.72rem; font-weight: 700; }
+.mx-tc { font-size: 0.58rem; opacity: 0.55; }
 .mx-cells { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 
-.cell { background: var(--sw); border-radius: 10px; padding: 0.75rem; cursor: pointer; transition: all 0.25s; border: 2px solid transparent; position: relative; overflow: hidden; min-height: 88px; display: flex; flex-direction: column; justify-content: space-between; }
-.cell:hover { transform: translateY(-2px); box-shadow: 0 5px 16px rgba(0,0,0,0.06); }
-.cell .bar { position: absolute; top: 0; right: 0; width: 4px; height: 100%; border-radius: 0 10px 10px 0; }
-.cell.done { border-color: rgba(91,123,58,0.3); }
-.cell.done::after { content: '✓'; position: absolute; top: 5px; left: 5px; width: 18px; height: 18px; background: var(--ok); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; }
-.cell.dated { border-color: rgba(196,162,78,0.2); }
-.cell .num { position: absolute; top: 5px; left: 5px; width: 16px; height: 16px; border-radius: 50%; background: var(--sa); color: var(--wg); font-size: 0.58rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+/* ── Cell — Redesigned ── */
+.cell {
+  background: var(--sw); border-radius: 10px; padding: 0.7rem 0.65rem 0.6rem;
+  cursor: pointer; transition: all 0.2s ease; border: 1.5px solid transparent;
+  position: relative; overflow: hidden; min-height: 100px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+.cell:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.08); border-color: rgba(107,157,173,0.2); }
+.cell .bar { position: absolute; top: 0; right: 0; width: 3px; height: 100%; border-radius: 0 10px 10px 0; }
+.cell.done { border-color: rgba(91,123,58,0.25); background: rgba(91,123,58,0.03); }
+.cell.done::after { content: '✓'; position: absolute; top: 5px; left: 5px; width: 17px; height: 17px; background: var(--ok); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.58rem; font-weight: 700; }
+.cell.dated { border-color: rgba(196,162,78,0.25); }
+.cell .num { position: absolute; top: 5px; left: 5px; width: 16px; height: 16px; border-radius: 50%; background: var(--sa); color: var(--wg); font-size: 0.56rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .cell.done .num { display: none; }
-.cell-name { font-weight: 600; font-size: 0.78rem; line-height: 1.3; margin-bottom: 0.2rem; }
-.cell-desc { font-size: 0.67rem; color: var(--wg); line-height: 1.3; margin-bottom: 0.3rem; }
-.cell-meta { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
-.cell-dur { font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--sa); color: var(--wg); }
-.cell-date { font-size: 0.65rem; color: var(--mi-d); font-weight: 500; }
+.cell-name { font-weight: 700; font-size: 0.8rem; line-height: 1.35; color: var(--ch); padding-left: 18px; }
+.cell-meta { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; margin-top: 0.35rem; }
+.cell-dur { font-size: 0.62rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--sa); color: var(--wg); font-weight: 500; }
+.cell-date { font-size: 0.62rem; color: var(--mi-d); font-weight: 600; }
+
+/* ── Cell Hover Tooltip ── */
+.cell-insight { position: absolute; bottom: 0; left: 0; right: 0; padding: 0.3rem 0.45rem; font-size: 0.6rem; line-height: 1.3; color: #fff; border-radius: 0 0 8px 8px; opacity: 0; transform: translateY(4px); transition: all 0.22s ease; pointer-events: none; z-index: 10; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell:hover .cell-insight { opacity: 1; transform: translateY(0); }
+@media (max-width: 640px) { .cell-insight { display: none; } }
+.cell.highlighted { box-shadow: 0 0 0 2px rgba(107,157,173,0.45), 0 4px 14px rgba(107,157,173,0.18); transform: translateY(-1px); }
 
 /* ── Missing warning ── */
-.missing { background: rgba(192,57,43,0.05); border: 2px solid rgba(192,57,43,0.12); border-radius: 11px; padding: 0.9rem 1.1rem; margin-top: 1rem; }
-.missing h4 { color: var(--rd); font-size: 0.88rem; margin-bottom: 0.4rem; }
-.missing-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.missing-chip { font-size: 0.72rem; padding: 0.18rem 0.45rem; border-radius: 5px; background: rgba(192,57,43,0.06); color: var(--rd); cursor: pointer; }
+.missing { background: rgba(192,57,43,0.04); border: 1.5px solid rgba(192,57,43,0.1); border-radius: 11px; padding: 0.9rem 1.1rem; margin-top: 1rem; }
+.missing h4 { color: var(--rd); font-size: 0.85rem; margin-bottom: 0.4rem; }
+.missing-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.missing-chip { font-size: 0.7rem; padding: 0.18rem 0.45rem; border-radius: 5px; background: rgba(192,57,43,0.06); color: var(--rd); cursor: pointer; }
 
-/* ── Submit section ── */
-.submit { border-radius: 14px; padding: 1.3rem; text-align: center; margin: 1rem 0; }
-.submit-ready { background: rgba(107,157,173,0.06); border: 2px solid var(--mi); }
+/* ── Submit ── */
+.submit { border-radius: var(--radius); padding: 1.2rem; text-align: center; margin: 1rem 0; }
+.submit-ready { background: rgba(107,157,173,0.05); border: 2px solid var(--mi); }
 .submit-wait { background: rgba(0,0,0,0.02); border: 2px dashed var(--sa); }
-.submit-done { background: rgba(91,123,58,0.05); border: 2px solid var(--ok); }
-.submit h3 { font-family: 'Amiri', serif; margin-bottom: 0.4rem; }
-.submit p { color: var(--wg); font-size: 0.85rem; margin-bottom: 0.8rem; }
+.submit-done { background: rgba(91,123,58,0.04); border: 2px solid var(--ok); }
+.submit h3 { font-family: 'Amiri', serif; margin-bottom: 0.4rem; font-size: 1.1rem; }
+.submit p { color: var(--wg); font-size: 0.83rem; margin-bottom: 0.7rem; }
 
 /* ── Modal ── */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem; animation: fadeIn 0.2s; }
-.modal { background: var(--sw); border-radius: 20px; padding: 2rem; max-width: 500px; width: 100%; box-shadow: 0 16px 48px rgba(0,0,0,0.12); animation: slideUp 0.3s; max-height: 90vh; overflow-y: auto; }
-.modal-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; color: #fff; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.75rem; }
-.modal h2 { font-family: 'Amiri', serif; font-size: 1.3rem; margin-bottom: 0.35rem; }
-.modal-desc { color: var(--wg); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1rem; }
-.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; margin-bottom: 1rem; }
-.modal-item { background: var(--cr); padding: 0.55rem 0.75rem; border-radius: 8px; }
-.modal-item-label { font-size: 0.68rem; color: var(--wg); }
-.modal-item-value { font-weight: 700; font-size: 0.85rem; }
-.date-section { background: var(--cr); border-radius: 10px; padding: 0.9rem; margin-bottom: 1rem; }
-.date-section h4 { font-size: 0.85rem; color: var(--mi-d); margin-bottom: 0.5rem; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem; animation: fadeIn 0.2s; }
+.modal { background: var(--sw); border-radius: 18px; padding: 1.8rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.14); animation: slideUp 0.28s cubic-bezier(0.22,1,0.36,1); max-height: 90vh; overflow-y: auto; }
+.modal-badge { display: inline-block; padding: 0.22rem 0.65rem; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: 700; margin-bottom: 0.8rem; letter-spacing: 0.5px; }
+.modal h2 { font-family: 'Amiri', serif; font-size: 1.6rem; margin-bottom: 0.4rem; color: var(--ch); line-height: 1.2; }
+.modal-desc { color: var(--wg); font-size: 0.87rem; line-height: 1.75; margin-bottom: 1rem; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+.modal-item { background: var(--cr); padding: 0.55rem 0.75rem; border-radius: 9px; }
+.modal-item-label { font-size: 0.65rem; color: var(--wg); font-weight: 600; letter-spacing: 0.3px; }
+.modal-item-value { font-weight: 700; font-size: 0.88rem; margin-top: 0.1rem; }
+.date-section { background: var(--cr); border-radius: 11px; padding: 0.9rem; margin-bottom: 1rem; }
+.date-section h4 { font-size: 0.82rem; color: var(--mi-d); margin-bottom: 0.5rem; font-weight: 700; }
 .date-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.date-row input { flex: 1; min-width: 140px; padding: 0.55rem 0.75rem; border: 2px solid var(--sa); border-radius: 8px; font-family: 'Tajawal'; direction: ltr; }
-.hijri-badge { font-size: 0.8rem; color: var(--go-d); font-weight: 600; padding: 0.35rem 0.6rem; background: rgba(196,162,78,0.08); border-radius: 7px; margin-top: 0.35rem; }
+.date-row input { flex: 1; min-width: 140px; padding: 0.55rem 0.75rem; border: 1.5px solid var(--sa); border-radius: 8px; font-family: 'Tajawal'; direction: ltr; font-size: 0.9rem; background: var(--sw); transition: border-color 0.2s; }
+.date-row input:focus { outline: none; border-color: var(--mi); }
+.hijri-badge { font-size: 0.78rem; color: var(--go-d); font-weight: 700; padding: 0.35rem 0.65rem; background: rgba(196,162,78,0.1); border-radius: 7px; margin-top: 0.35rem; }
 .modal-actions { display: flex; gap: 0.5rem; }
 .modal-actions .btn { flex: 1; }
+.modal-section { margin-bottom: 0.9rem; }
+.modal-section-title { font-size: 0.75rem; font-weight: 700; color: var(--mi-d); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.3rem; letter-spacing: 0.3px; }
+.modal-insight-box { background: linear-gradient(135deg, rgba(107,157,173,0.07), rgba(107,157,173,0.02)); border-right: 3px solid var(--mi); border-radius: 9px; padding: 0.75rem 1rem; font-size: 0.87rem; font-weight: 600; color: var(--mi-d); line-height: 1.65; }
+.modal-why { font-size: 0.83rem; color: var(--wg); line-height: 1.75; padding: 0.4rem 0; }
+.modal-outputs { display: flex; flex-direction: column; gap: 0.3rem; }
+.modal-output-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--ch); padding: 0.35rem 0.65rem; background: rgba(107,157,173,0.04); border-radius: 7px; }
+.modal-output-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.modal-related { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.modal-related-chip { font-size: 0.7rem; padding: 0.25rem 0.55rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; border: 1.5px solid; font-weight: 500; }
+.modal-related-chip:hover { transform: translateY(-1px); opacity: 0.82; }
+.modal-related-label { font-size: 0.63rem; color: var(--wg); margin-bottom: 0.2rem; font-weight: 600; }
+.modal-divider { height: 1px; background: var(--sa); margin: 0.8rem 0; }
 
 /* ── Timeline ── */
 .tl { position: relative; padding-right: 1.8rem; }
-.tl::before { content: ''; position: absolute; right: 6px; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--mi-d), var(--mi)); border-radius: 3px; }
-.tl-item { position: relative; padding: 0 1.6rem 1.1rem 0; animation: slideR 0.35s ease both; }
-.tl-dot { position: absolute; right: -1.8rem; top: 0.2rem; width: 14px; height: 14px; border-radius: 50%; border: 3px solid; background: var(--sw); }
-.tl-card { background: var(--sw); border-radius: 11px; padding: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border-right: 3px solid; }
-.tl-step { font-size: 0.65rem; font-weight: 700; color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; display: inline-block; margin-bottom: 0.3rem; }
-.tl-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.15rem; }
-.tl-track { font-size: 0.75rem; color: var(--wg); margin-bottom: 0.3rem; }
-.tl-dates { font-size: 0.75rem; color: var(--mi-d); display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.tl-hijri { font-size: 0.7rem; color: var(--go-d); margin-top: 0.15rem; }
+.tl::before { content: ''; position: absolute; right: 6px; top: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, var(--mi-d), var(--mi-l)); border-radius: 2px; }
+.tl-item { position: relative; padding: 0 1.6rem 1rem 0; animation: slideR 0.3s ease both; }
+.tl-dot { position: absolute; right: -1.8rem; top: 0.2rem; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid; background: var(--sw); }
+.tl-card { background: var(--sw); border-radius: 11px; padding: 0.9rem 1rem; box-shadow: var(--shadow-sm); border-right: 3px solid; }
+.tl-step { font-size: 0.62rem; font-weight: 700; color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; display: inline-block; margin-bottom: 0.3rem; }
+.tl-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 0.12rem; }
+.tl-track { font-size: 0.72rem; color: var(--wg); margin-bottom: 0.25rem; }
+.tl-dates { font-size: 0.73rem; color: var(--mi-d); display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.tl-hijri { font-size: 0.68rem; color: var(--go-d); margin-top: 0.12rem; font-weight: 600; }
 
 /* ── Admin ── */
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.2rem; }
-.stat { background: var(--sw); border-radius: 13px; padding: 1.1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.03); text-align: center; border-top: 3px solid; }
-.stat-v { font-size: 1.8rem; font-weight: 800; margin-bottom: 0.15rem; }
-.stat-l { font-size: 0.78rem; color: var(--wg); }
-.admin-table { background: var(--sw); border-radius: 13px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); overflow-x: auto; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.2rem; }
+.stat { background: var(--sw); border-radius: var(--radius); padding: 1.1rem; box-shadow: var(--shadow-sm); text-align: center; border-top: 3px solid; }
+.stat-v { font-size: 1.8rem; font-weight: 800; margin-bottom: 0.12rem; }
+.stat-l { font-size: 0.75rem; color: var(--wg); }
+.admin-table { background: var(--sw); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); overflow-x: auto; }
 .admin-table table { width: 100%; border-collapse: collapse; min-width: 650px; }
-.admin-table th { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 0.75rem; font-weight: 600; font-size: 0.78rem; }
-.admin-table td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--sa); font-size: 0.78rem; }
-.badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 5px; font-size: 0.7rem; font-weight: 600; }
+.admin-table th { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 0.7rem 0.75rem; font-weight: 600; font-size: 0.76rem; }
+.admin-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--sa); font-size: 0.78rem; }
+.badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 5px; font-size: 0.68rem; font-weight: 700; }
 .badge-ok { background: rgba(91,123,58,0.1); color: var(--ok); }
 .badge-wait { background: rgba(196,162,78,0.1); color: var(--go-d); }
 
 /* ── Output Table ── */
-.output-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: 0 3px 14px rgba(0,0,0,0.05); margin-bottom: 1.2rem; border: 2px solid var(--mi); }
+.output-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow-md); margin-bottom: 1.2rem; border: 2px solid var(--mi); }
 .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
 .output-header h3 { font-family: 'Amiri', serif; font-size: 1.3rem; color: var(--mi-d); }
 .output-info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-bottom: 1rem; padding: 0.8rem; background: rgba(107,157,173,0.04); border-radius: 10px; }
 .output-info-item { text-align: center; }
-.output-info-label { font-size: 0.68rem; color: var(--wg); }
-.output-info-value { font-weight: 700; font-size: 0.9rem; }
+.output-info-label { font-size: 0.65rem; color: var(--wg); font-weight: 600; }
+.output-info-value { font-weight: 700; font-size: 0.88rem; }
 .output-table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 10px; }
-.output-table th { background: linear-gradient(135deg, var(--mi-dd), var(--mi-d)); color: #fff; padding: 0.65rem 0.7rem; font-size: 0.75rem; }
-.output-table td { padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--sa); font-size: 0.78rem; }
+.output-table th { background: linear-gradient(135deg, var(--mi-dd), var(--mi-d)); color: #fff; padding: 0.6rem 0.7rem; font-size: 0.74rem; }
+.output-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--sa); font-size: 0.77rem; }
 .output-table tr:nth-child(even) td { background: rgba(107,157,173,0.02); }
 .output-stamp { text-align: center; margin-top: 1rem; padding-top: 0.8rem; border-top: 2px dashed var(--sa); }
 .output-stamp p { font-size: 0.78rem; color: var(--wg); margin-bottom: 0.2rem; }
-.copyright { font-size: 0.72rem; color: #999; margin-top: 0.5rem; }
+.copyright { font-size: 0.7rem; color: #aaa; margin-top: 0.5rem; }
 
 /* ── Summary ── */
-.sum-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: 0 3px 14px rgba(0,0,0,0.04); margin-bottom: 1rem; }
+.sum-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow-sm); margin-bottom: 1rem; }
 .sum-title { font-family: 'Amiri', serif; font-size: 1.2rem; color: var(--mi-d); margin-bottom: 0.7rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--sa); }
 .sum-track { padding: 0.75rem; background: var(--cr); border-radius: 9px; border-right: 3px solid; margin-bottom: 0.6rem; }
 .sum-track-head { font-weight: 700; margin-bottom: 0.3rem; }
-.sum-track-item { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.78rem; border-bottom: 1px solid rgba(0,0,0,0.03); }
+.sum-track-item { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.77rem; border-bottom: 1px solid rgba(0,0,0,0.03); }
 
 /* ── Toast ── */
-.toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--ch); color: #fff; padding: 0.75rem 1.3rem; border-radius: 10px; font-size: 0.85rem; z-index: 2000; animation: slideUp 0.3s ease, fadeOut 0.3s ease 2.5s forwards; box-shadow: 0 8px 24px rgba(0,0,0,0.2); max-width: 90vw; text-align: center; }
+.toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: #1E1E1E; color: #fff; padding: 0.7rem 1.3rem; border-radius: 10px; font-size: 0.83rem; z-index: 2000; animation: slideUp 0.3s ease, fadeOut 0.3s ease 2.5s forwards; box-shadow: 0 8px 24px rgba(0,0,0,0.22); max-width: 90vw; text-align: center; }
 
-/* ── Confirm Modal ── */
-.confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 3000; padding: 1.5rem; animation: fadeIn 0.2s; }
-.confirm-box { background: var(--sw); border-radius: 18px; padding: 2rem; max-width: 380px; width: 100%; box-shadow: 0 16px 48px rgba(0,0,0,0.15); animation: slideUp 0.3s; text-align: center; }
-.confirm-box h3 { font-family: 'Amiri', serif; font-size: 1.2rem; color: var(--ch); margin-bottom: 0.6rem; }
-.confirm-box p { color: var(--wg); font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.2rem; white-space: pre-line; }
+/* ── Confirm ── */
+.confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 3000; padding: 1.5rem; animation: fadeIn 0.2s; }
+.confirm-box { background: var(--sw); border-radius: 18px; padding: 2rem; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.18); animation: slideUp 0.3s; text-align: center; }
+.confirm-box h3 { font-family: 'Amiri', serif; font-size: 1.25rem; color: var(--ch); margin-bottom: 0.6rem; }
+.confirm-box p { color: var(--wg); font-size: 0.87rem; line-height: 1.65; margin-bottom: 1.2rem; white-space: pre-line; }
 .confirm-btns { display: flex; gap: 0.6rem; }
-.confirm-btns .btn { flex: 1; padding: 0.7rem; font-size: 0.9rem; }
+.confirm-btns .btn { flex: 1; padding: 0.7rem; font-size: 0.88rem; }
 
+/* ── Empty ── */
 .empty { text-align: center; padding: 2.5rem 1.5rem; color: var(--wg); }
 .empty h3 { font-family: 'Amiri', serif; font-size: 1.15rem; color: var(--ch); margin-bottom: 0.3rem; }
 
 /* ── Footer ── */
-.app-footer { text-align: center; padding: 1.5rem; border-top: 1px solid var(--sa); margin-top: 1rem; }
-.app-footer p { font-size: 0.75rem; color: #999; }
+.app-footer { text-align: center; padding: 1.2rem; border-top: 1px solid var(--sa); margin-top: auto; }
+.app-footer p { font-size: 0.72rem; color: #bbb; }
 
 /* ── Report ── */
-.rpt-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: 0 3px 14px rgba(0,0,0,0.05); margin-bottom: 1rem; }
-.rpt-pattern { text-align: center; padding: 1.5rem; background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border-radius: 14px; margin-bottom: 1.2rem; border: 1.5px solid rgba(107,157,173,0.12); }
-.rpt-pattern-icon { font-size: 2.5rem; margin-bottom: 0.3rem; }
-.rpt-pattern-name { font-family: 'Amiri', serif; font-size: 1.6rem; color: var(--mi-d); margin-bottom: 0.4rem; }
-.rpt-pattern-desc { font-size: 0.85rem; color: var(--wg); line-height: 1.7; max-width: 500px; margin: 0 auto; }
+.rpt-card { background: var(--sw); border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow-sm); margin-bottom: 1rem; }
+.rpt-pattern { text-align: center; padding: 1.4rem; background: linear-gradient(135deg, rgba(107,157,173,0.05), rgba(107,157,173,0.01)); border-radius: var(--radius); margin-bottom: 1.2rem; border: 1.5px solid rgba(107,157,173,0.1); }
+.rpt-pattern-icon { font-size: 2.2rem; margin-bottom: 0.3rem; }
+.rpt-pattern-name { font-family: 'Amiri', serif; font-size: 1.5rem; color: var(--mi-d); margin-bottom: 0.4rem; }
+.rpt-pattern-desc { font-size: 0.83rem; color: var(--wg); line-height: 1.75; max-width: 500px; margin: 0 auto; }
 .rpt-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin-bottom: 1.2rem; }
 .rpt-stat { background: var(--cr); border-radius: 11px; padding: 0.9rem 0.6rem; text-align: center; }
-.rpt-stat-v { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.1rem; }
-.rpt-stat-l { font-size: 0.72rem; color: var(--wg); }
+.rpt-stat-v { font-size: 1.4rem; font-weight: 800; margin-bottom: 0.1rem; }
+.rpt-stat-l { font-size: 0.7rem; color: var(--wg); }
 .rpt-bar-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
-.rpt-bar-label { width: 90px; font-size: 0.78rem; font-weight: 600; text-align: left; flex-shrink: 0; }
-.rpt-bar-track { flex: 1; height: 22px; background: var(--sa); border-radius: 6px; overflow: hidden; }
-.rpt-bar-fill { height: 100%; border-radius: 6px; transition: width 0.8s ease; display: flex; align-items: center; justify-content: flex-end; padding-left: 0.4rem; }
-.rpt-bar-pct { font-size: 0.65rem; font-weight: 700; color: #fff; padding-left: 0.3rem; }
-.rpt-bar-count { font-size: 0.72rem; color: var(--wg); width: 35px; text-align: center; flex-shrink: 0; }
-.rpt-gap { background: rgba(192,57,43,0.04); border: 1.5px solid rgba(192,57,43,0.12); border-radius: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; font-size: 0.8rem; line-height: 1.6; }
-.rpt-rec { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.6rem 0.8rem; background: rgba(91,123,58,0.04); border-radius: 9px; margin-bottom: 0.4rem; font-size: 0.82rem; line-height: 1.6; }
-.rpt-rec-icon { color: var(--ok); font-size: 1rem; flex-shrink: 0; margin-top: 0.1rem; }
+.rpt-bar-label { width: 85px; font-size: 0.76rem; font-weight: 600; text-align: left; flex-shrink: 0; }
+.rpt-bar-track { flex: 1; height: 20px; background: var(--sa); border-radius: 5px; overflow: hidden; }
+.rpt-bar-fill { height: 100%; border-radius: 5px; transition: width 0.8s ease; display: flex; align-items: center; justify-content: flex-end; padding-left: 0.3rem; }
+.rpt-bar-pct { font-size: 0.62rem; font-weight: 700; color: #fff; }
+.rpt-bar-count { font-size: 0.7rem; color: var(--wg); width: 32px; text-align: center; flex-shrink: 0; }
+.rpt-gap { background: rgba(192,57,43,0.03); border: 1.5px solid rgba(192,57,43,0.1); border-radius: 9px; padding: 0.65rem 0.85rem; margin-bottom: 0.45rem; font-size: 0.79rem; line-height: 1.6; }
+.rpt-rec { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.6rem 0.75rem; background: rgba(91,123,58,0.04); border-radius: 9px; margin-bottom: 0.4rem; font-size: 0.81rem; line-height: 1.65; }
+.rpt-rec-icon { color: var(--ok); font-size: 0.95rem; flex-shrink: 0; margin-top: 0.1rem; }
 .rpt-empty { text-align: center; padding: 3rem 1.5rem; }
 .rpt-empty h3 { font-family: 'Amiri', serif; color: var(--mi-d); font-size: 1.2rem; margin-bottom: 0.5rem; }
-.rpt-empty p { color: var(--wg); font-size: 0.88rem; line-height: 1.6; }
-.rpt-section-title { font-family: 'Amiri', serif; font-size: 1.1rem; color: var(--mi-d); margin-bottom: 0.7rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--sa); }
-@media (max-width: 640px) { .rpt-stats { grid-template-columns: repeat(2, 1fr); } .rpt-bar-label { width: 70px; font-size: 0.7rem; } }
+.rpt-empty p { color: var(--wg); font-size: 0.87rem; line-height: 1.65; }
+.rpt-section-title { font-family: 'Amiri', serif; font-size: 1.05rem; color: var(--mi-d); margin-bottom: 0.7rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--sa); }
+@media (max-width: 640px) { .rpt-stats { grid-template-columns: repeat(2, 1fr); } .rpt-bar-label { width: 65px; font-size: 0.7rem; } }
 
 /* ── Admin Content Editor ── */
-.adm-edit-card { background: var(--sw); border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; border: 1px solid var(--sa); }
+.adm-edit-card { background: var(--sw); border-radius: 11px; padding: 1rem; margin-bottom: 0.75rem; border: 1px solid var(--sa); }
 .adm-edit-card:hover { border-color: var(--mi); }
 .adm-edit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; cursor: pointer; }
-.adm-edit-header h4 { font-size: 0.88rem; color: var(--mi-d); margin: 0; }
+.adm-edit-header h4 { font-size: 0.87rem; color: var(--mi-d); margin: 0; }
 .adm-field { margin-bottom: 0.6rem; }
-.adm-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--wg); margin-bottom: 0.2rem; }
-.adm-field input, .adm-field textarea { width: 100%; padding: 0.5rem 0.6rem; border: 1.5px solid var(--sa); border-radius: 8px; font-family: 'Tajawal', sans-serif; font-size: 0.82rem; direction: rtl; resize: vertical; box-sizing: border-box; }
+.adm-field label { display: block; font-size: 0.7rem; font-weight: 600; color: var(--wg); margin-bottom: 0.2rem; }
+.adm-field input, .adm-field textarea { width: 100%; padding: 0.5rem 0.6rem; border: 1.5px solid var(--sa); border-radius: 8px; font-family: 'Tajawal', sans-serif; font-size: 0.82rem; direction: rtl; resize: vertical; box-sizing: border-box; background: var(--cr); }
 .adm-field input:focus, .adm-field textarea:focus { border-color: var(--mi); outline: none; }
 .adm-field textarea { min-height: 60px; }
 .adm-actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.5rem; }
-.adm-consultant { background: linear-gradient(135deg, rgba(107,157,173,0.04), rgba(107,157,173,0.01)); border: 1.5px solid rgba(107,157,173,0.15); border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; }
-.adm-consultant h4 { color: var(--mi-d); font-size: 0.9rem; margin-bottom: 0.4rem; }
-.adm-note { font-size: 0.78rem; color: var(--wg); padding: 0.4rem 0.6rem; background: rgba(139,105,20,0.04); border-radius: 7px; margin-bottom: 0.4rem; }
+.adm-consultant { background: linear-gradient(135deg, rgba(107,157,173,0.03), rgba(107,157,173,0.01)); border: 1.5px solid rgba(107,157,173,0.12); border-radius: 11px; padding: 1rem; margin-bottom: 0.75rem; }
+.adm-consultant h4 { color: var(--mi-d); font-size: 0.88rem; margin-bottom: 0.4rem; }
+.adm-note { font-size: 0.77rem; color: var(--wg); padding: 0.4rem 0.6rem; background: rgba(139,105,20,0.04); border-radius: 7px; margin-bottom: 0.4rem; }
 
 /* ── Smart Suggestions ── */
-.smart-box { border-radius: 13px; padding: 1rem 1.2rem; margin-bottom: 1rem; animation: fadeIn 0.5s; }
-.smart-welcome { background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border: 1.5px dashed var(--mi); text-align: center; }
+.smart-box { border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1rem; animation: fadeIn 0.5s; }
+.smart-welcome { background: linear-gradient(135deg, rgba(107,157,173,0.05), rgba(107,157,173,0.01)); border: 1.5px dashed var(--mi); text-align: center; }
 .smart-welcome h3 { font-family: 'Amiri', serif; color: var(--mi-d); font-size: 1.1rem; margin-bottom: 0.3rem; }
 .smart-welcome p { font-size: 0.82rem; color: var(--wg); line-height: 1.6; margin-bottom: 0.5rem; }
-.smart-progress { background: rgba(91,123,58,0.04); border: 1.5px solid rgba(91,123,58,0.15); }
-.smart-progress h4 { color: var(--ok); font-size: 0.9rem; margin-bottom: 0.3rem; }
+.smart-progress { background: rgba(91,123,58,0.04); border: 1.5px solid rgba(91,123,58,0.12); }
+.smart-progress h4 { color: var(--ok); font-size: 0.88rem; margin-bottom: 0.3rem; }
 .smart-progress p { font-size: 0.8rem; color: var(--wg); line-height: 1.5; }
 .smart-suggest { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-.smart-chip { font-size: 0.75rem; padding: 0.3rem 0.65rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 500; border: 1.5px solid; }
-.smart-chip:hover { transform: translateY(-1px); opacity: 0.85; }
-.smart-counter { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--mi-d); font-weight: 600; margin-top: 0.4rem; }
+.smart-chip { font-size: 0.73rem; padding: 0.3rem 0.65rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 600; border: 1.5px solid; }
+.smart-chip:hover { transform: translateY(-1px); opacity: 0.82; }
+.smart-counter { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; color: var(--mi-d); font-weight: 700; margin-top: 0.4rem; }
 
-/* ── Cell Hover Tooltip ── */
-.cell { position: relative; }
-.cell-insight { position: absolute; bottom: -2px; left: 4px; right: 4px; padding: 0.3rem 0.45rem; font-size: 0.62rem; line-height: 1.3; color: #fff; border-radius: 0 0 8px 8px; opacity: 0; transform: translateY(4px); transition: all 0.25s ease; pointer-events: none; z-index: 10; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cell:hover .cell-insight { opacity: 1; transform: translateY(0); }
-@media (max-width: 640px) { .cell-insight { display: none; } }
-
-/* ── Cell Highlight (connected processes) ── */
-.cell.highlighted { box-shadow: 0 0 0 2px rgba(107,157,173,0.5), 0 0 12px rgba(107,157,173,0.25); transform: translateY(-1px); }
-.cell.highlighted .cell-name { color: var(--mi-d); }
-
-/* ── Modal Enhanced Sections ── */
-.modal-section { margin-bottom: 1rem; }
-.modal-section-title { font-size: 0.8rem; font-weight: 700; color: var(--mi-d); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
-.modal-insight-box { background: linear-gradient(135deg, rgba(107,157,173,0.06), rgba(107,157,173,0.02)); border-right: 3px solid var(--mi); border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.85rem; font-weight: 600; color: var(--mi-d); line-height: 1.6; }
-.modal-why { font-size: 0.82rem; color: var(--wg); line-height: 1.7; padding: 0.5rem 0; }
-.modal-outputs { display: flex; flex-direction: column; gap: 0.35rem; }
-.modal-output-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--ch); padding: 0.35rem 0.6rem; background: rgba(107,157,173,0.04); border-radius: 7px; }
-.modal-output-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.modal-related { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.modal-related-chip { font-size: 0.72rem; padding: 0.25rem 0.55rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; border: 1.5px solid; font-weight: 500; }
-.modal-related-chip:hover { transform: translateY(-1px); opacity: 0.85; }
-.modal-related-label { font-size: 0.65rem; color: var(--wg); margin-bottom: 0.2rem; }
-.modal-divider { height: 1px; background: var(--sa); margin: 0.8rem 0; }
-
-/* ── Demo CTA in Modal ── */
-.demo-cta { background: linear-gradient(135deg, #8B691408, #8B691415); border: 1.5px solid #8B691430; border-radius: 12px; padding: 1rem 1.1rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.75rem; cursor: pointer; transition: all 0.2s; }
-.demo-cta:hover { border-color: #8B6914; background: linear-gradient(135deg, #8B691415, #8B691422); transform: translateY(-1px); }
-.demo-cta-icon { font-size: 1.6rem; flex-shrink: 0; }
-.demo-cta-text { flex: 1; }
-.demo-cta-title { font-weight: 700; font-size: 0.88rem; color: #8B6914; margin-bottom: 0.15rem; }
-.demo-cta-desc { font-size: 0.75rem; color: var(--wg); line-height: 1.4; }
-.demo-cta-arrow { color: #8B6914; font-size: 1.1rem; flex-shrink: 0; }
-.demo-screen { position: fixed; inset: 0; background: var(--cr); z-index: 200; display: flex; flex-direction: column; overflow: hidden; }
-.demo-header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
-.demo-header-back { background: rgba(255,255,255,0.12); border: none; color: #fff; border-radius: 8px; padding: 0.4rem 0.8rem; cursor: pointer; font-family: Tajawal,sans-serif; font-size: 0.82rem; display: flex; align-items: center; gap: 0.3rem; }
-.demo-header-info { flex: 1; }
-.demo-header-title { font-family: Amiri,serif; font-size: 1.1rem; font-weight: 700; }
-.demo-header-sub { font-size: 0.72rem; opacity: 0.7; margin-top: 0.15rem; }
-.demo-header-badge { background: #8B6914; padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
-.demo-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
-.demo-intro { background: var(--sw); border-radius: 14px; padding: 1.1rem 1.3rem; margin-bottom: 1.5rem; border-right: 4px solid #8B6914; }
-.demo-intro-title { font-weight: 700; color: #8B6914; margin-bottom: 0.3rem; font-size: 0.9rem; }
-.demo-intro-text { font-size: 0.82rem; color: var(--wg); line-height: 1.7; }
-.demo-card { background: var(--sw); border-radius: 16px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1.5px solid var(--sa); }
-.demo-card-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--sa); }
-.demo-card-num { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg,#8B6914,#A07820); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
-.demo-card-name { font-weight: 700; font-size: 0.9rem; color: var(--mi-d); flex: 1; }
-.demo-card-remove { background: none; border: none; color: #C0392B; cursor: pointer; font-size: 0.8rem; padding: 0.2rem 0.4rem; border-radius: 6px; }
-.demo-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1rem; }
-.demo-fields-3 { grid-template-columns: 1fr 1fr 1fr; }
-.demo-field { display: flex; flex-direction: column; gap: 0.25rem; }
+/* ── Demo Form ── */
 .demo-field label { font-size: 0.7rem; font-weight: 600; color: var(--wg); }
 .demo-field input,.demo-field select { border: 1.5px solid var(--sa); border-radius: 8px; padding: 0.45rem 0.6rem; font-family: Tajawal,sans-serif; font-size: 0.82rem; background: var(--cr); color: var(--mi-d); }
 .demo-field input:focus,.demo-field select:focus { outline: none; border-color: #8B6914; }
@@ -983,6 +978,34 @@ const AdminSession = {
     try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch (e) {}
   },
 };
+
+
+const AuthLeft = ({ title, quote, highlight, tracks }) => (
+  <div className="auth-left">
+    <div className="auth-left-grid"/>
+    <div className="auth-left-content">
+      <MILogo size={52} color="#C4A24E"/>
+      <div className="auth-left-quote">
+        {quote.split('||').map((part,i) =>
+          i === 1 ? <span key={i}>{part}</span> : <span key={i}>{part}</span>
+        )}
+      </div>
+      <div className="auth-left-attr">Milestone Impact • الإطار الحاكم</div>
+      <div className="auth-left-tracks">
+        {[
+          {n:'الخلق',c:'#8B6914',w:'19%'},
+          {n:'الإبداع',c:'#5B7B3A',w:'21%'},
+          {n:'الإنشاء',c:'#2E6B8A',w:'47%'},
+          {n:'الجعل',c:'#6B4E3D',w:'13%'},
+        ].map(t=>(
+          <div key={t.n} className="auth-left-track" style={{background:t.c+'22',color:t.c,border:`1px solid ${t.c}44`}}>
+            {t.n} {t.w}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 // ════════════════════════════════════════════════════════════════
 // MAIN APP
@@ -1668,107 +1691,129 @@ export default function App() {
 
   // ════════ REGISTER ════════
   if (screen === "register") return (
-    <><style>{CSS}</style><div className="app"><div className="splash">
-      <MILogo size={50} color={BRAND.color} />
-      <h1 style={{ marginTop: "0.8rem" }}>مصفوفة التأثير</h1>
-      <p className="sub">{otpStep === "form" ? "سجّل بياناتك للبدء" : "أدخل رمز التحقق"}</p>
-      <div className="card">
-        {otpStep === "form" ? <>
-          <h2>التسجيل</h2>
-          <form onSubmit={handleRegister}>
-            <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
-            <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
-            <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
-            <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
-          </form>
-        </> : <>
-          <h2>✉ رمز التحقق</h2>
-          <p style={{ fontSize: "0.85rem", color: "#6B6560", marginBottom: "1rem", textAlign: "center" }}>تم إرسال رمز مكون من 6 أرقام إلى<br /><strong style={{ color: BRAND.color, direction: "ltr", display: "inline-block" }}>{user.email}</strong></p>
-          <form onSubmit={handleVerifyOtp}>
-            <div className={`fg ${otpError ? "fg-err" : ""}`}>
-              <label>رمز التحقق</label>
-              <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
-                onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
-                style={{ direction: "ltr", textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: 700 }} />
-              {otpError && <div className="fg-msg">{otpError}</div>}
+    <><style>{CSS}</style>
+    <div className="auth-screen">
+      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل — بل بالهندسة" />
+      <div className="auth-right">
+        <div className="auth-form-wrap">
+          <div className="auth-logo"><MILogo size={28} color={BRAND.dark}/><span className="auth-logo-text">مصفوفة التأثير</span></div>
+          {otpStep === "form" ? <>
+            <h1 className="auth-title">ابدأ رحلتك</h1>
+            <p className="auth-sub">سجّل بياناتك للدخول إلى منظومة العمليات الست عشرة</p>
+            <form onSubmit={handleRegister}>
+              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
+              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
+              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
+              <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
+            </form>
+            <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
+              لديك حساب؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"'Tajawal'",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("resume"); setOtpStep("form"); }}>استئناف الجلسة</button>
             </div>
-            <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
-          </form>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.8rem" }}>
-            <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
-            <button style={{ background: "none", border: "none", color: "#6B6560", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← تغيير البيانات</button>
-          </div>
-        </>}
-        <div className="back-link"><button onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة</button></div>
+          </> : <>
+            <h1 className="auth-title">رمز التحقق</h1>
+            <p className="auth-sub">تم إرسال رمز مكوّن من 6 أرقام إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email}</strong></p>
+            <form onSubmit={handleVerifyOtp}>
+              <div className={`fg ${otpError ? "fg-err" : ""}`}>
+                <label>رمز التحقق</label>
+                <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                  onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
+                  style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
+                {otpError && <div className="fg-msg">{otpError}</div>}
+              </div>
+              <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+            </form>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+              <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+              <button style={{ background: "none", border: "none", color: "var(--wg)", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← تغيير البيانات</button>
+            </div>
+          </>}
+          <button className="auth-back" onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة للرئيسية</button>
+        </div>
       </div>
-    </div></div></>
+    </div></>
   );
 
   // ════════ ADMIN LOGIN ════════
 
   // ════════ RESUME ════════
   if (screen === "resume") return (
-    <><style>{CSS}</style><div className="app"><div className="splash">
-      <MILogo size={50} color="#5B7B3A" />
-      <h1 style={{ color: "#5B7B3A", marginTop: "0.8rem" }}>استئناف الجلسة</h1>
-      <p className="sub">{otpStep === "form" ? "أدخل رقم جوالك لاستعادة بياناتك" : "أدخل رمز التحقق"}</p>
-      <div className="card">
-        {otpStep === "form" ? <>
-          <h2>↩ استئناف</h2>
-          <form onSubmit={handleResume}>
-            <div className={`fg ${resumeError ? "fg-err" : ""}`}>
-              <label>رقم الجوال المسجل</label>
-              <input type="tel" placeholder="05XXXXXXXX" value={resumePhone}
-                onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
-                style={{ direction: "ltr", textAlign: "right" }} />
-              {resumeError && <div className="fg-msg">{resumeError}</div>}
+    <><style>{CSS}</style>
+    <div className="auth-screen">
+      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل — بل بالهندسة" />
+      <div className="auth-right">
+        <div className="auth-form-wrap">
+          <div className="auth-logo"><MILogo size={28} color={BRAND.dark}/><span className="auth-logo-text">مصفوفة التأثير</span></div>
+          {otpStep === "form" ? <>
+            <h1 className="auth-title">استئناف الجلسة</h1>
+            <p className="auth-sub">أدخل رقم جوالك لاستعادة بياناتك وخطتك السابقة</p>
+            <form onSubmit={handleResume}>
+              <div className={`fg ${resumeError ? "fg-err" : ""}`}>
+                <label>رقم الجوال المسجل</label>
+                <input type="tel" placeholder="05XXXXXXXX" value={resumePhone}
+                  onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
+                  style={{ direction: "ltr", textAlign: "right" }} />
+                {resumeError && <div className="fg-msg">{resumeError}</div>}
+              </div>
+              <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={resumeLoading}>
+                {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
+              </button>
+            </form>
+            <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
+              مسجّل جديد؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"'Tajawal'",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("register"); setOtpStep("form"); }}>ابدأ رحلتك</button>
             </div>
-            <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={resumeLoading}>
-              {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
-            </button>
-          </form>
-        </> : <>
-          <h2>✉ رمز التحقق</h2>
-          <p style={{ fontSize: "0.85rem", color: "#6B6560", marginBottom: "1rem", textAlign: "center" }}>تم إرسال رمز إلى<br /><strong style={{ color: "#5B7B3A", direction: "ltr", display: "inline-block" }}>{user.email?.replace(/(.{2}).*(@.*)/, "$1***$2")}</strong></p>
-          <form onSubmit={handleResumeVerify}>
-            <div className={`fg ${otpError ? "fg-err" : ""}`}>
-              <label>رمز التحقق</label>
-              <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
-                onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
-                style={{ direction: "ltr", textAlign: "center", fontSize: "1.5rem", letterSpacing: "8px", fontWeight: 700 }} />
-              {otpError && <div className="fg-msg">{otpError}</div>}
+          </> : <>
+            <h1 className="auth-title">رمز التحقق</h1>
+            <p className="auth-sub">تم إرسال رمز إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email?.replace(/(.{2}).*(@.*)/, "$1***$2")}</strong></p>
+            <form onSubmit={handleResumeVerify}>
+              <div className={`fg ${otpError ? "fg-err" : ""}`}>
+                <label>رمز التحقق</label>
+                <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                  onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
+                  style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
+                {otpError && <div className="fg-msg">{otpError}</div>}
+              </div>
+              <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+            </form>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
+              <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+              <button style={{ background: "none", border: "none", color: "var(--wg)", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← رقم آخر</button>
             </div>
-            <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
-          </form>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.8rem" }}>
-            <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
-            <button style={{ background: "none", border: "none", color: "#6B6560", fontFamily: "'Tajawal'", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← رقم آخر</button>
-          </div>
-        </>}
-        <div style={{ textAlign: "center", marginTop: "1rem", padding: "0.8rem", background: "rgba(107,157,173,0.04)", borderRadius: "8px" }}>
-          <p style={{ fontSize: "0.78rem", color: "#6B6560", marginBottom: "0.3rem" }}>ليس لديك حساب؟</p>
-          <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "'Tajawal'", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }} onClick={() => { setScreen("register"); setOtpStep("form"); }}>🚀 سجّل الآن</button>
+          </>}
+          <button className="auth-back" onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة للرئيسية</button>
         </div>
-        <div className="back-link"><button onClick={() => { setScreen("splash"); setOtpStep("form"); setOtpCode(""); }}>→ العودة</button></div>
       </div>
-    </div></div></>
+    </div></>
   );
 
-  // ════════ ADMIN LOGIN (original) ════════
+  // ════════ ADMIN LOGIN ════════
   if (screen === "admin-login") return (
-    <><style>{CSS}</style><div className="app"><div className="splash">
-      <MILogo size={50} color={BRAND.deep} />
-      <h1 style={{ color: BRAND.deep, marginTop: "0.8rem" }}>لوحة الإدارة</h1>
-      <p className="sub">Milestone Impact</p>
-      <div className="card"><h2>دخول المدير</h2>
-        <form onSubmit={handleAdminLogin}>
-          <div className="fg"><label>اسم المستخدم</label><input placeholder="admin" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} /></div>
-          <div className={`fg ${adminError ? "fg-err" : ""}`}><label>كلمة المرور</label><input type="password" placeholder="••••••••" value={adminPass} onChange={e => { setAdminPass(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
-          <button type="submit" className="btn">🔐 دخول</button>
-        </form>
-        <div className="back-link"><button onClick={() => setScreen("splash")}>→ العودة</button></div>
+    <><style>{CSS}</style>
+    <div className="auth-screen">
+      <div className="auth-left" style={{background:"linear-gradient(160deg,#0f1923 0%,#1a1a2e 100%)"}}>
+        <div className="auth-left-grid"/>
+        <div className="auth-left-content" style={{position:"relative",zIndex:1,textAlign:"center"}}>
+          <MILogo size={52} color="#6B9DAD"/>
+          <div className="auth-left-quote" style={{color:"rgba(255,255,255,0.7)",fontSize:"1rem",marginTop:"1.5rem"}}>
+            لوحة إدارة المستشار<br/>
+            <span style={{color:"#6B9DAD",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
+          </div>
+          <div className="auth-left-attr" style={{marginTop:"1rem"}}>Milestone Impact • نسخة المستشار</div>
+        </div>
       </div>
-    </div></div></>
+      <div className="auth-right">
+        <div className="auth-form-wrap">
+          <div className="auth-logo"><MILogo size={28} color={BRAND.deep}/><span className="auth-logo-text" style={{color:BRAND.deep}}>لوحة الإدارة</span></div>
+          <h1 className="auth-title">دخول المستشار</h1>
+          <p className="auth-sub">أدخل بيانات الدخول للوصول إلى لوحة المراجعة والإدارة</p>
+          <form onSubmit={handleAdminLogin}>
+            <div className="fg"><label>اسم المستخدم</label><input placeholder="admin" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} /></div>
+            <div className={`fg ${adminError ? "fg-err" : ""}`}><label>كلمة المرور</label><input type="password" placeholder="••••••••" value={adminPass} onChange={e => { setAdminPass(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
+            <button type="submit" className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>دخول ←</button>
+          </form>
+          <button className="auth-back" onClick={() => setScreen("splash")}>→ العودة للرئيسية</button>
+        </div>
+      </div>
+    </div></>
   );
 
   // ════════ ADMIN PANEL ════════
@@ -2002,15 +2047,21 @@ export default function App() {
   return (
     <><style>{CSS}</style><div className="app">
       <nav className="nav">
-        <div className="nav-brand"><div className="nav-logo"><MILogo size={16} color="#fff" /></div><div className="nav-text"><h3>مصفوفة التأثير</h3><span>{user.name}</span></div></div>
-        <div className="nav-right"><div className="tabs">{userTabs.map(([k, v]) => <button key={k} className={`tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{v}</button>)}</div><button className="btn-logout" onClick={logout}>← خروج</button></div>
+        <div className="nav-brand">
+          <div className="nav-logo"><MILogo size={15} color="#fff"/></div>
+          <span className="nav-user">{user.name}</span>
+        </div>
+        <div className="nav-center">
+          <div className="tabs">{userTabs.map(([k,v]) => <button key={k} className={`tab ${tab===k?"on":""}`} onClick={() => setTab(k)}>{v}</button>)}</div>
+        </div>
+        <div className="nav-right">
+          <div className="nav-prog">
+            <div className="nav-prog-bar"><div className="nav-prog-fill" style={{width:`${progressPct}%`}}/></div>
+            <span className="nav-prog-pct">{progressPct}%</span>
+          </div>
+          <button className="btn-logout" onClick={logout}>خروج</button>
+        </div>
       </nav>
-
-      <div className="prog-wrap"><div className="prog-box">
-        <div className="prog-top"><span className="prog-label">نسبة الإنجاز</span><span className="prog-pct">{progressPct}%</span></div>
-        <div className="prog-bar"><div className="prog-fill" style={{ width: `${progressPct}%` }} /></div>
-        <div className="prog-stats"><span><strong>{datedCount}</strong>/16 موعد</span><span><strong>{confirmedCount}</strong>/16 مؤكد</span>{submitted && <span style={{ color: "#5B7B3A", fontWeight: 700 }}>✓ تم التقديم</span>}</div>
-      </div></div>
 
       {/* ═══ MATRIX ═══ */}
       {tab === "matrix" && <div className="sec" style={{ animation: "fadeIn 0.4s" }}>
@@ -2088,8 +2139,8 @@ export default function App() {
               }}
               onMouseLeave={() => { if (!selectedCell) setHighlightedKeys([]); }}>
               <div className="bar" style={{ background: tr.color }} /><span className="num">{proc.index + 1}</span>
-              <div><div className="cell-name">{op.nameAr}</div><div className="cell-desc">{op.desc.slice(0, 35)}…</div></div>
-              <div className="cell-meta"><span className="cell-dur">{op.dur} أيام</span>{hasD && <span className="cell-date">{fmtShort(dates[key])}</span>}</div>
+              <div className="cell-name">{op.nameAr}</div>
+              <div className="cell-meta"><span className="cell-dur">{proc.duration || `${op.dur}w`}</span>{hasD && <span className="cell-date">{fmtShort(dates[key])}</span>}</div>
               {proc.insight && <div className="cell-insight" style={{ background: `${tr.color}E6` }}>{proc.insight}</div>}
             </div>);
           })}</div>
