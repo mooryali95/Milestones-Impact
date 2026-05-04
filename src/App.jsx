@@ -560,8 +560,9 @@ const CSS = `
   --radius: 14px; --shadow-sm: 0 2px 8px rgba(0,0,0,0.04); --shadow-md: 0 6px 24px rgba(0,0,0,0.07);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: var(--ch); direction: rtl; min-height: 100vh; }
-.app { min-height: 100vh; display: flex; flex-direction: column; }
+html { overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: var(--ch); direction: rtl; min-height: 100vh; min-height: -webkit-fill-available; overflow-x: hidden; }
+.app { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; position: relative; overscroll-behavior-y: none; }
 
 /* ── Auth Screens (Split Layout) ── */
 .auth-screen { min-height: 100vh; display: grid; grid-template-columns: 1fr 480px; }
@@ -645,7 +646,7 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .btn-logout:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.4); }
 
 /* ── Section ── */
-.sec { padding: 1.2rem 1.5rem 1.5rem; }
+.sec { padding: 1rem 1rem 1.5rem; overflow-x: hidden; }
 .sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
 .sec-title { font-family: 'Amiri', serif; font-size: 1.2rem; color: var(--mi-d); }
 
@@ -711,8 +712,8 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .submit p { color: var(--wg); font-size: 0.83rem; margin-bottom: 0.7rem; }
 
 /* ── Modal ── */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1.5rem; animation: fadeIn 0.2s; }
-.modal { background: var(--sw); border-radius: 18px; padding: 1.8rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.14); animation: slideUp 0.28s cubic-bezier(0.22,1,0.36,1); max-height: 90vh; overflow-y: auto; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; animation: fadeIn 0.2s; overscroll-behavior: contain; touch-action: none; }
+.modal { background: var(--sw); border-radius: 18px; padding: 1.5rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.14); animation: slideUp 0.28s cubic-bezier(0.22,1,0.36,1); max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; touch-action: pan-y; }
 .modal-badge { display: inline-block; padding: 0.22rem 0.65rem; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: 700; margin-bottom: 0.8rem; letter-spacing: 0.5px; }
 .modal h2 { font-family: 'Amiri', serif; font-size: 1.6rem; margin-bottom: 0.4rem; color: var(--ch); line-height: 1.2; }
 .modal-desc { color: var(--wg); font-size: 0.87rem; line-height: 1.75; margin-bottom: 1rem; }
@@ -930,11 +931,24 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 @media (max-width: 640px) {
   .mx-groups, .mx-phases { display: none; }
   .mx-row { flex-direction: column; }
-  .mx-track { width: 100%; border-radius: 10px 10px 0 0; flex-direction: row; padding: 0.5rem; gap: 0.4rem; }
+  .mx-track { width: 100%; min-width: unset; border-radius: 10px 10px 0 0; flex-direction: row; padding: 0.5rem 0.75rem; gap: 0.5rem; }
+  .mx-tw { font-size: 0.9rem; }
   .mx-cells { grid-template-columns: repeat(2, 1fr); }
-  .sec { padding: 0.9rem; }
+  .cell { min-height: 85px; padding: 0.6rem; }
+  .cell-name { font-size: 0.76rem; }
+  .sec { padding: 0.75rem; overflow-x: hidden; }
   .banner { flex-direction: column; text-align: center; }
   .output-info { grid-template-columns: 1fr; }
+  .ctx-bar { gap: 0.4rem; padding: 0.55rem 0.75rem; }
+  .ctx-stat-num { font-size: 0.88rem; }
+  .nav { padding: 0 0.75rem; height: 48px; }
+  .nav-user { font-size: 0.72rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-prog-bar { width: 50px; }
+  .nav-prog-pct { font-size: 0.65rem; }
+  .btn-logout { padding: 0.28rem 0.55rem; font-size: 0.68rem; }
+  .overlay { padding: 0.5rem; align-items: flex-end; }
+  .modal { border-radius: 18px 18px 12px 12px; padding: 1.2rem; max-height: 92vh; }
+  .modal-x { top: 0.7rem; left: 0.7rem; }
 }
 
 /* ══ USER PAGE — UX Improvements ══ */
@@ -972,6 +986,7 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 @media(max-width:640px){
   .user-bottom-bar{display:flex;}
   .user-desktop-tabs{display:none!important;}
+  .nav-center{display:none!important;}
   .sec{padding-bottom:5rem;}
   .ctx-divider{display:none;}
   .mx-mobile-track{display:block;}
@@ -1025,6 +1040,7 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 @media(max-width:640px){
   .admin-bottom-bar{display:flex;}
   .admin-desktop-tabs{display:none!important;}
+  .nav-center{display:none!important;}
   .sec{padding-bottom:5rem;}
   .stat-grid{grid-template-columns:repeat(2,1fr);gap:.5rem;}
   .demo-person-grid{grid-template-columns:1fr;}
@@ -1033,6 +1049,8 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 @media(min-width:641px){
   .reg-modal-overlay{align-items:center;padding:1rem;}
   .reg-modal{border-radius:20px;}
+  .user-bottom-bar{display:none!important;}
+  .admin-bottom-bar{display:none!important;}
 }`;
 
 // ════════════════════════════════════════════════════════════════
@@ -1496,12 +1514,22 @@ export default function App() {
 
   const saveDemoData = async () => {
     if (!sessionId) return;
+    // ── التحقق: يجب وجود صف واحد على الأقل مكتمل (اسم + بُعد واحد) ──
+    const validRows = demoRows.filter(r => {
+      if (!r.name?.trim()) return false;
+      const hasStrength = Object.values(r.strength || {}).some(v => Number(v) > 0);
+      return hasStrength;
+    });
+    if (validRows.length === 0) {
+      showToast("⚠ يجب إدخال اسم شخص واحد على الأقل مع تحديد قوته");
+      return;
+    }
     setDemoSaving(true);
     try {
       const rec = await DB.get(sessionId);
       if (rec) { rec[DEMO_KEY] = demoRows; await DB.save(sessionId, rec); }
       LocalSession.update({ [DEMO_KEY]: demoRows });
-      showToast("تم حفظ التحليل الديموغرافي ✓");
+      showToast(`تم حفظ التحليل — ${validRows.length} شخص ✓`);
     } catch(e) { showToast("خطأ في الحفظ"); }
     setDemoSaving(false);
   };
