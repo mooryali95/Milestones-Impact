@@ -867,54 +867,72 @@ body, #root { font-family: 'Tajawal', sans-serif; background: var(--cr); color: 
 .demo-field input,.demo-field select { border: 1.5px solid var(--sa); border-radius: 8px; padding: 0.45rem 0.6rem; font-family: Tajawal,sans-serif; font-size: 0.82rem; background: var(--cr); color: var(--mi-d); }
 .demo-field input:focus,.demo-field select:focus { outline: none; border-color: #8B6914; }
 .demo-section-label { font-size: 0.75rem; font-weight: 700; color: var(--mi-d); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.6rem; background: var(--cr); border-radius: 8px; }
-.demo-scores { display: grid; grid-template-columns: repeat(5,1fr); gap: 0.5rem; margin-bottom: 0.8rem; }
-.demo-scores-4 { grid-template-columns: repeat(4,1fr); }
-.demo-score { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
-.demo-score label { font-size: 0.65rem; color: var(--wg); text-align: center; }
-.demo-score input[type=number] { width: 100%; border: 1.5px solid var(--sa); border-radius: 8px; padding: 0.35rem; text-align: center; font-family: Tajawal,sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--mi-d); background: var(--cr); }
-.demo-score input[type=number]:focus { outline: none; border-color: #8B6914; }
-.demo-targets { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.demo-target-chip { display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1.5px solid var(--sa); font-size: 0.75rem; cursor: pointer; transition: all 0.2s; user-select: none; }
-.demo-target-chip.active { border-color: #8B6914; background: #8B691415; color: #8B6914; font-weight: 600; }
-.demo-footer { background: var(--sw); border-top: 1px solid var(--sa); padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-shrink: 0; }
-.demo-add-btn { background: none; border: 1.5px dashed var(--sa); border-radius: 10px; padding: 0.5rem 1rem; color: var(--wg); cursor: pointer; font-family: Tajawal,sans-serif; font-size: 0.82rem; }
-.demo-add-btn:hover { border-color: #8B6914; color: #8B6914; }
 
-/* ── Demo CTA ── */
-.demo-cta { background: linear-gradient(135deg,#8B691408,#8B691415); border:1.5px solid #8B691430; border-radius:12px; padding:1rem 1.1rem; margin-top:0.8rem; display:flex; align-items:center; gap:0.75rem; cursor:pointer; transition:all 0.2s; }
-.demo-cta:hover { border-color:#8B6914; background:linear-gradient(135deg,#8B691415,#8B691422); transform:translateY(-1px); box-shadow:0 4px 16px rgba(139,105,20,0.15); }
-.demo-cta-icon { font-size:1.6rem; flex-shrink:0; }
-.demo-cta-text { flex:1; }
-.demo-cta-title { font-weight:700; font-size:0.88rem; color:#8B6914; margin-bottom:0.15rem; }
-.demo-cta-desc { font-size:0.75rem; color:var(--wg); line-height:1.4; }
-.demo-cta-arrow { color:#8B6914; font-size:1.1rem; flex-shrink:0; }
+/* ══ Demo Form — Mobile First ══ */
+/* Overlay & Screen */
+.demo-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(5px); display:flex; align-items:flex-end; justify-content:center; z-index:1500; animation:fadeIn 0.2s; padding:0; }
+.demo-screen { background:var(--sw); width:100%; max-width:640px; height:95vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 -8px 40px rgba(0,0,0,0.2); border-radius:20px 20px 0 0; animation:slideUp 0.35s cubic-bezier(0.22,1,0.36,1); }
 
-/* ── Demo Screen ── */
-.demo-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; z-index:1500; padding:1rem; animation:fadeIn 0.2s; }
-.demo-screen { background:var(--sw); border-radius:20px; width:100%; max-width:720px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,0.2); animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1); }
-.demo-header { background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:1rem 1.4rem; display:flex; align-items:center; gap:0.8rem; flex-shrink:0; border-radius:20px 20px 0 0; }
-.demo-header-back { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); color:#fff; border-radius:8px; padding:0.35rem 0.8rem; cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.78rem; transition:background 0.2s; }
-.demo-header-back:hover { background:rgba(255,255,255,0.2); }
-.demo-header-info { flex:1; }
-.demo-header-title { font-family:Amiri,serif; font-size:1rem; font-weight:700; }
-.demo-header-sub { font-size:0.68rem; opacity:0.6; margin-top:0.08rem; }
-.demo-header-badge { background:#8B6914; padding:0.25rem 0.65rem; border-radius:20px; font-size:0.7rem; font-weight:700; white-space:nowrap; }
-.demo-body { flex:1; overflow-y:auto; padding:1.2rem 1.4rem; }
-.demo-intro { background:var(--sw); border-radius:14px; padding:1.1rem 1.3rem; margin-bottom:1.5rem; border-right:4px solid #8B6914; box-shadow:var(--shadow-sm); }
-.demo-intro-title { font-weight:700; color:#8B6914; margin-bottom:0.35rem; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem; }
-.demo-intro-text { font-size:0.82rem; color:var(--wg); line-height:1.75; }
-.demo-card { background:var(--sw); border-radius:16px; padding:1.3rem; margin-bottom:1rem; box-shadow:var(--shadow-sm); border:1.5px solid var(--sa); transition:border-color 0.2s; }
-.demo-card:hover { border-color:#8B691430; }
-.demo-card-header { display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:1px solid var(--sa); }
-.demo-card-num { width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg,#8B6914,#A07820); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.78rem; font-weight:700; flex-shrink:0; }
-.demo-card-name { font-weight:700; font-size:0.92rem; color:var(--ch); flex:1; }
-.demo-card-remove { background:none; border:none; color:#C0392B; cursor:pointer; font-size:0.8rem; padding:0.2rem 0.5rem; border-radius:6px; transition:background 0.2s; }
-.demo-card-remove:hover { background:rgba(192,57,43,0.08); }
+/* Header */
+.demo-header { background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; padding:0.9rem 1.1rem; display:flex; align-items:center; gap:0.7rem; flex-shrink:0; border-radius:20px 20px 0 0; }
+.demo-header-back { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); color:#fff; border-radius:8px; padding:0.3rem 0.7rem; cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.76rem; flex-shrink:0; }
+.demo-header-info { flex:1; min-width:0; }
+.demo-header-title { font-family:Amiri,serif; font-size:0.95rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.demo-header-sub { font-size:0.64rem; opacity:0.55; margin-top:0.06rem; }
+.demo-header-badge { background:#8B6914; padding:0.22rem 0.6rem; border-radius:20px; font-size:0.68rem; font-weight:700; white-space:nowrap; flex-shrink:0; }
 
-/* ── Demo Admin Table ── */
-.demo-admin-table { width:100%; border-collapse:collapse; font-size:0.74rem; margin-top:0.5rem; overflow-x:auto; display:block; }
-.demo-admin-table th { background:#1a1a2e; color:#fff; padding:0.5rem 0.6rem; font-weight:600; text-align:right; white-space:nowrap; }
-.demo-admin-table td { padding:0.5rem 0.6rem; border-bottom:1px solid var(--sa); vertical-align:top; }
+/* Pull indicator */
+.demo-pull { width:36px; height:4px; background:rgba(255,255,255,0.25); border-radius:2px; margin:0 auto 0.6rem; }
+
+/* Body */
+.demo-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0.85rem; }
+
+/* Intro */
+.demo-intro { background:rgba(139,105,20,0.05); border-radius:12px; padding:0.85rem 1rem; margin-bottom:1rem; border-right:3px solid #8B6914; }
+.demo-intro-title { font-weight:700; color:#8B6914; margin-bottom:0.25rem; font-size:0.85rem; display:flex; align-items:center; gap:0.35rem; }
+.demo-intro-text { font-size:0.77rem; color:var(--wg); line-height:1.65; }
+
+/* Person Card */
+.demo-card { background:var(--sw); border-radius:14px; margin-bottom:0.85rem; border:1.5px solid var(--sa); overflow:hidden; }
+.demo-card-header { display:flex; align-items:center; gap:0.55rem; padding:0.8rem 1rem; border-bottom:1px solid var(--sa); background:var(--cr); }
+.demo-card-num { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#8B6914,#A07820); color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:700; flex-shrink:0; }
+.demo-card-name { font-weight:700; font-size:0.88rem; color:var(--ch); flex:1; }
+.demo-card-remove { background:none; border:1px solid rgba(192,57,43,0.2); color:#C0392B; cursor:pointer; font-size:0.72rem; padding:0.22rem 0.5rem; border-radius:6px; flex-shrink:0; }
+.demo-card-body { padding:0.85rem; }
+
+/* Fields — single column on mobile */
+.demo-field-group { display:flex; flex-direction:column; gap:0.55rem; margin-bottom:0.75rem; }
+.demo-field-row { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+.demo-field { display:flex; flex-direction:column; gap:0.2rem; }
+.demo-field label { font-size:0.68rem; font-weight:600; color:var(--wg); letter-spacing:0.2px; }
+.demo-field input, .demo-field select { border:1.5px solid var(--sa); border-radius:10px; padding:0.6rem 0.75rem; font-family:Tajawal,sans-serif; font-size:0.9rem; background:var(--cr); color:var(--ch); transition:border-color 0.2s; -webkit-appearance:none; }
+.demo-field input:focus, .demo-field select:focus { outline:none; border-color:#8B6914; background:var(--sw); }
+
+/* Section Label */
+.demo-sec-title { font-size:0.7rem; font-weight:700; color:var(--wg); text-transform:uppercase; letter-spacing:0.8px; padding:0.5rem 0 0.4rem; border-top:1px solid var(--sa); margin-top:0.3rem; display:flex; align-items:center; gap:0.3rem; }
+
+/* Stepper — for scores */
+.demo-stepper-grid { display:flex; flex-direction:column; gap:0.55rem; margin-bottom:0.6rem; }
+.demo-stepper-row { display:flex; align-items:center; gap:0.6rem; }
+.demo-stepper-label { font-size:0.76rem; font-weight:600; color:var(--ch); width:60px; flex-shrink:0; }
+.demo-stepper { display:flex; align-items:center; gap:0.4rem; flex:1; }
+.demo-stepper-btn { width:34px; height:34px; border-radius:50%; border:1.5px solid var(--sa); background:var(--sw); color:var(--ch); font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; flex-shrink:0; font-weight:700; line-height:1; }
+.demo-stepper-btn:active { transform:scale(0.9); background:var(--sa); }
+.demo-stepper-track { flex:1; height:6px; background:var(--sa); border-radius:3px; overflow:hidden; }
+.demo-stepper-fill { height:100%; border-radius:3px; transition:width 0.2s; }
+.demo-stepper-val { font-size:0.82rem; font-weight:700; color:var(--ch); width:30px; text-align:center; flex-shrink:0; }
+
+/* Target Chips */
+.demo-targets { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin-top:0.4rem; }
+.demo-target-chip { display:flex; align-items:center; justify-content:center; gap:0.3rem; padding:0.55rem 0.5rem; border-radius:10px; border:1.5px solid var(--sa); font-size:0.8rem; cursor:pointer; transition:all 0.18s; user-select:none; font-family:Tajawal,sans-serif; font-weight:500; background:var(--sw); }
+.demo-target-chip.active { border-color:#8B6914; background:#8B691412; color:#8B6914; font-weight:700; }
+
+/* Footer */
+.demo-footer { background:var(--sw); border-top:1px solid var(--sa); padding:0.75rem 0.9rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-shrink:0; padding-bottom:calc(0.75rem + env(safe-area-inset-bottom)); }
+.demo-add-btn { background:none; border:1.5px dashed var(--sa); border-radius:10px; padding:0.5rem 0.9rem; color:var(--wg); cursor:pointer; font-family:Tajawal,sans-serif; font-size:0.82rem; transition:all 0.2s; }
+.demo-add-btn:active { border-color:#8B6914; color:#8B6914; }
+
+/* Admin */
 .demo-score-pill { display:inline-block; padding:0.15rem 0.4rem; border-radius:4px; font-weight:700; font-size:0.72rem; }
 .demo-empty-state { text-align:center; padding:2rem; color:var(--wg); font-size:0.85rem; }
 
@@ -2676,122 +2694,165 @@ export default function App() {
       {demoScreen && (
         <div className="demo-overlay" onClick={() => setDemoScreen(false)}>
         <div className="demo-screen" onClick={e => e.stopPropagation()}>
+
           {/* Header */}
           <div className="demo-header">
             <button className="demo-header-back" onClick={() => setDemoScreen(false)}>← رجوع</button>
             <div className="demo-header-info">
               <div className="demo-header-title">◈ {appContent.demo_screen_title || 'التحليل الديموغرافي'}</div>
-              <div className="demo-header-sub">{appContent.demo_screen_sub || 'تفكيك البنية البشرية التي تتحرك داخلها قيمتك'}</div>
+              <div className="demo-header-sub">{appContent.demo_screen_sub || 'تفكيك البنية البشرية'}</div>
             </div>
             <div className="demo-header-badge">{demoRows.filter(r => r.name.trim()).length} شخص</div>
           </div>
 
           {/* Body */}
           <div className="demo-body">
+
+            {/* Intro */}
             <div className="demo-intro">
               <div className="demo-intro-title">🧭 {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
-              <div className="demo-intro-text" style={{fontSize:"0.8rem"}}>{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
+              <div className="demo-intro-text">{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
             </div>
 
+            {/* Person Cards */}
             {demoRows.map((row, idx) => (
               <div key={row.id} className="demo-card">
+
                 {/* Card Header */}
                 <div className="demo-card-header">
                   <div className="demo-card-num">{idx + 1}</div>
                   <div className="demo-card-name">{row.name || `الشخص ${idx + 1}`}</div>
-                  <button className="demo-card-remove" onClick={() => removeDemoRow(row.id)} title="حذف">✕</button>
+                  <button className="demo-card-remove" onClick={() => removeDemoRow(row.id)}>✕ حذف</button>
                 </div>
 
-                {/* الهوية */}
-                <div className="demo-section-label">👤 البيانات الأساسية</div>
-                <div className="demo-fields demo-fields-3" style={{ marginBottom: "0.6rem" }}>
-                  <div className="demo-field">
-                    <label>الاسم *</label>
-                    <input placeholder="اسم الشخص" value={row.name} onChange={e => updateDemoRow(row.id, 'name', e.target.value)} />
-                  </div>
-                  <div className="demo-field">
-                    <label>الجهة / المؤسسة</label>
-                    <input placeholder="الشركة أو الجهة" value={row.entity} onChange={e => updateDemoRow(row.id, 'entity', e.target.value)} />
-                  </div>
-                  <div className="demo-field">
-                    <label>المنصب</label>
-                    <input placeholder="الدور أو المنصب" value={row.position} onChange={e => updateDemoRow(row.id, 'position', e.target.value)} />
-                  </div>
-                </div>
-                <div className="demo-fields demo-fields-3">
-                  <div className="demo-field">
-                    <label>طبيعة العلاقة</label>
-                    <select value={row.relation} onChange={e => updateDemoRow(row.id, 'relation', e.target.value)}>
-                      <option value="">اختر</option>
-                      <option>أقارب</option><option>زملاء</option><option>أصدقاء</option>
-                      <option>عملاء</option><option>شركاء</option><option>معارف</option><option>أخرى</option>
-                    </select>
-                  </div>
-                  <div className="demo-field">
-                    <label>العمر التقريبي</label>
-                    <input type="number" min="15" max="99" placeholder="45" value={row.age} onChange={e => updateDemoRow(row.id, 'age', e.target.value)} />
-                  </div>
-                  <div className="demo-field">
-                    <label>الموقع الجغرافي</label>
-                    <input placeholder="المدينة / الدولة" value={row.location} onChange={e => updateDemoRow(row.id, 'location', e.target.value)} />
-                  </div>
-                </div>
-                <div className="demo-fields" style={{ marginTop: "0.6rem" }}>
-                  <div className="demo-field" style={{ gridColumn: "1/-1" }}>
-                    <label>الحدث المشترك (كيف التقيتما؟)</label>
-                    <input placeholder="مثال: زميل عمل، حضرنا نفس البرنامج..." value={row.sharedEvent} onChange={e => updateDemoRow(row.id, 'sharedEvent', e.target.value)} />
-                  </div>
-                </div>
+                <div className="demo-card-body">
 
-                {/* قوة الشخص */}
-                <div className="demo-section-label" style={{ marginTop: "1rem" }}>⚡ قوة الشخص بشكل عام (0–100)</div>
-                <div className="demo-scores">
-                  {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي'],['sovereign','سيادي']].map(([k, label]) => (
-                    <div key={k} className="demo-score">
-                      <label>{label}</label>
-                      <input type="number" min="0" max="100" value={row.strength[k]}
-                        onChange={e => updateDemoRow(row.id, ['strength', k], Math.min(100, Math.max(0, +e.target.value || 0)))}
-                        style={{ borderColor: row.strength[k] > 60 ? '#8B6914' : row.strength[k] > 30 ? '#2E6B8A' : undefined }}
-                      />
+                  {/* ── الاسم (full width) ── */}
+                  <div className="demo-field-group">
+                    <div className="demo-field">
+                      <label>الاسم الكامل *</label>
+                      <input placeholder="اسم الشخص" value={row.name}
+                        onChange={e => updateDemoRow(row.id, 'name', e.target.value)} />
                     </div>
-                  ))}
-                </div>
+                  </div>
 
-                {/* نوع العلاقة الشخصية */}
-                <div className="demo-section-label">🤝 نوع علاقتي به (0–100)</div>
-                <div className="demo-scores demo-scores-4">
-                  {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي']].map(([k, label]) => (
-                    <div key={k} className="demo-score">
-                      <label>{label}</label>
-                      <input type="number" min="0" max="100" value={row.myRelation[k]}
-                        onChange={e => updateDemoRow(row.id, ['myRelation', k], Math.min(100, Math.max(0, +e.target.value || 0)))}
-                      />
+                  {/* ── صفان ── */}
+                  <div className="demo-field-row" style={{marginBottom:"0.55rem"}}>
+                    <div className="demo-field">
+                      <label>الجهة / المؤسسة</label>
+                      <input placeholder="الشركة أو الجهة" value={row.entity}
+                        onChange={e => updateDemoRow(row.id, 'entity', e.target.value)} />
                     </div>
-                  ))}
-                </div>
+                    <div className="demo-field">
+                      <label>المنصب</label>
+                      <input placeholder="الدور" value={row.position}
+                        onChange={e => updateDemoRow(row.id, 'position', e.target.value)} />
+                    </div>
+                  </div>
 
-                {/* المستهدف */}
-                <div className="demo-section-label">🎯 ما أستهدف تفعيله معه</div>
-                <div className="demo-targets">
-                  {[['knowledge','معرفي 🧠'],['social','مجتمعي 🤝'],['financial','مالي 💰'],['economic','اقتصادي 📈']].map(([k, label]) => (
-                    <div key={k}
-                      className={`demo-target-chip ${row.target[k] ? 'active' : ''}`}
-                      onClick={() => updateDemoRow(row.id, ['target', k], !row.target[k])}
-                    >{label}</div>
-                  ))}
+                  <div className="demo-field-row" style={{marginBottom:"0.55rem"}}>
+                    <div className="demo-field">
+                      <label>طبيعة العلاقة</label>
+                      <select value={row.relation} onChange={e => updateDemoRow(row.id, 'relation', e.target.value)}>
+                        <option value="">اختر</option>
+                        <option>أقارب</option><option>زملاء</option><option>أصدقاء</option>
+                        <option>عملاء</option><option>شركاء</option><option>معارف</option><option>أخرى</option>
+                      </select>
+                    </div>
+                    <div className="demo-field">
+                      <label>الموقع الجغرافي</label>
+                      <input placeholder="المدينة" value={row.location}
+                        onChange={e => updateDemoRow(row.id, 'location', e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="demo-field-group">
+                    <div className="demo-field">
+                      <label>الحدث المشترك</label>
+                      <input placeholder="مثال: زميل عمل، حضرنا نفس البرنامج..." value={row.sharedEvent}
+                        onChange={e => updateDemoRow(row.id, 'sharedEvent', e.target.value)} />
+                    </div>
+                  </div>
+
+                  {/* ── قوة الشخص — Steppers ── */}
+                  <div className="demo-sec-title">⚡ قوة الشخص (0–100)</div>
+                  <div className="demo-stepper-grid">
+                    {[['knowledge','🧠 معرفي','#2E6B8A'],['social','🤝 مجتمعي','#5B7B3A'],['financial','💰 مالي','#8B6914'],['economic','📈 اقتصادي','#6B4E3D'],['sovereign','👑 سيادي','#6B2D8A']].map(([k,label,color]) => {
+                      const val = row.strength?.[k] || 0;
+                      return (
+                        <div key={k} className="demo-stepper-row">
+                          <div className="demo-stepper-label">{label}</div>
+                          <div className="demo-stepper">
+                            <button className="demo-stepper-btn"
+                              onClick={() => updateDemoRow(row.id, ['strength',k], Math.max(0, val-10))}>−</button>
+                            <div className="demo-stepper-track">
+                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:color}}/>
+                            </div>
+                            <button className="demo-stepper-btn"
+                              onClick={() => updateDemoRow(row.id, ['strength',k], Math.min(100, val+10))}>+</button>
+                            <div className="demo-stepper-val" style={{color: val>0 ? color : 'var(--wg)'}}>{val}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── نوع علاقتي به — Steppers ── */}
+                  <div className="demo-sec-title">🤝 نوع علاقتي به (0–100)</div>
+                  <div className="demo-stepper-grid">
+                    {[['knowledge','🧠 معرفي','#2E6B8A'],['social','🤝 مجتمعي','#5B7B3A'],['financial','💰 مالي','#8B6914'],['economic','📈 اقتصادي','#6B4E3D']].map(([k,label,color]) => {
+                      const val = row.myRelation?.[k] || 0;
+                      return (
+                        <div key={k} className="demo-stepper-row">
+                          <div className="demo-stepper-label">{label}</div>
+                          <div className="demo-stepper">
+                            <button className="demo-stepper-btn"
+                              onClick={() => updateDemoRow(row.id, ['myRelation',k], Math.max(0, val-10))}>−</button>
+                            <div className="demo-stepper-track">
+                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:color}}/>
+                            </div>
+                            <button className="demo-stepper-btn"
+                              onClick={() => updateDemoRow(row.id, ['myRelation',k], Math.min(100, val+10))}>+</button>
+                            <div className="demo-stepper-val" style={{color: val>0 ? color : 'var(--wg)'}}>{val}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── المستهدف — Chips 2×2 ── */}
+                  <div className="demo-sec-title">🎯 ما أستهدف تفعيله معه</div>
+                  <div className="demo-targets">
+                    {[['knowledge','🧠 معرفي'],['social','🤝 مجتمعي'],['financial','💰 مالي'],['economic','📈 اقتصادي']].map(([k,label]) => (
+                      <div key={k}
+                        className={`demo-target-chip ${row.target?.[k] ? 'active' : ''}`}
+                        onClick={() => updateDemoRow(row.id, ['target',k], !row.target?.[k])}>
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+
                 </div>
               </div>
             ))}
+
+            {/* Add Person */}
+            <button className="demo-add-btn" style={{width:"100%",textAlign:"center",marginBottom:"1rem"}} onClick={addDemoRow}>
+              + {appContent.demo_add_btn || 'إضافة شخص'}
+            </button>
+
           </div>
 
           {/* Footer */}
           <div className="demo-footer">
-            <button className="demo-add-btn" onClick={addDemoRow}>+ {appContent.demo_add_btn || 'إضافة شخص'}</button>
-            <span style={{fontSize:"0.78rem",color:"var(--wg)"}}>{demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل</span>
-            <button className="btn btn-gold btn-s" onClick={saveDemoData} disabled={demoSaving}>
+            <span style={{fontSize:"0.76rem",color:"var(--wg)"}}>
+              {demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل
+            </span>
+            <button className="btn btn-gold btn-s" onClick={saveDemoData} disabled={demoSaving} style={{minWidth:"120px"}}>
               {demoSaving ? "جارٍ الحفظ..." : `💾 ${appContent.demo_save_btn || 'حفظ التحليل'}`}
             </button>
           </div>
+
         </div>
         </div>
       )}
