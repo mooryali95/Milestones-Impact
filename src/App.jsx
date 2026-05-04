@@ -2161,7 +2161,7 @@ export default function App() {
               {/* ── تبويب التحليل الديموغرافي ── */}
               {selectedRegTab === "demo" && <>
                 {(!selectedReg[DEMO_KEY] || selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length === 0)
-                  ? <div className="empty"><h3>🗺️</h3><p>لم يُكمل العميل التحليل الديموغرافي بعد</p></div>
+                  ? <div className="empty"><h3>🗺️</h3><p>{appContent.demo_empty_state || 'لم يُكمل العميل التحليل الديموغرافي بعد'}</p></div>
                   : <>
                     <div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
                     <div className="demo-person-grid">
