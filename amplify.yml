@@ -7,6 +7,13 @@ frontend:
     build:
       commands:
         - npm run build
+    postBuild:
+      commands:
+        # Copy static leaders/ landing page into build output
+        # This makes /leaders accessible at mi.sunkvalue.com/leaders
+        - mkdir -p build/leaders
+        - cp -r leaders/* build/leaders/
+        - echo "✅ Leaders landing page included in build"
   artifacts:
     baseDirectory: build
     files:
