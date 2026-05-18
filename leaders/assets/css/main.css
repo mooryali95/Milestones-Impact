@@ -1,0 +1,28 @@
+/* ════════════════════════════════════════════════════════════════════
+   ░░  MILESTONE IMPACT — MAIN STYLESHEET  ░░
+   ════════════════════════════════════════════════════════════════════
+   هذا الملف يستورد جميع ملفات CSS بالترتيب الصحيح.
+   اربط هذا الملف فقط في index.html — وكل شيء آخر يُستورد تلقائياً.
+
+   ⚠️  ملاحظة:
+   ────────────
+   الترتيب مهم — لا تُعيد ترتيب الـ @import.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* 1. Design Tokens — متغيرات الهوية (الألوان، الخطوط، المسافات) */
+@import url('./01-tokens.css');
+
+/* 2. Base — Reset + Typography + Background */
+@import url('./02-base.css');
+
+/* 3. Layout — Header + Footer + Section Container */
+@import url('./03-layout.css');
+
+/* 4. Components — Logo + Buttons + Section Headers */
+@import url('./04-components.css');
+
+/* 5. Sections — جميع الأقسام التسعة */
+@import url('./05-sections.css');
+
+/* 6. Typeform — منطق الفورم التفاعلي */
+@import url('./06-typeform.css');
