@@ -13,8 +13,14 @@
     "build": "react-scripts build",
     "test": "react-scripts test"
   },
-  "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
-  }
+ "browserslist": {
+  "production": [
+    "defaults",
+    "not IE 11"
+  ],
+  "development": [
+    "last 2 chrome versions",
+    "last 2 firefox versions",
+    "last 2 safari versions"
+  ]
 }
