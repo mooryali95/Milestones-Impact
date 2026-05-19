@@ -83,15 +83,13 @@
   }
   </script>
 
-  <!-- Fonts — Fallback من Google Fonts (Readex Pro + IBM Plex Sans Arabic)
-       الخطوط الأصلية (Ara Hamah 1982 + DIN Next LT Arabic) محلية في assets/fonts/ -->
+  <!-- Fonts — Tajawal (Body) + Ara Hamah 1982 (Logo - local) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@200;300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@200;300;400;500;700;800;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
 
-  <!-- Preload الخطوط المحلية (الأولوية) -->
+  <!-- Preload Ara Hamah (used in logo only) -->
   <link rel="preload" href="assets/fonts/AraHamah1982-Regular.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="assets/fonts/DINNextLTArabic-Regular.woff2" as="font" type="font/woff2" crossorigin />
 
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23061E2C'/%3E%3Cpath d='M12 4 L16 8 L16 16 L12 20 L8 16 L8 8 Z' fill='%23C8A45C'/%3E%3C/svg%3E" />
@@ -109,9 +107,9 @@
     <a href="#hero" class="logo" aria-label="Milestone Impact — الصفحة الرئيسية">
       <span class="logo__text">
         <span class="logo__milestone">Milestone</span>
-        <span class="logo__impact">impact</span>
+        <span class="logo__diamond" aria-hidden="true"></span>
+        <span class="logo__impact">Impact</span>
       </span>
-      <span class="logo__diamond" aria-hidden="true"></span>
     </a>
     <nav class="header__nav" role="navigation" aria-label="القائمة الرئيسية">
       <a href="#concept" class="header__nav-link">Concept</a>
@@ -434,12 +432,12 @@
     <div class="footer__container">
       <div class="footer__top">
         <a href="#hero" class="logo footer__logo" aria-label="Milestone Impact">
-          <span class="logo__text">
-            <span class="logo__milestone">Milestone</span>
-            <span class="logo__impact">impact</span>
-          </span>
-          <span class="logo__diamond" aria-hidden="true"></span>
-        </a>
+      <span class="logo__text">
+        <span class="logo__milestone">Milestone</span>
+        <span class="logo__diamond" aria-hidden="true"></span>
+        <span class="logo__impact">Impact</span>
+      </span>
+    </a>
         <div class="footer__powered">
           <span class="footer__powered-label">POWERED BY</span>
           <div class="footer__powered-brands">
@@ -468,12 +466,12 @@
 
     <div class="tf-modal__header">
       <a href="#" class="logo" onclick="event.preventDefault()" aria-label="Milestone Impact">
-        <span class="logo__text">
-          <span class="logo__milestone">Milestone</span>
-          <span class="logo__impact">impact</span>
-        </span>
+      <span class="logo__text">
+        <span class="logo__milestone">Milestone</span>
         <span class="logo__diamond" aria-hidden="true"></span>
-      </a>
+        <span class="logo__impact">Impact</span>
+      </span>
+    </a>
       <div class="tf-modal__counter" id="tfCounter"></div>
       <button class="tf-modal__close" onclick="closeTypeform()" aria-label="إغلاق النموذج">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>

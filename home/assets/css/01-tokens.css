@@ -1,14 +1,13 @@
 /* ════════════════════════════════════════════════════════════════════
    ░░  MILESTONE IMPACT — DESIGN TOKENS  ░░
    ════════════════════════════════════════════════════════════════════
-   هذا الملف يحتوي على جميع متغيرات الهوية البصرية.
-   لتغيير أي لون أو خط أو مسافة عبر الموقع كاملاً — عدّل هنا فقط.
+   مصدر الحقيقة الواحد لجميع متغيرات الهوية البصرية.
    ════════════════════════════════════════════════════════════════════ */
 
 /* ──────────────────────────────────────────────
-   📝 FONT FACES — الخطوط المحلية المرخّصة
+   📝 FONT FACE — Ara Hamah 1982 (Logo only)
+   خط محلي مرخّص — يُستخدم فقط لاسم البراند Milestone Impact
    ────────────────────────────────────────────── */
-
 @font-face {
   font-family: 'Ara Hamah 1982';
   src: url('../fonts/AraHamah1982-Regular.woff2') format('woff2'),
@@ -18,66 +17,54 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'DIN Next LT Arabic';
-  src: url('../fonts/DINNextLTArabic-Regular.woff2') format('woff2'),
-       url('../fonts/DINNextLTArabic-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   /* ──────────────────────────────────────────────
-     🎨 BRAND COLORS — الألوان الأساسية
+     🎨 BRAND COLORS
      ────────────────────────────────────────────── */
 
-  /* Petrol — البترولي (لون البراند الرئيسي) */
+  /* Petrol — البترولي (اللون الأساسي للبراند) */
   --petrol-deepest: #061E2C;
   --petrol-deep:    #0A2A3D;
   --petrol-mid:     #14495E;
   --petrol-soft:    #2A6478;
 
-  /* Gold — الذهبي (لون التميز والقيمة) */
+  /* Gold — الذهبي (لون التميّز) */
   --gold-deep:      #A8862E;
   --gold:           #C8A45C;
   --gold-light:     #D9BC7E;
   --gold-pale:      #EBD9B4;
 
-  /* Sand — الرملي (الخلفيات الفاتحة) */
+  /* Sand — الرملي (الخلفيات) */
   --sand-cream:     #F2EBD9;
   --sand-light:     #F7F2E5;
   --sand-paper:     #FBF8EF;
   --off-white:      #FDFCF8;
 
-  /* Ink — الحبر (النصوص بدرجات) */
+  /* Ink — الحبر (النصوص) */
   --ink:            #0A1820;
   --ink-soft:       #1F3340;
   --ink-mid:        #4A5A66;
   --ink-light:      #7A8A94;
   --ink-faint:      #C8D0D6;
 
-  /* Lines — الخطوط والحدود */
+  /* Lines */
   --line:           rgba(10, 42, 61, 0.08);
   --line-gold:      rgba(200, 164, 92, 0.25);
 
   /* ──────────────────────────────────────────────
-     📝 TYPOGRAPHY — الخطوط
-     ────────────────────────────────────────────────
-     الخط الرئيسي : Ara Hamah 1982 (للعناوين والنصوص العربية)
-     الخط الثانوي : DIN Next LT Arabic (Labels, Subtitles, Meta)
-     Fallback     : Readex Pro + IBM Plex Sans Arabic (Google Fonts)
+     📝 TYPOGRAPHY
+     ──────────────────────────────────────────────
+     النص العربي  : Tajawal (Google Fonts)
+     اللوجو فقط   : Ara Hamah 1982 (محلي مرخّص — لاسم Milestone Impact)
      ────────────────────────────────────────────── */
 
-  --font-ar:    'Ara Hamah 1982', 'Readex Pro', 'Tajawal', 'Segoe UI', sans-serif;     /* العربي الرئيسي */
-  --font-en:    'DIN Next LT Arabic', 'IBM Plex Sans Arabic', 'Inter', sans-serif;      /* الثانوي/اللاتيني */
-  --font-mono:  'DIN Next LT Arabic', 'IBM Plex Sans Arabic', 'Inter', sans-serif;       /* alias لـ DIN */
-
-  /* تفعيل synthesis للأوزان غير المتوفّرة (نملك 400 فقط لكلا الخطين) */
-  --font-synth: weight style;
+  --font-ar:    'Tajawal', 'Segoe UI', sans-serif;
+  --font-en:    'Tajawal', 'Inter', sans-serif;
+  --font-mono:  'Inter', 'Tajawal', sans-serif;
+  --font-logo:  'Ara Hamah 1982', 'Cormorant Garamond', 'Georgia', serif;
 
   /* ──────────────────────────────────────────────
-     📐 LAYOUT — المسافات (Mobile First)
+     📐 LAYOUT — Mobile First
      ────────────────────────────────────────────── */
 
   --container:        100%;
@@ -87,7 +74,7 @@
   --section-py-lg:    80px;
 
   /* ──────────────────────────────────────────────
-     🎬 MOTION — الحركة
+     🎬 MOTION
      ────────────────────────────────────────────── */
 
   --ease:      cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -95,70 +82,7 @@
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* تفعيل synthesis عالمياً (يُتيح للمتصفح محاكاة Bold/Italic عند غياب الوزن) */
-body, * {
-  font-synthesis: weight style;
-}
-
-/* ──────────────────────────────────────────────
-   💪 WEIGHT EMULATION — لمحاكاة Bold للخطوط أحادية الوزن
-   ──────────────────────────────────────────────
-   كلا الخطين (Ara Hamah + DIN Next) متاحان بـ Weight 400 فقط.
-   نُحاكي الـ Bold عبر -webkit-text-stroke الرقيق + تنعيم النص.
-   النتيجة: عناوين بسُمك حقيقي دون قبح faux-bold. */
-
-/* العناوين الكبرى (Hero, Section titles) */
-.hero__title,
-.section-title,
-.ecosystem__contact-title {
-  -webkit-text-stroke: 0.7px currentColor;
-  text-rendering: optimizeLegibility;
-  letter-spacing: -0.01em;
-}
-
-/* العناوين المتوسطة (Card titles, Node titles) */
-h2, h3,
-.concept__card-title,
-.model__node-title-ar,
-.product-card__name,
-.partner-card__name,
-.tf-welcome__title,
-.tf-thanks__title,
-.tf-step__question {
-  -webkit-text-stroke: 0.5px currentColor;
-  text-rendering: optimizeLegibility;
-}
-
-/* النصوص الجريئة داخل الفقرات */
-strong, b {
-  -webkit-text-stroke: 0.35px currentColor;
-}
-
-/* النصوص الجريئة المهمة (مثل Milestone Impact في الفقرات) */
-.hero__subtitle strong,
-.section-intro strong {
-  -webkit-text-stroke: 0.4px currentColor;
-  color: var(--petrol-deepest);
-}
-
-/* النصوص الوصفية الكبيرة (Subtitle + Intro) — تحتاج وزناً مرئياً */
-.hero__subtitle,
-.section-intro {
-  -webkit-text-stroke: 0.2px currentColor;
-  font-weight: 400;
-}
-
-/* النصوص داخل البطاقات */
-.concept__card-text,
-.product-card__desc,
-.model__caption-text,
-.ecosystem__contact-text {
-  -webkit-text-stroke: 0.15px currentColor;
-}
-
-/* ──────────────────────────────────────────────
-   📱 RESPONSIVE SCALE — Tablet
-   ────────────────────────────────────────────── */
+/* Tablet */
 @media (min-width: 640px) {
   :root {
     --gutter:        32px;
@@ -167,9 +91,7 @@ strong, b {
   }
 }
 
-/* ──────────────────────────────────────────────
-   🖥️ RESPONSIVE SCALE — Desktop
-   ────────────────────────────────────────────── */
+/* Desktop */
 @media (min-width: 1024px) {
   :root {
     --gutter:           48px;
