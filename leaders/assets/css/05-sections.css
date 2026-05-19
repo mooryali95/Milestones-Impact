@@ -51,11 +51,12 @@
     display: block;
     position: absolute;
     top: 0;
-    right: 0;
+    left: 0;
+    right: auto;
     width: 50%;
     height: 100%;
-    background: linear-gradient(135deg, var(--petrol-deepest) 0%, var(--petrol-deep) 100%);
-    clip-path: polygon(20% 0, 100% 0, 100% 100%, 0 100%);
+    background: linear-gradient(225deg, var(--petrol-deepest) 0%, var(--petrol-deep) 100%);
+    clip-path: polygon(0 0, 80% 0, 100% 100%, 0 100%);
     z-index: 0;
   }
   .hero__shape::after {
@@ -63,8 +64,8 @@
     position: absolute;
     inset: 0;
     background-image:
-      radial-gradient(circle at 30% 40%, rgba(200, 164, 92, 0.15) 0%, transparent 40%),
-      radial-gradient(circle at 70% 70%, rgba(200, 164, 92, 0.08) 0%, transparent 45%);
+      radial-gradient(circle at 70% 40%, rgba(200, 164, 92, 0.15) 0%, transparent 40%),
+      radial-gradient(circle at 30% 70%, rgba(200, 164, 92, 0.08) 0%, transparent 45%);
   }
 }
 
@@ -209,10 +210,11 @@
   .hero__pillars {
     padding: 48px 40px;
     gap: 28px;
-    background: linear-gradient(180deg, rgba(10, 42, 61, 0.4) 0%, rgba(6, 30, 44, 0.3) 100%);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(200, 164, 92, 0.25);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    box-shadow: none;
   }
   .hero__pillars::before {
     content: '';
