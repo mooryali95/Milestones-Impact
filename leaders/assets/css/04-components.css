@@ -196,9 +196,9 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--gold-deep);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   margin-bottom: 16px;
 }
 @media (min-width: 640px) {
