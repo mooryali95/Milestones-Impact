@@ -57,6 +57,7 @@
 .logo__impact {
   font-weight: 600;
   font-style: italic;
+  font-synthesis: style;
   color: var(--petrol-deep);
 }
 
@@ -106,6 +107,7 @@
   font-size: 32px;
   font-weight: 600;
   font-style: italic;
+  font-synthesis: style;
   letter-spacing: -0.01em;
   color: var(--gold-light);
   line-height: 1;

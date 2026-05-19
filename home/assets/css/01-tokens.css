@@ -4,6 +4,19 @@
    مصدر الحقيقة الواحد لجميع متغيرات الهوية البصرية.
    ════════════════════════════════════════════════════════════════════ */
 
+/* ──────────────────────────────────────────────
+   📝 FONT FACE — Ara Hamah 1982 (Logo only)
+   خط محلي مرخّص — يُستخدم فقط لاسم البراند Milestone Impact
+   ────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Ara Hamah 1982';
+  src: url('../fonts/AraHamah1982-Regular.woff2') format('woff2'),
+       url('../fonts/AraHamah1982-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ──────────────────────────────────────────────
      🎨 BRAND COLORS
@@ -42,13 +55,13 @@
      📝 TYPOGRAPHY
      ──────────────────────────────────────────────
      النص العربي  : Tajawal (Google Fonts)
-     اللوجو       : Cormorant Garamond (Italic للـ Impact)
+     اللوجو فقط   : Ara Hamah 1982 (محلي مرخّص — لاسم Milestone Impact)
      ────────────────────────────────────────────── */
 
   --font-ar:    'Tajawal', 'Segoe UI', sans-serif;
   --font-en:    'Tajawal', 'Inter', sans-serif;
   --font-mono:  'Inter', 'Tajawal', sans-serif;
-  --font-logo:  'Cormorant Garamond', 'Georgia', serif;
+  --font-logo:  'Ara Hamah 1982', 'Cormorant Garamond', 'Georgia', serif;
 
   /* ──────────────────────────────────────────────
      📐 LAYOUT — Mobile First
