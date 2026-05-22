@@ -5,27 +5,23 @@
    - 5 أسئلة + شاشة ترحيب + شاشة شكر
    - Validation كاملة
    - اختصارات لوحة المفاتيح (Enter / Escape)
-   - إرسال البريد بصورة آمنة (window.open + fallback)
+   - إرسال البيانات إلى Supabase + Fallback mailto
    ════════════════════════════════════════════════════════════════════ */
 
 (function initTypeform() {
 
   // ──────────────────────────────────────────────
-  // ⚙️ CONFIG — قابل للتبديل بين Worker و Mailto
+  // ⚙️ CONFIG
   // ──────────────────────────────────────────────
   const CONFIG = {
-    // المنتج (لتمييز الطلب في Worker)
     product: 'MI-LEADERS',
 
-    // طريقة الإرسال:
-    // 'worker' = Cloudflare Worker (يحتاج workerUrl)
-    // 'mailto' = mailto: link (الوضع الافتراضي حالياً)
-    method: 'mailto',
+    // Supabase
+    supabaseUrl:    'https://eormhcupwgwpllhrfxxg.supabase.co',
+    supabaseKey:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUQ799y5rZrj29ggB1f0',
+    table:          'contact_requests',
 
-    // عند تفعيل Worker لاحقاً، ضع الـ URL هنا:
-    workerUrl: 'https://mi-leaders-api.workers.dev/send',
-
-    // البريد المُستلِم (يُستخدم في mailto مؤقتاً)
+    // Fallback mailto
     recipientEmail: 'mi@sunkvalue.com',
   };
 
@@ -61,7 +57,6 @@
     if (presetInterest) formData.interest = presetInterest;
     goToStep(0);
 
-    // Apply preset interest if passed
     if (presetInterest) {
       setTimeout(() => {
         document.querySelectorAll('.tf-option').forEach(opt => {
@@ -74,14 +69,12 @@
         });
       }, 50);
     } else {
-      // Clear all selections
       document.querySelectorAll('.tf-option').forEach(opt => {
         opt.classList.remove('selected');
         opt.setAttribute('aria-checked', 'false');
       });
     }
 
-    // Clear all inputs
     ['qName', 'qOrg', 'qEmail', 'qPhone', 'qContext'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
@@ -107,15 +100,13 @@
     const target = document.querySelector(`.tf-step[data-step="${stepKey}"]`);
     if (target) target.classList.add('active');
 
-    // Update progress bar
-    const progressSteps = stepOrder.length - 2; // exclude welcome & thanks
+    const progressSteps = stepOrder.length - 2;
     let prog = 0;
     if (stepKey === 'welcome')      prog = 0;
     else if (stepKey === 'thanks')  prog = 100;
     else                            prog = (parseInt(stepKey) / progressSteps) * 100;
     tfProgress.style.width = prog + '%';
 
-    // Counter & footer visibility
     if (stepKey === 'welcome' || stepKey === 'thanks') {
       tfCounter.textContent = '';
       tfFooter.style.display = 'none';
@@ -124,17 +115,14 @@
       tfFooter.style.display = 'flex';
     }
 
-    // Previous button visibility
     tfPrev.style.visibility = (idx > 1 && stepKey !== 'thanks') ? 'visible' : 'hidden';
 
-    // Next button label (different on last step)
     if (stepKey === '5') {
       tfNext.innerHTML = '<span>إرسال الرسالة</span><span class="tf-btn-next__enter">Enter ↵</span>';
     } else {
       tfNext.innerHTML = '<span>موافق</span><span class="tf-btn-next__enter">Enter ↵</span>';
     }
 
-    // Focus input
     setTimeout(() => {
       if (target) {
         const input = target.querySelector('input, textarea');
@@ -142,7 +130,6 @@
       }
     }, 400);
 
-    // Scroll body to top
     const body = document.getElementById('tfBody');
     if (body) body.scrollTop = 0;
   }
@@ -209,7 +196,7 @@
   }
 
   // ──────────────────────────────────────────────
-  // 🎯 Option Selection (with auto-advance)
+  // 🎯 Option Selection
   // ──────────────────────────────────────────────
   document.querySelectorAll('.tf-option').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -220,7 +207,6 @@
       opt.classList.add('selected');
       opt.setAttribute('aria-checked', 'true');
 
-      // Auto-advance after 400ms
       setTimeout(() => {
         if (stepOrder[currentStep] === '4') nextStep();
       }, 400);
@@ -232,14 +218,8 @@
   // ──────────────────────────────────────────────
   document.addEventListener('keydown', (e) => {
     if (!tfModal.classList.contains('open')) return;
-
-    if (e.key === 'Escape') {
-      closeTypeform();
-      return;
-    }
-
+    if (e.key === 'Escape') { closeTypeform(); return; }
     if (e.key === 'Enter' && !e.shiftKey) {
-      // Allow Enter in textarea (Shift+Enter for new line)
       const activeEl = document.activeElement;
       if (activeEl && activeEl.tagName === 'TEXTAREA') return;
       e.preventDefault();
@@ -248,45 +228,66 @@
   });
 
   // ──────────────────────────────────────────────
-  // 📧 Email Submission
+  // 🏷️ Interest Labels
   // ──────────────────────────────────────────────
   const INTEREST_LABELS = {
-    A: 'استشارة قيادية متخصصة',
-    B: 'تنفيذ البرنامج مؤسسياً',
-    C: 'شراكة استراتيجية'
+    leaders:     'برنامج إدارة المشروعات للقادة',
+    matrix:      'منصة مصفوفة التأثير',
+    partnership: 'شراكة استراتيجية',
+    general:     'استشارة عامة',
   };
 
-  function buildPayload() {
-    return {
-      product: CONFIG.product,
-      productName: 'إدارة المشروعات للقادة',
-      timestamp: new Date().toISOString(),
-      requestId: `${CONFIG.product}-${Date.now()}`,
-      data: {
-        name: formData.name || '',
-        organization: formData.organization || '',
-        email: formData.email || '',
-        phone: formData.phone || '',
-        interest: formData.interest || '',
-        interestLabel: INTEREST_LABELS[formData.interest] || '',
-        context: formData.context || '',
-      },
-      meta: {
-        source: window.location.href,
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-      }
+  // ──────────────────────────────────────────────
+  // 🗄️ Supabase — إرسال البيانات
+  // ──────────────────────────────────────────────
+  async function sendToSupabase() {
+    const payload = {
+      product:        CONFIG.product,
+      source_url:     window.location.href,
+      name:           formData.name           || '',
+      organization:   formData.organization   || '',
+      email:          formData.email          || '',
+      phone:          formData.phone          || '',
+      interest:       formData.interest       || '',
+      interest_label: INTEREST_LABELS[formData.interest] || '',
+      context:        formData.context        || '',
+      user_agent:     navigator.userAgent,
+      language:       navigator.language,
+      status:         'new',
     };
+
+    const res = await fetch(
+      `${CONFIG.supabaseUrl}/rest/v1/${CONFIG.table}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'apikey':        CONFIG.supabaseKey,
+          'Authorization': `Bearer ${CONFIG.supabaseKey}`,
+          'Prefer':        'return=minimal',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Supabase error ${res.status}: ${err}`);
+    }
+
+    return true;
   }
 
+  // ──────────────────────────────────────────────
+  // 📧 Mailto Fallback
+  // ──────────────────────────────────────────────
   function buildMailtoLink() {
     const subject = encodeURIComponent(
       `[${CONFIG.product}] طلب جديد — ${INTEREST_LABELS[formData.interest] || 'تواصل'}`
     );
-
     const body = encodeURIComponent(
       `السلام عليكم،\n\n` +
-      `وردنا طلب جديد عبر برنامج "إدارة المشروعات للقادة":\n\n` +
+      `وردنا طلب جديد:\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `المنتج: ${CONFIG.product}\n` +
       `الاسم: ${formData.name || '—'}\n` +
@@ -296,69 +297,48 @@
       `نوع الطلب: ${INTEREST_LABELS[formData.interest] || '—'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `السياق الإضافي:\n${formData.context || '— لم يُذكر —'}\n\n` +
-      `\n— تم الإرسال عبر Milestone Impact`
+      `— تم الإرسال عبر Milestone Impact`
     );
-
     return `mailto:${CONFIG.recipientEmail}?subject=${subject}&body=${body}`;
   }
 
-  async function sendViaWorker() {
-    try {
-      const response = await fetch(CONFIG.workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload()),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Worker submission failed:', error);
-      // Fallback to mailto if Worker fails
-      lastMailtoLink = buildMailtoLink();
-      window.open(lastMailtoLink, '_blank');
-      return null;
-    }
-  }
-
-  function sendViaMailto() {
+  function triggerMailto() {
     lastMailtoLink = buildMailtoLink();
-    setTimeout(() => {
-      const mailWin = window.open(lastMailtoLink, '_blank');
-      if (!mailWin) {
-        const a = document.createElement('a');
-        a.href = lastMailtoLink;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-    }, 300);
+    const a = document.createElement('a');
+    a.href = lastMailtoLink;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
-  function submitForm() {
-    // ALWAYS show thanks screen first (UI feedback)
+  // ──────────────────────────────────────────────
+  // 🚀 Submit — Supabase أولاً، mailto كـ Fallback
+  // ──────────────────────────────────────────────
+  async function submitForm() {
+    // أظهر شاشة الشكر فوراً (UX)
     currentStep = stepOrder.length - 1;
     goToStep(currentStep);
 
-    // Then trigger the actual send based on CONFIG.method
-    if (CONFIG.method === 'worker') {
-      sendViaWorker();
-    } else {
-      sendViaMailto();
+    try {
+      await sendToSupabase();
+      // نجح الإرسال لـ Supabase — لا حاجة لـ mailto
+    } catch (err) {
+      console.warn('Supabase failed, falling back to mailto:', err);
+      // Fallback تلقائي
+      triggerMailto();
     }
   }
 
-  // Re-trigger from Thank You screen
   function resendEmail() {
-    if (CONFIG.method === 'worker') {
-      sendViaWorker();
-    } else if (lastMailtoLink) {
+    if (lastMailtoLink) {
       window.location.href = lastMailtoLink;
     } else {
-      sendViaMailto();
+      triggerMailto();
     }
   }
 
-  // Initialize: hide footer initially (welcome screen)
+  // Initialize
   tfFooter.style.display = 'none';
+
 })();
