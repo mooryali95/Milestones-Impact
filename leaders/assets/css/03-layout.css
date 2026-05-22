@@ -83,6 +83,26 @@
 .header__nav-link:hover { color: var(--petrol-deep); }
 .header__nav-link:hover::after { width: 100%; }
 
+/* Active state (scrollspy) */
+.header__nav-link.is-active { color: var(--gold-deep); }
+.header__nav-link.is-active::after { width: 100%; }
+
+/* Home link — distinct (back to mother site) */
+.header__nav-link--home {
+  color: var(--gold-deep);
+  font-weight: 600;
+  padding: 4px 12px;
+  border: 1px solid var(--line-gold);
+  border-radius: 100px;
+  transition: all 0.3s var(--ease);
+}
+.header__nav-link--home::after { display: none; }
+.header__nav-link--home:hover {
+  background: var(--gold);
+  color: var(--petrol-deepest);
+  border-color: var(--gold);
+}
+
 .header__cta {
   padding: 9px 16px;
   background: var(--petrol-deepest);

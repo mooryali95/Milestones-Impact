@@ -339,7 +339,7 @@
   align-items: start;
 }
 @media (min-width: 1024px) {
-  .problem__grid { grid-template-columns: 1fr 1fr; gap: 80px; }
+  .problem__grid { grid-template-columns: 1fr 1fr; gap: 56px; }
 }
 
 .problem__questions {
@@ -672,7 +672,7 @@
   margin-top: 56px;
 }
 @media (min-width: 1024px) {
-  .pin-system { grid-template-columns: 1fr 1fr; gap: 80px; margin-top: 80px; }
+  .pin-system { grid-template-columns: 1fr 1fr; gap: 64px; margin-top: 80px; }
 }
 
 .pin-visual {
