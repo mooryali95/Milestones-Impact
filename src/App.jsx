@@ -1079,80 +1079,295 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .demo-header { border-radius:20px 20px 0 0; }
 }
 
-/* ════════════════════════
+/* ════════════════════════════════════════════════════
    LAPTOP — 1024px–1439px
-════════════════════════ */
+   Full Desktop Experience
+════════════════════════════════════════════════════ */
 @media(min-width:1024px){
+
+  /* ── Reset Mobile overrides ── */
   .bottom-bar { display:none!important; }
-  .nav { height:58px; padding:0 2rem; }
-  .nav-center { display:flex; }
-  .nav-user { max-width:160px; font-size:0.85rem; }
-  .nav-logo { width:32px; height:32px; }
-  .nav-prog-bar { width:70px; }
-  .nav-prog-pct { font-size:0.75rem; min-width:32px; }
-  .tabs { gap:2px; }
-  .tab { padding:0.35rem 1.1rem; font-size:0.83rem; }
-  .btn-logout { padding:0.36rem 0.9rem; font-size:0.79rem; }
-  .sec { padding:1.5rem 2.5rem 2rem; max-width:1200px; margin:0 auto; width:100%; }
-  .sec-title { font-size:1.35rem; }
+  .modal-pull { display:none; }
+
+  /* ── Body & App ── */
+  body { font-size:15px; }
+
+  /* ── Nav — Refined Desktop Bar ── */
+  .nav {
+    height: 60px;
+    padding: 0 2.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .nav-logo { width:34px; height:34px; }
+  .nav-brand { gap: 0.6rem; }
+  .nav-user { max-width:180px; font-size:0.88rem; font-weight:700; }
+  .nav-prog-bar { width:80px; height:4px; }
+  .nav-prog-pct { font-size:0.78rem; min-width:34px; font-weight:700; }
+  .tabs { gap:2px; padding:3px; }
+  .tab { padding:0.4rem 1.2rem; font-size:0.85rem; border-radius:7px; }
+  .tab.on { box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+  .btn-logout { padding:0.4rem 1rem; font-size:0.8rem; border-radius:8px; }
+
+  /* ── Page Layout ── */
+  .sec {
+    padding: 1.8rem 2.5rem 2rem;
+    max-width: 1280px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .sec-title { font-size:1.4rem; }
+  .sec-head { margin-bottom:1.2rem; }
+
+  /* ── Auth Screen ── */
   .auth-screen { flex-direction:row; }
-  .auth-left { display:flex; flex-direction:column; align-items:center; justify-content:center; width:42%; max-width:440px; background:linear-gradient(160deg,#1a2535 0%,#0f1923 100%); padding:3rem; position:relative; overflow:hidden; }
-  .auth-left::before { content:''; position:absolute; inset:0; background-image:linear-gradient(rgba(139,105,20,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(139,105,20,0.07) 1px,transparent 1px); background-size:48px 48px; }
-  .auth-left-content { position:relative; z-index:1; text-align:center; }
-  .auth-left-quote { font-family:'Amiri',serif; font-size:1.2rem; color:rgba(255,255,255,0.82); line-height:1.9; margin:1.8rem 0; }
+  .auth-left {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    width:44%; max-width:480px;
+    background:linear-gradient(160deg,#1a2535 0%,#0f1923 100%);
+    padding:3.5rem; position:relative; overflow:hidden;
+  }
+  .auth-left::before {
+    content:''; position:absolute; inset:0;
+    background-image:linear-gradient(rgba(139,105,20,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(139,105,20,0.07) 1px,transparent 1px);
+    background-size:48px 48px;
+  }
+  .auth-left-content { position:relative; z-index:1; text-align:center; max-width:320px; }
+  .auth-left-quote { font-family:'Amiri',serif; font-size:1.25rem; color:rgba(255,255,255,0.85); line-height:1.95; margin:2rem 0; }
   .auth-left-quote span { color:#C4A24E; }
   .auth-left-attr { font-size:0.65rem; letter-spacing:3px; color:rgba(255,255,255,0.3); text-transform:uppercase; }
   .auth-left-tracks { display:flex; gap:0.45rem; justify-content:center; margin-top:2rem; flex-wrap:wrap; }
-  .auth-left-track { padding:0.28rem 0.65rem; border-radius:20px; font-size:0.65rem; font-weight:600; letter-spacing:0.8px; }
-  .mx-wrap { border-radius:var(--r-lg); }
-  .mx-track-header { padding:0.85rem 1.2rem; }
-  .mx-track-name { font-size:1.05rem; }
-  .mx-track-desc { font-size:0.7rem; }
-  .mx-cells-grid { grid-template-columns:repeat(4,1fr); }
-  .cell { min-height:112px; padding:0.85rem; }
-  .cell-name { font-size:0.85rem; }
-  .cell-dur { font-size:0.66rem; }
-  .cell-date { font-size:0.68rem; }
-  .stat-grid { grid-template-columns:repeat(4,1fr); gap:0.85rem; }
-  .stat { padding:1.1rem 1rem; }
-  .stat-v { font-size:1.8rem; }
-  .rpt-stats { grid-template-columns:repeat(4,1fr); }
-  .output-info { grid-template-columns:repeat(3,1fr); }
-  .demo-person-grid { grid-template-columns:repeat(2,1fr); }
-  .reg-card { padding:1rem 1.2rem; }
-  .reg-card-name { font-size:0.92rem; }
-  .overlay { align-items:center; padding:2rem; }
-  .modal { border-radius:20px; max-height:86vh; max-width:600px; padding:2rem; }
-  .modal-pull { display:none; }
-  .modal h2 { font-size:1.6rem; }
-  .reg-modal-overlay { align-items:center; padding:1.5rem; }
-  .reg-modal { border-radius:20px; max-width:860px; }
-  .demo-overlay { align-items:center; padding:1.5rem; }
-  .demo-screen { border-radius:20px; height:auto; max-height:88vh; max-width:720px; }
-  .demo-header { border-radius:20px 20px 0 0; }
-  .ctx-bar { padding:0.75rem 1.2rem; }
-  .ctx-stat-num { font-size:1.15rem; }
-  .tl-card { padding:1rem 1.2rem; }
-  .tl-name { font-size:0.92rem; }
-  .submit-box { padding:1.5rem; }
-  .submit-box h3 { font-size:1.15rem; }
-  .smart-box { padding:1rem 1.2rem; }
+  .auth-left-track { padding:0.28rem 0.7rem; border-radius:20px; font-size:0.65rem; font-weight:600; letter-spacing:0.8px; }
+  .auth-right { padding:3rem; }
+  .auth-form-wrap { max-width:380px; }
+  .auth-title { font-size:2rem; }
+  .auth-sub { font-size:0.88rem; margin-bottom:2rem; }
+  .fg label { font-size:0.8rem; }
+  .fg input { padding:0.85rem 1.1rem; font-size:1rem; border-radius:var(--r-md); }
+  .btn { padding:0.95rem; font-size:0.98rem; border-radius:var(--r-md); }
+
+  /* ── Context Bar ── */
+  .ctx-bar {
+    padding:0.85rem 1.4rem;
+    border-radius:var(--r-md);
+    gap:1rem;
+    margin-bottom:1.2rem;
+  }
+  .ctx-stat-num { font-size:1.2rem; }
+  .ctx-stat-label { font-size:0.74rem; }
+  .ctx-bar-track { height:6px; }
+  .ctx-pct { font-size:0.78rem; }
+
+  /* ── Matrix — Classic Table Layout ── */
+  .mx-wrap {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    border-radius: var(--r-lg);
+    overflow: hidden;
+  }
+  .mx-track-section {
+    display: contents;
+  }
+  .mx-track-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 1rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    min-height: 120px;
+    position: sticky;
+    right: 0;
+  }
+  .mx-track-icon { font-size:1.3rem; margin-bottom:0.3rem; }
+  .mx-track-name { font-size:1rem; font-weight:700; margin-bottom:0.2rem; }
+  .mx-track-weight {
+    font-size:0.72rem; font-weight:700; padding:0.18rem 0.5rem;
+    border-radius:20px; color:#fff; background:rgba(0,0,0,0.25)!important;
+    margin-right:0; margin-top:0.3rem;
+  }
+  .mx-track-desc { font-size:0.67rem; opacity:0.65; margin-top:0.25rem; }
+  .mx-cells-grid {
+    grid-template-columns: repeat(4,1fr);
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cell {
+    min-height: 120px;
+    padding: 0.9rem;
+    border-left: 1px solid var(--border);
+    border-bottom: none;
+    border-radius:0;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .cell:hover {
+    background: rgba(107,157,173,0.06);
+    box-shadow: inset 0 0 0 1.5px var(--mi);
+    z-index:1;
+    position:relative;
+  }
+  .cell.highlighted {
+    background: rgba(107,157,173,0.08);
+    box-shadow: inset 0 0 0 2px var(--mi);
+  }
+  .cell.done:hover { background: rgba(74,122,58,0.07); }
+  .cell-accent { height:3px; width:100%; top:0; left:0; right:0; }
+  .cell-name { font-size:0.87rem; line-height:1.4; }
+  .cell-dur { font-size:0.68rem; }
+  .cell-date { font-size:0.7rem; }
+
+  /* ── Smart Box ── */
+  .smart-box { padding:1.1rem 1.4rem; margin-top:1rem; }
+  .smart-label { font-size:0.76rem; }
+
+  /* ── Submit Box ── */
+  .submit-box { padding:1.6rem 2rem; margin-top:1rem; }
+  .submit-box h3 { font-size:1.2rem; }
+  .submit-box p { font-size:0.88rem; }
+
+  /* ── Timeline ── */
+  .tl { padding-right:2.2rem; }
+  .tl-card { padding:1.1rem 1.3rem; }
+  .tl-name { font-size:0.94rem; }
+  .tl-dates { font-size:0.76rem; }
+
+  /* ── Modal ── */
+  .overlay { align-items:center; padding:2.5rem; }
+  .modal {
+    border-radius:var(--r-xl);
+    max-height:84vh;
+    max-width:620px;
+    padding:2.2rem;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.18);
+  }
+  .modal h2 { font-size:1.7rem; }
+  .modal-desc { font-size:0.88rem; }
+  .modal-insight-box { font-size:0.88rem; padding:0.85rem 1.1rem; }
+  .modal-section-title { font-size:0.76rem; }
+  .date-section { padding:1rem; }
+  .date-row input { padding:0.65rem 0.85rem; font-size:0.95rem; }
+  .hijri-badge { font-size:0.82rem; }
+  .modal-grid { gap:0.55rem; }
+  .modal-item { padding:0.6rem 0.85rem; }
+  .modal-item-label { font-size:0.67rem; }
+  .modal-item-value { font-size:0.9rem; }
+
+  /* ── Report ── */
+  .rpt-stats { grid-template-columns:repeat(4,1fr); gap:0.75rem; }
+  .rpt-stat { padding:1rem 0.75rem; }
+  .rpt-stat-v { font-size:1.5rem; }
+  .rpt-card { padding:1.3rem; }
+  .rpt-pattern { padding:1.5rem; }
+  .rpt-pattern-name { font-size:1.5rem; }
+  .rpt-pattern-desc { font-size:0.85rem; }
+  .rpt-bar-label { font-size:0.76rem; width:80px; }
+  .rpt-bar-fill { height:20px; }
+  .rpt-section-title { font-size:1.1rem; }
+
+  /* ── Output ── */
+  .output-info { grid-template-columns:repeat(3,1fr); gap:0.6rem; }
+  .output-table th { padding:0.65rem 0.75rem; font-size:0.78rem; }
+  .output-table td { padding:0.55rem 0.75rem; font-size:0.82rem; }
+
+  /* ── Admin Panel — Sidebar Layout ── */
+  .admin-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+    min-height: calc(100vh - 60px);
+  }
+  .admin-sidebar {
+    background: var(--bg-card);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+  .admin-sidebar-header {
+    padding: 1rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Amiri', serif;
+    font-size: 1.05rem;
+    color: var(--mi-d);
+    font-weight: 700;
+  }
+  .admin-main { min-width: 0; }
+
+  /* Admin Stats ── */
+  .stat-grid { grid-template-columns:repeat(4,1fr); gap:0.9rem; }
+  .stat { padding:1.2rem 1rem; }
+  .stat-v { font-size:1.9rem; }
+  .stat-l { font-size:0.74rem; }
+
+  /* Reg Cards ── */
+  .reg-card { padding:1rem 1.2rem; gap:0.85rem; }
+  .reg-card-name { font-size:0.94rem; }
+  .reg-card-meta { font-size:0.73rem; }
+  .reg-card-avatar { width:42px; height:42px; font-size:1.1rem; }
+
+  /* Reg Modal ── */
+  .reg-modal-overlay { align-items:center; padding:2rem; }
+  .reg-modal {
+    border-radius:var(--r-xl);
+    max-width:900px;
+    max-height:88vh;
+  }
+  .reg-modal-header { padding:1rem 1.3rem; border-radius:var(--r-xl) var(--r-xl) 0 0; }
+  .reg-modal-name { font-size:1.05rem; }
+  .reg-modal-tab { padding:0.32rem 0.75rem; font-size:0.76rem; }
+  .reg-modal-body { padding:1.3rem; }
+
+  /* Demo Admin Cards ── */
+  .demo-person-grid { grid-template-columns:repeat(2,1fr); gap:0.85rem; }
+  .demo-person-card { padding:1.1rem; }
+  .demo-person-name { font-size:0.92rem; }
+
+  /* Demo Form Modal ── */
+  .demo-overlay { align-items:center; padding:2rem; }
+  .demo-screen {
+    border-radius:var(--r-xl);
+    height:auto;
+    max-height:88vh;
+    max-width:740px;
+    box-shadow:0 24px 80px rgba(0,0,0,0.18);
+  }
+  .demo-header { border-radius:var(--r-xl) var(--r-xl) 0 0; padding:1rem 1.3rem; }
+  .demo-header-title { font-size:1rem; }
+  .demo-body { padding:1.3rem; }
+  .demo-intro { padding:1rem 1.2rem; }
+  .demo-card { border-radius:16px; }
+  .demo-card-body { padding:1rem; }
+  .demo-field-row { gap:0.6rem; }
+  .demo-field input, .demo-field select { padding:0.65rem 0.85rem; font-size:0.92rem; }
+  .demo-stepper-btn { width:36px; height:36px; font-size:1.1rem; }
+  .demo-stepper-val { font-size:0.88rem; width:32px; }
+  .demo-targets { gap:0.5rem; }
+  .demo-target-chip { padding:0.6rem 0.6rem; font-size:0.82rem; }
+  .demo-footer { padding:0.9rem 1.3rem; }
 }
 
-/* ════════════════════════
+/* ════════════════════════════════════════════════════
    LARGE DESKTOP — 1440px+
-════════════════════════ */
+════════════════════════════════════════════════════ */
 @media(min-width:1440px){
-  .sec { max-width:1400px; padding:2rem 3rem 2.5rem; }
-  .nav { padding:0 3rem; }
-  .cell { min-height:124px; }
-  .cell-name { font-size:0.88rem; }
+  .nav { padding:0 3.5rem; }
+  .sec { max-width:1440px; padding:2rem 3.5rem 2.5rem; }
+  .cell { min-height:128px; padding:1rem; }
+  .cell-name { font-size:0.9rem; }
+  .mx-track-header { min-height:128px; padding:1.2rem 1.2rem; }
+  .mx-track-name { font-size:1.1rem; }
+  .modal { max-width:660px; }
   .reg-modal { max-width:1000px; }
-  .modal { max-width:640px; }
-  .stat-v { font-size:2rem; }
-  .stat { padding:1.3rem 1rem; }
+  .demo-screen { max-width:780px; }
+  .stat-v { font-size:2.1rem; }
+  .stat { padding:1.4rem 1.2rem; }
+  .rpt-stat-v { font-size:1.7rem; }
+  .admin-layout { grid-template-columns:300px 1fr; gap:2rem; }
 }
-`
+
 
 // ════════════════════════════════════════════════════════════════
 // LOCAL SESSION MANAGER (24-hour persistence)
@@ -1962,46 +2177,150 @@ export default function App() {
 
         {/* ══ TAB: المسجلون ══ */}
         {adminTab === "regs" && <>
-          <div className="sec-head">
-            <h2 className="sec-title">سجل المشاركين</h2>
-            <button className="btn btn-s btn-outline" onClick={loadRegs}>↻ تحديث</button>
+          <div className="admin-layout">
+            {/* Sidebar — قائمة المسجلين */}
+            <div className="admin-sidebar">
+              <div className="admin-sidebar-header">
+                سجل المشاركين
+                <button className="btn btn-s btn-outline" style={{float:"left",marginTop:"-2px"}} onClick={loadRegs}>↻</button>
+              </div>
+              {loading ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>جارٍ التحميل...</div>
+              : allRegs.length === 0 ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>لا يوجد مسجلين</div>
+              : <div style={{padding:"0.5rem"}}>
+                {allRegs.map((r,i) => {
+                  const datesCount = r.dates ? Object.keys(r.dates).length : 0;
+                  const pct = Math.round((datesCount/16)*100);
+                  const initials = r.name ? r.name.split(" ").slice(0,2).map(w=>w[0]).join("") : "?";
+                  const trackColors = ["#8B6914","#5B7B3A","#2E6B8A","#6B4E3D"];
+                  const avatarColor = trackColors[i % 4];
+                  const isSelected = selectedReg?.id === r.id;
+                  return (
+                    <div key={r.id}
+                      style={{
+                        display:"flex",alignItems:"center",gap:"0.6rem",
+                        padding:"0.65rem 0.75rem",borderRadius:"10px",cursor:"pointer",
+                        background:isSelected?"rgba(107,157,173,0.1)":"transparent",
+                        border:isSelected?"1px solid var(--mi)":"1px solid transparent",
+                        marginBottom:"0.25rem",transition:"all 0.15s"
+                      }}
+                      onClick={()=>{ setSelectedReg(r); setSelectedRegTab("schedule"); }}>
+                      <div style={{width:"32px",height:"32px",borderRadius:"50%",background:avatarColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.75rem",fontWeight:700,flexShrink:0}}>{initials}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:"0.82rem",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
+                        <div style={{fontSize:"0.65rem",color:"var(--text-muted)",display:"flex",gap:"0.3rem",alignItems:"center",marginTop:"0.1rem"}}>
+                          <div style={{flex:1,height:"3px",background:"var(--border)",borderRadius:"2px",overflow:"hidden"}}>
+                            <div style={{height:"100%",background:avatarColor,borderRadius:"2px",width:`${pct}%`}}/>
+                          </div>
+                          <span>{datesCount}/16</span>
+                          {r.submitted && <span style={{color:"var(--ok)"}}>✓</span>}
+                          {r.reopenRequested && <span style={{color:"var(--err)"}}>🔓</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>}
+            </div>
+
+            {/* Main — تفاصيل المسجّل */}
+            <div className="admin-main">
+              {!selectedReg
+                ? <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",padding:"3rem",textAlign:"center"}}>
+                    <div style={{fontSize:"2.5rem",marginBottom:"0.75rem",opacity:0.4}}>👤</div>
+                    <div style={{fontSize:"1rem",color:"var(--text-muted)",fontFamily:"'Amiri',serif"}}>اختر مشاركاً من القائمة</div>
+                  </div>
+                : <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",overflow:"hidden"}}>
+                    {/* Header */}
+                    <div style={{background:"linear-gradient(135deg,#12161e,#1a2535)",color:"#fff",padding:"1rem 1.3rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontFamily:"'Amiri',serif",fontSize:"1.1rem",fontWeight:700}}>{selectedReg.name}</div>
+                        <div style={{fontSize:"0.7rem",opacity:0.55,direction:"ltr"}}>{selectedReg.phone} | {selectedReg.email}</div>
+                      </div>
+                      <div style={{display:"flex",background:"rgba(0,0,0,0.25)",borderRadius:"8px",padding:"2px",gap:"1px"}}>
+                        {[["schedule","📅 المواعيد"],["demo","🗺️ التحليل"],["history","📈 التقدم"]].map(([k,v])=>(
+                          <button key={k} className={`reg-modal-tab ${selectedRegTab===k?"on":""}`} onClick={()=>setSelectedRegTab(k)}>{v}</button>
+                        ))}
+                      </div>
+                      <button className="reg-modal-close" onClick={()=>setSelectedReg(null)}>✕</button>
+                    </div>
+                    {/* Body */}
+                    <div style={{padding:"1.3rem",maxHeight:"calc(100vh - 280px)",overflowY:"auto"}}>
+                      {selectedRegTab === "schedule" && <>{(() => {
+                        const r = selectedReg;
+                        return <>
+                          <div style={{overflowX:"auto"}}>
+                            <table className="output-table" style={{minWidth:"540px"}}>
+                              <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
+                              <tbody>{procs.map((p,j)=>{
+                                const d=r.dates?.[p.key], c=r.confirmed?.[p.key];
+                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
+                              })}</tbody>
+                            </table>
+                          </div>
+                          {r.submittedAt && <div className="output-stamp" style={{marginTop:"0.8rem"}}><p>تم التقديم: <strong style={{color:BRAND.color}}>{fmtBoth(r.submittedAt).both}</strong></p></div>}
+                          {r.submitted && <div style={{marginTop:"0.8rem",textAlign:"center"}}><button className="btn btn-s btn-danger" style={{width:"auto"}} onClick={()=>{ adminUnlock(r.id); setSelectedReg(null); }}>🔓 فتح التعديل</button></div>}
+                        </>;
+                      })()}</>}
+                      {selectedRegTab === "demo" && <>{(!selectedReg[DEMO_KEY]||selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length===0)
+                        ? <div className="empty"><h3>🗺️</h3><p>{appContent.demo_empty_state||'لم يُكمل العميل التحليل الديموغرافي بعد'}</p></div>
+                        : <><div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
+                          <div className="demo-person-grid">
+                            {selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).map((person,pi)=>{
+                              const scoreColor=(v)=>v>=70?"#27ae60":v>=40?"#2E6B8A":"#aaa";
+                              const targets=["knowledge","social","financial","economic"].filter(k=>person.target?.[k]);
+                              const targetLabels={knowledge:"معرفي",social:"مجتمعي",financial:"مالي",economic:"اقتصادي"};
+                              return <div key={pi} className="demo-person-card">
+                                <div className="demo-person-header"><div className="demo-person-num">{pi+1}</div><div><div className="demo-person-name">{person.name}</div><div className="demo-person-role">{[person.position,person.entity,person.relation].filter(Boolean).join(" • ")||"—"}</div></div>{person.location&&<div style={{marginRight:"auto",fontSize:"0.65rem",color:"var(--text-muted)"}}>📍{person.location}</div>}</div>
+                                <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
+                                {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{const val=person.strength?.[k]||0;return <div key={k} className="demo-bar-row"><div className="demo-bar-label">{label}</div><div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div><div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div></div>;})}
+                                {targets.length>0&&<div className="demo-person-chips">{targets.map(k=><span key={k} className="demo-person-chip" style={{background:"#8B691415",color:"#8B6914",border:"1px solid #8B691430"}}>{targetLabels[k]}</span>)}</div>}
+                              </div>;\n                            })}\n                          </div></>\n                      }</>}
+                      {selectedRegTab === "history" && (() => {
+                        const r = selectedReg;
+                        const regDates = r.dates || {};
+                        const bookedProcs = procs.filter(p=>regDates[p.key]).sort((a,b)=>new Date(regDates[a.key])-new Date(regDates[b.key]));
+                        const totalDays = bookedProcs.length>=2 ? Math.round((new Date(regDates[bookedProcs[bookedProcs.length-1].key])-new Date(regDates[bookedProcs[0].key]))/(1000*60*60*24)) : 0;
+                        const confCount = Object.keys(r.confirmed||{}).length;
+                        const trackDist=[{id:'creation',name:'الخلق',color:'#8B6914'},{id:'innovation',name:'الإبداع',color:'#5B7B3A'},{id:'establishment',name:'الإنشاء',color:'#2E6B8A'},{id:'making',name:'الجعل',color:'#6B4E3D'}].map(t=>({...t,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
+                        return <div>
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
+                            {[{v:bookedProcs.length,l:'مواعيد',c:'var(--mi-d)'},{v:confCount,l:'مؤكدة',c:'var(--ok)'},{v:totalDays+'d',l:'مدة التخطيط',c:'var(--gold-d)'}].map((s,i)=>(
+                              <div key={i} style={{background:'var(--bg-deep)',borderRadius:'12px',padding:'0.75rem 0.5rem',textAlign:'center'}}>
+                                <div style={{fontSize:'1.35rem',fontWeight:800,color:s.c}}>{s.v}</div>
+                                <div style={{fontSize:'0.63rem',color:'var(--text-muted)'}}>{s.l}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="demo-section-head" style={{marginBottom:'0.55rem'}}>توزيع المسارات</div>
+                          {trackDist.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.38rem'}}>
+                            <div style={{fontSize:'0.7rem',fontWeight:700,color:t.color,width:'50px',flexShrink:0}}>{t.name}</div>
+                            <div style={{flex:1,height:'9px',background:'var(--border)',borderRadius:'5px',overflow:'hidden'}}><div style={{height:'100%',background:t.color,borderRadius:'5px',width:`${(t.count/4)*100}%`}}/></div>
+                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)',width:'26px',textAlign:'center'}}>{t.count}/4</div>
+                          </div>)}
+                          <div className="demo-section-head" style={{margin:'0.75rem 0 0.55rem'}}>مسار التخطيط ({bookedProcs.length} خطوة)</div>
+                          {bookedProcs.length===0 ? <div className="empty"><p>لم يحدد أي مواعيد</p></div>
+                          : <div style={{position:'relative',paddingRight:'1.2rem'}}>
+                              <div style={{position:'absolute',right:'5px',top:0,bottom:0,width:'2px',background:'linear-gradient(180deg,var(--mi-d),var(--border))',borderRadius:'2px'}}/>
+                              {bookedProcs.map((p,i)=>{const d=regDates[p.key],isConf=!!(r.confirmed||{})[p.key];return <div key={p.key} style={{position:'relative',paddingRight:'1rem',paddingBottom:'0.6rem'}}>
+                                <div style={{position:'absolute',right:'-1.2rem',top:'0.2rem',width:'12px',height:'12px',borderRadius:'50%',border:`2px solid ${p.trackColor}`,background:isConf?p.trackColor:'var(--bg-card)'}}/>
+                                <div style={{background:'var(--bg-card)',borderRadius:'10px',padding:'0.55rem 0.7rem',border:`1px solid var(--border)`,borderRight:`3px solid ${p.trackColor}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                                  <div><span style={{fontSize:'0.57rem',fontWeight:700,color:'#fff',background:p.trackColor,padding:'0.07rem 0.33rem',borderRadius:'4px',marginLeft:'0.28rem'}}>#{i+1}</span><span style={{fontSize:'0.8rem',fontWeight:700}}>{p.nameAr}</span></div>
+                                  <div style={{textAlign:'left',flexShrink:0}}><div style={{fontSize:'0.68rem',color:'var(--mi-d)',fontWeight:700}}>{fmtShort(d)}</div>{isConf&&<div style={{fontSize:'0.58rem',color:'var(--ok)'}}>✓</div>}</div>
+                                </div>
+                              </div>;})}
+                            </div>}
+                          <div style={{textAlign:'center',fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'0.75rem',padding:'0.55rem',background:'var(--bg-deep)',borderRadius:'8px'}}>
+                            📅 التسجيل: <strong>{r.registeredAt?fmtBoth(r.registeredAt).hijri:'—'}</strong>{r.submittedAt&&<> • ✅ التقديم: <strong>{fmtBoth(r.submittedAt).hijri}</strong></>}
+                          </div>
+                        </div>;
+                      })()}
+                    </div>
+                  </div>
+              }
+            </div>
           </div>
-          {loading ? <div className="empty"><p>جارٍ التحميل...</p></div>
-          : allRegs.length === 0 ? <div className="empty"><h3>لا يوجد مسجلين</h3></div>
-          : <div className="reg-list">
-            {allRegs.map((r,i) => {
-              const datesCount = r.dates ? Object.keys(r.dates).length : 0;
-              const pct = Math.round((datesCount/16)*100);
-              const initials = r.name ? r.name.split(" ").slice(0,2).map(w=>w[0]).join("") : "?";
-              const trackColors = ["#8B6914","#5B7B3A","#2E6B8A","#6B4E3D"];
-              const avatarColor = trackColors[i % 4];
-              return (
-                <div key={r.id} className={`reg-card ${r.reopenRequested?"has-alert":""}`}
-                  onClick={()=>{ setSelectedReg(r); setSelectedRegTab("schedule"); }}>
-                  <div className="reg-card-avatar" style={{background:avatarColor}}>{initials}</div>
-                  <div className="reg-card-info">
-                    <div className="reg-card-name">{r.name}</div>
-                    <div className="reg-card-meta">
-                      <span style={{direction:"ltr"}}>{r.phone}</span>
-                      <span>•</span>
-                      <span>{r.registeredAt ? fmtBoth(r.registeredAt).hijri : "—"}</span>
-                      {r.reopenRequested && <span style={{color:"#C0392B",fontWeight:700}}>🔓 طلب فتح</span>}
-                    </div>
-                  </div>
-                  <div className="reg-card-right">
-                    {r.submitted
-                      ? <span className="badge badge-ok">✓ مكتمل</span>
-                      : <span className="badge badge-wait">جارٍ</span>}
-                    <div className="reg-prog-mini">
-                      <div className="reg-prog-fill" style={{width:`${pct}%`,background:avatarColor}}/>
-                    </div>
-                    <div className="reg-prog-pct">{datesCount}/16</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>}
         </>}
+
 
         {/* ══ TAB: التقارير ══ */}
         {adminTab === "reports" && <>
@@ -2076,163 +2395,7 @@ export default function App() {
 
       </div>
 
-      {/* ══ REG MODAL ══ */}
-      {selectedReg && (
-        <div className="reg-modal-overlay" onClick={()=>setSelectedReg(null)}>
-          <div className="reg-modal" onClick={e=>e.stopPropagation()}>
 
-            {/* Header */}
-            <div className="reg-modal-header">
-              <button className="reg-modal-close" onClick={()=>setSelectedReg(null)}>✕ إغلاق</button>
-              <div className="reg-modal-info">
-                <div className="reg-modal-name">{selectedReg.name}</div>
-                <div className="reg-modal-phone">{selectedReg.phone} | {selectedReg.email}</div>
-              </div>
-              <div className="reg-modal-tabs">
-                <button className={`reg-modal-tab ${selectedRegTab==="schedule"?"on":""}`} onClick={()=>setSelectedRegTab("schedule")}>📅 المواعيد</button>
-                <button className={`reg-modal-tab ${selectedRegTab==="demo"?"on":""}`} onClick={()=>setSelectedRegTab("demo")}>🗺️ التحليل</button>
-                <button className={`reg-modal-tab ${selectedRegTab==="history"?"on":""}`} onClick={()=>setSelectedRegTab("history")}>📈 التقدم</button>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="reg-modal-body">
-
-              {/* ── تبويب المواعيد ── */}
-              {selectedRegTab === "schedule" && <>
-                <div className="demo-section-head">جدول المواعيد الـ 16</div>
-                <div style={{overflowX:"auto"}}>
-                  <table className="output-table" style={{minWidth:"540px"}}>
-                    <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
-                    <tbody>{procs.map((p,j)=>{
-                      const d = selectedReg.dates?.[p.key];
-                      const c = selectedReg.confirmed?.[p.key];
-                      return <tr key={p.key}>
-                        <td>{j+1}</td>
-                        <td style={{fontWeight:600}}>{p.nameAr}</td>
-                        <td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td>
-                        <td>{d ? fmtGregorian(d) : "—"}</td>
-                        <td style={{color:"#8B6914"}}>{d ? gregorianToHijri(d).formatted : "—"}</td>
-                        <td>{c ? <span className="badge badge-ok">✓</span> : d ? <span className="badge badge-wait">محدد</span> : "—"}</td>
-                      </tr>;
-                    })}</tbody>
-                  </table>
-                </div>
-                {selectedReg.submittedAt && <div className="output-stamp" style={{marginTop:"0.8rem"}}>
-                  <p>تم التقديم: <strong style={{color:BRAND.color}}>{fmtBoth(selectedReg.submittedAt).both}</strong></p>
-                </div>}
-                {selectedReg.submitted && <div style={{marginTop:"0.8rem",textAlign:"center"}}>
-                  <button className="btn btn-s" style={{background:"linear-gradient(135deg,#C0392B,#E74C3C)",width:"auto"}} onClick={()=>{ adminUnlock(selectedReg.id); setSelectedReg(null); }}>🔓 فتح التعديل</button>
-                </div>}
-              </>}
-
-              {/* ── تبويب التحليل الديموغرافي ── */}
-              {selectedRegTab === "demo" && <>
-                {(!selectedReg[DEMO_KEY] || selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length === 0)
-                  ? <div className="empty"><h3>🗺️</h3><p>{appContent.demo_empty_state || 'لم يُكمل العميل التحليل الديموغرافي بعد'}</p></div>
-                  : <>
-                    <div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
-                    <div className="demo-person-grid">
-                      {selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).map((person, pi) => {
-                        const scoreColor = (v) => v>=70?"#27ae60":v>=40?"#2E6B8A":"#aaa";
-                        const targets = ["knowledge","social","financial","economic"].filter(k=>person.target?.[k]);
-                        const targetLabels = {knowledge:"معرفي",social:"مجتمعي",financial:"مالي",economic:"اقتصادي"};
-                        return (
-                          <div key={pi} className="demo-person-card">
-                            <div className="demo-person-header">
-                              <div className="demo-person-num">{pi+1}</div>
-                              <div>
-                                <div className="demo-person-name">{person.name}</div>
-                                <div className="demo-person-role">{[person.position,person.entity,person.relation].filter(Boolean).join(" • ") || "—"}</div>
-                              </div>
-                              {person.location && <div style={{marginRight:"auto",fontSize:"0.65rem",color:"var(--wg)"}}>📍{person.location}</div>}
-                            </div>
-
-                            <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
-                            {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{
-                              const val = person.strength?.[k] || 0;
-                              return <div key={k} className="demo-bar-row">
-                                <div className="demo-bar-label">{label}</div>
-                                <div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div>
-                                <div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div>
-                              </div>;
-                            })}
-
-                            {targets.length > 0 && <div className="demo-person-chips">
-                              <span style={{fontSize:"0.62rem",color:"var(--wg)",marginLeft:"0.3rem"}}>المستهدف:</span>
-                              {targets.map(k=><span key={k} className="demo-person-chip" style={{background:"#8B691415",color:"#8B6914",border:"1px solid #8B691430"}}>{targetLabels[k]}</span>)}
-                            </div>}
-
-                            {person.sharedEvent && <div style={{marginTop:"0.5rem",fontSize:"0.68rem",color:"var(--wg)",fontStyle:"italic"}}>"{person.sharedEvent}"</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                }
-              </>}
-
-              {/* ── تبويب تاريخ التقدم ── */}
-              {selectedRegTab === "history" && (() => {
-                const regDates = selectedReg.dates || {};
-                const bookedProcs = procs.filter(p => regDates[p.key]).sort((a,b) => new Date(regDates[a.key]) - new Date(regDates[b.key]));
-                const totalDays = bookedProcs.length >= 2 ? Math.round((new Date(regDates[bookedProcs[bookedProcs.length-1].key]) - new Date(regDates[bookedProcs[0].key])) / (1000*60*60*24)) : 0;
-                const confCount = Object.keys(selectedReg.confirmed||{}).length;
-                const trackDist = [{id:'creation',name:'الخلق',color:'#8B6914'},{id:'innovation',name:'الإبداع',color:'#5B7B3A'},{id:'establishment',name:'الإنشاء',color:'#2E6B8A'},{id:'making',name:'الجعل',color:'#6B4E3D'}].map(t=>({...t,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
-                return (
-                  <div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
-                      {[{v:bookedProcs.length,l:'مواعيد محددة',c:'var(--mi-d)'},{v:confCount,l:'مؤكدة',c:'var(--ok)'},{v:totalDays+'d',l:'مدة التخطيط',c:'var(--gold-d)'}].map((s,i)=>(
-                        <div key={i} style={{background:'var(--bg-deep)',borderRadius:'12px',padding:'0.75rem 0.5rem',textAlign:'center'}}>
-                          <div style={{fontSize:'1.35rem',fontWeight:800,color:s.c,marginBottom:'0.08rem'}}>{s.v}</div>
-                          <div style={{fontSize:'0.63rem',color:'var(--text-muted)'}}>{s.l}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{background:'var(--bg-card)',borderRadius:'12px',padding:'0.85rem',marginBottom:'0.85rem',border:'1px solid var(--border)'}}>
-                      <div className="demo-section-head" style={{marginBottom:'0.55rem'}}>توزيع المسارات</div>
-                      {trackDist.map(t=>(
-                        <div key={t.id} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.38rem'}}>
-                          <div style={{fontSize:'0.7rem',fontWeight:700,color:t.color,width:'50px',flexShrink:0}}>{t.name}</div>
-                          <div style={{flex:1,height:'9px',background:'var(--border)',borderRadius:'5px',overflow:'hidden'}}>
-                            <div style={{height:'100%',background:t.color,borderRadius:'5px',width:`${(t.count/4)*100}%`,transition:'width 0.6s'}}/>
-                          </div>
-                          <div style={{fontSize:'0.68rem',color:'var(--text-muted)',width:'26px',textAlign:'center'}}>{t.count}/4</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="demo-section-head" style={{marginBottom:'0.55rem'}}>مسار التخطيط ({bookedProcs.length} خطوة)</div>
-                    {bookedProcs.length===0 ? <div className="empty"><p>لم يحدد أي مواعيد بعد</p></div>
-                    : <div style={{position:'relative',paddingRight:'1.2rem'}}>
-                        <div style={{position:'absolute',right:'5px',top:0,bottom:0,width:'2px',background:'linear-gradient(180deg,var(--mi-d),var(--border))',borderRadius:'2px'}}/>
-                        {bookedProcs.map((p,i)=>{
-                          const d=regDates[p.key], isConf=!!(selectedReg.confirmed||{})[p.key];
-                          return <div key={p.key} style={{position:'relative',paddingRight:'1rem',paddingBottom:'0.6rem'}}>
-                            <div style={{position:'absolute',right:'-1.2rem',top:'0.2rem',width:'12px',height:'12px',borderRadius:'50%',border:`2px solid ${p.trackColor}`,background:isConf?p.trackColor:'var(--bg-card)'}}/>
-                            <div style={{background:'var(--bg-card)',borderRadius:'10px',padding:'0.55rem 0.7rem',border:`1px solid var(--border)`,borderRight:`3px solid ${p.trackColor}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:'0.4rem'}}>
-                              <div>
-                                <span style={{fontSize:'0.57rem',fontWeight:700,color:'#fff',background:p.trackColor,padding:'0.07rem 0.33rem',borderRadius:'4px',marginLeft:'0.28rem'}}>#{i+1}</span>
-                                <span style={{fontSize:'0.8rem',fontWeight:700}}>{p.nameAr}</span>
-                              </div>
-                              <div style={{textAlign:'left',flexShrink:0}}>
-                                <div style={{fontSize:'0.68rem',color:'var(--mi-d)',fontWeight:700}}>{fmtShort(d)}</div>
-                                {isConf&&<div style={{fontSize:'0.58rem',color:'var(--ok)'}}>✓ مؤكد</div>}
-                              </div>
-                            </div>
-                          </div>;
-                        })}
-                      </div>}
-                    <div style={{textAlign:'center',fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'0.75rem',padding:'0.55rem',background:'var(--bg-deep)',borderRadius:'8px'}}>
-                      📅 التسجيل: <strong>{selectedReg.registeredAt?fmtBoth(selectedReg.registeredAt).hijri:'—'}</strong>
-                      {selectedReg.submittedAt&&<> &nbsp;•&nbsp; ✅ التقديم: <strong>{fmtBoth(selectedReg.submittedAt).hijri}</strong></>}
-                    </div>
-                  </div>
-                );
-              })()}
-
-            </div>
-          </div>
-        </div>
       )}
 
       <Footer />
