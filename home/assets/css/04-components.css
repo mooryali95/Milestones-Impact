@@ -6,59 +6,54 @@
 
 /* ──────────────────────────────────────────────
    🪪 LOGO — Default Size (Header & Footer)
-   Cormorant Garamond | Diamond between lines | Impact italic
+   Cormorant Garamond | Horizontal layout | impact bold
    ────────────────────────────────────────────── */
 .logo {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  font-family: var(--font-logo);
+  gap: 2px;
+  font-family: var(--font-en);
   letter-spacing: -0.01em;
   color: var(--petrol-deepest);
-  line-height: 1;
 }
 
 .logo__text {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   line-height: 0.95;
 }
 
-/* Diamond — vertically centered BETWEEN Milestone and Impact */
 .logo__diamond {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   background: var(--gold);
   transform: rotate(45deg);
-  box-shadow: 0 0 10px rgba(200, 164, 92, 0.45);
-  align-self: center;
-  margin: 2px 0;
-  flex-shrink: 0;
+  margin-left: 3px;
+  box-shadow: 0 0 12px rgba(200, 164, 92, 0.4);
 }
 @media (min-width: 640px) {
-  .logo__diamond { width: 8px; height: 8px; margin: 3px 0; }
+  .logo__diamond { width: 7px; height: 7px; margin-left: 4px; }
 }
 
 .logo__milestone,
 .logo__impact {
-  font-size: 22px;
-  letter-spacing: -0.01em;
-  line-height: 1;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  font-style: normal;
 }
 @media (min-width: 640px) {
-  .logo__milestone, .logo__impact { font-size: 26px; }
+  .logo__milestone, .logo__impact { font-size: 22px; }
 }
 
 .logo__milestone {
-  font-weight: 600;
+  font-weight: 400;
   font-style: normal;
 }
 .logo__impact {
   font-weight: 600;
-  font-style: italic;
-  font-synthesis: style;
+  font-style: normal;
   color: var(--petrol-deep);
+  margin-top: 2px;
 }
 
 /* ──────────────────────────────────────────────
@@ -67,10 +62,9 @@
 .logo-xl {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  font-family: var(--font-logo);
+  gap: 4px;
+  font-family: var(--font-en);
   color: var(--sand-cream);
-  line-height: 1;
 }
 
 .logo-xl__text {
