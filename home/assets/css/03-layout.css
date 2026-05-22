@@ -83,6 +83,10 @@
 .header__nav-link:hover { color: var(--petrol-deep); }
 .header__nav-link:hover::after { width: 100%; }
 
+/* Active state (scrollspy) */
+.header__nav-link.is-active { color: var(--gold-deep); }
+.header__nav-link.is-active::after { width: 100%; }
+
 .header__cta {
   padding: 9px 16px;
   background: var(--petrol-deepest);
