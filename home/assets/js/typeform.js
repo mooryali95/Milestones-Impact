@@ -312,17 +312,14 @@
   // 🚀 Submit — Supabase أولاً، mailto كـ Fallback
   // ──────────────────────────────────────────────
   async function submitForm() {
-    // أظهر شاشة الشكر فوراً (UX)
     currentStep = stepOrder.length - 1;
     goToStep(currentStep);
 
     try {
       await sendToSupabase();
-      // نجح الإرسال لـ Supabase — لا حاجة لـ mailto
     } catch (err) {
-      console.warn('Supabase failed, falling back to mailto:', err);
-      // Fallback: نفتح الإيميل في الخلفية وتبقى شاشة الشكر
-      triggerMailto();
+      // نسجّل الخطأ فقط — لا نفتح الإيميل
+      console.error('Supabase insert failed:', err);
     }
   }
 
