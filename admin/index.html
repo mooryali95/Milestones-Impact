@@ -1048,15 +1048,16 @@ let authToken = null;
 // SUPABASE HELPERS
 // ══════════════════════════════════════════════════════
 async function supabaseQuery(path, options = {}) {
+  const { headers: optHeaders, ...restOptions } = options;
   const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     headers: {
       'apikey': SUPA_KEY,
       'Authorization': `Bearer ${authToken || SUPA_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
-      ...options.headers,
+      ...optHeaders,          // تطغى على الافتراضية
     },
-    ...options,
+    ...restOptions,
   });
   if (!res.ok) {
     const err = await res.text();

@@ -317,27 +317,34 @@
 
     try {
       await sendToSupabase();
-      // إرسال إشعار للأدمن بالبريد
+
+      // إشعار الأدمن (fire & forget)
       fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': CONFIG.supabaseKey,
-          'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
         body: JSON.stringify({
           action: 'notify',
+          name: formData.name || '—', organization: formData.organization || '—',
+          emailContact: formData.email || '—', phone: formData.phone || '—',
+          interest: formData.interest || '—', interestLabel: INTEREST_LABELS[formData.interest] || '—',
+          product: CONFIG.product, sourceUrl: window.location.href, submittedAt: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+
+      // إيميل تأكيد للمتقدم (مع حماية rate limit)
+      fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
+        body: JSON.stringify({
+          action: 'confirm',
           name: formData.name || '—',
-          organization: formData.organization || '—',
-          emailContact: formData.email || '—',
-          phone: formData.phone || '—',
+          email: formData.email || '',
+          product: CONFIG.product,
           interest: formData.interest || '—',
           interestLabel: INTEREST_LABELS[formData.interest] || '—',
-          product: CONFIG.product,
-          sourceUrl: window.location.href,
-          submittedAt: new Date().toISOString(),
         }),
-      }).catch(e => console.warn('notify failed:', e));
+      }).catch(() => {});
+
     } catch (err) {
       console.error('Supabase insert failed:', err);
     }
