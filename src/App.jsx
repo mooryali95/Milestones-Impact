@@ -1454,6 +1454,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .rpt-stat-v { font-size:1.7rem; }
   .admin-layout { grid-template-columns:300px 1fr; gap:2rem; }
 }
+`;
 
 
 // ════════════════════════════════════════════════════════════════
@@ -1549,7 +1550,7 @@ const AuthLeft = ({ title, quote, highlight, tracks }) => (
           {n:'الإنشاء',c:'#2E6B8A',w:'47%'},
           {n:'الجعل',c:'#6B4E3D',w:'13%'},
         ].map(t=>(
-          <div key={t.n} className="auth-left-track" style={{background:t.c+'22',color:t.c,border:`1px solid ${t.c}44`}}>
+          <div key={t.n} className="auth-left-track" style={{background:t.c+'22',color:t.c,border:'1px solid '+t.c+'44'}}>
             {t.n} {t.w}
           </div>
         ))}
@@ -2361,7 +2362,10 @@ export default function App() {
                                 <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
                                 {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{const val=person.strength?.[k]||0;return <div key={k} className="demo-bar-row"><div className="demo-bar-label">{label}</div><div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div><div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div></div>;})}
                                 {targets.length>0&&<div className="demo-person-chips">{targets.map(k=><span key={k} className="demo-person-chip" style={{background:"#8B691415",color:"#8B6914",border:"1px solid #8B691430"}}>{targetLabels[k]}</span>)}</div>}
-                              </div>;\n                            })}\n                          </div></>\n                      }</>}
+                              </div>;
+                            })}
+                          </div></>
+                      }</>}
                       {selectedRegTab === "history" && (() => {
                         const r = selectedReg;
                         const regDates = r.dates || {};
