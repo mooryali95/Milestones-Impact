@@ -304,12 +304,8 @@
 
   function triggerMailto() {
     lastMailtoLink = buildMailtoLink();
-    const a = document.createElement('a');
-    a.href = lastMailtoLink;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // نفتح في نافذة جديدة حتى لا تُغلق شاشة الشكر
+    window.open(lastMailtoLink, '_blank');
   }
 
   // ──────────────────────────────────────────────
@@ -325,14 +321,14 @@
       // نجح الإرسال لـ Supabase — لا حاجة لـ mailto
     } catch (err) {
       console.warn('Supabase failed, falling back to mailto:', err);
-      // Fallback تلقائي
+      // Fallback: نفتح الإيميل في الخلفية وتبقى شاشة الشكر
       triggerMailto();
     }
   }
 
   function resendEmail() {
     if (lastMailtoLink) {
-      window.location.href = lastMailtoLink;
+      window.open(lastMailtoLink, '_blank');
     } else {
       triggerMailto();
     }
