@@ -708,6 +708,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
    MATRIX — Mobile First
 ════════════════════════════════════════ */
 .mx-wrap { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--border); background: var(--bg-card); }
+.mx-col-headers { display: none; }
 .mx-track-header { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); }
 .mx-track-icon { font-size: 1.1rem; }
 .mx-track-name { font-family: 'Amiri', serif; font-size: 1rem; font-weight: 700; }
@@ -1157,63 +1158,147 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .ctx-bar-track { height:6px; }
   .ctx-pct { font-size:0.78rem; }
 
-  /* ── Matrix — Classic Table Layout ── */
+  /* ════════════════════════════════════════
+     MATRIX — Desktop Table Layout
+     5-column grid: [track header] + [4 cells]
+     Each track-section uses display:contents
+     to place header & cells directly in parent grid
+  ════════════════════════════════════════ */
+
+  /* Column headers row */
+  .mx-col-headers {
+    display: grid;
+    grid-template-columns: 200px repeat(4, 1fr);
+    background: var(--bg-card);
+    border-bottom: 2px solid var(--border);
+    position: sticky;
+    top: 60px;
+    z-index: 10;
+  }
+  .mx-col-header-empty {
+    background: var(--mi-dd);
+    padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .mx-col-header-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .mx-col-header-mi {
+    font-family: 'Amiri', serif;
+    font-size: 0.88rem;
+    color: rgba(255,255,255,0.9);
+    font-weight: 700;
+  }
+  .mx-phase-header {
+    padding: 0.65rem 0.75rem;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: var(--bg-card);
+  }
+  .mx-phase-num {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 0.12rem;
+  }
+  .mx-phase-name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .mx-phase-group {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+  }
+  .mx-phase-header.current { border-bottom: 2px solid #8B6914; }
+  .mx-phase-header.new { border-bottom: 2px solid #2E6B8A; }
+
+  /* Main wrap becomes 5-col grid */
   .mx-wrap {
     display: grid;
-    grid-template-columns: 140px 1fr;
-    border-radius: var(--r-lg);
-    overflow: hidden;
+    grid-template-columns: 200px repeat(4, 1fr);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    overflow: visible;
+    border: 1px solid var(--border);
+    border-top: none;
+    background: var(--border);
+    gap: 1px;
   }
+
+  /* Each track section = display:contents to flow into parent grid */
   .mx-track-section {
     display: contents;
   }
+
+  /* Track header — occupies column 1 */
   .mx-track-header {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    padding: 1rem 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    min-height: 120px;
-    position: sticky;
-    right: 0;
-  }
-  .mx-track-icon { font-size:1.3rem; margin-bottom:0.3rem; }
-  .mx-track-name { font-size:1rem; font-weight:700; margin-bottom:0.2rem; }
-  .mx-track-weight {
-    font-size:0.72rem; font-weight:700; padding:0.18rem 0.5rem;
-    border-radius:20px; color:#fff; background:rgba(0,0,0,0.25)!important;
-    margin-right:0; margin-top:0.3rem;
-  }
-  .mx-track-desc { font-size:0.67rem; opacity:0.65; margin-top:0.25rem; }
-  .mx-cells-grid {
-    grid-template-columns: repeat(4,1fr);
-    gap: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .cell {
-    min-height: 120px;
-    padding: 0.9rem;
-    border-left: 1px solid var(--border);
+    padding: 1rem 1.1rem;
+    gap: 0.2rem;
     border-bottom: none;
-    border-radius:0;
+    min-height: 130px;
+    position: relative;
+  }
+  .mx-track-icon { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  .mx-track-name { font-size: 1rem; font-weight: 700; line-height: 1.2; }
+  .mx-track-weight {
+    font-size: 0.68rem; font-weight: 700; padding: 0.16rem 0.5rem;
+    border-radius: 20px; color: #fff; background: rgba(0,0,0,0.28) !important;
+    margin-right: 0; margin-top: 0.2rem; letter-spacing: 0.3px;
+  }
+  .mx-track-desc { font-size: 0.65rem; opacity: 0.7; margin-top: 0.1rem; line-height: 1.4; }
+
+  /* Cells grid — removed, cells flow directly */
+  .mx-cells-grid {
+    display: contents;
+  }
+
+  /* Cell — occupies one column in row */
+  .cell {
+    background: var(--bg-card);
+    min-height: 130px;
+    padding: 0.9rem 1rem;
+    border-radius: 0;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     transition: background 0.15s, box-shadow 0.15s;
+    position: relative;
   }
   .cell:hover {
-    background: rgba(107,157,173,0.06);
-    box-shadow: inset 0 0 0 1.5px var(--mi);
-    z-index:1;
-    position:relative;
-  }
-  .cell.highlighted {
-    background: rgba(107,157,173,0.08);
+    background: rgba(107,157,173,0.07);
     box-shadow: inset 0 0 0 2px var(--mi);
+    z-index: 2;
   }
-  .cell.done:hover { background: rgba(74,122,58,0.07); }
-  .cell-accent { height:3px; width:100%; top:0; left:0; right:0; }
-  .cell-name { font-size:0.87rem; line-height:1.4; }
-  .cell-dur { font-size:0.68rem; }
-  .cell-date { font-size:0.7rem; }
+  .cell.done { background: rgba(74,122,58,0.04); }
+  .cell.done:hover { background: rgba(74,122,58,0.08); }
+  .cell.dated { background: rgba(139,105,20,0.03); }
+  .cell.highlighted {
+    background: rgba(107,157,173,0.1);
+    box-shadow: inset 0 0 0 2px var(--mi);
+    z-index: 2;
+  }
+  .cell-accent { height: 3px; width: 100%; top: 0; left: 0; right: 0; }
+  .cell-num { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); background: var(--bg-deep); border-radius: 4px; padding: 0.12rem 0.35rem; }
+  .cell-name { font-size: 0.88rem; line-height: 1.45; font-weight: 700; color: var(--text); }
+  .cell-dur { font-size: 0.68rem; padding: 0.12rem 0.35rem; }
+  .cell-date { font-size: 0.72rem; font-weight: 700; }
 
   /* ── Smart Box ── */
   .smart-box { padding:1.1rem 1.4rem; margin-top:1rem; }
@@ -1355,10 +1440,12 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 @media(min-width:1440px){
   .nav { padding:0 3.5rem; }
   .sec { max-width:1440px; padding:2rem 3.5rem 2.5rem; }
-  .cell { min-height:128px; padding:1rem; }
-  .cell-name { font-size:0.9rem; }
-  .mx-track-header { min-height:128px; padding:1.2rem 1.2rem; }
-  .mx-track-name { font-size:1.1rem; }
+  .mx-wrap { grid-template-columns: 220px repeat(4, 1fr); }
+  .mx-col-headers { grid-template-columns: 220px repeat(4, 1fr); }
+  .cell { min-height:140px; padding:1.1rem; }
+  .cell-name { font-size:0.92rem; }
+  .mx-track-header { min-height:140px; padding:1.2rem; }
+  .mx-track-name { font-size:1.05rem; }
   .modal { max-width:660px; }
   .reg-modal { max-width:1000px; }
   .demo-screen { max-width:780px; }
@@ -2472,7 +2559,24 @@ export default function App() {
           {submitted && <span style={{fontSize:".75rem",color:"var(--ok)",fontWeight:700,marginRight:"auto"}}>🔒 مكتملة</span>}
         </div>
 
-        {/* المصفوفة — Mobile First */}
+        {/* المصفوفة — Mobile First / Desktop Table */}
+        {/* Column headers — desktop only */}
+        <div className="mx-col-headers">
+          <div className="mx-col-header-empty">
+            <div>
+              <div className="mx-col-header-label">المحاور</div>
+              <div className="mx-col-header-mi">مصفوفة التأثير</div>
+            </div>
+          </div>
+          {PHASES.map(ph => (
+            <div key={ph.id} className={`mx-phase-header ${ph.group}`}>
+              <div className="mx-phase-num">المرحلة {ph.id}</div>
+              <div className="mx-phase-name">{ph.nameAr}</div>
+              <div className="mx-phase-group">{ph.groupAr}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="mx-wrap">
           {TRACKS.map(tr => (
             <div key={tr.id} className="mx-track-section">
