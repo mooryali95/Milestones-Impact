@@ -3,11 +3,18 @@
   X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Permissions-Policy: geolocation=(), microphone=(), camera=()*
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
-# Static assets — long cache
-/assets/*
+# JS files — short cache to allow updates
+/assets/js/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+# Static assets (images, fonts) — long cache
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/img/*
   Cache-Control: public, max-age=31536000, immutable
 
 # HTML — no cache (always fresh)
