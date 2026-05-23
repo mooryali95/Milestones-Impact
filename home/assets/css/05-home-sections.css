@@ -109,12 +109,12 @@
 }
 
 .hero__title {
-  font-size: clamp(38px, 10vw, 92px);
+  font-size: clamp(36px, 9vw, 78px);
   font-weight: 800;
-  line-height: 1.04;
+  line-height: 1.05;
   color: var(--petrol-deepest);
-  letter-spacing: -0.03em;
-  margin-bottom: 24px;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
 }
 .hero__title em {
   font-family: var(--font-en);
@@ -122,8 +122,9 @@
   font-weight: 500;
   color: var(--gold-deep);
 }
+@media (min-width: 640px) { .hero__title { margin-bottom: 24px; } }
 @media (min-width: 1024px) {
-  .hero__title { font-size: clamp(56px, 7vw, 96px); }
+  .hero__title { font-size: clamp(56px, 7vw, 88px); }
 }
 
 .hero__divider {
@@ -146,27 +147,25 @@
 }
 
 .hero__subtitle {
-  font-size: 17px;
-  line-height: 1.7;
-  color: var(--ink-soft);
-  max-width: 620px;
-  margin-bottom: 16px;
-  font-weight: 400;
-}
-@media (min-width: 640px) {
-  .hero__subtitle { font-size: 19px; line-height: 1.75; margin-bottom: 18px; }
+  font-size: clamp(18px, 4vw, 28px);
+  font-weight: 500;
+  color: var(--petrol-deep);
+  margin-bottom: 20px;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
 }
 .hero__subtitle strong {
-  color: var(--petrol-deep);
-  font-weight: 700;
+  font-weight: 800;
+  color: var(--gold-deep);
 }
+@media (min-width: 640px) { .hero__subtitle { margin-bottom: 28px; } }
 
 .hero__tagline {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 15px;
   color: var(--gold-deep);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   margin-bottom: 40px;
 }
 @media (min-width: 640px) {

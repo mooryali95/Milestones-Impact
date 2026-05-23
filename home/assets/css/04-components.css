@@ -6,7 +6,6 @@
 
 /* ──────────────────────────────────────────────
    🪪 LOGO — Default Size (Header & Footer)
-   Cormorant Garamond | Horizontal layout | impact bold
    ────────────────────────────────────────────── */
 .logo {
   display: flex;
@@ -15,12 +14,6 @@
   font-family: var(--font-en);
   letter-spacing: -0.01em;
   color: var(--petrol-deepest);
-}
-
-.logo__text {
-  display: flex;
-  flex-direction: column;
-  line-height: 0.95;
 }
 
 .logo__diamond {
@@ -33,6 +26,12 @@
 }
 @media (min-width: 640px) {
   .logo__diamond { width: 7px; height: 7px; margin-left: 4px; }
+}
+
+.logo__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 0.95;
 }
 
 .logo__milestone,
@@ -57,7 +56,8 @@
 }
 
 /* ──────────────────────────────────────────────
-   🪪 LOGO XL — Large Display Version (Dark backgrounds)
+   🪪 LOGO XL — Large Display Version
+   (Used in "Milestone Reimagined" section)
    ────────────────────────────────────────────── */
 .logo-xl {
   display: inline-flex;
@@ -67,49 +67,42 @@
   color: var(--sand-cream);
 }
 
-.logo-xl__text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 0.95;
-}
-
 .logo-xl__diamond {
   width: 10px;
   height: 10px;
   background: var(--gold);
   transform: rotate(45deg);
-  box-shadow: 0 0 18px rgba(200, 164, 92, 0.55);
-  align-self: center;
-  margin: 3px 0;
-  flex-shrink: 0;
+  margin-left: 6px;
+  box-shadow: 0 0 20px rgba(200, 164, 92, 0.6);
 }
-@media (min-width: 640px) {
-  .logo-xl__diamond { width: 12px; height: 12px; margin: 4px 0; }
+
+.logo-xl__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 0.92;
 }
 
 .logo-xl__milestone {
-  font-size: 32px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 400;
   font-style: normal;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--sand-cream);
-  line-height: 1;
 }
 
 .logo-xl__impact {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 600;
-  font-style: italic;
-  font-synthesis: style;
-  letter-spacing: -0.01em;
+  font-style: normal;
+  letter-spacing: -0.02em;
   color: var(--gold-light);
-  line-height: 1;
+  margin-top: 3px;
 }
 
 @media (min-width: 640px) {
   .logo-xl__milestone,
-  .logo-xl__impact { font-size: 44px; }
+  .logo-xl__impact { font-size: 36px; }
+  .logo-xl__diamond { width: 12px; height: 12px; margin-left: 8px; }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -203,9 +196,9 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--gold-deep);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   margin-bottom: 16px;
 }
 @media (min-width: 640px) {
