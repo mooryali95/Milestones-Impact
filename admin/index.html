@@ -807,23 +807,45 @@
     </div>
   </div>
 
-  <!-- Right panel — Form -->
+  <!-- Right panel — OTP Form -->
   <div class="login-right">
     <div class="login-form-wrap">
-      <div class="login-form-title">مرحباً بك</div>
-      <div class="login-form-sub">سجّل دخولك للوصول إلى لوحة الإدارة</div>
 
-      <div class="form-group">
-        <label class="form-label" for="loginEmail">البريد الإلكتروني</label>
-        <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="loginPass">كلمة المرور</label>
-        <input class="form-input" type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
+      <!-- Step 1: Email -->
+      <div id="loginStepEmail">
+        <div class="login-form-title">مرحباً بك</div>
+        <div class="login-form-sub">أدخل بريدك الإلكتروني لاستلام رمز الدخول</div>
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">البريد الإلكتروني</label>
+          <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
+        </div>
+        <button class="login-btn" id="loginBtnSend" onclick="handleSendOtp()">إرسال رمز الدخول</button>
+        <div class="login-error" id="loginError"></div>
       </div>
 
-      <button class="login-btn" id="loginBtn" onclick="handleLogin()">دخول</button>
-      <div class="login-error" id="loginError"></div>
+      <!-- Step 2: OTP -->
+      <div id="loginStepOtp" style="display:none">
+        <div class="login-form-title">تحقق من بريدك</div>
+        <div class="login-form-sub" id="loginOtpSub">أرسلنا رمزاً مكوّناً من 6 أرقام إلى بريدك</div>
+        <div class="form-group">
+          <label class="form-label" for="loginOtp">رمز التحقق</label>
+          <input class="form-input" type="text" id="loginOtp"
+            placeholder="• • • • • •"
+            maxlength="6"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            style="letter-spacing:8px;font-size:1.4rem;text-align:center;direction:ltr" />
+        </div>
+        <button class="login-btn" id="loginBtnVerify" onclick="handleVerifyOtp()">تأكيد الدخول</button>
+        <div class="login-error" id="loginErrorOtp"></div>
+        <div style="text-align:center;margin-top:14px">
+          <button onclick="handleBackToEmail()"
+            style="background:none;border:none;color:var(--petrol);font-size:0.85rem;cursor:pointer;text-decoration:underline;font-family:inherit">
+            ← تغيير البريد الإلكتروني
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -999,25 +1021,11 @@ let authToken = null;
 // ══════════════════════════════════════════════════════
 // SUPABASE HELPERS
 // ══════════════════════════════════════════════════════
-async function supabaseAuth(email, password) {
-  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPA_KEY,
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.msg || 'خطأ في تسجيل الدخول');
-  return data;
-}
-
 async function supabaseQuery(path, options = {}) {
   const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     headers: {
       'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${authToken}`,
+      'Authorization': `Bearer ${authToken || SUPA_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
       ...options.headers,
@@ -1033,66 +1041,137 @@ async function supabaseQuery(path, options = {}) {
 }
 
 // ══════════════════════════════════════════════════════
-// LOGIN
+// OTP LOGIN — Step 1: Send
 // ══════════════════════════════════════════════════════
-async function handleLogin() {
+async function handleSendOtp() {
   const email = document.getElementById('loginEmail').value.trim();
-  const pass  = document.getElementById('loginPass').value;
-  const btn   = document.getElementById('loginBtn');
+  const btn   = document.getElementById('loginBtnSend');
   const err   = document.getElementById('loginError');
 
   err.classList.remove('show');
-  if (!email || !pass) { showLoginError('يرجى إدخال البريد وكلمة المرور'); return; }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showLoginError('loginError', 'يرجى إدخال بريد إلكتروني صحيح');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'جارٍ الإرسال...';
+
+  try {
+    // تحقق أن البريد موجود في admin_users أولاً
+    const admins = await supabaseQuery(
+      `admin_users?select=id,name,role_id,is_active&email=eq.${encodeURIComponent(email)}&limit=1`
+    );
+    if (!admins || admins.length === 0 || !admins[0].is_active) {
+      throw new Error('هذا البريد غير مسجّل في لوحة الإدارة');
+    }
+
+    // إرسال OTP عبر Edge Function
+    const res = await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
+      body: JSON.stringify({ action: 'send', email }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'فشل الإرسال');
+
+    // الانتقال لخطوة OTP
+    document.getElementById('loginStepEmail').style.display = 'none';
+    document.getElementById('loginStepOtp').style.display = 'block';
+    document.getElementById('loginOtpSub').textContent = `أرسلنا رمزاً من 6 أرقام إلى ${email}`;
+    setTimeout(() => document.getElementById('loginOtp').focus(), 100);
+
+  } catch (e) {
+    showLoginError('loginError', e.message || 'حدث خطأ، حاول مجدداً');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'إرسال رمز الدخول';
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// OTP LOGIN — Step 2: Verify
+// ══════════════════════════════════════════════════════
+async function handleVerifyOtp() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const otp   = document.getElementById('loginOtp').value.trim();
+  const btn   = document.getElementById('loginBtnVerify');
+
+  document.getElementById('loginErrorOtp').classList.remove('show');
+  if (otp.length !== 6) {
+    showLoginError('loginErrorOtp', 'الرمز يجب أن يكون 6 أرقام');
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = 'جارٍ التحقق...';
 
   try {
-    const data = await supabaseAuth(email, pass);
-    authToken = data.access_token;
+    // التحقق من OTP
+    const res = await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
+      body: JSON.stringify({ action: 'verify', email, otp }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'رمز التحقق غير صحيح أو منتهي');
 
-    // التحقق من أن المستخدم admin
-    const adminUser = await supabaseQuery(
-      `admin_users?select=id,name,role_id,is_active&id=eq.${data.user.id}&limit=1`
+    // جلب بيانات الأدمن
+    const admins = await supabaseQuery(
+      `admin_users?select=id,name,role_id,is_active&email=eq.${encodeURIComponent(email)}&limit=1`
     );
+    if (!admins || admins.length === 0) throw new Error('حدث خطأ في جلب بيانات المستخدم');
 
-    if (!adminUser || adminUser.length === 0 || !adminUser[0].is_active) {
-      throw new Error('ليس لديك صلاحية الوصول للوحة الإدارة');
-    }
+    const u = admins[0];
+    authToken = SUPA_KEY; // نستخدم anon key للقراءة بعد التحقق
+    Session.save(SUPA_KEY, { id: u.id, name: u.name, role: u.role_id, email });
 
-    const u = adminUser[0];
-    Session.save(data.access_token, { id: u.id, name: u.name, role: u.role_id, email });
-
-    // تسجيل الدخول في Audit Log
+    // تسجيل في Audit Log
     try {
       await supabaseQuery('admin_audit_log', {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ user_id: u.id, user_email: email, action: 'login', meta: { role: u.role_id } }),
+        body: JSON.stringify({ user_id: u.id, user_email: email, action: 'login_otp', meta: { role: u.role_id } }),
       });
     } catch {}
 
     showDashboard(u, email);
 
   } catch (e) {
-    showLoginError(e.message || 'خطأ في تسجيل الدخول');
+    showLoginError('loginErrorOtp', e.message || 'حدث خطأ، حاول مجدداً');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'دخول';
+    btn.textContent = 'تأكيد الدخول';
   }
 }
 
-function showLoginError(msg) {
-  const el = document.getElementById('loginError');
+// ══════════════════════════════════════════════════════
+// OTP LOGIN — Back to email step
+// ══════════════════════════════════════════════════════
+function handleBackToEmail() {
+  document.getElementById('loginStepOtp').style.display = 'none';
+  document.getElementById('loginStepEmail').style.display = 'block';
+  document.getElementById('loginOtp').value = '';
+  document.getElementById('loginErrorOtp').classList.remove('show');
+}
+
+function showLoginError(id, msg) {
+  const el = document.getElementById(id);
   el.textContent = msg;
   el.classList.add('show');
 }
 
-// Enter key on login
+// Enter key
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('screen-login').style.display !== 'none') {
-    handleLogin();
+  if (e.key !== 'Enter') return;
+  const loginVisible = document.getElementById('screen-login').style.display !== 'none';
+  if (!loginVisible) return;
+  if (document.getElementById('loginStepOtp').style.display !== 'none') {
+    handleVerifyOtp();
+  } else {
+    handleSendOtp();
   }
+});
 });
 
 // ══════════════════════════════════════════════════════
@@ -1102,7 +1181,7 @@ document.addEventListener('keydown', e => {
   const session = Session.load();
   if (session) {
     authToken = session.token;
-    // التحقق السريع إن كان التوكن لا يزال صالحاً
+    // تحقق سريع أن المستخدم لا يزال في admin_users
     supabaseQuery(`admin_users?select=id,name,role_id&id=eq.${session.user.id}&limit=1`)
       .then(rows => {
         if (rows && rows.length > 0) {
@@ -1136,7 +1215,10 @@ function handleLogout() {
   filteredData = [];
   document.getElementById('screen-dashboard').style.display = 'none';
   document.getElementById('screen-login').style.display = 'grid';
-  document.getElementById('loginPass').value = '';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginOtp').value = '';
+  document.getElementById('loginStepEmail').style.display = 'block';
+  document.getElementById('loginStepOtp').style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════
