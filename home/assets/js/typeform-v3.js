@@ -317,8 +317,28 @@
 
     try {
       await sendToSupabase();
+      // إرسال إشعار للأدمن بالبريد
+      fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': CONFIG.supabaseKey,
+          'Authorization': `Bearer ${CONFIG.supabaseKey}`,
+        },
+        body: JSON.stringify({
+          action: 'notify',
+          name: formData.name || '—',
+          organization: formData.organization || '—',
+          emailContact: formData.email || '—',
+          phone: formData.phone || '—',
+          interest: formData.interest || '—',
+          interestLabel: INTEREST_LABELS[formData.interest] || '—',
+          product: CONFIG.product,
+          sourceUrl: window.location.href,
+          submittedAt: new Date().toISOString(),
+        }),
+      }).catch(e => console.warn('notify failed:', e));
     } catch (err) {
-      // نسجّل الخطأ فقط — لا نفتح الإيميل
       console.error('Supabase insert failed:', err);
     }
   }
