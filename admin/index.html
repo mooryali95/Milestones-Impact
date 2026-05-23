@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>لوحة الإدارة — Milestone Impact</title>
+  <meta name="robots" content="noindex, nofollow" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ══ TOKENS ══ */
+    :root {
+      --petrol:     #061E2C;
+      --petrol-mid: #0A2A3D;
+      --petrol-s:   #14495E;
+      --gold:       #C8A45C;
+      --gold-deep:  #A8862E;
+      --gold-pale:  #EBD9B4;
+      --sand:       #F2EBD9;
+      --sand-light: #F7F2E5;
+      --off-white:  #FDFCF8;
+      --ink:        #0A1820;
+      --ink-mid:    #4A5A66;
+      --ink-light:  #7A8A94;
+      --ink-faint:  #C8D0D6;
+      --line:       rgba(10,42,61,0.08);
+      --line-gold:  rgba(200,164,92,0.20);
+      --font-ar:    'Tajawal', sans-serif;
+      --font-en:    'Cormorant Garamond', serif;
+      --ease:       cubic-bezier(0.22,0.61,0.36,1);
+
+      /* status colors */
+      --c-new:      #2E6B8A;
+      --c-read:     #5B7B3A;
+      --c-replied:  #8B6914;
+      --c-archived: #6B4E3D;
+    }
+
+    /* ══ RESET ══ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font-ar);
+      background: var(--off-white);
+      color: var(--ink);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    input, select, textarea { font-family: inherit; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ══ SCROLLBAR ══ */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--ink-faint); border-radius: 99px; }
+
+    /* ══════════════════════════════════════════
+       LOGIN SCREEN
+    ══════════════════════════════════════════ */
+    #screen-login {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width: 768px) { #screen-login { grid-template-columns: 1fr; } }
+
+    .login-left {
+      background: var(--petrol);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    @media (max-width: 768px) { .login-left { display: none; } }
+
+    .login-left::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 80%, rgba(200,164,92,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 20%, rgba(20,73,94,0.6) 0%, transparent 60%);
+    }
+
+    .login-left-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(200,164,92,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(200,164,92,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .login-left-top { position: relative; z-index: 1; }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--font-en);
+      color: var(--sand);
+    }
+    .login-logo-text { display: flex; flex-direction: column; line-height: 0.95; }
+    .login-logo span { font-size: 20px; letter-spacing: -0.02em; }
+    .login-logo span:last-child { font-weight: 600; color: var(--gold); }
+    .login-logo-diamond {
+      width: 6px; height: 6px;
+      background: var(--gold);
+      transform: rotate(45deg);
+      margin-right: 4px;
+      box-shadow: 0 0 12px rgba(200,164,92,0.5);
+    }
+
+    .login-left-bottom { position: relative; z-index: 1; }
+
+    .login-tagline {
+      font-family: var(--font-en);
+      font-size: 2.4rem;
+      color: var(--sand);
+      line-height: 1.2;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+    .login-tagline em {
+      font-style: italic;
+      color: var(--gold);
+    }
+
+    .login-systems {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .login-system-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid rgba(200,164,92,0.15);
+      border-radius: 8px;
+      background: rgba(200,164,92,0.05);
+    }
+    .login-system-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--gold);
+      opacity: 0.6;
+    }
+    .login-system-dot.active { opacity: 1; box-shadow: 0 0 8px var(--gold); }
+    .login-system-name { font-size: 0.85rem; color: var(--gold-pale); }
+    .login-system-badge {
+      margin-right: auto;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(200,164,92,0.15);
+      color: var(--gold);
+    }
+
+    /* Login Right */
+    .login-right {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 40px;
+      background: var(--off-white);
+    }
+
+    .login-form-wrap {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-form-title {
+      font-family: var(--font-en);
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: var(--petrol);
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+    .login-form-sub {
+      font-size: 0.88rem;
+      color: var(--ink-mid);
+      margin-bottom: 36px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--ink-mid);
+      margin-bottom: 7px;
+      letter-spacing: 0.02em;
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1.5px solid var(--ink-faint);
+      border-radius: 10px;
+      background: white;
+      font-size: 0.95rem;
+      color: var(--ink);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      direction: ltr;
+      text-align: right;
+    }
+    .form-input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(200,164,92,0.12);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--petrol);
+      color: var(--sand);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      margin-top: 8px;
+      transition: background 0.2s, transform 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .login-btn:hover { background: var(--petrol-s); transform: translateY(-1px); }
+    .login-btn:active { transform: translateY(0); }
+    .login-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .login-error {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: rgba(180,40,40,0.07);
+      border: 1px solid rgba(180,40,40,0.2);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #B42828;
+      display: none;
+    }
+    .login-error.show { display: block; }
+
+    /* ══════════════════════════════════════════
+       DASHBOARD SCREEN
+    ══════════════════════════════════════════ */
+    #screen-dashboard { display: none; min-height: 100vh; }
+
+    /* Header */
+    .dash-header {
+      background: var(--petrol);
+      padding: 0 32px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 20px rgba(6,30,44,0.15);
+    }
+
+    .dash-header-logo {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-family: var(--font-en);
+      color: var(--sand);
+    }
+    .dash-header-logo-text { display: flex; flex-direction: column; line-height: 0.95; }
+    .dash-header-logo span { font-size: 15px; letter-spacing: -0.02em; }
+    .dash-header-logo span:last-child { font-weight: 600; color: var(--gold); }
+    .dash-header-logo-diamond {
+      width: 5px; height: 5px;
+      background: var(--gold);
+      transform: rotate(45deg);
+      margin-right: 4px;
+    }
+    .dash-header-badge {
+      margin-right: 12px;
+      font-size: 0.7rem;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: rgba(200,164,92,0.15);
+      color: var(--gold);
+      font-family: var(--font-ar);
+      font-weight: 500;
+      letter-spacing: 0.03em;
+    }
+
+    .dash-header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .dash-user-info {
+      text-align: left;
+    }
+    .dash-user-name {
+      font-size: 0.85rem;
+      color: var(--sand);
+      font-weight: 500;
+    }
+    .dash-user-role {
+      font-size: 0.72rem;
+      color: var(--gold);
+    }
+    .dash-logout-btn {
+      padding: 7px 14px;
+      border: 1px solid rgba(200,164,92,0.25);
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--gold-pale);
+      transition: all 0.2s;
+    }
+    .dash-logout-btn:hover {
+      background: rgba(200,164,92,0.1);
+      color: var(--gold);
+    }
+
+    /* Main Layout */
+    .dash-body {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 32px;
+    }
+    @media (max-width: 768px) { .dash-body { padding: 20px 16px; } }
+
+    /* Page Title */
+    .dash-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .dash-title {
+      font-family: var(--font-en);
+      font-size: 1.7rem;
+      color: var(--petrol);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .dash-title-sub {
+      font-size: 0.85rem;
+      color: var(--ink-light);
+    }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 900px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(6,30,44,0.07); }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 60px; height: 60px;
+      border-radius: 0 14px 0 60px;
+      opacity: 0.06;
+    }
+    .stat-card.s-total::before  { background: var(--petrol-s); }
+    .stat-card.s-new::before    { background: var(--c-new); }
+    .stat-card.s-replied::before { background: var(--c-replied); }
+    .stat-card.s-archived::before{ background: var(--c-archived); }
+
+    .stat-label {
+      font-size: 0.78rem;
+      color: var(--ink-light);
+      font-weight: 500;
+      margin-bottom: 10px;
+      letter-spacing: 0.03em;
+    }
+    .stat-value {
+      font-family: var(--font-en);
+      font-size: 2.4rem;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--petrol);
+      margin-bottom: 6px;
+    }
+    .stat-value.s-new    { color: var(--c-new); }
+    .stat-value.s-replied{ color: var(--c-replied); }
+    .stat-value.s-archived{color: var(--c-archived); }
+    .stat-sub {
+      font-size: 0.75rem;
+      color: var(--ink-faint);
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+    }
+    .search-wrap svg {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-light);
+      pointer-events: none;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 38px 10px 16px;
+      border: 1.5px solid var(--ink-faint);
+      border-radius: 10px;
+      background: white;
+      font-size: 0.88rem;
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--gold); }
+
+    .filter-select {
+      padding: 10px 14px;
+      border: 1.5px solid var(--ink-faint);
+      border-radius: 10px;
+      background: white;
+      font-size: 0.85rem;
+      color: var(--ink-mid);
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .filter-select:focus { border-color: var(--gold); }
+
+    .refresh-btn {
+      padding: 10px 16px;
+      border: 1.5px solid var(--line-gold);
+      border-radius: 10px;
+      background: white;
+      font-size: 0.85rem;
+      color: var(--gold-deep);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { background: rgba(200,164,92,0.06); }
+
+    /* Table */
+    .table-wrap {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 16px rgba(6,30,44,0.04);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table th {
+      background: var(--sand-light);
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--ink-mid);
+      text-align: right;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 14px 16px;
+      font-size: 0.88rem;
+      color: var(--ink);
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tbody tr {
+      transition: background 0.15s;
+      cursor: pointer;
+    }
+    .data-table tbody tr:hover { background: var(--sand-light); }
+
+    /* Status Badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .status-badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+    }
+    .status-badge.new      { background: rgba(46,107,138,0.1);  color: var(--c-new);      }
+    .status-badge.new::before      { background: var(--c-new); }
+    .status-badge.read     { background: rgba(91,123,58,0.1);   color: var(--c-read);     }
+    .status-badge.read::before     { background: var(--c-read); }
+    .status-badge.replied  { background: rgba(139,105,20,0.1);  color: var(--c-replied);  }
+    .status-badge.replied::before  { background: var(--c-replied); }
+    .status-badge.archived { background: rgba(107,78,61,0.12);  color: var(--c-archived); }
+    .status-badge.archived::before { background: var(--c-archived); }
+
+    /* Source Badge */
+    .source-badge {
+      font-size: 0.72rem;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .source-badge.home    { background: rgba(20,73,94,0.08);  color: var(--petrol-s); }
+    .source-badge.leaders { background: rgba(200,164,92,0.12); color: var(--gold-deep); }
+
+    /* Interest Badge */
+    .interest-badge {
+      font-size: 0.78rem;
+      color: var(--ink-mid);
+      padding: 3px 8px;
+      background: var(--sand-light);
+      border-radius: 6px;
+    }
+
+    /* Copy btn */
+    .copy-btn {
+      font-size: 0.75rem;
+      color: var(--ink-light);
+      padding: 3px 8px;
+      border-radius: 6px;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+    .copy-btn:hover {
+      color: var(--petrol);
+      background: var(--sand-light);
+      border-color: var(--line);
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--ink-light);
+    }
+    .empty-state-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* Loading */
+    .loading-row td {
+      text-align: center;
+      padding: 48px;
+      color: var(--ink-light);
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid var(--ink-faint);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ DETAIL DRAWER ══ */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6,30,44,0.45);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      backdrop-filter: blur(2px);
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+    .drawer {
+      position: fixed;
+      top: 0; left: 0;
+      width: min(480px, 100vw);
+      height: 100vh;
+      background: white;
+      z-index: 201;
+      overflow-y: auto;
+      transform: translateX(-100%);
+      transition: transform 0.3s var(--ease);
+      display: flex;
+      flex-direction: column;
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 24px 24px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 1;
+    }
+    .drawer-title { font-size: 1rem; font-weight: 600; color: var(--petrol); }
+    .drawer-close {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ink-light);
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .drawer-close:hover { background: var(--sand-light); color: var(--ink); }
+
+    .drawer-body { padding: 24px; flex: 1; }
+
+    .detail-section { margin-bottom: 24px; }
+    .detail-section-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--ink-light);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+      font-size: 0.88rem;
+    }
+    .detail-key { color: var(--ink-light); flex-shrink: 0; }
+    .detail-val { color: var(--ink); text-align: left; word-break: break-all; }
+
+    .context-box {
+      background: var(--sand-light);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 0.88rem;
+      color: var(--ink-mid);
+      line-height: 1.7;
+      margin-top: 8px;
+    }
+
+    /* Status changer */
+    .status-changer {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .status-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      border: 1.5px solid transparent;
+      transition: all 0.2s;
+    }
+    .status-btn.new      { border-color: rgba(46,107,138,0.3); color: var(--c-new); }
+    .status-btn.new:hover, .status-btn.new.active { background: rgba(46,107,138,0.1); border-color: var(--c-new); }
+    .status-btn.read     { border-color: rgba(91,123,58,0.3); color: var(--c-read); }
+    .status-btn.read:hover, .status-btn.read.active { background: rgba(91,123,58,0.1); border-color: var(--c-read); }
+    .status-btn.replied  { border-color: rgba(139,105,20,0.3); color: var(--c-replied); }
+    .status-btn.replied:hover, .status-btn.replied.active { background: rgba(139,105,20,0.1); border-color: var(--c-replied); }
+    .status-btn.archived { border-color: rgba(107,78,61,0.3); color: var(--c-archived); }
+    .status-btn.archived:hover, .status-btn.archived.active { background: rgba(107,78,61,0.12); border-color: var(--c-archived); }
+
+    .reply-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px;
+      background: var(--petrol);
+      color: var(--sand);
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      margin-top: 20px;
+      transition: background 0.2s;
+    }
+    .reply-btn:hover { background: var(--petrol-s); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--petrol);
+      color: var(--sand);
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      z-index: 999;
+      transition: transform 0.3s var(--ease);
+      box-shadow: 0 8px 24px rgba(6,30,44,0.2);
+      white-space: nowrap;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Pagination */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-top: 1px solid var(--line);
+      background: white;
+      font-size: 0.82rem;
+      color: var(--ink-mid);
+    }
+    .page-btns { display: flex; gap: 6px; }
+    .page-btn {
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      border: 1px solid var(--ink-faint);
+      color: var(--ink-mid);
+      transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold-deep); }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-btn.active { background: var(--petrol); color: var(--sand); border-color: var(--petrol); }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════════ -->
+<div id="screen-login">
+  <!-- Left panel -->
+  <div class="login-left">
+    <div class="login-left-grid"></div>
+    <div class="login-left-top">
+      <div class="login-logo">
+        <div class="login-logo-text">
+          <span>Milestone</span>
+          <span>Impact</span>
+        </div>
+        <div class="login-logo-diamond"></div>
+      </div>
+    </div>
+    <div class="login-left-bottom">
+      <div class="login-tagline">
+        لوحة الإدارة<br/>
+        <em>الموحّدة</em>
+      </div>
+      <div class="login-systems">
+        <div class="login-system-item">
+          <div class="login-system-dot active"></div>
+          <span class="login-system-name">Milestone Impact — MI</span>
+          <span class="login-system-badge">نشط</span>
+        </div>
+        <div class="login-system-item">
+          <div class="login-system-dot"></div>
+          <span class="login-system-name">Raqeeb — رقيب</span>
+          <span class="login-system-badge" style="opacity:0.5">قريباً</span>
+        </div>
+        <div class="login-system-item">
+          <div class="login-system-dot"></div>
+          <span class="login-system-name">Sila — صلة</span>
+          <span class="login-system-badge" style="opacity:0.5">قريباً</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel — Form -->
+  <div class="login-right">
+    <div class="login-form-wrap">
+      <div class="login-form-title">مرحباً بك</div>
+      <div class="login-form-sub">سجّل دخولك للوصول إلى لوحة الإدارة</div>
+
+      <div class="form-group">
+        <label class="form-label" for="loginEmail">البريد الإلكتروني</label>
+        <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPass">كلمة المرور</label>
+        <input class="form-input" type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+
+      <button class="login-btn" id="loginBtn" onclick="handleLogin()">دخول</button>
+      <div class="login-error" id="loginError"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     DASHBOARD SCREEN
+══════════════════════════════════════════ -->
+<div id="screen-dashboard">
+  <!-- Header -->
+  <header class="dash-header">
+    <div style="display:flex;align-items:center;gap:4px;">
+      <div class="dash-header-logo">
+        <div class="dash-header-logo-text">
+          <span>Milestone</span>
+          <span>Impact</span>
+        </div>
+        <div class="dash-header-logo-diamond"></div>
+      </div>
+      <span class="dash-header-badge">لوحة الإدارة</span>
+    </div>
+    <div class="dash-header-right">
+      <div class="dash-user-info">
+        <div class="dash-user-name" id="dashUserName">—</div>
+        <div class="dash-user-role" id="dashUserRole">—</div>
+      </div>
+      <button class="dash-logout-btn" onclick="handleLogout()">خروج</button>
+    </div>
+  </header>
+
+  <!-- Body -->
+  <div class="dash-body">
+    <!-- Title -->
+    <div class="dash-title-row">
+      <div class="dash-title">طلبات التواصل</div>
+      <div class="dash-title-sub" id="lastUpdated">—</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card s-total">
+        <div class="stat-label">إجمالي الطلبات</div>
+        <div class="stat-value" id="statTotal">—</div>
+        <div class="stat-sub">جميع المصادر</div>
+      </div>
+      <div class="stat-card s-new">
+        <div class="stat-label">طلبات جديدة</div>
+        <div class="stat-value s-new" id="statNew">—</div>
+        <div class="stat-sub">بانتظار المراجعة</div>
+      </div>
+      <div class="stat-card s-replied">
+        <div class="stat-label">تم الرد</div>
+        <div class="stat-value s-replied" id="statReplied">—</div>
+        <div class="stat-sub">هذا الشهر</div>
+      </div>
+      <div class="stat-card s-archived">
+        <div class="stat-label">مؤرشفة</div>
+        <div class="stat-value s-archived" id="statArchived">—</div>
+        <div class="stat-sub">غير نشطة</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input class="search-input" type="text" id="searchInput" placeholder="بحث بالاسم أو البريد أو الجهة..." oninput="filterTable()" />
+      </div>
+      <select class="filter-select" id="filterStatus" onchange="filterTable()">
+        <option value="">كل الحالات</option>
+        <option value="new">جديد</option>
+        <option value="read">مقروء</option>
+        <option value="replied">تم الرد</option>
+        <option value="archived">مؤرشف</option>
+      </select>
+      <select class="filter-select" id="filterSource" onchange="filterTable()">
+        <option value="">كل المصادر</option>
+        <option value="MI-HOME">الرئيسية</option>
+        <option value="MI-LEADERS">القادة</option>
+      </select>
+      <button class="refresh-btn" onclick="loadRequests()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/>
+        </svg>
+        تحديث
+      </button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>الاسم</th>
+            <th>الجهة</th>
+            <th>البريد</th>
+            <th>نوع الطلب</th>
+            <th>المصدر</th>
+            <th>التاريخ</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr class="loading-row">
+            <td colspan="7"><div class="spinner"></div></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pagination" id="pagination" style="display:none;">
+        <span id="paginationInfo"></span>
+        <div class="page-btns" id="pageBtns"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Drawer -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title" id="drawerTitle">تفاصيل الطلب</div>
+    <button class="drawer-close" onclick="closeDrawer()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M18 6 6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════
+const SUPA_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUQ799y5rZrj29ggB1f0';
+const SESSION_KEY = 'mi_admin_v2_session';
+const SESSION_TTL = 4 * 60 * 60 * 1000; // 4 ساعات
+
+// ══════════════════════════════════════════════════════
+// SESSION MANAGEMENT
+// ══════════════════════════════════════════════════════
+const Session = {
+  save(token, user) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user, savedAt: Date.now() }));
+  },
+  load() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (Date.now() - p.savedAt > SESSION_TTL) { this.clear(); return null; }
+      return p;
+    } catch { return null; }
+  },
+  clear() { localStorage.removeItem(SESSION_KEY); }
+};
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let allData = [];
+let filteredData = [];
+let currentPage = 1;
+const PAGE_SIZE = 15;
+let authToken = null;
+
+// ══════════════════════════════════════════════════════
+// SUPABASE HELPERS
+// ══════════════════════════════════════════════════════
+async function supabaseAuth(email, password) {
+  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || 'خطأ في تسجيل الدخول');
+  return data;
+}
+
+async function supabaseQuery(path, options = {}) {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...options.headers,
+    },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// ══════════════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════════════
+async function handleLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const btn   = document.getElementById('loginBtn');
+  const err   = document.getElementById('loginError');
+
+  err.classList.remove('show');
+  if (!email || !pass) { showLoginError('يرجى إدخال البريد وكلمة المرور'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'جارٍ التحقق...';
+
+  try {
+    const data = await supabaseAuth(email, pass);
+    authToken = data.access_token;
+
+    // التحقق من أن المستخدم admin
+    const adminUser = await supabaseQuery(
+      `admin_users?select=id,name,role_id,is_active&id=eq.${data.user.id}&limit=1`
+    );
+
+    if (!adminUser || adminUser.length === 0 || !adminUser[0].is_active) {
+      throw new Error('ليس لديك صلاحية الوصول للوحة الإدارة');
+    }
+
+    const u = adminUser[0];
+    Session.save(data.access_token, { id: u.id, name: u.name, role: u.role_id, email });
+
+    // تسجيل الدخول في Audit Log
+    try {
+      await supabaseQuery('admin_audit_log', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ user_id: u.id, user_email: email, action: 'login', meta: { role: u.role_id } }),
+      });
+    } catch {}
+
+    showDashboard(u, email);
+
+  } catch (e) {
+    showLoginError(e.message || 'خطأ في تسجيل الدخول');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'دخول';
+  }
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// Enter key on login
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('screen-login').style.display !== 'none') {
+    handleLogin();
+  }
+});
+
+// ══════════════════════════════════════════════════════
+// INIT — Check existing session
+// ══════════════════════════════════════════════════════
+(function init() {
+  const session = Session.load();
+  if (session) {
+    authToken = session.token;
+    // التحقق السريع إن كان التوكن لا يزال صالحاً
+    supabaseQuery(`admin_users?select=id,name,role_id&id=eq.${session.user.id}&limit=1`)
+      .then(rows => {
+        if (rows && rows.length > 0) {
+          showDashboard(rows[0], session.user.email);
+        } else {
+          Session.clear();
+        }
+      })
+      .catch(() => Session.clear());
+  }
+})();
+
+// ══════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════
+function showDashboard(user, email) {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-dashboard').style.display = 'block';
+
+  const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
+  document.getElementById('dashUserName').textContent = user.name || email;
+  document.getElementById('dashUserRole').textContent = ROLE_LABELS[user.role_id || user.role] || '—';
+
+  loadRequests();
+}
+
+function handleLogout() {
+  Session.clear();
+  authToken = null;
+  allData = [];
+  filteredData = [];
+  document.getElementById('screen-dashboard').style.display = 'none';
+  document.getElementById('screen-login').style.display = 'grid';
+  document.getElementById('loginPass').value = '';
+}
+
+// ══════════════════════════════════════════════════════
+// LOAD DATA
+// ══════════════════════════════════════════════════════
+async function loadRequests() {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><div class="spinner"></div></td></tr>';
+
+  try {
+    const data = await supabaseQuery(
+      'contact_requests?select=*&order=created_at.desc&limit=500'
+    );
+
+    allData = data || [];
+    updateStats();
+    filterTable();
+
+    const now = new Date();
+    document.getElementById('lastUpdated').textContent =
+      'آخر تحديث: ' + now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
+  } catch (e) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="7" style="color:#B42828">خطأ في تحميل البيانات: ${e.message}</td></tr>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════
+function updateStats() {
+  const total    = allData.length;
+  const newCount = allData.filter(r => r.status === 'new').length;
+  const replied  = allData.filter(r => r.status === 'replied').length;
+  const archived = allData.filter(r => r.status === 'archived').length;
+
+  document.getElementById('statTotal').textContent   = total;
+  document.getElementById('statNew').textContent      = newCount;
+  document.getElementById('statReplied').textContent  = replied;
+  document.getElementById('statArchived').textContent = archived;
+}
+
+// ══════════════════════════════════════════════════════
+// FILTER + RENDER
+// ══════════════════════════════════════════════════════
+function filterTable() {
+  const q      = document.getElementById('searchInput').value.toLowerCase();
+  const status = document.getElementById('filterStatus').value;
+  const source = document.getElementById('filterSource').value;
+
+  filteredData = allData.filter(r => {
+    const matchQ = !q || [r.name, r.email, r.organization, r.phone].some(
+      v => v && v.toLowerCase().includes(q)
+    );
+    const matchS = !status || r.status === status;
+    const matchP = !source || r.product === source;
+    return matchQ && matchS && matchP;
+  });
+
+  currentPage = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredData.slice(start, start + PAGE_SIZE);
+
+  if (filteredData.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="7">
+        <div class="empty-state">
+          <div class="empty-state-icon">📭</div>
+          <p>لا توجد طلبات مطابقة</p>
+        </div>
+      </td></tr>`;
+    document.getElementById('pagination').style.display = 'none';
+    return;
+  }
+
+  const STATUS_AR = { new: 'جديد', read: 'مقروء', replied: 'تم الرد', archived: 'مؤرشف' };
+  const INTEREST_AR = {
+    leaders: 'برنامج القادة',
+    matrix: 'مصفوفة التأثير',
+    partnership: 'شراكة',
+    general: 'استشارة عامة',
+    A: 'استشارة قيادية',
+    B: 'تنفيذ مؤسسي',
+    C: 'شراكة استراتيجية',
+  };
+
+  tbody.innerHTML = page.map(r => `
+    <tr onclick="openDrawer('${r.id}')">
+      <td><strong>${esc(r.name)}</strong></td>
+      <td style="color:var(--ink-mid)">${esc(r.organization)}</td>
+      <td>
+        <span style="font-size:0.83rem;direction:ltr;display:inline-block">${esc(r.email)}</span>
+        <button class="copy-btn" onclick="event.stopPropagation();copyText('${esc(r.email)}')">نسخ</button>
+      </td>
+      <td><span class="interest-badge">${INTEREST_AR[r.interest] || esc(r.interest) || '—'}</span></td>
+      <td><span class="source-badge ${r.product === 'MI-HOME' ? 'home' : 'leaders'}">${r.product === 'MI-HOME' ? 'الرئيسية' : 'القادة'}</span></td>
+      <td style="color:var(--ink-light);font-size:0.82rem;white-space:nowrap">${fmtDate(r.created_at)}</td>
+      <td><span class="status-badge ${r.status}">${STATUS_AR[r.status] || r.status}</span></td>
+    </tr>
+  `).join('');
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const total = filteredData.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const pag   = document.getElementById('pagination');
+
+  if (pages <= 1) { pag.style.display = 'none'; return; }
+  pag.style.display = 'flex';
+
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end   = Math.min(currentPage * PAGE_SIZE, total);
+  document.getElementById('paginationInfo').textContent = `${start}–${end} من ${total}`;
+
+  const btns = document.getElementById('pageBtns');
+  let html = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - currentPage) <= 1) {
+      html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - currentPage) === 2) {
+      html += `<span style="padding:6px 4px;color:var(--ink-faint)">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+  btns.innerHTML = html;
+}
+
+function goPage(p) {
+  currentPage = p;
+  renderTable();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ══════════════════════════════════════════════════════
+// DRAWER
+// ══════════════════════════════════════════════════════
+function openDrawer(id) {
+  const r = allData.find(x => x.id === id);
+  if (!r) return;
+
+  const STATUS_AR   = { new: 'جديد', read: 'مقروء', replied: 'تم الرد', archived: 'مؤرشف' };
+  const INTEREST_AR = {
+    leaders: 'برنامج القادة', matrix: 'مصفوفة التأثير',
+    partnership: 'شراكة استراتيجية', general: 'استشارة عامة',
+    A: 'استشارة قيادية', B: 'تنفيذ مؤسسي', C: 'شراكة استراتيجية',
+  };
+
+  document.getElementById('drawerTitle').textContent = r.name;
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="detail-section">
+      <div class="detail-section-title">بيانات المتواصل</div>
+      <div class="detail-row"><span class="detail-key">الاسم</span><span class="detail-val">${esc(r.name)}</span></div>
+      <div class="detail-row"><span class="detail-key">الجهة</span><span class="detail-val">${esc(r.organization)}</span></div>
+      <div class="detail-row">
+        <span class="detail-key">البريد</span>
+        <span class="detail-val" style="direction:ltr">
+          ${esc(r.email)}
+          <button class="copy-btn" onclick="copyText('${esc(r.email)}')">نسخ</button>
+        </span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">الجوال</span>
+        <span class="detail-val" style="direction:ltr">
+          ${esc(r.phone)}
+          <button class="copy-btn" onclick="copyText('${esc(r.phone)}')">نسخ</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">تفاصيل الطلب</div>
+      <div class="detail-row"><span class="detail-key">نوع الطلب</span><span class="detail-val">${INTEREST_AR[r.interest] || esc(r.interest)}</span></div>
+      <div class="detail-row"><span class="detail-key">المصدر</span><span class="detail-val">${r.product === 'MI-HOME' ? 'الصفحة الرئيسية' : 'صفحة القادة'}</span></div>
+      <div class="detail-row"><span class="detail-key">التاريخ</span><span class="detail-val">${fmtDate(r.created_at)}</span></div>
+      ${r.context ? `
+      <div style="margin-top:4px">
+        <div style="font-size:0.78rem;color:var(--ink-light);margin-bottom:6px">السياق الإضافي</div>
+        <div class="context-box">${esc(r.context)}</div>
+      </div>` : ''}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">تغيير الحالة</div>
+      <div class="status-changer">
+        ${['new','read','replied','archived'].map(s => `
+          <button class="status-btn ${s} ${r.status === s ? 'active' : ''}"
+            onclick="updateStatus('${r.id}', '${s}')">
+            ${STATUS_AR[s]}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <button class="reply-btn" onclick="replyByEmail('${esc(r.email)}','${esc(r.name)}')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z"/>
+      </svg>
+      إرسال رد بالبريد
+    </button>
+  `;
+
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+
+  // تحديث الحالة لـ "مقروء" إن كانت جديدة
+  if (r.status === 'new') {
+    updateStatus(r.id, 'read', true);
+  }
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+// ══════════════════════════════════════════════════════
+// UPDATE STATUS
+// ══════════════════════════════════════════════════════
+async function updateStatus(id, status, silent = false) {
+  try {
+    await supabaseQuery(`contact_requests?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ status }),
+    });
+
+    // تحديث محلي
+    const idx = allData.findIndex(r => r.id === id);
+    if (idx !== -1) allData[idx].status = status;
+    updateStats();
+    filterTable();
+    renderTable();
+
+    // تحديث الـ drawer إن كان مفتوحاً
+    const drawer = document.getElementById('drawer');
+    if (drawer.classList.contains('open')) {
+      document.querySelectorAll('.status-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.classList.contains(status));
+      });
+    }
+
+    if (!silent) showToast(`تم تغيير الحالة إلى: ${({ new:'جديد',read:'مقروء',replied:'تم الرد',archived:'مؤرشف' })[status]}`);
+
+  } catch (e) {
+    showToast('خطأ في تحديث الحالة');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════
+function replyByEmail(email, name) {
+  const subject = encodeURIComponent(`رداً على استفساركم — Milestone Impact`);
+  const body    = encodeURIComponent(`السلام عليكم ${name}،\n\nشكراً لتواصلكم مع Milestone Impact.\n\n`);
+  window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+  updateStatus(
+    allData.find(r => r.email === email)?.id,
+    'replied'
+  );
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast('تم النسخ ✓'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Intl.DateTimeFormat('ar-SA', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(iso));
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
