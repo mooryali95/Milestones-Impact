@@ -1444,17 +1444,10 @@ document.addEventListener('keydown', e => {
 (function init() {
   const session = Session.load();
   if (session) {
+    // جلسة موجودة وصالحة — أدخل مباشرة بدون استعلام admin_users
+    // (RLS تمنع anon key من قراءة admin_users، فلا نستعلم)
     authToken = session.token;
-    // تحقق سريع أن المستخدم لا يزال في admin_users
-    supabaseQuery(`admin_users?select=id,name,role_id&id=eq.${session.user.id}&limit=1`)
-      .then(rows => {
-        if (rows && rows.length > 0) {
-          showDashboard(rows[0], session.user.email);
-        } else {
-          Session.clear();
-        }
-      })
-      .catch(() => Session.clear());
+    showDashboard(session.user, session.user.email);
   }
 })();
 
