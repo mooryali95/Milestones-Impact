@@ -13,6 +13,13 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
     <><style>{`
 /* LANDING PAGE — Luxury Editorial */
 .lp{font-family:'Tajawal',sans-serif;direction:rtl;background:#0D0D0F;color:#E8E2D9;overflow-x:hidden;}
+/* ══ TOP NAV — رابط العودة للبراند الأم ══ */
+.lp-topnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.6rem;background:linear-gradient(to bottom,rgba(13,13,15,.85),rgba(13,13,15,0));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+.lp-topnav-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none;color:rgba(232,226,217,.85);font-family:'Amiri',serif;font-size:.95rem;transition:color .3s;}
+.lp-topnav-brand:hover{color:#C4A24E;}
+.lp-topnav-home{display:flex;align-items:center;gap:.45rem;text-decoration:none;padding:.45rem 1rem;border:1px solid rgba(107,157,173,.3);border-radius:3px;color:#6B9DAD;font-family:'Tajawal',sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.5px;transition:all .3s;}
+.lp-topnav-home:hover{border-color:#6B9DAD;background:rgba(107,157,173,.08);}
+.lp-hero{padding-top:5rem;}
 .lp *,.lp *::before,.lp *::after{box-sizing:border-box;margin:0;padding:0;}
 .lp-hero{min-height:100vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;overflow:hidden;}
 .lp-hero-bg{position:absolute;inset:0;z-index:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,#1C2B3A 0%,#0D0D0F 70%);}
@@ -93,6 +100,15 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-a5{animation:lp-fade-up .9s .6s ease both;}
     `}</style>
     <div className="lp">
+
+      {/* ══ TOP NAV — العودة للبراند الأم ══ */}
+      <nav className="lp-topnav">
+        <a className="lp-topnav-brand" href="https://mi.sunkvalue.com">
+          <MILogo size={24} color="#C4A24E"/>
+          <span>Milestone Impact</span>
+        </a>
+        <a className="lp-topnav-home" href="https://mi.sunkvalue.com">المنظومة الأم ←</a>
+      </nav>
 
       {/* ══ HERO ══ */}
       <section className="lp-hero">
