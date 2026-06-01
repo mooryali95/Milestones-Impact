@@ -1316,24 +1316,8 @@ async function handleSendOtp() {
   btn.textContent = 'جارٍ الإرسال...';
 
   try {
-    // تحقق أن البريد في admin_users
-    let isAdmin = false;
-    try {
-      const admins = await supabaseQuery(
-        `admin_users?select=id,is_active&email=eq.${encodeURIComponent(email)}&limit=1`
-      );
-      isAdmin = admins && admins.length > 0 && admins[0].is_active;
-    } catch (queryErr) {
-      // إذا فشل الاستعلام بسبب RLS نتجاوز ونرسل OTP مباشرة
-      console.warn('admin_users query failed, proceeding anyway:', queryErr);
-      isAdmin = true;
-    }
-
-    if (!isAdmin) {
-      throw new Error('هذا البريد غير مسجّل في لوحة الإدارة');
-    }
-
-    // إرسال OTP
+    // إرسال OTP مباشرة — التحقق من صلاحية البريد يتم داخل Edge Function
+    // (استعلام admin_users من الكود غير موثوق بسبب RLS مع anon key)
     const res = await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
       method: 'POST',
       headers: {
