@@ -16,9 +16,10 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 /* ══ TOP NAV — رابط العودة للبراند الأم ══ */
 .lp-topnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.6rem;background:linear-gradient(to bottom,rgba(13,13,15,.85),rgba(13,13,15,0));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
 .lp-topnav-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none;color:rgba(232,226,217,.85);font-family:'Amiri',serif;font-size:.95rem;transition:color .3s;}
-.lp-topnav-brand:hover{color:#C4A24E;}
-.lp-topnav-home{display:flex;align-items:center;gap:.45rem;text-decoration:none;padding:.45rem 1rem;border:1px solid rgba(107,157,173,.3);border-radius:3px;color:#6B9DAD;font-family:'Tajawal',sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.5px;transition:all .3s;}
-.lp-topnav-home:hover{border-color:#6B9DAD;background:rgba(107,157,173,.08);}
+.lp-topnav-brand:hover{color:#C8A45C;}
+.lp-topnav-links{display:flex;align-items:center;gap:.6rem;}
+.lp-topnav-home{display:flex;align-items:center;gap:.45rem;text-decoration:none;padding:.45rem 1rem;border:1px solid rgba(42,100,120,.4);border-radius:3px;color:#2A6478;font-family:'Tajawal',sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.5px;transition:all .3s;}
+.lp-topnav-home:hover{border-color:#2A6478;background:rgba(20,73,94,.1);color:#8BBCC8;}
 .lp-hero{padding-top:5rem;}
 .lp *,.lp *::before,.lp *::after{box-sizing:border-box;margin:0;padding:0;}
 .lp-hero{min-height:100vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;overflow:hidden;}
@@ -107,7 +108,10 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
           <MILogo size={24} color="#C4A24E"/>
           <span>Milestone Impact</span>
         </a>
-        <a className="lp-topnav-home" href="https://mi.sunkvalue.com">المنظومة الأم ←</a>
+        <div className="lp-topnav-links">
+          <a className="lp-topnav-home" href="https://leaders.sunkvalue.com">للقادة ←</a>
+          <a className="lp-topnav-home" href="https://mi.sunkvalue.com">المنظومة الأم ←</a>
+        </div>
       </nav>
 
       {/* ══ HERO ══ */}
