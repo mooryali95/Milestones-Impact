@@ -1777,7 +1777,7 @@ async function handleAddUser() {
 // ══════════════════════════════════════════════════════
 function showDashboard(user, email) {
   document.getElementById('screen-login').style.display = 'none';
-  document.getElementById('screen-dashboard').style.display = 'block';
+  document.getElementById('screen-dashboard').style.display = 'flex';
 
   document.getElementById('dashUserName').textContent = user.name || email;
   document.getElementById('dashUserRole').textContent = ROLE_LABELS[user.role_id || user.role] || '—';
