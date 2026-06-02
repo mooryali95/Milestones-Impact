@@ -1566,9 +1566,12 @@ async function handleVerifyCode() {
   btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
   try {
     const d = await callAuth({ action: 'verify-code', email, code });
+    console.log('[DEBUG] verify-code response:', JSON.stringify(d));
     if (!d.success) throw new Error(d.message || 'الرمز غير صحيح أو منتهي الصلاحية');
+    console.log('[DEBUG] d.user:', JSON.stringify(d.user));
     authToken = SUPA_KEY;
     Session.save(SUPA_KEY, d.user);
+    console.log('[DEBUG] calling showDashboard...');
     showDashboard(d.user, email);
   } catch(e) {
     showLoginError('loginErrorCode', e.message);
@@ -1776,12 +1779,16 @@ async function handleAddUser() {
 // DASHBOARD
 // ══════════════════════════════════════════════════════
 function showDashboard(user, email) {
-  document.getElementById('screen-login').style.display = 'none';
-  document.getElementById('screen-dashboard').style.display = 'flex';
-
+  console.log('[DEBUG] showDashboard called, user:', JSON.stringify(user));
+  const loginEl = document.getElementById('screen-login');
+  const dashEl  = document.getElementById('screen-dashboard');
+  console.log('[DEBUG] login el:', !!loginEl, 'dash el:', !!dashEl);
+  loginEl.style.display = 'none';
+  dashEl.style.display  = 'flex';
+  console.log('[DEBUG] dash display set to flex');
   document.getElementById('dashUserName').textContent = user.name || email;
   document.getElementById('dashUserRole').textContent = ROLE_LABELS[user.role_id || user.role] || '—';
-
+  console.log('[DEBUG] calling loadRequests...');
   loadRequests();
 }
 
