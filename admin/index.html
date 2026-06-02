@@ -994,6 +994,87 @@
       border-bottom: 2px solid var(--gold);
     }
     .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ══ TOTP Screens ══════════════════════════════════ */
+    #loginStepTotp  { display:none; }
+    #loginStepSetup { display:none; }
+
+    .totp-input {
+      letter-spacing: 12px;
+      font-size: 1.8rem;
+      text-align: center;
+      font-family: var(--font-en);
+      font-weight: 600;
+      color: var(--petrol);
+      direction: ltr;
+    }
+    .totp-input::placeholder { letter-spacing: 6px; font-size: 1rem; color: var(--ink-faint); }
+
+    /* QR Code container */
+    .qr-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 22px;
+      background: var(--sand-light);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .qr-canvas { border-radius: 8px; background: white; padding: 10px; }
+    .qr-secret {
+      font-family: var(--font-en);
+      font-size: 0.75rem;
+      color: var(--ink-light);
+      letter-spacing: 2px;
+      word-break: break-all;
+      text-align: center;
+      direction: ltr;
+    }
+    .qr-note {
+      font-size: 0.78rem;
+      color: var(--ink-light);
+      text-align: center;
+      line-height: 1.65;
+    }
+    .qr-apps {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .qr-app-tag {
+      font-size: 0.7rem;
+      padding: 3px 10px;
+      background: rgba(20,73,94,0.07);
+      color: var(--petrol-s);
+      border-radius: 99px;
+      border: 1px solid rgba(20,73,94,0.15);
+    }
+
+    /* مؤشر الوقت */
+    .totp-timer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: var(--ink-light);
+      margin-top: 10px;
+    }
+    .totp-timer-bar {
+      width: 80px; height: 3px;
+      background: var(--ink-faint);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .totp-timer-fill {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 99px;
+      transition: width 1s linear;
+    }
   </style>
 </head>
 <body>
@@ -1075,6 +1156,51 @@
         </div>
         <button class="login-btn" id="loginBtnVerify" onclick="handleVerifyOtp()">تأكيد الدخول</button>
         <div class="login-error" id="loginErrorOtp"></div>
+        <div style="text-align:center;margin-top:16px">
+          <button onclick="handleBackToEmail()" class="btn-ghost-small">← تغيير البريد الإلكتروني</button>
+        </div>
+      </div>
+
+      <!-- Step QR: إعداد TOTP لأول مرة -->
+      <div id="loginStepSetup">
+        <div class="login-form-eyebrow">First-Time Setup</div>
+        <div class="login-form-title">إعداد المصادق</div>
+        <div class="login-form-sub">امسح الرمز بتطبيق المصادقة</div>
+        <div class="qr-wrap">
+          <canvas id="qrCanvas" class="qr-canvas" width="180" height="180"></canvas>
+          <div class="qr-apps">
+            <span class="qr-app-tag">Google Authenticator</span>
+            <span class="qr-app-tag">Authy</span>
+            <span class="qr-app-tag">1Password</span>
+          </div>
+          <div class="qr-note">أو أدخل المفتاح يدوياً:</div>
+          <div class="qr-secret" id="qrSecretText">—</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setupToken">أدخل الرمز من التطبيق للتأكيد</label>
+          <input class="form-input totp-input" type="text" id="setupToken"
+            placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+        </div>
+        <button class="login-btn" id="loginBtnSetup" onclick="handleConfirmSetup()">تأكيد الإعداد</button>
+        <div class="login-error" id="loginErrorSetup"></div>
+      </div>
+
+      <!-- Step TOTP: إدخال رمز عند الدخول -->
+      <div id="loginStepTotp">
+        <div class="login-form-eyebrow">Authenticator</div>
+        <div class="login-form-title">رمز المصادقة</div>
+        <div class="login-form-sub">افتح تطبيق المصادقة وأدخل الرمز الحالي</div>
+        <div class="form-group">
+          <label class="form-label" for="totpToken">الرمز المكوّن من 6 أرقام</label>
+          <input class="form-input totp-input" type="text" id="totpToken"
+            placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+        </div>
+        <div class="totp-timer">
+          <span id="totpCountdown">30</span>ث
+          <div class="totp-timer-bar"><div class="totp-timer-fill" id="totpTimerFill" style="width:100%"></div></div>
+        </div>
+        <button class="login-btn" id="loginBtnTotp" onclick="handleVerifyTotp()">دخول</button>
+        <div class="login-error" id="loginErrorTotp"></div>
         <div style="text-align:center;margin-top:16px">
           <button onclick="handleBackToEmail()" class="btn-ghost-small">← تغيير البريد الإلكتروني</button>
         </div>
@@ -1296,149 +1422,169 @@ async function supabaseQuery(path, options = {}) {
 }
 
 // ══════════════════════════════════════════════════════
-// OTP LOGIN — Step 1: Send
 // ══════════════════════════════════════════════════════
-async function handleSendOtp() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const btn   = document.getElementById('loginBtnSend');
-  const err   = document.getElementById('loginError');
+// TOTP — المتغيرات والأدوات
+// ══════════════════════════════════════════════════════
+const TOTP_URL = `${SUPA_URL}/functions/v1/admin-totp`;
+let totpTimerInterval = null;
 
-  err.classList.remove('show');
-  err.style.display = 'none';
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    showLoginError('loginError', 'يرجى إدخال بريد إلكتروني صحيح');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'جارٍ الإرسال...';
-
-  try {
-    // إرسال OTP مباشرة — التحقق من صلاحية البريد يتم داخل Edge Function
-    // (استعلام admin_users من الكود غير موثوق بسبب RLS مع anon key)
-    const res = await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
-      },
-      body: JSON.stringify({ action: 'send', email }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`فشل الإرسال (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    if (!data.success) throw new Error(data.message || 'فشل إرسال الرمز');
-
-    // الانتقال لخطوة OTP
-    document.getElementById('loginStepEmail').style.display = 'none';
-    document.getElementById('loginStepOtp').style.display = 'block';
-    document.getElementById('loginOtpSub').textContent =
-      `أرسلنا رمزاً من 6 أرقام إلى ${email}`;
-    setTimeout(() => document.getElementById('loginOtp').focus(), 100);
-
-  } catch (e) {
-    err.style.display = 'block';
-    showLoginError('loginError', e.message || 'حدث خطأ، حاول مجدداً');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'إرسال رمز الدخول';
-  }
+async function callTotp(body) {
+  const res = await fetch(TOTP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` },
+    body: JSON.stringify(body),
+  });
+  return res.json();
 }
 
-// ══════════════════════════════════════════════════════
-// OTP LOGIN — Step 2: Verify
-// ══════════════════════════════════════════════════════
-async function handleVerifyOtp() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const otp   = document.getElementById('loginOtp').value.trim();
-  const btn   = document.getElementById('loginBtnVerify');
-
-  document.getElementById('loginErrorOtp').classList.remove('show');
-  if (otp.length !== 6) {
-    showLoginError('loginErrorOtp', 'الرمز يجب أن يكون 6 أرقام');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'جارٍ التحقق...';
-
-  try {
-    // التحقق من OTP
-    const res = await fetch(`${SUPA_URL}/functions/v1/send-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
-      body: JSON.stringify({ action: 'verify', email, otp }),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.message || 'رمز التحقق غير صحيح أو منتهي');
-
-    // جلب بيانات الأدمن
-    const admins = await supabaseQuery(
-      `admin_users?select=id,name,role_id,is_active&email=eq.${encodeURIComponent(email)}&limit=1`
-    );
-    if (!admins || admins.length === 0) throw new Error('حدث خطأ في جلب بيانات المستخدم');
-
-    const u = admins[0];
-    authToken = SUPA_KEY; // نستخدم anon key للقراءة بعد التحقق
-    Session.save(SUPA_KEY, { id: u.id, name: u.name, role: u.role_id, email });
-
-    // تسجيل في Audit Log
-    try {
-      await supabaseQuery('admin_audit_log', {
-        method: 'POST',
-        headers: { Prefer: 'return=minimal' },
-        body: JSON.stringify({ user_id: u.id, user_email: email, action: 'login_otp', meta: { role: u.role_id } }),
-      });
-    } catch {}
-
-    showDashboard(u, email);
-
-  } catch (e) {
-    showLoginError('loginErrorOtp', e.message || 'حدث خطأ، حاول مجدداً');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'تأكيد الدخول';
-  }
+function goToStep(stepId) {
+  ['loginStepEmail','loginStepOtp','loginStepTotp','loginStepSetup'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (id === stepId) ? 'block' : 'none';
+  });
 }
 
-// ══════════════════════════════════════════════════════
-// OTP LOGIN — Back to email step
-// ══════════════════════════════════════════════════════
-function handleBackToEmail() {
-  document.getElementById('loginStepOtp').style.display = 'none';
-  document.getElementById('loginStepEmail').style.display = 'block';
-  document.getElementById('loginOtp').value = '';
-  document.getElementById('loginErrorOtp').classList.remove('show');
+function startTotpTimer() {
+  clearInterval(totpTimerInterval);
+  function tick() {
+    const secs = 30 - (Math.floor(Date.now() / 1000) % 30);
+    const fill = document.getElementById('totpTimerFill');
+    const cd   = document.getElementById('totpCountdown');
+    if (fill) fill.style.width = (secs / 30 * 100) + '%';
+    if (cd)   cd.textContent = secs;
+    if (fill) fill.style.background = secs <= 5 ? '#B42828' : 'var(--gold)';
+  }
+  tick();
+  totpTimerInterval = setInterval(tick, 1000);
+}
+
+function drawQR(uri) {
+  const wrap = document.getElementById('qrCanvas');
+  if (!wrap) return;
+  function render() {
+    wrap.innerHTML = '';
+    new QRCode(wrap, { text: uri, width: 160, height: 160, colorDark: '#061E2C', colorLight: '#FDFCF8', correctLevel: QRCode.CorrectLevel.M });
+  }
+  if (!window.QRCode) {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = render;
+    document.head.appendChild(s);
+  } else { render(); }
 }
 
 function showLoginError(id, msg) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.textContent = msg;
-  el.classList.add('show');
-  el.style.display = 'block';
+  el.textContent = msg; el.classList.add('show'); el.style.display = 'block';
 }
 
-// Enter key
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
-  const loginVisible = document.getElementById('screen-login').style.display !== 'none';
-  if (!loginVisible) return;
-  if (document.getElementById('loginStepOtp').style.display !== 'none') {
-    handleVerifyOtp();
-  } else {
-    handleSendOtp();
+// ══════════════════════════════════════════════════════
+// STEP 1: إدخال البريد
+// ══════════════════════════════════════════════════════
+async function handleSendOtp() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const btn   = document.getElementById('loginBtnSend');
+  const err   = document.getElementById('loginError');
+  err.classList.remove('show'); err.style.display = 'none';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showLoginError('loginError', 'يرجى إدخال بريد إلكتروني صحيح'); return;
   }
-});
+  btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
+  try {
+    const data = await callTotp({ action: 'status', email });
+    if (!data.success) throw new Error(data.message || 'البريد غير مسجّل');
+    if (data.totp_enabled) {
+      goToStep('loginStepTotp');
+      setTimeout(() => document.getElementById('totpToken').focus(), 100);
+      startTotpTimer();
+    } else {
+      const setup = await callTotp({ action: 'setup', email });
+      if (!setup.success) throw new Error(setup.message || 'خطأ في الإعداد');
+      document.getElementById('qrSecretText').textContent = setup.secret;
+      drawQR(setup.uri);
+      goToStep('loginStepSetup');
+      setTimeout(() => document.getElementById('setupToken').focus(), 100);
+    }
+  } catch (e) {
+    showLoginError('loginError', e.message || 'حدث خطأ');
+  } finally {
+    btn.disabled = false; btn.textContent = 'إرسال رمز الدخول';
+  }
+}
 
 // ══════════════════════════════════════════════════════
-// INIT — Check existing session
+// STEP Setup: تأكيد الإعداد الأول
+// ══════════════════════════════════════════════════════
+async function handleConfirmSetup() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const token = document.getElementById('setupToken').value.trim();
+  const btn   = document.getElementById('loginBtnSetup');
+  document.getElementById('loginErrorSetup').style.display = 'none';
+  if (token.length !== 6) { showLoginError('loginErrorSetup', 'الرمز 6 أرقام'); return; }
+  btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
+  try {
+    const data = await callTotp({ action: 'confirm-setup', email, token });
+    if (!data.success) throw new Error(data.message || 'رمز غير صحيح');
+    goToStep('loginStepTotp');
+    setTimeout(() => document.getElementById('totpToken').focus(), 100);
+    startTotpTimer();
+    showToast('✅ تم إعداد المصادق بنجاح');
+  } catch (e) {
+    showLoginError('loginErrorSetup', e.message || 'حدث خطأ');
+  } finally {
+    btn.disabled = false; btn.textContent = 'تأكيد الإعداد';
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// STEP TOTP: تسجيل الدخول
+// ══════════════════════════════════════════════════════
+async function handleVerifyTotp() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const token = document.getElementById('totpToken').value.trim();
+  const btn   = document.getElementById('loginBtnTotp');
+  document.getElementById('loginErrorTotp').style.display = 'none';
+  if (token.length !== 6) { showLoginError('loginErrorTotp', 'الرمز 6 أرقام'); return; }
+  btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
+  try {
+    const data = await callTotp({ action: 'verify', email, token });
+    if (!data.success) throw new Error(data.message || 'رمز غير صحيح');
+    clearInterval(totpTimerInterval);
+    authToken = SUPA_KEY;
+    Session.save(SUPA_KEY, data.user);
+    showDashboard(data.user, email);
+  } catch (e) {
+    showLoginError('loginErrorTotp', e.message || 'حدث خطأ');
+    const tf = document.getElementById('totpToken');
+    if (tf) { tf.value = ''; tf.focus(); }
+  } finally {
+    btn.disabled = false; btn.textContent = 'دخول';
+  }
+}
+
+async function handleVerifyOtp() { await handleVerifyTotp(); }
+
+function handleBackToEmail() {
+  clearInterval(totpTimerInterval);
+  goToStep('loginStepEmail');
+  ['loginOtp','totpToken','setupToken'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const login = document.getElementById('screen-login');
+  if (!login || login.style.display === 'none') return;
+  const active = ['loginStepTotp','loginStepSetup','loginStepOtp'].find(id => {
+    const el = document.getElementById(id); return el && el.style.display !== 'none';
+  });
+  if (active === 'loginStepTotp')       handleVerifyTotp();
+  else if (active === 'loginStepSetup') handleConfirmSetup();
+  else                                  handleSendOtp();
+});
+
+
+// // INIT — Check existing session
 // ══════════════════════════════════════════════════════
 (function init() {
   const session = Session.load();
