@@ -1445,75 +1445,16 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<script>
+<script>// ══════════════════════════════════════════════════════
+// AUTH — الإعداد
 // ══════════════════════════════════════════════════════
-// CONFIG
-// ══════════════════════════════════════════════════════
-const SUPA_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';
-const SESSION_KEY = 'mi_admin_v2_session';
-const SESSION_TTL = 4 * 60 * 60 * 1000; // 4 ساعات
+const AUTH_URL = `${SUPA_URL}/functions/v1/admin-auth`;
+const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
+let currentEmail = '';
+let settingsUser  = null;
 
-// ══════════════════════════════════════════════════════
-// SESSION MANAGEMENT
-// ══════════════════════════════════════════════════════
-const Session = {
-  save(token, user) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user, savedAt: Date.now() }));
-  },
-  load() {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      if (Date.now() - p.savedAt > SESSION_TTL) { this.clear(); return null; }
-      return p;
-    } catch { return null; }
-  },
-  clear() { localStorage.removeItem(SESSION_KEY); }
-};
-
-// ══════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════
-let allData = [];
-let filteredData = [];
-let currentPage = 1;
-const PAGE_SIZE = 15;
-let authToken = null;
-
-// ══════════════════════════════════════════════════════
-// SUPABASE HELPERS
-// ══════════════════════════════════════════════════════
-async function supabaseQuery(path, options = {}) {
-  const { headers: optHeaders, ...restOptions } = options;
-  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
-    headers: {
-      'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${authToken || SUPA_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation',
-      ...optHeaders,          // تطغى على الافتراضية
-    },
-    ...restOptions,
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-// ══════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════
-// TOTP — المتغيرات والأدوات
-// ══════════════════════════════════════════════════════
-const TOTP_URL = `${SUPA_URL}/functions/v1/admin-totp`;
-let totpTimerInterval = null;
-
-async function callTotp(body) {
-  const res = await fetch(TOTP_URL, {
+async function callAuth(body) {
+  const res = await fetch(AUTH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` },
     body: JSON.stringify(body),
@@ -1521,52 +1462,8 @@ async function callTotp(body) {
   return res.json();
 }
 
-function goToStep(stepId) {
-  ['loginStepEmail','loginStepOtp','loginStepTotp','loginStepSetup'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = (id === stepId) ? 'block' : 'none';
-  });
-}
-
-function startTotpTimer() {
-  clearInterval(totpTimerInterval);
-  function tick() {
-    const secs = 30 - (Math.floor(Date.now() / 1000) % 30);
-    const fill = document.getElementById('totpTimerFill');
-    const cd   = document.getElementById('totpCountdown');
-    if (fill) fill.style.width = (secs / 30 * 100) + '%';
-    if (cd)   cd.textContent = secs;
-    if (fill) fill.style.background = secs <= 5 ? '#B42828' : 'var(--gold)';
-  }
-  tick();
-  totpTimerInterval = setInterval(tick, 1000);
-}
-
-function drawQR(uri) {
-  const wrap = document.getElementById('qrCanvas');
-  if (!wrap) return;
-  function render() {
-    wrap.innerHTML = '';
-    new QRCode(wrap, { text: uri, width: 160, height: 160, colorDark: '#061E2C', colorLight: '#FDFCF8', correctLevel: QRCode.CorrectLevel.M });
-  }
-  if (!window.QRCode) {
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-    s.onload = render;
-    document.head.appendChild(s);
-  } else { render(); }
-}
-
-function showLoginError(id, msg) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = msg; el.classList.add('show'); el.style.display = 'block';
-}
-
-// ══════════════════════════════════════════════════════
-// STEP 1: إدخال البريد
-// ══════════════════════════════════════════════════════
-async function handleSendOtp() {
+// ══ Login: Step 1 ══════════════════════════════════════
+async function handleSendEmail() {
   const email = document.getElementById('loginEmail').value.trim();
   const btn   = document.getElementById('loginBtnSend');
   const err   = document.getElementById('loginError');
@@ -1576,99 +1473,231 @@ async function handleSendOtp() {
   }
   btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
   try {
-    const data = await callTotp({ action: 'status', email });
-    if (!data.success) throw new Error(data.message || 'البريد غير مسجّل');
-    if (data.totp_enabled) {
-      goToStep('loginStepTotp');
-      setTimeout(() => document.getElementById('totpToken').focus(), 100);
-      startTotpTimer();
-    } else {
-      const setup = await callTotp({ action: 'setup', email });
-      if (!setup.success) throw new Error(setup.message || 'خطأ في الإعداد');
-      document.getElementById('qrSecretText').textContent = setup.secret;
-      drawQR(setup.uri);
-      goToStep('loginStepSetup');
-      setTimeout(() => document.getElementById('setupToken').focus(), 100);
-    }
-  } catch (e) {
-    showLoginError('loginError', e.message || 'حدث خطأ');
-  } finally {
-    btn.disabled = false; btn.textContent = 'إرسال رمز الدخول';
-  }
+    const d = await callAuth({ action: 'send-code', email });
+    if (!d.success) throw new Error(d.message || 'البريد غير مسجّل');
+    currentEmail = email;
+    document.getElementById('loginStepEmail').style.display = 'none';
+    document.getElementById('loginStepCode').style.display  = 'block';
+    setTimeout(() => document.getElementById('loginCode').focus(), 100);
+  } catch(e) {
+    showLoginError('loginError', e.message);
+  } finally { btn.disabled = false; btn.textContent = 'متابعة'; }
+}
+async function handleSendOtp() { await handleSendEmail(); }
+
+// ══ إرسال OTP بالبريد (اختياري) ════════════════════════
+async function handleSendEmailCode() {
+  const email = currentEmail || document.getElementById('loginEmail').value.trim();
+  const btn   = document.getElementById('sendCodeEmailBtn');
+  btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
+  try {
+    const d = await callAuth({ action: 'send-code', email });
+    if (!d.success) throw new Error(d.message);
+    showToast('✅ تم إرسال الرمز إلى بريدك');
+  } catch(e) { showLoginError('loginErrorCode', e.message);
+  } finally { btn.disabled = false; btn.textContent = 'إرسال رمز لبريدي الإلكتروني ←'; }
 }
 
-// ══════════════════════════════════════════════════════
-// STEP Setup: تأكيد الإعداد الأول
-// ══════════════════════════════════════════════════════
-async function handleConfirmSetup() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const token = document.getElementById('setupToken').value.trim();
-  const btn   = document.getElementById('loginBtnSetup');
-  document.getElementById('loginErrorSetup').style.display = 'none';
-  if (token.length !== 6) { showLoginError('loginErrorSetup', 'الرمز 6 أرقام'); return; }
+// ══ Login: Step 2 — التحقق ════════════════════════════
+async function handleVerifyCode() {
+  const email = currentEmail || document.getElementById('loginEmail').value.trim();
+  const code  = document.getElementById('loginCode').value.trim();
+  const btn   = document.getElementById('loginBtnVerify');
+  document.getElementById('loginErrorCode').style.display = 'none';
+  if (code.length !== 6) { showLoginError('loginErrorCode', 'الرمز 6 أرقام'); return; }
   btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
   try {
-    const data = await callTotp({ action: 'confirm-setup', email, token });
-    if (!data.success) throw new Error(data.message || 'رمز غير صحيح');
-    goToStep('loginStepTotp');
-    setTimeout(() => document.getElementById('totpToken').focus(), 100);
-    startTotpTimer();
-    showToast('✅ تم إعداد المصادق بنجاح');
-  } catch (e) {
-    showLoginError('loginErrorSetup', e.message || 'حدث خطأ');
-  } finally {
-    btn.disabled = false; btn.textContent = 'تأكيد الإعداد';
-  }
-}
-
-// ══════════════════════════════════════════════════════
-// STEP TOTP: تسجيل الدخول
-// ══════════════════════════════════════════════════════
-async function handleVerifyTotp() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const token = document.getElementById('totpToken').value.trim();
-  const btn   = document.getElementById('loginBtnTotp');
-  document.getElementById('loginErrorTotp').style.display = 'none';
-  if (token.length !== 6) { showLoginError('loginErrorTotp', 'الرمز 6 أرقام'); return; }
-  btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
-  try {
-    const data = await callTotp({ action: 'verify', email, token });
-    if (!data.success) throw new Error(data.message || 'رمز غير صحيح');
-    clearInterval(totpTimerInterval);
+    const d = await callAuth({ action: 'verify-code', email, code });
+    if (!d.success) throw new Error(d.message || 'الرمز غير صحيح');
     authToken = SUPA_KEY;
-    Session.save(SUPA_KEY, data.user);
-    showDashboard(data.user, email);
-  } catch (e) {
-    showLoginError('loginErrorTotp', e.message || 'حدث خطأ');
-    const tf = document.getElementById('totpToken');
-    if (tf) { tf.value = ''; tf.focus(); }
-  } finally {
-    btn.disabled = false; btn.textContent = 'دخول';
-  }
+    Session.save(SUPA_KEY, d.user);
+    showDashboard(d.user, email);
+  } catch(e) {
+    showLoginError('loginErrorCode', e.message);
+    document.getElementById('loginCode').value = '';
+    document.getElementById('loginCode').focus();
+  } finally { btn.disabled = false; btn.textContent = 'تأكيد الدخول'; }
 }
-
-async function handleVerifyOtp() { await handleVerifyTotp(); }
+async function handleVerifyOtp() { await handleVerifyCode(); }
 
 function handleBackToEmail() {
-  clearInterval(totpTimerInterval);
-  goToStep('loginStepEmail');
-  ['loginOtp','totpToken','setupToken'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  currentEmail = '';
+  document.getElementById('loginStepCode').style.display  = 'none';
+  document.getElementById('loginStepEmail').style.display = 'block';
+  document.getElementById('loginCode').value = '';
+  document.getElementById('loginErrorCode').style.display = 'none';
+}
+
+function showLoginError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg; el.classList.add('show'); el.style.display = 'block';
 }
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   const login = document.getElementById('screen-login');
   if (!login || login.style.display === 'none') return;
-  const active = ['loginStepTotp','loginStepSetup','loginStepOtp'].find(id => {
-    const el = document.getElementById(id); return el && el.style.display !== 'none';
-  });
-  if (active === 'loginStepTotp')       handleVerifyTotp();
-  else if (active === 'loginStepSetup') handleConfirmSetup();
-  else                                  handleSendOtp();
+  if (document.getElementById('loginStepCode').style.display !== 'none') handleVerifyCode();
+  else handleSendEmail();
 });
 
+// ══════════════════════════════════════════════════════
+// SETTINGS MODAL
+// ══════════════════════════════════════════════════════
+function openSettings() {
+  const session = Session.load();
+  if (!session) return;
+  settingsUser = session.user;
+  document.getElementById('settingsName').textContent  = session.user.name  || '—';
+  document.getElementById('settingsEmail').textContent = session.user.email || '—';
+  document.getElementById('settingsRole').textContent  = ROLE_LABELS[session.user.role] || session.user.role || '—';
+  renderTotpStatus(!!session.user.totp_enabled);
+  const uSection = document.getElementById('usersSection');
+  if (session.user.role === 'super_admin') { uSection.style.display = 'block'; loadUsers(); }
+  else uSection.style.display = 'none';
+  document.getElementById('settingsOverlay').classList.add('open');
+  document.getElementById('settingsQrWrap').style.display = 'none';
+}
 
-// // INIT — Check existing session
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+
+function renderTotpStatus(enabled) {
+  const dot = document.getElementById('totpDot');
+  const lbl = document.getElementById('totpLabel');
+  const sub = document.getElementById('totpSub');
+  const bts = document.getElementById('totpBtns');
+  if (enabled) {
+    dot.className = 'totp-status-dot on';
+    lbl.textContent = 'TOTP مفعّل';
+    sub.textContent = 'يقبل: رمز التطبيق + OTP البريد';
+    bts.innerHTML = `<button class="btn-sm ghost" onclick="handleResetTotp()">🔄 إعادة ربط التطبيق</button><button class="btn-sm danger" onclick="handleDisableTotp()">تعطيل TOTP</button>`;
+  } else {
+    dot.className = 'totp-status-dot off';
+    lbl.textContent = 'TOTP غير مفعّل';
+    sub.textContent = 'يستخدم OTP البريد فقط حالياً';
+    bts.innerHTML = `<button class="btn-sm primary" onclick="handleSetupTotp()">🔐 تفعيل TOTP</button>`;
+  }
+}
+
+async function handleSetupTotp() {
+  const email = settingsUser?.email;
+  const d = await callAuth({ action: 'setup-totp', email });
+  if (!d.success) { showToast('❌ ' + d.message); return; }
+  document.getElementById('settingsQrSecret').textContent = d.secret;
+  drawQR(d.uri, 'settingsQrCanvas');
+  document.getElementById('settingsQrWrap').style.display = 'block';
+  document.getElementById('settingsConfirmToken').value = '';
+  document.getElementById('settingsQrError').style.display = 'none';
+  setTimeout(() => document.getElementById('settingsConfirmToken').focus(), 100);
+}
+
+async function handleSettingsConfirmTotp() {
+  const email = settingsUser?.email;
+  const code  = document.getElementById('settingsConfirmToken').value.trim();
+  document.getElementById('settingsQrError').style.display = 'none';
+  if (code.length !== 6) { showLoginError('settingsQrError', 'الرمز 6 أرقام'); return; }
+  const d = await callAuth({ action: 'confirm-totp', email, code });
+  if (!d.success) { showLoginError('settingsQrError', d.message); return; }
+  document.getElementById('settingsQrWrap').style.display = 'none';
+  const session = Session.load();
+  if (session) { session.user.totp_enabled = true; Session.save(session.token, session.user); }
+  renderTotpStatus(true);
+  showToast('✅ تم تفعيل TOTP');
+}
+
+async function handleResetTotp() {
+  if (!confirm('سيتم توليد رمز QR جديد — التطبيق القديم لن يعمل. متابعة؟')) return;
+  const email = settingsUser?.email;
+  const d = await callAuth({ action: 'reset-totp', email });
+  if (!d.success) { showToast('❌ ' + d.message); return; }
+  document.getElementById('settingsQrSecret').textContent = d.secret;
+  drawQR(d.uri, 'settingsQrCanvas');
+  document.getElementById('settingsQrWrap').style.display = 'block';
+  document.getElementById('settingsConfirmToken').value = '';
+}
+
+async function handleDisableTotp() {
+  if (!confirm('سيتم تعطيل TOTP. ستعتمد على OTP البريد فقط. متابعة؟')) return;
+  const email = settingsUser?.email;
+  const d = await callAuth({ action: 'disable-totp', email });
+  if (!d.success) { showToast('❌ ' + d.message); return; }
+  const session = Session.load();
+  if (session) { session.user.totp_enabled = false; Session.save(session.token, session.user); }
+  renderTotpStatus(false);
+  document.getElementById('settingsQrWrap').style.display = 'none';
+  showToast('✅ تم تعطيل TOTP');
+}
+
+function drawQR(uri, containerId) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  function render() {
+    wrap.innerHTML = '';
+    new QRCode(wrap, { text: uri, width: 160, height: 160, colorDark: '#061E2C', colorLight: '#FDFCF8', correctLevel: QRCode.CorrectLevel.M });
+  }
+  if (!window.QRCode) {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    sc.onload = render;
+    document.head.appendChild(sc);
+  } else render();
+}
+
+// ══ إدارة المستخدمين ═══════════════════════════════════
+async function loadUsers() {
+  const email = Session.load()?.user?.email;
+  if (!email) return;
+  const d = await callAuth({ action: 'list-users', email });
+  if (!d.success) return;
+  const tbody = document.getElementById('usersTableBody');
+  if (!d.users?.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--ink-light)">لا يوجد مستخدمون</td></tr>'; return; }
+  tbody.innerHTML = d.users.map(u => `<tr>
+    <td style="font-weight:500">${esc(u.name)}</td>
+    <td style="font-size:.78rem;color:var(--ink-mid);direction:ltr">${esc(u.email)}</td>
+    <td><select class="role-select" onchange="handleUpdateUser('${u.id}','role_id',this.value)">${['super_admin','admin','viewer'].map(r=>`<option value="${r}"${u.role_id===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td>
+    <td><span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:${u.totp_enabled?'rgba(74,122,58,.1)':'var(--sand-light)'};color:${u.totp_enabled?'#4A7A3A':'var(--ink-faint)'};">${u.totp_enabled?'✓ نشط':'—'}</span></td>
+    <td><button class="toggle-btn ${u.is_active?'on':'off'}" onclick="handleToggleActive('${u.id}',${u.is_active})"></button></td>
+  </tr>`).join('');
+}
+
+async function handleUpdateUser(id, field, value) {
+  const email = Session.load()?.user?.email;
+  const d = await callAuth({ action: 'update-user', email, targetId: id, field, value });
+  if (!d.success) showToast('❌ ' + d.message); else showToast('✅ تم التحديث');
+}
+
+async function handleToggleActive(id, current) {
+  const email = Session.load()?.user?.email;
+  const d = await callAuth({ action: 'update-user', email, targetId: id, field: 'is_active', value: !current });
+  if (d.success) loadUsers(); else showToast('❌ ' + d.message);
+}
+
+function toggleAddUserForm() {
+  const f = document.getElementById('addUserForm');
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) document.getElementById('newUserName').focus();
+}
+
+async function handleAddUser() {
+  const email    = Session.load()?.user?.email;
+  const newName  = document.getElementById('newUserName').value.trim();
+  const newEmail = document.getElementById('newUserEmail').value.trim();
+  const newRole  = document.getElementById('newUserRole').value;
+  document.getElementById('addUserError').style.display = 'none';
+  if (!newName || !newEmail) { showLoginError('addUserError', 'الاسم والبريد مطلوبان'); return; }
+  const d = await callAuth({ action: 'add-user', email, newName, newEmail, newRole });
+  if (!d.success) { showLoginError('addUserError', d.message); return; }
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserEmail').value = '';
+  toggleAddUserForm();
+  loadUsers();
+  showToast('✅ تم إضافة المستخدم');
+}
+
+// INIT — Check existing session
 // ══════════════════════════════════════════════════════
 (function init() {
   const session = Session.load();
@@ -1687,7 +1716,6 @@ function showDashboard(user, email) {
   document.getElementById('screen-login').style.display = 'none';
   document.getElementById('screen-dashboard').style.display = 'block';
 
-  const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
   document.getElementById('dashUserName').textContent = user.name || email;
   document.getElementById('dashUserRole').textContent = ROLE_LABELS[user.role_id || user.role] || '—';
 
@@ -1702,9 +1730,10 @@ function handleLogout() {
   document.getElementById('screen-dashboard').style.display = 'none';
   document.getElementById('screen-login').style.display = 'grid';
   document.getElementById('loginEmail').value = '';
-  document.getElementById('loginOtp').value = '';
+  document.getElementById('loginCode').value = '';
+  document.getElementById('loginStepCode').style.display  = 'none';
   document.getElementById('loginStepEmail').style.display = 'block';
-  document.getElementById('loginStepOtp').style.display = 'none';
+  currentEmail = ''; if(typeof closeSettings==='function') closeSettings();
 }
 
 // ══════════════════════════════════════════════════════
