@@ -1075,6 +1075,71 @@
       border-radius: 99px;
       transition: width 1s linear;
     }
+
+    /* ══ Login Step Code ══ */
+    .code-input { letter-spacing:10px; font-size:1.8rem; text-align:center; font-family:var(--font-en); font-weight:600; color:var(--petrol); direction:ltr; }
+    .code-input::placeholder { letter-spacing:4px; font-size:1rem; color:var(--ink-faint); }
+    .code-hint { display:flex; align-items:center; gap:8px; justify-content:center; font-size:.75rem; color:var(--ink-light); margin-top:10px; flex-wrap:wrap; }
+    .code-hint-badge { padding:2px 9px; border-radius:99px; font-size:.68rem; font-weight:500; border:1px solid var(--line); background:var(--sand-light); color:var(--ink-mid); }
+    .code-hint-badge.totp { border-color:rgba(20,73,94,.2); background:rgba(20,73,94,.06); color:var(--petrol-s); }
+    .code-hint-badge.otp  { border-color:rgba(200,164,92,.3); background:rgba(200,164,92,.07); color:var(--gold-deep); }
+    .send-code-btn { background:none; border:none; color:var(--petrol-s); font-size:.83rem; cursor:pointer; font-family:inherit; text-decoration:underline; text-underline-offset:2px; padding:4px 0; margin-top:8px; display:block; width:100%; text-align:center; transition:color .2s; }
+    .send-code-btn:hover { color:var(--petrol); }
+    .send-code-btn:disabled { opacity:.45; cursor:not-allowed; }
+    /* ══ Settings Button ══ */
+    .dash-settings-btn { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(200,164,92,.2); color:rgba(235,217,180,.6); transition:all .2s; }
+    .dash-settings-btn:hover { border-color:rgba(200,164,92,.45); color:var(--gold); background:rgba(200,164,92,.07); }
+    /* ══ Settings Modal ══ */
+    .modal-overlay { position:fixed; inset:0; background:rgba(6,30,44,.5); z-index:300; display:none; align-items:flex-start; justify-content:flex-end; padding:14px; backdrop-filter:blur(4px); }
+    .modal-overlay.open { display:flex; }
+    .settings-modal { background:var(--off-white); border-radius:16px; width:min(520px,100%); max-height:calc(100vh - 28px); overflow-y:auto; border:1px solid var(--line-gold); box-shadow:0 20px 60px rgba(6,30,44,.18); display:flex; flex-direction:column; }
+    .modal-header { padding:18px 22px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--off-white); z-index:1; }
+    .modal-eyebrow { font-size:.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--gold-deep); margin-bottom:2px; }
+    .modal-title { font-family:var(--font-en); font-size:1.15rem; font-weight:500; color:var(--petrol); }
+    .modal-close { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--ink-light); transition:all .15s; }
+    .modal-close:hover { background:var(--sand-light); color:var(--ink); }
+    .modal-body { padding:20px 22px; flex:1; }
+    .settings-section { margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--line); }
+    .settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+    .settings-section-title { font-size:.62rem; font-weight:600; color:var(--ink-light); letter-spacing:.09em; text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; }
+    .profile-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-size:.88rem; }
+    .profile-row:last-child { border-bottom:none; }
+    .profile-key { color:var(--ink-light); font-size:.82rem; }
+    .profile-val { color:var(--ink); font-weight:500; }
+    .totp-status-row { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-radius:10px; border:1px solid var(--line); background:var(--sand-light); margin-bottom:12px; }
+    .totp-status-info { display:flex; align-items:center; gap:10px; }
+    .totp-status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .totp-status-dot.on { background:#4A7A3A; box-shadow:0 0 8px rgba(74,122,58,.4); }
+    .totp-status-dot.off { background:var(--ink-faint); }
+    .totp-status-label { font-size:.88rem; font-weight:500; color:var(--ink); }
+    .totp-status-sub { font-size:.73rem; color:var(--ink-light); }
+    .btn-sm { padding:6px 14px; border-radius:7px; font-size:.78rem; font-weight:500; border:1.5px solid transparent; transition:all .15s; white-space:nowrap; }
+    .btn-sm.primary { background:var(--petrol); color:var(--sand-cream); border-color:var(--petrol); }
+    .btn-sm.primary:hover { background:var(--petrol-s); }
+    .btn-sm.ghost { border-color:var(--ink-faint); color:var(--ink-mid); }
+    .btn-sm.ghost:hover { border-color:var(--petrol-s); color:var(--petrol-s); }
+    .btn-sm.danger { border-color:rgba(168,40,40,.25); color:#A82828; }
+    .btn-sm.danger:hover { background:rgba(168,40,40,.06); border-color:#A82828; }
+    .btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .qr-wrap-modal { display:flex; flex-direction:column; align-items:center; gap:12px; padding:18px; background:var(--sand-light); border:1px solid var(--line); border-radius:12px; margin-bottom:16px; }
+    .qr-secret-txt { font-family:var(--font-en); font-size:.72rem; color:var(--ink-light); letter-spacing:2px; word-break:break-all; text-align:center; direction:ltr; }
+    .qr-apps { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+    .qr-app-tag { font-size:.67rem; padding:2px 9px; background:rgba(20,73,94,.07); color:var(--petrol-s); border-radius:99px; border:1px solid rgba(20,73,94,.15); }
+    .users-table { width:100%; border-collapse:collapse; font-size:.83rem; }
+    .users-table th { padding:8px 10px; text-align:right; font-size:.68rem; font-weight:600; color:var(--ink-light); letter-spacing:.06em; text-transform:uppercase; background:var(--sand-light); border-bottom:1px solid var(--line-strong); }
+    .users-table td { padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+    .users-table tr:last-child td { border-bottom:none; }
+    .role-select { padding:4px 8px; border-radius:6px; font-size:.78rem; border:1px solid var(--ink-faint); background:var(--sand-paper); color:var(--ink); outline:none; cursor:pointer; font-family:inherit; }
+    .toggle-btn { width:36px; height:20px; border-radius:99px; position:relative; border:none; cursor:pointer; transition:background .2s; }
+    .toggle-btn.on { background:var(--petrol-s); }
+    .toggle-btn.off { background:var(--ink-faint); }
+    .toggle-btn::after { content:''; position:absolute; top:2px; width:16px; height:16px; border-radius:50%; background:white; transition:left .2s; }
+    .toggle-btn.on::after { left:18px; }
+    .toggle-btn.off::after { left:2px; }
+    .add-user-form { display:none; padding:14px; background:var(--sand-light); border:1px solid var(--line); border-radius:10px; margin-top:12px; }
+    .add-user-form.open { display:block; }
+    .form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:10px; }
+    @media(max-width:480px) { .form-row-3 { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -1132,13 +1197,38 @@
       <div id="loginStepEmail">
         <div class="login-form-eyebrow">Admin Access</div>
         <div class="login-form-title">مرحباً بك</div>
-        <div class="login-form-sub">أدخل بريدك الإلكتروني لاستلام رمز الدخول</div>
+        <div class="login-form-sub">أدخل بريدك الإلكتروني للمتابعة</div>
         <div class="form-group">
           <label class="form-label" for="loginEmail">البريد الإلكتروني</label>
-          <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
+          <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email"/>
         </div>
-        <button class="login-btn" id="loginBtnSend" onclick="handleSendOtp()">إرسال رمز الدخول</button>
+        <button class="login-btn" id="loginBtnSend" onclick="handleSendEmail()">متابعة</button>
         <div class="login-error" id="loginError"></div>
+      </div>
+
+      <!-- Step 2: رمز OTP أو TOTP -->
+      <div id="loginStepCode" style="display:none">
+        <div class="login-form-eyebrow">Verification</div>
+        <div class="login-form-title">أدخل الرمز</div>
+        <div class="login-form-sub">أدخل رمز المصادقة أو رمز البريد</div>
+        <div class="form-group">
+          <label class="form-label" for="loginCode">الرمز المكوّن من 6 أرقام</label>
+          <input class="form-input code-input" type="text" id="loginCode"
+            placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
+        </div>
+        <div class="code-hint">
+          <span>يقبل:</span>
+          <span class="code-hint-badge totp">🔐 TOTP — تطبيق المصادقة</span>
+          <span class="code-hint-badge otp">✉️ OTP — البريد الإلكتروني</span>
+        </div>
+        <button class="send-code-btn" id="sendCodeEmailBtn" onclick="handleSendEmailCode()">
+          إرسال رمز لبريدي الإلكتروني ←
+        </button>
+        <button class="login-btn" id="loginBtnVerify" onclick="handleVerifyCode()" style="margin-top:14px">تأكيد الدخول</button>
+        <div class="login-error" id="loginErrorCode"></div>
+        <div style="text-align:center;margin-top:14px">
+          <button onclick="handleBackToEmail()" class="btn-ghost-small">← تغيير البريد الإلكتروني</button>
+        </div>
       </div>
 
       <!-- Step 2: OTP -->
@@ -1161,52 +1251,7 @@
         </div>
       </div>
 
-      <!-- Step QR: إعداد TOTP لأول مرة -->
-      <div id="loginStepSetup">
-        <div class="login-form-eyebrow">First-Time Setup</div>
-        <div class="login-form-title">إعداد المصادق</div>
-        <div class="login-form-sub">امسح الرمز بتطبيق المصادقة</div>
-        <div class="qr-wrap">
-          <canvas id="qrCanvas" class="qr-canvas" width="180" height="180"></canvas>
-          <div class="qr-apps">
-            <span class="qr-app-tag">Google Authenticator</span>
-            <span class="qr-app-tag">Authy</span>
-            <span class="qr-app-tag">1Password</span>
-          </div>
-          <div class="qr-note">أو أدخل المفتاح يدوياً:</div>
-          <div class="qr-secret" id="qrSecretText">—</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="setupToken">أدخل الرمز من التطبيق للتأكيد</label>
-          <input class="form-input totp-input" type="text" id="setupToken"
-            placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
-        </div>
-        <button class="login-btn" id="loginBtnSetup" onclick="handleConfirmSetup()">تأكيد الإعداد</button>
-        <div class="login-error" id="loginErrorSetup"></div>
-      </div>
-
-      <!-- Step TOTP: إدخال رمز عند الدخول -->
-      <div id="loginStepTotp">
-        <div class="login-form-eyebrow">Authenticator</div>
-        <div class="login-form-title">رمز المصادقة</div>
-        <div class="login-form-sub">افتح تطبيق المصادقة وأدخل الرمز الحالي</div>
-        <div class="form-group">
-          <label class="form-label" for="totpToken">الرمز المكوّن من 6 أرقام</label>
-          <input class="form-input totp-input" type="text" id="totpToken"
-            placeholder="• • • • • •" maxlength="6" inputmode="numeric" autocomplete="one-time-code"/>
-        </div>
-        <div class="totp-timer">
-          <span id="totpCountdown">30</span>ث
-          <div class="totp-timer-bar"><div class="totp-timer-fill" id="totpTimerFill" style="width:100%"></div></div>
-        </div>
-        <button class="login-btn" id="loginBtnTotp" onclick="handleVerifyTotp()">دخول</button>
-        <div class="login-error" id="loginErrorTotp"></div>
-        <div style="text-align:center;margin-top:16px">
-          <button onclick="handleBackToEmail()" class="btn-ghost-small">← تغيير البريد الإلكتروني</button>
-        </div>
-      </div>
-
-    </div>
+      
   </div>
 </div><!-- /screen-login -->
 
@@ -1239,6 +1284,7 @@
         <div class="dash-user-name" id="dashUserName">—</div>
         <div class="dash-user-role" id="dashUserRole">—</div>
       </div>
+      <button class="dash-settings-btn" onclick="openSettings()" title="الإعدادات"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button class="dash-logout" onclick="handleLogout()">خروج</button>
     </div>
   </header>
@@ -1340,6 +1386,44 @@
 </div><!-- /screen-dashboard -->
 
 
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-modal">
+    <div class="modal-header">
+      <div><div class="modal-eyebrow">Account Settings</div><div class="modal-title">الإعدادات</div></div>
+      <button class="modal-close" onclick="closeSettings()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-section">
+        <div class="settings-section-title">الملف الشخصي</div>
+        <div class="profile-row"><span class="profile-key">الاسم</span><span class="profile-val" id="settingsName">—</span></div>
+        <div class="profile-row"><span class="profile-key">البريد</span><span class="profile-val" id="settingsEmail">—</span></div>
+        <div class="profile-row"><span class="profile-key">الصلاحية</span><span class="profile-val" id="settingsRole">—</span></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">أمان الحساب</div>
+        <div class="totp-status-row"><div class="totp-status-info"><div class="totp-status-dot" id="totpDot"></div><div><div class="totp-status-label" id="totpLabel">—</div><div class="totp-status-sub" id="totpSub">—</div></div></div></div>
+        <div class="btn-row" id="totpBtns" style="margin-bottom:12px"></div>
+        <div id="settingsQrWrap" style="display:none">
+          <div class="qr-wrap-modal"><div id="settingsQrCanvas"></div><div class="qr-apps"><span class="qr-app-tag">Google Authenticator</span><span class="qr-app-tag">Authy</span><span class="qr-app-tag">1Password</span></div><div style="font-size:.74rem;color:var(--ink-light)">أو أدخل يدوياً:</div><div class="qr-secret-txt" id="settingsQrSecret">—</div></div>
+          <div class="form-group"><label class="form-label">رمز التأكيد من التطبيق</label><input class="form-input code-input" type="text" id="settingsConfirmToken" placeholder="• • • • • •" maxlength="6" inputmode="numeric"/></div>
+          <button class="login-btn" onclick="handleSettingsConfirmTotp()">تأكيد الإعداد</button>
+          <div class="login-error" id="settingsQrError"></div>
+        </div>
+      </div>
+      <div class="settings-section" id="usersSection" style="display:none">
+        <div class="settings-section-title"><span>إدارة المستخدمين</span><button class="btn-sm primary" onclick="toggleAddUserForm()" style="font-size:.72rem;padding:4px 10px">+ إضافة</button></div>
+        <div class="add-user-form" id="addUserForm">
+          <div class="form-row-3"><div><label class="form-label">الاسم</label><input class="form-input" type="text" id="newUserName" placeholder="الاسم الكامل"/></div><div><label class="form-label">البريد</label><input class="form-input" type="email" id="newUserEmail" placeholder="email@example.com" dir="ltr"/></div><div><label class="form-label">الدور</label><select class="form-input" id="newUserRole"><option value="admin">مدير نظام</option><option value="viewer">مراقب</option><option value="super_admin">مدير عام</option></select></div></div>
+          <div class="btn-row"><button class="btn-sm primary" onclick="handleAddUser()">حفظ</button><button class="btn-sm ghost" onclick="toggleAddUserForm()">إلغاء</button></div>
+          <div class="login-error" id="addUserError"></div>
+        </div>
+        <div style="margin-top:12px;overflow-x:auto"><table class="users-table"><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>TOTP</th><th>نشط</th></tr></thead><tbody id="usersTableBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--ink-light)">جارٍ التحميل...</td></tr></tbody></table></div>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Detail Drawer -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer">
