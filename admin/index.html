@@ -420,6 +420,7 @@
        DASHBOARD SCREEN
     ══════════════════════════════════════════════════ */
     #screen-dashboard { display: none; min-height: 100vh; flex-direction: column; }
+    #screen-dashboard.visible { display: flex !important; }
 
     /* ─── Header ─── */
     .dash-header {
@@ -1775,6 +1776,7 @@ function showDashboard(user, email) {
     return;
   }
   loginEl.style.display = 'none';
+  dashEl.classList.add('visible');
   dashEl.style.display  = 'flex';
   document.getElementById('dashUserName').textContent = user.name || email;
   document.getElementById('dashUserRole').textContent = ROLE_LABELS[user.role_id || user.role] || '—';
@@ -1786,7 +1788,9 @@ function handleLogout() {
   authToken = null;
   allData = [];
   filteredData = [];
-  document.getElementById('screen-dashboard').style.display = 'none';
+  const _dash = document.getElementById('screen-dashboard');
+  _dash.classList.remove('visible');
+  _dash.style.display = 'none';
   document.getElementById('screen-login').style.display = 'grid';
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginCode').value = '';
