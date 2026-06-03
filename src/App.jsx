@@ -56,7 +56,12 @@ function fmtBoth(d) {
 
 function todayISO() { return new Date().toISOString().split("T")[0]; }
 function validPhone(p) { return /^05\d{8}$/.test(p.replace(/\s/g, "")); }
-function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+function validEmail(e) {
+  // Stronger validation: requires valid TLD (2+ chars), no consecutive dots, no leading/trailing dots in local part
+  return /^[a-zA-Z0-9]([a-zA-Z0-9._%+\-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(e)
+    && !e.includes('..')
+    && e.length <= 254;
+}
 function isPast(d) { const t = new Date(); t.setHours(0, 0, 0, 0); return new Date(d) < t; }
 
 // ════════════════════════════════════════════════════════════════
@@ -1605,6 +1610,12 @@ export default function App() {
   const [otpSending, setOtpSending] = useState(false);
   const [otpPending, setOtpPending] = useState(null);
 
+  // OTP Rate Limiting — client-side guard
+  const [otpLastSent, setOtpLastSent] = useState(null);       // timestamp of last send
+  const [otpFailCount, setOtpFailCount] = useState(0);        // consecutive failed verifications
+  const OTP_COOLDOWN_SEC = 60;   // seconds between resends
+  const OTP_MAX_FAILS    = 3;    // max failed verifications before lockout
+
   // Process details from Supabase (rich data)
   const [processDetails, setProcessDetails] = useState({});
   const [highlightedKeys, setHighlightedKeys] = useState([]);
@@ -1743,6 +1754,14 @@ export default function App() {
     e.preventDefault();
     const phone = resumePhone.replace(/\s/g, "");
     if (!validPhone(phone)) { setResumeError("صيغة غير صحيحة (05XXXXXXXX)"); return; }
+
+    // ── Rate limit: enforce cooldown between sends ──
+    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
+      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
+      setResumeError(`يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال`);
+      return;
+    }
+
     setResumeLoading(true);
     setResumeError("");
     const existing = await DB.getAll("reg:");
@@ -1754,6 +1773,8 @@ export default function App() {
     setResumeLoading(false);
     if (!res.success) { setResumeError("خطأ في إرسال رمز التحقق"); return; }
 
+    setOtpLastSent(Date.now());
+    setOtpFailCount(0);
     // Store found user and switch to OTP input
     setUser({ name: found.name, phone: found.phone, email: found.email });
     setOtpPending({ type: "resume", data: found });
@@ -1768,12 +1789,26 @@ export default function App() {
     e.preventDefault();
     if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
 
+    // ── Rate limit: max failed attempts ──
+    if (otpFailCount >= OTP_MAX_FAILS) {
+      setOtpError("تجاوزت الحد المسموح من المحاولات. يرجى طلب رمز جديد");
+      return;
+    }
+
     setOtpSending(true);
     setOtpError("");
     const found = otpPending?.data;
     const res = await OTP.verify(found.email, otpCode);
     setOtpSending(false);
-    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
+    if (!res.success) {
+      setOtpFailCount(prev => prev + 1);
+      const remaining = OTP_MAX_FAILS - (otpFailCount + 1);
+      setOtpError(remaining > 0
+        ? `${res.message || "رمز التحقق غير صحيح"} — متبقي ${remaining} محاولة`
+        : "تجاوزت الحد المسموح. اطلب رمزاً جديداً"
+      );
+      return;
+    }
 
     // Restore session
     setSessionId(found.id);
@@ -1797,9 +1832,17 @@ export default function App() {
     e.preventDefault();
     const errs = {};
     if (!user.name.trim()) errs.name = "الاسم مطلوب";
+    if (user.name.trim().length > 80) errs.name = "الاسم طويل جداً (80 حرف كحد أقصى)";
     if (!validPhone(user.phone)) errs.phone = "صيغة غير صحيحة (05XXXXXXXX)";
     if (!validEmail(user.email)) errs.email = "بريد إلكتروني غير صحيح";
     if (Object.keys(errs).length) { setRegErrors(errs); return; }
+
+    // ── Rate limit: enforce cooldown between sends ──
+    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
+      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
+      setRegErrors({ email: `يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال` });
+      return;
+    }
 
     // Check duplicate → auto-resume via OTP
     const existing = await DB.getAll("reg:");
@@ -1811,6 +1854,8 @@ export default function App() {
     setOtpSending(false);
     if (!res.success) { setRegErrors({ email: res.message || "خطأ في إرسال رمز التحقق" }); return; }
 
+    setOtpLastSent(Date.now());
+    setOtpFailCount(0);
     setOtpPending(dup ? { type: "resume", data: dup } : { type: "new" });
     setOtpStep("otp");
     setOtpCode("");
@@ -1823,11 +1868,25 @@ export default function App() {
     e.preventDefault();
     if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
 
+    // ── Rate limit: max failed attempts ──
+    if (otpFailCount >= OTP_MAX_FAILS) {
+      setOtpError("تجاوزت الحد المسموح من المحاولات. يرجى طلب رمز جديد");
+      return;
+    }
+
     setOtpSending(true);
     setOtpError("");
     const res = await OTP.verify(user.email, otpCode);
     setOtpSending(false);
-    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
+    if (!res.success) {
+      setOtpFailCount(prev => prev + 1);
+      const remaining = OTP_MAX_FAILS - (otpFailCount + 1);
+      setOtpError(remaining > 0
+        ? `${res.message || "رمز التحقق غير صحيح"} — متبقي ${remaining} محاولة`
+        : "تجاوزت الحد المسموح. اطلب رمزاً جديداً"
+      );
+      return;
+    }
 
     // OTP verified — complete registration or resume
     if (otpPending?.type === "resume") {
@@ -1863,12 +1922,23 @@ export default function App() {
 
   // ── Resend OTP ──
   const handleResendOtp = async () => {
+    // ── Rate limit: enforce cooldown ──
+    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
+      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
+      setOtpError(`يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال`);
+      return;
+    }
     setOtpSending(true);
     setOtpError("");
     const res = await OTP.send(user.email);
     setOtpSending(false);
-    if (res.success) showToast("تم إعادة إرسال الرمز ✉");
-    else setOtpError("خطأ في إعادة الإرسال");
+    if (res.success) {
+      setOtpLastSent(Date.now());
+      setOtpFailCount(0);
+      showToast("تم إعادة إرسال الرمز ✉");
+    } else {
+      setOtpError("خطأ في إعادة الإرسال");
+    }
   };
 
   // ── Admin Login (via Lambda) ──
@@ -2031,6 +2101,7 @@ export default function App() {
     setAdminUser(""); setAdminPass(""); setAdminError(""); setExpandedReg(null);
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
+    setOtpLastSent(null); setOtpFailCount(0);
   };
 
   const logout = () => {
@@ -2101,9 +2172,9 @@ export default function App() {
             <h1 className="auth-title">ابدأ رحلتك</h1>
             <p className="auth-sub">سجّل بياناتك للدخول إلى منظومة العمليات الست عشرة</p>
             <form onSubmit={handleRegister}>
-              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
-              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
-              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
+              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} maxLength={80} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
+              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
+              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} maxLength={254} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
             </form>
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
@@ -2149,7 +2220,7 @@ export default function App() {
             <form onSubmit={handleResume}>
               <div className={`fg ${resumeError ? "fg-err" : ""}`}>
                 <label>رقم الجوال المسجل</label>
-                <input type="tel" placeholder="05XXXXXXXX" value={resumePhone}
+                <input type="tel" placeholder="05XXXXXXXX" value={resumePhone} maxLength={10}
                   onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
                   style={{ direction: "ltr", textAlign: "right" }} />
                 {resumeError && <div className="fg-msg">{resumeError}</div>}
