@@ -1,0 +1,3 @@
+# admin.sunkvalue.com — SPA fallback
+# يضمن أن كل طلب يُخدَّم من admin/index.html
+/*    /index.html    200
