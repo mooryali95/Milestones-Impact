@@ -951,17 +951,11 @@ export default function App() {
   const sendOtp = async () => {
     setAuthError(""); setAuthBusy(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: authEmail.trim(),
-        options: { shouldCreateUser: false },
+      const { data, error } = await supabase.functions.invoke("sspdf-auth", {
+        body: { action: "send", email: authEmail.trim() },
       });
-      if (error) {
-        setAuthError(
-          error.status === 400
-            ? "هذا البريد غير مُفعَّل بعد لهذا النظام. تواصل مع مدير النظام لإضافته."
-            : error.message || "تعذّر إرسال رمز الدخول. حاول مرة أخرى."
-        );
-      } else setOtpSent(true);
+      if (error || !data?.success) setAuthError(data?.message || "تعذّر إرسال رمز الدخول. حاول مرة أخرى.");
+      else setOtpSent(true);
     } catch (e) {
       setAuthError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.");
     }
@@ -970,8 +964,16 @@ export default function App() {
   const verifyOtp = async () => {
     setAuthError(""); setAuthBusy(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ email: authEmail.trim(), token: otpCode.trim(), type: "email" });
-      if (error) setAuthError(error.message || "رمز غير صحيح أو منتهي الصلاحية.");
+      const { data, error } = await supabase.functions.invoke("sspdf-auth", {
+        body: { action: "verify", email: authEmail.trim(), otp: otpCode.trim() },
+      });
+      if (error || !data?.success) {
+        setAuthError(data?.message || "رمز غير صحيح أو منتهي الصلاحية.");
+        setAuthBusy(false);
+        return;
+      }
+      const { error: sessErr } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: "magiclink" });
+      if (sessErr) setAuthError("تعذّر إكمال تسجيل الدخول.");
     } catch (e) {
       setAuthError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.");
     }
