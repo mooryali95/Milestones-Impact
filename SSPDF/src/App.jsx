@@ -815,32 +815,45 @@ const Team = (p) => (
     <Card>
       {p.team.map((m, idx) => (
         <div key={m.id} className="flex justify-between items-center py-3" style={{ borderBottom: idx < p.team.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold"
-              style={{ background: B.goldSoft, color: B.goldText, border: `1px solid ${B.line}` }}>{m.name[0]}</div>
-            <div className="text-sm font-bold" style={{ color: B.petrol }}>{m.name}</div>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+              style={{ background: B.goldSoft, color: B.goldText, border: `1px solid ${B.line}` }}>{(m.name || m.email || "?")[0]?.toUpperCase()}</div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold truncate" style={{ color: B.petrol }}>{m.name || m.email}</div>
+              {m.email && <div className="text-xs font-mono truncate" style={{ color: B.muted }}>{m.email}</div>}
+            </div>
           </div>
-          <span className="text-xs px-3 py-1 rounded-full font-bold" style={ROLES[m.role].chip}>{ROLES[m.role].ar}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap" style={ROLES[m.role].chip}>{ROLES[m.role].ar}</span>
+            {p.repoActive !== false && (
+              <span className="text-xs" title={m.linked ? "مرتبط بحساب فعلي" : "بانتظار أول تسجيل دخول"}>{m.linked ? "🟢" : "⏳"}</span>
+            )}
+            {p.can.team && (
+              <button onClick={() => p.removeTeamMember(m)} title="حذف العضو"
+                className="text-sm px-2 py-1 rounded-lg" style={{ color: B.bad, border: `1px solid ${B.line}` }}>🗑</button>
+            )}
+          </div>
         </div>
       ))}
       {p.can.team && (
-        <div className="flex flex-wrap gap-2 mt-4">
-          <input value={p.newMember} onChange={(e) => p.setNewMember(e.target.value)} placeholder="اسم العضو الجديد..."
-            className="flex-1 min-w-40 rounded-lg px-3 py-2 text-sm outline-none inp" />
-          <select value={p.newMemberRole} onChange={(e) => p.setNewMemberRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none inp">
-            {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.ar}</option>)}
-          </select>
-          <GoldBtn onClick={() => {
-            if (!p.newMember.trim()) return;
-            p.setTeam((t) => [...t, { id: Date.now(), name: p.newMember.trim(), role: p.newMemberRole }]);
-            p.log("إضافة عضو", `${p.newMember.trim()} — ${ROLES[p.newMemberRole].ar}`);
-            p.setNewMember("");
-          }}>إضافة</GoldBtn>
-        </div>
-      )}
-      {p.can.team && (
-        <div className="text-xs mt-2" style={{ color: B.muted }}>
-          ⚠️ الإضافة هنا للعرض فقط. صلاحيته الفعلية تُفعَّل بعد تسجيل دخوله لأول مرة وربط حسابه من قاعدة البيانات (schema: sspdf).
+        <div className="mt-4">
+          <div className="flex flex-wrap gap-2">
+            <input value={p.newMemberEmail} onChange={(e) => p.setNewMemberEmail(e.target.value)} placeholder="بريد العضو الإلكتروني..."
+              type="email" dir="ltr" style={{ textAlign: "right" }}
+              className="flex-1 min-w-40 rounded-lg px-3 py-2 text-sm outline-none inp" />
+            <select value={p.newMemberRole} onChange={(e) => p.setNewMemberRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none inp">
+              {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.ar}</option>)}
+            </select>
+            <GoldBtn onClick={() => {
+              if (!p.newMemberEmail.trim() || !p.newMemberEmail.includes("@")) { p.setTeamError("أدخل بريداً إلكترونياً صحيحاً"); return; }
+              p.addTeamMember(p.newMemberEmail.trim(), p.newMemberRole, "");
+              p.setNewMemberEmail("");
+            }}>إضافة</GoldBtn>
+          </div>
+          {p.teamError && <div className="text-xs mt-2" style={{ color: B.bad }}>{p.teamError}</div>}
+          <div className="text-xs mt-2" style={{ color: B.muted }}>
+            🟢 عضو فعّال بالفعل · ⏳ سيُفعَّل تلقائياً فور أول تسجيل دخول له بنفس هذا البريد
+          </div>
         </div>
       )}
     </Card>
@@ -892,7 +905,7 @@ export default function App() {
   const [mc, setMc] = useState(null);
   const [newSvc, setNewSvc] = useState("");
   const [newSeg, setNewSeg] = useState("");
-  const [newMember, setNewMember] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("evaluator");
 
   const [authState, setAuthState] = useState(repo ? "checking" : "local");
@@ -913,6 +926,7 @@ export default function App() {
       if (d) {
         setServices(d.services); setSegments(d.segments); setCriteria(d.criteria);
         setEvals(d.evals); if (d.audit.length) setAudit(d.audit);
+        if (d.team) setTeam(d.team);
       }
       setHydrated(true);
     }
@@ -1052,6 +1066,38 @@ export default function App() {
     log("موازنة الأوزان", "إعادة ضبط المجموع إلى 100%");
   };
 
+  const [teamError, setTeamError] = useState("");
+  const addTeamMember = async (email, role, displayName) => {
+    setTeamError("");
+    if (repo) {
+      const res = await repo.addMember({ email, role, displayName });
+      if (res.error) { setTeamError(res.error); return; }
+      setTeam((t) => [...t, res.member]);
+      log("إضافة عضو", `${email} — ${ROLES[role].ar}`);
+    } else {
+      setTeam((t) => [...t, { id: Date.now(), email, name: displayName || email, role, linked: false }]);
+      log("إضافة عضو", `${displayName || email} — ${ROLES[role].ar}`);
+    }
+  };
+  const removeTeamMember = async (member) => {
+    setTeamError("");
+    const admins = team.filter((m) => m.role === "admin");
+    if (member.role === "admin" && admins.length <= 1) {
+      setTeamError("لا يمكن حذف آخر مدير نظام متبقٍ في المشروع");
+      return;
+    }
+    if (member.userId && member.userId === authUser?.id) {
+      setTeamError("لا يمكنك حذف حسابك الخاص أثناء تسجيل دخولك به");
+      return;
+    }
+    if (repo) {
+      const res = await repo.removeMember(member.id);
+      if (res.error) { setTeamError(res.error); return; }
+    }
+    setTeam((t) => t.filter((m) => m.id !== member.id));
+    log("حذف عضو", `${member.name || member.email}`);
+  };
+
   if (repo && authState === "checking") return <CheckingScreen />;
   if (repo && authState === "login") {
     return (
@@ -1077,7 +1123,9 @@ export default function App() {
     role, can, team, setTeam, services, setServices, segments, setSegments,
     criteria, setCriteria, evals, setEvals, audit, selCombo, setSelCombo,
     anTab, setAnTab, comboMode, setComboMode, mc, setMc,
-    newSvc, setNewSvc, newSeg, setNewSeg, newMember, setNewMember, newMemberRole, setNewMemberRole,
+    newSvc, setNewSvc, newSeg, setNewSeg,
+    newMemberEmail, setNewMemberEmail, newMemberRole, setNewMemberRole,
+    addTeamMember, removeTeamMember, teamError, repoActive: !!repo,
     ranked, top, totalW, confIdx, lastUpdate,
     comboName, toggleCombo, setScore, setConf, setEvidence, setRisk, setWeight, normalizeW, log,
     setScreen,

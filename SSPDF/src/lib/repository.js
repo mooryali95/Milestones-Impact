@@ -26,7 +26,7 @@ class SupabaseRepo {
     const project = projects[0];
     this.projectId = project.id;
 
-    const [sv, sg, cr, cb, rk, lg] = await Promise.all([
+    const [sv, sg, cr, cb, rk, lg, mb] = await Promise.all([
       this.sb.from("services").select("*").eq("project_id", project.id).order("sort"),
       this.sb.from("segments").select("*").eq("project_id", project.id).order("sort"),
       this.sb.from("criteria").select("*").eq("project_id", project.id).order("sort"),
@@ -34,8 +34,9 @@ class SupabaseRepo {
       this.sb.from("risks").select("*"),
       this.sb.from("activity_log").select("*").eq("project_id", project.id)
         .order("created_at", { ascending: false }).limit(100),
+      this.sb.from("project_members").select("*").eq("project_id", project.id).order("created_at"),
     ]);
-    for (const r of [sv, sg, cr, cb, rk, lg]) if (r.error) throw r.error;
+    for (const r of [sv, sg, cr, cb, rk, lg, mb]) if (r.error) throw r.error;
 
     const services = sv.data.map((x) => ({ id: x.code, ar: x.name_ar, en: x.name_en || "" }));
     const segments = sg.data.map((x) => ({ id: x.code, ar: x.name_ar, en: x.name_en || "" }));
@@ -86,7 +87,37 @@ class SupabaseRepo {
       user: x.actor, action: x.action, detail: x.detail || "",
     }));
 
-    return { project, services, segments, criteria, evals, audit };
+    const team = mb.data.map((m) => ({
+      id: m.id, email: m.email || "", name: m.display_name || m.email || "—",
+      role: m.role, userId: m.user_id, linked: !!m.user_id,
+    }));
+
+    return { project, services, segments, criteria, evals, audit, team };
+  }
+
+  /** إضافة عضو فريق حقيقي — يُكتب مباشرة في قاعدة البيانات */
+  async addMember({ email, role, displayName }) {
+    if (!this.projectId) return { error: "لا يوجد مشروع محمَّل" };
+    const { data, error } = await this.sb.from("project_members")
+      .insert({
+        project_id: this.projectId,
+        email: email.trim().toLowerCase(),
+        display_name: (displayName || "").trim() || email.trim(),
+        role,
+      })
+      .select().single();
+    if (error) {
+      if (error.code === "23505") return { error: "هذا البريد مضاف مسبقاً لهذا المشروع" };
+      return { error: error.message };
+    }
+    return { member: { id: data.id, email: data.email, name: data.display_name, role: data.role, userId: data.user_id, linked: false } };
+  }
+
+  /** حذف عضو فريق — مباشرة من قاعدة البيانات */
+  async removeMember(memberRowId) {
+    const { error } = await this.sb.from("project_members").delete().eq("id", memberRowId);
+    if (error) return { error: error.message };
+    return { ok: true };
   }
 
   /** مزامنة شاملة (Debounced من الواجهة): بنية + أوزان + تركيبات + تقييمات + مخاطر */
