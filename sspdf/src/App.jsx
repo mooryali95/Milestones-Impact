@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { repo } from "./lib/repository";
+import { repo, getMyRole } from "./lib/repository";
+import { supabase } from "./lib/supabaseClient";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell, ScatterChart, Scatter, ReferenceLine,
@@ -10,7 +11,7 @@ const B = {
   petrol: "#061E2C",
   petrolSoft: "#3E6E8C",
   gold: "#C8A45C",
-  goldText: "#A98442",
+  goldText: "#8A6432", // مُعدَّل ليجتاز تباين WCAG AA (5.32 : 1 على أبيض)
   goldSoft: "#F3E9D7",
   sand: "#FBF8EF",
   card: "#FFFFFF",
@@ -278,28 +279,85 @@ export default function App() {
   const [newMember, setNewMember] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("evaluator");
 
+  /* ── المصادقة الحقيقية (Supabase Auth) — تُفعَّل تلقائياً عند وجود اتصال بقاعدة البيانات ── */
+  const [authState, setAuthState] = useState(repo ? "checking" : "local"); // checking · login · pending · ready · local
+  const [authUser, setAuthUser] = useState(null);
+  const [teamDisplayName, setTeamDisplayName] = useState("");
+  const [adminClaimed, setAdminClaimed] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const afterLogin = async (user) => {
+    setAuthUser(user);
+    if (!hydrated) {
+      const d = await repo.load().catch(() => null);
+      if (d) {
+        setServices(d.services); setSegments(d.segments); setCriteria(d.criteria);
+        setEvals(d.evals); if (d.audit.length) setAudit(d.audit);
+      }
+      setHydrated(true);
+    }
+    const info = await getMyRole(supabase, repo.projectId);
+    if (info.role) {
+      setRole(info.role);
+      setTeamDisplayName(info.displayName || user.email);
+      setAuthState("ready");
+    } else {
+      setAdminClaimed(info.adminClaimed);
+      setAuthState("pending");
+    }
+  };
+
+  useEffect(() => {
+    if (!repo) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) afterLogin(session.user); else setAuthState("login");
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session) afterLogin(session.user);
+      else { setAuthUser(null); setAuthState("login"); }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const sendOtp = async () => {
+    setAuthError(""); setAuthBusy(true);
+    const { error } = await supabase.auth.signInWithOtp({ email: authEmail.trim() });
+    setAuthBusy(false);
+    if (error) setAuthError(error.message); else setOtpSent(true);
+  };
+  const verifyOtp = async () => {
+    setAuthError(""); setAuthBusy(true);
+    const { error } = await supabase.auth.verifyOtp({ email: authEmail.trim(), token: otpCode.trim(), type: "email" });
+    setAuthBusy(false);
+    if (error) setAuthError(error.message);
+  };
+  const claimAdminNow = async () => {
+    setAuthBusy(true);
+    await repo.claimAdmin(authUser.email).catch(() => {});
+    const info = await getMyRole(supabase, repo.projectId);
+    setAuthBusy(false);
+    if (info.role) { setRole(info.role); setTeamDisplayName(info.displayName || authUser.email); setAuthState("ready"); }
+  };
+  const signOut = async () => { await supabase.auth.signOut(); };
+
   const can = ROLES[role].can;
-  const userName = team.find((m) => m.role === role)?.name || "أنت";
+  const userName = authState === "ready" ? (teamDisplayName || authUser?.email || "مستخدم")
+    : team.find((m) => m.role === role)?.name || "أنت";
   const log = (action, detail) => {
     setAudit((a) => [{ ts: now(), user: userName, action, detail }, ...a]);
     repo?.addLog(action, detail, userName).catch(() => {});
   };
 
-  /* ── مزامنة قاعدة البيانات (Supabase · schema: sspdf) ── */
+  /* ── مزامنة قاعدة البيانات (Supabase · schema: sspdf) ──
+     ملاحظة: عند وجود اتصال حقيقي، يتم التحميل الأول بعد نجاح تسجيل الدخول
+     داخل afterLogin أعلاه — وليس هنا — لضمان عدم كشف أي بيانات قبل المصادقة. */
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!repo) { setHydrated(true); return; }
-    repo.load()
-      .then((d) => {
-        if (!d) return;
-        setServices(d.services);
-        setSegments(d.segments);
-        setCriteria(d.criteria);
-        setEvals(d.evals);
-        if (d.audit.length) setAudit(d.audit);
-      })
-      .catch((e) => console.warn("SSPDF load:", e.message))
-      .finally(() => setHydrated(true));
+    if (!repo) setHydrated(true);
   }, []);
   useEffect(() => {
     if (!hydrated || !repo) return;
@@ -618,11 +676,16 @@ export default function App() {
           <div key={cr.id} className="grid grid-cols-12 gap-3 items-center py-2" style={{ borderBottom: i < criteria.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
             <div className="col-span-5 md:col-span-4 text-sm" style={{ color: B.petrol }}>{cr.ar}<div className="text-xs font-mono" style={{ color: B.muted }}>{cr.en}</div></div>
             <div className="col-span-2 text-xs hidden md:block" style={{ color: B.muted }}>{cr.g}</div>
-            <div className="col-span-5 md:col-span-5">
-              <input type="range" min={0} max={25} value={cr.w} disabled={!can.weights}
+            <div className="col-span-5 md:col-span-4">
+              <input type="range" min={0} max={60} value={cr.w} disabled={!can.weights}
                 onChange={(e) => setWeight(i, +e.target.value)} className="w-full" style={{ accentColor: B.gold }} />
             </div>
-            <div className="col-span-2 md:col-span-1 font-mono font-bold text-sm" style={{ color: B.goldText }}>{cr.w}%</div>
+            <div className="col-span-2 flex items-center gap-1">
+              <input type="number" min={0} max={100} value={cr.w} disabled={!can.weights}
+                onChange={(e) => setWeight(i, Math.max(0, Math.min(100, +e.target.value || 0)))}
+                className="w-14 rounded-lg px-1 py-1 text-center font-mono font-bold text-sm outline-none inp" style={{ color: B.goldText }} />
+              <span className="text-xs" style={{ color: B.muted }}>%</span>
+            </div>
           </div>
         ))}
       </Card>
@@ -688,9 +751,9 @@ export default function App() {
                         </select>
                       </td>
                       <td className="p-2 min-w-64">
-                        <input value={ev.evidence[cr.id] || ""} disabled={!can.score} placeholder="اكتب الدليل الذي يبرر هذه الدرجة..."
+                        <textarea value={ev.evidence[cr.id] || ""} disabled={!can.score} placeholder="اكتب الدليل الذي يبرر هذه الدرجة..." rows={2}
                           onChange={(e) => setEvidence(selCombo, cr.id, e.target.value)}
-                          className="w-full rounded-lg px-3 py-1.5 text-xs outline-none inp" />
+                          className="w-full rounded-lg px-3 py-1.5 text-xs outline-none inp resize-y leading-relaxed" style={{ minHeight: 40 }} />
                       </td>
                     </tr>
                   );
@@ -881,6 +944,11 @@ export default function App() {
             }}>إضافة</GoldBtn>
           </div>
         )}
+        {can.team && (
+          <div className="text-xs mt-2" style={{ color: B.muted }}>
+            ⚠️ الإضافة هنا للعرض فقط. صلاحيته الفعلية تُفعَّل بعد تسجيل دخوله لأول مرة وربط حسابه من قاعدة البيانات (schema: sspdf).
+          </div>
+        )}
       </Card>
       <Card className="mt-4">
         <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>مصفوفة الصلاحيات</div>
@@ -918,6 +986,73 @@ export default function App() {
   const SCREENS = { portal: Portal, dashboard: Dashboard, library: Library, combos: Combos, criteria: Criteria, scoring: Scoring, risk: Risk, analysis: Analysis, decision: Decision, audit: Audit, team: Team };
   const Screen = SCREENS[screen];
 
+  const AuthShell = ({ children }) => (
+    <div dir="rtl" className="min-h-screen flex items-center justify-center p-5" style={{ background: B.sand, fontFamily: "'DIN Next LT Arabic', 'Tajawal', 'Segoe UI', Tahoma, sans-serif" }}>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-6">
+          <span className="px-3 py-1.5 rounded-lg text-xl font-black font-mono tracking-tight" style={{ background: B.petrol, color: B.gold }}>SSPDF</span>
+          <div className="text-xs mt-2" style={{ color: B.muted }}>إطار قرار محفظة الخدمات الاستراتيجية</div>
+        </div>
+        <div className="card p-6" style={{ background: B.card, border: `1px solid ${B.line}`, borderRadius: 16 }}>{children}</div>
+      </div>
+    </div>
+  );
+
+  if (repo && authState === "checking") {
+    return <AuthShell><div className="text-center text-sm" style={{ color: B.muted }}>جارٍ التحقق من الجلسة…</div></AuthShell>;
+  }
+
+  if (repo && authState === "login") {
+    return (
+      <AuthShell>
+        <div className="text-sm font-bold mb-1" style={{ color: B.petrol }}>تسجيل الدخول</div>
+        <div className="text-xs mb-4" style={{ color: B.muted }}>Sign in via one-time email code</div>
+        {!otpSent ? (
+          <>
+            <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="بريدك الإلكتروني"
+              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none inp mb-3" dir="ltr" style={{ textAlign: "right" }} />
+            <GoldBtn onClick={sendOtp} disabled={authBusy || !authEmail.trim()} className="w-full py-2.5">
+              {authBusy ? "جارٍ الإرسال…" : "إرسال رمز الدخول"}
+            </GoldBtn>
+          </>
+        ) : (
+          <>
+            <div className="text-xs mb-3" style={{ color: B.muted }}>أُرسل رمز إلى {authEmail} — أدخله هنا:</div>
+            <input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="000000" maxLength={6}
+              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none inp mb-3 text-center font-mono tracking-widest" />
+            <GoldBtn onClick={verifyOtp} disabled={authBusy || !otpCode.trim()} className="w-full py-2.5">
+              {authBusy ? "جارٍ التحقق…" : "دخول"}
+            </GoldBtn>
+            <button onClick={() => { setOtpSent(false); setOtpCode(""); }} className="w-full text-xs mt-3" style={{ color: B.muted }}>تغيير البريد الإلكتروني</button>
+          </>
+        )}
+        {authError && <div className="text-xs mt-3 text-center" style={{ color: B.bad }}>{authError}</div>}
+      </AuthShell>
+    );
+  }
+
+  if (repo && authState === "pending") {
+    return (
+      <AuthShell>
+        {!adminClaimed ? (
+          <>
+            <div className="text-sm font-bold mb-2" style={{ color: B.petrol }}>لا يوجد مدير نظام مرتبط بعد</div>
+            <div className="text-xs mb-4" style={{ color: B.muted }}>بصفتك أول من يسجّل الدخول، يمكنك المطالبة بصلاحية مدير النظام لهذا المشروع.</div>
+            <GoldBtn onClick={claimAdminNow} disabled={authBusy} className="w-full py-2.5">
+              {authBusy ? "جارٍ الربط…" : "المطالبة بصلاحية مدير النظام"}
+            </GoldBtn>
+          </>
+        ) : (
+          <>
+            <div className="text-sm font-bold mb-2" style={{ color: B.petrol }}>بانتظار تفعيل صلاحيتك</div>
+            <div className="text-xs mb-4" style={{ color: B.muted }}>حسابك ({authUser?.email}) لم يُربط بعد بأي دور في المشروع. تواصل مع مدير النظام لتفعيله من جدول العضوية.</div>
+          </>
+        )}
+        <button onClick={signOut} className="w-full text-xs mt-4" style={{ color: B.muted }}>تسجيل الخروج</button>
+      </AuthShell>
+    );
+  }
+
   return (
     <div dir="rtl" className="min-h-screen" style={{ background: B.sand, color: B.petrol, fontFamily: "'DIN Next LT Arabic', 'Tajawal', 'Segoe UI', Tahoma, 'Noto Sans Arabic', sans-serif" }}>
       <style>{`
@@ -934,11 +1069,21 @@ export default function App() {
         </div>
         <div className="flex-1"></div>
         <div className="flex items-center gap-2 text-xs">
-          <span style={{ color: B.muted }}>الدور الحالي:</span>
-          <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-1.5 outline-none inp">
-            {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.ar}</option>)}
-          </select>
-          <span className="px-3 py-1.5 rounded-lg font-bold" style={ROLES[role].chip}>{userName}</span>
+          {authState === "local" ? (
+            <>
+              <span style={{ color: B.muted }}>الدور الحالي</span>
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: B.goldSoft, color: B.goldText }}>وضع تجريبي محلي</span>
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-1.5 outline-none inp">
+                {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.ar}</option>)}
+              </select>
+            </>
+          ) : (
+            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{ROLES[role].ar}</span></span>
+          )}
+          <span className="px-3 py-1.5 rounded-lg font-bold" style={ROLES[role]?.chip}>{userName}</span>
+          {authState === "ready" && (
+            <button onClick={signOut} className="text-xs px-2 py-1.5 rounded-lg" style={{ color: B.muted, border: `1px solid ${B.line}` }}>تسجيل الخروج</button>
+          )}
         </div>
       </header>
       <div className="flex">

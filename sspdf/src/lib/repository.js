@@ -179,3 +179,29 @@ class SupabaseRepo {
 }
 
 export const repo = supabase ? new SupabaseRepo(supabase) : null;
+
+/**
+ * يحدد دور المستخدم المسجَّل دخوله فعلياً من جدول العضوية،
+ * ويتحقق هل يوجد مدير نظام مرتبط بحساب حقيقي من قبل.
+ */
+export async function getMyRole(sb, projectId) {
+  const { data: { user } = {} } = await sb.auth.getUser();
+  if (!user) return { user: null, role: null, displayName: null, adminClaimed: false };
+
+  let role = null, displayName = null;
+  try {
+    const { data } = await sb.from("project_members")
+      .select("role, display_name")
+      .eq("project_id", projectId).eq("user_id", user.id)
+      .maybeSingle();
+    if (data) { role = data.role; displayName = data.display_name; }
+  } catch (_) {}
+
+  let adminClaimed = false;
+  try {
+    const { data } = await sb.rpc("project_has_admin", { p_project: projectId });
+    adminClaimed = !!data;
+  } catch (_) {}
+
+  return { user, role, displayName, adminClaimed };
+}
