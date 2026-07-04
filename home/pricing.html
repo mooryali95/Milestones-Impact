@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#061E2C" />
+  <title>Pricing — Milestone Impact | التسعير</title>
+  <meta name="description" content="خطط اشتراك Milestone Impact — Individual وEnterprise. اختر الخطة المناسبة لرحلتك." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://mi.sunkvalue.com/pricing.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800&family=Cormorant+Garamond:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/main.css" />
+  <style>
+    .page-hero {
+      background: linear-gradient(160deg, var(--petrol-deepest) 0%, var(--petrol-deep) 100%);
+      padding: 7rem 2rem 5rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .page-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(200,164,92,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .page-hero__eyebrow {
+      font-family: var(--font-en);
+      font-size: 0.75rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1.2rem;
+    }
+    .page-hero__title {
+      font-family: var(--font-en);
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    .page-hero__title-ar {
+      font-family: var(--font-ar);
+      font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+      font-weight: 300;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 1.5rem;
+    }
+    .page-hero__sub {
+      font-size: 1rem;
+      color: rgba(255,255,255,0.6);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.8;
+    }
+
+    /* ── Pricing Section ── */
+    .pricing-section {
+      padding: 5rem 2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .pricing-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 3.5rem;
+    }
+    .pricing-toggle__label {
+      font-size: 0.9rem;
+      color: var(--petrol-mid);
+      font-weight: 600;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 700px) {
+      .pricing-grid { grid-template-columns: 1fr; }
+    }
+    .plan-card {
+      background: #FDFBF8;
+      border: 1.5px solid #E8DFC8;
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      position: relative;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .plan-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 48px rgba(6,30,44,0.1);
+    }
+    .plan-card--featured {
+      background: var(--petrol-deepest);
+      border-color: var(--gold);
+      color: #fff;
+    }
+    .plan-card__badge {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(90deg, var(--gold-deep), var(--gold));
+      color: var(--petrol-deepest);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 0.3rem 1.1rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .plan-card__tier {
+      font-family: var(--font-en);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold-deep);
+      margin-bottom: 0.6rem;
+    }
+    .plan-card--featured .plan-card__tier { color: var(--gold-light); }
+    .plan-card__name {
+      font-family: var(--font-ar);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--petrol-deepest);
+      margin-bottom: 0.3rem;
+    }
+    .plan-card--featured .plan-card__name { color: #fff; }
+    .plan-card__price {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      margin: 1.4rem 0 0.3rem;
+    }
+    .plan-card__currency {
+      font-family: var(--font-en);
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--gold-deep);
+    }
+    .plan-card--featured .plan-card__currency { color: var(--gold-light); }
+    .plan-card__amount {
+      font-family: var(--font-en);
+      font-size: 3.2rem;
+      font-weight: 700;
+      color: var(--petrol-deepest);
+      line-height: 1;
+    }
+    .plan-card--featured .plan-card__amount { color: #fff; }
+    .plan-card__period {
+      font-size: 0.82rem;
+      color: #888;
+      margin-bottom: 0.5rem;
+    }
+    .plan-card--featured .plan-card__period { color: rgba(255,255,255,0.45); }
+    .plan-card__desc {
+      font-size: 0.88rem;
+      color: #666;
+      line-height: 1.7;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid #E8DFC8;
+    }
+    .plan-card--featured .plan-card__desc {
+      color: rgba(255,255,255,0.55);
+      border-bottom-color: rgba(200,164,92,0.2);
+    }
+    .plan-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 2.2rem;
+    }
+    .plan-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.88rem;
+      color: var(--petrol-deepest);
+      line-height: 1.5;
+    }
+    .plan-card--featured .plan-features li { color: rgba(255,255,255,0.85); }
+    .plan-features li::before {
+      content: '✓';
+      color: var(--gold-deep);
+      font-weight: 700;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+    .plan-card--featured .plan-features li::before { color: var(--gold); }
+    .plan-cta {
+      display: block;
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: 10px;
+      border: 2px solid var(--gold-deep);
+      background: transparent;
+      color: var(--gold-deep);
+      font-family: var(--font-ar);
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .plan-cta:hover {
+      background: var(--gold-deep);
+      color: #fff;
+    }
+    .plan-cta--primary {
+      background: linear-gradient(135deg, var(--gold-deep), var(--gold));
+      border-color: transparent;
+      color: var(--petrol-deepest);
+    }
+    .plan-cta--primary:hover {
+      opacity: 0.9;
+      color: var(--petrol-deepest);
+    }
+
+    /* ── FAQ / Notes ── */
+    .pricing-notes {
+      background: #F5EFE4;
+      border-radius: 16px;
+      padding: 2.5rem;
+      margin-top: 3rem;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .pricing-notes__title {
+      font-family: var(--font-ar);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--petrol-deepest);
+      margin-bottom: 1.2rem;
+    }
+    .pricing-notes__list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .pricing-notes__list li {
+      font-size: 0.87rem;
+      color: #555;
+      line-height: 1.7;
+      padding-right: 1rem;
+      border-right: 2px solid var(--gold);
+    }
+    .pricing-notes__list strong { color: var(--petrol-deepest); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header" id="header" role="banner">
+    <a href="/" class="logo" aria-label="Milestone Impact — الصفحة الرئيسية">
+      <span class="logo__text">
+        <span class="logo__milestone">Milestone</span>
+        <span class="logo__diamond" aria-hidden="true"></span>
+        <span class="logo__impact">Impact</span>
+      </span>
+    </a>
+    <nav class="header__nav" role="navigation">
+      <a href="/" class="header__nav-link">الرئيسية</a>
+      <a href="pricing.html" class="header__nav-link is-active">التسعير</a>
+    </nav>
+    <a href="mailto:hello@mi.sunkvalue.com" class="header__cta">تواصل معنا</a>
+  </header>
+
+  <!-- Hero -->
+  <section class="page-hero">
+    <p class="page-hero__eyebrow">Pricing Plans</p>
+    <h1 class="page-hero__title">Simple, Transparent Pricing</h1>
+    <p class="page-hero__title-ar">تسعير واضح بلا تعقيد</p>
+    <p class="page-hero__sub">اختر الخطة التي تناسب رحلتك — سواء كنت فرداً يبحث عن أثر شخصي، أو مؤسسة تبني تحولاً استراتيجياً.</p>
+  </section>
+
+  <!-- Pricing Cards -->
+  <section class="pricing-section">
+    <div class="pricing-grid">
+
+      <!-- Individual -->
+      <div class="plan-card">
+        <div class="plan-card__tier">Individual</div>
+        <div class="plan-card__name">للأفراد</div>
+        <div class="plan-card__price">
+          <span class="plan-card__currency">$</span>
+          <span class="plan-card__amount">200</span>
+        </div>
+        <div class="plan-card__period">سنوياً / Per Year</div>
+        <p class="plan-card__desc">
+          للمستشار المستقل أو القائد الباحث عن أداة تحليل وتخطيط استراتيجي شخصية — مبنية على منهجية مصفوفة التأثير.
+        </p>
+        <ul class="plan-features">
+          <li>وصول كامل لمنصة مصفوفة التأثير</li>
+          <li>الـ 16 عملية استراتيجية</li>
+          <li>نموذج التحليل الديموغرافي</li>
+          <li>تقرير تحليلي تلقائي</li>
+          <li>حفظ الجلسة لمدة 24 ساعة</li>
+          <li>دعم عبر البريد الإلكتروني</li>
+        </ul>
+        <a href="mailto:hello@mi.sunkvalue.com?subject=Individual Plan Inquiry" class="plan-cta">ابدأ الآن</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="plan-card plan-card--featured">
+        <div class="plan-card__badge">Most Popular</div>
+        <div class="plan-card__tier">Enterprise</div>
+        <div class="plan-card__name">للمؤسسات</div>
+        <div class="plan-card__price">
+          <span class="plan-card__currency">$</span>
+          <span class="plan-card__amount">5,000</span>
+        </div>
+        <div class="plan-card__period">سنوياً / Per Year</div>
+        <p class="plan-card__desc">
+          للمؤسسات والشركات التي تبني تحولاً مؤسسياً حقيقياً — مع إشراك الفرق القيادية في رحلة مصفوفة التأثير.
+        </p>
+        <ul class="plan-features">
+          <li>كل مزايا الخطة الفردية</li>
+          <li>وصول متعدد المستخدمين (حتى 20 مستخدم)</li>
+          <li>لوحة تحكم المستشار الكاملة</li>
+          <li>تقارير مقارنة بين المشاركين</li>
+          <li>جلسة توجيهية مع فريق Milestone Impact</li>
+          <li>أولوية في الدعم والتطوير</li>
+          <li>تخصيص الهوية البصرية</li>
+        </ul>
+        <a href="mailto:hello@mi.sunkvalue.com?subject=Enterprise Plan Inquiry" class="plan-cta plan-cta--primary">تواصل معنا</a>
+      </div>
+
+    </div>
+
+    <!-- Notes -->
+    <div class="pricing-notes">
+      <div class="pricing-notes__title">ملاحظات مهمة</div>
+      <ul class="pricing-notes__list">
+        <li><strong>الدفع:</strong> يتم الدفع سنوياً. يُرجى التواصل معنا لتحديد طريقة الدفع المناسبة.</li>
+        <li><strong>الاسترداد:</strong> استرداد كامل خلال 14 يوماً من الاشتراك في حال عدم الاستخدام. راجع <a href="refund.html" style="color:var(--gold-deep)">سياسة الاسترداد</a>.</li>
+        <li><strong>التجديد:</strong> يتجدد الاشتراك تلقائياً ما لم يتم الإلغاء قبل 30 يوماً من تاريخ التجديد.</li>
+        <li><strong>Enterprise:</strong> للمجموعات الأكبر من 20 مستخدم — تواصل معنا لعرض مخصص.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer" role="contentinfo">
+    <div class="footer__container">
+      <div class="footer__top">
+        <a href="/" class="logo footer__logo" aria-label="Milestone Impact">
+          <span class="logo__text">
+            <span class="logo__milestone">Milestone</span>
+            <span class="logo__diamond" aria-hidden="true"></span>
+            <span class="logo__impact">Impact</span>
+          </span>
+        </a>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Milestone Impact — جميع الحقوق محفوظة</span>
+        <nav class="footer__bottom-links">
+          <a href="terms.html" class="footer__bottom-link">شروط الخدمة</a>
+          <a href="privacy.html" class="footer__bottom-link">الخصوصية</a>
+          <a href="refund.html" class="footer__bottom-link">سياسة الاسترداد</a>
+          <a href="pricing.html" class="footer__bottom-link">التسعير</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
