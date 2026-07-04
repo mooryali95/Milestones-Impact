@@ -950,15 +950,32 @@ export default function App() {
 
   const sendOtp = async () => {
     setAuthError(""); setAuthBusy(true);
-    const { error } = await supabase.auth.signInWithOtp({ email: authEmail.trim() });
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: authEmail.trim(),
+        options: { shouldCreateUser: false },
+      });
+      if (error) {
+        setAuthError(
+          error.status === 400
+            ? "هذا البريد غير مُفعَّل بعد لهذا النظام. تواصل مع مدير النظام لإضافته."
+            : error.message || "تعذّر إرسال رمز الدخول. حاول مرة أخرى."
+        );
+      } else setOtpSent(true);
+    } catch (e) {
+      setAuthError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.");
+    }
     setAuthBusy(false);
-    if (error) setAuthError(error.message); else setOtpSent(true);
   };
   const verifyOtp = async () => {
     setAuthError(""); setAuthBusy(true);
-    const { error } = await supabase.auth.verifyOtp({ email: authEmail.trim(), token: otpCode.trim(), type: "email" });
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email: authEmail.trim(), token: otpCode.trim(), type: "email" });
+      if (error) setAuthError(error.message || "رمز غير صحيح أو منتهي الصلاحية.");
+    } catch (e) {
+      setAuthError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.");
+    }
     setAuthBusy(false);
-    if (error) setAuthError(error.message);
   };
   const claimAdminNow = async () => {
     setAuthBusy(true);
