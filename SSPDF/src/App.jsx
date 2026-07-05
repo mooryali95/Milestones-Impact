@@ -1077,12 +1077,12 @@ const Compare = (p) => {
 };
 
 const SCREENS = { portal: Portal, dashboard: Dashboard, library: Library, combos: Combos, criteria: Criteria, scoring: Scoring, risk: Risk, analysis: Analysis, decision: Decision, audit: Audit, team: Team, compare: Compare };
+const PINNED = ["dashboard", "🏠", "لوحة القرار"];
 const NAV = [
-  { g: "عام", items: [["portal", "بوابة المشاريع"], ["dashboard", "لوحة القرار"], ["compare", "مقارنة المشاريع"]] },
-  { g: "الاستكشاف", items: [["library", "الخدمات والشرائح"], ["combos", "التركيبات"]] },
-  { g: "التقييم", items: [["criteria", "المعايير والأوزان"], ["scoring", "مصفوفة التقييم"]] },
-  { g: "التحليل", items: [["risk", "المخاطر"], ["analysis", "السيناريوهات والمحاكاة"]] },
-  { g: "القرار", items: [["decision", "التوصيات"], ["audit", "سجل التدقيق"], ["team", "الفريق والصلاحيات"]] },
+  { g: "الاستكشاف", items: [["library", "📚", "الخدمات والشرائح"], ["combos", "🔀", "التركيبات"]] },
+  { g: "التقييم", items: [["criteria", "⚖️", "المعايير والأوزان"], ["scoring", "📝", "مصفوفة التقييم"]] },
+  { g: "التحليل", items: [["risk", "⚠️", "المخاطر"], ["analysis", "📊", "السيناريوهات والمحاكاة"]] },
+  { g: "القرار", items: [["decision", "✅", "التوصيات"], ["audit", "🕐", "سجل التدقيق"], ["team", "👥", "الفريق والصلاحيات"]] },
 ];
 
 export default function App() {
@@ -1387,13 +1387,44 @@ export default function App() {
     npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, npTemplateId, setNpTemplateId, handleCreateProject, projectBusy,
   };
   const Screen = SCREENS[screen];
+  const [openGroup, setOpenGroup] = useState(() => NAV.findIndex((g) => g.items.some(([k]) => k === screen)));
+  useEffect(() => {
+    const idx = NAV.findIndex((g) => g.items.some(([k]) => k === screen));
+    if (idx >= 0) setOpenGroup(idx);
+  }, [screen]);
+  const [showSwitcher, setShowSwitcher] = useState(false);
 
   return (
     <div dir="rtl" className="min-h-screen" style={{ background: B.sand, color: B.petrol, fontFamily: "'DIN Next LT Arabic', 'Tajawal', 'Segoe UI', Tahoma, 'Noto Sans Arabic', sans-serif" }}>
       <header className="px-5 py-3 flex flex-wrap items-center gap-4 sticky top-0 z-10" style={{ background: "#fff", borderBottom: `1px solid ${B.line}` }}>
         <div className="flex items-center gap-3">
           <span className="px-2.5 py-1 rounded-lg text-lg font-black font-mono tracking-tight" style={{ background: B.petrol, color: B.gold }}>SSPDF</span>
-          <span className="text-xs hidden sm:inline" style={{ color: B.muted }}>إطار قرار محفظة الخدمات الاستراتيجية</span>
+          {repo && authState === "ready" ? (
+            <div className="relative">
+              <button onClick={() => setShowSwitcher((s) => !s)}
+                className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-lg transition"
+                style={{ background: B.goldSoft, color: B.petrol }}>
+                {currentProject?.name || "اختر مشروعاً"} <span style={{ color: B.goldText, fontSize: "0.7rem" }}>▾</span>
+              </button>
+              {showSwitcher && (
+                <div className="absolute top-full right-0 mt-2 rounded-xl shadow-lg z-20 overflow-hidden" style={{ background: "#fff", border: `1px solid ${B.line}`, minWidth: 240 }}>
+                  {myProjects.map((pr) => (
+                    <button key={pr.id} onClick={() => { switchProject(pr.id, pr.myRole); setShowSwitcher(false); }}
+                      className="block w-full text-right px-4 py-2.5 text-sm transition"
+                      style={{ background: pr.id === currentProject?.id ? B.goldSoft : "transparent", color: B.petrol, borderBottom: `1px solid ${B.lineSoft}` }}>
+                      {pr.id === currentProject?.id ? "● " : ""}{pr.name}
+                    </button>
+                  ))}
+                  <button onClick={() => { setScreen("compare"); setShowSwitcher(false); }}
+                    className="block w-full text-right px-4 py-2.5 text-sm" style={{ color: B.petrolSoft, borderBottom: `1px solid ${B.lineSoft}` }}>📊 مقارنة المشاريع</button>
+                  <button onClick={() => { setScreen("portal"); setShowSwitcher(false); }}
+                    className="block w-full text-right px-4 py-2.5 text-sm font-bold" style={{ color: B.goldText }}>+ مشروع جديد / كل المشاريع</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs hidden sm:inline" style={{ color: B.muted }}>إطار قرار محفظة الخدمات الاستراتيجية</span>
+          )}
         </div>
         <div className="flex-1"></div>
         <div className="flex items-center gap-2 text-xs">
@@ -1406,7 +1437,7 @@ export default function App() {
               </select>
             </>
           ) : (
-            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{ROLES[role].ar}</span></span>
+            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{ROLES[role]?.ar}</span></span>
           )}
           <span className="px-3 py-1.5 rounded-lg font-bold" style={ROLES[role]?.chip}>{userName}</span>
           {authState === "ready" && (
@@ -1415,22 +1446,46 @@ export default function App() {
         </div>
       </header>
       <div className="flex">
-        <nav className="w-52 shrink-0 min-h-screen p-3 hidden md:block" style={{ background: B.petrol }}>
-          {NAV.map((g) => (
-            <div key={g.g} className="mb-4">
-              <div className="text-xs tracking-wider mb-1 px-2" style={{ color: "#7E93A0" }}>{g.g}</div>
-              {g.items.map(([k, t]) => (
-                <button key={k} onClick={() => setScreen(k)}
-                  className="block w-full text-right px-3 py-2 rounded-lg text-sm mb-0.5 transition"
-                  style={screen === k ? { background: B.gold, color: B.petrol, fontWeight: 700 } : { color: "#C9D3D9" }}>{t}</button>
-              ))}
-            </div>
-          ))}
+        <nav className="w-56 shrink-0 min-h-screen p-3 hidden md:block" style={{ background: B.petrol }}>
+          <button onClick={() => setScreen(PINNED[0])}
+            className="flex items-center gap-2 w-full text-right px-3 py-2.5 rounded-lg text-sm mb-3 transition"
+            style={screen === PINNED[0] ? { background: B.gold, color: B.petrol, fontWeight: 700 } : { color: "#E7EEF2", background: "rgba(255,255,255,0.06)" }}>
+            <span>{PINNED[1]}</span><span>{PINNED[2]}</span>
+          </button>
+          {NAV.map((g, gi) => {
+            const isOpen = openGroup === gi;
+            return (
+              <div key={g.g} className="mb-1.5">
+                <button onClick={() => setOpenGroup(isOpen ? -1 : gi)}
+                  className="flex items-center justify-between w-full text-right px-2 py-2 rounded-lg text-xs tracking-wider transition"
+                  style={{ color: isOpen ? B.gold : "#7E93A0", background: isOpen ? "rgba(200,164,92,0.08)" : "transparent" }}>
+                  <span>{g.g}</span>
+                  <span style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
+                </button>
+                {isOpen && (
+                  <div className="mt-0.5 mb-2">
+                    {g.items.map(([k, icon, t]) => (
+                      <button key={k} onClick={() => setScreen(k)}
+                        className="flex items-center gap-2 w-full text-right px-3 py-2 rounded-lg text-sm mb-0.5 transition"
+                        style={screen === k ? { background: B.gold, color: B.petrol, fontWeight: 700 } : { color: "#C9D3D9" }}>
+                        <span>{icon}</span><span>{t}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
         <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-6xl">
           <div className="md:hidden mb-4">
             <select value={screen} onChange={(e) => setScreen(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none inp">
-              {NAV.flatMap((g) => g.items).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+              <option value={PINNED[0]}>{PINNED[1]} {PINNED[2]}</option>
+              {NAV.map((g) => (
+                <optgroup key={g.g} label={g.g}>
+                  {g.items.map(([k, icon, t]) => <option key={k} value={k}>{icon} {t}</option>)}
+                </optgroup>
+              ))}
             </select>
           </div>
           <Screen {...ctx} />
