@@ -17,14 +17,50 @@ class SupabaseRepo {
     this.comboIdByKey = {}; // "S2|C5" → uuid
   }
 
-  /** تحميل أول مشروع وبناء خرائط المعرفات */
-  async load() {
-    const { data: projects, error: pErr } = await this.sb
-      .from("projects").select("*").order("created_at");
-    if (pErr) throw pErr;
-    if (!projects?.length) return null;
-    const project = projects[0];
+  /** قائمة المشاريع التي أملك عضوية فعلية فيها (بحسب الجلسة الحالية) */
+  async listMyProjects() {
+    const { data: { user } } = await this.sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await this.sb.from("project_members")
+      .select("role, projects:project_id (id, name, name_en, description, status, created_at, updated_at)")
+      .eq("user_id", user.id);
+    if (error) throw error;
+    return (data || [])
+      .filter((r) => r.projects)
+      .map((r) => ({ ...r.projects, myRole: r.role }))
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+  }
+
+  /** إنشاء مشروع جديد فارغ، وتصبح منشئه مديره تلقائياً */
+  async createProject({ name, nameEn, description }) {
+    const { data: { user } } = await this.sb.auth.getUser();
+    if (!user) throw new Error("لا توجد جلسة دخول");
+    const { data: project, error } = await this.sb.from("projects")
+      .insert({ name, name_en: nameEn || null, description: description || null, status: "draft" })
+      .select().single();
+    if (error) throw error;
+    const { error: memErr } = await this.sb.from("project_members")
+      .insert({ project_id: project.id, user_id: user.id, role: "admin", email: user.email, display_name: user.email });
+    if (memErr) throw memErr;
+    return project;
+  }
+
+  /** تحميل مشروع محدد بمعرّفه */
+  async load(projectId) {
+    let project;
+    if (projectId) {
+      const { data, error } = await this.sb.from("projects").select("*").eq("id", projectId).single();
+      if (error) throw error;
+      project = data;
+    } else {
+      const { data: projects, error: pErr } = await this.sb
+        .from("projects").select("*").order("created_at");
+      if (pErr) throw pErr;
+      if (!projects?.length) return null;
+      project = projects[0];
+    }
     this.projectId = project.id;
+    this.serviceIdByCode = {}; this.segmentIdByCode = {}; this.critIdByCode = {}; this.comboIdByKey = {};
 
     const [sv, sg, cr, cb, rk, lg, mb] = await Promise.all([
       this.sb.from("services").select("*").eq("project_id", project.id).order("sort"),
@@ -141,11 +177,24 @@ class SupabaseRepo {
       if (!error && data) this.segmentIdByCode[s.id] = data.id;
     }
 
-    // 2) الأوزان
+    // 2) المعايير: تحديث الموجود، وإضافة الجديد فعلياً (ضروري للمشاريع الفارغة الجديدة)
     for (const c of criteria) {
-      await this.sb.from("criteria")
-        .update({ weight: c.w })
-        .eq("project_id", pid).eq("code", c.id);
+      if (this.critIdByCode[c.id]) {
+        await this.sb.from("criteria").update({ weight: c.w, name_ar: c.ar, name_en: c.en || null, grp: c.g || null })
+          .eq("project_id", pid).eq("code", c.id);
+      } else {
+        const { data, error } = await this.sb.from("criteria")
+          .insert({ project_id: pid, code: c.id, name_ar: c.ar, name_en: c.en || null, grp: c.g || null, weight: c.w, sort: 99 })
+          .select().single();
+        if (!error && data) this.critIdByCode[c.id] = data.id;
+      }
+    }
+    const currentCritCodes = new Set(criteria.map((c) => c.id));
+    for (const code of Object.keys(this.critIdByCode)) {
+      if (!currentCritCodes.has(code)) {
+        await this.sb.from("criteria").delete().eq("id", this.critIdByCode[code]);
+        delete this.critIdByCode[code];
+      }
     }
 
     // 3) التركيبات: تفعيل الجديدة وإلغاء المحذوفة

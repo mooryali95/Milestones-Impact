@@ -305,7 +305,7 @@ const CheckingScreen = () => (
   <AuthShell><div className="text-center text-sm" style={{ color: B.muted }}>جارٍ التحقق من الجلسة…</div></AuthShell>
 );
 
-const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, setOtpCode, authBusy, authError, sendOtp, verifyOtp }) => (
+const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, setOtpCode, authBusy, authError, sendOtp, verifyOtp, resendIn }) => (
   <AuthShell>
     <div className="text-sm font-bold mb-1" style={{ color: B.petrol }}>تسجيل الدخول</div>
     <div className="text-xs mb-4" style={{ color: B.muted }}>Sign in via one-time email code</div>
@@ -313,8 +313,8 @@ const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, se
       <>
         <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="بريدك الإلكتروني"
           className="w-full rounded-lg px-3 py-2.5 text-sm outline-none inp mb-3" dir="ltr" style={{ textAlign: "right" }} />
-        <GoldBtn onClick={sendOtp} disabled={authBusy || !authEmail.trim()} className="w-full py-2.5">
-          {authBusy ? "جارٍ الإرسال…" : "إرسال رمز الدخول"}
+        <GoldBtn onClick={sendOtp} disabled={authBusy || !authEmail.trim() || resendIn > 0} className="w-full py-2.5">
+          {authBusy ? "جارٍ الإرسال…" : resendIn > 0 ? `أعد المحاولة بعد ${resendIn} ثانية` : "إرسال رمز الدخول"}
         </GoldBtn>
       </>
     ) : (
@@ -325,7 +325,13 @@ const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, se
         <GoldBtn onClick={verifyOtp} disabled={authBusy || !otpCode.trim()} className="w-full py-2.5">
           {authBusy ? "جارٍ التحقق…" : "دخول"}
         </GoldBtn>
-        <button onClick={() => { setOtpSent(false); setOtpCode(""); }} className="w-full text-xs mt-3" style={{ color: B.muted }}>تغيير البريد الإلكتروني</button>
+        <div className="flex justify-between mt-3">
+          <button onClick={() => { setOtpSent(false); setOtpCode(""); }} className="text-xs" style={{ color: B.muted }}>تغيير البريد الإلكتروني</button>
+          <button onClick={sendOtp} disabled={resendIn > 0 || authBusy} className="text-xs font-bold"
+            style={{ color: resendIn > 0 ? B.muted : B.goldText }}>
+            {resendIn > 0 ? `إعادة الإرسال بعد ${resendIn} ثانية` : "إعادة إرسال الرمز"}
+          </button>
+        </div>
       </>
     )}
     {authError && <div className="text-xs mt-3 text-center" style={{ color: B.bad }}>{authError}</div>}
@@ -352,50 +358,96 @@ const PendingScreen = ({ adminClaimed, authBusy, claimAdminNow, authUser, signOu
   </AuthShell>
 );
 
-const Portal = (p) => (
-  <div>
-    <H ar="بوابة المشاريع" en="Projects Portal" sub="جميع المنتجات والبرامج الخاضعة لإطار القرار — يتسع لـ 50+ منتجاً بعد الربط بقاعدة البيانات" />
-    <div className="grid md:grid-cols-2 gap-4">
-      <div onClick={() => p.setScreen("dashboard")}
-        className="rounded-2xl p-6 cursor-pointer transition hover:shadow-md"
-        style={{ background: B.card, border: `2px solid ${B.gold}` }}>
-        <div className="flex justify-between items-start">
-          <div>
+const Portal = (p) => {
+  if (!p.repoActive) {
+    return (
+      <div>
+        <H ar="بوابة المشاريع" en="Projects Portal" sub="وضع تجريبي محلي — تفعيل تعدد المشاريع يتطلب اتصالاً حقيقياً بقاعدة البيانات" />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div onClick={() => p.setScreen("dashboard")}
+            className="rounded-2xl p-6 cursor-pointer transition hover:shadow-md"
+            style={{ background: B.card, border: `2px solid ${B.gold}` }}>
             <div className="text-lg font-bold" style={{ color: B.petrol }}>برنامج إدارة المشروعات للقادة</div>
-            <div className="text-xs font-mono mt-1" style={{ color: B.muted }}>PM for Leaders</div>
+            <div className="text-xs font-mono mt-1" style={{ color: B.muted }}>PM for Leaders (Demo)</div>
           </div>
-          <span className="text-xs px-3 py-1 rounded-full" style={{ background: "#E8F0F5", color: B.petrolSoft, border: `1px solid ${B.petrolSoft}` }}>قيد التقييم</span>
         </div>
-        <div className="grid grid-cols-3 gap-3 mt-5 text-center">
-          <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.ranked.length}</div><div className="text-xs" style={{ color: B.muted }}>تركيبة مفعّلة</div></div>
-          <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.top ? p.top.adj.toFixed(1) : "—"}</div><div className="text-xs" style={{ color: B.muted }}>أعلى نتيجة</div></div>
-          <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{Math.round((p.ranked.length / (p.services.length * p.segments.length)) * 100)}%</div><div className="text-xs" style={{ color: B.muted }}>التغطية</div></div>
-        </div>
-        <div className="mt-4 pt-4 text-sm" style={{ borderTop: `1px solid ${B.lineSoft}` }}>
-          <span style={{ color: B.muted }}>التوصية الحالية: </span>
-          <span className="font-bold" style={{ color: B.ok }}>{p.top?.name}</span>
-        </div>
-        <div className="text-xs mt-2" style={{ color: B.muted }}>آخر تحديث: {p.lastUpdate}</div>
       </div>
-      <div className="rounded-2xl p-6 flex flex-col items-center justify-center"
-        style={{ border: `2px dashed ${B.line}`, color: B.muted }}>
-        <div className="text-3xl mb-2">+</div>
-        <div className="text-sm">مشروع جديد</div>
-        <div className="text-xs mt-1 text-center">يُفعّل في المرحلة الثانية بعد الربط بقاعدة البيانات<br /><span className="font-mono">Supabase · schema: sspdf</span></div>
+    );
+  }
+  return (
+    <div>
+      <H ar="بوابة المشاريع" en="Projects Portal" sub={`${p.myProjects.length} مشروعاً تملك صلاحية فيه`} />
+      <div className="grid md:grid-cols-2 gap-4">
+        {p.myProjects.map((pr) => {
+          const isOpen = p.currentProject?.id === pr.id;
+          return (
+            <div key={pr.id} onClick={() => { p.switchProject(pr.id, pr.myRole); }}
+              className="rounded-2xl p-6 cursor-pointer transition hover:shadow-md"
+              style={{ background: B.card, border: isOpen ? `2px solid ${B.gold}` : `1px solid ${B.line}` }}>
+              <div className="flex justify-between items-start">
+                <div className="min-w-0">
+                  <div className="text-lg font-bold truncate" style={{ color: B.petrol }}>{pr.name}</div>
+                  {pr.name_en && <div className="text-xs font-mono mt-1" style={{ color: B.muted }}>{pr.name_en}</div>}
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full whitespace-nowrap" style={{ background: "#E8F0F5", color: B.petrolSoft, border: `1px solid ${B.petrolSoft}` }}>
+                  {pr.status === "evaluating" ? "قيد التقييم" : pr.status === "completed" ? "مكتمل" : pr.status === "on_hold" ? "معلَّق" : "مسودة"}
+                </span>
+              </div>
+              {isOpen && p.top && (
+                <div className="grid grid-cols-3 gap-3 mt-5 text-center">
+                  <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.ranked.length}</div><div className="text-xs" style={{ color: B.muted }}>تركيبة مفعّلة</div></div>
+                  <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.top.adj.toFixed(1)}</div><div className="text-xs" style={{ color: B.muted }}>أعلى نتيجة</div></div>
+                  <div><span className="text-xs px-3 py-1 rounded-full font-bold" style={ROLES[pr.myRole].chip}>{ROLES[pr.myRole].ar}</span></div>
+                </div>
+              )}
+              {!isOpen && (
+                <div className="mt-4 text-xs" style={{ color: B.muted }}>
+                  دورك: <span className="font-bold px-2 py-0.5 rounded-full" style={ROLES[pr.myRole].chip}>{ROLES[pr.myRole].ar}</span>
+                  <span className="mr-3">اضغط للفتح</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {!p.showNewProjectForm ? (
+          <div onClick={() => p.setShowNewProjectForm(true)}
+            className="rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition hover:shadow-md"
+            style={{ border: `2px dashed ${B.line}`, color: B.muted }}>
+            <div className="text-3xl mb-2">+</div>
+            <div className="text-sm">مشروع جديد</div>
+          </div>
+        ) : (
+          <Card>
+            <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>مشروع جديد</div>
+            <input value={p.npName} onChange={(e) => p.setNpName(e.target.value)} placeholder="اسم المشروع بالعربية..."
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
+            <input value={p.npNameEn} onChange={(e) => p.setNpNameEn(e.target.value)} placeholder="English name (optional)..." dir="ltr"
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
+            <textarea value={p.npDesc} onChange={(e) => p.setNpDesc(e.target.value)} placeholder="وصف مختصر (اختياري)..." rows={2}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-3 resize-y" />
+            <div className="flex gap-2">
+              <GoldBtn onClick={p.handleCreateProject} disabled={!p.npName.trim() || p.projectBusy}>{p.projectBusy ? "جارٍ الإنشاء…" : "إنشاء"}</GoldBtn>
+              <button onClick={() => p.setShowNewProjectForm(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: B.muted, border: `1px solid ${B.line}` }}>إلغاء</button>
+            </div>
+          </Card>
+        )}
       </div>
+      {p.currentProject && (
+        <Card className="mt-6">
+          <div className="font-bold mb-3 text-sm" style={{ color: B.petrol }}>آخر النشاطات — {p.currentProject.name} <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>Activity Feed</span></div>
+          {p.audit.slice(0, 5).map((a, i) => (
+            <div key={i} className="flex gap-3 items-start py-2 text-sm" style={{ borderBottom: i < 4 ? `1px solid ${B.lineSoft}` : "none" }}>
+              <span className="text-xs font-mono whitespace-nowrap" style={{ color: B.muted }}>{a.ts}</span>
+              <span className="whitespace-nowrap font-bold" style={{ color: B.goldText }}>{a.action}</span>
+              <span style={{ color: B.petrol }}>{a.detail}</span>
+            </div>
+          ))}
+        </Card>
+      )}
     </div>
-    <Card className="mt-6">
-      <div className="font-bold mb-3 text-sm" style={{ color: B.petrol }}>آخر النشاطات <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>Activity Feed</span></div>
-      {p.audit.slice(0, 5).map((a, i) => (
-        <div key={i} className="flex gap-3 items-start py-2 text-sm" style={{ borderBottom: i < 4 ? `1px solid ${B.lineSoft}` : "none" }}>
-          <span className="text-xs font-mono whitespace-nowrap" style={{ color: B.muted }}>{a.ts}</span>
-          <span className="whitespace-nowrap font-bold" style={{ color: B.goldText }}>{a.action}</span>
-          <span style={{ color: B.petrol }}>{a.detail}</span>
-        </div>
-      ))}
-    </Card>
-  </div>
-);
+  );
+};
 
 const Dashboard = (p) => (
   <div>
@@ -583,6 +635,20 @@ const Criteria = (p) => (
         </div>
       ))}
     </Card>
+    {p.can.weights && (
+      <Card className="mt-4">
+        <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>إضافة معيار جديد</div>
+        <div className="flex flex-wrap gap-2">
+          <input value={p.newCrit} onChange={(e) => p.setNewCrit(e.target.value)} placeholder="اسم المعيار بالعربية..."
+            className="flex-1 min-w-40 rounded-lg px-3 py-2 text-sm outline-none inp" />
+          <GoldBtn onClick={() => {
+            if (!p.newCrit.trim()) return;
+            p.addCriterion(p.newCrit.trim());
+            p.setNewCrit("");
+          }}>إضافة</GoldBtn>
+        </div>
+      </Card>
+    )}
     <Card className="mt-4 text-sm" style={{ color: B.muted }}>
       <span className="font-bold" style={{ color: B.goldText }}>المنهجية: </span>
       توزيع مباشر بالنسب المئوية مستمد من مصفوفة GE-McKinsey لجاذبية السوق مقابل القدرة التنافسية، مع تعديل النتائج بمستوى الثقة (Confidence-Adjusted Scoring). وحدة المقارنات الزوجية <span className="font-mono">AHP</span> مجدولة في مرحلة التوسع.
@@ -905,6 +971,14 @@ export default function App() {
   const [mc, setMc] = useState(null);
   const [newSvc, setNewSvc] = useState("");
   const [newSeg, setNewSeg] = useState("");
+  const [newCrit, setNewCrit] = useState("");
+  const [myProjects, setMyProjects] = useState([]);
+  const [currentProject, setCurrentProject] = useState(null);
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [npName, setNpName] = useState("");
+  const [npNameEn, setNpNameEn] = useState("");
+  const [npDesc, setNpDesc] = useState("");
+  const [projectBusy, setProjectBusy] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("evaluator");
 
@@ -919,26 +993,49 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  const switchProject = async (projectId, knownRole) => {
+    const d = await repo.load(projectId).catch((e) => { console.warn(e); return null; });
+    if (!d) return;
+    setServices(d.services); setSegments(d.segments); setCriteria(d.criteria);
+    setEvals(d.evals); setAudit(d.audit.length ? d.audit : []); setTeam(d.team);
+    setCurrentProject({ id: d.project.id, name: d.project.name, name_en: d.project.name_en, status: d.project.status });
+    setRole(knownRole || myProjects.find((pr) => pr.id === projectId)?.myRole || "viewer");
+    setScreen("dashboard");
+  };
+
   const afterLogin = async (user) => {
     setAuthUser(user);
-    if (!hydrated) {
-      const d = await repo.load().catch(() => null);
-      if (d) {
-        setServices(d.services); setSegments(d.segments); setCriteria(d.criteria);
-        setEvals(d.evals); if (d.audit.length) setAudit(d.audit);
-        if (d.team) setTeam(d.team);
+    try {
+      const projects = await repo.listMyProjects();
+      setMyProjects(projects);
+      if (projects.length) {
+        await switchProject(projects[0].id, projects[0].myRole);
       }
-      setHydrated(true);
+    } catch (e) {
+      console.warn("SSPDF listMyProjects:", e.message);
     }
-    const info = await getMyRole(supabase, repo.projectId);
-    if (info.role) {
-      setRole(info.role);
-      setTeamDisplayName(info.displayName || user.email);
-      setAuthState("ready");
-    } else {
-      setAdminClaimed(info.adminClaimed);
-      setAuthState("pending");
+    setHydrated(true);
+    setAuthState("ready");
+  };
+
+  const handleCreateProject = async () => {
+    if (!npName.trim()) return;
+    setProjectBusy(true);
+    try {
+      const project = await repo.createProject({ name: npName.trim(), nameEn: npNameEn.trim(), description: npDesc.trim() });
+      const updated = await repo.listMyProjects();
+      setMyProjects(updated);
+      setShowNewProjectForm(false); setNpName(""); setNpNameEn(""); setNpDesc("");
+      await switchProject(project.id, "admin");
+    } catch (e) {
+      alert("تعذّر إنشاء المشروع: " + e.message);
     }
+    setProjectBusy(false);
+  };
+
+  const addCriterion = (name) => {
+    setCriteria((c) => [...c, { id: `c${Date.now()}`, ar: name, en: "", g: "", w: 0 }]);
+    log("إضافة معيار", name);
   };
 
   useEffect(() => {
@@ -962,14 +1059,26 @@ export default function App() {
     return () => clearTimeout(t);
   }, [hydrated, services, segments, criteria, evals]);
 
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendIn > 0]);
+
   const sendOtp = async () => {
     setAuthError(""); setAuthBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke("sspdf-auth", {
         body: { action: "send", email: authEmail.trim() },
       });
-      if (error || !data?.success) setAuthError(data?.message || "تعذّر إرسال رمز الدخول. حاول مرة أخرى.");
-      else setOtpSent(true);
+      if (error || !data?.success) {
+        setAuthError(data?.message || "تعذّر إرسال رمز الدخول. حاول مرة أخرى.");
+        if (data?.retryAfter) setResendIn(data.retryAfter);
+      } else {
+        setOtpSent(true);
+        setResendIn(data.retryAfter || 60);
+      }
     } catch (e) {
       setAuthError("تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.");
     }
@@ -1003,7 +1112,7 @@ export default function App() {
   const signOut = async () => { await supabase.auth.signOut(); };
 
   const can = ROLES[role].can;
-  const userName = authState === "ready" ? (teamDisplayName || authUser?.email || "مستخدم")
+  const userName = authState === "ready" ? (authUser?.email || "مستخدم")
     : team.find((m) => m.role === role)?.name || "أنت";
   const log = (action, detail) => {
     setAudit((a) => [{ ts: now(), user: userName, action, detail }, ...a]);
@@ -1034,7 +1143,10 @@ export default function App() {
     if (!can.structure) return;
     setEvals((e) => {
       const n = { ...e };
-      if (n[key]) { delete n[key]; log("استبعاد تركيبة", comboName(key)); }
+      if (n[key]) {
+        if (!window.confirm(`هل تريد استبعاد "${comboName(key)}"؟ ستفقد كل تقييماتها المُدخلة.`)) return e;
+        delete n[key]; log("استبعاد تركيبة", comboName(key));
+      }
       else {
         n[key] = { scores: Array(criteria.length).fill(5), conf: Array(criteria.length).fill("M"), risk: 5, riskNote: "", evidence: {} };
         log("تفعيل تركيبة", comboName(key));
@@ -1081,6 +1193,7 @@ export default function App() {
   };
   const removeTeamMember = async (member) => {
     setTeamError("");
+    if (!window.confirm(`هل تريد حذف "${member.name || member.email}" من الفريق؟`)) return;
     const admins = team.filter((m) => m.role === "admin");
     if (member.role === "admin" && admins.length <= 1) {
       setTeamError("لا يمكن حذف آخر مدير نظام متبقٍ في المشروع");
@@ -1106,7 +1219,7 @@ export default function App() {
         otpSent={otpSent} setOtpSent={setOtpSent}
         otpCode={otpCode} setOtpCode={setOtpCode}
         authBusy={authBusy} authError={authError}
-        sendOtp={sendOtp} verifyOtp={verifyOtp}
+        sendOtp={sendOtp} verifyOtp={verifyOtp} resendIn={resendIn}
       />
     );
   }
@@ -1123,12 +1236,14 @@ export default function App() {
     role, can, team, setTeam, services, setServices, segments, setSegments,
     criteria, setCriteria, evals, setEvals, audit, selCombo, setSelCombo,
     anTab, setAnTab, comboMode, setComboMode, mc, setMc,
-    newSvc, setNewSvc, newSeg, setNewSeg,
+    newSvc, setNewSvc, newSeg, setNewSeg, newCrit, setNewCrit, addCriterion,
     newMemberEmail, setNewMemberEmail, newMemberRole, setNewMemberRole,
     addTeamMember, removeTeamMember, teamError, repoActive: !!repo,
     ranked, top, totalW, confIdx, lastUpdate,
     comboName, toggleCombo, setScore, setConf, setEvidence, setRisk, setWeight, normalizeW, log,
     setScreen,
+    myProjects, currentProject, switchProject, showNewProjectForm, setShowNewProjectForm,
+    npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, handleCreateProject, projectBusy,
   };
   const Screen = SCREENS[screen];
 
