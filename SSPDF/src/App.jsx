@@ -1353,6 +1353,14 @@ export default function App() {
     log("حذف عضو", `${member.name || member.email}`);
   };
 
+  const Screen = SCREENS[screen];
+  const [openGroup, setOpenGroup] = useState(() => NAV.findIndex((g) => g.items.some(([k]) => k === screen)));
+  useEffect(() => {
+    const idx = NAV.findIndex((g) => g.items.some(([k]) => k === screen));
+    if (idx >= 0) setOpenGroup(idx);
+  }, [screen]);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+
   if (repo && authState === "checking") return <CheckingScreen />;
   if (repo && authState === "login") {
     return (
@@ -1388,13 +1396,6 @@ export default function App() {
     myProjects, currentProject, switchProject, showNewProjectForm, setShowNewProjectForm, compareAllProjects,
     npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, npTemplateId, setNpTemplateId, handleCreateProject, projectBusy,
   };
-  const Screen = SCREENS[screen];
-  const [openGroup, setOpenGroup] = useState(() => NAV.findIndex((g) => g.items.some(([k]) => k === screen)));
-  useEffect(() => {
-    const idx = NAV.findIndex((g) => g.items.some(([k]) => k === screen));
-    if (idx >= 0) setOpenGroup(idx);
-  }, [screen]);
-  const [showSwitcher, setShowSwitcher] = useState(false);
 
   return (
     <div dir="rtl" className="min-h-screen" style={{ background: B.sand, color: B.petrol, fontFamily: "'DIN Next LT Arabic', 'Tajawal', 'Segoe UI', Tahoma, 'Noto Sans Arabic', sans-serif" }}>
