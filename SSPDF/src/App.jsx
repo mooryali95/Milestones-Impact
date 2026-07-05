@@ -495,9 +495,46 @@ const Portal = (p) => {
   );
 };
 
+const ONBOARDING_STEPS = [
+  { screen: "library", icon: "📚", title: "أضف الخدمات والشرائح", desc: "المتغيران الأساسيان اللذان تُبنى منهما كل التركيبات" },
+  { screen: "criteria", icon: "⚖️", title: "حدّد معايير التقييم وأوزانها", desc: "مباشرة أو عبر المقارنات الزوجية (AHP)" },
+  { screen: "combos", icon: "🔀", title: "ولّد التركيبات وفعّل ما يستحق", desc: "تُتولَّد تلقائياً من الخدمات × الشرائح" },
+  { screen: "scoring", icon: "📝", title: "قيّم كل تركيبة بالدليل والثقة", desc: "درجة 1–9 لكل معيار مع سبب الدرجة" },
+  { screen: "decision", icon: "✅", title: "راجع التوصيات والقرار", desc: "تصنيف تلقائي: ابدأ الآن / أجّل / استبعد" },
+];
+
+const OnboardingGuide = (p) => {
+  const isEmpty = p.services.length === 0 && p.segments.length === 0 && p.criteria.length === 0;
+  const [dismissed, setDismissed] = useState(false);
+  if (!isEmpty || dismissed) return null;
+  return (
+    <div className="rounded-2xl p-5 mb-6" style={{ background: B.card, border: `2px dashed ${B.gold}` }}>
+      <div className="flex justify-between items-start mb-3">
+        <div className="font-bold text-sm" style={{ color: B.petrol }}>دليل البدء السريع <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>Quick Start</span></div>
+        <button onClick={() => setDismissed(true)} className="text-xs" style={{ color: B.muted }}>إخفاء ✕</button>
+      </div>
+      <div className="text-xs mb-4" style={{ color: B.muted }}>هذا مشروع جديد فارغ — اتّبع الخطوات بالترتيب للوصول لأول توصية:</div>
+      <div className="grid md:grid-cols-5 gap-2">
+        {ONBOARDING_STEPS.map((s, i) => (
+          <button key={s.screen} onClick={() => p.setScreen(s.screen)}
+            className="text-right rounded-xl p-3 transition hover:shadow-md" style={{ background: B.sand, border: `1px solid ${B.line}` }}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs font-mono font-bold" style={{ color: B.goldText }}>{i + 1}</span>
+              <span>{s.icon}</span>
+            </div>
+            <div className="text-xs font-bold mb-1" style={{ color: B.petrol }}>{s.title}</div>
+            <div className="text-xs" style={{ color: B.muted }}>{s.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = (p) => (
   <div>
-    <H ar="لوحة القرار" en="Decision Dashboard" sub="برنامج إدارة المشروعات للقادة" />
+    <H ar="لوحة القرار" en="Decision Dashboard" sub={p.currentProject?.name || "برنامج إدارة المشروعات للقادة"} />
+    <OnboardingGuide {...p} />
     {p.top && (
       <div className="rounded-2xl p-6 mb-6" style={{ background: B.petrol, border: `2px solid ${B.gold}` }}>
         <div className="text-xs tracking-widest font-mono mb-2" style={{ color: B.gold }}>TOP RECOMMENDATION</div>
