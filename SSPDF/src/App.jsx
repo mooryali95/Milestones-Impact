@@ -171,6 +171,8 @@ const ROLES = {
   analyst: { ar: "محلل", en: "Analyst", chip: { background: B.ok, color: "#fff" }, can: { structure: false, weights: false, score: false, risk: false, analyze: true, team: false } },
   viewer: { ar: "مشاهد", en: "Viewer", chip: { background: B.muted, color: "#fff" }, can: { structure: false, weights: false, score: false, risk: false, analyze: false, team: false } },
 };
+/** قراءة آمنة دائماً — لا تُسقط التطبيق أبداً مهما كانت قيمة الدور غير متوقعة */
+const roleInfo = (key) => ROLES[key] || ROLES.viewer;
 
 const CONF = {
   H: { f: 1.0, ar: "عالٍ", color: B.ok },
@@ -303,7 +305,7 @@ const Stat = ({ label, value, alert }) => (
 
 const Locked = ({ role }) => (
   <div className="text-xs rounded-lg px-3 py-2 mb-4" style={{ background: B.goldSoft, border: `1px solid ${B.line}`, color: B.muted }}>
-    🔒 صلاحيتك الحالية ({ROLES[role].ar}) للعرض فقط في هذه الشاشة
+    🔒 صلاحيتك الحالية ({roleInfo(role).ar}) للعرض فقط في هذه الشاشة
   </div>
 );
 
@@ -423,12 +425,12 @@ const Portal = (p) => {
                 <div className="grid grid-cols-3 gap-3 mt-5 text-center">
                   <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.ranked.length}</div><div className="text-xs" style={{ color: B.muted }}>تركيبة مفعّلة</div></div>
                   <div><div className="font-mono font-bold" style={{ color: B.goldText }}>{p.top.adj.toFixed(1)}</div><div className="text-xs" style={{ color: B.muted }}>أعلى نتيجة</div></div>
-                  <div><span className="text-xs px-3 py-1 rounded-full font-bold" style={ROLES[pr.myRole].chip}>{ROLES[pr.myRole].ar}</span></div>
+                  <div><span className="text-xs px-3 py-1 rounded-full font-bold" style={roleInfo(pr.myRole).chip}>{roleInfo(pr.myRole).ar}</span></div>
                 </div>
               )}
               {!isOpen && (
                 <div className="mt-4 text-xs" style={{ color: B.muted }}>
-                  دورك: <span className="font-bold px-2 py-0.5 rounded-full" style={ROLES[pr.myRole].chip}>{ROLES[pr.myRole].ar}</span>
+                  دورك: <span className="font-bold px-2 py-0.5 rounded-full" style={roleInfo(pr.myRole).chip}>{roleInfo(pr.myRole).ar}</span>
                   <span className="mr-3">اضغط للفتح</span>
                 </div>
               )}
@@ -973,7 +975,7 @@ const Team = (p) => (
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap" style={ROLES[m.role].chip}>{ROLES[m.role].ar}</span>
+            <span className="text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap" style={roleInfo(m.role).chip}>{roleInfo(m.role).ar}</span>
             {p.repoActive !== false && (
               <span className="text-xs" title={m.linked ? "مرتبط بحساب فعلي" : "بانتظار أول تسجيل دخول"}>{m.linked ? "🟢" : "⏳"}</span>
             )}
@@ -1251,7 +1253,7 @@ export default function App() {
   };
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  const can = ROLES[role].can;
+  const can = roleInfo(role).can;
   const userName = authState === "ready" ? (authUser?.email || "مستخدم")
     : team.find((m) => m.role === role)?.name || "أنت";
   const log = (action, detail) => {
@@ -1325,10 +1327,10 @@ export default function App() {
       const res = await repo.addMember({ email, role, displayName });
       if (res.error) { setTeamError(res.error); return; }
       setTeam((t) => [...t, res.member]);
-      log("إضافة عضو", `${email} — ${ROLES[role].ar}`);
+      log("إضافة عضو", `${email} — ${roleInfo(role).ar}`);
     } else {
       setTeam((t) => [...t, { id: Date.now(), email, name: displayName || email, role, linked: false }]);
-      log("إضافة عضو", `${displayName || email} — ${ROLES[role].ar}`);
+      log("إضافة عضو", `${displayName || email} — ${roleInfo(role).ar}`);
     }
   };
   const removeTeamMember = async (member) => {
@@ -1437,9 +1439,9 @@ export default function App() {
               </select>
             </>
           ) : (
-            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{ROLES[role]?.ar}</span></span>
+            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{roleInfo(role).ar}</span></span>
           )}
-          <span className="px-3 py-1.5 rounded-lg font-bold" style={ROLES[role]?.chip}>{userName}</span>
+          <span className="px-3 py-1.5 rounded-lg font-bold" style={roleInfo(role).chip}>{userName}</span>
           {authState === "ready" && (
             <button onClick={signOut} className="text-xs px-2 py-1.5 rounded-lg" style={{ color: B.muted, border: `1px solid ${B.line}` }}>تسجيل الخروج</button>
           )}

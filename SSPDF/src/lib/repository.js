@@ -26,8 +26,9 @@ class SupabaseRepo {
       .eq("user_id", user.id);
     if (error) throw error;
     return (data || [])
-      .filter((r) => r.projects)
-      .map((r) => ({ ...r.projects, myRole: r.role }))
+      .map((r) => ({ proj: Array.isArray(r.projects) ? r.projects[0] : r.projects, role: r.role }))
+      .filter((r) => r.proj)
+      .map((r) => ({ ...r.proj, myRole: r.role || "viewer" }))
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
   }
 
