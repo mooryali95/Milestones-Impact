@@ -243,6 +243,41 @@ class SupabaseRepo {
       await this.sb.from("risks").upsert(riskRows, { onConflict: "combination_id" });
   }
 
+  /** نسخ بنية مشروع (خدمات، شرائح، معايير فقط — بلا تقييمات) كقالب لمشروع جديد */
+  async copyProjectStructure(sourceProjectId, targetProjectId) {
+    const [sv, sg, cr] = await Promise.all([
+      this.sb.from("services").select("code,name_ar,name_en,sort").eq("project_id", sourceProjectId),
+      this.sb.from("segments").select("code,name_ar,name_en,sort").eq("project_id", sourceProjectId),
+      this.sb.from("criteria").select("code,name_ar,name_en,grp,weight,sort").eq("project_id", sourceProjectId),
+    ]);
+    if (sv.data?.length) await this.sb.from("services").insert(sv.data.map((x) => ({ ...x, project_id: targetProjectId })));
+    if (sg.data?.length) await this.sb.from("segments").insert(sg.data.map((x) => ({ ...x, project_id: targetProjectId })));
+    if (cr.data?.length) await this.sb.from("criteria").insert(cr.data.map((x) => ({ ...x, project_id: targetProjectId })));
+  }
+
+  /** إحصاءات خفيفة لكل مشاريعي دفعة واحدة — لشاشة المقارنة */
+  async compareProjects(projectIds) {
+    if (!projectIds.length) return [];
+    const [sv, sg, cr, cb, lg] = await Promise.all([
+      this.sb.from("services").select("project_id").in("project_id", projectIds),
+      this.sb.from("segments").select("project_id").in("project_id", projectIds),
+      this.sb.from("criteria").select("project_id").in("project_id", projectIds),
+      this.sb.from("combinations").select("project_id, active").in("project_id", projectIds),
+      this.sb.from("activity_log").select("project_id, created_at").in("project_id", projectIds).order("created_at", { ascending: false }),
+    ]);
+    const count = (arr, pid, filter) => (arr || []).filter((x) => x.project_id === pid && (!filter || filter(x))).length;
+    const lastActivity = (pid) => (lg.data || []).find((x) => x.project_id === pid)?.created_at || null;
+    return projectIds.map((pid) => ({
+      id: pid,
+      services: count(sv.data, pid),
+      segments: count(sg.data, pid),
+      criteria: count(cr.data, pid),
+      combos: count(cb.data, pid),
+      activeCombos: count(cb.data, pid, (x) => x.active),
+      lastActivity: lastActivity(pid),
+    }));
+  }
+
   /** سجل التدقيق */
   async addLog(action, detail, actor) {
     if (!this.projectId) return;

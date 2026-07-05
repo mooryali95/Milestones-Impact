@@ -254,6 +254,32 @@ function runMonteCarlo(items, criteria, n = 1000) {
 const scoreStyle = (s) =>
   s >= 7 ? { background: "#E4F2EA", color: B.ok } : s >= 4 ? { background: "#F7EDD8", color: B.warn } : { background: "#F7E2DE", color: B.bad };
 
+/* مقياس ساعاتي (Saaty Scale) لمنهجية AHP */
+const SAATY = [
+  { v: 1 / 9, label: "الثاني أهم بشكل مطلق (1/9)" },
+  { v: 1 / 7, label: "الثاني أهم جداً (1/7)" },
+  { v: 1 / 5, label: "الثاني أهم بوضوح (1/5)" },
+  { v: 1 / 3, label: "الثاني أهم قليلاً (1/3)" },
+  { v: 1, label: "متساويان في الأهمية (1)" },
+  { v: 3, label: "الأول أهم قليلاً (3)" },
+  { v: 5, label: "الأول أهم بوضوح (5)" },
+  { v: 7, label: "الأول أهم جداً (7)" },
+  { v: 9, label: "الأول أهم بشكل مطلق (9)" },
+];
+
+/** حساب الأوزان من مصفوفة المقارنات الزوجية عبر المتوسط الهندسي (طريقة معتمدة ومبسّطة لـ AHP) */
+function computeAHPWeights(criteria, pairs) {
+  const n = criteria.length;
+  const M = Array.from({ length: n }, () => Array(n).fill(1));
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const v = pairs[`${i}-${j}`] ?? 1;
+    M[i][j] = v; M[j][i] = 1 / v;
+  }
+  const geo = M.map((row) => Math.pow(row.reduce((a, b) => a * b, 1), 1 / n));
+  const total = geo.reduce((a, b) => a + b, 0) || 1;
+  return geo.map((g) => Math.round((g / total) * 1000) / 10);
+}
+
 const Card = ({ children, className = "", style = {} }) => (
   <div className={`card p-5 ${className}`} style={style}>{children}</div>
 );
@@ -425,7 +451,13 @@ const Portal = (p) => {
             <input value={p.npNameEn} onChange={(e) => p.setNpNameEn(e.target.value)} placeholder="English name (optional)..." dir="ltr"
               className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
             <textarea value={p.npDesc} onChange={(e) => p.setNpDesc(e.target.value)} placeholder="وصف مختصر (اختياري)..." rows={2}
-              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-3 resize-y" />
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2 resize-y" />
+            {p.myProjects.length > 0 && (
+              <select value={p.npTemplateId} onChange={(e) => p.setNpTemplateId(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-3">
+                <option value="">ابدأ فارغاً (بلا قالب)</option>
+                {p.myProjects.map((pr) => <option key={pr.id} value={pr.id}>نسخ خدمات وشرائح ومعايير من: {pr.name}</option>)}
+              </select>
+            )}
             <div className="flex gap-2">
               <GoldBtn onClick={p.handleCreateProject} disabled={!p.npName.trim() || p.projectBusy}>{p.projectBusy ? "جارٍ الإنشاء…" : "إنشاء"}</GoldBtn>
               <button onClick={() => p.setShowNewProjectForm(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: B.muted, border: `1px solid ${B.line}` }}>إلغاء</button>
@@ -607,54 +639,97 @@ const Combos = (p) => (
   </div>
 );
 
-const Criteria = (p) => (
-  <div>
-    <H ar="المعايير والأوزان" en="Criteria & Weights" sub="الأوزان مضبوطة وفق منهجية GE-McKinsey: جاذبية السوق ≈ 50% والقدرة على الفوز ≈ 50%" />
-    {!p.can.weights && <Locked role={p.role} />}
-    <Card>
-      <div className="text-sm font-bold mb-4" style={{ color: p.totalW === 100 ? B.ok : B.bad }}>
-        مجموع الأوزان: <span className="font-mono">{p.totalW}%</span> {p.totalW !== 100 && "⚠️ يجب أن يساوي 100%"}
-        {p.totalW !== 100 && p.can.weights && (
-          <button onClick={p.normalizeW} className="mr-3 px-3 py-1 rounded-lg text-xs font-bold" style={{ background: B.gold, color: B.petrol }}>موازنة تلقائية</button>
-        )}
+const Criteria = (p) => {
+  const [mode, setMode] = useState("direct");
+  const pairCount = (p.criteria.length * (p.criteria.length - 1)) / 2;
+  return (
+    <div>
+      <H ar="المعايير والأوزان" en="Criteria & Weights" sub="الأوزان مضبوطة وفق منهجية GE-McKinsey: جاذبية السوق ≈ 50% والقدرة على الفوز ≈ 50%" />
+      {!p.can.weights && <Locked role={p.role} />}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {[["direct", "الأوزان المباشرة"], ["ahp", `المقارنات الزوجية AHP (${pairCount})`]].map(([k, t]) => (
+          <button key={k} onClick={() => setMode(k)}
+            className="px-4 py-2 rounded-lg text-sm font-bold transition"
+            style={mode === k ? { background: B.gold, color: B.petrol } : { background: "#fff", border: `1px solid ${B.line}`, color: B.petrol }}>{t}</button>
+        ))}
       </div>
-      {p.criteria.map((cr, i) => (
-        <div key={cr.id} className="grid grid-cols-12 gap-3 items-center py-2" style={{ borderBottom: i < p.criteria.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
-          <div className="col-span-5 md:col-span-4 text-sm" style={{ color: B.petrol }}>{cr.ar}<div className="text-xs font-mono" style={{ color: B.muted }}>{cr.en}</div></div>
-          <div className="col-span-2 text-xs hidden md:block" style={{ color: B.muted }}>{cr.g}</div>
-          <div className="col-span-5 md:col-span-4">
-            <input type="range" min={0} max={60} value={cr.w} disabled={!p.can.weights}
-              onChange={(e) => p.setWeight(i, +e.target.value)} className="w-full" style={{ accentColor: B.gold }} />
+      {mode === "direct" && (
+        <Card>
+          <div className="text-sm font-bold mb-4" style={{ color: p.totalW === 100 ? B.ok : B.bad }}>
+            مجموع الأوزان: <span className="font-mono">{p.totalW}%</span> {p.totalW !== 100 && "⚠️ يجب أن يساوي 100%"}
+            {p.totalW !== 100 && p.can.weights && (
+              <button onClick={p.normalizeW} className="mr-3 px-3 py-1 rounded-lg text-xs font-bold" style={{ background: B.gold, color: B.petrol }}>موازنة تلقائية</button>
+            )}
           </div>
-          <div className="col-span-2 flex items-center gap-1">
-            <input type="number" min={0} max={100} value={cr.w} disabled={!p.can.weights}
-              onChange={(e) => p.setWeight(i, Math.max(0, Math.min(100, +e.target.value || 0)))}
-              className="w-14 rounded-lg px-1 py-1 text-center font-mono font-bold text-sm outline-none inp" style={{ color: B.goldText }} />
-            <span className="text-xs" style={{ color: B.muted }}>%</span>
+          {p.criteria.map((cr, i) => (
+            <div key={cr.id} className="grid grid-cols-12 gap-3 items-center py-2" style={{ borderBottom: i < p.criteria.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
+              <div className="col-span-5 md:col-span-4 text-sm" style={{ color: B.petrol }}>{cr.ar}<div className="text-xs font-mono" style={{ color: B.muted }}>{cr.en}</div></div>
+              <div className="col-span-2 text-xs hidden md:block" style={{ color: B.muted }}>{cr.g}</div>
+              <div className="col-span-5 md:col-span-4">
+                <input type="range" min={0} max={60} value={cr.w} disabled={!p.can.weights}
+                  onChange={(e) => p.setWeight(i, +e.target.value)} className="w-full" style={{ accentColor: B.gold }} />
+              </div>
+              <div className="col-span-2 flex items-center gap-1">
+                <input type="number" min={0} max={100} value={cr.w} disabled={!p.can.weights}
+                  onChange={(e) => p.setWeight(i, Math.max(0, Math.min(100, +e.target.value || 0)))}
+                  className="w-14 rounded-lg px-1 py-1 text-center font-mono font-bold text-sm outline-none inp" style={{ color: B.goldText }} />
+                <span className="text-xs" style={{ color: B.muted }}>%</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+      {mode === "ahp" && (
+        <Card>
+          <div className="text-xs mb-4" style={{ color: B.muted }}>
+            لكل زوج من المعايير، حدّد أيهما أهم وبأي درجة وفق المقياس القياسي (Saaty Scale)، ثم اضغط "تطبيق الأوزان المحسوبة".
           </div>
-        </div>
-      ))}
-    </Card>
-    {p.can.weights && (
-      <Card className="mt-4">
-        <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>إضافة معيار جديد</div>
-        <div className="flex flex-wrap gap-2">
-          <input value={p.newCrit} onChange={(e) => p.setNewCrit(e.target.value)} placeholder="اسم المعيار بالعربية..."
-            className="flex-1 min-w-40 rounded-lg px-3 py-2 text-sm outline-none inp" />
-          <GoldBtn onClick={() => {
-            if (!p.newCrit.trim()) return;
-            p.addCriterion(p.newCrit.trim());
-            p.setNewCrit("");
-          }}>إضافة</GoldBtn>
-        </div>
+          <div className="space-y-3 max-h-96 overflow-y-auto pl-1">
+            {p.criteria.map((a, i) => p.criteria.map((b, j) => {
+              if (i >= j) return null;
+              const key = `${i}-${j}`;
+              return (
+                <div key={key} className="pb-3" style={{ borderBottom: `1px solid ${B.lineSoft}` }}>
+                  <div className="text-xs mb-1.5" style={{ color: B.petrol }}>
+                    <span className="font-bold">{a.ar}</span> <span style={{ color: B.muted }}>مقابل</span> <span className="font-bold">{b.ar}</span>
+                  </div>
+                  <select value={p.ahpPairs[key] ?? 1} onChange={(e) => p.setAhpPair(key, +e.target.value)}
+                    disabled={!p.can.weights}
+                    className="w-full rounded-lg px-3 py-2 text-xs outline-none inp">
+                    {SAATY.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+                  </select>
+                </div>
+              );
+            }))}
+          </div>
+          {p.can.weights && (
+            <GoldBtn onClick={() => p.applyAHP(computeAHPWeights(p.criteria, p.ahpPairs))} className="w-full py-2.5 mt-4">
+              تطبيق الأوزان المحسوبة على معايير التقييم
+            </GoldBtn>
+          )}
+        </Card>
+      )}
+      <Card className="mt-4 text-sm" style={{ color: B.muted }}>
+        <span className="font-bold" style={{ color: B.goldText }}>المنهجية: </span>
+        توزيع مباشر بالنسب المئوية أو مقارنات زوجية وفق AHP، مع تعديل النتائج بمستوى الثقة (Confidence-Adjusted Scoring) عند التقييم.
       </Card>
-    )}
-    <Card className="mt-4 text-sm" style={{ color: B.muted }}>
-      <span className="font-bold" style={{ color: B.goldText }}>المنهجية: </span>
-      توزيع مباشر بالنسب المئوية مستمد من مصفوفة GE-McKinsey لجاذبية السوق مقابل القدرة التنافسية، مع تعديل النتائج بمستوى الثقة (Confidence-Adjusted Scoring). وحدة المقارنات الزوجية <span className="font-mono">AHP</span> مجدولة في مرحلة التوسع.
-    </Card>
-  </div>
-);
+      {p.can.weights && (
+        <Card className="mt-4">
+          <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>إضافة معيار جديد</div>
+          <div className="flex flex-wrap gap-2">
+            <input value={p.newCrit} onChange={(e) => p.setNewCrit(e.target.value)} placeholder="اسم المعيار بالعربية..."
+              className="flex-1 min-w-40 rounded-lg px-3 py-2 text-sm outline-none inp" />
+            <GoldBtn onClick={() => {
+              if (!p.newCrit.trim()) return;
+              p.addCriterion(p.newCrit.trim());
+              p.setNewCrit("");
+            }}>إضافة</GoldBtn>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
 
 const Scoring = (p) => {
   const ev = p.evals[p.selCombo];
@@ -832,7 +907,15 @@ const Decision = (p) => {
     return `أقوى محركات النتيجة: ${tops.join("، ")}.`;
   };
   return (
-    <div>
+    <div id="decision-print-area">
+      <div className="flex justify-between items-start flex-wrap gap-3 mb-2 print-hide">
+        <div></div>
+        <GoldBtn onClick={() => window.print()}>⬇ تصدير PDF</GoldBtn>
+      </div>
+      <div className="hidden print-only mb-4">
+        <div style={{ color: B.petrol, fontWeight: 900, fontSize: "1.1rem" }}>SSPDF — {p.currentProject?.name || "برنامج إدارة المشروعات للقادة"}</div>
+        <div style={{ color: B.muted, fontSize: "0.75rem" }}>تقرير القرار والتوصيات — {new Date().toLocaleDateString("ar-SA")}</div>
+      </div>
       <H ar="القرار والتوصيات" en="Decision & Recommendations" sub="تصنيف تلقائي وفق النتيجة المعدّلة بالثقة ودرجة المخاطر" />
       {Object.entries(BUCKETS).map(([k, b]) => (
         <div key={k} className="mb-5">
@@ -947,9 +1030,55 @@ const Team = (p) => (
   </div>
 );
 
-const SCREENS = { portal: Portal, dashboard: Dashboard, library: Library, combos: Combos, criteria: Criteria, scoring: Scoring, risk: Risk, analysis: Analysis, decision: Decision, audit: Audit, team: Team };
+const Compare = (p) => {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    if (!p.repoActive || !p.myProjects.length) return;
+    p.compareAllProjects().then(setStats);
+  }, [p.myProjects.length]);
+  return (
+    <div>
+      <H ar="مقارنة المشاريع" en="Projects Comparison" sub="نظرة سريعة على كل مشاريعك جنباً إلى جنب" />
+      {!p.repoActive && <Locked role={p.role} />}
+      {p.repoActive && !stats && <div className="text-sm" style={{ color: B.muted }}>جارٍ التحميل…</div>}
+      {stats && (
+        <Card className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs" style={{ color: B.muted, borderBottom: `1px solid ${B.line}` }}>
+                <th className="p-2 text-right font-normal">المشروع</th>
+                <th className="p-2 font-normal">الخدمات</th>
+                <th className="p-2 font-normal">الشرائح</th>
+                <th className="p-2 font-normal">المعايير</th>
+                <th className="p-2 font-normal">تركيبات مفعّلة</th>
+                <th className="p-2 font-normal">آخر نشاط</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.myProjects.map((pr, idx) => {
+                const s = stats.find((x) => x.id === pr.id) || {};
+                return (
+                  <tr key={pr.id} style={{ borderBottom: idx < p.myProjects.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
+                    <td className="p-2 font-bold" style={{ color: B.petrol }}>{pr.name}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: B.muted }}>{s.services ?? "—"}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: B.muted }}>{s.segments ?? "—"}</td>
+                    <td className="p-2 text-center font-mono" style={{ color: B.muted }}>{s.criteria ?? "—"}</td>
+                    <td className="p-2 text-center font-mono font-bold" style={{ color: B.goldText }}>{s.activeCombos ?? "—"} / {s.combos ?? "—"}</td>
+                    <td className="p-2 text-center text-xs font-mono" style={{ color: B.muted }}>{s.lastActivity ? s.lastActivity.slice(0, 10) : "لا نشاط"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+const SCREENS = { portal: Portal, dashboard: Dashboard, library: Library, combos: Combos, criteria: Criteria, scoring: Scoring, risk: Risk, analysis: Analysis, decision: Decision, audit: Audit, team: Team, compare: Compare };
 const NAV = [
-  { g: "عام", items: [["portal", "بوابة المشاريع"], ["dashboard", "لوحة القرار"]] },
+  { g: "عام", items: [["portal", "بوابة المشاريع"], ["dashboard", "لوحة القرار"], ["compare", "مقارنة المشاريع"]] },
   { g: "الاستكشاف", items: [["library", "الخدمات والشرائح"], ["combos", "التركيبات"]] },
   { g: "التقييم", items: [["criteria", "المعايير والأوزان"], ["scoring", "مصفوفة التقييم"]] },
   { g: "التحليل", items: [["risk", "المخاطر"], ["analysis", "السيناريوهات والمحاكاة"]] },
@@ -978,6 +1107,7 @@ export default function App() {
   const [npName, setNpName] = useState("");
   const [npNameEn, setNpNameEn] = useState("");
   const [npDesc, setNpDesc] = useState("");
+  const [npTemplateId, setNpTemplateId] = useState("");
   const [projectBusy, setProjectBusy] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("evaluator");
@@ -1023,9 +1153,10 @@ export default function App() {
     setProjectBusy(true);
     try {
       const project = await repo.createProject({ name: npName.trim(), nameEn: npNameEn.trim(), description: npDesc.trim() });
+      if (npTemplateId) await repo.copyProjectStructure(npTemplateId, project.id);
       const updated = await repo.listMyProjects();
       setMyProjects(updated);
-      setShowNewProjectForm(false); setNpName(""); setNpNameEn(""); setNpDesc("");
+      setShowNewProjectForm(false); setNpName(""); setNpNameEn(""); setNpDesc(""); setNpTemplateId("");
       await switchProject(project.id, "admin");
     } catch (e) {
       alert("تعذّر إنشاء المشروع: " + e.message);
@@ -1036,6 +1167,15 @@ export default function App() {
   const addCriterion = (name) => {
     setCriteria((c) => [...c, { id: `c${Date.now()}`, ar: name, en: "", g: "", w: 0 }]);
     log("إضافة معيار", name);
+  };
+
+  const compareAllProjects = () => repo.compareProjects(myProjects.map((p) => p.id));
+
+  const [ahpPairs, setAhpPairs] = useState({});
+  const setAhpPair = (key, val) => setAhpPairs((p) => ({ ...p, [key]: val }));
+  const applyAHP = (weights) => {
+    setCriteria((c) => c.map((cr, i) => ({ ...cr, w: weights[i] })));
+    log("تطبيق AHP", "تحديث الأوزان عبر المقارنات الزوجية");
   };
 
   useEffect(() => {
@@ -1237,13 +1377,14 @@ export default function App() {
     criteria, setCriteria, evals, setEvals, audit, selCombo, setSelCombo,
     anTab, setAnTab, comboMode, setComboMode, mc, setMc,
     newSvc, setNewSvc, newSeg, setNewSeg, newCrit, setNewCrit, addCriterion,
+    ahpPairs, setAhpPair, applyAHP,
     newMemberEmail, setNewMemberEmail, newMemberRole, setNewMemberRole,
     addTeamMember, removeTeamMember, teamError, repoActive: !!repo,
     ranked, top, totalW, confIdx, lastUpdate,
     comboName, toggleCombo, setScore, setConf, setEvidence, setRisk, setWeight, normalizeW, log,
     setScreen,
-    myProjects, currentProject, switchProject, showNewProjectForm, setShowNewProjectForm,
-    npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, handleCreateProject, projectBusy,
+    myProjects, currentProject, switchProject, showNewProjectForm, setShowNewProjectForm, compareAllProjects,
+    npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, npTemplateId, setNpTemplateId, handleCreateProject, projectBusy,
   };
   const Screen = SCREENS[screen];
 
