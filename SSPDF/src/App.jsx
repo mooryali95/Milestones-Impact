@@ -329,8 +329,20 @@ const AuthShell = ({ children }) => (
   </div>
 );
 
+const Spinner = () => (
+  <div style={{
+    width: 28, height: 28, borderRadius: "50%",
+    border: `3px solid ${B.lineSoft}`, borderTopColor: B.gold,
+    animation: "sspdf-spin 0.8s linear infinite", margin: "0 auto",
+  }} />
+);
+
 const CheckingScreen = () => (
-  <AuthShell><div className="text-center text-sm" style={{ color: B.muted }}>جارٍ التحقق من الجلسة…</div></AuthShell>
+  <AuthShell>
+    <style>{`@keyframes sspdf-spin { to { transform: rotate(360deg); } }`}</style>
+    <Spinner />
+    <div className="text-center text-sm mt-4" style={{ color: B.muted }}>جارٍ تحميل بياناتك…</div>
+  </AuthShell>
 );
 
 const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, setOtpCode, authBusy, authError, sendOtp, verifyOtp, resendIn }) => (
@@ -607,6 +619,7 @@ const Combos = (p) => (
               {p.segments.map((sg) => {
                 const key = `${sv.id}|${sg.id}`;
                 const ev = p.evals[key];
+                const isUnscored = ev && ev.scores.every((s) => s === 5) && Object.keys(ev.evidence).length === 0;
                 const sc = ev ? calcScore(ev, p.criteria).adj : null;
                 const clickable = p.comboMode === "toggle" ? p.can.structure : !!ev;
                 return (
@@ -617,13 +630,16 @@ const Combos = (p) => (
                         else if (ev) { p.setSelCombo(key); p.setScreen("scoring"); }
                       }}
                       disabled={!clickable}
+                      title={isUnscored ? "لم يُقيَّم بعد — اضغط لإدخال التقييم" : ""}
                       className={`w-14 h-11 rounded-lg text-sm font-mono transition ${clickable ? "cursor-pointer" : "cursor-default"}`}
                       style={ev
-                        ? (p.comboMode === "edit"
+                        ? (isUnscored
+                          ? { border: `1px dashed ${B.petrolSoft}`, background: "#F0F5F7", color: B.petrolSoft, fontWeight: 700 }
+                          : p.comboMode === "edit"
                           ? { border: `1px solid ${B.gold}`, background: B.goldSoft, color: B.goldText, fontWeight: 700 }
                           : { border: `1px solid ${B.ok}`, background: "#E4F2EA", color: B.ok, fontWeight: 700 })
                         : { border: `1px dashed ${B.line}`, color: "#B9B29E", background: "#fff" }}>
-                      {ev ? (p.comboMode === "edit" ? `${sc.toFixed(0)} ✎` : sc.toFixed(0)) : "—"}
+                      {ev ? (isUnscored ? "؟" : (p.comboMode === "edit" ? `${sc.toFixed(0)} ✎` : sc.toFixed(0))) : "—"}
                     </button>
                   </td>
                 );
@@ -634,7 +650,7 @@ const Combos = (p) => (
       </table>
       <div className="text-xs mt-3" style={{ color: B.muted }}>
         {p.comboMode === "toggle"
-          ? "اضغط أي خلية للتفعيل أو الاستبعاد · الرقم = النتيجة المعدّلة بالثقة"
+          ? "اضغط أي خلية للتفعيل أو الاستبعاد · الرقم = النتيجة المعدّلة بالثقة · ؟ = لم يُقيَّم بعد"
           : "اضغط أي تركيبة مفعّلة للانتقال مباشرة إلى مصفوفة التقييم وتعديل درجاتها"}
       </div>
     </Card>

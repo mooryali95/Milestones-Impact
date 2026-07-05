@@ -32,18 +32,13 @@ class SupabaseRepo {
       .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
   }
 
-  /** إنشاء مشروع جديد فارغ، وتصبح منشئه مديره تلقائياً */
+  /** إنشاء مشروع جديد فارغ، وتصبح منشئه مديره تلقائياً — عملية ذرّية واحدة داخل قاعدة البيانات */
   async createProject({ name, nameEn, description }) {
-    const { data: { user } } = await this.sb.auth.getUser();
-    if (!user) throw new Error("لا توجد جلسة دخول");
-    const { data: project, error } = await this.sb.from("projects")
-      .insert({ name, name_en: nameEn || null, description: description || null, status: "draft" })
-      .select().single();
+    const { data, error } = await this.sb.rpc("create_project_with_admin", {
+      p_name: name, p_name_en: nameEn || null, p_description: description || null,
+    });
     if (error) throw error;
-    const { error: memErr } = await this.sb.from("project_members")
-      .insert({ project_id: project.id, user_id: user.id, role: "admin", email: user.email, display_name: user.email });
-    if (memErr) throw memErr;
-    return project;
+    return data;
   }
 
   /** تحميل مشروع محدد بمعرّفه */
