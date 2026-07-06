@@ -531,10 +531,20 @@ const OnboardingGuide = (p) => {
   );
 };
 
-const Dashboard = (p) => (
+const Dashboard = (p) => {
+  const hasStructure = p.services.length > 0 && p.segments.length > 0;
+  const hasCombos = p.ranked.length > 0;
+  return (
   <div>
     <H ar="لوحة القرار" en="Decision Dashboard" sub={p.currentProject?.name || "برنامج إدارة المشروعات للقادة"} />
     <OnboardingGuide {...p} />
+    {hasStructure && !hasCombos && (
+      <div className="rounded-2xl p-6 mb-6 text-center" style={{ background: B.card, border: `2px dashed ${B.petrolSoft}` }}>
+        <div className="text-sm font-bold mb-1" style={{ color: B.petrol }}>لا توجد تركيبات مفعّلة بعد</div>
+        <div className="text-xs mb-3" style={{ color: B.muted }}>لديك خدمات وشرائح جاهزة — اذهب للتركيبات وفعّل ما يستحق التقييم لتظهر النتائج هنا</div>
+        <GoldBtn onClick={() => p.setScreen("combos")}>الذهاب إلى التركيبات ←</GoldBtn>
+      </div>
+    )}
     {p.top && (
       <div className="rounded-2xl p-6 mb-6" style={{ background: B.petrol, border: `2px solid ${B.gold}` }}>
         <div className="text-xs tracking-widest font-mono mb-2" style={{ color: B.gold }}>TOP RECOMMENDATION</div>
@@ -592,7 +602,8 @@ const Dashboard = (p) => (
       </Card>
     </div>
   </div>
-);
+  );
+};
 
 const Library = (p) => (
   <div>
@@ -1178,15 +1189,43 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  const switchProject = async (projectId, knownRole) => {
+  const parseHash = () => {
+    const h = window.location.hash.replace(/^#\/?/, "");
+    const [pid, scr] = h.split("/");
+    return { pid: pid || null, scr: scr || null };
+  };
+
+  const switchProject = async (projectId, knownRole, initialScreen = "dashboard") => {
     const d = await repo.load(projectId).catch((e) => { console.warn(e); return null; });
     if (!d) return;
     setServices(d.services); setSegments(d.segments); setCriteria(d.criteria);
     setEvals(d.evals); setAudit(d.audit.length ? d.audit : []); setTeam(d.team);
     setCurrentProject({ id: d.project.id, name: d.project.name, name_en: d.project.name_en, status: d.project.status });
     setRole(knownRole || myProjects.find((pr) => pr.id === projectId)?.myRole || "viewer");
-    setScreen("dashboard");
+    setScreen(initialScreen);
+    window.location.hash = `#/${projectId}/${initialScreen}`;
   };
+
+  /* حفظ مكانك في رابط الصفحة — يمنع العودة للمشروع الافتراضي عند مغادرة الصفحة والرجوع إليها */
+  useEffect(() => {
+    if (!currentProject) return;
+    const target = `#/${currentProject.id}/${screen}`;
+    if (window.location.hash !== target) window.location.hash = target;
+  }, [screen, currentProject?.id]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const { pid, scr } = parseHash();
+      if (pid && pid !== currentProject?.id) {
+        const proj = myProjects.find((p) => p.id === pid);
+        if (proj) switchProject(pid, proj.myRole, scr || "dashboard");
+      } else if (scr && scr !== screen && SCREENS[scr]) {
+        setScreen(scr);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [currentProject, myProjects, screen]);
 
   const afterLogin = async (user) => {
     setAuthUser(user);
@@ -1194,7 +1233,13 @@ export default function App() {
       const projects = await repo.listMyProjects();
       setMyProjects(projects);
       if (projects.length) {
-        await switchProject(projects[0].id, projects[0].myRole);
+        const { pid, scr } = parseHash();
+        const restored = pid && projects.find((p) => p.id === pid);
+        if (restored) {
+          await switchProject(restored.id, restored.myRole, scr && SCREENS[scr] ? scr : "dashboard");
+        } else {
+          await switchProject(projects[0].id, projects[0].myRole);
+        }
       }
     } catch (e) {
       console.warn("SSPDF listMyProjects:", e.message);
