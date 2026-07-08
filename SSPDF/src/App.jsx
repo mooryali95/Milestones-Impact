@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { repo, getMyRole } from "./lib/repository";
+import { repo } from "./lib/repository";
 import { supabase } from "./lib/supabaseClient";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -218,6 +218,7 @@ const BUCKETS = {
   next: { ar: "الموجة التالية", color: B.petrolSoft },
   defer: { ar: "أجّل", color: B.goldText },
   exclude: { ar: "استبعد حالياً", color: B.bad },
+  unscored: { ar: "لم تُقيَّم بعد", color: "#9B9690" },
 };
 
 function scenWeights(criteria, mult) {
@@ -378,25 +379,6 @@ const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, se
   </AuthShell>
 );
 
-const PendingScreen = ({ adminClaimed, authBusy, claimAdminNow, authUser, signOut }) => (
-  <AuthShell>
-    {!adminClaimed ? (
-      <>
-        <div className="text-sm font-bold mb-2" style={{ color: B.petrol }}>لا يوجد مدير نظام مرتبط بعد</div>
-        <div className="text-xs mb-4" style={{ color: B.muted }}>بصفتك أول من يسجّل الدخول، يمكنك المطالبة بصلاحية مدير النظام لهذا المشروع.</div>
-        <GoldBtn onClick={claimAdminNow} disabled={authBusy} className="w-full py-2.5">
-          {authBusy ? "جارٍ الربط…" : "المطالبة بصلاحية مدير النظام"}
-        </GoldBtn>
-      </>
-    ) : (
-      <>
-        <div className="text-sm font-bold mb-2" style={{ color: B.petrol }}>بانتظار تفعيل صلاحيتك</div>
-        <div className="text-xs mb-4" style={{ color: B.muted }}>حسابك ({authUser?.email}) لم يُربط بعد بأي دور في المشروع. تواصل مع مدير النظام لتفعيله من جدول العضوية.</div>
-      </>
-    )}
-    <button onClick={signOut} className="w-full text-xs mt-4" style={{ color: B.muted }}>تسجيل الخروج</button>
-  </AuthShell>
-);
 
 const Portal = (p) => {
   if (!p.repoActive) {
@@ -605,7 +587,10 @@ const Dashboard = (p) => {
   );
 };
 
-const Library = (p) => (
+const Library = (p) => {
+  const [editing, setEditing] = useState(null); // "S3" أو null
+  const [editVal, setEditVal] = useState("");
+  return (
   <div>
     <H ar="مكتبة الخدمات والشرائح" en="Service Library & Segments" sub="المتغيران الأساسيان اللذان تتولد منهما جميع التركيبات" />
     {!p.can.structure && <Locked role={p.role} />}
@@ -617,9 +602,35 @@ const Library = (p) => (
         <Card key={sec.prefix}>
           <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>{sec.title} <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>{sec.en}</span></div>
           {sec.items.map((it, idx) => (
-            <div key={it.id} className="flex justify-between items-center py-2 text-sm" style={{ borderBottom: idx < sec.items.length - 1 ? `1px solid ${B.lineSoft}` : "none", color: B.petrol }}>
-              <div><span className="font-mono text-xs ml-2" style={{ color: B.muted }}>{it.id}</span>{it.ar}</div>
-              <span className="text-xs font-mono" style={{ color: B.muted }}>{it.en}</span>
+            <div key={it.id} className="flex justify-between items-center py-2 text-sm gap-2" style={{ borderBottom: idx < sec.items.length - 1 ? `1px solid ${B.lineSoft}` : "none", color: B.petrol }}>
+              {editing === it.id ? (
+                <>
+                  <input value={editVal} onChange={(e) => setEditVal(e.target.value)} autoFocus
+                    className="flex-1 rounded-lg px-2 py-1 text-sm outline-none inp" />
+                  <button onClick={() => {
+                    if (!editVal.trim()) return;
+                    sec.set((arr) => arr.map((x) => x.id === it.id ? { ...x, ar: editVal.trim() } : x));
+                    p.log("تعديل", `${sec.title}: ${it.ar} ← ${editVal.trim()}`);
+                    setEditing(null);
+                  }} className="text-xs px-2 py-1 rounded-lg" style={{ background: B.gold, color: B.petrol }}>حفظ</button>
+                  <button onClick={() => setEditing(null)} className="text-xs px-2 py-1" style={{ color: B.muted }}>إلغاء</button>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0 truncate"><span className="font-mono text-xs ml-2" style={{ color: B.muted }}>{it.id}</span>{it.ar}</div>
+                  <span className="text-xs font-mono shrink-0" style={{ color: B.muted }}>{it.en}</span>
+                  {p.can.structure && (
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => { setEditing(it.id); setEditVal(it.ar); }} className="text-xs px-1.5" style={{ color: B.petrolSoft }}>✎</button>
+                      <button onClick={() => {
+                        if (!window.confirm(`حذف "${it.ar}"؟ سيُحذف معه أي تركيبات وتقييمات مرتبطة به.`)) return;
+                        sec.set((arr) => arr.filter((x) => x.id !== it.id));
+                        p.log("حذف", `${sec.title}: ${it.ar}`);
+                      }} className="text-xs px-1.5" style={{ color: B.bad }}>🗑</button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ))}
           {p.can.structure && (
@@ -639,9 +650,23 @@ const Library = (p) => (
       ))}
     </div>
   </div>
-);
+  );
+};
 
-const Combos = (p) => (
+const Combos = (p) => {
+  if (p.services.length === 0 || p.segments.length === 0) {
+    return (
+      <div>
+        <H ar="مولّد التركيبات" en="Combination Generator" sub="تحتاج خدمة واحدة وشريحة واحدة على الأقل لتوليد أي تركيبة" />
+        <div className="rounded-2xl p-6 text-center" style={{ background: B.card, border: `2px dashed ${B.petrolSoft}` }}>
+          <div className="text-sm font-bold mb-1" style={{ color: B.petrol }}>لا توجد خدمات أو شرائح بعد</div>
+          <div className="text-xs mb-3" style={{ color: B.muted }}>أضف خدمة واحدة على الأقل وشريحة واحدة على الأقل أولاً</div>
+          <GoldBtn onClick={() => p.setScreen("library")}>الذهاب إلى الخدمات والشرائح ←</GoldBtn>
+        </div>
+      </div>
+    );
+  }
+  return (
   <div>
     <H ar="مولّد التركيبات" en="Combination Generator" sub={`${p.services.length} خدمات × ${p.segments.length} شرائح = ${p.services.length * p.segments.length} تركيبة ممكنة`} />
     {!p.can.structure && p.comboMode === "toggle" && <Locked role={p.role} />}
@@ -703,7 +728,8 @@ const Combos = (p) => (
       </div>
     </Card>
   </div>
-);
+  );
+};
 
 const Criteria = (p) => {
   const [mode, setMode] = useState("direct");
@@ -728,10 +754,10 @@ const Criteria = (p) => {
             )}
           </div>
           {p.criteria.map((cr, i) => (
-            <div key={cr.id} className="grid grid-cols-12 gap-3 items-center py-2" style={{ borderBottom: i < p.criteria.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
-              <div className="col-span-5 md:col-span-4 text-sm" style={{ color: B.petrol }}>{cr.ar}<div className="text-xs font-mono" style={{ color: B.muted }}>{cr.en}</div></div>
+            <div key={cr.id} className="grid grid-cols-12 gap-2 items-center py-2" style={{ borderBottom: i < p.criteria.length - 1 ? `1px solid ${B.lineSoft}` : "none" }}>
+              <div className="col-span-4 text-sm" style={{ color: B.petrol }}>{cr.ar}<div className="text-xs font-mono" style={{ color: B.muted }}>{cr.en}</div></div>
               <div className="col-span-2 text-xs hidden md:block" style={{ color: B.muted }}>{cr.g}</div>
-              <div className="col-span-5 md:col-span-4">
+              <div className="col-span-4 md:col-span-3">
                 <input type="range" min={0} max={60} value={cr.w} disabled={!p.can.weights}
                   onChange={(e) => p.setWeight(i, +e.target.value)} className="w-full" style={{ accentColor: B.gold }} />
               </div>
@@ -741,12 +767,27 @@ const Criteria = (p) => {
                   className="w-14 rounded-lg px-1 py-1 text-center font-mono font-bold text-sm outline-none inp" style={{ color: B.goldText }} />
                 <span className="text-xs" style={{ color: B.muted }}>%</span>
               </div>
+              <div className="col-span-2 md:col-span-1 text-left">
+                {p.can.weights && (
+                  <button onClick={() => {
+                    if (!window.confirm(`حذف معيار "${cr.ar}"؟ ستُحذف معه كل الدرجات المرتبطة به في التقييمات.`)) return;
+                    p.removeCriterion(cr.id);
+                  }} className="text-xs px-1.5" style={{ color: B.bad }}>🗑</button>
+                )}
+              </div>
             </div>
           ))}
         </Card>
       )}
       {mode === "ahp" && (
         <Card>
+          {p.criteria.length < 2 ? (
+            <div className="text-center py-4">
+              <div className="text-sm font-bold mb-1" style={{ color: B.petrol }}>تحتاج معيارين على الأقل</div>
+              <div className="text-xs" style={{ color: B.muted }}>أضف معياراً آخر من الأسفل لتتمكن من استخدام المقارنات الزوجية</div>
+            </div>
+          ) : (
+          <>
           <div className="text-xs mb-4" style={{ color: B.muted }}>
             لكل زوج من المعايير، حدّد أيهما أهم وبأي درجة وفق المقياس القياسي (Saaty Scale)، ثم اضغط "تطبيق الأوزان المحسوبة".
           </div>
@@ -772,6 +813,8 @@ const Criteria = (p) => {
             <GoldBtn onClick={() => p.applyAHP(computeAHPWeights(p.criteria, p.ahpPairs))} className="w-full py-2.5 mt-4">
               تطبيق الأوزان المحسوبة على معايير التقييم
             </GoldBtn>
+          )}
+          </>
           )}
         </Card>
       )}
@@ -888,17 +931,19 @@ const Risk = (p) => (
 );
 
 const Analysis = (p) => {
+  const scored = useMemo(() => p.ranked.filter((r) => !r.isUnscored), [p.ranked]);
+  const excludedCount = p.ranked.length - scored.length;
   const scenRank = useMemo(() => {
     const out = {};
     Object.entries(SCENARIOS).forEach(([k, s]) => {
       const w = scenWeights(p.criteria, s.mult);
-      out[k] = p.ranked.map((r) => ({ key: r.key, name: r.name, adj: calcScore(r.ev, w).adj })).sort((a, b) => b.adj - a.adj);
+      out[k] = scored.map((r) => ({ key: r.key, name: r.name, adj: calcScore(r.ev, w).adj })).sort((a, b) => b.adj - a.adj);
     });
     return out;
-  }, [p.ranked, p.criteria]);
+  }, [scored, p.criteria]);
   return (
     <div>
-      <H ar="التحليل والسيناريوهات" en="Sensitivity · Scenarios · Monte Carlo" sub="اختبار استقرار القرار عند تغيّر الافتراضات" />
+      <H ar="التحليل والسيناريوهات" en="Sensitivity · Scenarios · Monte Carlo" sub={excludedCount > 0 ? `اختبار استقرار القرار عند تغيّر الافتراضات — تم استبعاد ${excludedCount} تركيبة غير مُقيَّمة بعد من هذا التحليل` : "اختبار استقرار القرار عند تغيّر الافتراضات"} />
       <div className="flex gap-2 mb-4">
         {[["scen", "السيناريوهات الثلاثة"], ["mc", "محاكاة Monte Carlo"]].map(([k, t]) => (
           <button key={k} onClick={() => p.setAnTab(k)}
@@ -925,7 +970,7 @@ const Analysis = (p) => {
       {p.anTab === "mc" && (
         <Card>
           <div className="flex flex-wrap items-center gap-4 mb-4">
-            <GoldBtn disabled={!p.can.analyze} onClick={() => { p.setMc(runMonteCarlo(p.ranked, p.criteria)); p.log("محاكاة", "تشغيل Monte Carlo — 1000 تكرار"); }} className="px-5 py-2.5">
+            <GoldBtn disabled={!p.can.analyze || scored.length === 0} onClick={() => { p.setMc(runMonteCarlo(scored, p.criteria)); p.log("محاكاة", "تشغيل Monte Carlo — 1000 تكرار"); }} className="px-5 py-2.5">
               ▶ تشغيل المحاكاة (1000 تكرار)
             </GoldBtn>
             <div className="text-xs" style={{ color: B.muted }}>تُضاف عشوائية لكل درجة حسب مستوى الثقة، ثم يُقاس تكرار ظهور كل تركيبة ضمن أفضل 3</div>
@@ -966,7 +1011,7 @@ const Analysis = (p) => {
 };
 
 const Decision = (p) => {
-  const groups = { launch: [], next: [], defer: [], exclude: [] };
+  const groups = { launch: [], next: [], defer: [], exclude: [], unscored: [] };
   p.ranked.forEach((r) => groups[r.bucket].push(r));
   const rationale = (r) => {
     const tops = p.criteria.map((c, i) => ({ ar: c.ar, v: c.w * r.ev.scores[i] })).sort((a, b) => b.v - a.v).slice(0, 3).map((x) => x.ar);
@@ -994,7 +1039,7 @@ const Decision = (p) => {
                   <div className="font-bold text-sm" style={{ color: B.petrol }}>{r.name}</div>
                   <span className="font-mono text-sm font-bold" style={{ color: B.goldText }}>{r.adj.toFixed(1)}</span>
                 </div>
-                <div className="text-xs mt-2" style={{ color: B.muted }}>{rationale(r)}</div>
+                <div className="text-xs mt-2" style={{ color: B.muted }}>{r.isUnscored ? "لم يُدخَل أي تقييم بعد — النتيجة افتراضية غير حقيقية." : rationale(r)}</div>
                 <div className="text-xs mt-1" style={{ color: B.muted }}>المخاطر: {r.risk}/9 · مؤشر الثقة: {Math.round((r.adj / r.raw) * 100)}%</div>
               </Card>
             ))}
@@ -1180,8 +1225,6 @@ export default function App() {
 
   const [authState, setAuthState] = useState(repo ? "checking" : "local");
   const [authUser, setAuthUser] = useState(null);
-  const [teamDisplayName, setTeamDisplayName] = useState("");
-  const [adminClaimed, setAdminClaimed] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -1219,6 +1262,7 @@ export default function App() {
       if (pid && pid !== currentProject?.id) {
         const proj = myProjects.find((p) => p.id === pid);
         if (proj) switchProject(pid, proj.myRole, scr || "dashboard");
+        else setAccessError("لا تملك صلاحية الوصول لهذا المشروع، أو أنه لم يعد موجوداً.");
       } else if (scr && scr !== screen && SCREENS[scr]) {
         setScreen(scr);
       }
@@ -1226,6 +1270,8 @@ export default function App() {
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, [currentProject, myProjects, screen]);
+
+  const [accessError, setAccessError] = useState("");
 
   const afterLogin = async (user) => {
     setAuthUser(user);
@@ -1235,6 +1281,7 @@ export default function App() {
       if (projects.length) {
         const { pid, scr } = parseHash();
         const restored = pid && projects.find((p) => p.id === pid);
+        if (pid && !restored) setAccessError("لا تملك صلاحية الوصول لهذا المشروع، أو أنه لم يعد موجوداً. تم فتح أحدث مشروع لديك بدلاً منه.");
         if (restored) {
           await switchProject(restored.id, restored.myRole, scr && SCREENS[scr] ? scr : "dashboard");
         } else {
@@ -1267,6 +1314,11 @@ export default function App() {
   const addCriterion = (name) => {
     setCriteria((c) => [...c, { id: `c${Date.now()}`, ar: name, en: "", g: "", w: 0 }]);
     log("إضافة معيار", name);
+  };
+  const removeCriterion = (id) => {
+    const cr = criteria.find((c) => c.id === id);
+    setCriteria((c) => c.filter((x) => x.id !== id));
+    if (cr) log("حذف معيار", cr.ar);
   };
 
   const compareAllProjects = () => repo.compareProjects(myProjects.map((p) => p.id));
@@ -1342,14 +1394,8 @@ export default function App() {
     }
     setAuthBusy(false);
   };
-  const claimAdminNow = async () => {
-    setAuthBusy(true);
-    await repo.claimAdmin(authUser.email).catch(() => {});
-    const info = await getMyRole(supabase, repo.projectId);
-    setAuthBusy(false);
-    if (info.role) { setRole(info.role); setTeamDisplayName(info.displayName || authUser.email); setAuthState("ready"); }
-  };
   const signOut = async () => { await supabase.auth.signOut(); };
+
 
   const can = roleInfo(role).can;
   const userName = authState === "ready" ? (authUser?.email || "مستخدم")
@@ -1369,12 +1415,13 @@ export default function App() {
     return Object.entries(evals)
       .map(([key, ev]) => {
         const sc = calcScore(ev, criteria);
-        return { key, ev, name: comboName(key), ...sc, risk: ev.risk, bucket: bucket(sc.adj, ev.risk) };
+        const isUnscored = ev.scores.every((s) => s === 5) && Object.keys(ev.evidence).length === 0;
+        return { key, ev, name: comboName(key), ...sc, risk: ev.risk, isUnscored, bucket: isUnscored ? "unscored" : bucket(sc.adj, ev.risk) };
       })
-      .sort((a, b) => b.adj - a.adj);
+      .sort((a, b) => (a.isUnscored !== b.isUnscored ? (a.isUnscored ? 1 : -1) : b.adj - a.adj));
   }, [evals, criteria, services, segments]);
 
-  const top = ranked[0];
+  const top = ranked.find((r) => !r.isUnscored);
   const totalW = criteria.reduce((s, c) => s + c.w, 0);
   const confIdx = top ? Math.round((top.adj / top.raw) * 100) : 0;
   const lastUpdate = audit[0]?.ts || "—";
@@ -1471,20 +1518,12 @@ export default function App() {
       />
     );
   }
-  if (repo && authState === "pending") {
-    return (
-      <PendingScreen
-        adminClaimed={adminClaimed} authBusy={authBusy}
-        claimAdminNow={claimAdminNow} authUser={authUser} signOut={signOut}
-      />
-    );
-  }
 
   const ctx = {
     role, can, team, setTeam, services, setServices, segments, setSegments,
     criteria, setCriteria, evals, setEvals, audit, selCombo, setSelCombo,
     anTab, setAnTab, comboMode, setComboMode, mc, setMc,
-    newSvc, setNewSvc, newSeg, setNewSeg, newCrit, setNewCrit, addCriterion,
+    newSvc, setNewSvc, newSeg, setNewSeg, newCrit, setNewCrit, addCriterion, removeCriterion,
     ahpPairs, setAhpPair, applyAHP,
     newMemberEmail, setNewMemberEmail, newMemberRole, setNewMemberRole,
     addTeamMember, removeTeamMember, teamError, repoActive: !!repo,
@@ -1546,6 +1585,12 @@ export default function App() {
           )}
         </div>
       </header>
+      {accessError && (
+        <div className="px-5 py-2.5 text-xs flex justify-between items-center" style={{ background: "#FDECEA", color: B.bad, borderBottom: `1px solid ${B.bad}` }}>
+          <span>⚠️ {accessError}</span>
+          <button onClick={() => setAccessError("")} className="font-bold px-2">✕</button>
+        </div>
+      )}
       <div className="flex">
         <nav className="w-56 shrink-0 min-h-screen p-3 hidden md:block" style={{ background: B.petrol }}>
           <button onClick={() => setScreen(PINNED[0])}

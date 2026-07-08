@@ -157,20 +157,44 @@ class SupabaseRepo {
     if (!this.projectId) return;
     const pid = this.projectId;
 
-    // 1) عناصر جديدة في المكتبة
-    const newSv = services.filter((s) => !this.serviceIdByCode[s.id]);
-    for (const s of newSv) {
-      const { data, error } = await this.sb.from("services")
-        .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
-        .select().single();
-      if (!error && data) this.serviceIdByCode[s.id] = data.id;
+    // 1) الخدمات: تحديث الموجود، إضافة الجديد، حذف المُزال من الواجهة
+    for (const s of services) {
+      if (this.serviceIdByCode[s.id]) {
+        await this.sb.from("services").update({ name_ar: s.ar, name_en: s.en || null })
+          .eq("project_id", pid).eq("code", s.id);
+      } else {
+        const { data, error } = await this.sb.from("services")
+          .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
+          .select().single();
+        if (!error && data) this.serviceIdByCode[s.id] = data.id;
+      }
     }
-    const newSg = segments.filter((s) => !this.segmentIdByCode[s.id]);
-    for (const s of newSg) {
-      const { data, error } = await this.sb.from("segments")
-        .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
-        .select().single();
-      if (!error && data) this.segmentIdByCode[s.id] = data.id;
+    const currentSvcCodes = new Set(services.map((s) => s.id));
+    for (const code of Object.keys(this.serviceIdByCode)) {
+      if (!currentSvcCodes.has(code)) {
+        await this.sb.from("services").delete().eq("id", this.serviceIdByCode[code]);
+        delete this.serviceIdByCode[code];
+      }
+    }
+
+    // 2) الشرائح: نفس المنطق
+    for (const s of segments) {
+      if (this.segmentIdByCode[s.id]) {
+        await this.sb.from("segments").update({ name_ar: s.ar, name_en: s.en || null })
+          .eq("project_id", pid).eq("code", s.id);
+      } else {
+        const { data, error } = await this.sb.from("segments")
+          .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
+          .select().single();
+        if (!error && data) this.segmentIdByCode[s.id] = data.id;
+      }
+    }
+    const currentSegCodes = new Set(segments.map((s) => s.id));
+    for (const code of Object.keys(this.segmentIdByCode)) {
+      if (!currentSegCodes.has(code)) {
+        await this.sb.from("segments").delete().eq("id", this.segmentIdByCode[code]);
+        delete this.segmentIdByCode[code];
+      }
     }
 
     // 2) المعايير: تحديث الموجود، وإضافة الجديد فعلياً (ضروري للمشاريع الفارغة الجديدة)
