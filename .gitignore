@@ -18,3 +18,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .DS_Store
+
+# Root project intentionally builds without a committed lockfile
+# (react-scripts loose peer deps produce a lockfile npm ci rejects on CI)
+package-lock.json
