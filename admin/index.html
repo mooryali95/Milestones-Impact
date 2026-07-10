@@ -1429,8 +1429,10 @@
 // CONFIG
 // ══════════════════════════════════════════════════════
 const SUPA_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
+// Public anon key — used only to pass the Edge Function gateway. It grants no
+// data access; every privileged call is authorized by the admin session token.
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';
-const AUTH_URL = `${SUPA_URL}/functions/v1/admin-auth`;
+const ADMIN_API = `${SUPA_URL}/functions/v1/admin-api`;
 const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
 
 let authToken    = null;
@@ -1463,34 +1465,26 @@ const Session = {
 // ══════════════════════════════════════════════════════
 // SUPABASE QUERY (للداشبورد فقط)
 // ══════════════════════════════════════════════════════
-async function supabaseQuery(path, method = 'GET', body = null) {
-  const opts = {
-    method,
-    headers: {
-      'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${SUPA_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(`${SUPA_URL}/rest/v1/${path}`, opts);
-  if (!res.ok) throw new Error(`Supabase ${res.status}`);
-  const text = await res.text();
-  return text ? JSON.parse(text) : [];
-}
-
+// All admin operations go through the admin-api Edge Function. The anon key
+// only satisfies the gateway; the admin session token (carried in the body)
+// is what actually authorizes each action server-side.
+const LEGACY_ACTION_MAP = { 'send-code': 'login-send', 'verify-code': 'login-verify' };
 async function callAuth(body) {
-  const res = await fetch(AUTH_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPA_KEY,
-      'Authorization': `Bearer ${SUPA_KEY}`
-    },
-    body: JSON.stringify(body),
-  });
-  return res.json();
+  const action = LEGACY_ACTION_MAP[body.action] || body.action;
+  const payload = { ...body, action };
+  if (authToken) payload.token = authToken;
+  try {
+    const res = await fetch(ADMIN_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  } catch (e) { return { success: false, message: 'خطأ في الاتصال بالخادم' }; }
 }
 
 // ══════════════════════════════════════════════════════
@@ -1547,11 +1541,11 @@ async function handleVerifyCode() {
   try {
     const d = await callAuth({ action: 'verify-code', email, code });
     if (!d.success) throw new Error(d.message || 'الرمز غير صحيح أو منتهي الصلاحية');
-    if (!d.user) throw new Error('خطأ في الاستجابة — حاول مجدداً');
+    if (!d.user || !d.token) throw new Error('خطأ في الاستجابة — حاول مجدداً');
     // تأكد أن user يحتوي email
     const userObj = { ...d.user, email: d.user.email || email };
-    authToken = SUPA_KEY;
-    Session.save(SUPA_KEY, userObj);
+    authToken = d.token;
+    Session.save(d.token, userObj);
     showDashboard(userObj, userObj.email);
   } catch(e) {
     showLoginError('loginErrorCode', e.message);
@@ -1805,11 +1799,13 @@ async function loadRequests() {
   tbody.innerHTML = '<tr class="loading-row"><td colspan="7"><div class="spinner"></div></td></tr>';
 
   try {
-    const data = await supabaseQuery(
-      'contact_requests?select=*&order=created_at.desc&limit=500'
-    );
+    const res = await callAuth({ action: 'list-contacts' });
+    if (!res.success) {
+      if (res.message && res.message.includes('الجلسة')) { handleLogout(); return; }
+      throw new Error(res.message || 'تعذّر تحميل البيانات');
+    }
 
-    allData = data || [];
+    allData = res.contacts || [];
     updateStats();
     filterTable();
 
@@ -2023,11 +2019,8 @@ function closeDrawer() {
 // ══════════════════════════════════════════════════════
 async function updateStatus(id, status, silent = false) {
   try {
-    await supabaseQuery(`contact_requests?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ status }),
-    });
+    const res = await callAuth({ action: 'update-contact', id, fields: { status } });
+    if (!res.success) throw new Error(res.message || 'تعذّر التحديث');
 
     // تحديث محلي
     const idx = allData.findIndex(r => r.id === id);

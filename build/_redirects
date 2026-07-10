@@ -1,3 +1,0 @@
-# SPA fallback — all routes redirect to index.html
-# This allows React to handle routing client-side
-/*    /index.html   200
