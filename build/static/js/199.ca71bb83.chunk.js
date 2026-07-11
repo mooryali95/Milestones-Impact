@@ -1,2 +1,0 @@
-"use strict";(globalThis.webpackChunkmilestone_impact=globalThis.webpackChunkmilestone_impact||[]).push([[199],{199(s){s.exports=import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm")}}]);
-//# sourceMappingURL=199.ca71bb83.chunk.js.map

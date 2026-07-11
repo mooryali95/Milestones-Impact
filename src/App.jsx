@@ -284,106 +284,61 @@ function analyzeBookings(procs, dates, confirmed) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// DATABASE — Supabase (centralized, all devices see same data)
+// DATABASE ACCESS — via server-side Edge Functions
 // ════════════════════════════════════════════════════════════════
-// Setup: see SUPABASE-GUIDE.md
-// 1. Create free account at supabase.com
-// 2. Create table "registrations" 
-// 3. Paste your URL and anon key below
+// All privileged reads/writes go through the user-api / admin-api Edge
+// Functions, which authenticate a per-session token server-side. The anon
+// key below is public by design and only unlocks: (a) public SELECT on
+// process_details / app_content, and (b) invoking the Edge Functions —
+// it grants no access to registrations, OTP codes, or admin data.
 
 const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';
 
-// OTP Helper - calls Edge Function
-const OTP = {
-  async send(email) {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, action: 'send' }),
-      });
-      return await res.json();
-    } catch (e) { return { success: false, message: 'خطأ في الاتصال' }; }
-  },
-  async verify(email, otp) {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp, action: 'verify' }),
-      });
-      return await res.json();
-    } catch (e) { return { success: false, message: 'خطأ في الاتصال' }; }
-  },
-};
-
-const supabase = {
-  async query(method, path, body) {
-    const opts = {
-      method,
+// Invoke an Edge Function. The anon key stays in the Authorization header
+// (required by the Supabase gateway); the per-session token — when present —
+// is carried inside the JSON body and verified server-side.
+async function callFn(fn, body) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': method === 'POST' ? 'return=representation' : undefined,
       },
-    };
-    if (body) opts.body = JSON.stringify(body);
-    // Clean undefined headers
-    Object.keys(opts.headers).forEach(k => opts.headers[k] === undefined && delete opts.headers[k]);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, opts);
-    if (!res.ok) return null;
+      body: JSON.stringify(body),
+    });
+    return await res.json();
+  } catch (e) { return { success: false, message: 'خطأ في الاتصال بالخادم' }; }
+}
+
+// Public read of the two openly-readable content tables (SELECT-only via RLS).
+async function publicRead(path) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!res.ok) return [];
     const text = await res.text();
     return text ? JSON.parse(text) : [];
-  }
+  } catch (e) { return []; }
+}
+
+// ── User data API (token-scoped: a user only ever sees/writes their own row) ──
+const UserAPI = {
+  registerSend: (name, phone, email) => callFn('user-api', { action: 'register-send', name, phone, email }),
+  resumeSend: (phone) => callFn('user-api', { action: 'resume-send', phone }),
+  verify: (payload) => callFn('user-api', { action: 'verify', ...payload }),
+  get: (token) => callFn('user-api', { action: 'get', token }),
+  save: (token, fields) => callFn('user-api', { action: 'save', token, fields }),
 };
 
-const isSupabaseConfigured = !SUPABASE_URL.includes('YOUR_PROJECT');
-
-// Fallback to localStorage if Supabase not configured yet
-const DB = isSupabaseConfigured ? {
-  async getAll(prefix) {
-    try {
-      const data = await supabase.query('GET', `registrations?id=like.${prefix}*&select=*`);
-      return data || [];
-    } catch (e) { return []; }
-  },
-  async save(key, data) {
-    try {
-      // Upsert: insert or update
-      const payload = { ...data, id: key };
-      const existing = await supabase.query('GET', `registrations?id=eq.${key}&select=id`);
-      if (existing && existing.length > 0) {
-        await supabase.query('PATCH', `registrations?id=eq.${key}`, payload);
-      } else {
-        await supabase.query('POST', 'registrations', payload);
-      }
-      return true;
-    } catch (e) { return false; }
-  },
-  async get(key) {
-    try {
-      const data = await supabase.query('GET', `registrations?id=eq.${key}&select=*`);
-      return data && data.length > 0 ? data[0] : null;
-    } catch (e) { return null; }
-  },
-} : {
-  // Fallback: localStorage (for local dev before Supabase setup)
-  async getAll(prefix) {
-    try {
-      const items = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(prefix)) {
-          try { items.push(JSON.parse(localStorage.getItem(key))); } catch (e) {}
-        }
-      }
-      return items;
-    } catch (e) { return []; }
-  },
-  async save(key, data) { try { localStorage.setItem(key, JSON.stringify(data)); return true; } catch (e) { return false; } },
-  async get(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+// ── Admin data API (token-scoped: every action re-checks the admin session) ──
+const AdminAPI = {
+  loginSend: (email) => callFn('admin-api', { action: 'login-send', email }),
+  loginVerify: (email, code) => callFn('admin-api', { action: 'login-verify', email, code }),
+  call: (token, action, extra = {}) => callFn('admin-api', { action, token, ...extra }),
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -1470,11 +1425,12 @@ const SESSION_KEY = 'mi_local_session';
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
 
 const LocalSession = {
-  save(userData, sessionId, dates, confirmed, submitted, reopenRequested) {
+  save(userData, sessionId, dates, confirmed, submitted, reopenRequested, token) {
     try {
       const payload = {
         user: userData,
         sessionId,
+        token,
         dates,
         confirmed,
         submitted,
@@ -1582,13 +1538,17 @@ export default function App() {
   const [user, setUser] = useState({ name: "", phone: "", email: "" });
   const [regErrors, setRegErrors] = useState({});
   const [sessionId, setSessionId] = useState(null);
+  const [sessionToken, setSessionToken] = useState(null);
   const [dates, setDates] = useState({});
   const [confirmed, setConfirmed] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [reopenRequested, setReopenRequested] = useState(false);
 
-  const [adminUser, setAdminUser] = useState("");
-  const [adminPass, setAdminPass] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminCode, setAdminCode] = useState("");
+  const [adminOtpStep, setAdminOtpStep] = useState("email"); // "email" | "code"
+  const [adminSending, setAdminSending] = useState(false);
+  const [adminToken, setAdminToken] = useState(null);
   const [adminError, setAdminError] = useState("");
   const [allRegs, setAllRegs] = useState([]);
   const [expandedReg, setExpandedReg] = useState(null);
@@ -1634,17 +1594,19 @@ export default function App() {
   // ── Auto-restore local session ──
   useEffect(() => {
     // Restore admin session (4h)
-    const adminToken = AdminSession.load();
-    if (adminToken) {
+    const savedAdminToken = AdminSession.load();
+    if (savedAdminToken) {
+      setAdminToken(savedAdminToken);
       setScreen("admin");
-      loadRegs();
+      loadRegs(savedAdminToken);
       return;
     }
-    // Restore user session (24h)
+    // Restore user session (24h) — requires a valid session token
     const session = LocalSession.load();
-    if (session?.sessionId && session?.user) {
+    if (session?.sessionId && session?.token && session?.user) {
       setUser(session.user);
       setSessionId(session.sessionId);
+      setSessionToken(session.token);
       setDates(session.dates || {});
       setConfirmed(session.confirmed || {});
       setSubmitted(session.submitted || false);
@@ -1654,14 +1616,13 @@ export default function App() {
     }
   }, []);
 
-  // Load rich process details + app content from Supabase
+  // Load rich process details + app content (public, read-only tables)
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     (async () => {
       try {
         const [details, content] = await Promise.all([
-          supabase.query('GET', 'process_details?select=*'),
-          supabase.query('GET', 'app_content?select=*'),
+          publicRead('process_details?select=*'),
+          publicRead('app_content?select=*'),
         ]);
         if (details && details.length) {
           const map = {};
@@ -1717,117 +1678,102 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const loadRegs = async () => {
+  const loadRegs = async (tokenArg) => {
+    const token = tokenArg || adminToken;
+    if (!token) return;
     setLoading(true);
-    const regs = await DB.getAll("reg:");
-    setAllRegs(regs.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
+    const res = await AdminAPI.call(token, 'list-regs');
+    if (res?.success) {
+      const regs = res.registrations || [];
+      setAllRegs(regs.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
+    } else if (res?.message) {
+      showToast(res.message);
+      if (res.message.includes('الجلسة')) doLogout();
+    }
     setLoading(false);
   };
 
   // ── Admin: Save process detail ──
   const adminSaveProcess = async (processKey, updates) => {
-    if (!isSupabaseConfigured) return;
+    if (!adminToken) return;
     setAdminSaving(true);
-    try {
-      await supabase.query('PATCH', `process_details?process_key=eq.${processKey}`, updates);
-      // Refresh local state
+    const res = await AdminAPI.call(adminToken, 'save-process', { process_key: processKey, updates });
+    if (res?.success) {
       setProcessDetails(prev => ({ ...prev, [processKey]: { ...prev[processKey], ...updates } }));
       showToast('تم الحفظ ✓');
-    } catch (e) { showToast('خطأ في الحفظ'); }
+    } else { showToast(res?.message || 'خطأ في الحفظ'); }
     setAdminSaving(false);
   };
 
   // ── Admin: Save app content ──
   const adminSaveContent = async (key, value) => {
-    if (!isSupabaseConfigured) return;
+    if (!adminToken) return;
     setAdminSaving(true);
-    try {
-      await supabase.query('PATCH', `app_content?key=eq.${key}`, { value, updated_at: new Date().toISOString() });
+    const res = await AdminAPI.call(adminToken, 'save-content', { key, value });
+    if (res?.success) {
       setAppContent(prev => ({ ...prev, [key]: value }));
       showToast('تم الحفظ ✓');
-    } catch (e) { showToast('خطأ في الحفظ'); }
+    } else { showToast(res?.message || 'خطأ في الحفظ'); }
     setAdminSaving(false);
   };
 
-  // ── Resume Session: Step 1 - Find & Send OTP ──
+  // ── Apply a verified user session returned by user-api ──
+  const applyUserSession = (res) => {
+    const reg = res.registration || {};
+    const u = { name: reg.name || "", phone: reg.phone || "", email: reg.email || "" };
+    setUser(u);
+    setSessionId(reg.id);
+    setSessionToken(res.token);
+    setDates(reg.dates || {});
+    setConfirmed(reg.confirmed || {});
+    setSubmitted(reg.submitted || false);
+    setReopenRequested(reg.reopenRequested || false);
+    if (Array.isArray(reg.demographic_analysis)) setDemoRows(reg.demographic_analysis);
+    setScreen("main");
+    if (reg.submitted) setTab("output");
+    LocalSession.save(u, reg.id, reg.dates || {}, reg.confirmed || {},
+      reg.submitted || false, reg.reopenRequested || false, res.token);
+  };
+
+  // ── Resume Session: Step 1 — server finds account by phone & sends OTP ──
   const handleResume = async (e) => {
     e.preventDefault();
     const phone = resumePhone.replace(/\s/g, "");
     if (!validPhone(phone)) { setResumeError("صيغة غير صحيحة (05XXXXXXXX)"); return; }
 
-    // ── Rate limit: enforce cooldown between sends ──
-    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
-      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
-      setResumeError(`يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال`);
-      return;
-    }
-
     setResumeLoading(true);
     setResumeError("");
-    const existing = await DB.getAll("reg:");
-    const found = existing.find(r => r.phone === phone);
-    if (!found) { setResumeLoading(false); setResumeError("لا يوجد تسجيل بهذا الرقم"); return; }
-
-    // Send OTP to registered email
-    const res = await OTP.send(found.email);
+    const res = await UserAPI.resumeSend(phone);
     setResumeLoading(false);
-    if (!res.success) { setResumeError("خطأ في إرسال رمز التحقق"); return; }
+    if (!res.success) { setResumeError(res.message || "خطأ في إرسال رمز التحقق"); return; }
 
     setOtpLastSent(Date.now());
     setOtpFailCount(0);
-    // Store found user and switch to OTP input
-    setUser({ name: found.name, phone: found.phone, email: found.email });
-    setOtpPending({ type: "resume", data: found });
+    setUser({ name: "", phone, email: "" });
+    setOtpPending({ type: "resume", phone });
     setOtpStep("otp");
     setOtpCode("");
     setOtpError("");
-    showToast(`تم إرسال رمز التحقق إلى ${found.email.replace(/(.{2}).*(@.*)/, "$1***$2")} ✉`);
+    showToast(`تم إرسال رمز التحقق إلى ${res.maskedEmail || "بريدك المسجّل"} ✉`);
   };
 
-  // ── Resume: Step 2 - Verify OTP ──
+  // ── Resume: Step 2 — verify OTP, receive session token ──
   const handleResumeVerify = async (e) => {
     e.preventDefault();
     if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
 
-    // ── Rate limit: max failed attempts ──
-    if (otpFailCount >= OTP_MAX_FAILS) {
-      setOtpError("تجاوزت الحد المسموح من المحاولات. يرجى طلب رمز جديد");
-      return;
-    }
-
     setOtpSending(true);
     setOtpError("");
-    const found = otpPending?.data;
-    const res = await OTP.verify(found.email, otpCode);
+    const res = await UserAPI.verify({ otp: otpCode, phone: otpPending?.phone });
     setOtpSending(false);
-    if (!res.success) {
-      setOtpFailCount(prev => prev + 1);
-      const remaining = OTP_MAX_FAILS - (otpFailCount + 1);
-      setOtpError(remaining > 0
-        ? `${res.message || "رمز التحقق غير صحيح"} — متبقي ${remaining} محاولة`
-        : "تجاوزت الحد المسموح. اطلب رمزاً جديداً"
-      );
-      return;
-    }
+    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
 
-    // Restore session
-    setSessionId(found.id);
-    setDates(found.dates || {});
-    setConfirmed(found.confirmed || {});
-    setSubmitted(found.submitted || false);
-    setReopenRequested(found.reopenRequested || false);
-    setScreen("main");
-    if (found.submitted) setTab("output");
+    applyUserSession(res);
     setOtpStep("form"); setOtpCode(""); setOtpPending(null);
-    LocalSession.save(
-      { name: found.name, phone: found.phone, email: found.email },
-      found.id, found.dates || {}, found.confirmed || {},
-      found.submitted || false, found.reopenRequested || false
-    );
-    showToast(`مرحباً مجدداً ${found.name}! تم استعادة بياناتك`);
+    showToast(`مرحباً مجدداً ${res.registration?.name || ""}! تم استعادة بياناتك`);
   };
 
-  // ── Register: Step 1 - Validate & Send OTP ──
+  // ── Register: Step 1 — validate locally, server sends OTP (dedupe server-side) ──
   const handleRegister = async (e) => {
     e.preventDefault();
     const errs = {};
@@ -1837,131 +1783,91 @@ export default function App() {
     if (!validEmail(user.email)) errs.email = "بريد إلكتروني غير صحيح";
     if (Object.keys(errs).length) { setRegErrors(errs); return; }
 
-    // ── Rate limit: enforce cooldown between sends ──
-    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
-      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
-      setRegErrors({ email: `يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال` });
-      return;
-    }
-
-    // Check duplicate → auto-resume via OTP
-    const existing = await DB.getAll("reg:");
-    const dup = existing.find(r => r.email === user.email || r.phone === user.phone);
-
     setOtpSending(true);
     setOtpError("");
-    const res = await OTP.send(user.email);
+    const res = await UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim());
     setOtpSending(false);
     if (!res.success) { setRegErrors({ email: res.message || "خطأ في إرسال رمز التحقق" }); return; }
 
     setOtpLastSent(Date.now());
     setOtpFailCount(0);
-    setOtpPending(dup ? { type: "resume", data: dup } : { type: "new" });
+    setOtpPending({ type: res.mode === "resume" ? "resume" : "new" });
     setOtpStep("otp");
     setOtpCode("");
     setRegErrors({});
     showToast("تم إرسال رمز التحقق إلى بريدك الإلكتروني ✉");
   };
 
-  // ── Register: Step 2 - Verify OTP & Complete ──
+  // ── Register: Step 2 — verify OTP; server creates the record & issues a token ──
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (otpCode.length !== 6) { setOtpError("أدخل الرمز المكون من 6 أرقام"); return; }
 
-    // ── Rate limit: max failed attempts ──
-    if (otpFailCount >= OTP_MAX_FAILS) {
-      setOtpError("تجاوزت الحد المسموح من المحاولات. يرجى طلب رمز جديد");
-      return;
-    }
-
     setOtpSending(true);
     setOtpError("");
-    const res = await OTP.verify(user.email, otpCode);
+    const res = await UserAPI.verify({
+      otp: otpCode,
+      email: user.email.trim(),
+      name: user.name.trim(),
+      phone: user.phone.replace(/\s/g, ""),
+    });
     setOtpSending(false);
-    if (!res.success) {
-      setOtpFailCount(prev => prev + 1);
-      const remaining = OTP_MAX_FAILS - (otpFailCount + 1);
-      setOtpError(remaining > 0
-        ? `${res.message || "رمز التحقق غير صحيح"} — متبقي ${remaining} محاولة`
-        : "تجاوزت الحد المسموح. اطلب رمزاً جديداً"
-      );
-      return;
-    }
+    if (!res.success) { setOtpError(res.message || "رمز التحقق غير صحيح"); return; }
 
-    // OTP verified — complete registration or resume
-    if (otpPending?.type === "resume") {
-      const dup = otpPending.data;
-      setUser({ name: dup.name, phone: dup.phone, email: dup.email });
-      setSessionId(dup.id);
-      setDates(dup.dates || {});
-      setConfirmed(dup.confirmed || {});
-      setSubmitted(dup.submitted || false);
-      setReopenRequested(dup.reopenRequested || false);
-      setScreen("main");
-      if (dup.submitted) setTab("output");
-      LocalSession.save(
-        { name: dup.name, phone: dup.phone, email: dup.email },
-        dup.id, dup.dates || {}, dup.confirmed || {},
-        dup.submitted || false, dup.reopenRequested || false
-      );
-      showToast(`مرحباً مجدداً ${dup.name}! تم استعادة بياناتك`);
-    } else {
-      const id = `reg:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const record = { id, ...user, registeredAt: new Date().toISOString(), dates: {}, confirmed: {}, submitted: false };
-      await DB.save(id, record);
-      setSessionId(id);
-      LocalSession.save(
-        { name: user.name, phone: user.phone, email: user.email },
-        id, {}, {}, false, false
-      );
-      setScreen("main");
-      showToast(`أهلاً ${user.name}! تم تسجيلك بنجاح`);
-    }
+    applyUserSession(res);
     setOtpStep("form"); setOtpCode(""); setOtpPending(null); setRegErrors({});
+    showToast(res.mode === "new"
+      ? `أهلاً ${res.registration?.name || ""}! تم تسجيلك بنجاح`
+      : `مرحباً مجدداً ${res.registration?.name || ""}! تم استعادة بياناتك`);
   };
 
   // ── Resend OTP ──
   const handleResendOtp = async () => {
-    // ── Rate limit: enforce cooldown ──
-    if (otpLastSent && (Date.now() - otpLastSent) < OTP_COOLDOWN_SEC * 1000) {
-      const remaining = Math.ceil((OTP_COOLDOWN_SEC * 1000 - (Date.now() - otpLastSent)) / 1000);
-      setOtpError(`يرجى الانتظار ${remaining} ثانية قبل إعادة الإرسال`);
-      return;
-    }
     setOtpSending(true);
     setOtpError("");
-    const res = await OTP.send(user.email);
+    const res = (otpPending?.type === "resume" && otpPending.phone)
+      ? await UserAPI.resumeSend(otpPending.phone)
+      : await UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim());
     setOtpSending(false);
     if (res.success) {
       setOtpLastSent(Date.now());
       setOtpFailCount(0);
       showToast("تم إعادة إرسال الرمز ✉");
     } else {
-      setOtpError("خطأ في إعادة الإرسال");
+      setOtpError(res.message || "خطأ في إعادة الإرسال");
     }
   };
 
-  // ── Admin Login (via Lambda) ──
-  const handleAdminLogin = async (e) => {
+  // ── Admin Login: Step 1 — send OTP to a registered admin email ──
+  const handleAdminSendCode = async (e) => {
     e.preventDefault();
+    const email = adminEmail.trim().toLowerCase();
+    if (!validEmail(email)) { setAdminError("بريد إلكتروني غير صحيح"); return; }
+    setAdminSending(true);
     setAdminError("");
-    try {
-      const res = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: adminUser, password: adminPass }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        AdminSession.save(data.token);
-        setScreen("admin");
-        loadRegs();
-      } else {
-        setAdminError(data.message);
-      }
-    } catch (err) {
-      setAdminError("خطأ في الاتصال بالسيرفر");
-    }
+    const res = await AdminAPI.loginSend(email);
+    setAdminSending(false);
+    if (!res.success) { setAdminError(res.message || "تعذّر إرسال رمز الدخول"); return; }
+    setAdminOtpStep("code");
+    setAdminCode("");
+    showToast("تم إرسال رمز الدخول إلى بريدك ✉ (أو استخدم تطبيق المصادقة إن كان مفعّلاً)");
+  };
+
+  // ── Admin Login: Step 2 — verify TOTP/OTP, receive admin session token ──
+  const handleAdminVerify = async (e) => {
+    e.preventDefault();
+    if (adminCode.length !== 6) { setAdminError("أدخل الرمز المكون من 6 أرقام"); return; }
+    setAdminSending(true);
+    setAdminError("");
+    const res = await AdminAPI.loginVerify(adminEmail.trim().toLowerCase(), adminCode);
+    setAdminSending(false);
+    if (!res.success) { setAdminError(res.message || "الرمز غير صحيح"); return; }
+    AdminSession.save(res.token);
+    setAdminToken(res.token);
+    setAdminOtpStep("email");
+    setAdminCode("");
+    setScreen("admin");
+    loadRegs(res.token);
   };
 
   // ══ التحليل الديموغرافي — منطق البيانات ══
@@ -1976,10 +1882,10 @@ export default function App() {
   });
 
   const loadDemoData = async () => {
-    if (!sessionId) return;
-    const rec = await DB.get(sessionId);
-    const saved = rec?.[DEMO_KEY];
-    if (saved && saved.length > 0) {
+    if (!sessionToken) return;
+    const res = await UserAPI.get(sessionToken);
+    const saved = res?.success ? res.registration?.[DEMO_KEY] : null;
+    if (Array.isArray(saved) && saved.length > 0) {
       setDemoRows(saved);
     } else {
       setDemoRows([emptyDemoRow(), emptyDemoRow(), emptyDemoRow()]);
@@ -1987,7 +1893,7 @@ export default function App() {
   };
 
   const saveDemoData = async () => {
-    if (!sessionId) return;
+    if (!sessionToken) return;
     // ── التحقق: يجب وجود صف واحد على الأقل مكتمل (اسم + بُعد واحد) ──
     const validRows = demoRows.filter(r => {
       if (!r.name?.trim()) return false;
@@ -1999,12 +1905,11 @@ export default function App() {
       return;
     }
     setDemoSaving(true);
-    try {
-      const rec = await DB.get(sessionId);
-      if (rec) { rec[DEMO_KEY] = demoRows; await DB.save(sessionId, rec); }
+    const res = await UserAPI.save(sessionToken, { [DEMO_KEY]: demoRows });
+    if (res?.success) {
       LocalSession.update({ [DEMO_KEY]: demoRows });
       showToast(`تم حفظ التحليل — ${validRows.length} شخص ✓`);
-    } catch(e) { showToast("خطأ في الحفظ"); }
+    } else { showToast(res?.message || "خطأ في الحفظ"); }
     setDemoSaving(false);
   };
 
@@ -2032,7 +1937,7 @@ export default function App() {
     setDateError("");
     const newDates = { ...dates, [key]: dateStr };
     setDates(newDates);
-    if (sessionId) { const rec = await DB.get(sessionId); if (rec) { rec.dates = newDates; await DB.save(sessionId, rec); } }
+    if (sessionToken) await UserAPI.save(sessionToken, { dates: newDates });
     LocalSession.update({ dates: newDates });
     return true;
   };
@@ -2042,7 +1947,7 @@ export default function App() {
     const newConf = { ...confirmed, [key]: !confirmed[key] };
     if (!newConf[key]) delete newConf[key];
     setConfirmed(newConf);
-    if (sessionId) { const rec = await DB.get(sessionId); if (rec) { rec.confirmed = newConf; await DB.save(sessionId, rec); } }
+    if (sessionToken) await UserAPI.save(sessionToken, { confirmed: newConf });
     LocalSession.update({ confirmed: newConf });
     setSelectedCell(null);
     showToast(newConf[key] ? "تم تأكيد الموعد ✓" : "تم إلغاء التأكيد");
@@ -2052,15 +1957,8 @@ export default function App() {
   const doFinalSubmit = async () => {
     setConfirmAction(null);
     const submittedAt = new Date().toISOString();
-    if (sessionId) {
-      const rec = await DB.get(sessionId);
-      if (rec) {
-        rec.submitted = true;
-        rec.submittedAt = submittedAt;
-        rec.dates = dates;
-        rec.confirmed = confirmed;
-        await DB.save(sessionId, rec);
-      }
+    if (sessionToken) {
+      await UserAPI.save(sessionToken, { dates, confirmed, submitted: true, submittedAt });
     }
     setSubmitted(true);
     setTab("output");
@@ -2094,11 +1992,12 @@ export default function App() {
 
   // ── Logout ──
   const doLogout = () => {
+    if (adminToken) AdminAPI.call(adminToken, 'logout').catch(() => {});
     LocalSession.clear();
     AdminSession.clear();
     setScreen("splash"); setUser({ name: "", phone: "", email: "" }); setDates({}); setConfirmed({});
-    setSubmitted(false); setReopenRequested(false); setSessionId(null); setTab("matrix"); setRegErrors({});
-    setAdminUser(""); setAdminPass(""); setAdminError(""); setExpandedReg(null);
+    setSubmitted(false); setReopenRequested(false); setSessionId(null); setSessionToken(null); setTab("matrix"); setRegErrors({});
+    setAdminEmail(""); setAdminCode(""); setAdminOtpStep("email"); setAdminToken(null); setAdminError(""); setExpandedReg(null);
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
     setOtpLastSent(null); setOtpFailCount(0);
@@ -2121,25 +2020,18 @@ export default function App() {
 
   // ── Request Reopen (User) ──
   const requestReopen = async () => {
-    if (sessionId) {
-      const rec = await DB.get(sessionId);
-      if (rec) { rec.reopenRequested = true; await DB.save(sessionId, rec); }
-    }
+    if (sessionToken) await UserAPI.save(sessionToken, { reopenRequested: true });
     setReopenRequested(true);
     showToast("تم إرسال طلب إعادة الفتح للمدير ✓");
   };
 
   // ── Admin: Unlock a registration ──
   const adminUnlock = async (regId) => {
-    const rec = await DB.get(regId);
-    if (rec) {
-      rec.submitted = false;
-      rec.reopenRequested = false;
-      rec.submittedAt = null;
-      await DB.save(regId, rec);
-      showToast(`تم فتح التعديل لـ ${rec.name}`);
+    const res = await AdminAPI.call(adminToken, 'unlock-reg', { id: regId });
+    if (res?.success) {
+      showToast('تم فتح التعديل');
       loadRegs();
-    }
+    } else { showToast(res?.message || 'خطأ'); }
   };
 
   // Copyright footer
@@ -2275,12 +2167,19 @@ export default function App() {
         <div className="auth-form-wrap">
           <div className="auth-logo"><MILogo size={28} color={BRAND.deep}/><span className="auth-logo-text" style={{color:BRAND.deep}}>لوحة الإدارة</span></div>
           <h1 className="auth-title">دخول المستشار</h1>
-          <p className="auth-sub">أدخل بيانات الدخول للوصول إلى لوحة المراجعة والإدارة</p>
-          <form onSubmit={handleAdminLogin}>
-            <div className="fg"><label>اسم المستخدم</label><input placeholder="admin" value={adminUser} onChange={e => { setAdminUser(e.target.value); setAdminError(""); }} /></div>
-            <div className={`fg ${adminError ? "fg-err" : ""}`}><label>كلمة المرور</label><input type="password" placeholder="••••••••" value={adminPass} onChange={e => { setAdminPass(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
-            <button type="submit" className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>دخول ←</button>
-          </form>
+          <p className="auth-sub">{adminOtpStep === "email" ? "أدخل بريدك المسجّل لإرسال رمز الدخول" : "أدخل رمز الدخول (من بريدك أو تطبيق المصادقة)"}</p>
+          {adminOtpStep === "email" ? (
+            <form onSubmit={handleAdminSendCode}>
+              <div className={`fg ${adminError ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" dir="ltr" placeholder="admin@example.com" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
+              <button type="submit" disabled={adminSending} className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>{adminSending ? "..." : "إرسال الرمز ←"}</button>
+            </form>
+          ) : (
+            <form onSubmit={handleAdminVerify}>
+              <div className={`fg ${adminError ? "fg-err" : ""}`}><label>رمز الدخول (6 أرقام)</label><input inputMode="numeric" dir="ltr" maxLength={6} placeholder="______" value={adminCode} onChange={e => { setAdminCode(e.target.value.replace(/\D/g, "").slice(0,6)); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
+              <button type="submit" disabled={adminSending} className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>{adminSending ? "..." : "دخول ←"}</button>
+              <button type="button" className="auth-back" onClick={() => { setAdminOtpStep("email"); setAdminError(""); }}>→ تغيير البريد</button>
+            </form>
+          )}
           <button className="auth-back" onClick={() => setScreen("splash")}>→ العودة للرئيسية</button>
         </div>
       </div>
@@ -2983,7 +2882,7 @@ export default function App() {
               {dates[selectedCell.key] && <div className="hijri-badge">🌙 {gregorianToHijri(dates[selectedCell.key]).formatted}</div>}
               {dates[selectedCell.key] && !submitted && <div style={{marginTop:".5rem"}}>
                 <button style={{background:"none",border:"none",color:"var(--rd)",fontFamily:"Tajawal",fontSize:".75rem",cursor:"pointer"}}
-                  onClick={()=>{const newD={...dates};const newC={...confirmed};delete newD[selectedCell.key];delete newC[selectedCell.key];setDates(newD);setConfirmed(newC);if(sessionId){DB.get(sessionId).then(rec=>{if(rec){rec.dates=newD;rec.confirmed=newC;DB.save(sessionId,rec);}});}setTempDate("");showToast("تم حذف التاريخ");}}>
+                  onClick={()=>{const newD={...dates};const newC={...confirmed};delete newD[selectedCell.key];delete newC[selectedCell.key];setDates(newD);setConfirmed(newC);if(sessionToken){UserAPI.save(sessionToken,{dates:newD,confirmed:newC});}LocalSession.update({dates:newD,confirmed:newC});setTempDate("");showToast("تم حذف التاريخ");}}>
                   ✕ حذف التاريخ
                 </button>
               </div>}
