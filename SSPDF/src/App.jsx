@@ -160,7 +160,8 @@ const Portal = (p) => {
             <input value={p.npName} onChange={(e) => p.setNpName(e.target.value)} placeholder="اسم المشروع بالعربية..."
               className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
             <input value={p.npNameEn} onChange={(e) => p.setNpNameEn(e.target.value)} placeholder="English name (optional)..." dir="ltr"
-              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-1" />
+            <div className="text-xs mb-2" style={{ color: B.muted }}>يُستخدم لبناء رابط أنيق للمشروع (مثلاً project-name) — بلا اسم إنجليزي سيُستخدم معرّف تقني بديل</div>
             <textarea value={p.npDesc} onChange={(e) => p.setNpDesc(e.target.value)} placeholder="وصف مختصر (اختياري)..." rows={2}
               className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2 resize-y" />
             {p.myProjects.length > 0 && (
@@ -944,10 +945,16 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  const slugify = (text) =>
+    (text || "").toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  const projectSlug = (p) => slugify(p?.name_en) || p?.id || "";
+
   const parseHash = () => {
     const h = window.location.hash.replace(/^#\/?/, "");
-    const [pid, scr] = h.split("/");
-    return { pid: pid || null, scr: scr || null };
+    const [slug, scr] = h.split("/");
+    return { slug: slug || null, scr: scr || null };
   };
 
   const switchProject = async (projectId, knownRole, initialScreen = "dashboard") => {
@@ -958,22 +965,22 @@ export default function App() {
     setCurrentProject({ id: d.project.id, name: d.project.name, name_en: d.project.name_en, status: d.project.status });
     setRole(knownRole || myProjects.find((pr) => pr.id === projectId)?.myRole || "viewer");
     setScreen(initialScreen);
-    window.location.hash = `#/${projectId}/${initialScreen}`;
+    window.location.hash = `#/${slugify(d.project.name_en) || projectId}/${initialScreen}`;
   };
 
   /* حفظ مكانك في رابط الصفحة — يمنع العودة للمشروع الافتراضي عند مغادرة الصفحة والرجوع إليها */
   useEffect(() => {
     if (!currentProject) return;
-    const target = `#/${currentProject.id}/${screen}`;
+    const target = `#/${projectSlug(currentProject)}/${screen}`;
     if (window.location.hash !== target) window.location.hash = target;
   }, [screen, currentProject?.id]);
 
   useEffect(() => {
     const onHashChange = () => {
-      const { pid, scr } = parseHash();
-      if (pid && pid !== currentProject?.id) {
-        const proj = myProjects.find((p) => p.id === pid);
-        if (proj) switchProject(pid, proj.myRole, scr || "dashboard");
+      const { slug, scr } = parseHash();
+      if (slug && slug !== projectSlug(currentProject)) {
+        const proj = myProjects.find((p) => projectSlug(p) === slug);
+        if (proj) switchProject(proj.id, proj.myRole, scr || "dashboard");
         else setAccessError("لا تملك صلاحية الوصول لهذا المشروع، أو أنه لم يعد موجوداً.");
       } else if (scr && scr !== screen && SCREENS[scr]) {
         setScreen(scr);
@@ -991,9 +998,9 @@ export default function App() {
       const projects = await repo.listMyProjects();
       setMyProjects(projects);
       if (projects.length) {
-        const { pid, scr } = parseHash();
-        const restored = pid && projects.find((p) => p.id === pid);
-        if (pid && !restored) setAccessError("لا تملك صلاحية الوصول لهذا المشروع، أو أنه لم يعد موجوداً. تم فتح أحدث مشروع لديك بدلاً منه.");
+        const { slug, scr } = parseHash();
+        const restored = slug && projects.find((p) => projectSlug(p) === slug);
+        if (slug && !restored) setAccessError("لا تملك صلاحية الوصول لهذا المشروع، أو أنه لم يعد موجوداً. تم فتح أحدث مشروع لديك بدلاً منه.");
         if (restored) {
           await switchProject(restored.id, restored.myRole, scr && SCREENS[scr] ? scr : "dashboard");
         } else {
