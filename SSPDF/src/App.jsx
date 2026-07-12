@@ -111,21 +111,6 @@ const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, se
 
 
 const Portal = (p) => {
-  if (!p.repoActive) {
-    return (
-      <div>
-        <H ar="بوابة المشاريع" en="Projects Portal" sub="وضع تجريبي محلي — تفعيل تعدد المشاريع يتطلب اتصالاً حقيقياً بقاعدة البيانات" />
-        <div className="grid md:grid-cols-2 gap-4">
-          <div onClick={() => p.setScreen("dashboard")}
-            className="rounded-2xl p-6 cursor-pointer transition hover:shadow-md"
-            style={{ background: B.card, border: `2px solid ${B.gold}` }}>
-            <div className="text-lg font-bold" style={{ color: B.petrol }}>برنامج إدارة المشروعات للقادة</div>
-            <div className="text-xs font-mono mt-1" style={{ color: B.muted }}>PM for Leaders (Demo)</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
   return (
     <div>
       <H ar="بوابة المشاريع" en="Projects Portal" sub={`${p.myProjects.length} مشروعاً تملك صلاحية فيه`} />
@@ -815,9 +800,7 @@ const Team = (p) => (
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap" style={roleInfo(m.role).chip}>{roleInfo(m.role).ar}</span>
-            {p.repoActive !== false && (
-              <span className="text-xs" title={m.linked ? "مرتبط بحساب فعلي" : "بانتظار أول تسجيل دخول"}>{m.linked ? "🟢" : "⏳"}</span>
-            )}
+            <span className="text-xs" title={m.linked ? "مرتبط بحساب فعلي" : "بانتظار أول تسجيل دخول"}>{m.linked ? "🟢" : "⏳"}</span>
             {p.can.team && (
               <button onClick={() => p.removeTeamMember(m)} title="حذف العضو"
                 className="text-sm px-2 py-1 rounded-lg" style={{ color: B.bad, border: `1px solid ${B.line}` }}>🗑</button>
@@ -874,14 +857,13 @@ const Team = (p) => (
 const Compare = (p) => {
   const [stats, setStats] = useState(null);
   useEffect(() => {
-    if (!p.repoActive || !p.myProjects.length) return;
+    if (!p.myProjects.length) return;
     p.compareAllProjects().then(setStats);
   }, [p.myProjects.length]);
   return (
     <div>
       <H ar="مقارنة المشاريع" en="Projects Comparison" sub="نظرة سريعة على كل مشاريعك جنباً إلى جنب" />
-      {!p.repoActive && <Locked role={p.role} />}
-      {p.repoActive && !stats && <div className="text-sm" style={{ color: B.muted }}>جارٍ التحميل…</div>}
+      {!stats && <div className="text-sm" style={{ color: B.muted }}>جارٍ التحميل…</div>}
       {stats && (
         <Card className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -953,7 +935,7 @@ export default function App() {
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("evaluator");
 
-  const [authState, setAuthState] = useState(repo ? "checking" : "local");
+  const [authState, setAuthState] = useState(repo ? "checking" : "misconfigured");
   const [authUser, setAuthUser] = useState(null);
   const [authEmail, setAuthEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -1236,6 +1218,14 @@ export default function App() {
   }, [screen]);
   const [showSwitcher, setShowSwitcher] = useState(false);
 
+  if (!repo || authState === "misconfigured") {
+    return (
+      <AuthShell>
+        <div className="text-sm font-bold mb-2" style={{ color: B.bad }}>⚠️ التطبيق غير مُهيَّأ بشكل صحيح</div>
+        <div className="text-xs" style={{ color: B.muted }}>تعذّر الاتصال بقاعدة البيانات. تواصل مع الفريق التقني.</div>
+      </AuthShell>
+    );
+  }
   if (repo && authState === "checking") return <CheckingScreen />;
   if (repo && authState === "login") {
     return (
@@ -1256,7 +1246,7 @@ export default function App() {
     newSvc, setNewSvc, newSeg, setNewSeg, newCrit, setNewCrit, addCriterion, removeCriterion,
     ahpPairs, setAhpPair, applyAHP,
     newMemberEmail, setNewMemberEmail, newMemberRole, setNewMemberRole,
-    addTeamMember, removeTeamMember, teamError, repoActive: !!repo,
+    addTeamMember, removeTeamMember, teamError,
     ranked, top, totalW, confIdx, lastUpdate,
     comboName, toggleCombo, setScore, setConf, setEvidence, setRisk, setWeight, normalizeW, log,
     setScreen,
@@ -1298,17 +1288,7 @@ export default function App() {
         </div>
         <div className="flex-1"></div>
         <div className="flex items-center gap-2 text-xs">
-          {authState === "local" ? (
-            <>
-              <span style={{ color: B.muted }}>الدور الحالي</span>
-              <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: B.goldSoft, color: B.goldText }}>وضع تجريبي محلي</span>
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-1.5 outline-none inp">
-                {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.ar}</option>)}
-              </select>
-            </>
-          ) : (
-            <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{roleInfo(role).ar}</span></span>
-          )}
+          <span style={{ color: B.muted }}>الدور: <span className="font-bold" style={{ color: B.petrol }}>{roleInfo(role).ar}</span></span>
           <span className="px-3 py-1.5 rounded-lg font-bold" style={roleInfo(role).chip}>{userName}</span>
           {authState === "ready" && (
             <button onClick={signOut} className="text-xs px-2 py-1.5 rounded-lg" style={{ color: B.muted, border: `1px solid ${B.line}` }}>تسجيل الخروج</button>
