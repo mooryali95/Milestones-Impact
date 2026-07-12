@@ -24,12 +24,27 @@ export const Dashboard = (p) => {
       <div className="rounded-2xl p-6 mb-6" style={{ background: B.petrol, border: `2px solid ${B.gold}` }}>
         <div className="text-xs tracking-widest font-mono mb-2" style={{ color: B.gold }}>TOP RECOMMENDATION</div>
         <div className="text-2xl font-bold" style={{ color: B.sand }}>{p.top.name}</div>
-        <div className="flex flex-wrap gap-6 mt-4 text-sm">
-          <div><span style={{ color: "#9FB2BD" }}>النتيجة المرجحة: </span><span className="font-mono font-bold" style={{ color: B.gold }}>{p.top.raw.toFixed(1)}</span></div>
-          <div><span style={{ color: "#9FB2BD" }}>بعد تعديل الثقة: </span><span className="font-mono font-bold" style={{ color: "#7FD1AE" }}>{p.top.adj.toFixed(1)}</span></div>
-          <div><span style={{ color: "#9FB2BD" }}>مؤشر الثقة: </span><span className="font-mono font-bold" style={{ color: B.sand }}>{p.confIdx}%</span></div>
-          <div><span style={{ color: "#9FB2BD" }}>المخاطر: </span><span className="font-mono font-bold" style={{ color: B.sand }}>{p.top.risk}/9</span></div>
-          <div><span className="font-bold" style={{ color: "#7FD1AE" }}>{BUCKETS[p.top.bucket].ar}</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="font-mono font-bold" style={{ color: B.gold }}>{p.top.raw.toFixed(1)}</div>
+            <div className="text-xs mt-0.5" style={{ color: "#9FB2BD" }}>النتيجة المرجحة</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="font-mono font-bold" style={{ color: "#7FD1AE" }}>{p.top.adj.toFixed(1)}</div>
+            <div className="text-xs mt-0.5" style={{ color: "#9FB2BD" }}>بعد تعديل الثقة</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="font-mono font-bold" style={{ color: B.sand }}>{p.confIdx}%</div>
+            <div className="text-xs mt-0.5" style={{ color: "#9FB2BD" }}>مؤشر الثقة</div>
+          </div>
+          <div className="rounded-xl p-3 text-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="font-mono font-bold" style={{ color: B.sand }}>{p.top.risk}/9</div>
+            <div className="text-xs mt-0.5" style={{ color: "#9FB2BD" }}>المخاطر</div>
+          </div>
+          <div className="rounded-xl p-3 text-center col-span-2 sm:col-span-1" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="font-bold" style={{ color: "#7FD1AE" }}>{BUCKETS[p.top.bucket].ar}</div>
+            <div className="text-xs mt-0.5" style={{ color: "#9FB2BD" }}>التصنيف</div>
+          </div>
         </div>
       </div>
     )}
@@ -41,14 +56,22 @@ export const Dashboard = (p) => {
     </div>
     <div className="grid lg:grid-cols-2 gap-4">
       <Card>
-        <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>ترتيب الفرص <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>Ranking</span></div>
+        <div className="flex justify-between items-start mb-3 flex-wrap gap-2">
+          <div className="font-bold text-sm" style={{ color: B.petrol }}>ترتيب الفرص <span className="text-xs font-mono mr-2" style={{ color: B.goldText }}>Ranking</span></div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: B.muted }}>
+            {Object.entries(BUCKETS).map(([k, b]) => (
+              <span key={k} className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 4, background: b.color, display: "inline-block" }}></span>{b.ar}</span>
+            ))}
+          </div>
+        </div>
         <div dir="ltr" style={{ height: 340 }}>
           <ResponsiveContainer>
-            <BarChart data={p.ranked.map((r) => ({ name: r.name, v: +r.adj.toFixed(1) }))} layout="vertical" margin={{ left: 8, right: 24 }}>
+            <BarChart data={p.ranked.map((r) => ({ name: r.name.length > 22 ? r.name.slice(0, 21) + "…" : r.name, fullName: r.name, v: +r.adj.toFixed(1) }))} layout="vertical" margin={{ left: 8, right: 24 }}>
               <CartesianGrid stroke={B.lineSoft} horizontal={false} />
               <XAxis type="number" domain={[0, 100]} tick={{ fill: B.muted, fontSize: 11 }} />
               <YAxis type="category" dataKey="name" width={150} tick={{ fill: B.petrol, fontSize: 10 }} />
-              <Tooltip contentStyle={{ background: "#fff", border: `1px solid ${B.line}`, direction: "rtl", color: B.petrol }} />
+              <Tooltip contentStyle={{ background: "#fff", border: `1px solid ${B.line}`, direction: "rtl", color: B.petrol }}
+                labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ""} />
               <Bar dataKey="v" radius={[0, 6, 6, 0]}>
                 {p.ranked.map((r, i) => <Cell key={i} fill={i === 0 ? B.gold : BUCKETS[r.bucket].color} />)}
               </Bar>
