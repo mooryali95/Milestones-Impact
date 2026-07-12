@@ -41,6 +41,17 @@ class SupabaseRepo {
     return data;
   }
 
+  /** تعديل بيانات مشروع قائم (الاسم، الاسم الإنجليزي، الوصف) */
+  async updateProject(projectId, { name, nameEn, description }) {
+    const patch = {};
+    if (name !== undefined) patch.name = name;
+    if (nameEn !== undefined) patch.name_en = nameEn || null;
+    if (description !== undefined) patch.description = description || null;
+    const { data, error } = await this.sb.from("projects").update(patch).eq("id", projectId).select().single();
+    if (error) throw error;
+    return data;
+  }
+
   /** تحميل مشروع محدد بمعرّفه */
   async load(projectId) {
     let project;

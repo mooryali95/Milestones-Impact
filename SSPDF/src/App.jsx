@@ -111,12 +111,32 @@ const LoginScreen = ({ authEmail, setAuthEmail, otpSent, setOtpSent, otpCode, se
 
 
 const Portal = (p) => {
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editNameEn, setEditNameEn] = useState("");
   return (
     <div>
       <H ar="بوابة المشاريع" en="Projects Portal" sub={`${p.myProjects.length} مشروعاً تملك صلاحية فيه`} />
       <div className="grid md:grid-cols-2 gap-4">
         {p.myProjects.map((pr) => {
           const isOpen = p.currentProject?.id === pr.id;
+          const isEditing = editingId === pr.id;
+          if (isEditing) {
+            return (
+              <Card key={pr.id} style={{ border: `2px solid ${B.gold}` }}>
+                <div className="font-bold text-sm mb-3" style={{ color: B.petrol }}>تعديل بيانات المشروع</div>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="الاسم بالعربية..."
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-2" />
+                <input value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} placeholder="English name..." dir="ltr"
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none inp mb-1" />
+                <div className="text-xs mb-3" style={{ color: B.muted }}>الاسم الإنجليزي يبني رابط المشروع (مثلاً project-name)</div>
+                <div className="flex gap-2">
+                  <GoldBtn onClick={() => { p.saveProjectEdit(pr.id, editName, editNameEn); setEditingId(null); }} disabled={!editName.trim()}>حفظ</GoldBtn>
+                  <button onClick={() => setEditingId(null)} className="px-4 py-2 rounded-lg text-sm" style={{ color: B.muted, border: `1px solid ${B.line}` }}>إلغاء</button>
+                </div>
+              </Card>
+            );
+          }
           return (
             <div key={pr.id} onClick={() => { p.switchProject(pr.id, pr.myRole); }}
               className="rounded-2xl p-6 cursor-pointer transition hover:shadow-md"
@@ -126,9 +146,15 @@ const Portal = (p) => {
                   <div className="text-lg font-bold truncate" style={{ color: B.petrol }}>{pr.name}</div>
                   {pr.name_en && <div className="text-xs font-mono mt-1" style={{ color: B.muted }}>{pr.name_en}</div>}
                 </div>
-                <span className="text-xs px-3 py-1 rounded-full whitespace-nowrap" style={{ background: "#E8F0F5", color: B.petrolSoft, border: `1px solid ${B.petrolSoft}` }}>
-                  {pr.status === "evaluating" ? "قيد التقييم" : pr.status === "completed" ? "مكتمل" : pr.status === "on_hold" ? "معلَّق" : "مسودة"}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs px-3 py-1 rounded-full whitespace-nowrap" style={{ background: "#E8F0F5", color: B.petrolSoft, border: `1px solid ${B.petrolSoft}` }}>
+                    {pr.status === "evaluating" ? "قيد التقييم" : pr.status === "completed" ? "مكتمل" : pr.status === "on_hold" ? "معلَّق" : "مسودة"}
+                  </span>
+                  {pr.myRole === "admin" && (
+                    <button onClick={(e) => { e.stopPropagation(); setEditingId(pr.id); setEditName(pr.name); setEditNameEn(pr.name_en || ""); }}
+                      className="text-xs px-1.5" style={{ color: B.petrolSoft }}>✎</button>
+                  )}
+                </div>
               </div>
               {isOpen && p.top && (
                 <div className="grid grid-cols-3 gap-3 mt-5 text-center">
@@ -1030,6 +1056,20 @@ export default function App() {
     setProjectBusy(false);
   };
 
+  const saveProjectEdit = async (projectId, name, nameEn) => {
+    try {
+      await repo.updateProject(projectId, { name: name.trim(), nameEn: nameEn.trim() });
+      const updated = await repo.listMyProjects();
+      setMyProjects(updated);
+      if (currentProject?.id === projectId) {
+        setCurrentProject((cp) => ({ ...cp, name: name.trim(), name_en: nameEn.trim() }));
+      }
+      log("تعديل مشروع", name.trim());
+    } catch (e) {
+      alert("تعذّر حفظ التعديل: " + e.message);
+    }
+  };
+
   const addCriterion = (name) => {
     setCriteria((c) => [...c, { id: `c${Date.now()}`, ar: name, en: "", g: "", w: 0 }]);
     log("إضافة معيار", name);
@@ -1258,7 +1298,7 @@ export default function App() {
     comboName, toggleCombo, setScore, setConf, setEvidence, setRisk, setWeight, normalizeW, log,
     setScreen,
     myProjects, currentProject, switchProject, showNewProjectForm, setShowNewProjectForm, compareAllProjects,
-    npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, npTemplateId, setNpTemplateId, handleCreateProject, projectBusy,
+    npName, setNpName, npNameEn, setNpNameEn, npDesc, setNpDesc, npTemplateId, setNpTemplateId, handleCreateProject, projectBusy, saveProjectEdit,
   };
 
   return (
