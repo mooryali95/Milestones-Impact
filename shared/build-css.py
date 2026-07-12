@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-CSS Build Script — Milestone Impact
-يدمج ملفات CSS المشتركة + الخاصة في main.css لكل صفحة
+Build Script — Milestone Impact
+1) يدمج ملفات CSS المشتركة + الخاصة في main.css لكل صفحة
+2) يزامن ملفات JS المشتركة (shared/js) إلى مجلد كل صفحة
 الاستخدام: python3 shared/build-css.py
 """
 import os, hashlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHARED = os.path.join(ROOT, 'shared', 'css')
+SHARED_JS = os.path.join(ROOT, 'shared', 'js')
 
 SHARED_FILES = ['tokens.css', 'base.css', 'layout.css', 'components.css']
+
+# ملف JS مُولَّد يبدأ بهذا السطر — عدّل المصدر في shared/js لا النسخة المولّدة
+JS_HEADER = "// ══ Auto-generated from shared/js — edit the source there, not this copy. ══\n"
 
 PAGES = {
     'home': {
@@ -17,14 +22,30 @@ PAGES = {
         'page_file': '05-home-sections.css',
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
+        'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
+        'js': ['canvas.js', 'counters.js'],            # الملفات المشتركة التي تستعملها الصفحة
     },
     'leaders': {
         'css_dir': os.path.join(ROOT, 'leaders', 'assets', 'css'),
         'page_file': '05-sections.css',
         'extra': ['typeform.css'],
         'html': os.path.join(ROOT, 'leaders', 'index.html'),
+        'js_dir': os.path.join(ROOT, 'leaders', 'assets', 'js'),
+        'js': ['canvas.js', 'counters.js', 'tabs.js'],
     },
 }
+
+
+def sync_js(page_name, config):
+    """ينسخ ملفات JS المشتركة إلى مجلد الصفحة مع ترويسة تشير للمصدر."""
+    for filename in config.get('js', []):
+        src = os.path.join(SHARED_JS, filename)
+        with open(src) as f:
+            content = f.read()
+        out_path = os.path.join(config['js_dir'], filename)
+        with open(out_path, 'w') as f:
+            f.write(JS_HEADER + content)
+        print(f'   ↳ js: {page_name}/assets/js/{filename}')
 
 def build(page_name, config):
     parts = [f'/* ══ Milestone Impact — {page_name.upper()} — Auto-generated. Edit source files, not this file. ══ */\n']
@@ -89,4 +110,5 @@ def build(page_name, config):
 if __name__ == '__main__':
     for name, config in PAGES.items():
         build(name, config)
+        sync_js(name, config)
     print('\n🚀 Done! Commit and push to deploy.')
