@@ -1,3 +1,4 @@
+// ══ Auto-generated from shared/js — edit the source there, not this copy. ══
 /* ════════════════════════════════════════════════════════════════════
    ░░  HERO CANVAS — Glowing Network Animation  ░░
    ════════════════════════════════════════════════════════════════════
