@@ -115,8 +115,35 @@
       <a href="#products" class="header__nav-link">المنتجات</a>
       <a href="#ecosystem" class="header__nav-link">المنظومة</a>
     </nav>
-    <button class="header__cta" onclick="openTypeform()" aria-label="ابدأ محادثة">محادثة</button>
+    <div class="header__actions">
+      <button class="header__cta" onclick="openTypeform()" aria-label="ابدأ محادثة">محادثة</button>
+      <button class="header__burger" id="burgerBtn" aria-label="فتح القائمة" aria-expanded="false" aria-controls="mobileDrawer">
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+      </button>
+    </div>
   </header>
+
+  <!-- Mobile Drawer -->
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+  <nav class="mobile-drawer" id="mobileDrawer" role="navigation" aria-label="القائمة الرئيسية للجوال">
+    <div class="mobile-drawer__header">
+      <span class="logo__text">
+        <span class="logo__milestone">Milestone</span>
+        <span class="logo__diamond" aria-hidden="true"></span>
+        <span class="logo__impact">Impact</span>
+      </span>
+      <button class="mobile-drawer__close" id="drawerCloseBtn" aria-label="إغلاق القائمة">✕</button>
+    </div>
+    <div class="mobile-drawer__links">
+      <a href="#concept" class="mobile-drawer__link">المفهوم</a>
+      <a href="#model" class="mobile-drawer__link">النموذج</a>
+      <a href="#products" class="mobile-drawer__link">المنتجات</a>
+      <a href="#ecosystem" class="mobile-drawer__link">المنظومة</a>
+    </div>
+    <button class="mobile-drawer__cta" onclick="openTypeform()">ابدأ محادثة</button>
+  </nav>
 
   <main id="main">
 
@@ -624,6 +651,7 @@
   <script src="assets/js/scroll.js" defer></script>
   <script src="assets/js/counters.js" defer></script>
   <script src="assets/js/typeform-v3.js" defer></script>
+  <script src="assets/js/mobile-menu.js" defer></script>
 
 </body>
 </html>
