@@ -23,7 +23,7 @@ PAGES = {
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
-        'js': ['canvas.js', 'counters.js'],            # الملفات المشتركة التي تستعملها الصفحة
+        'js': ['canvas.js', 'counters.js', 'mobile-menu.js'],            # الملفات المشتركة التي تستعملها الصفحة
     },
     'leaders': {
         'css_dir': os.path.join(ROOT, 'leaders', 'assets', 'css'),
@@ -31,7 +31,7 @@ PAGES = {
         'extra': ['typeform.css'],
         'html': os.path.join(ROOT, 'leaders', 'index.html'),
         'js_dir': os.path.join(ROOT, 'leaders', 'assets', 'js'),
-        'js': ['canvas.js', 'counters.js', 'tabs.js'],
+        'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
     },
 }
 

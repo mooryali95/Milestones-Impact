@@ -107,7 +107,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="assets/css/main.css?v=9d9bad8a" />
+  <link rel="stylesheet" href="assets/css/main.css?v=cf7b1d1d" />
 </head>
 <body>
 
@@ -131,8 +131,36 @@
       <a href="#tracks" class="header__nav-link">المسارات</a>
       <a href="#roadmap" class="header__nav-link">خارطة التفعيل</a>
     </nav>
-    <button class="header__cta" onclick="openTypeform()" aria-label="احجز محادثة">محادثة</button>
+    <div class="header__actions">
+      <button class="header__cta" onclick="openTypeform()" aria-label="احجز محادثة">محادثة</button>
+      <button class="header__burger" id="burgerBtn" aria-label="فتح القائمة" aria-expanded="false" aria-controls="mobileDrawer">
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+      </button>
+    </div>
   </header>
+
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+  <nav class="mobile-drawer" id="mobileDrawer" role="navigation" aria-label="القائمة الرئيسية للجوال">
+    <div class="mobile-drawer__header">
+      <span class="logo__text">
+        <span class="logo__milestone">Milestone</span>
+        <span class="logo__diamond" aria-hidden="true"></span>
+        <span class="logo__impact">impact</span>
+      </span>
+      <button class="mobile-drawer__close" id="drawerCloseBtn" aria-label="إغلاق القائمة">✕</button>
+    </div>
+    <div class="mobile-drawer__links">
+      <a href="https://mi.sunkvalue.com" class="mobile-drawer__link">المنظومة ↗</a>
+      <a href="https://matrix.sunkvalue.com" class="mobile-drawer__link">المصفوفة ↗</a>
+      <a href="#problem" class="mobile-drawer__link">التحدي</a>
+      <a href="#frameworks" class="mobile-drawer__link">المنهجية</a>
+      <a href="#tracks" class="mobile-drawer__link">المسارات</a>
+      <a href="#roadmap" class="mobile-drawer__link">خارطة التفعيل</a>
+    </div>
+    <button class="mobile-drawer__cta" onclick="openTypeform()">احجز محادثة</button>
+  </nav>
 
   <!-- ═════════════════════════════════════ HERO ═════════════════════════════════════ -->
   <main id="main">
@@ -858,6 +886,7 @@
   <script src="assets/js/scroll.js" defer></script>
   <script src="assets/js/counters.js" defer></script>
   <script src="assets/js/tabs.js" defer></script>
+  <script src="assets/js/mobile-menu.js" defer></script>
   <script src="assets/js/typeform.js?v=3" defer></script>
 
 </body>
