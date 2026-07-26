@@ -89,3 +89,29 @@
     --container-narrow: 980px;
   }
 }
+
+/* ──────────────────────────────────────────────
+   🖥️ RESPONSIVE SCALE — Large Desktop (1440px+)
+   ────────────────────────────────────────────── */
+@media (min-width: 1440px) {
+  :root {
+    --gutter:           64px;
+    --section-py:       116px;
+    --section-py-lg:    140px;
+    --container:        1360px;
+    --container-narrow: 1040px;
+  }
+}
+
+/* ──────────────────────────────────────────────
+   🖥️ RESPONSIVE SCALE — Ultra Wide (1920px+)
+   ────────────────────────────────────────────── */
+@media (min-width: 1920px) {
+  :root {
+    --gutter:           80px;
+    --section-py:       132px;
+    --section-py-lg:    156px;
+    --container:        1460px;
+    --container-narrow: 1120px;
+  }
+}

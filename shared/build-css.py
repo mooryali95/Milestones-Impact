@@ -84,6 +84,17 @@ def sync_brand(page_name, config):
                 print(f'   ↳ video: {page_name}/assets/video/{fn}')
 
 
+def sync_layout_mirror(page_name, config):
+    """يزامن 03-layout.css كنسخة مرآة من shared/layout.css (للمرجعية فقط)."""
+    src = os.path.join(SHARED, 'layout.css')
+    dst = os.path.join(config['css_dir'], '03-layout.css')
+    header = '/* ══ نسخة مرآة من shared/css/layout.css — لا تعدّل هنا ══ */\n'
+    with open(src) as f:
+        content = f.read()
+    with open(dst, 'w') as f:
+        f.write(header + content)
+
+
 def build(page_name, config):
     parts = [f'/* ══ Milestone Impact — {page_name.upper()} — Auto-generated. Edit source files, not this file. ══ */\n']
 
@@ -94,15 +105,15 @@ def build(page_name, config):
             content = f.read()
         parts.append(f'\n/* ─── shared/{filename} ─── */\n{content}')
 
-    # 2. Page-specific layout additions (03-layout في leaders له إضافات)
-    layout_page = os.path.join(config['css_dir'], '03-layout.css')
-    if os.path.exists(layout_page):
-        shared_layout = open(os.path.join(SHARED, 'layout.css')).read()
-        page_layout   = open(layout_page).read()
-        # إضافة فقط الجزء الإضافي غير الموجود في shared
-        extra = page_layout.replace(shared_layout, '').strip()
+    # 2. إضافات التخطيط الخاصة بالصفحة — ملف صريح مستقل (اختياري)
+    #    ملاحظة: لا نطرح shared نصياً (آلية هشّة تنكسر عند أي تعديل)،
+    #    بل نقرأ ملف الإضافات الصريح فقط إن وُجد.
+    additions = os.path.join(config['css_dir'], '03-layout-additions.css')
+    if os.path.exists(additions):
+        with open(additions) as f:
+            extra = f.read().strip()
         if extra:
-            parts.append(f'\n/* ─── {page_name}/layout-additions.css ─── */\n{extra}\n')
+            parts.append(f'\n/* ─── {page_name}/03-layout-additions.css ─── */\n{extra}\n')
 
     # 3. Extra shared (typeform etc.)
     for filename in config.get('extra', []):
@@ -146,6 +157,7 @@ def build(page_name, config):
 
 if __name__ == '__main__':
     for name, config in PAGES.items():
+        sync_layout_mirror(name, config)
         build(name, config)
         sync_js(name, config)
         sync_brand(name, config)

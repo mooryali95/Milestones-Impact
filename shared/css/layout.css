@@ -55,15 +55,16 @@
 
 .header__nav {
   display: none;
-  gap: 28px;
+  gap: 18px;
   align-items: center;
 }
-@media (min-width: 1024px) {
-  .header__nav { display: flex; gap: 36px; }
-}
+/* تظهر من التابلت — بتباعد متدرّج حتى تتسع القوائم الطويلة */
+@media (min-width: 768px)  { .header__nav { display: flex; gap: 18px; } }
+@media (min-width: 900px)  { .header__nav { gap: 26px; } }
+@media (min-width: 1024px) { .header__nav { gap: 36px; } }
 
 .header__nav-link {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--ink-soft);
   letter-spacing: 0.02em;
@@ -80,6 +81,9 @@
   background: var(--gold);
   transition: width 0.4s var(--ease);
 }
+@media (min-width: 900px)  { .header__nav-link { font-size: 13.5px; } }
+@media (min-width: 1024px) { .header__nav-link { font-size: 14px; } }
+
 .header__nav-link:hover { color: var(--petrol-deep); }
 .header__nav-link:hover::after { width: 100%; }
 
@@ -128,8 +132,8 @@
   gap: 10px;
 }
 
-/* on mobile, shrink the CTA a bit so it sits comfortably next to the burger */
-@media (max-width: 1023px) {
+/* على الجوال فقط — تصغير الزر ليجاور الهامبرغر */
+@media (max-width: 767px) {
   .header__cta { padding: 8px 14px; font-size: 11.5px; }
 }
 
@@ -152,7 +156,7 @@
   z-index: 210;
   flex-shrink: 0;
 }
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .header__burger { display: none; }
 }
 .header__burger-line {
@@ -207,7 +211,7 @@
 .mobile-drawer.is-open {
   transform: translateX(0);
 }
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .mobile-drawer,
   .mobile-overlay {
     display: none;

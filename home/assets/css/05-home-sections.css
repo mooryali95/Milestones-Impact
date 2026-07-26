@@ -126,6 +126,12 @@
 @media (min-width: 1024px) {
   .hero__title { font-size: clamp(56px, 7vw, 88px); }
 }
+@media (min-width: 1440px) {
+  .hero__title { font-size: clamp(88px, 6.4vw, 104px); }
+}
+@media (min-width: 1920px) {
+  .hero__title { font-size: 112px; }
+}
 
 .hero__divider {
   display: flex;
