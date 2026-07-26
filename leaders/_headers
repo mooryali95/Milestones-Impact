@@ -3,7 +3,7 @@
   X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), microphone=(), camera=()*
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 # JS files — short cache to allow updates
@@ -20,3 +20,24 @@
 # HTML — no cache (always fresh)
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
+
+# Brand assets (SVG logos, social images) — long cache
+/assets/brand/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Intro video — long cache
+/assets/video/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Favicons & manifest — medium cache
+/favicon.*
+  Cache-Control: public, max-age=604800
+
+/apple-touch-icon*.png
+  Cache-Control: public, max-age=604800
+
+/android-chrome-*.png
+  Cache-Control: public, max-age=604800
+
+/site.webmanifest
+  Cache-Control: public, max-age=604800

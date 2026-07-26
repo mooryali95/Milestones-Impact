@@ -42,7 +42,7 @@
     }, 900);
   }
 
-  // تشغيل الفيديو — مع تخطٍّ فوري إن مُنع التشغيل التلقائي
+  // تشغيل الفيديو — مع تخطٍّ فوري إن مُنع التشغيل أو تعذّر الترميز
   if (video) {
     const p = video.play();
     if (p && typeof p.catch === 'function') {
@@ -50,6 +50,15 @@
     }
     video.addEventListener('ended', dismiss);
     video.addEventListener('error', dismiss);
+
+    // مع عناصر <source> لا يُطلق الفيديو حدث error —
+    // نفحص إن لم يجد المتصفح ترميزاً مدعوماً
+    video.addEventListener('stalled', function () {
+      if (video.networkState === 3 /* NETWORK_NO_SOURCE */) dismiss();
+    });
+    setTimeout(function () {
+      if (video.readyState === 0 && video.networkState === 3) dismiss();
+    }, 1500);
   }
 
   if (skipBtn) skipBtn.addEventListener('click', dismiss);
