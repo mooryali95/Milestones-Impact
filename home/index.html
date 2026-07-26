@@ -7,8 +7,14 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#061E2C" />
+  <meta name="theme-color" content="#0B272F" />
   <meta name="color-scheme" content="light" />
+
+  <!-- Favicon & PWA — Logo Package v5 -->
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
 
   <!-- Primary SEO -->
   <title>Milestone Impact | من النية... إلى الأثر</title>
@@ -27,7 +33,7 @@
   <meta property="og:title" content="Milestone Impact | من النية... إلى الأثر" />
   <meta property="og:description" content="منهجية متكاملة تُعيد تشكيل العلاقة بين القرار والقيمة والأثر." />
   <meta property="og:url" content="https://mi.sunkvalue.com/" />
-  <meta property="og:image" content="https://mi.sunkvalue.com/og-home.jpg" />
+  <meta property="og:image" content="https://mi.sunkvalue.com/assets/brand/social/og-teal.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
 
@@ -35,7 +41,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Milestone Impact | من النية... إلى الأثر" />
   <meta name="twitter:description" content="منهجية متكاملة تُعيد تشكيل العلاقة بين القرار والقيمة والأثر." />
-  <meta name="twitter:image" content="https://mi.sunkvalue.com/og-home.jpg" />
+  <meta name="twitter:image" content="https://mi.sunkvalue.com/assets/brand/social/og-teal.png" />
 
   <!-- Schema.org -->
   <script type="application/ld+json">
@@ -93,9 +99,19 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23061E2C'/%3E%3Cpath d='M12 4 L16 8 L16 16 L12 20 L8 16 L8 8 Z' fill='%23C8A45C'/%3E%3C/svg%3E" />
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="assets/css/main.css?v=e3d26c9a" />
+  <link rel="stylesheet" href="assets/css/main.css?v=f72dde08" />
 </head>
 <body>
+
+  <!-- ═════════ INTRO OVERLAY — يظهر مرة واحدة لكل جلسة ═════════ -->
+  <div class="intro-overlay" id="introOverlay" role="presentation">
+    <video class="intro-overlay__video"
+           src="assets/video/intro.mp4"
+           muted playsinline autoplay preload="auto"
+           aria-hidden="true"></video>
+    <div class="intro-overlay__bar" aria-hidden="true"></div>
+    <button class="intro-overlay__skip" type="button">تخطّي المقدمة</button>
+  </div>
 
   <!-- Scroll Progress -->
   <div class="scroll-progress" aria-hidden="true"><div class="scroll-progress__bar" id="scrollBar"></div></div>
@@ -103,11 +119,7 @@
   <!-- ═════════════════════════════════════ HEADER ═════════════════════════════════════ -->
   <header class="header" id="header" role="banner">
     <a href="#hero" class="logo" aria-label="Milestone Impact — الصفحة الرئيسية">
-      <span class="logo__text">
-        <span class="logo__milestone">Milestone</span>
-        <span class="logo__diamond" aria-hidden="true"></span>
-        <span class="logo__impact">Impact</span>
-      </span>
+      <img class="logo__img" src="assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
     </a>
     <nav class="header__nav" role="navigation" aria-label="القائمة الرئيسية">
       <a href="#concept" class="header__nav-link">المفهوم</a>
@@ -128,11 +140,7 @@
   <div class="mobile-overlay" id="mobileOverlay"></div>
   <nav class="mobile-drawer" id="mobileDrawer" role="navigation" aria-label="القائمة الرئيسية للجوال">
     <div class="mobile-drawer__header">
-      <span class="logo__text">
-        <span class="logo__milestone">Milestone</span>
-        <span class="logo__diamond" aria-hidden="true"></span>
-        <span class="logo__impact">Impact</span>
-      </span>
+      <img class="logo__img" src="assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
       <button class="mobile-drawer__close" id="drawerCloseBtn" aria-label="إغلاق القائمة">✕</button>
     </div>
     <div class="mobile-drawer__links">
@@ -456,11 +464,7 @@
     <div class="footer__container">
       <div class="footer__top">
         <a href="#hero" class="logo footer__logo" aria-label="Milestone Impact">
-      <span class="logo__text">
-        <span class="logo__milestone">Milestone</span>
-        <span class="logo__diamond" aria-hidden="true"></span>
-        <span class="logo__impact">Impact</span>
-      </span>
+      <img class="logo__img logo__img--inverted" src="assets/brand/svg/milestone-impact-inverted.svg" alt="Milestone Impact" width="220" height="100" />
     </a>
         <div class="footer__powered">
           <span class="footer__powered-label">POWERED BY</span>
@@ -490,11 +494,7 @@
 
     <div class="tf-modal__header">
       <a href="#hero" class="logo" aria-label="Milestone Impact">
-      <span class="logo__text">
-        <span class="logo__milestone">Milestone</span>
-        <span class="logo__diamond" aria-hidden="true"></span>
-        <span class="logo__impact">Impact</span>
-      </span>
+      <img class="logo__img" src="assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
     </a>
       <div class="tf-modal__counter" id="tfCounter"></div>
       <button class="tf-modal__close" onclick="closeTypeform()" aria-label="إغلاق النموذج">
@@ -650,6 +650,7 @@
   <script src="assets/js/scroll.js" defer></script>
   <script src="assets/js/counters.js" defer></script>
   <script src="assets/js/mobile-menu.js" defer></script>
+  <script src="assets/js/intro.js" defer></script>
   <script src="assets/js/typeform-v3.js" defer></script>
 
 </body>

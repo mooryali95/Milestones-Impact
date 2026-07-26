@@ -5,11 +5,13 @@ Build Script — Milestone Impact
 2) يزامن ملفات JS المشتركة (shared/js) إلى مجلد كل صفحة
 الاستخدام: python3 shared/build-css.py
 """
-import os, hashlib
+import os, hashlib, shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHARED = os.path.join(ROOT, 'shared', 'css')
 SHARED_JS = os.path.join(ROOT, 'shared', 'js')
+SHARED_BRAND = os.path.join(ROOT, 'shared', 'brand')
+SHARED_VIDEO = os.path.join(ROOT, 'shared', 'video')
 
 SHARED_FILES = ['tokens.css', 'base.css', 'layout.css', 'components.css']
 
@@ -23,7 +25,8 @@ PAGES = {
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
-        'js': ['canvas.js', 'counters.js', 'mobile-menu.js'],            # الملفات المشتركة التي تستعملها الصفحة
+        'js': ['canvas.js', 'counters.js', 'mobile-menu.js', 'intro.js'],            # الملفات المشتركة التي تستعملها الصفحة
+        'video': ['intro.mp4'],                        # الفيديو التعريفي (home فقط)
     },
     'leaders': {
         'css_dir': os.path.join(ROOT, 'leaders', 'assets', 'css'),
@@ -46,6 +49,40 @@ def sync_js(page_name, config):
         with open(out_path, 'w') as f:
             f.write(JS_HEADER + content)
         print(f'   ↳ js: {page_name}/assets/js/{filename}')
+
+def sync_brand(page_name, config):
+    """ينسخ أصول الهوية (شعارات/أيقونات/سوشال) وملفات الجذر إلى مجلد الصفحة."""
+    page_root = os.path.dirname(config['html'])
+
+    # 1) أصول الهوية → assets/brand/
+    dest_brand = os.path.join(page_root, 'assets', 'brand')
+    for sub in ('svg', 'png', 'webp', 'social'):
+        src_dir = os.path.join(SHARED_BRAND, sub)
+        if not os.path.isdir(src_dir):
+            continue
+        out_dir = os.path.join(dest_brand, sub)
+        os.makedirs(out_dir, exist_ok=True)
+        for fn in os.listdir(src_dir):
+            shutil.copy2(os.path.join(src_dir, fn), os.path.join(out_dir, fn))
+    print(f'   ↳ brand: {page_name}/assets/brand/')
+
+    # 2) ملفات الجذر (favicon / manifest) — يجب أن تكون في جذر الموقع
+    fav_dir = os.path.join(SHARED_BRAND, 'favicon')
+    if os.path.isdir(fav_dir):
+        for fn in os.listdir(fav_dir):
+            shutil.copy2(os.path.join(fav_dir, fn), os.path.join(page_root, fn))
+        print(f'   ↳ favicon: {page_name}/ (root)')
+
+    # 3) الفيديو التعريفي — للصفحات التي تطلبه فقط
+    if config.get('video'):
+        out_dir = os.path.join(page_root, 'assets', 'video')
+        os.makedirs(out_dir, exist_ok=True)
+        for fn in config['video']:
+            src = os.path.join(SHARED_VIDEO, fn)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(out_dir, fn))
+                print(f'   ↳ video: {page_name}/assets/video/{fn}')
+
 
 def build(page_name, config):
     parts = [f'/* ══ Milestone Impact — {page_name.upper()} — Auto-generated. Edit source files, not this file. ══ */\n']
@@ -111,4 +148,5 @@ if __name__ == '__main__':
     for name, config in PAGES.items():
         build(name, config)
         sync_js(name, config)
+        sync_brand(name, config)
     print('\n🚀 Done! Commit and push to deploy.')
