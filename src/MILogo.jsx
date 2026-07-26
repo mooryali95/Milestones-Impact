@@ -1,13 +1,24 @@
 import React from 'react';
 
-const BRAND_COLOR = '#6B9DAD';
+/**
+ * MILogo — المعيّن الرسمي من حزمة الهوية v5
+ * المصدر: svg/icon-transparent.svg
+ * قاعدة الهوية: لا يُدوَّر المعيّن ولا يُشوَّه ولا تُضاف له ظلال.
+ */
+const BRAND_GOLD = '#A97A2E';
 
-const MILogo = ({ size = 40, color = BRAND_COLOR }) => (
-  <svg viewBox="0 0 60 70" fill="none" style={{ width: size, height: size * 70 / 60 }}>
-    <path d="M30 8L45 23L30 38L15 23Z" stroke={color} strokeWidth="2" fill="none" />
-    <circle cx="30" cy="23" r="4" stroke={color} strokeWidth="1.5" fill="none" />
-    <line x1="30" y1="38" x2="30" y2="50" stroke={color} strokeWidth="2" />
-    <path d="M18 50L30 65L42 50" stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" />
+const MILogo = ({ size = 40, color = BRAND_GOLD }) => (
+  <svg
+    viewBox="0 0 512 512"
+    style={{ width: size, height: size, display: 'block' }}
+    role="img"
+    aria-label="Milestone Impact"
+  >
+    <rect
+      x="176" y="176" width="160" height="160"
+      transform="rotate(45 256 256)"
+      fill={color}
+    />
   </svg>
 );
 

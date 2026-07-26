@@ -22,10 +22,10 @@
   width: auto;
   transition: opacity 0.3s var(--ease);
 }
-@media (min-width: 640px)  { .logo__img { height: 34px; } }
-@media (min-width: 1024px) { .logo__img { height: 38px; } }
-@media (min-width: 1440px) { .logo__img { height: 42px; } }
-@media (min-width: 1920px) { .logo__img { height: 46px; } }
+@media (min-width: 640px)  { .logo__img { height: 36px; } }
+@media (min-width: 1024px) { .logo__img { height: 46px; } }
+@media (min-width: 1440px) { .logo__img { height: 54px; } }
+@media (min-width: 1920px) { .logo__img { height: 60px; } }
 
 .logo:hover .logo__img { opacity: 0.82; }
 
