@@ -1,0 +1,45 @@
+name: CI
+
+# Build + test the matrix React app on every push and PR.
+# Cloudflare Pages only *builds* on deploy; this adds the missing test gate
+# and catches build breaks before they reach a deploy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # No npm cache: this repo intentionally ships without a committed
+          # package-lock.json (react-scripts' loose peer deps produce a lock
+          # that `npm ci` rejects), so there is no lockfile for the cache key.
+
+      # Use `npm install`, NOT `npm ci` — see the lockfile note above.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # CI=true makes react-scripts treat warnings as errors (same strictness
+      # as the Cloudflare Pages build).
+      - name: Test
+        run: npm test -- --watchAll=false
+        env:
+          CI: true
+
+      - name: Build
+        run: npm run build
+        env:
+          CI: true
