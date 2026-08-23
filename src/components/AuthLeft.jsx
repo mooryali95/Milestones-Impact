@@ -1,5 +1,5 @@
 import React from "react";
-import MILogo from "../MILogo";
+import Wordmark from "./Wordmark";
 import { TRACKS } from "../config/constants";
 
 // ════════════════════════════════════════════════════════════════
@@ -11,7 +11,7 @@ const AuthLeft = ({ quote }) => (
   <div className="auth-left">
     <div className="auth-left-grid"/>
     <div className="auth-left-content">
-      <MILogo size={52} color="#C8A45C"/>
+      <Wordmark width={200} variant="inverted" />
       <div className="auth-left-quote">
         {quote.split('||').map((part, i) => <span key={i}>{part}</span>)}
       </div>

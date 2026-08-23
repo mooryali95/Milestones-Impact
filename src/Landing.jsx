@@ -1,4 +1,5 @@
 import React from "react";
+import Wordmark from "./components/Wordmark";
 import MILogo from "./MILogo";
 
 const TRACKS_LP = [
@@ -121,7 +122,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-hero-glow"/>
         <div className="lp-hero-content">
           <div className="lp-eyebrow lp-a1">مصفوفة التأثير</div>
-          <div className="lp-hero-logo lp-a2"><MILogo size={72} color="#C4A24E"/></div>
+          <div className="lp-hero-logo lp-a2"><Wordmark width={280} variant="inverted" /></div>
           <h1 className="lp-hero-title lp-a3">هندسة القيمة</h1>
           <div className="lp-hero-en lp-a3">MILESTONE IMPACT</div>
           <p className="lp-hero-sub lp-a4">نموذج تحولي من ستة عشر عملية استراتيجية —<br/>يشتغل على القيمة الكامنة داخل الإنسان، ويحوّلها إلى أثر قابل للقياس</p>

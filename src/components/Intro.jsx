@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import MILogo from "../MILogo";
+import Wordmark from "./Wordmark";
 import { BRAND } from "../config/constants";
 
 // ════════════════════════════════════════════════════════════════
@@ -32,7 +32,7 @@ const Intro = ({ onComplete }) => {
         transform: step >= 1 ? "scale(1) rotate(0deg)" : "scale(0.3) rotate(-90deg)",
         opacity: step >= 1 ? 1 : 0, marginBottom: "1.5rem",
       }}>
-        <MILogo size={70} color={BRAND.color} />
+        <Wordmark width={240} />
       </div>
 
       {/* Brand Name */}

@@ -75,6 +75,25 @@ def sync_js(page_name, config):
             f.write(JS_HEADER + content)
         print(f'   ↳ js: {page_name}/assets/js/{filename}')
 
+def sync_brand_to_react():
+    """ينسخ شعارات الهوية إلى src/assets/brand ليستوردها تطبيق React.
+
+    تطبيق CRA لا يستطيع الاستيراد من خارج src/، فنزامن الشعار الكامل
+    ونسخته المقلوبة إلى داخلها — بنفس منطق مزامنة الصفحات الثابتة،
+    فيبقى shared/brand هو المصدر الوحيد.
+    """
+    out_dir = os.path.join(ROOT, 'src', 'assets', 'brand')
+    src_dir = os.path.join(SHARED_BRAND, 'svg')
+    if not os.path.isdir(os.path.join(ROOT, 'src')) or not os.path.isdir(src_dir):
+        return
+    os.makedirs(out_dir, exist_ok=True)
+    for fn_ in ('milestone-impact.svg', 'milestone-impact-inverted.svg', 'icon-transparent.svg'):
+        src = os.path.join(src_dir, fn_)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(out_dir, fn_))
+            print('   \u21b3 react brand: src/assets/brand/%s' % fn_)
+
+
 def sync_brand(page_name, config):
     """ينسخ أصول الهوية (شعارات/أيقونات/سوشال) وملفات الجذر إلى مجلد الصفحة."""
     page_root = os.path.dirname(config['html'])
@@ -182,6 +201,7 @@ def build(page_name, config):
 
 if __name__ == '__main__':
     build_react_tokens()
+    sync_brand_to_react()
     for name, config in PAGES.items():
         sync_layout_mirror(name, config)
         build(name, config)

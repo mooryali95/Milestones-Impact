@@ -1,4 +1,5 @@
 import React from "react";
+import Wordmark from "../components/Wordmark";
 import MILogo from "../MILogo";
 import AuthLeft from "../components/AuthLeft";
 import { BRAND } from "../config/constants";
@@ -158,7 +159,7 @@ export const AdminLoginScreen = ({
       <div className="auth-left" style={{background:"#0f1923"}}>
         <div className="auth-left-grid"/>
         <div className="auth-left-content" style={{position:"relative",zIndex:1,textAlign:"center"}}>
-          <MILogo size={52} color="#14495E"/>
+          <Wordmark width={200} variant="inverted" />
           <div className="auth-left-quote" style={{color:"rgba(255,255,255,0.7)",fontSize:"1rem",marginTop:"1.5rem"}}>
             لوحة إدارة المستشار<br/>
             <span style={{color:"#14495E",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
