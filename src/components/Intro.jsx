@@ -41,7 +41,7 @@ const Intro = ({ onComplete }) => {
         transform: step >= 2 ? "translateY(0)" : "translateY(15px)",
       }}>
         <div style={{
-          fontFamily: "'Tajawal', sans-serif", fontSize: "2.4rem", fontWeight: 300,
+          fontFamily: "var(--font-ar)", fontSize: "2.4rem", fontWeight: 300,
           color: BRAND.color, letterSpacing: "4px", textAlign: "center", lineHeight: 1.2,
         }}>
           Milestone
@@ -49,7 +49,7 @@ const Intro = ({ onComplete }) => {
           Impact
         </div>
         <div style={{
-          textAlign: "center", marginTop: "0.8rem", fontFamily: "'Amiri', serif",
+          textAlign: "center", marginTop: "0.8rem", fontFamily: "var(--font-ar)",
           fontSize: "1rem", color: BRAND.dark, letterSpacing: "1px",
         }}>
           مصفوفة التأثير • هندسة اجتماعية

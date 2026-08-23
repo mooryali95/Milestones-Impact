@@ -138,13 +138,13 @@ const AdminPanel = (p) => {
               {!selectedReg
                 ? <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",padding:"3rem",textAlign:"center"}}>
                     <div style={{fontSize:"2.5rem",marginBottom:"0.75rem",opacity:0.4}}>👤</div>
-                    <div style={{fontSize:"1rem",color:"var(--text-muted)",fontFamily:"'Amiri',serif"}}>اختر مشاركاً من القائمة</div>
+                    <div style={{fontSize:"1rem",color:"var(--text-muted)",fontFamily:"var(--font-ar)"}}>اختر مشاركاً من القائمة</div>
                   </div>
                 : <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",overflow:"hidden"}}>
                     {/* Header */}
                     <div style={{background:"linear-gradient(135deg,#12161e,#1a2535)",color:"#fff",padding:"1rem 1.3rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
                       <div style={{flex:1}}>
-                        <div style={{fontFamily:"'Amiri',serif",fontSize:"1.1rem",fontWeight:700}}>{selectedReg.name}</div>
+                        <div style={{fontFamily:"var(--font-ar)",fontSize:"1.1rem",fontWeight:700}}>{selectedReg.name}</div>
                         <div style={{fontSize:"0.7rem",opacity:0.55,direction:"ltr"}}>{selectedReg.phone} | {selectedReg.email}</div>
                       </div>
                       <div style={{display:"flex",background:"rgba(0,0,0,0.25)",borderRadius:"8px",padding:"2px",gap:"1px"}}>

@@ -62,7 +62,7 @@ const ProcessModal = (p) => {
             {selectedCell && (selectedCell.nameAr==="تحليل ديموغرافي"||selectedCell.key==="creation-1") && (
               <div style={{margin:"0.8rem 0"}}>
                 <div style={{fontSize:".68rem",color:"var(--wg)",fontWeight:600,letterSpacing:".5px",marginBottom:".5rem",textTransform:"uppercase"}}>أداة مرتبطة بهذه العملية</div>
-                <button onClick={openDemoScreen} style={{width:"100%",display:"flex",alignItems:"center",gap:".75rem",padding:".85rem 1rem",border:"none",borderRadius:"12px",background:"linear-gradient(135deg,#8B6914,#C8A45C)",color:"#fff",cursor:"pointer",transition:"all .25s",boxShadow:"0 4px 16px rgba(139,105,20,.3)",fontFamily:"Tajawal,sans-serif"}}
+                <button onClick={openDemoScreen} style={{width:"100%",display:"flex",alignItems:"center",gap:".75rem",padding:".85rem 1rem",border:"none",borderRadius:"12px",background:"linear-gradient(135deg,#8B6914,#C8A45C)",color:"#fff",cursor:"pointer",transition:"all .25s",boxShadow:"0 4px 16px rgba(139,105,20,.3)",fontFamily:"var(--font-ar)"}}
                   onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 6px 22px rgba(139,105,20,.4)";}}
                   onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 4px 16px rgba(139,105,20,.3)";}}>
                   <span style={{fontSize:"1.3rem",flexShrink:0}}>🗺️</span>
@@ -80,12 +80,12 @@ const ProcessModal = (p) => {
                 <button className="btn btn-s btn-gold" onClick={()=>saveDate(selectedCell.key,tempDate)} disabled={!tempDate}>حفظ</button>
                 <input type="date" value={tempDate} min={new Date().toISOString().split("T")[0]}
                   onChange={e=>{setTempDate(e.target.value);setDateError("");}}
-                  style={{flex:1,minWidth:"140px",padding:".55rem .75rem",border:"1.5px solid var(--sa)",borderRadius:"8px",fontFamily:"Tajawal",direction:"ltr",fontSize:".9rem",background:"var(--sw)"}}/>
+                  style={{flex:1,minWidth:"140px",padding:".55rem .75rem",border:"1.5px solid var(--sa)",borderRadius:"8px",fontFamily:"var(--font-ar)",direction:"ltr",fontSize:".9rem",background:"var(--sw)"}}/>
               </div>
               {dateError && <p style={{fontSize:".72rem",color:"var(--rd)",marginTop:".25rem"}}>{dateError}</p>}
               {dates[selectedCell.key] && <div className="hijri-badge">🌙 {gregorianToHijri(dates[selectedCell.key]).formatted}</div>}
               {dates[selectedCell.key] && !submitted && <div style={{marginTop:".5rem"}}>
-                <button style={{background:"none",border:"none",color:"var(--rd)",fontFamily:"Tajawal",fontSize:".75rem",cursor:"pointer"}}
+                <button style={{background:"none",border:"none",color:"var(--rd)",fontFamily:"var(--font-ar)",fontSize:".75rem",cursor:"pointer"}}
                   onClick={()=>{const newD={...dates};const newC={...confirmed};delete newD[selectedCell.key];delete newC[selectedCell.key];setDates(newD);setConfirmed(newC);if(sessionToken){UserAPI.save(sessionToken,{dates:newD,confirmed:newC});}LocalSession.update({dates:newD,confirmed:newC});setTempDate("");showToast("تم حذف التاريخ");}}>
                   ✕ حذف التاريخ
                 </button>
