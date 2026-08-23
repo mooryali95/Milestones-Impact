@@ -1,4 +1,5 @@
 import React from "react";
+import Icon from "./Icon";
 
 // ════════════════════════════════════════════════════════════════
 // PROCESS MODAL — تفاصيل العملية وتحديد موعدها
@@ -35,14 +36,14 @@ const ProcessModal = (p) => {
             <button className="modal-x" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
             <h2>{selectedCell.nameAr}</h2>
-            {selectedCell.insight && <div className="modal-section"><div className="modal-insight-box">💡 {selectedCell.insight}</div></div>}
+            {selectedCell.insight && <div className="modal-section"><div className="modal-insight-box"><Icon name="insight" size={16} style={{marginLeft:".35rem"}} /> {selectedCell.insight}</div></div>}
             {selectedCell.fullDesc && <p className="modal-desc">{selectedCell.fullDesc}</p>}
             {selectedCell.whyItMatters && <div className="modal-section">
-              <div className="modal-section-title">⚡ لماذا يهم</div>
+              <div className="modal-section-title"><Icon name="value" size={16} style={{marginLeft:".35rem"}} /> لماذا يهم</div>
               <div className="modal-why">{selectedCell.whyItMatters}</div>
             </div>}
             {selectedCell.outputs?.length>0 && <div className="modal-section">
-              <div className="modal-section-title">📋 المخرجات المتوقعة</div>
+              <div className="modal-section-title"><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> المخرجات المتوقعة</div>
               <div className="modal-outputs">{selectedCell.outputs.map((o,i)=><div key={i} className="modal-output-item"><div className="modal-output-dot" style={{background:selectedCell.trackColor}}/>{o}</div>)}</div>
             </div>}
             <div className="modal-grid">
@@ -52,7 +53,7 @@ const ProcessModal = (p) => {
               <div className="modal-item"><div className="modal-item-label">المنطقة</div><div className="modal-item-value">{selectedCell.groupAr}</div></div>
             </div>
             {(selectedCell.fedBy?.length>0||selectedCell.feeds?.length>0) && <div className="modal-section">
-              <div className="modal-section-title">🔗 شبكة الترابط</div>
+              <div className="modal-section-title"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> شبكة الترابط</div>
               {selectedCell.fedBy?.length>0 && <><div className="modal-related-label">← تُغذّى من:</div>
                 <div className="modal-related">{selectedCell.fedBy.map(k=>{const p=procs.find(x=>x.key===k);return p?<span key={k} className="modal-related-chip" style={{borderColor:p.trackColor+'60',color:p.trackColor,background:p.trackColor+'08'}} onClick={()=>{setSelectedCell(p);setTempDate(dates[p.key]||"");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>{p.trackIcon} {p.nameAr}</span>:null;})}</div></>}
               {selectedCell.feeds?.length>0 && <><div className="modal-related-label" style={{marginTop:".5rem"}}>→ تُغذّي:</div>
@@ -75,7 +76,7 @@ const ProcessModal = (p) => {
               </div>
             )}
             <div className="date-section">
-              <h4>📅 تحديد تاريخ البدء</h4>
+              <h4><Icon name="milestone" size={16} style={{marginLeft:".35rem"}} /> تحديد تاريخ البدء</h4>
               <div className="date-row">
                 <button className="btn btn-s btn-gold" onClick={()=>saveDate(selectedCell.key,tempDate)} disabled={!tempDate}>حفظ</button>
                 <input type="date" value={tempDate} min={new Date().toISOString().split("T")[0]}

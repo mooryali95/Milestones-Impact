@@ -1,4 +1,5 @@
 import React from "react";
+import Icon from "../components/Icon";
 import MILogo from "../MILogo";
 import Footer from "../components/Footer";
 import { BRAND, TRACKS } from "../config/constants";
@@ -294,7 +295,7 @@ const AdminPanel = (p) => {
         {adminTab === "stats" && <>
           <div className="sec-head"><h2 className="sec-title">إحصائيات</h2></div>
           <div className="adm-consultant">
-            <h4>📊 توزيع المسارات</h4>
+            <h4><Icon name="report" size={16} style={{marginLeft:".35rem"}} /> توزيع المسارات</h4>
             {TRACKS.map(tr => {
               const count = allRegs.reduce((acc,r) => acc + Object.keys(r.dates||{}).filter(k=>k.startsWith(tr.id)).length, 0);
               const max = 16 * (allRegs.length || 1);
