@@ -26,9 +26,8 @@ PAGES = {
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
-        'js': ['canvas.js', 'counters.js', 'mobile-menu.js', 'intro.js'],            # الملفات المشتركة التي تستعملها الصفحة
-        'video': ['intro.webm', 'intro.mp4', 'intro-poster.jpg',
-                  'intro-film.webm', 'intro-film.mp4',
+        'js': ['canvas.js', 'counters.js', 'mobile-menu.js'],            # الملفات المشتركة التي تستعملها الصفحة
+        'video': ['intro-film.webm', 'intro-film.mp4',
                   'intro-film-poster.webp', 'intro-film-poster.jpg'],  # الفيديو التعريفي (home فقط)
     },
     'leaders': {
