@@ -100,7 +100,7 @@ export const MatrixTab = (p) => {
                       <div className="cell-accent" style={{background:tr.color}}/>
                       <div className="cell-top">
                         <span className="cell-num">#{proc.index+1}</span>
-                        {isDone && <span className="cell-check">✓</span>}
+                        {isDone && <span className="cell-check" role="img" aria-label="مؤكَّد">✓</span>}
                       </div>
                       <div className="cell-name">{op.nameAr}</div>
                       <div className="cell-bottom">
@@ -389,7 +389,7 @@ export const OutputTab = (p) => {
                 <td>{p.phaseNameAr}</td>
                 <td>{d?fmtGregorian(d):"—"}</td>
                 <td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td>
-                <td>{c?<span className="badge badge-ok">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td>
+                <td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td>
               </tr>);
             })}</tbody>
           </table>

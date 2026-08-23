@@ -1028,7 +1028,6 @@ body::after {
 /* ══════════════════════════════════════════════════════════════════
    🎬 INTRO OVERLAY — فيديو تعريفي يظهر مرة واحدة لكل جلسة
    ══════════════════════════════════════════════════════════════════ */
-.intro-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -1040,10 +1039,7 @@ body::after {
   opacity: 1;
   transition: opacity 0.9s var(--ease);
 }
-.intro-overlay.is-hiding { opacity: 0; pointer-events: none; }
-.intro-overlay.is-done   { display: none; }
 
-.intro-overlay__video {
   width: 100%;
   height: 100%;
   object-fit: cover;               /* يملأ أي مقاس بلا تشويه */
@@ -1051,7 +1047,6 @@ body::after {
 }
 
 /* زر التخطي */
-.intro-overlay__skip {
   position: absolute;
   bottom: max(28px, env(safe-area-inset-bottom));
   left: 50%;
@@ -1072,7 +1067,6 @@ body::after {
   opacity: 0;
   animation: introSkipIn 0.6s var(--ease) 1.2s forwards;
 }
-.intro-overlay__skip:hover {
   background: rgba(169, 122, 46, 0.9);
   border-color: transparent;
   color: #F7F8F6;
@@ -1080,23 +1074,18 @@ body::after {
 @keyframes introSkipIn { to { opacity: 1; } }
 
 /* شريط التقدّم أسفل الشاشة */
-.intro-overlay__bar {
   position: absolute;
   bottom: 0; left: 0;
   height: 2px;
   width: 0;
   background: linear-gradient(90deg, var(--gold-deep), var(--gold-light));
 }
-.intro-overlay__bar.is-running { animation: introBar 7s linear forwards; }
 @keyframes introBar { to { width: 100%; } }
 
 /* منع التمرير خلف الفيديو */
-body.intro-active { overflow: hidden; }
 
 /* احترام تفضيل تقليل الحركة — لا يُعرض الفيديو إطلاقاً */
 @media (prefers-reduced-motion: reduce) {
-  .intro-overlay { display: none !important; }
-  body.intro-active { overflow: auto !important; }
 }
 
 /* ══════════════════════════════════════════════════════════
