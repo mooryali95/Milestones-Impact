@@ -78,7 +78,7 @@ export const MatrixTab = (p) => {
         <div className="mx-wrap">
           {TRACKS.map(tr => (
             <div key={tr.id} className="mx-track-section">
-              <div className="mx-track-header" style={{background:`linear-gradient(135deg,${tr.color},${tr.color}BB)`,color:"#fff"}}>
+              <div className="mx-track-header" style={{background:`${tr.color}`,color:"#fff"}}>
                 <span className="mx-track-icon">{tr.icon}</span>
                 <span className="mx-track-name">{tr.nameAr}</span>
                 <span className="mx-track-desc">{tr.contentAr}</span>
@@ -283,7 +283,7 @@ export const ReportTab = (p) => {
               <div className="rpt-pattern-name">نمط {pattern.nameAr}</div>
               <div className="rpt-pattern-desc">{pattern.desc}</div>
             </div>
-            {isComplete && <div style={{textAlign:"center",padding:".6rem",background:"rgba(91,123,58,0.06)",borderRadius:"10px",marginTop:"-.5rem"}}>
+            {isComplete && <div style={{textAlign:"center",padding:".6rem",background:"rgba(91,123,58,0.06)",borderRadius:"2px",marginTop:"-.5rem"}}>
               <strong style={{color:"#5B7B3A",fontSize:".88rem"}}><Icon name="outcome" size={16} style={{marginLeft:".35rem"}} /> رحلة تحول كاملة</strong>
             </div>}</div>
             <div className="rpt-card"><h3 className="rpt-section-title">الإحصائيات</h3>

@@ -110,7 +110,7 @@ const AdminPanel = (p) => {
                     <div key={r.id}
                       style={{
                         display:"flex",alignItems:"center",gap:"0.6rem",
-                        padding:"0.65rem 0.75rem",borderRadius:"10px",cursor:"pointer",
+                        padding:"0.65rem 0.75rem",borderRadius:"2px",cursor:"pointer",
                         background:isSelected?"rgba(20, 73, 94,0.1)":"transparent",
                         border:isSelected?"1px solid var(--mi)":"1px solid transparent",
                         marginBottom:"0.25rem",transition:"all 0.15s"
@@ -143,12 +143,12 @@ const AdminPanel = (p) => {
                   </div>
                 : <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",overflow:"hidden"}}>
                     {/* Header */}
-                    <div style={{background:"linear-gradient(135deg,#12161e,#1a2535)",color:"#fff",padding:"1rem 1.3rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+                    <div style={{background:"#12161e",color:"#fff",padding:"1rem 1.3rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
                       <div style={{flex:1}}>
                         <div style={{fontFamily:"var(--font-ar)",fontSize:"1.1rem",fontWeight:700}}>{selectedReg.name}</div>
                         <div style={{fontSize:"0.7rem",opacity:0.55,direction:"ltr"}}>{selectedReg.phone} | {selectedReg.email}</div>
                       </div>
-                      <div style={{display:"flex",background:"rgba(0,0,0,0.25)",borderRadius:"8px",padding:"2px",gap:"1px"}}>
+                      <div style={{display:"flex",background:"rgba(0,0,0,0.25)",borderRadius:"2px",padding:"2px",gap:"1px"}}>
                         {[["schedule","📅 المواعيد"],["demo","🗺️ التحليل"],["history","📈 التقدم"]].map(([k,v])=>(
                           <button key={k} className={`reg-modal-tab ${selectedRegTab===k?"on":""}`} onClick={()=>setSelectedRegTab(k)}>{v}</button>
                         ))}
@@ -215,7 +215,7 @@ const AdminPanel = (p) => {
                           <div className="demo-section-head" style={{margin:'0.75rem 0 0.55rem'}}>مسار التخطيط ({bookedProcs.length} خطوة)</div>
                           {bookedProcs.length===0 ? <div className="empty"><p>لم يحدد أي مواعيد</p></div>
                           : <div style={{position:'relative',paddingRight:'1.2rem'}}>
-                              <div style={{position:'absolute',right:'5px',top:0,bottom:0,width:'2px',background:'linear-gradient(180deg,var(--mi-d),var(--border))',borderRadius:'2px'}}/>
+                              <div style={{position:'absolute',right:'5px',top:0,bottom:0,width:'2px',background:'var(--mi-d)',borderRadius:'2px'}}/>
                               {bookedProcs.map((p,i)=>{const d=regDates[p.key],isConf=!!(r.confirmed||{})[p.key];return <div key={p.key} style={{position:'relative',paddingRight:'1rem',paddingBottom:'0.6rem'}}>
                                 <div style={{position:'absolute',right:'-1.2rem',top:'0.2rem',width:'12px',height:'12px',borderRadius:'50%',border:`2px solid ${p.trackColor}`,background:isConf?p.trackColor:'var(--bg-card)'}}/>
                                 <div style={{background:'var(--bg-card)',borderRadius:'10px',padding:'0.55rem 0.7rem',border:`1px solid var(--border)`,borderRight:`3px solid ${p.trackColor}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>

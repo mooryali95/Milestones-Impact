@@ -62,7 +62,7 @@ const Intro = ({ onComplete }) => {
         marginTop: "2rem", overflow: "hidden",
       }}>
         <div style={{
-          height: "100%", background: `linear-gradient(90deg, ${BRAND.color}, ${BRAND.light})`,
+          height: "100%", background: `${BRAND.color}`,
           borderRadius: 2, transition: "width 2.5s ease", width: step >= 1 ? "100%" : "0%",
         }} />
       </div>

@@ -109,7 +109,7 @@ export const ResumeScreen = ({
                   style={{ direction: "ltr", textAlign: "right" }} />
                 {resumeError && <div className="fg-msg">{resumeError}</div>}
               </div>
-              <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={resumeLoading}>
+              <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={resumeLoading}>
                 {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
               </button>
             </form>
@@ -127,7 +127,7 @@ export const ResumeScreen = ({
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
                 {otpError && <div className="fg-msg">{otpError}</div>}
               </div>
-              <button type="submit" className="btn" style={{ background: "linear-gradient(135deg, #4A5628, #5B7B3A)" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+              <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
               <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
@@ -155,7 +155,7 @@ export const AdminLoginScreen = ({
   handleAdminVerify,
 }) => (
   <AuthShell>
-      <div className="auth-left" style={{background:"linear-gradient(160deg,#0f1923 0%,#1a1a2e 100%)"}}>
+      <div className="auth-left" style={{background:"#0f1923"}}>
         <div className="auth-left-grid"/>
         <div className="auth-left-content" style={{position:"relative",zIndex:1,textAlign:"center"}}>
           <MILogo size={52} color="#14495E"/>
@@ -174,12 +174,12 @@ export const AdminLoginScreen = ({
           {adminOtpStep === "email" ? (
             <form onSubmit={handleAdminSendCode}>
               <div className={`fg ${adminError ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" dir="ltr" placeholder="admin@example.com" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
-              <button type="submit" disabled={adminSending} className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>{adminSending ? "..." : "إرسال الرمز ←"}</button>
+              <button type="submit" disabled={adminSending} className="btn" style={{background:`${BRAND.deep}`}}>{adminSending ? "..." : "إرسال الرمز ←"}</button>
             </form>
           ) : (
             <form onSubmit={handleAdminVerify}>
               <div className={`fg ${adminError ? "fg-err" : ""}`}><label>رمز الدخول (6 أرقام)</label><input inputMode="numeric" dir="ltr" maxLength={6} placeholder="______" value={adminCode} onChange={e => { setAdminCode(e.target.value.replace(/\D/g, "").slice(0,6)); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
-              <button type="submit" disabled={adminSending} className="btn" style={{background:`linear-gradient(135deg,${BRAND.deep},${BRAND.dark})`}}>{adminSending ? "..." : "دخول ←"}</button>
+              <button type="submit" disabled={adminSending} className="btn" style={{background:`${BRAND.deep}`}}>{adminSending ? "..." : "دخول ←"}</button>
               <button type="button" className="auth-back" onClick={() => { setAdminOtpStep("email"); setAdminError(""); }}>→ تغيير البريد</button>
             </form>
           )}
