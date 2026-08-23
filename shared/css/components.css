@@ -277,3 +277,33 @@ body.intro-active { overflow: hidden; }
   .intro-overlay { display: none !important; }
   body.intro-active { overflow: auto !important; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   BRAND FILM — الفيلم التعريفي الرسمي
+   ══════════════════════════════════════════════════════════
+   يُشغَّل باختيار الزائر (preload="none")، فلا يُحمَّل شيء حتى
+   يضغط. الهوية: نصف قطر 2px · حدّ شعري · بلا ظل ولا تدرّج.
+*/
+.brandfilm__frame {
+  margin: 0;
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+.brandfilm__video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: var(--petrol-deep);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius);
+}
+
+.brandfilm__caption {
+  margin-top: 0.9rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-mid);
+  line-height: 1.7;
+}

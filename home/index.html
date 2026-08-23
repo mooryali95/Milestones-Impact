@@ -99,7 +99,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23061E2C'/%3E%3Cpath d='M12 4 L16 8 L16 16 L12 20 L8 16 L8 8 Z' fill='%23C8A45C'/%3E%3C/svg%3E" />
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="assets/css/main.css?v=10b9a9e6" />
+  <link rel="stylesheet" href="assets/css/main.css?v=eaa5ed9b" />
 </head>
 <body>
 
@@ -238,6 +238,32 @@
 
 
   <!-- ═════════════════════════════════════ ② MODEL ═════════════════════════════════════ -->
+  <!-- ══ الفيلم التعريفي الرسمي — يُشغَّل باختيار الزائر ══ -->
+  <section class="section brandfilm" id="film" aria-labelledby="film-title">
+    <div class="container">
+      <div class="section-head">
+        <h2 class="section-title" id="film-title">من <em>النية</em>... إلى الأثر</h2>
+        <p class="section-sub">الأطروحة في خمس عشرة ثانية</p>
+      </div>
+      <figure class="brandfilm__frame">
+        <video class="brandfilm__video"
+               controls
+               preload="none"
+               playsinline
+               poster="assets/video/intro-film-poster.webp"
+               aria-describedby="film-desc">
+          <source src="assets/video/intro-film.webm" type="video/webm">
+          <source src="assets/video/intro-film.mp4" type="video/mp4">
+          <p>متصفحك لا يدعم تشغيل الفيديو.
+             <a href="assets/video/intro-film.mp4">نزّل الفيلم</a>.</p>
+        </video>
+        <figcaption class="brandfilm__caption" id="film-desc">
+          فيلم الهوية الرسمي — بلا صوت. يعرض سلسلة الأثر: القرار ← العملية ← المخرج ← النتيجة ← الأثر.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section class="section model" id="model" aria-labelledby="model-title">
     <div class="section__container model__container">
       <div class="section-head--center reveal">
