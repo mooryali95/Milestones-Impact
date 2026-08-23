@@ -94,7 +94,7 @@ const AdminPanel = (p) => {
             <div className="admin-sidebar">
               <div className="admin-sidebar-header">
                 سجل المشاركين
-                <button className="btn btn-s btn-outline" style={{float:"left",marginTop:"-2px"}} onClick={loadRegs}>↻</button>
+                <button className="btn btn-s btn-outline" style={{float:"left",marginTop:"-2px"}} onClick={loadRegs} aria-label="تحديث قائمة المسجّلين">↻</button>
               </div>
               {loading ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>جارٍ التحميل...</div>
               : allRegs.length === 0 ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>لا يوجد مسجلين</div>
@@ -124,8 +124,8 @@ const AdminPanel = (p) => {
                             <div style={{height:"100%",background:avatarColor,borderRadius:"2px",width:`${pct}%`}}/>
                           </div>
                           <span>{datesCount}/16</span>
-                          {r.submitted && <span style={{color:"var(--ok)"}}>✓</span>}
-                          {r.reopenRequested && <span style={{color:"var(--err)"}}>🔓</span>}
+                          {r.submitted && <span style={{color:"var(--ok)"}} role="img" aria-label="مُقدَّم">✓</span>}
+                          {r.reopenRequested && <span style={{color:"var(--err)"}} role="img" aria-label="طلب إعادة فتح">🔓</span>}
                         </div>
                       </div>
                     </div>
@@ -153,7 +153,7 @@ const AdminPanel = (p) => {
                           <button key={k} className={`reg-modal-tab ${selectedRegTab===k?"on":""}`} onClick={()=>setSelectedRegTab(k)}>{v}</button>
                         ))}
                       </div>
-                      <button className="reg-modal-close" onClick={()=>setSelectedReg(null)}>✕</button>
+                      <button className="reg-modal-close" aria-label="إغلاق بيانات المسجّل" onClick={()=>setSelectedReg(null)}>✕</button>
                     </div>
                     {/* Body */}
                     <div style={{padding:"1.3rem",maxHeight:"calc(100vh - 280px)",overflowY:"auto"}}>
@@ -165,7 +165,7 @@ const AdminPanel = (p) => {
                               <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
                               <tbody>{procs.map((p,j)=>{
                                 const d=r.dates?.[p.key], c=r.confirmed?.[p.key];
-                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
+                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
                               })}</tbody>
                             </table>
                           </div>
@@ -281,8 +281,8 @@ const AdminPanel = (p) => {
               {isOpen && <>
                 {["insight","why_it_matters","description"].map(field => (
                   <div key={field} className="adm-field">
-                    <label>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
-                    <textarea defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
+                    <label htmlFor={`adm-${proc.key}-${field}`}>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
+                    <textarea id={`adm-${proc.key}-${field}`} defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
                       onBlur={async(e)=>{ try{ const {supabase} = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"); } catch(err){} showToast("التعديل يتم عبر Supabase مباشرة"); }} readOnly />
                   </div>
                 ))}

@@ -58,8 +58,8 @@ const DemographicsScreen = (p) => {
                   {/* ── الاسم (full width) ── */}
                   <div className="demo-field-group">
                     <div className="demo-field">
-                      <label>الاسم الكامل *</label>
-                      <input placeholder="اسم الشخص" value={row.name}
+                      <label htmlFor={`demo-${row.id}-name`}>الاسم الكامل *</label>
+                      <input id={`demo-${row.id}-name`} placeholder="اسم الشخص" value={row.name}
                         onChange={e => updateDemoRow(row.id, 'name', e.target.value)} />
                     </div>
                   </div>
@@ -67,37 +67,37 @@ const DemographicsScreen = (p) => {
                   {/* ── صفان ── */}
                   <div className="demo-field-row" style={{marginBottom:"0.55rem"}}>
                     <div className="demo-field">
-                      <label>الجهة / المؤسسة</label>
-                      <input placeholder="الشركة أو الجهة" value={row.entity}
+                      <label htmlFor={`demo-${row.id}-entity`}>الجهة / المؤسسة</label>
+                      <input id={`demo-${row.id}-entity`} placeholder="الشركة أو الجهة" value={row.entity}
                         onChange={e => updateDemoRow(row.id, 'entity', e.target.value)} />
                     </div>
                     <div className="demo-field">
-                      <label>المنصب</label>
-                      <input placeholder="الدور" value={row.position}
+                      <label htmlFor={`demo-${row.id}-position`}>المنصب</label>
+                      <input id={`demo-${row.id}-position`} placeholder="الدور" value={row.position}
                         onChange={e => updateDemoRow(row.id, 'position', e.target.value)} />
                     </div>
                   </div>
 
                   <div className="demo-field-row" style={{marginBottom:"0.55rem"}}>
                     <div className="demo-field">
-                      <label>طبيعة العلاقة</label>
-                      <select value={row.relation} onChange={e => updateDemoRow(row.id, 'relation', e.target.value)}>
+                      <label htmlFor={`demo-${row.id}-relation`}>طبيعة العلاقة</label>
+                      <select id={`demo-${row.id}-relation`} value={row.relation} onChange={e => updateDemoRow(row.id, 'relation', e.target.value)}>
                         <option value="">اختر</option>
                         <option>أقارب</option><option>زملاء</option><option>أصدقاء</option>
                         <option>عملاء</option><option>شركاء</option><option>معارف</option><option>أخرى</option>
                       </select>
                     </div>
                     <div className="demo-field">
-                      <label>الموقع الجغرافي</label>
-                      <input placeholder="المدينة" value={row.location}
+                      <label htmlFor={`demo-${row.id}-location`}>الموقع الجغرافي</label>
+                      <input id={`demo-${row.id}-location`} placeholder="المدينة" value={row.location}
                         onChange={e => updateDemoRow(row.id, 'location', e.target.value)} />
                     </div>
                   </div>
 
                   <div className="demo-field-group">
                     <div className="demo-field">
-                      <label>الحدث المشترك</label>
-                      <input placeholder="مثال: زميل عمل، حضرنا نفس البرنامج..." value={row.sharedEvent}
+                      <label htmlFor={`demo-${row.id}-sharedEvent`}>الحدث المشترك</label>
+                      <input id={`demo-${row.id}-sharedEvent`} placeholder="مثال: زميل عمل، حضرنا نفس البرنامج..." value={row.sharedEvent}
                         onChange={e => updateDemoRow(row.id, 'sharedEvent', e.target.value)} />
                     </div>
                   </div>

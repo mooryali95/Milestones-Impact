@@ -33,7 +33,7 @@ const ProcessModal = (p) => {
         <div className="overlay" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-pull"/>
-            <button className="modal-x" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
+            <button className="modal-x" aria-label="إغلاق تفاصيل العملية" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
             <h2>{selectedCell.nameAr}</h2>
             {selectedCell.insight && <div className="modal-section"><div className="modal-insight-box"><Icon name="insight" size={16} style={{marginLeft:".35rem"}} /> {selectedCell.insight}</div></div>}
@@ -71,7 +71,7 @@ const ProcessModal = (p) => {
                     <span style={{display:"block",fontWeight:700,fontSize:".88rem",marginBottom:".1rem"}}>{appContent.demo_cta_title||'ابدأ تحليلك الديموغرافي'}</span>
                     <span style={{display:"block",fontSize:".72rem",opacity:.85}}>{appContent.demo_cta_desc||'رسّم شبكتك البشرية'}</span>
                   </span>
-                  <span style={{fontSize:"1rem",flexShrink:0,opacity:.8}}>←</span>
+                  <span aria-hidden="true" style={{fontSize:"1rem",flexShrink:0,opacity:.8}}>←</span>
                 </button>
               </div>
             )}
@@ -79,7 +79,7 @@ const ProcessModal = (p) => {
               <h4><Icon name="milestone" size={16} style={{marginLeft:".35rem"}} /> تحديد تاريخ البدء</h4>
               <div className="date-row">
                 <button className="btn btn-s btn-gold" onClick={()=>saveDate(selectedCell.key,tempDate)} disabled={!tempDate}>حفظ</button>
-                <input type="date" value={tempDate} min={new Date().toISOString().split("T")[0]}
+                <input type="date" aria-label="تاريخ تنفيذ العملية" value={tempDate} min={new Date().toISOString().split("T")[0]}
                   onChange={e=>{setTempDate(e.target.value);setDateError("");}}
                   style={{flex:1,minWidth:"140px",padding:".55rem .75rem",border:"1.5px solid var(--sa)",borderRadius:"2px",fontFamily:"var(--font-ar)",direction:"ltr",fontSize:".9rem",background:"var(--sw)"}}/>
               </div>

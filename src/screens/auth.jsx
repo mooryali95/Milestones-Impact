@@ -43,9 +43,9 @@ export const RegisterScreen = ({
             <h1 className="auth-title">ابدأ رحلتك</h1>
             <p className="auth-sub">سجّل بياناتك للدخول إلى منظومة العمليات الست عشرة</p>
             <form onSubmit={handleRegister}>
-              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label>الاسم الكامل</label><input placeholder="أدخل اسمك" value={user.name} maxLength={80} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
-              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label>رقم الجوال</label><input type="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
-              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" placeholder="email@example.com" value={user.email} maxLength={254} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
+              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label htmlFor="reg-name">الاسم الكامل</label><input id="reg-name" placeholder="أدخل اسمك" value={user.name} maxLength={80} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
+              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label htmlFor="reg-phone">رقم الجوال</label><input id="reg-phone" type="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
+              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label htmlFor="reg-email">البريد الإلكتروني</label><input id="reg-email" type="email" placeholder="email@example.com" value={user.email} maxLength={254} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
             </form>
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
@@ -56,8 +56,8 @@ export const RegisterScreen = ({
             <p className="auth-sub">تم إرسال رمز مكوّن من 6 أرقام إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email}</strong></p>
             <form onSubmit={handleVerifyOtp}>
               <div className={`fg ${otpError ? "fg-err" : ""}`}>
-                <label>رمز التحقق</label>
-                <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                <label htmlFor="reg-otp">رمز التحقق</label>
+                <input id="reg-otp" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
                   onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
                 {otpError && <div className="fg-msg">{otpError}</div>}
@@ -104,8 +104,8 @@ export const ResumeScreen = ({
             <p className="auth-sub">أدخل رقم جوالك لاستعادة بياناتك وخطتك السابقة</p>
             <form onSubmit={handleResume}>
               <div className={`fg ${resumeError ? "fg-err" : ""}`}>
-                <label>رقم الجوال المسجل</label>
-                <input type="tel" placeholder="05XXXXXXXX" value={resumePhone} maxLength={10}
+                <label htmlFor="resume-phone">رقم الجوال المسجل</label>
+                <input id="resume-phone" type="tel" placeholder="05XXXXXXXX" value={resumePhone} maxLength={10}
                   onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
                   style={{ direction: "ltr", textAlign: "right" }} />
                 {resumeError && <div className="fg-msg">{resumeError}</div>}
@@ -122,8 +122,8 @@ export const ResumeScreen = ({
             <p className="auth-sub">تم إرسال رمز إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email?.replace(/(.{2}).*(@.*)/, "$1***$2")}</strong></p>
             <form onSubmit={handleResumeVerify}>
               <div className={`fg ${otpError ? "fg-err" : ""}`}>
-                <label>رمز التحقق</label>
-                <input type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                <label htmlFor="resume-otp">رمز التحقق</label>
+                <input id="resume-otp" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
                   onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
                 {otpError && <div className="fg-msg">{otpError}</div>}
@@ -174,12 +174,12 @@ export const AdminLoginScreen = ({
           <p className="auth-sub">{adminOtpStep === "email" ? "أدخل بريدك المسجّل لإرسال رمز الدخول" : "أدخل رمز الدخول (من بريدك أو تطبيق المصادقة)"}</p>
           {adminOtpStep === "email" ? (
             <form onSubmit={handleAdminSendCode}>
-              <div className={`fg ${adminError ? "fg-err" : ""}`}><label>البريد الإلكتروني</label><input type="email" dir="ltr" placeholder="admin@example.com" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
+              <div className={`fg ${adminError ? "fg-err" : ""}`}><label htmlFor="admin-email">البريد الإلكتروني</label><input id="admin-email" type="email" dir="ltr" placeholder="admin@example.com" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
               <button type="submit" disabled={adminSending} className="btn" style={{background:`${BRAND.deep}`}}>{adminSending ? "..." : "إرسال الرمز ←"}</button>
             </form>
           ) : (
             <form onSubmit={handleAdminVerify}>
-              <div className={`fg ${adminError ? "fg-err" : ""}`}><label>رمز الدخول (6 أرقام)</label><input inputMode="numeric" dir="ltr" maxLength={6} placeholder="______" value={adminCode} onChange={e => { setAdminCode(e.target.value.replace(/\D/g, "").slice(0,6)); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
+              <div className={`fg ${adminError ? "fg-err" : ""}`}><label htmlFor="admin-code">رمز الدخول (6 أرقام)</label><input id="admin-code" inputMode="numeric" dir="ltr" maxLength={6} placeholder="______" value={adminCode} onChange={e => { setAdminCode(e.target.value.replace(/\D/g, "").slice(0,6)); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
               <button type="submit" disabled={adminSending} className="btn" style={{background:`${BRAND.deep}`}}>{adminSending ? "..." : "دخول ←"}</button>
               <button type="button" className="auth-back" onClick={() => { setAdminOtpStep("email"); setAdminError(""); }}>→ تغيير البريد</button>
             </form>
