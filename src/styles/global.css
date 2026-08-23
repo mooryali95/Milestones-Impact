@@ -1,0 +1,40 @@
+/* ══════════════════════════════════════════════════════════════
+   GLOBAL BASE — أساس يسري على كل الشاشات
+   ══════════════════════════════════════════════════════════════
+   تطبيق React يحقن أنماطه من سلسلة CSS داخل الشاشات، لكن الصفحة
+   الرئيسية (Landing) لا تحقنها — فكان <body> بلا خط ويسقط إلى
+   الخط الافتراضي للمتصفح. هذا الملف يضع الأساس المشترك عالمياً.
+
+   لا يحتوي إلا ما يجب أن يسري على كل شيء؛ الأنماط الخاصة بالشاشات
+   تبقى في styles/appCss.js.
+   ══════════════════════════════════════════════════════════════ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ar);
+  direction: rtl;
+  background: var(--off-white);
+  color: var(--ink);
+  line-height: 1.65;                /* إيقاع النص في الهوية */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* الهوية: لا يُباعَد بين الحروف العربية أبداً */
+[lang="ar"], [dir="rtl"] {
+  letter-spacing: normal;
+}
+
+/* الهوية تنص على احترام تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

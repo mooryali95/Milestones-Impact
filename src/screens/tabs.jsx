@@ -1,4 +1,5 @@
 import React from "react";
+import Icon from "../components/Icon";
 import { BRAND, TRACKS, PHASES } from "../config/constants";
 import { fmtShort, fmtBoth, fmtGregorian, gregorianToHijri } from "../lib/dateUtils";
 import { analyzeBookings } from "../lib/analysis";
@@ -77,7 +78,7 @@ export const MatrixTab = (p) => {
         <div className="mx-wrap">
           {TRACKS.map(tr => (
             <div key={tr.id} className="mx-track-section">
-              <div className="mx-track-header" style={{background:`linear-gradient(135deg,${tr.color},${tr.color}BB)`,color:"#fff"}}>
+              <div className="mx-track-header" style={{background:`${tr.color}`,color:"#fff"}}>
                 <span className="mx-track-icon">{tr.icon}</span>
                 <span className="mx-track-name">{tr.nameAr}</span>
                 <span className="mx-track-desc">{tr.contentAr}</span>
@@ -117,7 +118,7 @@ export const MatrixTab = (p) => {
         {/* Smart Suggestions — BELOW matrix */}
         {!submitted && datedCount === 0 && (
           <div className="smart-below">
-            <div className="smart-below-label">💡 {appContent.welcome_hint||'يبدأ معظم العملاء بـ:'}</div>
+            <div className="smart-below-label"><Icon name="insight" size={16} style={{marginLeft:".35rem"}} /> {appContent.welcome_hint||'يبدأ معظم العملاء بـ:'}</div>
             <p style={{fontSize:".78rem",color:"var(--wg)",marginBottom:".5rem"}}>{appContent.welcome_desc||'اختر أول عملية لبدء بناء خطتك الاستراتيجية'}</p>
             <div className="smart-suggest">
               {(appContent.starter_processes||'creation-1,establishment-1').split(',').map(k=>k.trim()).map(k=>{
@@ -137,7 +138,7 @@ export const MatrixTab = (p) => {
           const sugList=[...suggestions].slice(0,3).map(k=>procs.find(x=>x.key===k)).filter(Boolean);
           return sugList.length>0 ? (
             <div className="smart-below">
-              <div className="smart-below-label">🔗 {appContent.suggest_label||'بناءً على اختياراتك، قد يهمك:'}</div>
+              <div className="smart-below-label"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> {appContent.suggest_label||'بناءً على اختياراتك، قد يهمك:'}</div>
               <div className="smart-suggest">
                 {sugList.map(p=><span key={p.key} className="smart-chip" style={{borderColor:p.trackColor+'50',color:p.trackColor,background:p.trackColor+'0A'}}
                   onClick={()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>
@@ -155,7 +156,7 @@ export const MatrixTab = (p) => {
           return sugList.length>0 ? (
             <div className="smart-below">
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:".4rem"}}>
-                <div className="smart-below-label" style={{marginBottom:0}}>🔗 {appContent.suggest_deps_label||'اقتراحات بناءً على التبعيات'}</div>
+                <div className="smart-below-label" style={{marginBottom:0}}><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> {appContent.suggest_deps_label||'اقتراحات بناءً على التبعيات'}</div>
                 <span className="smart-counter">{datedCount}/16</span>
               </div>
               <div className="smart-suggest">
@@ -200,7 +201,7 @@ export const MatrixTab = (p) => {
             <h3 style={{color:"#5B7B3A"}}>🔒 تم قفل الخطة بعد الموافقة النهائية</h3>
             <p style={{marginBottom:".5rem"}}>يمكنك مراجعة النموذج النهائي أو طلب إعادة الفتح</p>
             <div style={{display:"flex",gap:".5rem",justifyContent:"center",flexWrap:"wrap"}}>
-              <button className="btn btn-s btn-gold" onClick={()=>setTab("output")}>📋 النموذج النهائي</button>
+              <button className="btn btn-s btn-gold" onClick={()=>setTab("output")}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> النموذج النهائي</button>
               {!reopenRequested
                 ? <button className="btn btn-s btn-outline" onClick={requestReopen}>🔓 طلب إعادة فتح</button>
                 : <span style={{color:BRAND.color,fontWeight:600,fontSize:".82rem"}}>⏳ بانتظار موافقة المدير</span>}
@@ -246,7 +247,7 @@ export const ScheduleTab = (p) => {
                     </div>
                     <div className="tl-name">{item.nameAr}</div>
                     <div className="tl-track">{item.trackIcon} {item.trackNameAr} • {item.phaseNameAr}</div>
-                    <div className="tl-dates"><span>📅 {h.gregorian}</span><span>{item.duration||`${item.dur} أيام`}</span></div>
+                    <div className="tl-dates"><span><Icon name="milestone" size={16} style={{marginLeft:".35rem"}} /> {h.gregorian}</span><span>{item.duration||`${item.dur} أيام`}</span></div>
                     <div className="tl-hijri">🌙 {h.hijri}</div>
                   </div>
                 </div>
@@ -274,7 +275,7 @@ export const ReportTab = (p) => {
           const {pattern,trackCoverage,phaseCoverage,weightBalance,avgPhase,readinessAr,depGaps,recommendations,timeline,trackDist,totalBooked,isComplete}=analysis;
           return <>
             <div className="rpt-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:".5rem"}}>
-              <div><div style={{display:"flex",alignItems:"center",gap:".5rem"}}><MILogo size={18} color={BRAND.color}/><strong style={{fontFamily:"'Amiri',serif",color:BRAND.dark}}>Milestone Impact</strong></div><div style={{fontSize:".75rem",color:"#999",marginTop:".15rem"}}>تقرير مولّد تلقائياً</div></div>
+              <div><div style={{display:"flex",alignItems:"center",gap:".5rem"}}><MILogo size={18} color={BRAND.color}/><strong style={{fontFamily:"var(--font-ar)",color:BRAND.dark}}>Milestone Impact</strong></div><div style={{fontSize:".75rem",color:"#999",marginTop:".15rem"}}>تقرير مولّد تلقائياً</div></div>
               <div style={{textAlign:"left"}}><div style={{fontSize:".82rem",fontWeight:600}}>{user.name}</div><div style={{fontSize:".7rem",color:"#999"}}>{new Date().toLocaleDateString('ar-SA')} • {totalBooked} حجوزات</div></div>
             </div>
             <div className="rpt-card"><div className="rpt-pattern">
@@ -282,8 +283,8 @@ export const ReportTab = (p) => {
               <div className="rpt-pattern-name">نمط {pattern.nameAr}</div>
               <div className="rpt-pattern-desc">{pattern.desc}</div>
             </div>
-            {isComplete && <div style={{textAlign:"center",padding:".6rem",background:"rgba(91,123,58,0.06)",borderRadius:"10px",marginTop:"-.5rem"}}>
-              <strong style={{color:"#5B7B3A",fontSize:".88rem"}}>🏆 رحلة تحول كاملة</strong>
+            {isComplete && <div style={{textAlign:"center",padding:".6rem",background:"rgba(91,123,58,0.06)",borderRadius:"2px",marginTop:"-.5rem"}}>
+              <strong style={{color:"#5B7B3A",fontSize:".88rem"}}><Icon name="outcome" size={16} style={{marginLeft:".35rem"}} /> رحلة تحول كاملة</strong>
             </div>}</div>
             <div className="rpt-card"><h3 className="rpt-section-title">الإحصائيات</h3>
               <div className="rpt-stats">
@@ -336,7 +337,7 @@ export const SummaryTab = (p) => {
   return (
       <div className="sec" style={{animation:"fadeIn 0.4s"}}>
         <div className="sec-head"><h2 className="sec-title">المخرجات</h2></div>
-        {submitted && <div className="output-tab-hint" onClick={()=>setTab("output")}>📋 الخطة مكتملة — اضغط هنا لعرض النموذج النهائي وطباعته</div>}
+        {submitted && <div className="output-tab-hint" onClick={()=>setTab("output")}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> الخطة مكتملة — اضغط هنا لعرض النموذج النهائي وطباعته</div>}
         <div className="sum-card"><h3 className="sum-title">ملخص الخطة</h3>
           <div className="modal-grid" style={{marginBottom:"1rem"}}>
             <div className="modal-item"><div className="modal-item-label">المشارك</div><div className="modal-item-value">{user.name}</div></div>
@@ -373,7 +374,7 @@ export const OutputTab = (p) => {
   return (
       <div className="sec" style={{animation:"fadeIn 0.4s"}}>
         <div className="output-card">
-          <div className="output-header"><h3>📋 نموذج مصفوفة التأثير النهائي</h3><button className="btn btn-s btn-print" onClick={handlePrint}>🖨 طباعة</button></div>
+          <div className="output-header"><h3><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> نموذج مصفوفة التأثير النهائي</h3><button className="btn btn-s btn-print" onClick={handlePrint}>🖨 طباعة</button></div>
           <div className="output-info">
             <div className="output-info-item"><div className="output-info-label">المشارك</div><div className="output-info-value">{user.name}</div></div>
             <div className="output-info-item"><div className="output-info-label">الجوال</div><div className="output-info-value" style={{direction:"ltr"}}>{user.phone}</div></div>

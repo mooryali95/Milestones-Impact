@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import MILogo from "../MILogo";
+import Wordmark from "./Wordmark";
 import { BRAND } from "../config/constants";
 
 // ════════════════════════════════════════════════════════════════
@@ -32,7 +32,7 @@ const Intro = ({ onComplete }) => {
         transform: step >= 1 ? "scale(1) rotate(0deg)" : "scale(0.3) rotate(-90deg)",
         opacity: step >= 1 ? 1 : 0, marginBottom: "1.5rem",
       }}>
-        <MILogo size={70} color={BRAND.color} />
+        <Wordmark width={240} />
       </div>
 
       {/* Brand Name */}
@@ -41,7 +41,7 @@ const Intro = ({ onComplete }) => {
         transform: step >= 2 ? "translateY(0)" : "translateY(15px)",
       }}>
         <div style={{
-          fontFamily: "'Tajawal', sans-serif", fontSize: "2.4rem", fontWeight: 300,
+          fontFamily: "var(--font-ar)", fontSize: "2.4rem", fontWeight: 300,
           color: BRAND.color, letterSpacing: "4px", textAlign: "center", lineHeight: 1.2,
         }}>
           Milestone
@@ -49,7 +49,7 @@ const Intro = ({ onComplete }) => {
           Impact
         </div>
         <div style={{
-          textAlign: "center", marginTop: "0.8rem", fontFamily: "'Amiri', serif",
+          textAlign: "center", marginTop: "0.8rem", fontFamily: "var(--font-ar)",
           fontSize: "1rem", color: BRAND.dark, letterSpacing: "1px",
         }}>
           مصفوفة التأثير • هندسة اجتماعية
@@ -62,7 +62,7 @@ const Intro = ({ onComplete }) => {
         marginTop: "2rem", overflow: "hidden",
       }}>
         <div style={{
-          height: "100%", background: `linear-gradient(90deg, ${BRAND.color}, ${BRAND.light})`,
+          height: "100%", background: `${BRAND.color}`,
           borderRadius: 2, transition: "width 2.5s ease", width: step >= 1 ? "100%" : "0%",
         }} />
       </div>

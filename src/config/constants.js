@@ -5,11 +5,25 @@
 // AWS Lambda used only for the (optional, best-effort) consultant notify email.
 export const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com';
 
+// ألوان الهوية الرسمية — معايَرة على حزمة الهوية (07_WEB/mi-patterns.css).
+// تُستعمل في الأنماط المضمّنة داخل JS حيث لا تصل متغيرات CSS.
+// المصدر الوحيد للحقيقة هو shared/css/mi-tokens.css؛ هذه نسخة حرفية منه.
 export const BRAND = {
-  color: "#14495E",
-  dark: "#0A2A3D",
-  light: "#2A6478",
-  deep: "#061E2C"
+  // الأسماء الرسمية
+  graphite: "#0B272F",  // الأرضية الأساسية
+  ink:      "#061318",  // أعمق سطح
+  slate:    "#12414E",  // السطح الثانوي
+  gold:     "#A97A2E",  // اللمسة الأساسية
+  copper:   "#C79A4B",  // اللمسة على الأرضيات الداكنة
+  mist:     "#EAF0F0",  // الأرضية الفاتحة
+  sand:     "#EFE7D8",  // أرضية فاتحة دافئة
+
+  // أسماء متوارثة يستعملها الكود — تشير الآن للقيم الرسمية.
+  // (كانت #14495E / #0A2A3D / #061E2C وهي إصابات قريبة من الرسمية بفارق ΔE 6–9)
+  color: "#12414E",
+  dark:  "#0B272F",
+  light: "#2A6478",     // لا مقابل رسمي — أبقيَ كما هو
+  deep:  "#061318",
 };
 
 export const TRACKS = [

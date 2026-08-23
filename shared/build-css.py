@@ -13,7 +13,8 @@ SHARED_JS = os.path.join(ROOT, 'shared', 'js')
 SHARED_BRAND = os.path.join(ROOT, 'shared', 'brand')
 SHARED_VIDEO = os.path.join(ROOT, 'shared', 'video')
 
-SHARED_FILES = ['tokens.css', 'base.css', 'layout.css', 'components.css']
+# mi-tokens.css أولاً: يعرّف القيم الرسمية التي يشتق منها tokens.css
+SHARED_FILES = ['mi-tokens.css', 'tokens.css', 'base.css', 'layout.css', 'components.css']
 
 # ملف JS مُولَّد يبدأ بهذا السطر — عدّل المصدر في shared/js لا النسخة المولّدة
 JS_HEADER = "// ══ Auto-generated from shared/js — edit the source there, not this copy. ══\n"
@@ -26,7 +27,9 @@ PAGES = {
         'html': os.path.join(ROOT, 'home', 'index.html'),
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
         'js': ['canvas.js', 'counters.js', 'mobile-menu.js', 'intro.js'],            # الملفات المشتركة التي تستعملها الصفحة
-        'video': ['intro.webm', 'intro.mp4', 'intro-poster.jpg'],  # الفيديو التعريفي (home فقط)
+        'video': ['intro.webm', 'intro.mp4', 'intro-poster.jpg',
+                  'intro-film.webm', 'intro-film.mp4',
+                  'intro-film-poster.webp', 'intro-film-poster.jpg'],  # الفيديو التعريفي (home فقط)
     },
     'leaders': {
         'css_dir': os.path.join(ROOT, 'leaders', 'assets', 'css'),
@@ -39,6 +42,28 @@ PAGES = {
 }
 
 
+def build_react_tokens():
+    """يولّد src/styles/tokens.css من رموز الهوية المشتركة.
+
+    ملف CSS حقيقي يستورده src/index.js، فيُطبَّق عالمياً على كل
+    الشاشات — بما فيها الصفحة الرئيسية التي لا تحقن أنماط التطبيق.
+    المصدر واحد: نفس ملفَّي mi-tokens.css و tokens.css يغذّيان
+    الصفحات الثابتة وتطبيق React معاً.
+    """
+    out_dir = os.path.join(ROOT, 'src', 'styles')
+    if not os.path.isdir(out_dir):
+        return
+    parts = ['/* ══ Auto-generated from shared/css — edit the source there, not this file. ══ */',
+             '/* يُولَّد بـ: python3 shared/build-css.py */', '']
+    for filename in ('mi-tokens.css', 'tokens.css'):
+        with open(os.path.join(SHARED, filename)) as f:
+            parts.append('/* ─── shared/css/%s ─── */\n%s' % (filename, f.read()))
+    css = '\n'.join(parts)
+    with open(os.path.join(out_dir, 'tokens.css'), 'w') as f:
+        f.write(css)
+    print('   \u21b3 react: src/styles/tokens.css (%d \u0633\u0637\u0631)' % len(css.splitlines()))
+
+
 def sync_js(page_name, config):
     """ينسخ ملفات JS المشتركة إلى مجلد الصفحة مع ترويسة تشير للمصدر."""
     for filename in config.get('js', []):
@@ -49,6 +74,25 @@ def sync_js(page_name, config):
         with open(out_path, 'w') as f:
             f.write(JS_HEADER + content)
         print(f'   ↳ js: {page_name}/assets/js/{filename}')
+
+def sync_brand_to_react():
+    """ينسخ شعارات الهوية إلى src/assets/brand ليستوردها تطبيق React.
+
+    تطبيق CRA لا يستطيع الاستيراد من خارج src/، فنزامن الشعار الكامل
+    ونسخته المقلوبة إلى داخلها — بنفس منطق مزامنة الصفحات الثابتة،
+    فيبقى shared/brand هو المصدر الوحيد.
+    """
+    out_dir = os.path.join(ROOT, 'src', 'assets', 'brand')
+    src_dir = os.path.join(SHARED_BRAND, 'svg')
+    if not os.path.isdir(os.path.join(ROOT, 'src')) or not os.path.isdir(src_dir):
+        return
+    os.makedirs(out_dir, exist_ok=True)
+    for fn_ in ('milestone-impact.svg', 'milestone-impact-inverted.svg', 'icon-transparent.svg'):
+        src = os.path.join(src_dir, fn_)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(out_dir, fn_))
+            print('   \u21b3 react brand: src/assets/brand/%s' % fn_)
+
 
 def sync_brand(page_name, config):
     """ينسخ أصول الهوية (شعارات/أيقونات/سوشال) وملفات الجذر إلى مجلد الصفحة."""
@@ -156,6 +200,8 @@ def build(page_name, config):
     print(f'✅ {page_name}: main.css — {lines} lines, v={version}')
 
 if __name__ == '__main__':
+    build_react_tokens()
+    sync_brand_to_react()
     for name, config in PAGES.items():
         sync_layout_mirror(name, config)
         build(name, config)

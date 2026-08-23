@@ -1,4 +1,5 @@
 import React from "react";
+import Icon from "../components/Icon";
 
 // ════════════════════════════════════════════════════════════════
 // DEMOGRAPHICS — شاشة التحليل الديموغرافي
@@ -37,7 +38,7 @@ const DemographicsScreen = (p) => {
 
             {/* Intro */}
             <div className="demo-intro">
-              <div className="demo-intro-title">🧭 {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
+              <div className="demo-intro-title"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
               <div className="demo-intro-text">{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
             </div>
 
@@ -102,7 +103,7 @@ const DemographicsScreen = (p) => {
                   </div>
 
                   {/* ── قوة الشخص — Steppers ── */}
-                  <div className="demo-sec-title">⚡ قوة الشخص (0–100)</div>
+                  <div className="demo-sec-title"><Icon name="value" size={16} style={{marginLeft:".35rem"}} /> قوة الشخص (0–100)</div>
                   <div className="demo-stepper-grid">
                     {[['knowledge','🧠 معرفي','#2E6B8A'],['social','🤝 مجتمعي','#5B7B3A'],['financial','💰 مالي','#8B6914'],['economic','📈 اقتصادي','#6B4E3D'],['sovereign','👑 سيادي','#6B2D8A']].map(([k,label,color]) => {
                       const val = row.strength?.[k] || 0;
@@ -148,7 +149,7 @@ const DemographicsScreen = (p) => {
                   </div>
 
                   {/* ── المستهدف — Chips 2×2 ── */}
-                  <div className="demo-sec-title">🎯 ما أستهدف تفعيله معه</div>
+                  <div className="demo-sec-title"><Icon name="impact" size={16} style={{marginLeft:".35rem"}} /> ما أستهدف تفعيله معه</div>
                   <div className="demo-targets">
                     {[['knowledge','🧠 معرفي'],['social','🤝 مجتمعي'],['financial','💰 مالي'],['economic','📈 اقتصادي']].map(([k,label]) => (
                       <div key={k}

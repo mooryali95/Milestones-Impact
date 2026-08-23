@@ -1,38 +1,125 @@
 /* ══ Milestone Impact — HOME — Auto-generated. Edit source files, not this file. ══ */
 
 
+/* ─── shared/mi-tokens.css ─── */
+/* ══════════════════════════════════════════════════════════════
+   Milestone Impact — رموز الهوية الرسمية
+   ══════════════════════════════════════════════════════════════
+   المصدر: حزمة الهوية الرسمية · 07_WEB/mi-patterns.css (UI Library v8)
+   منقولة حرفياً — لا تُعدَّل القيم هنا؛ أي تغيير يبدأ من الحزمة.
+
+   هذا الملف هو المصدر الوحيد للحقيقة لألوان الهوية وخطوطها:
+     • الصفحات الثابتة  ← يُدمج في main.css عبر shared/build-css.py
+     • تطبيق React      ← يُولَّد منه src/styles/tokens.js بنفس السكربت
+   ══════════════════════════════════════════════════════════════ */
+
+/* ---- 1. Design tokens (brand constants) -------------------- */
+:root{
+  --mi-graphite:#0B272F;  /* Deep Teal Graphite - primary ground */
+  --mi-ink:#061318;       /* Ink - deepest surface            */
+  --mi-slate:#12414E;     /* Slate - secondary surface        */
+  --mi-gold:#A97A2E;      /* Executive Gold - primary accent  */
+  --mi-copper:#C79A4B;    /* Copper - accent on dark          */
+  --mi-mist:#EAF0F0;      /* Mist - light ground              */
+  --mi-sand:#EFE7D8;      /* Sand - warm light ground         */
+
+  /* semantic (theme-swapped) */
+  --mi-bg:var(--mi-mist);
+  --mi-surface:#FFFFFF;
+  --mi-fg:var(--mi-graphite);
+  --mi-muted:#4A6A72;
+  --mi-accent:var(--mi-gold);
+  --mi-line:color-mix(in oklab, var(--mi-fg) 16%, transparent);
+
+  /* pattern controls */
+  --mi-pattern-color:11,39,47;   /* rgb triplet */
+  --mi-pattern-opacity:.09;
+  --mi-pattern-scale:56px;
+
+  /* type + rhythm */
+  --mi-font:"Noto Sans",system-ui,sans-serif;
+  --mi-font-ar:"Noto Kufi Arabic","Noto Sans Arabic",system-ui,sans-serif;
+  --mi-track:.28em;
+  --mi-radius:2px;
+  --mi-space:clamp(16px,2.2vw,32px);
+}
+
+/* ---- 2. Themes --------------------------------------------- */
+:root[data-theme="dark"],.mi-dark{
+  --mi-bg:var(--mi-graphite); --mi-surface:#0F313A; --mi-fg:var(--mi-mist);
+  --mi-muted:#8AA3A8; --mi-accent:var(--mi-copper);
+  --mi-pattern-color:199,154,75; --mi-pattern-opacity:.13;
+}
+:root[data-theme="ink"]{
+  --mi-bg:var(--mi-ink); --mi-surface:#0B222A; --mi-fg:var(--mi-mist);
+  --mi-muted:#7E979C; --mi-accent:var(--mi-copper);
+  --mi-pattern-color:199,154,75; --mi-pattern-opacity:.12;
+}
+:root[data-theme="light"]{
+  --mi-bg:var(--mi-mist); --mi-surface:#FFFFFF; --mi-fg:var(--mi-graphite);
+  --mi-muted:#4A6A72; --mi-accent:#8E6524;
+  --mi-pattern-color:11,39,47; --mi-pattern-opacity:.09;
+}
+:root[data-theme="sand"]{
+  --mi-bg:var(--mi-sand); --mi-surface:#FBF7EF; --mi-fg:var(--mi-graphite);
+  --mi-muted:#6A604E; --mi-accent:#8E6524;
+  --mi-pattern-color:142,101,36; --mi-pattern-opacity:.10;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme]){
+    --mi-bg:var(--mi-graphite); --mi-surface:#0F313A; --mi-fg:var(--mi-mist);
+    --mi-muted:#8AA3A8; --mi-accent:var(--mi-copper);
+    --mi-pattern-color:199,154,75; --mi-pattern-opacity:.13;
+  }
+}
+
+
 /* ─── shared/tokens.css ─── */
 /* ════════════════════════════════════════════════════════════════════
    ░░  MILESTONE IMPACT — DESIGN TOKENS  ░░
    ════════════════════════════════════════════════════════════════════
-   هذا الملف يحتوي على جميع متغيرات الهوية البصرية.
-   لتغيير أي لون أو خط أو مسافة عبر الموقع كاملاً — عدّل هنا فقط.
+   رموز التطبيق — تُشتق من رموز الهوية الرسمية في mi-tokens.css.
+
+   الطبقتان:
+     mi-tokens.css  →  القيم الرسمية، منقولة حرفياً من حزمة الهوية.
+                       لا تُعدَّل هنا؛ أي تحديث يبدأ من الحزمة.
+     tokens.css     →  هذا الملف: أسماء دلالية يستعملها الكود،
+                       مربوطة بالقيم الرسمية عبر var().
+
+   الفائدة: تحديث الحزمة يغيّر ملفاً واحداً، وتبقى أسماء الكود ثابتة.
    ════════════════════════════════════════════════════════════════════ */
 
 :root {
   /* ──────────────────────────────────────────────
-     🎨 BRAND COLORS — الألوان الأساسية
+     BRAND COLORS — الألوان الأساسية
      ────────────────────────────────────────────── */
 
-  /* Petrol — البترولي (لون البراند الرئيسي) */
-  --petrol-deepest: #061E2C;
-  --petrol-deep:    #0A2A3D;
-  --petrol-mid:     #14495E;
-  --petrol-soft:    #2A6478;
+  /* Petrol — مشتق من رمادي/أردوازي الهوية الرسمي */
+  --petrol-deepest: var(--mi-ink);       /* رسمي #061318 */
+  --petrol-deep:    var(--mi-graphite);  /* رسمي #0B272F — الأرضية الأساسية */
+  --petrol-mid:     var(--mi-slate);     /* رسمي #12414E — السطح الثانوي */
+  --petrol-soft:    #2A6478;             /* لا مقابل رسمي — أبقيَ كما هو */
 
-  /* Gold — الذهبي (لون التميز والقيمة) */
-  --gold-deep:      #A8862E;
-  --gold:           #C8A45C;
-  --gold-light:     #D9BC7E;
-  --gold-pale:      #EBD9B4;
+  /* Gold — الذهبي
+     ملاحظة معايرة: الذهبي المستعمل سابقاً (#C8A45C) كان يقارب
+     copper الرسمي (#C79A4B) لا gold (#A97A2E). الهوية تعرّف copper
+     بأنه «لمسة على الداكن» — وهو استعماله الفعلي في التطبيق.
+     لذلك --gold يشير إلى copper، و--gold-deep إلى الذهب الرسمي. */
+  --gold-deep:      var(--mi-gold);      /* رسمي #A97A2E */
+  --gold:           var(--mi-copper);    /* رسمي #C79A4B */
+  --gold-light:     #D9A85A;             /* رسمي goldLight من brand-tokens.json */
+  --gold-pale:      #EBD9B4;             /* لا مقابل رسمي — أبقيَ كما هو */
 
   /* Sand — الرملي (الخلفيات الفاتحة) */
-  --sand-cream:     #F2EBD9;
-  --sand-light:     #F7F2E5;
-  --sand-paper:     #FBF8EF;
-  --off-white:      #FDFCF8;
+  --sand-cream:     var(--mi-sand);      /* رسمي #EFE7D8 */
+  --sand-light:     #F7F2E5;             /* تدرّج مشتق — لا مقابل رسمي */
+  --sand-paper:     #FBF8EF;             /* تدرّج مشتق — لا مقابل رسمي */
+  --off-white:      #FDFCF8;             /* لا مقابل رسمي — أبقيَ كما هو */
+  --mist:           var(--mi-mist);      /* رسمي #EAF0F0 — الأرضية الفاتحة */
 
-  /* Ink — الحبر (النصوص بدرجات) */
+  /* Ink — الحبر (سلّم النصوص)
+     الهوية لا تعرّف سلّم نصوص؛ هذه الدرجات تبقى كما هي.
+     تنبيه: «ink» هنا لون نص، بينما --mi-ink في الهوية أعمق سطح. */
   --ink:            #0A1820;
   --ink-soft:       #1F3340;
   --ink-mid:        #4A5A66;
@@ -40,19 +127,34 @@
   --ink-faint:      #C8D0D6;
 
   /* Lines — الخطوط والحدود */
-  --line:           rgba(10, 42, 61, 0.08);
-  --line-gold:      rgba(200, 164, 92, 0.25);
+  --line:           rgba(11, 39, 47, 0.08);    /* graphite بشفافية */
+  --line-gold:      rgba(199, 154, 75, 0.25);  /* copper بشفافية */
 
   /* ──────────────────────────────────────────────
-     📝 TYPOGRAPHY — الخطوط
+     TYPOGRAPHY — الخطوط
      ────────────────────────────────────────────── */
 
-  --font-ar:    'Tajawal', 'Segoe UI', sans-serif;          /* العربي */
-  --font-en:    'Cormorant Garamond', 'Georgia', serif;      /* الإنجليزي الفخم */
-  --font-mono:  'Inter', sans-serif;                          /* التسميات الإنجليزية */
+  --font-ar:    var(--mi-font-ar);   /* رسمي: Noto Kufi Arabic */
+  --font-en:    var(--mi-font);      /* رسمي: Noto Sans */
+  --font-mono:  var(--mi-font);      /* التسميات اللاتينية — نفس عائلة الهوية */
+
+  /* قواعد الهوية للخط:
+       وزن العرض 200 · تتبّع ‎-0.025em للعناوين اللاتينية
+       التسميات 10-11px كبيرة بتتبّع 0.30em (--mi-track)
+       لا يُباعَد بين الحروف العربية أبداً */
+  --display-weight:   200;
+  --display-tracking: -0.025em;
+  --label-tracking:   var(--mi-track);
 
   /* ──────────────────────────────────────────────
-     📐 LAYOUT — المسافات (Mobile First)
+     GEOMETRY — الهندسة
+     ────────────────────────────────────────────── */
+
+  --radius:   var(--mi-radius);   /* رسمي 2px — الهوية تحظر الحواف الدائرية */
+  --hairline: 1px;
+
+  /* ──────────────────────────────────────────────
+     LAYOUT — المسافات (Mobile First)
      ────────────────────────────────────────────── */
 
   --container:        100%;
@@ -62,16 +164,17 @@
   --section-py-lg:    80px;
 
   /* ──────────────────────────────────────────────
-     🎬 MOTION — الحركة
+     MOTION — الحركة
      ────────────────────────────────────────────── */
 
-  --ease:      cubic-bezier(0.22, 0.61, 0.36, 1);
-  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  /* منحنى الهوية الرسمي — كان (0.22, 0.61, 0.36, 1) فعُويِر */
+  --ease:      cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out:  cubic-bezier(0.22, 1, 0.36, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ──────────────────────────────────────────────
-   📱 RESPONSIVE SCALE — Tablet
+   RESPONSIVE SCALE — Tablet
    ────────────────────────────────────────────── */
 @media (min-width: 640px) {
   :root {
@@ -82,11 +185,11 @@
 }
 
 /* ──────────────────────────────────────────────
-   🖥️ RESPONSIVE SCALE — Desktop
+   RESPONSIVE SCALE — Desktop
    ────────────────────────────────────────────── */
 @media (min-width: 1024px) {
   :root {
-    --gutter:           48px;
+    --gutter:           48px;   /* مطابق لشبكة الهوية */
     --section-py:       100px;
     --section-py-lg:    120px;
     --container:        1280px;
@@ -95,7 +198,7 @@
 }
 
 /* ──────────────────────────────────────────────
-   🖥️ RESPONSIVE SCALE — Large Desktop (1440px+)
+   RESPONSIVE SCALE — Large Desktop (1440px+)
    ────────────────────────────────────────────── */
 @media (min-width: 1440px) {
   :root {
@@ -108,7 +211,7 @@
 }
 
 /* ──────────────────────────────────────────────
-   🖥️ RESPONSIVE SCALE — Ultra Wide (1920px+)
+   RESPONSIVE SCALE — Ultra Wide (1920px+)
    ────────────────────────────────────────────── */
 @media (min-width: 1920px) {
   :root {
@@ -994,6 +1097,36 @@ body.intro-active { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .intro-overlay { display: none !important; }
   body.intro-active { overflow: auto !important; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   BRAND FILM — الفيلم التعريفي الرسمي
+   ══════════════════════════════════════════════════════════
+   يُشغَّل باختيار الزائر (preload="none")، فلا يُحمَّل شيء حتى
+   يضغط. الهوية: نصف قطر 2px · حدّ شعري · بلا ظل ولا تدرّج.
+*/
+.brandfilm__frame {
+  margin: 0;
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+.brandfilm__video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: var(--petrol-deep);
+  border: var(--hairline) solid var(--line);
+  border-radius: var(--radius);
+}
+
+.brandfilm__caption {
+  margin-top: 0.9rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-mid);
+  line-height: 1.7;
 }
 
 
