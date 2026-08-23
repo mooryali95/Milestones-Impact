@@ -1,0 +1,70 @@
+/* ══════════════════════════════════════════════════════════════
+   Milestone Impact — رموز الهوية الرسمية
+   ══════════════════════════════════════════════════════════════
+   المصدر: حزمة الهوية الرسمية · 07_WEB/mi-patterns.css (UI Library v8)
+   منقولة حرفياً — لا تُعدَّل القيم هنا؛ أي تغيير يبدأ من الحزمة.
+
+   هذا الملف هو المصدر الوحيد للحقيقة لألوان الهوية وخطوطها:
+     • الصفحات الثابتة  ← يُدمج في main.css عبر shared/build-css.py
+     • تطبيق React      ← يُولَّد منه src/styles/tokens.js بنفس السكربت
+   ══════════════════════════════════════════════════════════════ */
+
+/* ---- 1. Design tokens (brand constants) -------------------- */
+:root{
+  --mi-graphite:#0B272F;  /* Deep Teal Graphite - primary ground */
+  --mi-ink:#061318;       /* Ink - deepest surface            */
+  --mi-slate:#12414E;     /* Slate - secondary surface        */
+  --mi-gold:#A97A2E;      /* Executive Gold - primary accent  */
+  --mi-copper:#C79A4B;    /* Copper - accent on dark          */
+  --mi-mist:#EAF0F0;      /* Mist - light ground              */
+  --mi-sand:#EFE7D8;      /* Sand - warm light ground         */
+
+  /* semantic (theme-swapped) */
+  --mi-bg:var(--mi-mist);
+  --mi-surface:#FFFFFF;
+  --mi-fg:var(--mi-graphite);
+  --mi-muted:#4A6A72;
+  --mi-accent:var(--mi-gold);
+  --mi-line:color-mix(in oklab, var(--mi-fg) 16%, transparent);
+
+  /* pattern controls */
+  --mi-pattern-color:11,39,47;   /* rgb triplet */
+  --mi-pattern-opacity:.09;
+  --mi-pattern-scale:56px;
+
+  /* type + rhythm */
+  --mi-font:"Noto Sans",system-ui,sans-serif;
+  --mi-font-ar:"Noto Kufi Arabic","Noto Sans Arabic",system-ui,sans-serif;
+  --mi-track:.28em;
+  --mi-radius:2px;
+  --mi-space:clamp(16px,2.2vw,32px);
+}
+
+/* ---- 2. Themes --------------------------------------------- */
+:root[data-theme="dark"],.mi-dark{
+  --mi-bg:var(--mi-graphite); --mi-surface:#0F313A; --mi-fg:var(--mi-mist);
+  --mi-muted:#8AA3A8; --mi-accent:var(--mi-copper);
+  --mi-pattern-color:199,154,75; --mi-pattern-opacity:.13;
+}
+:root[data-theme="ink"]{
+  --mi-bg:var(--mi-ink); --mi-surface:#0B222A; --mi-fg:var(--mi-mist);
+  --mi-muted:#7E979C; --mi-accent:var(--mi-copper);
+  --mi-pattern-color:199,154,75; --mi-pattern-opacity:.12;
+}
+:root[data-theme="light"]{
+  --mi-bg:var(--mi-mist); --mi-surface:#FFFFFF; --mi-fg:var(--mi-graphite);
+  --mi-muted:#4A6A72; --mi-accent:#8E6524;
+  --mi-pattern-color:11,39,47; --mi-pattern-opacity:.09;
+}
+:root[data-theme="sand"]{
+  --mi-bg:var(--mi-sand); --mi-surface:#FBF7EF; --mi-fg:var(--mi-graphite);
+  --mi-muted:#6A604E; --mi-accent:#8E6524;
+  --mi-pattern-color:142,101,36; --mi-pattern-opacity:.10;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme]){
+    --mi-bg:var(--mi-graphite); --mi-surface:#0F313A; --mi-fg:var(--mi-mist);
+    --mi-muted:#8AA3A8; --mi-accent:var(--mi-copper);
+    --mi-pattern-color:199,154,75; --mi-pattern-opacity:.13;
+  }
+}

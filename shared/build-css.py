@@ -13,7 +13,8 @@ SHARED_JS = os.path.join(ROOT, 'shared', 'js')
 SHARED_BRAND = os.path.join(ROOT, 'shared', 'brand')
 SHARED_VIDEO = os.path.join(ROOT, 'shared', 'video')
 
-SHARED_FILES = ['tokens.css', 'base.css', 'layout.css', 'components.css']
+# mi-tokens.css أولاً: يعرّف القيم الرسمية التي يشتق منها tokens.css
+SHARED_FILES = ['mi-tokens.css', 'tokens.css', 'base.css', 'layout.css', 'components.css']
 
 # ملف JS مُولَّد يبدأ بهذا السطر — عدّل المصدر في shared/js لا النسخة المولّدة
 JS_HEADER = "// ══ Auto-generated from shared/js — edit the source there, not this copy. ══\n"
@@ -37,6 +38,28 @@ PAGES = {
         'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
     },
 }
+
+
+def build_react_tokens():
+    """يولّد src/styles/tokens.css من رموز الهوية المشتركة.
+
+    ملف CSS حقيقي يستورده src/index.js، فيُطبَّق عالمياً على كل
+    الشاشات — بما فيها الصفحة الرئيسية التي لا تحقن أنماط التطبيق.
+    المصدر واحد: نفس ملفَّي mi-tokens.css و tokens.css يغذّيان
+    الصفحات الثابتة وتطبيق React معاً.
+    """
+    out_dir = os.path.join(ROOT, 'src', 'styles')
+    if not os.path.isdir(out_dir):
+        return
+    parts = ['/* ══ Auto-generated from shared/css — edit the source there, not this file. ══ */',
+             '/* يُولَّد بـ: python3 shared/build-css.py */', '']
+    for filename in ('mi-tokens.css', 'tokens.css'):
+        with open(os.path.join(SHARED, filename)) as f:
+            parts.append('/* ─── shared/css/%s ─── */\n%s' % (filename, f.read()))
+    css = '\n'.join(parts)
+    with open(os.path.join(out_dir, 'tokens.css'), 'w') as f:
+        f.write(css)
+    print('   \u21b3 react: src/styles/tokens.css (%d \u0633\u0637\u0631)' % len(css.splitlines()))
 
 
 def sync_js(page_name, config):
@@ -156,6 +179,7 @@ def build(page_name, config):
     print(f'✅ {page_name}: main.css — {lines} lines, v={version}')
 
 if __name__ == '__main__':
+    build_react_tokens()
     for name, config in PAGES.items():
         sync_layout_mirror(name, config)
         build(name, config)

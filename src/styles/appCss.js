@@ -1,6 +1,9 @@
 // ════════════════════════════════════════════════════════════════
-// GLOBAL CSS — injected via <style> in App; theme tokens mirror BRAND
+// GLOBAL CSS — injected via <style> in App
 // ════════════════════════════════════════════════════════════════
+// رموز الهوية ليست هنا: تُستورد عالمياً في src/index.js من
+// styles/tokens.css المُولَّد من shared/css — فتصل لكل الشاشات
+// بما فيها الصفحة الرئيسية، وبنسخة واحدة لا ثلاث.
 
 export const FONT_URL = "https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&display=swap";
 
