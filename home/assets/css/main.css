@@ -1118,6 +1118,29 @@ body::after {
   line-height: 1.7;
 }
 
+/* ══════════════════════════════════════════════════════════
+   PIN CENTER MARK — معيّن مركز مخطط المدارات
+   ══════════════════════════════════════════════════════════
+   الشعار المركّب لا يليق هنا: مركز المخطط مساحة صغيرة، وحدّه
+   الأدنى 120px يزاحم العقد المدارية. المعيّن هو المقصود —
+   نقطة القرار التي تدور حولها السمات.
+*/
+.pin-center__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.pin-center__icon {
+  display: block;
+  width: 56px;
+  height: 56px;
+}
+
+@media (min-width: 640px)  { .pin-center__icon { width: 68px; height: 68px; } }
+@media (min-width: 1024px) { .pin-center__icon { width: 80px; height: 80px; } }
+
 
 /* ─── shared/typeform.css ─── */
 /* ════════════════════════════════════════════════════════════════════

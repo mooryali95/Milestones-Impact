@@ -16,6 +16,20 @@ export const CSS = `
    Base: 390px → 768px → 1200px
 ════════════════════════════════════════════════════ */
 
+
+/* ── خريطة التغطية ── */
+.cov-wrap { overflow-x: auto; }
+.cov-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.cov-caption { caption-side: bottom; text-align: right; padding-top: 0.6rem; font-size: 0.68rem; color: var(--wg); line-height: 1.6; }
+.cov-corner { width: 34%; }
+.cov-phase { padding: 0 0 0.55rem; font-weight: 500; color: var(--wg); text-align: center; vertical-align: bottom; }
+.cov-phase-num { display: block; font-size: 0.62rem; opacity: 0.65; }
+.cov-phase-name { display: block; font-size: 0.66rem; }
+.cov-track { text-align: right; padding: 0.42rem 0 0.42rem 0.6rem; font-weight: 400; border-top: 1px solid var(--border); }
+.cov-track-name { display: block; font-weight: 700; font-size: 0.8rem; }
+.cov-track-meta { display: block; font-size: 0.64rem; color: var(--wg); margin-top: 0.1rem; }
+.cov-cell { text-align: center; padding: 0.42rem 0.2rem; border-top: 1px solid var(--border); }
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html { overflow-x: hidden; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
