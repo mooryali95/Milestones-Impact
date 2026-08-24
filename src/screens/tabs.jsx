@@ -1,6 +1,8 @@
 import React from "react";
+import MILogo from "../MILogo";
+import CoverageMatrix from "../components/CoverageMatrix";
 import Icon from "../components/Icon";
-import { BRAND, TRACKS, PHASES } from "../config/constants";
+import { BRAND, TRACKS, PHASES, OPERATIONS } from "../config/constants";
 import { fmtShort, fmtBoth, fmtGregorian, gregorianToHijri } from "../lib/dateUtils";
 import { analyzeBookings } from "../lib/analysis";
 
@@ -300,6 +302,9 @@ export const ReportTab = (p) => {
                 <div style={{flex:1}}><div style={{fontWeight:600,fontSize:".84rem"}}>{t.nameAr}</div><div style={{fontSize:".7rem",color:"#999"}}>{t.trackIcon} {t.trackNameAr}</div></div>
                 <div style={{textAlign:"left",flexShrink:0}}><div style={{fontSize:".73rem",color:BRAND.dark}}>{fmtShort(t.date)}</div>{t.isConfirmed&&<div style={{fontSize:".62rem",color:"#5B7B3A"}}>✓ مؤكد</div>}</div>
               </div>)}
+            </div>
+            <div className="rpt-card"><h3 className="rpt-section-title">خريطة التغطية</h3>
+              <CoverageMatrix procs={procs} dates={dates} confirmed={confirmed} />
             </div>
             <div className="rpt-card"><h3 className="rpt-section-title">توزيع الاهتمام</h3>
               {trackDist.map(t=><div key={t.id} className="rpt-bar-row">

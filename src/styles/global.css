@@ -70,3 +70,21 @@ button,
 a {
   touch-action: manipulation;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SR-ONLY — نص لقارئ الشاشة وحده
+   ══════════════════════════════════════════════════════════════
+   يُخفى بصرياً ويبقى مقروءاً لقارئ الشاشة. مطابق للتعريف في
+   shared/css/base.css، لكن تطبيق React لا يستورد ذلك الملف.
+*/
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
