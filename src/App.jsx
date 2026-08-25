@@ -152,7 +152,9 @@ export default function App() {
           content.forEach(c => { map[c.key] = c.value; });
           setAppContent(map);
         }
-        setDetailsState('ready');
+        // publicRead يعيد null عند تعذّر الوصول، ومصفوفة عند النجاح.
+        // الفشل لا يُلقى استثناءً، فلا يكفي انتظاره في catch وحده.
+        setDetailsState(details === null ? 'error' : 'ready');
       } catch (e) {
         console.log('Data not loaded:', e);
         setDetailsState('error');

@@ -29,15 +29,18 @@ export async function callFn(fn, body) {
 }
 
 // Public read of the two openly-readable content tables (SELECT-only via RLS).
+// يعيد مصفوفة عند النجاح — وقد تكون فارغة لأن الجدول فارغ فعلاً —
+// و null عند الفشل. التمييز مقصود: بدونه لا تستطيع الواجهة أن تفرّق
+// بين "لا توجد بيانات" و"تعذّر الوصول"، فتعرض فراغاً صامتاً في الحالتين.
 export async function publicRead(path) {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const text = await res.text();
     return text ? JSON.parse(text) : [];
-  } catch (e) { return []; }
+  } catch (e) { return null; }
 }
 
 // ── User data API (token-scoped: a user only ever sees/writes their own row) ──
