@@ -1,5 +1,9 @@
 import React from "react";
+import Skeleton from "./Skeleton";
 import Icon from "./Icon";
+import { gregorianToHijri } from "../lib/dateUtils";
+import { UserAPI } from "../lib/api";
+import { LocalSession } from "../lib/session";
 
 // ════════════════════════════════════════════════════════════════
 // PROCESS MODAL — تفاصيل العملية وتحديد موعدها
@@ -7,6 +11,7 @@ import Icon from "./Icon";
 
 const ProcessModal = (p) => {
   const {
+    detailsState,
     appContent,
     confirmed,
     dateError,
@@ -36,6 +41,17 @@ const ProcessModal = (p) => {
             <button className="modal-x" aria-label="إغلاق تفاصيل العملية" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
             <h2>{selectedCell.nameAr}</h2>
+            {detailsState === 'loading' && !selectedCell.insight && (
+              <div className="modal-section">
+                <Skeleton lines={2} height={11} />
+                <Skeleton lines={3} height={10} style={{ marginTop: "1rem" }} />
+              </div>
+            )}
+            {detailsState === 'error' && !selectedCell.insight && (
+              <p className="modal-desc" style={{ opacity: 0.75 }}>
+                تعذّر تحميل التفاصيل الموسّعة. بقية بيانات العملية أدناه صحيحة.
+              </p>
+            )}
             {selectedCell.insight && <div className="modal-section"><div className="modal-insight-box"><Icon name="insight" size={16} style={{marginLeft:".35rem"}} /> {selectedCell.insight}</div></div>}
             {selectedCell.fullDesc && <p className="modal-desc">{selectedCell.fullDesc}</p>}
             {selectedCell.whyItMatters && <div className="modal-section">

@@ -90,6 +90,8 @@ export default function App() {
 
   // Process details from Supabase (rich data)
   const [processDetails, setProcessDetails] = useState({});
+  // 'loading' | 'ready' | 'error' — حالة جلب المحتوى الغني
+  const [detailsState, setDetailsState] = useState('loading');
   const [highlightedKeys, setHighlightedKeys] = useState([]);
   const [appContent, setAppContent] = useState({});
 
@@ -97,6 +99,8 @@ export default function App() {
   const [demoScreen, setDemoScreen] = useState(false); // هل شاشة النموذج مفتوحة
   const [demoRows, setDemoRows] = useState([]); // صفوف البيانات
   const [demoSaving, setDemoSaving] = useState(false);
+  // الصفوف تُجلب من الخادم عند فتح الشاشة — تبقى فارغة حتى تصل
+  const [demoLoading, setDemoLoading] = useState(false);
   const DEMO_KEY = "demographic_analysis"; // مفتاح الحفظ في DB
   const [selectedReg, setSelectedReg] = useState(null); // المسجّل المفتوح في Modal الأدمن
   const [selectedRegTab, setSelectedRegTab] = useState('schedule'); // تبويب Modal الأدمن
@@ -128,7 +132,9 @@ export default function App() {
     }
   }, []);
 
-  // Load rich process details + app content (public, read-only tables)
+  // Load rich process details + app content (public, read-only tables).
+  // تُجلب في الخلفية بعد الإقلاع، فتظل تفاصيل العمليات فارغة حتى تصل —
+  // detailsState يخبر الواجهة أن تعرض هيكل انتظار بدل فراغ صامت.
   useEffect(() => {
     (async () => {
       try {
@@ -146,7 +152,11 @@ export default function App() {
           content.forEach(c => { map[c.key] = c.value; });
           setAppContent(map);
         }
-      } catch (e) { console.log('Data not loaded:', e); }
+        setDetailsState('ready');
+      } catch (e) {
+        console.log('Data not loaded:', e);
+        setDetailsState('error');
+      }
     })();
   }, []);
 
@@ -395,6 +405,7 @@ export default function App() {
 
   const loadDemoData = async () => {
     if (!sessionToken) return;
+    setDemoLoading(true);
     const res = await UserAPI.get(sessionToken);
     const saved = res?.success ? res.registration?.[DEMO_KEY] : null;
     if (Array.isArray(saved) && saved.length > 0) {
@@ -402,6 +413,7 @@ export default function App() {
     } else {
       setDemoRows([emptyDemoRow(), emptyDemoRow(), emptyDemoRow()]);
     }
+    setDemoLoading(false);
   };
 
   const saveDemoData = async () => {
@@ -779,6 +791,7 @@ export default function App() {
       {selectedCell && (
         <ProcessModal
           appContent={appContent}
+          detailsState={detailsState}
           confirmed={confirmed}
           dateError={dateError}
           dates={dates}
@@ -814,6 +827,7 @@ export default function App() {
       {/* ═══ شاشة التحليل الديموغرافي ═══ */}
       {demoScreen && (
         <DemographicsScreen
+          demoLoading={demoLoading}
           addDemoRow={addDemoRow}
           appContent={appContent}
           demoRows={demoRows}

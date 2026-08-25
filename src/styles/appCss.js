@@ -17,6 +17,20 @@ export const CSS = `
 ════════════════════════════════════════════════════ */
 
 
+
+/* ── هيكل الانتظار ── */
+.skl-line {
+  display: block;
+  background: var(--ink-faint);
+  border-radius: var(--radius);
+  opacity: 0.55;
+  animation: sklPulse 1.6s ease-in-out infinite;
+}
+@keyframes sklPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.7; }
+}
+
 /* ── خريطة التغطية ── */
 .cov-wrap { overflow-x: auto; }
 .cov-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }

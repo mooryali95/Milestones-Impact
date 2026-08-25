@@ -32,6 +32,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # يمسك المراجع غير المعرّفة — أخطاء تشغيلية لا يكشفها البناء.
+      # (فقدان استيراد عند نقل كود بين ملفات هو أشهر صورها.)
+      - name: Lint
+        run: npx eslint --no-eslintrc -c .eslintrc.ci.json
+             --resolve-plugins-relative-to node_modules/eslint-config-react-app
+             "src/**/*.{js,jsx}"
+
       # CI=true makes react-scripts treat warnings as errors (same strictness
       # as the Cloudflare Pages build).
       - name: Test
