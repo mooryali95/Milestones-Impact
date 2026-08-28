@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Landing from './Landing';
 import MILogo from './MILogo';
+import Icon from './components/Icon';
 import Footer from './components/Footer';
 import ProcessModal from './components/ProcessModal';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -666,12 +667,17 @@ export default function App() {
   // ════════ USER MAIN ════════
   // Tabs — report hidden until 3+ bookings
   const showReport = datedCount >= 3;
+  // الأيقونة الثالثة اسمٌ من مجموعة الهوية الرسمية، لا إيموجي —
+  // والهوية تحظر الإيموجي صراحةً. المقابلة دلالية لا زخرفية:
+  // كل خلية في المصفوفة نقطة قرار والمعيّن رمزها في الهوية (decision)،
+  // والجدول معالمُ على خط زمن (milestone)، والنهائي آخر حلقات
+  // سلسلة الأثر (impact).
   const userTabs = [
-    ["matrix", "المصفوفة", "🗂"],
-    ["schedule", "الجدول", "📅"],
-    ...(showReport ? [["report", "التقرير", "📊"]] : []),
-    ["summary", "المخرجات", "📋"],
-    ...(submitted ? [["output", "النهائي", "🏁"]] : []),
+    ["matrix", "المصفوفة", "decision"],
+    ["schedule", "الجدول", "milestone"],
+    ...(showReport ? [["report", "التقرير", "report"]] : []),
+    ["summary", "المخرجات", "output"],
+    ...(submitted ? [["output", "النهائي", "impact"]] : []),
   ];
 
   return (
@@ -704,7 +710,8 @@ export default function App() {
         <div className="bottom-bar-inner">
           {userTabs.map(([k,v,icon]) => (
             <button key={k} className={`bb-btn ${tab===k?"on":""}`} onClick={()=>setTab(k)}>
-              <span className="bb-icon">{icon}</span>
+              {/* label={null} — الاسم المرئي تحتها يكفي قارئ الشاشة */}
+              <span className="bb-icon"><Icon name={icon} size={20} label={null}/></span>
               <span className="bb-label">{v}</span>
             </button>
           ))}

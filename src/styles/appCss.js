@@ -122,7 +122,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .bottom-bar-inner { display: flex; align-items: stretch; }
 .bb-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 0.55rem 0.25rem 0.45rem; display: flex; flex-direction: column; align-items: center; gap: 0.18rem; color: var(--text-muted); transition: color 0.18s; min-width: 0; }
 .bb-btn.on { color: var(--mi-d); }
-.bb-icon { font-size: 1.1rem; line-height: 1; }
+.bb-icon { display: flex; align-items: center; justify-content: center; height: 20px; line-height: 1; }
 .bb-label { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; }
 .bb-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--mi-d); position: absolute; top: 6px; opacity: 0; transition: opacity 0.2s; }
 .bb-btn.on .bb-dot { opacity: 1; }
@@ -293,7 +293,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .tl-track { font-size:0.7rem; color:var(--text-muted); margin-bottom:0.22rem; }
 .tl-dates { font-size:0.72rem; color:var(--mi-d); display:flex; gap:0.5rem; flex-wrap:wrap; }
 .tl-hijri { font-size:0.67rem; color:var(--gold-d); margin-top:0.1rem; font-weight:600; }
-.tl-edit-btn { background:none; border:1px solid var(--border); border-radius: 2px; padding:0.18rem 0.42rem; font-size:0.63rem; color:var(--text-muted); cursor:pointer; font-family:var(--font-ar); transition:all 0.15s; margin-right:0.3rem; }
+/* min-height 24px — الحدّ الأدنى لهدف اللمس في WCAG 2.2 (2.5.8، مستوى AA).
+   كان الارتفاع الفعلي 19px فيسقط دونه. */
+.tl-edit-btn { background:none; border:1px solid var(--border); border-radius: 2px; padding:0.18rem 0.42rem; min-height:24px; font-size:0.63rem; color:var(--text-muted); cursor:pointer; font-family:var(--font-ar); transition:all 0.15s; margin-right:0.3rem; }
 .tl-edit-btn:active { border-color:var(--mi); color:var(--mi-d); }
 
 /* ════════════════════════════════════════
