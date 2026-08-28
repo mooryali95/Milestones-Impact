@@ -1,4 +1,5 @@
 import React from "react";
+import Skeleton from "../components/Skeleton";
 import Icon from "../components/Icon";
 
 // ════════════════════════════════════════════════════════════════
@@ -7,6 +8,7 @@ import Icon from "../components/Icon";
 
 const DemographicsScreen = (p) => {
   const {
+    demoLoading,
     addDemoRow,
     appContent,
     demoRows,
@@ -43,6 +45,12 @@ const DemographicsScreen = (p) => {
             </div>
 
             {/* Person Cards */}
+            {demoLoading && demoRows.length === 0 && (
+              <div className="demo-card" style={{ padding: "1.25rem" }}>
+                <Skeleton lines={1} height={14} width="42%" />
+                <Skeleton lines={4} height={11} style={{ marginTop: "1.1rem" }} />
+              </div>
+            )}
             {demoRows.map((row, idx) => (
               <div key={row.id} className="demo-card">
 
