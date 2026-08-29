@@ -310,9 +310,6 @@ const AdminPanel = (p) => {
 
       </div>
 
-
-      )}
-
       <Footer />
     </div></>
   );
