@@ -245,7 +245,7 @@ export const ScheduleTab = (p) => {
                     <div style={{display:"flex",alignItems:"center",gap:".4rem",marginBottom:".3rem"}}>
                       <span className="tl-step" style={{background:item.trackColor}}>خطوة {i+1}</span>
                       {isDone && <span className="badge badge-ok">مؤكد ✓</span>}
-                      {!submitted && <button className="tl-edit-btn" onClick={()=>{setSelectedCell(item);setTempDate(d);setDateError("");setTab("matrix");setTimeout(()=>setTab("schedule"),50);}}>✏ تعديل</button>}
+                      {!submitted && <button className="tl-edit-btn" onClick={()=>{setSelectedCell(item);setTempDate(d);setDateError("");setTab("matrix");setTimeout(()=>setTab("schedule"),50);}}>تعديل</button>}
                     </div>
                     <div className="tl-name">{item.nameAr}</div>
                     <div className="tl-track">{item.trackIcon} {item.trackNameAr} • {item.phaseNameAr}</div>
