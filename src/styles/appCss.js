@@ -61,8 +61,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 :root {
   /* Brand — موحّد مع البراند الأم (بترولي Petrol) */
   --mi: #14495E; --mi-d: #0A2A3D; --mi-l: #2A6478; --mi-dd: #061E2C;
-  /* Track Colors */
-  --c-creation: #8B6914; --c-innovation: #5B7B3A; --c-establishment: #2E6B8A; --c-making: #6B4E3D;
+  /* ألوان المسارات تُعرَّف في config/constants.js وحدها. كانت مكرّرة هنا
+     بلا استعمال — ونسخة ثانية من لوحة هي بالضبط ما يجعلها تتباعد. */
   /* Gold — موحّد مع البراند الأم */
   --gold: #C8A45C; --gold-d: #A8862E;
   /* Neutral */
@@ -706,8 +706,11 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
     color: var(--text-muted);
     margin-top: 0.1rem;
   }
-  .mx-phase-header.current { border-bottom: 2px solid #8B6914; }
-  .mx-phase-header.new { border-bottom: 2px solid #2E6B8A; }
+  /* حدّان يفصلان الهوية الحالية عن الجديدة. كانا يستعيران لونَي مسارين —
+     فيقرآن انتماءً لمسار لا لمجموعة مرحلة. والذهبي هنا خطٌّ لا لوحة
+     مملوءة، وهو استعماله الذي تجيزه الهوية. */
+  .mx-phase-header.current { border-bottom: 2px solid var(--petrol-mid); }
+  .mx-phase-header.new { border-bottom: 2px solid var(--gold-deep); }
 
   /* Main wrap becomes 5-col grid */
   .mx-wrap {
