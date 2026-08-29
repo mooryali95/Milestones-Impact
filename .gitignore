@@ -19,6 +19,6 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 
-# Root project intentionally builds without a committed lockfile
-# (react-scripts loose peer deps produce a lockfile npm ci rejects on CI)
-package-lock.json
+# package-lock.json is committed again. It was excluded because
+# react-scripts' loose peer deps produced a lockfile `npm ci` rejected;
+# Vite's tree resolves cleanly, so builds are reproducible once more.

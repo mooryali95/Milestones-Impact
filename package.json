@@ -5,26 +5,25 @@
   "description": "Milestone Impact — مصفوفة التأثير • هندسة اجتماعية",
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+    "react-dom": "^18.2.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test"
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\""
   },
-  "browserslist": {
-    "production": [
-      "last 2 Chrome versions",
-      "last 2 Firefox versions",
-      "last 2 Edge versions",
-      "last 2 Safari versions"
-    ],
-    "development": [
-      "last 2 Chrome versions",
-      "last 2 Firefox versions",
-      "last 2 Edge versions",
-      "last 2 Safari versions"
-    ]
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.29.7",
+    "@babel/plugin-syntax-jsx": "^7.29.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.5",
+    "jsdom": "^25.0.1",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
   }
 }

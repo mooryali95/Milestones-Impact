@@ -15,7 +15,7 @@ Cloudflare Pages يدعم 3+ مشاريع من نفس Repository — كل مشر
 ### 3. التطبيق نفسه لم يُمَس
 - ✅ `src/App.jsx` — لم يُمَس
 - ✅ `package.json` — لم يُمَس
-- ✅ `public/index.html` — لم يُمَس
+- ✅ `index.html` — نُقل إلى الجذر عند الانتقال إلى Vite (كان `public/index.html` مع CRA)
 - 🆕 `public/_headers` — مُضاف (security)
 - 🆕 `public/_redirects` — مُضاف (SPA fallback)
 

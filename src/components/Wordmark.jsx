@@ -31,7 +31,9 @@ const Wordmark = ({
   const src = variant === "inverted" ? wordmarkInverted : wordmark;
   const w = Math.max(width, MIN_WIDTH);
 
-  if (process.env.NODE_ENV !== "production" && width < MIN_WIDTH) {
+  // import.meta.env.DEV لا process.env — الأخير غير معرَّف في Vite،
+  // فيرمي ReferenceError في المتصفح بدل أن يحذفه البناء.
+  if (import.meta.env.DEV && width < MIN_WIDTH) {
     console.warn(
       `Wordmark: العرض ${width}px دون الحد الأدنى ${MIN_WIDTH}px — ` +
       `استعمل MILogo (المعيّن) في المساحات الضيقة.`
