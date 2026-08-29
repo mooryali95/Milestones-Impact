@@ -10,6 +10,7 @@ import { API_URL, TRACKS, PHASES, OPERATIONS } from './config/constants';
 import { validPhone, validEmail, isPast } from './lib/dateUtils';
 import { publicRead, UserAPI, AdminAPI } from './lib/api';
 import { LocalSession, AdminSession } from './lib/session';
+import useTabHash from './lib/useTabHash';
 import { printFinalTable } from './lib/print';
 import AdminPanel from './screens/admin';
 import { MatrixTab, ScheduleTab, ReportTab, SummaryTab, OutputTab } from './screens/tabs';
@@ -561,6 +562,17 @@ export default function App() {
     } else { showToast(res?.message || 'خطأ'); }
   };
 
+  // ── ربط التبويب بالعنوان ──
+  // قبل أي return مبكّر: قواعد الخطّافات تمنع استدعاءً مشروطاً.
+  // التقرير محجوب حتى ثلاثة مواعيد، والنهائي حتى التقديم — فالقائمة
+  // المسموحة تتغيّر مع الحالة، ورابطٌ لتبويب غير متاح يُتجاهل.
+  const showReport = datedCount >= 3;
+  const allowedTabs = [
+    "matrix", "schedule", ...(showReport ? ["report"] : []),
+    "summary", ...(submitted ? ["output"] : []),
+  ];
+  useTabHash({ tab, setTab, allowed: allowedTabs, enabled: screen === "main" });
+
   // Copyright footer
   // ════════ SPLASH ════════
   if (screen === "splash") return (
@@ -665,8 +677,7 @@ export default function App() {
   );
 
   // ════════ USER MAIN ════════
-  // Tabs — report hidden until 3+ bookings
-  const showReport = datedCount >= 3;
+  // showReport مُعرَّف أعلاه مع قائمة التبويبات المسموحة، فيبقى المصدر واحداً.
   // الأيقونة الثالثة اسمٌ من مجموعة الهوية الرسمية، لا إيموجي —
   // والهوية تحظر الإيموجي صراحةً. المقابلة دلالية لا زخرفية:
   // كل خلية في المصفوفة نقطة قرار والمعيّن رمزها في الهوية (decision)،
