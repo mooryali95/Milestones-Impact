@@ -21,6 +21,9 @@
     "jest": true,
     "node": true
   },
+  "globals": {
+    "vi": "readonly"
+  },
   "plugins": [
     "react"
   ],

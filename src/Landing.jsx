@@ -2,13 +2,6 @@ import React from "react";
 import Wordmark from "./components/Wordmark";
 import MILogo from "./MILogo";
 
-const TRACKS_LP = [
-  {id:"creation",name:"الخلق",icon:"◈",color:"#8B6914",weight:19,desc:"استدعاء الإرث وتفكيك البنية البشرية"},
-  {id:"innovation",name:"الإبداع",icon:"◉",color:"#5B7B3A",weight:21,desc:"إعادة تعريف القيمة وإطار الإدراك"},
-  {id:"establishment",name:"الإنشاء",icon:"◆",color:"#2E6B8A",weight:47,desc:"تكوين الكيان ومنظومة الإنتاج"},
-  {id:"making",name:"الجعل",icon:"◇",color:"#6B4E3D",weight:13,desc:"الاندماج وإغلاق حلقة الأثر"},
-];
-
 export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
   return (
     <><style>{`
@@ -28,16 +21,16 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-hero-grid{position:absolute;inset:0;z-index:1;opacity:.06;background-image:linear-gradient(rgba(169,122,46,.8) 1px,transparent 1px),linear-gradient(90deg,rgba(169,122,46,.8) 1px,transparent 1px);background-size:60px 60px;}
 .lp-hero-glow{position:absolute;width:600px;height:600px;border-radius:50%;background:none;top:50%;left:50%;transform:translate(-50%,-55%);z-index:1;pointer-events:none;}
 .lp-hero-content{position:relative;z-index:2;text-align:center;max-width:780px;}
-.lp-eyebrow{font-size:.68rem;letter-spacing:4px;text-transform:uppercase;color:#8B6914;margin-bottom:2rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:.8rem;}
-.lp-eyebrow::before,.lp-eyebrow::after{content:'';display:block;width:40px;height:1px;background:#8B6914;opacity:.6;}
+.lp-eyebrow{font-size:.68rem;letter-spacing:4px;text-transform:uppercase;color:#C79A4B;margin-bottom:2rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:.8rem;}
+.lp-eyebrow::before,.lp-eyebrow::after{content:'';display:block;width:40px;height:1px;background:#C79A4B;opacity:.6;}
 .lp-hero-logo{margin-bottom:1.8rem;animation:lp-float 6s ease-in-out infinite;}
 @keyframes lp-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .lp-hero-title{font-family:var(--font-ar);font-size:clamp(2.8rem,7vw,5rem);font-weight:700;line-height:1.1;margin-bottom:.6rem;background:#E8E2D9;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .lp-hero-en{font-family:var(--font-ar);font-weight:200;font-size:clamp(1rem,2.5vw,1.5rem);letter-spacing:6px;color:rgba(107,157,173,.7);margin-bottom:1.4rem;}
 .lp-hero-sub{font-size:clamp(.9rem,2vw,1.1rem);color:rgba(232,226,217,.55);line-height:1.8;max-width:520px;margin:0 auto 2.8rem;font-weight:300;}
-.lp-hero-line{width:1px;height:50px;background:#8B6914;margin:0 auto 2.8rem;}
+.lp-hero-line{width:1px;height:50px;background:#C79A4B;margin:0 auto 2.8rem;}
 .lp-hero-actions{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;}
-.lp-btn-primary{padding:.85rem 2.2rem;border-radius: 2px;border:1px solid #8B6914;background:#8B6914;color:#0D0D0F;font-family:var(--font-ar);font-size:.9rem;font-weight:700;cursor:pointer;letter-spacing:1px;transition:all .3s;position:relative;overflow:hidden;}
+.lp-btn-primary{padding:.85rem 2.2rem;border-radius: 2px;border:1px solid #C79A4B;background:#C79A4B;color:#0D0D0F;font-family:var(--font-ar);font-size:.9rem;font-weight:700;cursor:pointer;letter-spacing:1px;transition:all .3s;position:relative;overflow:hidden;}
 .lp-btn-primary::after{content:'';position:absolute;inset:0;background:transparent;transform:translateX(-100%);transition:transform .5s;}
 .lp-btn-primary:hover::after{transform:translateX(100%);}
 .lp-btn-primary:hover{transform:translateY(-2px);}
@@ -47,27 +40,29 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-btn-admin:hover{color:rgba(232,226,217,.45);}
 .lp-scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.2);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
 @keyframes lp-bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
-.lp-scroll-line{width:1px;height:30px;background:rgba(139,105,20,.5);}
+.lp-scroll-line{width:1px;height:30px;background:rgba(199,154,75,.5);}
 .lp-divider{display:flex;align-items:center;gap:1.5rem;padding:0 2rem;max-width:900px;margin:0 auto;}
 .lp-divider-line{flex:1;height:1px;background:transparent;}
-.lp-divider-gem{color:#8B6914;font-size:.8rem;}
+.lp-divider-gem{color:#C79A4B;font-size:.8rem;}
 .lp-section{padding:6rem 2rem;max-width:1100px;margin:0 auto;}
-.lp-section-label{font-size:.62rem;letter-spacing:4px;text-transform:uppercase;color:#8B6914;margin-bottom:.8rem;font-weight:600;}
+.lp-section-label{font-size:.62rem;letter-spacing:4px;text-transform:uppercase;color:#C79A4B;margin-bottom:.8rem;font-weight:600;}
 .lp-section-title{font-family:var(--font-ar);font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;line-height:1.2;margin-bottom:1rem;color:#E8E2D9;}
 .lp-section-body{font-size:1rem;color:rgba(232,226,217,.5);line-height:1.9;max-width:620px;font-weight:300;}
 .lp-manifesto{background:#0A0A0C;padding:6rem 2rem;}
 .lp-manifesto-inner{max-width:760px;margin:0 auto;text-align:center;}
 .lp-manifesto-quote{font-family:var(--font-ar);font-size:clamp(1.2rem,3vw,1.9rem);color:#E8E2D9;line-height:1.9;margin-bottom:2rem;position:relative;padding:0 1rem;}
-.lp-manifesto-quote::before{content:'"';position:absolute;right:-10px;top:-20px;font-size:5rem;color:#8B691420;font-family:var(--font-ar);line-height:1;}
-.lp-manifesto-attr{font-size:.72rem;letter-spacing:3px;color:#8B6914;text-transform:uppercase;}
-.lp-tracks{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(139,105,20,.1);border:1px solid rgba(139,105,20,.1);border-radius: 2px;overflow:hidden;}
+.lp-manifesto-quote::before{content:'"';position:absolute;right:-10px;top:-20px;font-size:5rem;color:#C79A4B20;font-family:var(--font-ar);line-height:1;}
+.lp-manifesto-attr{font-size:.72rem;letter-spacing:3px;color:#C79A4B;text-transform:uppercase;}
+.lp-tracks{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(199,154,75,.1);border:1px solid rgba(199,154,75,.1);border-radius: 2px;overflow:hidden;}
 @media(max-width:700px){.lp-tracks{grid-template-columns:1fr 1fr;}}
 .lp-track{padding:2rem 1.5rem;background:#0D0D0F;position:relative;overflow:hidden;transition:background .3s;}
 .lp-track::before{content:'';position:absolute;top:0;right:0;width:3px;height:100%;}
-.lp-track-creation::before{background:#8B6914;}
-.lp-track-innovation::before{background:#5B7B3A;}
-.lp-track-establishment::before{background:#2E6B8A;}
-.lp-track-making::before{background:#6B4E3D;}
+/* درجات المسارات على الداكن — مشروحة عند مصفوفة المسارات في JSX أدناه.
+   ثلاثة مواضع تحملها: هذه، ونقاط العمليات، والمصفوفة. تبقى متطابقة يدوياً. */
+.lp-track-creation::before{background:#EFE7D8;}
+.lp-track-innovation::before{background:#D9A85A;}
+.lp-track-establishment::before{background:#8AA3A8;}
+.lp-track-making::before{background:#A97A2E;}
 .lp-track:hover{background:#111115;}
 .lp-track-icon{font-size:1.4rem;margin-bottom:.8rem;}
 .lp-track-name{font-family:var(--font-ar);font-size:1.2rem;font-weight:700;margin-bottom:.3rem;}
@@ -76,15 +71,15 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-track-ops{display:flex;flex-direction:column;gap:.3rem;margin-top:.8rem;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.05);}
 .lp-track-op{font-size:.68rem;color:rgba(232,226,217,.3);padding:.2rem 0;display:flex;align-items:center;gap:.4rem;}
 .lp-track-op::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
-.lp-track-creation .lp-track-op::before{background:#8B6914;}
-.lp-track-innovation .lp-track-op::before{background:#5B7B3A;}
-.lp-track-establishment .lp-track-op::before{background:#2E6B8A;}
-.lp-track-making .lp-track-op::before{background:#6B4E3D;}
+.lp-track-creation .lp-track-op::before{background:#EFE7D8;}
+.lp-track-innovation .lp-track-op::before{background:#D9A85A;}
+.lp-track-establishment .lp-track-op::before{background:#8AA3A8;}
+.lp-track-making .lp-track-op::before{background:#A97A2E;}
 .lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;}
 @media(max-width:700px){.lp-steps{grid-template-columns:1fr;}}
 .lp-step{text-align:center;padding:2rem;}
-.lp-step-num{width:56px;height:56px;border-radius:50%;border:1px solid rgba(139,105,20,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;font-family:var(--font-ar);font-size:1.4rem;color:#8B6914;position:relative;}
-.lp-step-num::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid rgba(139,105,20,.15);}
+.lp-step-num{width:56px;height:56px;border-radius:50%;border:1px solid rgba(199,154,75,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;font-family:var(--font-ar);font-size:1.4rem;color:#C79A4B;position:relative;}
+.lp-step-num::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid rgba(199,154,75,.15);}
 .lp-step-title{font-family:var(--font-ar);font-size:1.1rem;margin-bottom:.5rem;color:#E8E2D9;}
 .lp-step-desc{font-size:.78rem;color:rgba(232,226,217,.4);line-height:1.7;}
 .lp-cta-final{padding:8rem 2rem;text-align:center;background:#0D0D0F;position:relative;overflow:hidden;}
@@ -92,7 +87,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-cta-final-inner{position:relative;z-index:1;}
 .lp-cta-final-title{font-family:var(--font-ar);font-size:clamp(2rem,5vw,3.5rem);margin-bottom:.8rem;background:#E8E2D9;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .lp-cta-final-sub{color:rgba(232,226,217,.4);font-size:.9rem;margin-bottom:2.5rem;letter-spacing:1px;}
-.lp-footer{padding:2rem;border-top:1px solid rgba(139,105,20,.1);text-align:center;background:#0D0D0F;}
+.lp-footer{padding:2rem;border-top:1px solid rgba(199,154,75,.1);text-align:center;background:#0D0D0F;}
 .lp-footer-text{font-size:.68rem;color:rgba(232,226,217,.18);letter-spacing:2px;line-height:2;}
 @keyframes lp-fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
 .lp-a1{animation:lp-fade-up .9s ease both;}
@@ -159,11 +154,19 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         </div>
         <div style={{maxWidth:"1100px",margin:"0 auto",padding:"0 2rem 2rem"}}>
           <div className="lp-tracks">
+            {/* ألوان مسارات صفحة الهبوط — رسمية، ومختلفة عن ألوان التطبيق
+                عن قصد. أرضية هذه الصفحة #0D0D0F شبه سوداء، ودرجات الجرافيت
+                التي يستعملها التطبيق (#0B272F ← #061318) تختفي عليها.
+                والأربعة القديمة كانت تسقط في التباين هنا: 3.82 · 4.01 ·
+                3.32 · 2.57، كلها دون 4.5. البديل أربع درجات رسمية تنازلية
+                في الإضاءة: أدنى تباين 5.09، وأدنى ΔE بين زوجين 17.4 —
+                تمييز أوسع مما في التطبيق (10.6)، وهو ما تتيحه هذه الأرضية.
+                ويجب أن تبقى مطابقة لقواعد .lp-track-*::before أعلاه. */}
             {[
-              {id:"creation",name:"الخلق",icon:"◈",color:"#8B6914",weight:19,desc:"استدعاء الإرث وتفكيك البنية البشرية",ops:OPERATIONS.creation.map(o=>o.nameAr)},
-              {id:"innovation",name:"الإبداع",icon:"◉",color:"#5B7B3A",weight:21,desc:"إعادة تعريف القيمة وإطار الإدراك",ops:OPERATIONS.innovation.map(o=>o.nameAr)},
-              {id:"establishment",name:"الإنشاء",icon:"◆",color:"#2E6B8A",weight:47,desc:"تكوين الكيان ومنظومة الإنتاج",ops:OPERATIONS.establishment.map(o=>o.nameAr)},
-              {id:"making",name:"الجعل",icon:"◇",color:"#6B4E3D",weight:13,desc:"الاندماج وإغلاق حلقة الأثر",ops:OPERATIONS.making.map(o=>o.nameAr)},
+              {id:"creation",name:"الخلق",icon:"◈",color:"#EFE7D8",weight:19,desc:"استدعاء الإرث وتفكيك البنية البشرية",ops:OPERATIONS.creation.map(o=>o.nameAr)},
+              {id:"innovation",name:"الإبداع",icon:"◉",color:"#D9A85A",weight:21,desc:"إعادة تعريف القيمة وإطار الإدراك",ops:OPERATIONS.innovation.map(o=>o.nameAr)},
+              {id:"establishment",name:"الإنشاء",icon:"◆",color:"#8AA3A8",weight:47,desc:"تكوين الكيان ومنظومة الإنتاج",ops:OPERATIONS.establishment.map(o=>o.nameAr)},
+              {id:"making",name:"الجعل",icon:"◇",color:"#A97A2E",weight:13,desc:"الاندماج وإغلاق حلقة الأثر",ops:OPERATIONS.making.map(o=>o.nameAr)},
             ].map(t=>(
               <div key={t.id} className={`lp-track lp-track-${t.id}`}>
                 <div className="lp-track-weight">{t.weight}%</div>
