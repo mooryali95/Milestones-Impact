@@ -2,25 +2,42 @@
 // DATE + VALIDATION UTILITIES
 // ════════════════════════════════════════════════════════════════
 
+// ── التقويم الهجري ──
+// كان هنا حسابٌ يدوي للتقويم الهجري *الحسابي الجدولي*. وهو تقويم صحيح
+// في ذاته، لكنه ليس التقويم المعتمد في السعودية — فكان يسبق أمّ القرى
+// بيوم إلى يومين. أمثلة مقيسة: 2025-03-01 كان يُعرض «3 رمضان» وهو
+// «1 رمضان»، و2000-01-01 «26 رمضان» وهو «24 رمضان».
+//
+// في تطبيقٍ للمواعيد هذا فرقٌ يُعتدّ به: المستخدم يقارن ما يراه هنا
+// بتقويم هاتفه وتقويم الجهات الرسمية، وكلاهما أمّ القرى.
+//
+// Intl يشحن أمّ القرى في كل المتصفحات ضمن هدف البناء (Chrome 107+ ·
+// Safari 16+)، فحلّ عشرين سطراً من الحساب اليدوي بسطرين يقرآن من
+// المصدر الصحيح. و‑nu-latn تُبقي الأرقام لاتينية كبقية الواجهة.
+const HIJRI_AR = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura-nu-latn", {
+  day: "numeric", month: "long", year: "numeric",
+});
+const HIJRI_PARTS = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura-nu-latn", {
+  day: "numeric", month: "numeric", year: "numeric",
+});
+
 export function gregorianToHijri(gDate) {
   const d = new Date(gDate);
-  const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
-  let jd = Math.floor((1461 * (gy + 4800 + Math.floor((gm - 14) / 12))) / 4)
-    + Math.floor((367 * (gm - 2 - 12 * Math.floor((gm - 14) / 12))) / 12)
-    - Math.floor((3 * Math.floor((gy + 4900 + Math.floor((gm - 14) / 12)) / 100)) / 4) + gd - 32075;
-  let l = jd - 1948440 + 10632;
-  let n = Math.floor((l - 1) / 10631);
-  l = l - 10631 * n + 354;
-  let j = Math.floor((10985 - l) / 5316) * Math.floor((50 * l) / 17719)
-    + Math.floor(l / 5670) * Math.floor((43 * l) / 15238);
-  l = l - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50)
-    - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
-  const hm = Math.floor((24 * l) / 709);
-  const hd = l - Math.floor((709 * hm) / 24);
-  const hy = 30 * n + j - 30;
-  const months = ["محرم", "صفر", "ربيع الأول", "ربيع الثاني", "جمادى الأولى",
-    "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"];
-  return { day: hd, month: hm, year: hy, formatted: `${hd} ${months[hm - 1]} ${hy}هـ` };
+  // تاريخ غير صالح يجعل Intl يرمي RangeError فيسقط التصيير كله؛
+  // الحساب القديم كان يعيد NaN بصمت. نعيد شكلاً آمناً بدل الحالتين.
+  if (Number.isNaN(d.getTime())) {
+    return { day: NaN, month: NaN, year: NaN, formatted: "—" };
+  }
+  const ar = Object.fromEntries(HIJRI_AR.formatToParts(d).map(p => [p.type, p.value]));
+  const num = Object.fromEntries(HIJRI_PARTS.formatToParts(d).map(p => [p.type, p.value]));
+  return {
+    day: Number(num.day),
+    month: Number(num.month),
+    year: Number(num.year),
+    // نبني النص يدوياً لا عبر format(): الأخير يفصل «هـ» بمسافة،
+    // والشكل المعتمد في الواجهة يلصقها بالسنة.
+    formatted: `${ar.day} ${ar.month} ${ar.year}هـ`,
+  };
 }
 
 export function fmtGregorian(d) {
