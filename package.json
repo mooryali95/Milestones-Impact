@@ -14,7 +14,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\""
+    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\"",
+    "sync": "node scripts/sync-shared.mjs",
+    "sync:check": "node scripts/sync-shared.mjs --check"
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.29.7",
