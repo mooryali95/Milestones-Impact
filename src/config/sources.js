@@ -34,6 +34,7 @@ export const FIELD = {
 //   origin    مشروع Cloudflare، للتوضيح لا للمنطق
 //   table     جدول القراءة
 //   action    إجراء admin-api الذي يجلبه (الخادم يفرض الصلاحية)
+//   dataKey   مفتاح المصفوفة في ردّ ذلك الإجراء
 //   color     من لوحة الهوية — يميّز المصدر بصرياً في القوائم المختلطة
 //   fields    ما يُعرض، بالترتيب
 //   statuses  دورة حياة الطلب، إن كان له واحدة
@@ -46,6 +47,7 @@ export const SOURCES = [
     origin: 'mi-matrix',
     table: 'registrations',
     action: 'list-regs',
+    dataKey: 'registrations',   // مفتاح المصفوفة في ردّ الخادم
     color: '#12414E',
     idKey: 'id',
     titleKey: 'name',
@@ -71,6 +73,7 @@ export const SOURCES = [
     origin: 'mi-home',
     table: 'contact_requests',
     action: 'list-contact-requests',
+    dataKey: 'requests',
     color: '#A97A2E',
     idKey: 'id',
     titleKey: 'name',

@@ -8,7 +8,9 @@ import ConfirmDialog from './components/ConfirmDialog';
 import DemographicsScreen from './screens/demographics';
 import { API_URL, TRACKS, PHASES, OPERATIONS } from './config/constants';
 import { validPhone, validEmail, isPast } from './lib/dateUtils';
-import { publicRead, UserAPI, AdminAPI } from './lib/api';
+import { publicRead, UserAPI, AdminAPI, classify, RESULT } from './lib/api';
+import { SOURCES } from './config/sources';
+import { normalize } from './lib/permissions';
 import { LocalSession, AdminSession } from './lib/session';
 import useTabHash from './lib/useTabHash';
 import { printFinalTable } from './lib/print';
@@ -50,7 +52,7 @@ const OTP_COOLDOWN_SEC = 60;
 export default function App() {
   const [screen, setScreen] = useState("splash");
   const [tab, setTab] = useState("matrix");
-  const [adminTab, setAdminTab] = useState("regs");
+  const [adminTab, setAdminTab] = useState("inbox");
   const [expandedContent, setExpandedContent] = useState(null);
   const [adminReportReg, setAdminReportReg] = useState(null);
 
@@ -70,6 +72,21 @@ export default function App() {
   const [adminToken, setAdminToken] = useState(null);
   const [adminError, setAdminError] = useState("");
   const [allRegs, setAllRegs] = useState([]);
+
+  // ── لوحة الإدارة: الصلاحيات والمصادر ──
+  // myPerms === null تعني «لم تصل بعد» لا «بلا صلاحية». اللوحة لا
+  // تُعرض قبل وصولها: عرضُها ثم إخفاء ما لا يملكه يكشف ما لا يُرى.
+  const [myPerms, setMyPerms] = useState(null);
+  const [adminEmailMe, setAdminEmailMe] = useState('');
+  // rows[sourceId] = { state, data, message } — لكل مصدرٍ حالته وحده،
+  // فسقوط أحدها لا يُخفي البقية ولا يُعرض فراغاً باسم الجميع.
+  const [rows, setRows] = useState({});
+  const [admins, setAdmins] = useState([]);
+  const [accessState, setAccessState] = useState({ state: RESULT.OK, message: '' });
+  const [savingPerms, setSavingPerms] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsState, setAnalyticsState] = useState({ state: RESULT.OK, message: '' });
+  const [analyticsRange, setAnalyticsRange] = useState('30d');
   const [loading, setLoading] = useState(false);
 
   const [selectedCell, setSelectedCell] = useState(null);
@@ -221,19 +238,87 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  // ── تحميل لوحة الإدارة ──
+  // الصلاحيات أولاً، ثم كل مصدرٍ يملك عرضه. لكل مصدرٍ حالته وحده
+  // فسقوطُ أحدها لا يُخفي البقية، ومصدرٌ لم يُنفَّذ في الخادم بعد
+  // يظهر بحاله لا فراغاً — وهذا سيقع فعلاً: الواجهة سبقت الخادم.
   const loadRegs = async (tokenArg) => {
     const token = tokenArg || adminToken;
     if (!token) return;
     setLoading(true);
-    const res = await AdminAPI.call(token, 'list-regs');
-    if (res?.success) {
-      const regs = res.registrations || [];
-      setAllRegs(regs.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
-    } else if (res?.message) {
-      showToast(res.message);
-      if (res.message.includes('الجلسة')) doLogout();
+
+    // ١. من أنا وما أذوناتي — الخادم يقرّر لا الواجهة
+    const me = await AdminAPI.whoami(token);
+    if (me?.success) {
+      setMyPerms(normalize(me.permissions));
+      setAdminEmailMe(me.email || '');
+    } else if (me?.message?.includes('الجلسة')) {
+      setLoading(false);
+      doLogout();
+      return;
+    } else {
+      // whoami لم يُنفَّذ بعد: لا نفتح اللوحة على مصراعيها ولا نُقفلها
+      // صامتةً — تبقى myPerms null فتعرض اللوحة سببها ورابط العقد.
+      setMyPerms(null);
+      setLoading(false);
+      return;
     }
+    const perms = normalize(me.permissions);
+
+    // ٢. كل مصدرٍ يملك عرضه
+    const next = {};
+    await Promise.all(SOURCES.map(async (src) => {
+      if (!perms?.sources?.[src.id]?.includes('view')) return;
+      const res = await AdminAPI.listSource(token, src.action);
+      const bundle = classify(res, src.dataKey || (src.id === 'matrix' ? 'registrations' : 'requests'));
+      if (bundle.state === RESULT.OK) {
+        bundle.data = [...bundle.data].sort(
+          (a, b) => new Date(b[src.dateKey] || 0) - new Date(a[src.dateKey] || 0));
+      }
+      next[src.id] = bundle;
+    }));
+    setRows(next);
+    // يبقى allRegs لأن شاشات أخرى تقرؤه
+    setAllRegs(next.matrix?.state === RESULT.OK ? next.matrix.data : []);
+
+    // ٣. إدارة الوصول — لمن يملكها وحده
+    if (perms?.manage_access) {
+      const res = await AdminAPI.listAdmins(token);
+      const bundle = classify(res, 'admins');
+      setAccessState({ state: bundle.state, message: bundle.message });
+      setAdmins(bundle.data);
+    }
+
     setLoading(false);
+  };
+
+  // ── التحليلات ──
+  const loadAnalytics = async (range) => {
+    if (!adminToken) return;
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : 30;
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86400000);
+    const res = await AdminAPI.call(adminToken, 'analytics-summary', {
+      from: from.toISOString(), to: to.toISOString(),
+    });
+    const bundle = classify(res, 'daily');
+    setAnalyticsState({ state: bundle.state, message: bundle.message });
+    setAnalyticsData(bundle.state === RESULT.OK
+      ? { daily: res.daily || [], pages: res.pages || [], totals: res.totals || { views: 0, visits: 0 } }
+      : null);
+  };
+
+  // ── حفظ صلاحيات مستشار ──
+  const savePermissions = async (email, permissions) => {
+    setSavingPerms(true);
+    const res = await AdminAPI.setPermissions(adminToken, email, permissions);
+    setSavingPerms(false);
+    if (res?.success) {
+      showToast('حُفظت الصلاحيات');
+      loadRegs();
+    } else {
+      showToast(res?.message || 'تعذّر حفظ الصلاحيات');
+    }
   };
 
   // ── Apply a verified user session returned by user-api ──
@@ -556,6 +641,13 @@ export default function App() {
     } else { showToast(res?.message || 'خطأ'); }
   };
 
+  useEffect(() => {
+    if (screen === 'admin' && adminTab === 'analytics' && adminToken) loadAnalytics(analyticsRange);
+    // loadAnalytics غير مدرجة عمداً: تُعاد بناءً في كل تصيير، فإدراجها
+    // يجعل التأثير يعيد الطلب بلا انقطاع. وما تقرؤه من الإغلاق
+    // (adminToken) مدرجٌ صراحةً.
+  }, [screen, adminTab, analyticsRange, adminToken]);
+
   // ── ربط التبويب بالعنوان ──
   // قبل أي return مبكّر: قواعد الخطّافات تمنع استدعاءً مشروطاً.
   // التقرير محجوب حتى ثلاثة مواعيد، والنهائي حتى التقديم — فالقائمة
@@ -645,25 +737,34 @@ export default function App() {
   // ════════ ADMIN PANEL ════════
   if (screen === "admin") return (
     <AdminPanel
-      DEMO_KEY={DEMO_KEY}
+      adminEmail={adminEmailMe}
       adminReportReg={adminReportReg}
       adminTab={adminTab}
       adminUnlock={adminUnlock}
-      allRegs={allRegs}
       appContent={appContent}
       expandedContent={expandedContent}
-      loadRegs={loadRegs}
       loading={loading}
       logout={logout}
+      myPerms={myPerms}
       procs={procs}
-      selectedReg={selectedReg}
-      selectedRegTab={selectedRegTab}
+      reload={loadRegs}
+      rows={rows}
       setAdminReportReg={setAdminReportReg}
       setAdminTab={setAdminTab}
       setExpandedContent={setExpandedContent}
       setSelectedReg={setSelectedReg}
       setSelectedRegTab={setSelectedRegTab}
+      selectedReg={selectedReg}
+      selectedRegTab={selectedRegTab}
       showToast={showToast}
+      accessState={accessState}
+      admins={admins}
+      savePermissions={savePermissions}
+      savingPerms={savingPerms}
+      analyticsState={analyticsState}
+      analyticsData={analyticsData}
+      analyticsRange={analyticsRange}
+      setAnalyticsRange={setAnalyticsRange}
     />
   );
 

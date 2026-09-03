@@ -1,325 +1,422 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import Icon from "../components/Icon";
 import MILogo from "../MILogo";
 import Footer from "../components/Footer";
-import { BRAND, TRACKS } from "../config/constants";
-import { fmtShort, fmtBoth, fmtGregorian, gregorianToHijri } from "../lib/dateUtils";
+import StateNotice from "../components/StateNotice";
+import { BRAND } from "../config/constants";
+import { SOURCES, FIELD } from "../config/sources";
+import { CAN, can, canManageAccess, visibleSources } from "../lib/permissions";
+import { RESULT } from "../lib/api";
+import { fmtBoth, fmtShort } from "../lib/dateUtils";
 import { analyzeBookings } from "../lib/analysis";
 import { CSS } from "../styles/appCss";
+import MatrixDetail from "./adminMatrixDetail";
+import AdminAccess from "./adminAccess";
+import AdminAnalytics from "./adminAnalytics";
 
 // ════════════════════════════════════════════════════════════════
-// ADMIN PANEL — لوحة المستشار: السجلات والمحتوى والتقارير
+// ADMIN PANEL — لوحة المستشار
 // ════════════════════════════════════════════════════════════════
-// تأخذ حزمة خصائص واحدة (p) على نمط شاشات SSPDF، وتُفكَّك في الأعلى
-// حتى يبقى جسم الشاشة كما هو دون أي تعديل.
+// كانت اللوحة تعرف مصدراً واحداً (تسجيلات المصفوفة) وتفترض شكله في
+// شيفرتها. فطلبات الموقع — وهي تصل إلى contact_requests منذ نُشر
+// الموقع — لم يرها المستشار قطّ.
+//
+// الآن: «الوارد» واحدٌ يجمع كل المصادر المسجَّلة في sources.js،
+// كلُّ صفٍّ موسومٌ بمصدره ولونه، ومرشِّحٌ يعزل مصدراً بعينه. والتفاصيل
+// تُصيَّر من وصف الحقول، فنموذجٌ جديد غداً يظهر بلا لمس هذا الملف.
+//
+// وكل تبويبٍ وكل إجراءٍ محروسٌ بإذن. وحراسة الواجهة عرضٌ لا منع —
+// الخادم يعيد الفحص، والعقد في server/admin-api-contract.md.
+
+const FIXED_TABS = [
+  { id: "reports", labelAr: "التقارير", icon: "report" },
+  { id: "analytics", labelAr: "التحليلات", icon: "growth" },
+  // «الحوكمة» أقرب ما في مجموعة الهوية إلى ضبط الوصول — ولا يوجد قفل
+  { id: "access", labelAr: "الوصول", icon: "governance" },
+];
+
+// قيمةُ حقلٍ بحسب نوعه المُعلَن في السجلّ
+function FieldValue({ field, value }) {
+  if (value === null || value === undefined || value === "") return <span className="fv-empty">—</span>;
+  switch (field.type) {
+    case FIELD.DATE: return <span>{fmtBoth(value).both}</span>;
+    case FIELD.EMAIL: return <a href={`mailto:${value}`} className="fv-link" dir="ltr">{value}</a>;
+    case FIELD.PHONE: return <a href={`tel:${value}`} className="fv-link" dir="ltr">{value}</a>;
+    case FIELD.BADGE: return <span className="badge badge-wait">{value}</span>;
+    case FIELD.LINK: return <a href={value} className="fv-link" dir="ltr" target="_blank" rel="noreferrer noopener">{value}</a>;
+    case FIELD.LONG: return <p className="fv-long">{value}</p>;
+    default: return <span>{value}</span>;
+  }
+}
+
+function statusOf(source, row) {
+  for (const s of source.statuses || []) if (s.match(row)) return s;
+  return null;
+}
 
 const AdminPanel = (p) => {
   const {
-    DEMO_KEY,
-    adminReportReg,
-    adminTab,
-    adminUnlock,
-    allRegs,
-    appContent,
-    expandedContent,
-    loadRegs,
-    loading,
-    logout,
-    procs,
-    selectedReg,
-    selectedRegTab,
-    setAdminReportReg,
-    setAdminTab,
-    setExpandedContent,
-    setSelectedReg,
-    setSelectedRegTab,
-    showToast,
+    adminEmail, adminReportReg, adminTab, adminUnlock, appContent, expandedContent,
+    loading, logout, myPerms, procs, reload, rows, setAdminReportReg, setAdminTab,
+    setExpandedContent, setSelectedReg, setSelectedRegTab, selectedReg, selectedRegTab,
+    showToast, accessState, admins, savePermissions, savingPerms,
+    analyticsState, analyticsData, analyticsRange, setAnalyticsRange,
   } = p;
+
+  const [filter, setFilter] = useState("all");     // معرّف مصدر أو "all"
+  const [query, setQuery] = useState("");
+
+  const mine = useMemo(() => visibleSources(myPerms, SOURCES), [myPerms]);
+  const canAccess = canManageAccess(myPerms);
+
+  // كل الصفوف من كل مصدرٍ مرئيّ، موسومةً بمصدرها ومرتّبةً بالأحدث.
+  const inbox = useMemo(() => {
+    const all = [];
+    for (const s of mine) {
+      const bundle = rows[s.id];
+      if (!bundle || bundle.state !== RESULT.OK) continue;
+      for (const row of bundle.data) {
+        all.push({ source: s, row, when: row[s.dateKey] ? new Date(row[s.dateKey]).getTime() : 0 });
+      }
+    }
+    return all.sort((a, b) => b.when - a.when);
+  }, [mine, rows]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return inbox.filter(({ source, row }) => {
+      if (filter !== "all" && source.id !== filter) return false;
+      if (!q) return true;
+      return source.fields.some((f) => String(row[f.key] || "").toLowerCase().includes(q));
+    });
+  }, [inbox, filter, query]);
+
+  // حالةٌ جامعة للوارد: إن لم ينجح أيّ مصدر، اعرض سبب الأول بدل فراغ.
+  const inboxProblem = useMemo(() => {
+    if (!mine.length) return null;
+    const ok = mine.some((s) => rows[s.id]?.state === RESULT.OK);
+    if (ok) return null;
+    const first = mine.map((s) => rows[s.id]).find(Boolean);
+    return first || { state: RESULT.ERROR, message: "لم تُطلب البيانات بعد" };
+  }, [mine, rows]);
+
+  // تبويبٌ لا يملك محتواه لا يُعرض أصلاً — أهون من فتحه على رفض.
+  const tabs = [
+    { id: "inbox", labelAr: "الوارد", icon: "process" },
+    ...FIXED_TABS.filter((t) => {
+      if (t.id === "access") return canAccess;
+      if (t.id === "reports") return can(myPerms, "matrix", CAN.VIEW);
+      return true;
+    }),
+  ];
+
+  // ── الأذونات لم تصل بعد ──
+  if (!myPerms) {
+    return (
+      <><style>{CSS}</style><div className="app">
+        <nav className="nav nav-admin"><div className="nav-brand">
+          <div className="nav-logo"><MILogo size={15} color="#14495E" /></div>
+          <div><div style={{ fontSize: "0.82rem", color: "#fff", fontWeight: 700 }}>لوحة الإدارة</div></div>
+        </div><div className="nav-right"><button className="btn-logout" onClick={logout}>خروج</button></div></nav>
+        <div className="sec">
+          <div className="notice notice-wait">
+            <h3>جارٍ التحقّق من صلاحياتك</h3>
+            <p>
+              لا تُعرض اللوحة قبل أن يقول الخادم ما تملكه — عرضُها ثم إخفاء ما لا تملك
+              يكشف ما لا ينبغي أن يُرى.
+            </p>
+            <p className="notice-detail">
+              إن طال هذا، فالغالب أن إجراء <strong>whoami</strong> لم يُنفَّذ في admin-api بعد.
+              الخطوات في <strong>server/admin-api-contract.md</strong>.
+            </p>
+            <button className="btn btn-s btn-outline" style={{ marginTop: ".7rem", width: "auto" }} onClick={reload}>
+              إعادة المحاولة
+            </button>
+          </div>
+        </div>
+        <Footer />
+      </div></>
+    );
+  }
 
   return (
     <><style>{CSS}</style><div className="app">
 
-      {/* ── Nav ── */}
       <nav className="nav nav-admin">
         <div className="nav-brand">
-          <div className="nav-logo"><MILogo size={15} color="#14495E"/></div>
+          <div className="nav-logo"><MILogo size={15} color="#14495E" /></div>
           <div>
-            <div style={{fontSize:"0.82rem",color:"#fff",fontWeight:700}}>لوحة الإدارة</div>
-            <div style={{fontSize:"0.62rem",color:"rgba(255,255,255,0.4)"}}>Milestone Impact</div>
+            <div style={{ fontSize: "0.82rem", color: "#fff", fontWeight: 700 }}>لوحة الإدارة</div>
+            <div style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.55)" }} dir="ltr">{adminEmail || "Milestone Impact"}</div>
           </div>
         </div>
         <div className="nav-center">
           <div className="tabs">
-            {[["regs","المسجلين"],["reports","التقارير"],["content","المحتوى"],["stats","إحصائيات"]].map(([k,v])=>(
-              <button key={k} className={`tab ${adminTab===k?"on":""}`} onClick={()=>setAdminTab(k)}>{v}</button>
+            {tabs.map((t) => (
+              <button key={t.id} className={`tab ${adminTab === t.id ? "on" : ""}`} onClick={() => setAdminTab(t.id)}>{t.labelAr}</button>
             ))}
           </div>
         </div>
-        <div className="nav-right">
-          <button className="btn-logout" onClick={logout}>خروج</button>
-        </div>
+        <div className="nav-right"><button className="btn-logout" onClick={logout}>خروج</button></div>
       </nav>
 
-      {/* ── Bottom Bar (mobile) ── */}
       <div className="bottom-bar">
         <div className="bottom-bar-inner">
-          {[["regs","👥","المسجلين"],["reports","📊","التقارير"],["content","✏","المحتوى"],["stats","📈","إحصائيات"]].map(([k,icon,label])=>(
-            <button key={k} className={`bb-btn ${adminTab===k?"on":""}`} onClick={()=>setAdminTab(k)}>
-              <span className="bb-icon">{icon}</span>
-              <span className="bb-label">{label}</span>
+          {tabs.map((t) => (
+            <button key={t.id} className={`bb-btn ${adminTab === t.id ? "on" : ""}`} onClick={() => setAdminTab(t.id)}>
+              <span className="bb-icon"><Icon name={t.icon} size={18} /></span>
+              <span className="bb-label">{t.labelAr}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="sec" style={{animation:"fadeIn 0.4s"}}>
+      <div className="sec" style={{ animation: "fadeIn 0.4s" }}>
 
-        {/* ── Stats ── */}
-        <div className="stat-grid">
-          <div className="stat" style={{borderTopColor:BRAND.color}}><div className="stat-v" style={{color:BRAND.color}}>{allRegs.length}</div><div className="stat-l">إجمالي المسجلين</div></div>
-          <div className="stat" style={{borderTopColor:"#5B7B3A"}}><div className="stat-v" style={{color:"#5B7B3A"}}>{allRegs.filter(r=>r.submitted).length}</div><div className="stat-l">خطط مكتملة</div></div>
-          <div className="stat" style={{borderTopColor:"var(--gold-deep)"}}><div className="stat-v" style={{color:"var(--gold-deep)"}}>{allRegs.filter(r=>!r.submitted).length}</div><div className="stat-l">قيد التخطيط</div></div>
-          <div className="stat" style={{borderTopColor:"#C0392B"}}><div className="stat-v" style={{color:"#C0392B"}}>{allRegs.filter(r=>r.reopenRequested).length}</div><div className="stat-l">طلبات فتح</div></div>
-        </div>
-
-        {/* ══ TAB: المسجلون ══ */}
-        {adminTab === "regs" && <>
-          <div className="admin-layout">
-            {/* Sidebar — قائمة المسجلين */}
-            <div className="admin-sidebar">
-              <div className="admin-sidebar-header">
-                سجل المشاركين
-                <button className="btn btn-s btn-outline" style={{float:"left",marginTop:"-2px"}} onClick={loadRegs} aria-label="تحديث قائمة المسجّلين">↻</button>
-              </div>
-              {loading ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>جارٍ التحميل...</div>
-              : allRegs.length === 0 ? <div style={{padding:"1.5rem",textAlign:"center",color:"var(--text-muted)",fontSize:"0.85rem"}}>لا يوجد مسجلين</div>
-              : <div style={{padding:"0.5rem"}}>
-                {allRegs.map((r,i) => {
-                  const datesCount = r.dates ? Object.keys(r.dates).length : 0;
-                  const pct = Math.round((datesCount/16)*100);
-                  const initials = r.name ? r.name.split(" ").slice(0,2).map(w=>w[0]).join("") : "?";
-                  // من TRACKS لا نسخة محلية — لون الأفاتار دورةٌ على المسارات.
-                  const avatarColor = TRACKS[i % TRACKS.length].color;
-                  const isSelected = selectedReg?.id === r.id;
+        {/* ══ الوارد ══ */}
+        {adminTab === "inbox" && (
+          !mine.length ? (
+            <div className="notice notice-deny">
+              <h3>لا تملك صلاحية عرض أي مصدر</h3>
+              <p>اطلب من صاحب إدارة الوصول أن يمنحك إذن العرض على ما تحتاجه.</p>
+            </div>
+          ) : (
+            <>
+              <div className="stat-grid stat-grid-auto">
+                {mine.map((s) => {
+                  const b = rows[s.id];
+                  const n = b?.state === RESULT.OK ? b.data.length : null;
                   return (
-                    <div key={r.id}
-                      style={{
-                        display:"flex",alignItems:"center",gap:"0.6rem",
-                        padding:"0.65rem 0.75rem",borderRadius:"2px",cursor:"pointer",
-                        background:isSelected?"rgba(20, 73, 94,0.1)":"transparent",
-                        border:isSelected?"1px solid var(--mi)":"1px solid transparent",
-                        marginBottom:"0.25rem",transition:"all 0.15s"
-                      }}
-                      onClick={()=>{ setSelectedReg(r); setSelectedRegTab("schedule"); }}>
-                      <div style={{width:"32px",height:"32px",borderRadius:"50%",background:avatarColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.75rem",fontWeight:700,flexShrink:0}}>{initials}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:"0.82rem",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
-                        <div style={{fontSize:"0.65rem",color:"var(--text-muted)",display:"flex",gap:"0.3rem",alignItems:"center",marginTop:"0.1rem"}}>
-                          <div style={{flex:1,height:"3px",background:"var(--border)",borderRadius:"2px",overflow:"hidden"}}>
-                            <div style={{height:"100%",background:avatarColor,borderRadius:"2px",width:`${pct}%`}}/>
-                          </div>
-                          <span>{datesCount}/16</span>
-                          {r.submitted && <span style={{color:"var(--ok)"}} role="img" aria-label="مُقدَّم">✓</span>}
-                          {r.reopenRequested && <span style={{color:"var(--err)"}} role="img" aria-label="طلب إعادة فتح">🔓</span>}
-                        </div>
-                      </div>
+                    <div key={s.id} className="stat" style={{ borderTopColor: s.color }}>
+                      <div className="stat-v" style={{ color: s.color }}>{n === null ? "—" : n}</div>
+                      <div className="stat-l">{s.nameAr}</div>
                     </div>
                   );
                 })}
-              </div>}
-            </div>
-
-            {/* Main — تفاصيل المسجّل */}
-            <div className="admin-main">
-              {!selectedReg
-                ? <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",padding:"3rem",textAlign:"center"}}>
-                    <div style={{fontSize:"2.5rem",marginBottom:"0.75rem",opacity:0.4}}>👤</div>
-                    <div style={{fontSize:"1rem",color:"var(--text-muted)",fontFamily:"var(--font-ar)"}}>اختر مشاركاً من القائمة</div>
-                  </div>
-                : <div style={{background:"var(--bg-card)",borderRadius:"var(--r-lg)",border:"1px solid var(--border)",overflow:"hidden"}}>
-                    {/* Header */}
-                    <div style={{background:"#12161e",color:"#fff",padding:"1rem 1.3rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontFamily:"var(--font-ar)",fontSize:"1.1rem",fontWeight:700}}>{selectedReg.name}</div>
-                        <div style={{fontSize:"0.7rem",opacity:0.55,direction:"ltr"}}>{selectedReg.phone} | {selectedReg.email}</div>
-                      </div>
-                      <div style={{display:"flex",background:"rgba(0,0,0,0.25)",borderRadius:"2px",padding:"2px",gap:"1px"}}>
-                        {[["schedule","📅 المواعيد"],["demo","🗺️ التحليل"],["history","📈 التقدم"]].map(([k,v])=>(
-                          <button key={k} className={`reg-modal-tab ${selectedRegTab===k?"on":""}`} onClick={()=>setSelectedRegTab(k)}>{v}</button>
-                        ))}
-                      </div>
-                      <button className="reg-modal-close" aria-label="إغلاق بيانات المسجّل" onClick={()=>setSelectedReg(null)}>✕</button>
-                    </div>
-                    {/* Body */}
-                    <div style={{padding:"1.3rem",maxHeight:"calc(100vh - 280px)",overflowY:"auto"}}>
-                      {selectedRegTab === "schedule" && <>{(() => {
-                        const r = selectedReg;
-                        return <>
-                          <div style={{overflowX:"auto"}}>
-                            <table className="output-table" style={{minWidth:"540px"}}>
-                              <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
-                              <tbody>{procs.map((p,j)=>{
-                                const d=r.dates?.[p.key], c=r.confirmed?.[p.key];
-                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"var(--text-secondary)"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
-                              })}</tbody>
-                            </table>
-                          </div>
-                          {r.submittedAt && <div className="output-stamp" style={{marginTop:"0.8rem"}}><p>تم التقديم: <strong style={{color:BRAND.color}}>{fmtBoth(r.submittedAt).both}</strong></p></div>}
-                          {r.submitted && <div style={{marginTop:"0.8rem",textAlign:"center"}}><button className="btn btn-s btn-danger" style={{width:"auto"}} onClick={()=>{ adminUnlock(r.id); setSelectedReg(null); }}>🔓 فتح التعديل</button></div>}
-                        </>;
-                      })()}</>}
-                      {selectedRegTab === "demo" && <>{(!selectedReg[DEMO_KEY]||selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length===0)
-                        ? <div className="empty"><h3>🗺️</h3><p>{appContent.demo_empty_state||'لم يُكمل العميل التحليل الديموغرافي بعد'}</p></div>
-                        : <><div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
-                          <div className="demo-person-grid">
-                            {selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).map((person,pi)=>{
-                              // قيسَ على خلفية البطاقة #FDFAF6 ونصٌّ صغير (عتبة 4.5):
-                              // ‏#27ae60 عند 2.76 و‎#aaa عند 2.23 — يسقطان. والرقم
-                              // نفسه مكتوب بهذا اللون، فالسقوط يمسّ القراءة لا الذوق.
-                              // ‏--ok أخضر النجاح في التطبيق نفسه (4.88)، فتبقى
-                              // الدلالة «أخضر = مرتفع» ويسقط لونٌ خارج اللوحة.
-                              const scoreColor=(v)=>v>=70?"var(--ok)":v>=40?"#2E6B8A":"#5C6B70";
-                              const targets=["knowledge","social","financial","economic"].filter(k=>person.target?.[k]);
-                              const targetLabels={knowledge:"معرفي",social:"مجتمعي",financial:"مالي",economic:"اقتصادي"};
-                              return <div key={pi} className="demo-person-card">
-                                <div className="demo-person-header"><div className="demo-person-num">{pi+1}</div><div><div className="demo-person-name">{person.name}</div><div className="demo-person-role">{[person.position,person.entity,person.relation].filter(Boolean).join(" • ")||"—"}</div></div>{person.location&&<div style={{marginRight:"auto",fontSize:"0.65rem",color:"var(--text-muted)"}}>📍{person.location}</div>}</div>
-                                <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
-                                {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{const val=person.strength?.[k]||0;return <div key={k} className="demo-bar-row"><div className="demo-bar-label">{label}</div><div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div><div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div></div>;})}
-                                {targets.length>0&&<div className="demo-person-chips">{targets.map(k=><span key={k} className="demo-person-chip" style={{background:"rgba(169,122,46,0.08)",color:"var(--petrol-deep)",border:"1px solid rgba(169,122,46,0.30)"}}>{targetLabels[k]}</span>)}</div>}
-                              </div>;
-                            })}
-                          </div></>
-                      }</>}
-                      {selectedRegTab === "history" && (() => {
-                        const r = selectedReg;
-                        const regDates = r.dates || {};
-                        const bookedProcs = procs.filter(p=>regDates[p.key]).sort((a,b)=>new Date(regDates[a.key])-new Date(regDates[b.key]));
-                        const totalDays = bookedProcs.length>=2 ? Math.round((new Date(regDates[bookedProcs[bookedProcs.length-1].key])-new Date(regDates[bookedProcs[0].key]))/(1000*60*60*24)) : 0;
-                        const confCount = Object.keys(r.confirmed||{}).length;
-                        // من TRACKS لا نسخة محلية بأسماء وألوان مكرّرة.
-                        const trackDist=TRACKS.map(t=>({id:t.id,name:t.nameAr,color:t.color,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
-                        return <div>
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
-                            {[{v:bookedProcs.length,l:'مواعيد',c:'var(--mi-d)'},{v:confCount,l:'مؤكدة',c:'var(--ok)'},{v:totalDays+'d',l:'مدة التخطيط',c:'var(--gold-d)'}].map((s,i)=>(
-                              <div key={i} style={{background:'var(--bg-deep)',borderRadius:'12px',padding:'0.75rem 0.5rem',textAlign:'center'}}>
-                                <div style={{fontSize:'1.35rem',fontWeight:800,color:s.c}}>{s.v}</div>
-                                <div style={{fontSize:'0.63rem',color:'var(--text-muted)'}}>{s.l}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="demo-section-head" style={{marginBottom:'0.55rem'}}>توزيع المسارات</div>
-                          {trackDist.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.38rem'}}>
-                            <div style={{fontSize:'0.7rem',fontWeight:700,color:t.color,width:'50px',flexShrink:0}}>{t.name}</div>
-                            <div style={{flex:1,height:'9px',background:'var(--border)',borderRadius:'5px',overflow:'hidden'}}><div style={{height:'100%',background:t.color,borderRadius:'5px',width:`${(t.count/4)*100}%`}}/></div>
-                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)',width:'26px',textAlign:'center'}}>{t.count}/4</div>
-                          </div>)}
-                          <div className="demo-section-head" style={{margin:'0.75rem 0 0.55rem'}}>مسار التخطيط ({bookedProcs.length} خطوة)</div>
-                          {bookedProcs.length===0 ? <div className="empty"><p>لم يحدد أي مواعيد</p></div>
-                          : <div style={{position:'relative',paddingRight:'1.2rem'}}>
-                              <div style={{position:'absolute',right:'5px',top:0,bottom:0,width:'2px',background:'var(--mi-d)',borderRadius:'2px'}}/>
-                              {bookedProcs.map((p,i)=>{const d=regDates[p.key],isConf=!!(r.confirmed||{})[p.key];return <div key={p.key} style={{position:'relative',paddingRight:'1rem',paddingBottom:'0.6rem'}}>
-                                <div style={{position:'absolute',right:'-1.2rem',top:'0.2rem',width:'12px',height:'12px',borderRadius:'50%',border:`2px solid ${p.trackColor}`,background:isConf?p.trackColor:'var(--bg-card)'}}/>
-                                <div style={{background:'var(--bg-card)',borderRadius:'10px',padding:'0.55rem 0.7rem',border:`1px solid var(--border)`,borderRight:`3px solid ${p.trackColor}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                                  <div><span style={{fontSize:'0.57rem',fontWeight:700,color:'#fff',background:p.trackColor,padding:'0.07rem 0.33rem',borderRadius:'4px',marginLeft:'0.28rem'}}>#{i+1}</span><span style={{fontSize:'0.8rem',fontWeight:700}}>{p.nameAr}</span></div>
-                                  <div style={{textAlign:'left',flexShrink:0}}><div style={{fontSize:'0.68rem',color:'var(--mi-d)',fontWeight:700}}>{fmtShort(d)}</div>{isConf&&<div style={{fontSize:'0.58rem',color:'var(--ok)'}}>✓</div>}</div>
-                                </div>
-                              </div>;})}
-                            </div>}
-                          <div style={{textAlign:'center',fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'0.75rem',padding:'0.55rem',background:'var(--bg-deep)',borderRadius:'8px'}}>
-                            📅 التسجيل: <strong>{r.registeredAt?fmtBoth(r.registeredAt).hijri:'—'}</strong>{r.submittedAt&&<> • ✅ التقديم: <strong>{fmtBoth(r.submittedAt).hijri}</strong></>}
-                          </div>
-                        </div>;
-                      })()}
-                    </div>
-                  </div>
-              }
-            </div>
-          </div>
-        </>}
-
-
-        {/* ══ TAB: التقارير ══ */}
-        {adminTab === "reports" && <>
-          <div className="sec-head"><h2 className="sec-title">تقارير العملاء</h2></div>
-          {allRegs.length === 0 && <div className="empty"><h3>لا يوجد مسجلين</h3></div>}
-          {allRegs.map(reg => {
-            const regAnalysis = analyzeBookings(procs, reg.dates || {}, reg.confirmed || {});
-            const bookedCount = Object.keys(reg.dates || {}).length;
-            const isOpen = adminReportReg === reg.id;
-            return <div key={reg.id} className="adm-consultant">
-              <div className="adm-edit-header" onClick={() => setAdminReportReg(isOpen ? null : reg.id)}>
-                <h4>{reg.name} — {bookedCount} حجوزات {regAnalysis ? `• نمط ${regAnalysis.pattern.nameAr}` : "• أقل من 3"}</h4>
-                <span>{isOpen ? "▲" : "▼"}</span>
               </div>
-              {isOpen && <>
-                {!regAnalysis ? <p style={{color:"#999",fontSize:"0.82rem"}}>أقل من 3 حجوزات</p> : <>
-                  <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.6rem"}}>
-                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:BRAND.color,fontSize:"1.1rem"}}>{regAnalysis.pattern.icon} {regAnalysis.pattern.nameAr}</div><div className="rpt-stat-l">النمط</div></div>
-                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:"#5B7B3A"}}>{regAnalysis.trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
-                    <div className="rpt-stat" style={{flex:1}}><div className="rpt-stat-v" style={{color:"#6B4E3D"}}>{regAnalysis.readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
-                  </div>
-                  <div className="adm-note">⏱ <strong>الزمن بين الحجوزات:</strong> {(()=>{ const dateVals = Object.values(reg.dates||{}).sort(); if(dateVals.length<2) return "حجز واحد فقط"; const diffDays = Math.round((new Date(dateVals[dateVals.length-1])-new Date(dateVals[0]))/(1000*60*60*24)); return diffDays===0?"حجز كل المواعيد دفعة واحدة":diffDays<=7?`${diffDays} يوم — قرار سريع`:`${diffDays} يوم — استكشاف متأنٍ`; })()}</div>
-                  <div className="adm-note">💬 <strong>نقاط نقاش:</strong> {regAnalysis.patternId==="sequential"?"يميل للتعمق — ناقش التوسع":regAnalysis.patternId==="breadthFirst"?"يميل للاستكشاف — ناقش التعمق":regAnalysis.patternId==="foundationFocused"?"يركز على التأسيس — ناقش الانتقال":"نمط تكاملي — ناقش الأولويات"}</div>
-                  {regAnalysis.depGaps.length>0 && <div className="adm-note" style={{background:"rgba(192,57,43,0.04)"}}>⚠ <strong>تبعيات مفقودة:</strong> {regAnalysis.depGaps.map(g=>`${g.process} ← ${g.missing}`).join(" | ")}</div>}
-                  {regAnalysis.recommendations.length>0 && regAnalysis.recommendations.map((rec,i)=><div key={i} className="rpt-rec"><span className="rpt-rec-icon">💡</span><span>{rec}</span></div>)}
-                </>}
-              </>}
-            </div>;
-          })}
-        </>}
 
-        {/* ══ TAB: المحتوى ══ */}
-        {adminTab === "content" && <>
-          <div className="sec-head"><h2 className="sec-title">إدارة المحتوى</h2></div>
-          <div className="adm-consultant"><h4>🔒 المحتوى يُدار من قاعدة البيانات مباشرة عبر Supabase</h4><p className="adm-note" style={{marginTop:"0.5rem"}}>جميع النصوص محفوظة في جداول <strong>app_content</strong> و<strong>process_details</strong>. لا يمكن تعديلها من هنا لحماية الملكية الفكرية.</p></div>
-          {procs.map((proc) => {
-            const isOpen = expandedContent === proc.key;
-            return <div key={proc.key} className="adm-edit-card">
-              <div className="adm-edit-header" onClick={() => setExpandedContent(isOpen ? null : proc.key)}>
-                <h4 style={{color:proc.trackColor}}>{proc.trackIcon} {proc.nameAr}</h4>
-                <span>{isOpen ? "▲" : "▼"}</span>
+              <div className="inbox-bar">
+                <div className="src-filters">
+                  <button className={`src-chip ${filter === "all" ? "on" : ""}`} onClick={() => setFilter("all")}>
+                    الكل <span className="src-chip-n">{inbox.length}</span>
+                  </button>
+                  {mine.map((s) => (
+                    <button key={s.id} className={`src-chip ${filter === s.id ? "on" : ""}`} onClick={() => setFilter(s.id)}>
+                      <span className="src-dot" style={{ background: s.color }} aria-hidden="true" />
+                      {s.nameAr}
+                      <span className="src-chip-n">{inbox.filter((i) => i.source.id === s.id).length}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="inbox-actions">
+                  <label className="sr-only" htmlFor="inbox-q">بحث في الوارد</label>
+                  <input id="inbox-q" className="inbox-search" type="search" placeholder="بحث بالاسم أو الجهة أو البريد…"
+                    value={query} onChange={(e) => setQuery(e.target.value)} />
+                  <button className="btn btn-s btn-outline" onClick={reload} aria-label="تحديث الوارد">↻</button>
+                </div>
               </div>
-              {isOpen && <>
-                {["insight","why_it_matters","description"].map(field => (
-                  <div key={field} className="adm-field">
-                    <label htmlFor={`adm-${proc.key}-${field}`}>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
-                    {/* كان هنا استيرادٌ ديناميكيّ من cdn.jsdelivr عند كل خروجٍ من
-                        الحقل: يجلب حزمة Supabase وقت التشغيل من طرف ثالث، ثم
-                        يطرح ناتجه — المتغيّر لم يُستعمل قطّ. والحقل للقراءة
-                        أصلاً. فحُذف الاستيراد وبقي التنبيه. */}
-                    <textarea id={`adm-${proc.key}-${field}`} defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
-                      onBlur={()=>showToast("التعديل يتم عبر Supabase مباشرة")} readOnly />
-                  </div>
-                ))}
-              </>}
-            </div>;
-          })}
-        </>}
 
-        {/* ══ TAB: الإحصائيات ══ */}
-        {adminTab === "stats" && <>
-          <div className="sec-head"><h2 className="sec-title">إحصائيات</h2></div>
-          <div className="adm-consultant">
-            <h4><Icon name="report" size={16} style={{marginLeft:".35rem"}} /> توزيع المسارات</h4>
-            {TRACKS.map(tr => {
-              const count = allRegs.reduce((acc,r) => acc + Object.keys(r.dates||{}).filter(k=>k.startsWith(tr.id)).length, 0);
-              // المقام عدد عمليات هذا المسار لا عمليات المصفوفة كلها. كان 16
-              // بينما المسار الواحد لا يسع إلا أربعاً، فسقف العمود 4/16 = 25%
-              // مهما اكتمل — أي أن كل الأعمدة كانت مرسومة على رُبع طولها.
-              // ويُشتقّ من procs فلا يتخلّف لو تغيّر شكل المصفوفة.
-              const perTrack = procs.filter(pr => pr.trackId === tr.id).length || 1;
-              const max = perTrack * (allRegs.length || 1);
-              return <div key={tr.id} className="rpt-bar-row" style={{marginTop:"0.5rem"}}>
-                <div className="rpt-bar-label" style={{color:tr.color,fontWeight:700}}>{tr.nameAr}</div>
-                <div className="rpt-bar-track"><div className="rpt-bar-fill" style={{width:`${(count/max)*100}%`,background:tr.color}}/></div>
-                <div className="rpt-bar-count">{count}</div>
-              </div>;
+              {/* أسبابُ عدم وصول مصدرٍ بعينه — كلٌّ باسمه، لا صمت */}
+              {mine.map((s) => {
+                const b = rows[s.id];
+                if (!b || b.state === RESULT.OK) return null;
+                return (
+                  <div key={s.id} className="src-problem">
+                    <span className="src-dot" style={{ background: s.color }} aria-hidden="true" />
+                    <strong>{s.nameAr}</strong>
+                    <StateNotice state={b.state} message={b.message} onRetry={reload} />
+                  </div>
+                );
+              })}
+
+              {loading && <div className="adm-hint" style={{ padding: "1rem", textAlign: "center" }}>جارٍ التحميل…</div>}
+
+              {!loading && inboxProblem === null && filtered.length === 0 && (
+                <div className="empty">
+                  <h3>{query || filter !== "all" ? "لا نتائج لهذا الترشيح" : "الوارد فارغ"}</h3>
+                  <p>{query || filter !== "all" ? "جرّب مصدراً آخر أو امسح البحث." : "لم يصل أي طلب بعد."}</p>
+                </div>
+              )}
+
+              <div className="inbox-list">
+                {filtered.map(({ source, row }) => {
+                  const st = statusOf(source, row);
+                  const id = row[source.idKey];
+                  const open = selectedReg?.id === id && selectedReg?.__source === source.id;
+                  return (
+                    <div key={`${source.id}:${id}`} className={`inbox-row ${open ? "on" : ""}`}
+                      style={{ borderRightColor: source.color }}
+                      onClick={() => { setSelectedReg(open ? null : { ...row, id, __source: source.id }); setSelectedRegTab("schedule"); }}>
+                      <div className="inbox-row-main">
+                        <div className="inbox-row-title">{row[source.titleKey] || "بلا اسم"}</div>
+                        <div className="inbox-row-meta">
+                          {/* الجواب على «من أين جاء هذا؟» — في كل صفّ، لا في تبويب */}
+                          <span className="src-tag" style={{ color: source.color, borderColor: `${source.color}55` }}>
+                            <span className="src-dot" style={{ background: source.color }} aria-hidden="true" />
+                            {source.nameAr}
+                          </span>
+                          {st && <span className="badge badge-wait">{st.labelAr}</span>}
+                          {row[source.dateKey] && <span className="inbox-row-date">{fmtShort(row[source.dateKey])}</span>}
+                        </div>
+                      </div>
+                      <span className="inbox-row-chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── التفاصيل ── */}
+              {selectedReg && (() => {
+                const source = SOURCES.find((s) => s.id === selectedReg.__source);
+                if (!source) return null;
+                const isMatrix = source.id === "matrix";
+                return (
+                  <div className="detail-card">
+                    <div className="detail-head" style={{ background: source.color }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="detail-name">{selectedReg[source.titleKey]}</div>
+                        <div className="detail-where">{source.whereAr}</div>
+                      </div>
+                      {isMatrix && (
+                        <div className="reg-modal-tabs">
+                          {[["schedule", "المواعيد"], ["demo", "الشبكة"], ["history", "التقدم"]].map(([k, v]) => (
+                            <button key={k} className={`reg-modal-tab ${selectedRegTab === k ? "on" : ""}`} onClick={() => setSelectedRegTab(k)}>{v}</button>
+                          ))}
+                        </div>
+                      )}
+                      <button className="reg-modal-close" aria-label="إغلاق التفاصيل" onClick={() => setSelectedReg(null)}>✕</button>
+                    </div>
+                    <div className="detail-body">
+                      {isMatrix ? (
+                        <MatrixDetail reg={selectedReg} tab={selectedRegTab} procs={procs} appContent={appContent}
+                          canEdit={can(myPerms, source.id, CAN.EDIT)}
+                          onUnlock={(regId) => { adminUnlock(regId); setSelectedReg(null); }} />
+                      ) : (
+                        <dl className="field-list">
+                          {source.fields.map((f) => (
+                            <div key={f.key} className="field-row">
+                              <dt>{f.labelAr}</dt>
+                              <dd><FieldValue field={f} value={selectedReg[f.key]} /></dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                      {!can(myPerms, source.id, CAN.EXPORT) && (
+                        <p className="adm-hint" style={{ marginTop: ".8rem" }}>التصدير يحتاج صلاحية تصدير على هذا المصدر.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          )
+        )}
+
+        {/* ══ التقارير — تحليل المصفوفة ══ */}
+        {adminTab === "reports" && (() => {
+          const src = SOURCES.find((s) => s.id === "matrix");
+          if (!can(myPerms, "matrix", CAN.VIEW)) {
+            return <StateNotice state={RESULT.DENIED} message="التقارير مبنيّة على تسجيلات المصفوفة." />;
+          }
+          const bundle = rows.matrix;
+          if (!bundle || bundle.state !== RESULT.OK) {
+            return <StateNotice state={bundle?.state || RESULT.ERROR} message={bundle?.message} onRetry={reload} />;
+          }
+          return (
+            <>
+              <div className="sec-head"><h2 className="sec-title">تقارير العملاء</h2></div>
+              {bundle.data.length === 0 && <div className="empty"><h3>لا يوجد مسجلين</h3></div>}
+              {bundle.data.map((reg) => {
+                const a = analyzeBookings(procs, reg.dates || {}, reg.confirmed || {});
+                const bookedCount = Object.keys(reg.dates || {}).length;
+                const isOpen = adminReportReg === reg.id;
+                return (
+                  <div key={reg.id} className="adm-consultant">
+                    <div className="adm-edit-header" onClick={() => setAdminReportReg(isOpen ? null : reg.id)}>
+                      <h4>
+                        <span className="src-dot" style={{ background: src.color }} aria-hidden="true" />
+                        {reg.name} — {bookedCount} حجوزات {a ? `• نمط ${a.pattern.nameAr}` : "• أقل من 3"}
+                      </h4>
+                      <span>{isOpen ? "▲" : "▼"}</span>
+                    </div>
+                    {isOpen && (!a ? <p className="adm-hint">أقل من 3 حجوزات</p> : (
+                      <>
+                        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+                          <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: BRAND.color, fontSize: "1.1rem" }}>{a.pattern.nameAr}</div><div className="rpt-stat-l">النمط</div></div>
+                          <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "var(--ok)" }}>{a.trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
+                          <div className="rpt-stat" style={{ flex: 1 }}><div className="rpt-stat-v" style={{ color: "var(--petrol-mid)" }}>{a.readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
+                        </div>
+                        <div className="adm-note"><strong>الزمن بين الحجوزات:</strong> {(() => {
+                          const v = Object.values(reg.dates || {}).sort();
+                          if (v.length < 2) return "حجز واحد فقط";
+                          const d = Math.round((new Date(v[v.length - 1]) - new Date(v[0])) / 86400000);
+                          return d === 0 ? "حجز كل المواعيد دفعة واحدة" : d <= 7 ? `${d} يوم — قرار سريع` : `${d} يوم — استكشاف متأنٍ`;
+                        })()}</div>
+                        <div className="adm-note"><strong>نقاط نقاش:</strong> {
+                          a.patternId === "sequential" ? "يميل للتعمق — ناقش التوسع"
+                            : a.patternId === "breadthFirst" ? "يميل للاستكشاف — ناقش التعمق"
+                              : a.patternId === "foundationFocused" ? "يركز على التأسيس — ناقش الانتقال"
+                                : "نمط تكاملي — ناقش الأولويات"}</div>
+                        {a.depGaps.length > 0 && (
+                          <div className="adm-note adm-note-warn"><strong>تبعيات مفقودة:</strong> {a.depGaps.map((g) => `${g.process} ← ${g.missing}`).join(" | ")}</div>
+                        )}
+                        {a.recommendations.map((rec, i) => <div key={i} className="rpt-rec"><span>{rec}</span></div>)}
+                      </>
+                    ))}
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
+
+        {/* ══ التحليلات ══ */}
+        {adminTab === "analytics" && (
+          <AdminAnalytics state={analyticsState.state} data={analyticsData} message={analyticsState.message}
+            range={analyticsRange} setRange={setAnalyticsRange} onRetry={reload} />
+        )}
+
+        {/* ══ الوصول ══ */}
+        {adminTab === "access" && (
+          <AdminAccess state={accessState.state} admins={admins} message={accessState.message}
+            myEmail={adminEmail} onSave={savePermissions} saving={savingPerms} onRetry={reload} />
+        )}
+
+        {/* المحتوى — مرجعٌ للمستشار، والتحرير في Supabase مباشرة */}
+        {adminTab === "content" && (
+          <>
+            <div className="sec-head"><h2 className="sec-title">المحتوى</h2></div>
+            <div className="adm-consultant">
+              <h4>المحتوى يُدار من قاعدة البيانات مباشرة</h4>
+              <p className="adm-note" style={{ marginTop: "0.5rem" }}>
+                النصوص في جدولَي <strong>app_content</strong> و<strong>process_details</strong>.
+              </p>
+            </div>
+            {procs.map((proc) => {
+              const isOpen = expandedContent === proc.key;
+              return (
+                <div key={proc.key} className="adm-edit-card">
+                  <div className="adm-edit-header" onClick={() => setExpandedContent(isOpen ? null : proc.key)}>
+                    <h4 style={{ color: proc.trackColor }}>{proc.nameAr}</h4>
+                    <span>{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                  {isOpen && ["insight", "why_it_matters", "description"].map((field) => (
+                    <div key={field} className="adm-field">
+                      <label htmlFor={`adm-${proc.key}-${field}`}>
+                        {{ insight: "البصيرة المنهجية", why_it_matters: "لماذا يهم", description: "الوصف التفصيلي" }[field]}
+                      </label>
+                      <textarea id={`adm-${proc.key}-${field}`} rows={2} readOnly
+                        defaultValue={field === "insight" ? proc.insight : field === "why_it_matters" ? proc.whyItMatters : proc.fullDesc}
+                        onBlur={() => showToast("التعديل يتم عبر Supabase مباشرة")} />
+                    </div>
+                  ))}
+                </div>
+              );
             })}
-          </div>
-        </>}
+          </>
+        )}
 
       </div>
-
       <Footer />
     </div></>
   );
