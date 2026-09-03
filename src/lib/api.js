@@ -57,4 +57,37 @@ export const AdminAPI = {
   loginSend: (email) => callFn('admin-api', { action: 'login-send', email }),
   loginVerify: (email, code) => callFn('admin-api', { action: 'login-verify', email, code }),
   call: (token, action, extra = {}) => callFn('admin-api', { action, token, ...extra }),
+
+  // من أنا وما أذوناتي. الخادم هو من يقرّر — الواجهة لا تفترض.
+  whoami: (token) => callFn('admin-api', { action: 'whoami', token }),
+
+  // قائمة مصدرٍ ما. الإجراء يأتي من سجلّ المصادر لا من هنا، فمصدرٌ
+  // جديد لا يحتاج سطراً في هذه الطبقة.
+  listSource: (token, action, extra = {}) => callFn('admin-api', { action, token, ...extra }),
+
+  // إدارة الوصول — لا يصلها إلا من يملك manage_access، والخادم يفرضه.
+  listAdmins: (token) => callFn('admin-api', { action: 'list-admins', token }),
+  setPermissions: (token, adminId, permissions) =>
+    callFn('admin-api', { action: 'set-admin-permissions', token, adminId, permissions }),
 };
+
+// ── تمييز «لم يُنفَّذ في الخادم بعد» عن «خطأ» عن «فارغ» ──
+// الدرس نفسه الذي دفع publicRead إلى إعادة null: واجهةٌ لا تفرّق بين
+// «لا بيانات» و«تعذّر الوصول» تعرض فراغاً صامتاً في الحالتين، فيظنّ
+// المستشار أن لا طلبات وهو لم يصل إليها أصلاً.
+//
+// العقد: إجراءٌ لا يعرفه الخادم يردّ { success:false, code:'unsupported_action' }.
+// وحتى يُطبَّق ذلك، أي ردٍّ فاشل يُعرض بنصّه كما جاء — لا يُبتلع.
+export const RESULT = { OK: 'ok', UNSUPPORTED: 'unsupported', DENIED: 'denied', ERROR: 'error' };
+
+export function classify(res, dataKey) {
+  if (!res) return { state: RESULT.ERROR, message: 'لا ردّ من الخادم', data: [] };
+  if (res.success) return { state: RESULT.OK, data: res[dataKey] || [], message: '' };
+  if (res.code === 'unsupported_action') {
+    return { state: RESULT.UNSUPPORTED, data: [], message: res.message || '' };
+  }
+  if (res.code === 'forbidden' || res.code === 'denied') {
+    return { state: RESULT.DENIED, data: [], message: res.message || 'لا تملك صلاحية على هذا المصدر' };
+  }
+  return { state: RESULT.ERROR, data: [], message: res.message || 'خطأ غير معروف' };
+}
