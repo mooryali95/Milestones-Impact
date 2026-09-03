@@ -7,6 +7,7 @@ import { BRAND } from "../config/constants";
 import { SOURCES, FIELD } from "../config/sources";
 import { CAN, can, canManageAccess, visibleSources } from "../lib/permissions";
 import { RESULT } from "../lib/api";
+import { mergeInbox, filterInbox, statusOf, countBySource } from "../lib/inbox";
 import { fmtBoth, fmtShort } from "../lib/dateUtils";
 import { analyzeBookings } from "../lib/analysis";
 import { CSS } from "../styles/appCss";
@@ -49,17 +50,12 @@ function FieldValue({ field, value }) {
   }
 }
 
-function statusOf(source, row) {
-  for (const s of source.statuses || []) if (s.match(row)) return s;
-  return null;
-}
-
 const AdminPanel = (p) => {
   const {
     adminEmail, adminReportReg, adminTab, adminUnlock, appContent, expandedContent,
     loading, logout, myPerms, procs, reload, rows, setAdminReportReg, setAdminTab,
     setExpandedContent, setSelectedReg, setSelectedRegTab, selectedReg, selectedRegTab,
-    showToast, accessState, admins, savePermissions, savingPerms,
+    showToast, accessState, admins, savePermissions, savingPerms, setRequestStatus, savingStatus, toast,
     analyticsState, analyticsData, analyticsRange, setAnalyticsRange,
   } = p;
 
@@ -69,27 +65,10 @@ const AdminPanel = (p) => {
   const mine = useMemo(() => visibleSources(myPerms, SOURCES), [myPerms]);
   const canAccess = canManageAccess(myPerms);
 
-  // كل الصفوف من كل مصدرٍ مرئيّ، موسومةً بمصدرها ومرتّبةً بالأحدث.
-  const inbox = useMemo(() => {
-    const all = [];
-    for (const s of mine) {
-      const bundle = rows[s.id];
-      if (!bundle || bundle.state !== RESULT.OK) continue;
-      for (const row of bundle.data) {
-        all.push({ source: s, row, when: row[s.dateKey] ? new Date(row[s.dateKey]).getTime() : 0 });
-      }
-    }
-    return all.sort((a, b) => b.when - a.when);
-  }, [mine, rows]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return inbox.filter(({ source, row }) => {
-      if (filter !== "all" && source.id !== filter) return false;
-      if (!q) return true;
-      return source.fields.some((f) => String(row[f.key] || "").toLowerCase().includes(q));
-    });
-  }, [inbox, filter, query]);
+  // المنطق في src/lib/inbox.js ومُختبَرٌ هناك — لا مدفوناً في التصيير.
+  const inbox = useMemo(() => mergeInbox(mine, rows), [mine, rows]);
+  const filtered = useMemo(() => filterInbox(inbox, { sourceId: filter, query }), [inbox, filter, query]);
+  const counts = useMemo(() => countBySource(inbox), [inbox]);
 
   // حالةٌ جامعة للوارد: إن لم ينجح أيّ مصدر، اعرض سبب الأول بدل فراغ.
   const inboxProblem = useMemo(() => {
@@ -134,6 +113,7 @@ const AdminPanel = (p) => {
             </button>
           </div>
         </div>
+        {toast && <div className="toast">{toast}</div>}
         <Footer />
       </div></>
     );
@@ -204,7 +184,7 @@ const AdminPanel = (p) => {
                     <button key={s.id} className={`src-chip ${filter === s.id ? "on" : ""}`} onClick={() => setFilter(s.id)}>
                       <span className="src-dot" style={{ background: s.color }} aria-hidden="true" />
                       {s.nameAr}
-                      <span className="src-chip-n">{inbox.filter((i) => i.source.id === s.id).length}</span>
+                      <span className="src-chip-n">{counts[s.id] || 0}</span>
                     </button>
                   ))}
                 </div>
@@ -292,14 +272,35 @@ const AdminPanel = (p) => {
                           canEdit={can(myPerms, source.id, CAN.EDIT)}
                           onUnlock={(regId) => { adminUnlock(regId); setSelectedReg(null); }} />
                       ) : (
-                        <dl className="field-list">
-                          {source.fields.map((f) => (
-                            <div key={f.key} className="field-row">
-                              <dt>{f.labelAr}</dt>
-                              <dd><FieldValue field={f} value={selectedReg[f.key]} /></dd>
+                        <>
+                          {/* تغيير الحالة — ما كان إذن «تعديل» يَعِد به.
+                              يظهر لمن يملكه وحده، والخادم يعيد الفحص. */}
+                          {can(myPerms, source.id, CAN.EDIT) && (source.statuses || []).length > 0 && (
+                            <div className="status-bar">
+                              <span className="status-bar-label">الحالة</span>
+                              <div className="status-opts" role="group" aria-label="حالة الطلب">
+                                {source.statuses.map((st) => {
+                                  const current = statusOf(source, selectedReg)?.id === st.id;
+                                  return (
+                                    <button key={st.id} className={`status-opt ${current ? "on" : ""}`}
+                                      disabled={savingStatus || current} aria-pressed={current}
+                                      onClick={() => setRequestStatus(source.id, selectedReg[source.idKey], st.id)}>
+                                      {st.labelAr}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          ))}
-                        </dl>
+                          )}
+                          <dl className="field-list">
+                            {source.fields.map((f) => (
+                              <div key={f.key} className="field-row">
+                                <dt>{f.labelAr}</dt>
+                                <dd><FieldValue field={f} value={selectedReg[f.key]} /></dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </>
                       )}
                       {!can(myPerms, source.id, CAN.EXPORT) && (
                         <p className="adm-hint" style={{ marginTop: ".8rem" }}>التصدير يحتاج صلاحية تصدير على هذا المصدر.</p>
@@ -417,6 +418,7 @@ const AdminPanel = (p) => {
         )}
 
       </div>
+      {toast && <div className="toast">{toast}</div>}
       <Footer />
     </div></>
   );

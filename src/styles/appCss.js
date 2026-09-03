@@ -1014,6 +1014,18 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .detail-where { font-size:0.68rem; opacity:0.8; margin-top:0.1rem; }
 .detail-body { padding:1.2rem; max-height:calc(100vh - 280px); overflow-y:auto; }
 
+/* ── شريط الحالة ── */
+.status-bar { display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem;
+  padding-bottom:0.9rem; margin-bottom:0.9rem; border-bottom:1px solid var(--border); }
+.status-bar-label { font-size:0.73rem; font-weight:700; color:var(--text-muted); }
+.status-opts { display:flex; flex-wrap:wrap; gap:0.3rem; }
+.status-opt { padding:0.35rem 0.7rem; min-height:32px; border:1px solid var(--border);
+  background:var(--bg-card); border-radius:2px; font-family:var(--font-ar); font-size:0.76rem;
+  color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
+.status-opt:hover:not(:disabled) { border-color:var(--petrol-mid); }
+.status-opt.on { background:var(--petrol-deep); color:#fff; border-color:var(--petrol-deep); font-weight:700; }
+.status-opt:disabled:not(.on) { opacity:0.55; cursor:default; }
+
 /* ── قائمة الحقول العامّة ── */
 .field-list { display:flex; flex-direction:column; gap:0.7rem; }
 .field-row { display:grid; grid-template-columns:110px 1fr; gap:0.75rem; align-items:start; }

@@ -59,10 +59,13 @@ export const SOURCES = [
       { key: 'registeredAt', labelAr: 'تاريخ التسجيل', type: FIELD.DATE },
       { key: 'submittedAt', labelAr: 'تاريخ التقديم', type: FIELD.DATE },
     ],
+    // الترتيب يحسم: تُقرأ الحالات بالتتابع وأوّل مطابقةٍ تفوز.
+    // فالأخصّ أولاً — ومن طلب إعادة الفتح مُقدِّمٌ أيضاً، فلو تأخّر
+    // «طلب إعادة فتح» عن «مُقدَّم» لظهر مُقدَّماً واختفى أنه ينتظرك.
     statuses: [
-      { id: 'planning', labelAr: 'قيد التخطيط', match: (r) => !r.submitted },
-      { id: 'submitted', labelAr: 'مُقدَّم', match: (r) => !!r.submitted },
       { id: 'reopen', labelAr: 'طلب إعادة فتح', match: (r) => !!r.reopenRequested },
+      { id: 'submitted', labelAr: 'مُقدَّم', match: (r) => !!r.submitted },
+      { id: 'planning', labelAr: 'قيد التخطيط', match: (r) => !r.submitted },
     ],
   },
   {

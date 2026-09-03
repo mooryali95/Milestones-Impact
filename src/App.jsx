@@ -308,6 +308,29 @@ export default function App() {
       : null);
   };
 
+  // ── تغيير حالة طلب ──
+  // نحدّث محلياً بعد نجاح الخادم لا قبله: تفاؤلٌ بلا تأكيد يعرض
+  // حالةً لم تُحفَظ، وهو الخطأ نفسه الذي كان في نموذج الموقع.
+  const [savingStatus, setSavingStatus] = useState(false);
+  const setRequestStatus = async (sourceId, id, status) => {
+    setSavingStatus(true);
+    const res = await AdminAPI.call(adminToken, 'set-request-status', { source: sourceId, id, status });
+    setSavingStatus(false);
+    if (!res?.success) {
+      showToast(res?.code === 'unsupported_action'
+        ? 'تغيير الحالة لم يُنفَّذ في الخادم بعد'
+        : (res?.message || 'تعذّر تغيير الحالة'));
+      return;
+    }
+    setRows((prev) => {
+      const bundle = prev[sourceId];
+      if (!bundle || bundle.state !== RESULT.OK) return prev;
+      return { ...prev, [sourceId]: { ...bundle, data: bundle.data.map((r) => (r.id === id ? { ...r, status } : r)) } };
+    });
+    setSelectedReg((cur) => (cur && cur.id === id ? { ...cur, status } : cur));
+    showToast('حُدِّثت الحالة');
+  };
+
   // ── حفظ صلاحيات مستشار ──
   const savePermissions = async (email, permissions) => {
     setSavingPerms(true);
@@ -761,6 +784,9 @@ export default function App() {
       admins={admins}
       savePermissions={savePermissions}
       savingPerms={savingPerms}
+      setRequestStatus={setRequestStatus}
+      savingStatus={savingStatus}
+      toast={toast}
       analyticsState={analyticsState}
       analyticsData={analyticsData}
       analyticsRange={analyticsRange}
