@@ -155,6 +155,23 @@
   // ──────────────────────────────────────────────
   // ✅ Validation
   // ──────────────────────────────────────────────
+  // بريدٌ صحيح: نطاقٌ أعلى من حرفين، بلا نقطتين متتاليتين، وبلا
+  // نقطةٍ في طرف الاسم. نسخة قواعد src/lib/dateUtils.js نفسها.
+  function isValidEmail(e) {
+    return /^[a-zA-Z0-9]([a-zA-Z0-9._%+\-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(e)
+      && e.indexOf('..') === -1
+      && e.length <= 254;
+  }
+
+  // الموقع بابٌ عامّ يصله زوّارٌ من خارج المملكة، فلا يُقصر على 05
+  // كما في التطبيق. والمطلوب أن يكون رقماً فعلاً.
+  function isValidPhone(v) {
+    var d = String(v).replace(/[\s()\-\.]/g, '');
+    if (/^\+\d{8,15}$/.test(d)) return true;   // دوليّ
+    if (/^0\d{8,14}$/.test(d)) return true;     // محليّ يبدأ بصفر
+    return /^\d{8,15}$/.test(d);
+  }
+
   function showError(stepEl, show) {
     const err = stepEl.querySelector('.tf-step__error');
     if (err) err.classList.toggle('show', show);
@@ -177,8 +194,10 @@
     else if (stepKey === '3') {
       const email = document.getElementById('qEmail').value.trim();
       const phone = document.getElementById('qPhone').value.trim();
-      const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-      if (!validEmail || phone.length < 6) { showError(stepEl, true); return false; }
+      // القاعدة نفسها التي في التطبيق (src/lib/dateUtils.js). كان هنا
+      // تحقّقٌ أرخص يقبل a@b.c وa..b@c.com و"aaaaaa" هاتفاً — فيصل
+      // الطلب ببريدٍ لا يُراسَل ورقمٍ لا يُتَّصل به.
+      if (!isValidEmail(email) || !isValidPhone(phone)) { showError(stepEl, true); return false; }
       formData.email = email;
       formData.phone = phone;
     }
@@ -311,12 +330,26 @@
   // ──────────────────────────────────────────────
   // 🚀 Submit — Supabase أولاً، mailto كـ Fallback
   // ──────────────────────────────────────────────
+  // ══ لا تُعلَن نتيجةٌ قبل أن تُعرَف ══
+  // كانت شاشة الشكر تُعرض *قبل* محاولة الإرسال، والفشل يُكتب في
+  // console وحدها. فمن فشل طلبه رأى «تم إرسال طلبكم بنجاح» ومضى،
+  // والطلب ضاع بلا أثر. مقيسٌ في المتصفّح قبل الإصلاح: الإدراج
+  // يفشل، وشاشة النجاح تظهر، ولا إشعار.
+  //
+  // والبديل mailto كان مكتوباً في هذا الملف ولا يُنادى عند الفشل
+  // قطّ — شبكةُ أمانٍ معلّقة لا تُمسك أحداً. الآن تُعرض فعلاً.
+  var submitting = false;
+
   async function submitForm() {
-    currentStep = stepOrder.length - 1;
-    goToStep(currentStep);
+    if (submitting) return;
+    submitting = true;
+    setSubmitState('sending');
 
     try {
       await sendToSupabase();
+      setSubmitState('sent');
+      currentStep = stepOrder.length - 1;
+      goToStep(currentStep);
 
       // إشعار الأدمن (fire & forget)
       fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
@@ -346,7 +379,31 @@
       }).catch(() => {});
 
     } catch (err) {
+      // الطلب لم يصل. نقول ذلك، ونفتح البديل بدل ابتلاع الخطأ.
       console.error('Supabase insert failed:', err);
+      setSubmitState('failed');
+    } finally {
+      submitting = false;
+    }
+  }
+
+  // ── حالة الإرسال على الشاشة ──
+  function setSubmitState(state) {
+    var next = document.getElementById('tfNext');
+    var fail = document.getElementById('tfFail');
+    if (next) {
+      next.disabled = state === 'sending';
+      if (state === 'sending') next.innerHTML = '<span>جارٍ الإرسال…</span>';
+      else if (state === 'failed') next.innerHTML = '<span>إعادة المحاولة</span>';
+      else next.innerHTML = '<span>إرسال الرسالة</span><span class="tf-btn-next__enter">Enter ↵</span>';
+    }
+    if (fail) {
+      fail.hidden = state !== 'failed';
+      if (state === 'failed') {
+        var link = document.getElementById('tfFailMail');
+        if (link) link.href = buildMailtoLink();
+        fail.focus();
+      }
     }
   }
 

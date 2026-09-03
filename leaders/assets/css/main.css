@@ -1677,6 +1677,52 @@ body::after {
 }
 .tf-thanks__btn-primary:hover { background: var(--gold-deep); border-color: var(--gold-deep); }
 
+/* ════════════════════════════════════════════════════════════════════
+   ░░  لوحة الفشل  ░░
+   ════════════════════════════════════════════════════════════════════
+   كانت شاشة الشكر تُعرض قبل محاولة الإرسال، فيرى من فشل طلبه
+   «تم إرسال طلبكم بنجاح» ويمضي — والطلب ضاع. هذه اللوحة تقول
+   الحقيقة وتفتح البديل بدلاً من ابتلاع الخطأ.
+   ════════════════════════════════════════════════════════════════════ */
+
+.tf-fail {
+  flex-shrink: 0;
+  margin: 0 18px 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(168,52,34,0.28);
+  border-right: 3px solid #A83422;
+  border-radius: 2px;
+  background: rgba(168,52,34,0.05);
+}
+.tf-fail:focus { outline: 2px solid #A83422; outline-offset: 2px; }
+.tf-fail strong {
+  display: block;
+  font-family: var(--font-ar);
+  font-size: 0.95rem;
+  color: #A83422;
+  margin-bottom: 0.3rem;
+}
+.tf-fail p {
+  font-size: 0.84rem;
+  line-height: 1.75;
+  color: var(--petrol-deepest);
+  margin-bottom: 0.55rem;
+}
+.tf-fail__mail {
+  display: inline-block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--petrol-mid);
+  text-decoration: underline;
+  min-height: 24px;
+  line-height: 24px;
+}
+.tf-fail__mail:hover { color: var(--petrol-deepest); }
+
+@media (min-width: 768px) {
+  .tf-fail { margin: 0 var(--gutter) 6px; }
+}
+
 
 /* ─── leaders/05-sections.css ─── */
 /* ════════════════════════════════════════════════════════════════════

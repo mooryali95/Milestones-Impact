@@ -44,9 +44,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      # كل مشروع على Pages يخدم مجلده وحده، فلا يُنشر shared/ —
-      # والملف المشترك يجب أن يوجد نسخاً في مجلدات المواقع. هذا
-      # الفحص يكشف نسخةً عُدِّلت في مكانها بدل مصدرها، فلا تنحرف
-      # النسخ صامتةً كما انحرفت سبع نسخٍ من لوحة الألوان قبلها.
-      - name: Check shared copies are in sync
-        run: node scripts/sync-shared.mjs --check
+      # main.css وملفات JS في مجلدات المواقع كلُّها مُولَّدة من shared/
+      # عبر build-css.py — كل مشروع على Pages يخدم مجلده وحده فلا
+      # يُنشر shared/. نعيد التوليد ونطالب ألا يتغيّر شيء: من عدّل
+      # ملفاً مُولَّداً في مكانه بدل مصدره أسقط البناء ورأى السبب.
+      - name: Generated files match their sources
+        run: |
+          python3 shared/build-css.py
+          git diff --exit-code -- home leaders src/styles/tokens.css \
+            || (echo '::error::ملفٌ مُولَّد عُدِّل في مكانه. عدّل المصدر في shared/ ثم شغّل: python3 shared/build-css.py' && exit 1)
