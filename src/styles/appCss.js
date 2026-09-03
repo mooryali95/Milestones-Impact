@@ -50,7 +50,8 @@ html { overflow-x: hidden; -webkit-text-size-adjust: 100%; scroll-behavior: smoo
 body, #root {
   font-family: var(--font-ar); direction: rtl;
   background: #F5EFE4; color: #1C1A17;
-  min-height: 100vh; min-height: -webkit-fill-available;
+  /* dvh لا -webkit-fill-available — راجع .auth-screen أدناه. */
+  min-height: 100vh; min-height: 100dvh;
   overflow-x: hidden; overscroll-behavior-y: none;
 }
 button, input, select, textarea { font-family: inherit; }
@@ -78,7 +79,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 }
 
 /* ── App Shell ── */
-.app { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ════════════════════════════════════════
    TOP NAV — Compact Mobile Bar
@@ -138,7 +139,12 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 /* ════════════════════════════════════════
    AUTH SCREENS — Split Layout
 ════════════════════════════════════════ */
-.auth-screen { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+/* ترتيب الإعلانين مقصود. كان -webkit-fill-available بعد 100vh فيغلبه،
+   وهو يُحسب في كروم إلى stretch فينهار الارتفاع إلى ارتفاع المحتوى:
+   492px مقيسة في نافذة 950px — نصف الشاشة أرضية فارغة تحت النموذج.
+   dvh هو ما كان -webkit-fill-available يقاربه (اتّباع أشرطة المتصفح
+   المتحركة في الجوال)، ويسقط وحده على المتصفحات الأقدم فيبقى 100vh. */
+.auth-screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 .auth-left { display: none; }
 .auth-right { flex: 1; background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1.5rem; }
 .auth-form-wrap { width: 100%; max-width: 360px; }

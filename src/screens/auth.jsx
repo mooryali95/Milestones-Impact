@@ -110,7 +110,7 @@ export const ResumeScreen = ({
                   style={{ direction: "ltr", textAlign: "right" }} />
                 {resumeError && <div className="fg-msg">{resumeError}</div>}
               </div>
-              <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={resumeLoading}>
+              <button type="submit" className="btn" style={{ background: "var(--petrol-deep)" }} disabled={resumeLoading}>
                 {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
               </button>
             </form>
@@ -128,10 +128,10 @@ export const ResumeScreen = ({
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
                 {otpError && <div className="fg-msg">{otpError}</div>}
               </div>
-              <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
+              <button type="submit" className="btn" style={{ background: "var(--petrol-deep)" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+              <button style={{ background: "none", border: "none", color: "var(--petrol-mid)", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
               <button style={{ background: "none", border: "none", color: "var(--wg)", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← رقم آخر</button>
             </div>
           </>}
