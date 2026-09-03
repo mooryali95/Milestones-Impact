@@ -113,7 +113,7 @@ const DemographicsScreen = (p) => {
                   {/* ── قوة الشخص — Steppers ── */}
                   <div className="demo-sec-title"><Icon name="value" size={16} style={{marginLeft:".35rem"}} /> قوة الشخص (0–100)</div>
                   <div className="demo-stepper-grid">
-                    {[['knowledge','🧠 معرفي','#2E6B8A'],['social','🤝 مجتمعي','#5B7B3A'],['financial','💰 مالي','#8B6914'],['economic','📈 اقتصادي','#6B4E3D'],['sovereign','👑 سيادي','#6B2D8A']].map(([k,label,color]) => {
+                    {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي'],['sovereign','سيادي']].map(([k,label]) => {
                       const val = row.strength?.[k] || 0;
                       return (
                         <div key={k} className="demo-stepper-row">
@@ -122,11 +122,11 @@ const DemographicsScreen = (p) => {
                             <button className="demo-stepper-btn"
                               onClick={() => updateDemoRow(row.id, ['strength',k], Math.max(0, val-10))}>−</button>
                             <div className="demo-stepper-track">
-                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:color}}/>
+                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:"var(--gold)"}}/>
                             </div>
                             <button className="demo-stepper-btn"
                               onClick={() => updateDemoRow(row.id, ['strength',k], Math.min(100, val+10))}>+</button>
-                            <div className="demo-stepper-val" style={{color: val>0 ? color : 'var(--wg)'}}>{val}</div>
+                            <div className="demo-stepper-val" style={{color: val>0 ? 'var(--text)' : 'var(--wg)'}}>{val}</div>
                           </div>
                         </div>
                       );
@@ -134,9 +134,9 @@ const DemographicsScreen = (p) => {
                   </div>
 
                   {/* ── نوع علاقتي به — Steppers ── */}
-                  <div className="demo-sec-title">🤝 نوع علاقتي به (0–100)</div>
+                  <div className="demo-sec-title"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> نوع علاقتي به (0–100)</div>
                   <div className="demo-stepper-grid">
-                    {[['knowledge','🧠 معرفي','#2E6B8A'],['social','🤝 مجتمعي','#5B7B3A'],['financial','💰 مالي','#8B6914'],['economic','📈 اقتصادي','#6B4E3D']].map(([k,label,color]) => {
+                    {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي']].map(([k,label]) => {
                       const val = row.myRelation?.[k] || 0;
                       return (
                         <div key={k} className="demo-stepper-row">
@@ -145,11 +145,11 @@ const DemographicsScreen = (p) => {
                             <button className="demo-stepper-btn"
                               onClick={() => updateDemoRow(row.id, ['myRelation',k], Math.max(0, val-10))}>−</button>
                             <div className="demo-stepper-track">
-                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:color}}/>
+                              <div className="demo-stepper-fill" style={{width:`${val}%`,background:"var(--gold)"}}/>
                             </div>
                             <button className="demo-stepper-btn"
                               onClick={() => updateDemoRow(row.id, ['myRelation',k], Math.min(100, val+10))}>+</button>
-                            <div className="demo-stepper-val" style={{color: val>0 ? color : 'var(--wg)'}}>{val}</div>
+                            <div className="demo-stepper-val" style={{color: val>0 ? 'var(--text)' : 'var(--wg)'}}>{val}</div>
                           </div>
                         </div>
                       );
@@ -159,7 +159,7 @@ const DemographicsScreen = (p) => {
                   {/* ── المستهدف — Chips 2×2 ── */}
                   <div className="demo-sec-title"><Icon name="impact" size={16} style={{marginLeft:".35rem"}} /> ما أستهدف تفعيله معه</div>
                   <div className="demo-targets">
-                    {[['knowledge','🧠 معرفي'],['social','🤝 مجتمعي'],['financial','💰 مالي'],['economic','📈 اقتصادي']].map(([k,label]) => (
+                    {[['knowledge','معرفي'],['social','مجتمعي'],['financial','مالي'],['economic','اقتصادي']].map(([k,label]) => (
                       <div key={k}
                         className={`demo-target-chip ${row.target?.[k] ? 'active' : ''}`}
                         onClick={() => updateDemoRow(row.id, ['target',k], !row.target?.[k])}>
@@ -185,7 +185,7 @@ const DemographicsScreen = (p) => {
               {demoRows.filter(r => r.name.trim()).length} / {demoRows.length} مكتمل
             </span>
             <button className="btn btn-gold btn-s" onClick={saveDemoData} disabled={demoSaving} style={{minWidth:"120px"}}>
-              {demoSaving ? "جارٍ الحفظ..." : `💾 ${appContent.demo_save_btn || 'حفظ التحليل'}`}
+              {demoSaving ? "جارٍ الحفظ..." : `${appContent.demo_save_btn || 'حفظ التحليل'}`}
             </button>
           </div>
 
