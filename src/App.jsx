@@ -29,6 +29,15 @@ import { CSS } from './styles/appCss';
 ╚══════════════════════════════════════════════════════════════╝
 */
 
+// ثوانٍ بين إرسالٍ وإعادته. خارج المكوّن فلا يُعاد بناؤه كل تصيير.
+const OTP_COOLDOWN_SEC = 60;
+
+// ملاحظة: كان هنا OTP_MAX_FAILS = 3 لقفل الحساب بعد ثلاث محاولات
+// فاشلة، وotpFailCount يُصفَّر عند النجاح ولا يزيد عند الفشل قطّ —
+// أي أن القفل لم يوجد أصلاً. ولم يُستكمل عمداً: قفلٌ في المتصفّح
+// يمحوه تحديث الصفحة، فيمنع صاحب الحساب ولا يمنع المهاجم. الحدّ
+// الحقيقي مكانه admin-api / user-api في الخادم.
+
 
 
 
@@ -84,11 +93,26 @@ export default function App() {
   const [otpSending, setOtpSending] = useState(false);
   const [otpPending, setOtpPending] = useState(null);
 
-  // OTP Rate Limiting — client-side guard
+  // ── مهلة إعادة إرسال الرمز ──
+  // كان otpLastSent يُكتب في أربعة مواضع ولا يُقرأ في موضع واحد، فزرّ
+  // «إعادة إرسال» يبعث بريداً في كل ضغطة بلا حدّ. الكتابة كانت موجودة
+  // والقراءة ناقصة، فأُكملت هنا.
   const [otpLastSent, setOtpLastSent] = useState(null);       // timestamp of last send
   const [otpFailCount, setOtpFailCount] = useState(0);        // consecutive failed verifications
-  const OTP_COOLDOWN_SEC = 60;   // seconds between resends
-  const OTP_MAX_FAILS    = 3;    // max failed verifications before lockout
+  const [otpCooldown, setOtpCooldown] = useState(0);          // ثوانٍ متبقّية، 0 = مسموح
+
+  useEffect(() => {
+    if (!otpLastSent) { setOtpCooldown(0); return; }
+    const left = () => Math.max(0, OTP_COOLDOWN_SEC - Math.floor((Date.now() - otpLastSent) / 1000));
+    setOtpCooldown(left());
+    if (left() === 0) return;
+    const id = setInterval(() => {
+      const l = left();
+      setOtpCooldown(l);
+      if (l === 0) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [otpLastSent]);
 
   // Process details from Supabase (rich data)
   const [processDetails, setProcessDetails] = useState({});
@@ -349,6 +373,7 @@ export default function App() {
 
   // ── Resend OTP ──
   const handleResendOtp = async () => {
+    if (otpCooldown > 0) return;   // الزرّ معطَّل أصلاً؛ وهذا يحرس النقر البرمجيّ
     setOtpSending(true);
     setOtpError("");
     const res = (otpPending?.type === "resume" && otpPending.phone)
@@ -601,6 +626,7 @@ export default function App() {
       handleRegister={handleRegister}
       handleVerifyOtp={handleVerifyOtp}
       handleResendOtp={handleResendOtp}
+      otpCooldown={otpCooldown}
       setScreen={setScreen}
     />
   );
@@ -617,6 +643,7 @@ export default function App() {
       otpError={otpError}
       setOtpError={setOtpError}
       handleResendOtp={handleResendOtp}
+      otpCooldown={otpCooldown}
       setScreen={setScreen}
       resumePhone={resumePhone}
       setResumePhone={setResumePhone}
