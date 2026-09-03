@@ -79,7 +79,9 @@ const ProcessModal = (p) => {
             {selectedCell && (selectedCell.nameAr==="تحليل ديموغرافي"||selectedCell.key==="creation-1") && (
               <div style={{margin:"0.8rem 0"}}>
                 <div style={{fontSize:".68rem",color:"var(--wg)",fontWeight:600,letterSpacing:".5px",marginBottom:".5rem",textTransform:"uppercase"}}>أداة مرتبطة بهذه العملية</div>
-                <button onClick={openDemoScreen} style={{width:"100%",display:"flex",alignItems:"center",gap:".75rem",padding:".85rem 1rem",border:"none",borderRadius:"2px",background:"#8B6914",color:"#fff",cursor:"pointer",transition:"all .25s",fontFamily:"var(--font-ar)"}}
+                <button onClick={openDemoScreen} style={{width:"100%",display:"flex",alignItems:"center",gap:".75rem",padding:".85rem 1rem",border:"none",borderRadius:"2px",// لوحة مملوءة بالذهبي تحظرها الهوية، والأبيض عليه يقيس 3.81:1
+                  // فيسقط. الجرافيت لوحة الهوية نفسها، والأبيض عليه 15.61:1.
+                  background:"var(--petrol-deep)",color:"#fff",cursor:"pointer",transition:"all .25s",fontFamily:"var(--font-ar)"}}
                   onMouseEnter={e=>{e.currentTarget.style.opacity="0.9";}}
                   onMouseLeave={e=>{e.currentTarget.style.opacity="";}}>
                   <span style={{fontSize:"1.3rem",flexShrink:0}}>🗺️</span>
@@ -100,7 +102,8 @@ const ProcessModal = (p) => {
                   style={{flex:1,minWidth:"140px",padding:".55rem .75rem",border:"1.5px solid var(--sa)",borderRadius:"2px",fontFamily:"var(--font-ar)",direction:"ltr",fontSize:".9rem",background:"var(--sw)"}}/>
               </div>
               {dateError && <p style={{fontSize:".72rem",color:"var(--rd)",marginTop:".25rem"}}>{dateError}</p>}
-              {dates[selectedCell.key] && <div className="hijri-badge">🌙 {gregorianToHijri(dates[selectedCell.key]).formatted}</div>}
+              {/* كان 🌙 هنا — والهوية تحظر الإيموجي. النصّ الهجري يعرّف نفسه بـ«هـ». */}
+              {dates[selectedCell.key] && <div className="hijri-badge">{gregorianToHijri(dates[selectedCell.key]).formatted}</div>}
               {dates[selectedCell.key] && !submitted && <div style={{marginTop:".5rem"}}>
                 <button style={{background:"none",border:"none",color:"var(--rd)",fontFamily:"var(--font-ar)",fontSize:".75rem",cursor:"pointer"}}
                   onClick={()=>{const newD={...dates};const newC={...confirmed};delete newD[selectedCell.key];delete newC[selectedCell.key];setDates(newD);setConfirmed(newC);if(sessionToken){UserAPI.save(sessionToken,{dates:newD,confirmed:newC});}LocalSession.update({dates:newD,confirmed:newC});setTempDate("");showToast("تم حذف التاريخ");}}>

@@ -40,8 +40,11 @@ export function gregorianToHijri(gDate) {
   };
 }
 
+// -nu-latn هنا أيضاً. بدونها يعطي ar-SA أرقاماً هندية (١ سبتمبر ٢٠٢٦)
+// بينما العمود الهجري بجانبه لاتيني — نظاما أرقام في صفٍّ واحد من
+// الجدول النهائي، وهو أول ما يُطبع ويُحتفظ به.
 export function fmtGregorian(d) {
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     year: "numeric", month: "long", day: "numeric", calendar: "gregory"
   }).format(new Date(d));
 }

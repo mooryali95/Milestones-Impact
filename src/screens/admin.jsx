@@ -83,7 +83,7 @@ const AdminPanel = (p) => {
         <div className="stat-grid">
           <div className="stat" style={{borderTopColor:BRAND.color}}><div className="stat-v" style={{color:BRAND.color}}>{allRegs.length}</div><div className="stat-l">إجمالي المسجلين</div></div>
           <div className="stat" style={{borderTopColor:"#5B7B3A"}}><div className="stat-v" style={{color:"#5B7B3A"}}>{allRegs.filter(r=>r.submitted).length}</div><div className="stat-l">خطط مكتملة</div></div>
-          <div className="stat" style={{borderTopColor:"#8B6914"}}><div className="stat-v" style={{color:"#8B6914"}}>{allRegs.filter(r=>!r.submitted).length}</div><div className="stat-l">قيد التخطيط</div></div>
+          <div className="stat" style={{borderTopColor:"var(--gold-deep)"}}><div className="stat-v" style={{color:"var(--gold-deep)"}}>{allRegs.filter(r=>!r.submitted).length}</div><div className="stat-l">قيد التخطيط</div></div>
           <div className="stat" style={{borderTopColor:"#C0392B"}}><div className="stat-v" style={{color:"#C0392B"}}>{allRegs.filter(r=>r.reopenRequested).length}</div><div className="stat-l">طلبات فتح</div></div>
         </div>
 
@@ -103,8 +103,8 @@ const AdminPanel = (p) => {
                   const datesCount = r.dates ? Object.keys(r.dates).length : 0;
                   const pct = Math.round((datesCount/16)*100);
                   const initials = r.name ? r.name.split(" ").slice(0,2).map(w=>w[0]).join("") : "?";
-                  const trackColors = ["#8B6914","#5B7B3A","#2E6B8A","#6B4E3D"];
-                  const avatarColor = trackColors[i % 4];
+                  // من TRACKS لا نسخة محلية — لون الأفاتار دورةٌ على المسارات.
+                  const avatarColor = TRACKS[i % TRACKS.length].color;
                   const isSelected = selectedReg?.id === r.id;
                   return (
                     <div key={r.id}
@@ -165,7 +165,7 @@ const AdminPanel = (p) => {
                               <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الميلادي</th><th>الهجري</th><th>الحالة</th></tr></thead>
                               <tbody>{procs.map((p,j)=>{
                                 const d=r.dates?.[p.key], c=r.confirmed?.[p.key];
-                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
+                                return <tr key={p.key}><td>{j+1}</td><td style={{fontWeight:600}}>{p.nameAr}</td><td style={{color:p.trackColor,whiteSpace:"nowrap"}}>{p.trackIcon} {p.trackNameAr}</td><td>{d?fmtGregorian(d):"—"}</td><td style={{color:"var(--text-secondary)"}}>{d?gregorianToHijri(d).formatted:"—"}</td><td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td></tr>;
                               })}</tbody>
                             </table>
                           </div>
@@ -185,7 +185,7 @@ const AdminPanel = (p) => {
                                 <div className="demo-person-header"><div className="demo-person-num">{pi+1}</div><div><div className="demo-person-name">{person.name}</div><div className="demo-person-role">{[person.position,person.entity,person.relation].filter(Boolean).join(" • ")||"—"}</div></div>{person.location&&<div style={{marginRight:"auto",fontSize:"0.65rem",color:"var(--text-muted)"}}>📍{person.location}</div>}</div>
                                 <div className="demo-section-head" style={{marginBottom:"0.4rem"}}>قوة الشخص</div>
                                 {[["knowledge","معرفي"],["social","مجتمعي"],["financial","مالي"],["economic","اقتصادي"],["sovereign","سيادي"]].map(([k,label])=>{const val=person.strength?.[k]||0;return <div key={k} className="demo-bar-row"><div className="demo-bar-label">{label}</div><div className="demo-bar-track"><div className="demo-bar-fill" style={{width:`${val}%`,background:scoreColor(val)}}/></div><div className="demo-bar-val" style={{color:scoreColor(val)}}>{val}</div></div>;})}
-                                {targets.length>0&&<div className="demo-person-chips">{targets.map(k=><span key={k} className="demo-person-chip" style={{background:"#8B691415",color:"#8B6914",border:"1px solid #8B691430"}}>{targetLabels[k]}</span>)}</div>}
+                                {targets.length>0&&<div className="demo-person-chips">{targets.map(k=><span key={k} className="demo-person-chip" style={{background:"rgba(169,122,46,0.08)",color:"var(--petrol-deep)",border:"1px solid rgba(169,122,46,0.30)"}}>{targetLabels[k]}</span>)}</div>}
                               </div>;
                             })}
                           </div></>
@@ -196,7 +196,8 @@ const AdminPanel = (p) => {
                         const bookedProcs = procs.filter(p=>regDates[p.key]).sort((a,b)=>new Date(regDates[a.key])-new Date(regDates[b.key]));
                         const totalDays = bookedProcs.length>=2 ? Math.round((new Date(regDates[bookedProcs[bookedProcs.length-1].key])-new Date(regDates[bookedProcs[0].key]))/(1000*60*60*24)) : 0;
                         const confCount = Object.keys(r.confirmed||{}).length;
-                        const trackDist=[{id:'creation',name:'الخلق',color:'#8B6914'},{id:'innovation',name:'الإبداع',color:'#5B7B3A'},{id:'establishment',name:'الإنشاء',color:'#2E6B8A'},{id:'making',name:'الجعل',color:'#6B4E3D'}].map(t=>({...t,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
+                        // من TRACKS لا نسخة محلية بأسماء وألوان مكرّرة.
+                        const trackDist=TRACKS.map(t=>({id:t.id,name:t.nameAr,color:t.color,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
                         return <div>
                           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
                             {[{v:bookedProcs.length,l:'مواعيد',c:'var(--mi-d)'},{v:confCount,l:'مؤكدة',c:'var(--ok)'},{v:totalDays+'d',l:'مدة التخطيط',c:'var(--gold-d)'}].map((s,i)=>(

@@ -278,7 +278,7 @@ export const ReportTab = (p) => {
           return <>
             <div className="rpt-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:".5rem"}}>
               <div><div style={{display:"flex",alignItems:"center",gap:".5rem"}}><MILogo size={18} color={BRAND.color}/><strong style={{fontFamily:"var(--font-ar)",color:BRAND.dark}}>Milestone Impact</strong></div><div style={{fontSize:".75rem",color:"#999",marginTop:".15rem"}}>تقرير مولّد تلقائياً</div></div>
-              <div style={{textAlign:"left"}}><div style={{fontSize:".82rem",fontWeight:600}}>{user.name}</div><div style={{fontSize:".7rem",color:"#999"}}>{new Date().toLocaleDateString('ar-SA')} • {totalBooked} حجوزات</div></div>
+              <div style={{textAlign:"left"}}><div style={{fontSize:".82rem",fontWeight:600}}>{user.name}</div><div style={{fontSize:".7rem",color:"#999"}}>{fmtBoth(new Date()).hijri} • {totalBooked} حجوزات</div></div>
             </div>
             <div className="rpt-card"><div className="rpt-pattern">
               <div className="rpt-pattern-icon">{pattern.icon}</div>
@@ -292,7 +292,7 @@ export const ReportTab = (p) => {
               <div className="rpt-stats">
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:BRAND.color}}>{totalBooked}</div><div className="rpt-stat-l">محجوزة</div></div>
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#5B7B3A"}}>{trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
-                <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#8B6914"}}>{avgPhase}</div><div className="rpt-stat-l">متوسط المرحلة</div></div>
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"var(--gold-deep)"}}>{avgPhase}</div><div className="rpt-stat-l">متوسط المرحلة</div></div>
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#6B4E3D"}}>{readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
               </div>
             </div>
@@ -393,12 +393,15 @@ export const OutputTab = (p) => {
                 <td style={{color:p.trackColor}}>{p.trackIcon} {p.trackNameAr}</td>
                 <td>{p.phaseNameAr}</td>
                 <td>{d?fmtGregorian(d):"—"}</td>
-                <td style={{color:"#8B6914"}}>{d?gregorianToHijri(d).formatted:"—"}</td>
+                <td style={{color:"var(--text-secondary)"}}>{d?gregorianToHijri(d).formatted:"—"}</td>
                 <td>{c?<span className="badge badge-ok" role="img" aria-label="مؤكَّد">✓</span>:d?<span className="badge badge-wait">محدد</span>:"—"}</td>
               </tr>);
             })}</tbody>
           </table>
-          {dates && Object.keys(dates).length > 0 && <div className="output-stamp"><p>تاريخ الإنشاء: <strong style={{color:BRAND.color}}>{new Date().toLocaleDateString('ar-SA')}</strong></p></div>}
+          {/* كان toLocaleDateString('ar-SA') بلا تقويم صريح، فيتركه لافتراض
+              المحرّك: كروم يعطي هجرياً ومحرّكات أخرى ميلادياً — على وثيقة
+              تُطبع وتُحفظ. fmtBoth يذكر التقويمين صراحةً فلا لبس. */}
+          {dates && Object.keys(dates).length > 0 && <div className="output-stamp"><p>تاريخ الإنشاء: <strong style={{color:BRAND.color}}>{fmtBoth(new Date()).both}</strong></p></div>}
           <div className="copyright">© {new Date().getFullYear()} Milestone Impact — جميع الحقوق محفوظة</div>
         </div>
       </div>
