@@ -178,7 +178,12 @@ const AdminPanel = (p) => {
                         : <><div className="demo-section-head">{selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).length} شخص في الشبكة</div>
                           <div className="demo-person-grid">
                             {selectedReg[DEMO_KEY].filter(x=>x.name?.trim()).map((person,pi)=>{
-                              const scoreColor=(v)=>v>=70?"#27ae60":v>=40?"#2E6B8A":"#aaa";
+                              // قيسَ على خلفية البطاقة #FDFAF6 ونصٌّ صغير (عتبة 4.5):
+                              // ‏#27ae60 عند 2.76 و‎#aaa عند 2.23 — يسقطان. والرقم
+                              // نفسه مكتوب بهذا اللون، فالسقوط يمسّ القراءة لا الذوق.
+                              // ‏--ok أخضر النجاح في التطبيق نفسه (4.88)، فتبقى
+                              // الدلالة «أخضر = مرتفع» ويسقط لونٌ خارج اللوحة.
+                              const scoreColor=(v)=>v>=70?"var(--ok)":v>=40?"#2E6B8A":"#5C6B70";
                               const targets=["knowledge","social","financial","economic"].filter(k=>person.target?.[k]);
                               const targetLabels={knowledge:"معرفي",social:"مجتمعي",financial:"مالي",economic:"اقتصادي"};
                               return <div key={pi} className="demo-person-card">
@@ -283,8 +288,12 @@ const AdminPanel = (p) => {
                 {["insight","why_it_matters","description"].map(field => (
                   <div key={field} className="adm-field">
                     <label htmlFor={`adm-${proc.key}-${field}`}>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
+                    {/* كان هنا استيرادٌ ديناميكيّ من cdn.jsdelivr عند كل خروجٍ من
+                        الحقل: يجلب حزمة Supabase وقت التشغيل من طرف ثالث، ثم
+                        يطرح ناتجه — المتغيّر لم يُستعمل قطّ. والحقل للقراءة
+                        أصلاً. فحُذف الاستيراد وبقي التنبيه. */}
                     <textarea id={`adm-${proc.key}-${field}`} defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
-                      onBlur={async(e)=>{ try{ const {supabase} = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"); } catch(err){} showToast("التعديل يتم عبر Supabase مباشرة"); }} readOnly />
+                      onBlur={()=>showToast("التعديل يتم عبر Supabase مباشرة")} readOnly />
                   </div>
                 ))}
               </>}
@@ -299,7 +308,12 @@ const AdminPanel = (p) => {
             <h4><Icon name="report" size={16} style={{marginLeft:".35rem"}} /> توزيع المسارات</h4>
             {TRACKS.map(tr => {
               const count = allRegs.reduce((acc,r) => acc + Object.keys(r.dates||{}).filter(k=>k.startsWith(tr.id)).length, 0);
-              const max = 16 * (allRegs.length || 1);
+              // المقام عدد عمليات هذا المسار لا عمليات المصفوفة كلها. كان 16
+              // بينما المسار الواحد لا يسع إلا أربعاً، فسقف العمود 4/16 = 25%
+              // مهما اكتمل — أي أن كل الأعمدة كانت مرسومة على رُبع طولها.
+              // ويُشتقّ من procs فلا يتخلّف لو تغيّر شكل المصفوفة.
+              const perTrack = procs.filter(pr => pr.trackId === tr.id).length || 1;
+              const max = perTrack * (allRegs.length || 1);
               return <div key={tr.id} className="rpt-bar-row" style={{marginTop:"0.5rem"}}>
                 <div className="rpt-bar-label" style={{color:tr.color,fontWeight:700}}>{tr.nameAr}</div>
                 <div className="rpt-bar-track"><div className="rpt-bar-fill" style={{width:`${(count/max)*100}%`,background:tr.color}}/></div>
