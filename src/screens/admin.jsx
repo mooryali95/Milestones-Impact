@@ -21,14 +21,11 @@ const AdminPanel = (p) => {
     adminUnlock,
     allRegs,
     appContent,
-    confirmed,
-    dates,
     expandedContent,
     loadRegs,
     loading,
     logout,
     procs,
-    reopenRequested,
     selectedReg,
     selectedRegTab,
     setAdminReportReg,
@@ -37,8 +34,6 @@ const AdminPanel = (p) => {
     setSelectedReg,
     setSelectedRegTab,
     showToast,
-    submitted,
-    tab,
   } = p;
 
   return (

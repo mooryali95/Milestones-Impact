@@ -48,14 +48,10 @@ const OTP_COOLDOWN_SEC = 60;
 // ════════════════════════════════════════════════════════════════
 
 export default function App() {
-  const [introVisible, setIntroVisible] = useState(true);
   const [screen, setScreen] = useState("splash");
   const [tab, setTab] = useState("matrix");
   const [adminTab, setAdminTab] = useState("regs");
   const [expandedContent, setExpandedContent] = useState(null);
-  const [adminEditProcess, setAdminEditProcess] = useState(null);
-  const [adminEditContent, setAdminEditContent] = useState(null);
-  const [adminSaving, setAdminSaving] = useState(false);
   const [adminReportReg, setAdminReportReg] = useState(null);
 
   const [user, setUser] = useState({ name: "", phone: "", email: "" });
@@ -74,7 +70,6 @@ export default function App() {
   const [adminToken, setAdminToken] = useState(null);
   const [adminError, setAdminError] = useState("");
   const [allRegs, setAllRegs] = useState([]);
-  const [expandedReg, setExpandedReg] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const [selectedCell, setSelectedCell] = useState(null);
@@ -130,8 +125,6 @@ export default function App() {
   const DEMO_KEY = "demographic_analysis"; // مفتاح الحفظ في DB
   const [selectedReg, setSelectedReg] = useState(null); // المسجّل المفتوح في Modal الأدمن
   const [selectedRegTab, setSelectedRegTab] = useState('schedule'); // تبويب Modal الأدمن
-
-  const hideIntro = useCallback(() => setIntroVisible(false), []);
 
   // ── Auto-restore local session ──
   useEffect(() => {
@@ -241,30 +234,6 @@ export default function App() {
       if (res.message.includes('الجلسة')) doLogout();
     }
     setLoading(false);
-  };
-
-  // ── Admin: Save process detail ──
-  const adminSaveProcess = async (processKey, updates) => {
-    if (!adminToken) return;
-    setAdminSaving(true);
-    const res = await AdminAPI.call(adminToken, 'save-process', { process_key: processKey, updates });
-    if (res?.success) {
-      setProcessDetails(prev => ({ ...prev, [processKey]: { ...prev[processKey], ...updates } }));
-      showToast('تم الحفظ ✓');
-    } else { showToast(res?.message || 'خطأ في الحفظ'); }
-    setAdminSaving(false);
-  };
-
-  // ── Admin: Save app content ──
-  const adminSaveContent = async (key, value) => {
-    if (!adminToken) return;
-    setAdminSaving(true);
-    const res = await AdminAPI.call(adminToken, 'save-content', { key, value });
-    if (res?.success) {
-      setAppContent(prev => ({ ...prev, [key]: value }));
-      showToast('تم الحفظ ✓');
-    } else { showToast(res?.message || 'خطأ في الحفظ'); }
-    setAdminSaving(false);
   };
 
   // ── Apply a verified user session returned by user-api ──
@@ -550,7 +519,7 @@ export default function App() {
     AdminSession.clear();
     setScreen("splash"); setUser({ name: "", phone: "", email: "" }); setDates({}); setConfirmed({});
     setSubmitted(false); setReopenRequested(false); setSessionId(null); setSessionToken(null); setTab("matrix"); setRegErrors({});
-    setAdminEmail(""); setAdminCode(""); setAdminOtpStep("email"); setAdminToken(null); setAdminError(""); setExpandedReg(null);
+    setAdminEmail(""); setAdminCode(""); setAdminOtpStep("email"); setAdminToken(null); setAdminError("");
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
     setOtpLastSent(null); setOtpFailCount(0);
@@ -682,14 +651,11 @@ export default function App() {
       adminUnlock={adminUnlock}
       allRegs={allRegs}
       appContent={appContent}
-      confirmed={confirmed}
-      dates={dates}
       expandedContent={expandedContent}
       loadRegs={loadRegs}
       loading={loading}
       logout={logout}
       procs={procs}
-      reopenRequested={reopenRequested}
       selectedReg={selectedReg}
       selectedRegTab={selectedRegTab}
       setAdminReportReg={setAdminReportReg}
@@ -698,8 +664,6 @@ export default function App() {
       setSelectedReg={setSelectedReg}
       setSelectedRegTab={setSelectedRegTab}
       showToast={showToast}
-      submitted={submitted}
-      tab={tab}
     />
   );
 

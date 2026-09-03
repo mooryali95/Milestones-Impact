@@ -15,7 +15,6 @@ const DemographicsScreen = (p) => {
     demoSaving,
     removeDemoRow,
     saveDemoData,
-    screen,
     setDemoScreen,
     updateDemoRow,
   } = p;
