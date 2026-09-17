@@ -82,11 +82,11 @@
     } catch (e) { return null; }
   }
 
-  function send() {
+  function send(pathOverride) {
     try {
       var payload = {
         site: siteName(),
-        path: location.pathname || '/',
+        path: pathOverride || (location.pathname || '/'),
         title: (document.title || '').slice(0, 200),
         referrer: cleanReferrer(),
         visit_id: visitId(),
@@ -113,11 +113,50 @@
   }
 
   // بعد أن تستقرّ الصفحة، لا أثناء تصييرها.
+  // requestIdleCallback يمرّر IdleDeadline للمُنادى، وهو ليس مساراً —
+  // فنلفّه بدالّة لئلا يصير كائن المهلة قيمةً لـ path.
   function schedule() {
-    if (window.requestIdleCallback) requestIdleCallback(send, { timeout: 3000 });
-    else setTimeout(send, 800);
+    if (window.requestIdleCallback) requestIdleCallback(function () { send(); }, { timeout: 3000 });
+    else setTimeout(function () { send(); }, 800);
   }
 
-  if (document.readyState === 'complete') schedule();
-  else window.addEventListener('load', schedule, { once: true });
+  // ── تطبيقات الصفحة الواحدة ──
+  // مصفوفة التأثير صفحةٌ واحدة تتبدّل شاشاتها وتبويباتها بلا تنقّل،
+  // فحدث load يقع مرّة واحدة مهما طاف المستخدم فيها.
+  //
+  // فمن يحمل data-spa يبلّغ عن نفسه: لا إرسال تلقائيّ عند التحميل،
+  // بل يُنادي التطبيقُ miTrackView بما يعرضه — أوّلَ مرّة وكلّما تبدّل.
+  // ولولا ذلك لسُجّلت زيارتان لفتحةٍ واحدة: واحدة للمستند وأخرى
+  // للشاشة الأولى — وهكذا يبدأ عدّادٌ يكذب.
+  //
+  // والحارس يمنع التكرار: تصيير React قد يُطلق التأثير مرّتين على
+  // الحالة نفسها، فيُضاعَف العدّ بلا أن يتنقّل أحد.
+  var lastPath = null;
+  window.miTrackView = function (virtualPath) {
+    try {
+      var path = String(virtualPath || location.pathname || '/');
+      if (path === lastPath) return;
+      lastPath = path;
+      send(path);
+    } catch (e) { /* لا شيء */ }
+  };
+
+  function isSpa() {
+    try {
+      var el = document.currentScript || document.querySelector('script[data-site]');
+      return !!(el && el.hasAttribute('data-spa'));
+    } catch (e) { return false; }
+  }
+
+  // يُقرأ الآن لا داخل المستمع: document.currentScript يفقد قيمته لاحقاً.
+  var spa = isSpa();
+
+  function onReady() {
+    if (spa) return;              // التطبيق يبلّغ عن نفسه
+    lastPath = location.pathname;
+    schedule();
+  }
+
+  if (document.readyState === 'complete') onReady();
+  else window.addEventListener('load', onReady, { once: true });
 })();

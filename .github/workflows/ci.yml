@@ -41,6 +41,11 @@ jobs:
       - name: Test
         run: npm test
 
+      # قبل البناء لا بعده: Vite ينسخ public/ كما هي وقتَ البناء، فتوليدٌ
+      # بعده يترك الحزمة تحمل نسخةً قديمة من الملف المشترك. وقع هذا فعلاً.
+      - name: Sync generated files
+        run: python3 shared/build-css.py
+
       - name: Build
         run: npm run build
 
@@ -51,5 +56,5 @@ jobs:
       - name: Generated files match their sources
         run: |
           python3 shared/build-css.py
-          git diff --exit-code -- home leaders src/styles/tokens.css \
+          git diff --exit-code -- home leaders public src/styles/tokens.css \
             || (echo '::error::ملفٌ مُولَّد عُدِّل في مكانه. عدّل المصدر في shared/ ثم شغّل: python3 shared/build-css.py' && exit 1)

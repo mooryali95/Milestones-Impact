@@ -63,6 +63,27 @@ def build_react_tokens():
     print('   \u21b3 react: src/styles/tokens.css (%d \u0633\u0637\u0631)' % len(css.splitlines()))
 
 
+def sync_js_to_react():
+    """ينسخ ملفات JS المشتركة إلى public/ في تطبيق React.
+
+    Vite ينسخ public/ كما هي إلى build/، فيصير الملف متاحاً على
+    /analytics.js ويُدرَج بوسم script في index.html — بلا حزمه في
+    الحزمة، فيبقى المصدر واحداً مع الصفحات الثابتة.
+    """
+    out_dir = os.path.join(ROOT, 'public')
+    if not os.path.isdir(out_dir):
+        return
+    for filename in ('analytics.js',):
+        src = os.path.join(SHARED_JS, filename)
+        if not os.path.exists(src):
+            continue
+        with open(src) as f:
+            content = f.read()
+        with open(os.path.join(out_dir, filename), 'w') as f:
+            f.write(JS_HEADER + content)
+        print('   \u21b3 react: public/%s' % filename)
+
+
 def sync_js(page_name, config):
     """ينسخ ملفات JS المشتركة إلى مجلد الصفحة مع ترويسة تشير للمصدر."""
     for filename in config.get('js', []):
@@ -201,6 +222,7 @@ def build(page_name, config):
 
 if __name__ == '__main__':
     build_react_tokens()
+    sync_js_to_react()
     sync_brand_to_react()
     for name, config in PAGES.items():
         sync_layout_mirror(name, config)

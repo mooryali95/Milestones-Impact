@@ -28,5 +28,8 @@
   <noscript>يجب تفعيل JavaScript لاستخدام هذا التطبيق.</noscript>
   <div id="root"></div>
   <script type="module" src="/src/index.jsx"></script>
+  <!-- القياس: مصدره shared/js/analytics.js ويُنسخ إلى public/ بـ build-css.py.
+       خارج الحزمة عمداً — فلا يؤخّر تحميل التطبيق، وسقوطه لا يُسقطه. -->
+  <script src="/analytics.js" data-site="mi-matrix" data-spa defer></script>
 </body>
 </html>
