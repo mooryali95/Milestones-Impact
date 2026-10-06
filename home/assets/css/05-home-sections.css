@@ -519,11 +519,17 @@
   gap: 28px;
   margin-top: 24px;
 }
-@media (min-width: 900px) {
+@media (min-width: 760px) {
   .products__grid {
     grid-template-columns: 1fr 1fr;
-    gap: 36px;
+    gap: 32px;
     margin-top: 48px;
+  }
+}
+@media (min-width: 1180px) {
+  .products__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
   }
 }
 
@@ -579,7 +585,8 @@
 }
 
 /* اللون التعريفي لكل منتج */
-.product-card--leaders {
+.product-card--leaders,
+.product-card--projects {
   --product-accent: var(--gold);
   --product-glow: rgba(200, 164, 92, 0.1);
 }

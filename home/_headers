@@ -41,3 +41,10 @@
 
 /site.webmanifest
   Cache-Control: public, max-age=604800
+
+# Program pages (/leaders, /projects) — shared assets
+/assets/program/js/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/assets/program/css/*
+  Cache-Control: public, max-age=31536000, immutable
