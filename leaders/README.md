@@ -7,7 +7,7 @@
 ## 🌐 الرابط الحي
 
 ```
-https://mi.sunkvalue.com/leaders
+https://leaders.sunkvalue.com/
 ```
 
 ---
