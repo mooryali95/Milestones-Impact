@@ -222,20 +222,21 @@
 .hero__tagline[dir="ltr"],
 .product-card__tagline[dir="ltr"] { text-align: right; }
 
-/* لوحة المسارات داخل الشكل البترولي (شاشات كبيرة فقط) */
+/* لوحة المسارات داخل الشكل البترولي (شاشات كبيرة فقط)
+   تحل محل الشعار الكبير من 1280px لأنها تحمل الشعار نفسه، فلا يتكرر */
 .hero__showcase { display: none; }
 @media (min-width: 1280px) {
-  .hero__container {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 30%);
-    align-items: center;
-    gap: 6vw;
-  }
+  .hero__brand { display: none; }
+  /* مثبّتة على اللوح نفسه لا على الحاوية: الحاوية تتوسّط في الشاشات العريضة
+     بينما اللوح ثابت عند 48% من العرض، فتنزلق اللوحة فوق الحافة المائلة */
   .hero__showcase {
     display: block;
-    position: relative;
+    position: absolute;
+    top: 50%;
+    left: 4vw;
+    width: min(380px, 24vw);
+    transform: translateY(-50%);
     z-index: 2;
-    max-width: 380px;
     color: var(--sand-paper);
   }
   .hero__showcase-logo {

@@ -69,6 +69,37 @@
   }
 }
 
+/* الهيدر فوق اللوح البترولي قبل التمرير: قائمة الروابط هنا أطول من الصفحة الأم
+   فتمتد فوق اللوح الداكن ويختفي نصها، لذا نمنحها خلفية فاتحة خاصة بها */
+.header__nav-link { white-space: nowrap; }
+@media (min-width: 1024px) {
+  .header:not(.scrolled) .header__nav {
+    padding: 10px 24px;
+    background: rgba(251, 248, 239, 0.94);
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 24px rgba(6, 30, 44, 0.14);
+  }
+  .header:not(.scrolled) .header__cta {
+    background: var(--gold);
+    color: var(--petrol-deepest);
+  }
+  .header:not(.scrolled) .header__cta:hover { background: var(--off-white); }
+}
+/* سبعة روابط لا تتسع للتابلت: القائمة الجانبية حتى 1024px */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .header__nav { display: none; }
+  .header__burger { display: flex; }
+  .mobile-drawer { display: flex; }
+  .mobile-overlay { display: block; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .header__nav { gap: 20px; }
+  .header__nav-link { font-size: 13px; }
+}
+
 .hero__container {
   width: 100%;
   max-width: var(--container);
