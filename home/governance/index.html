@@ -67,7 +67,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=570f946f" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=37c0e3d4" />
 </head>
 <body data-product="MI-GOVERNANCE">
 
@@ -199,9 +199,46 @@
         </p>
       </div>
 
+
+      <!-- مخطط الهيكل: من يرفع إلى من -->
+      <figure class="org reveal" aria-label="مخطط الهيكل المؤسسي">
+        <div class="org__row org__row--top">
+          <a class="org-node org-node--trustees" href="#council-trustees">
+            <span class="org-node__num" dir="ltr">01</span>
+            <span class="org-node__name">مجلس الأمناء</span>
+            <span class="org-node__role">الأمانة والرقابة العليا</span>
+          </a>
+        </div>
+        <div class="org__branch" aria-hidden="true"></div>
+        <div class="org__row org__row--pair">
+          <a class="org-node" href="#council-founding">
+            <span class="org-node__num" dir="ltr">02</span>
+            <span class="org-node__name">المجلس التأسيسي</span>
+            <span class="org-node__role">الهوية والمنهجية</span>
+          </a>
+          <span class="org__link" aria-hidden="true"><span>توجيه منهجي</span></span>
+          <a class="org-node org-node--exec" href="#council-executive">
+            <span class="org-node__num" dir="ltr">03</span>
+            <span class="org-node__name">المجلس التنفيذي</span>
+            <span class="org-node__role">الاستراتيجية والمحفظة</span>
+          </a>
+        </div>
+        <div class="org__row org__row--bottom">
+          <a class="org-node" href="#council-operational">
+            <span class="org-node__num" dir="ltr">04</span>
+            <span class="org-node__name">المجلس التشغيلي</span>
+            <span class="org-node__role">التنفيذ والجودة</span>
+          </a>
+        </div>
+        <figcaption class="org__legend">
+          <span><i class="org__key org__key--solid"></i>خط المساءلة والتقارير</span>
+          <span><i class="org__key org__key--dashed"></i>علاقة توجيه</span>
+        </figcaption>
+      </figure>
+
       <ol class="gov__tiers" aria-label="المجالس الأربعة">
 
-        <li class="gov-tier gov-tier--trustees reveal" aria-labelledby="gov1-title">
+        <li class="gov-tier gov-tier--trustees reveal" id="council-trustees" aria-labelledby="gov1-title">
           <div class="gov-tier__node" aria-hidden="true"><span>01</span></div>
           <article class="gov-tier__card">
             <header class="gov-tier__head">
@@ -225,10 +262,11 @@
                 <div><dt>تُرفع إليه</dt><dd>تقارير المجلسين التأسيسي والتنفيذي</dd></div>
               </dl>
             </div>
+            <div class="gov-members" data-council="trustees" data-seats="5" aria-label="أعضاء مجلس الأمناء"></div>
           </article>
         </li>
 
-        <li class="gov-tier reveal" aria-labelledby="gov2-title">
+        <li class="gov-tier reveal" id="council-founding" aria-labelledby="gov2-title">
           <div class="gov-tier__node" aria-hidden="true"><span>02</span></div>
           <article class="gov-tier__card">
             <header class="gov-tier__head">
@@ -252,10 +290,11 @@
                 <div><dt>يرفع تقاريره إلى</dt><dd>مجلس الأمناء</dd></div>
               </dl>
             </div>
+            <div class="gov-members" data-council="founding" data-seats="3" aria-label="أعضاء المجلس التأسيسي"></div>
           </article>
         </li>
 
-        <li class="gov-tier reveal" aria-labelledby="gov3-title">
+        <li class="gov-tier reveal" id="council-executive" aria-labelledby="gov3-title">
           <div class="gov-tier__node" aria-hidden="true"><span>03</span></div>
           <article class="gov-tier__card">
             <header class="gov-tier__head">
@@ -279,10 +318,11 @@
                 <div><dt>يرفع تقاريره إلى</dt><dd>مجلس الأمناء</dd></div>
               </dl>
             </div>
+            <div class="gov-members" data-council="executive" data-seats="4" aria-label="أعضاء المجلس التنفيذي"></div>
           </article>
         </li>
 
-        <li class="gov-tier reveal" aria-labelledby="gov4-title">
+        <li class="gov-tier reveal" id="council-operational" aria-labelledby="gov4-title">
           <div class="gov-tier__node" aria-hidden="true"><span>04</span></div>
           <article class="gov-tier__card">
             <header class="gov-tier__head">
@@ -306,6 +346,7 @@
                 <div><dt>يرفع تقاريره إلى</dt><dd>المجلس التنفيذي</dd></div>
               </dl>
             </div>
+            <div class="gov-members" data-council="operational" data-seats="4" aria-label="أعضاء المجلس التشغيلي"></div>
           </article>
         </li>
 
@@ -576,6 +617,7 @@
   <script src="/assets/program/js/tabs.js" defer></script>
   <script src="/assets/program/js/mobile-menu.js" defer></script>
   <script src="/assets/program/js/typeform.js?v=3" defer></script>
+  <script src="/assets/program/js/governance.js" defer></script>
 
 </body>
 </html>
