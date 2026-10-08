@@ -36,7 +36,8 @@ PAGES = {
         'page_file': '05-sections.css',
         'extra': ['typeform.css'],
         'html': os.path.join(ROOT, 'home', 'leaders', 'index.html'),
-        'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html')],
+        'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html'),
+                      os.path.join(ROOT, 'home', 'governance', 'index.html')],
         'brand': False,   # الهوية والأيقونات تُخدم من جذر home
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'js'),
         'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
