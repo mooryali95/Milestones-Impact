@@ -1453,17 +1453,17 @@ const PAGE_SIZE  = 20;
 const Session = {
   KEY: 'mi_admin_v3',
   save(token, user) {
-    try { localStorage.setItem(this.KEY, JSON.stringify({ token, user, ts: Date.now() })); } catch {}
+    try { sessionStorage.setItem(this.KEY, JSON.stringify({ token, user, ts: Date.now() })); } catch {}
   },
   load() {
     try {
-      const d = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+      const d = JSON.parse(sessionStorage.getItem(this.KEY) || 'null');
       if (!d) return null;
-      if (Date.now() - d.ts > 24 * 60 * 60 * 1000) { this.clear(); return null; }
+      if (Date.now() - d.ts > 8 * 60 * 60 * 1000) { this.clear(); return null; }
       return d;
     } catch { return null; }
   },
-  clear() { try { localStorage.removeItem(this.KEY); } catch {} }
+  clear() { try { sessionStorage.removeItem(this.KEY); localStorage.removeItem(this.KEY); } catch {} }
 };
 
 // ══════════════════════════════════════════════════════
@@ -1682,6 +1682,8 @@ function drawQR(uri, containerId) {
   if (!window.QRCode) {
     const sc = document.createElement('script');
     sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    sc.integrity = 'sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU';
+    sc.crossOrigin = 'anonymous';
     sc.onload = render; document.head.appendChild(sc);
   } else render();
 }
@@ -1701,9 +1703,9 @@ async function loadUsers() {
   tbody.innerHTML = d.users.map(u => `<tr>
     <td style="font-weight:500">${esc(u.name)}</td>
     <td style="font-size:.78rem;color:var(--ink-mid);direction:ltr">${esc(u.email)}</td>
-    <td><select class="role-select" onchange="handleUpdateUser('${u.id}','role_id',this.value)">${['super_admin','admin','viewer'].map(r => `<option value="${r}"${u.role_id===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td>
+    <td><select class="role-select" onchange="handleUpdateUser('${esc(u.id)}','role_id',this.value)">${['super_admin','admin','viewer'].map(r => `<option value="${r}"${u.role_id===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td>
     <td><span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:${u.totp_enabled?'rgba(74,122,58,.1)':'var(--sand-light)'};color:${u.totp_enabled?'#4A7A3A':'var(--ink-faint)'};">${u.totp_enabled?'✓ نشط':'—'}</span></td>
-    <td><button class="toggle-btn ${u.is_active?'on':'off'}" onclick="handleToggleActive('${u.id}',${u.is_active})"></button></td>
+    <td><button class="toggle-btn ${u.is_active?'on':'off'}" onclick="handleToggleActive('${esc(u.id)}',${u.is_active === true})"></button></td>
   </tr>`).join('');
 }
 
@@ -1887,7 +1889,7 @@ function renderTable() {
   };
 
   tbody.innerHTML = page.map(r => `
-    <tr onclick="openDrawer('${r.id}')">
+    <tr onclick="openDrawer('${esc(r.id)}')">
       <td><strong>${esc(r.name)}</strong></td>
       <td style="color:var(--ink-mid)">${esc(r.organization)}</td>
       <td>
@@ -1897,7 +1899,7 @@ function renderTable() {
       <td><span class="interest-badge">${INTEREST_AR[r.interest] || esc(r.interest) || '—'}</span></td>
       <td><span class="source-badge ${r.product === 'MI-HOME' ? 'home' : 'leaders'}">${r.product === 'MI-HOME' ? 'الرئيسية' : 'القادة'}</span></td>
       <td style="color:var(--ink-light);font-size:0.82rem;white-space:nowrap">${fmtDate(r.created_at)}</td>
-      <td><span class="status-badge ${r.status}">${STATUS_AR[r.status] || r.status}</span></td>
+      <td><span class="status-badge ${esc(r.status)}">${STATUS_AR[r.status] || esc(r.status)}</span></td>
     </tr>
   `).join('');
 
@@ -1989,7 +1991,7 @@ function openDrawer(id) {
       <div class="status-changer">
         ${['new','read','replied','archived'].map(s => `
           <button class="status-btn ${s} ${r.status === s ? 'active' : ''}"
-            onclick="updateStatus('${r.id}', '${s}')">
+            onclick="updateStatus('${esc(r.id)}', '${s}')">
             ${STATUS_AR[s]}
           </button>
         `).join('')}
@@ -2084,7 +2086,7 @@ function esc(str) {
   if (!str) return '';
   return String(str)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 </script>
 </body>
