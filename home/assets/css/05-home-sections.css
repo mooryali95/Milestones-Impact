@@ -46,7 +46,7 @@
     /* RTL: الشكل البترولي على اليسار، النص على اليمين */
     top: 0; left: 0; right: auto;
     width: 48%; height: 100%;
-    clip-path: polygon(0 0, 70% 0, 100% 100%, 0 100%);
+    clip-path: polygon(0 0, 55% 0, 100% 100%, 0 100%);
     opacity: 0.97;
   }
   .hero__shape::after {
@@ -56,6 +56,48 @@
     background-image:
       radial-gradient(circle at 30% 40%, rgba(200, 164, 92, 0.18) 0%, transparent 30%),
       radial-gradient(circle at 70% 70%, rgba(200, 164, 92, 0.1) 0%, transparent 35%);
+  }
+}
+
+/* الشعار المعكوس داخل اللوح البترولي — سطح المكتب فقط */
+.hero__brand { display: none; }
+@media (min-width: 1024px) {
+  .hero__brand {
+    position: absolute;
+    top: 50%;
+    left: 4vw;
+    width: clamp(220px, 20vw, 380px);
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .hero__brand-logo {
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.35));
+  }
+  .hero__brand-rule {
+    width: 64px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+  .hero__brand-caption {
+    font-family: var(--font-ar);
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: rgba(247, 248, 246, 0.72);
+  }
+  /* زر المحادثة يقع فوق اللوح الداكن قبل التمرير — نمنحه تبايناً ذهبياً */
+  .header:not(.scrolled) .header__cta {
+    background: var(--gold);
+    color: var(--petrol-deepest);
+  }
+  .header:not(.scrolled) .header__cta:hover {
+    background: var(--off-white);
   }
 }
 
@@ -71,22 +113,9 @@
   position: relative;
   z-index: 2;
 }
-/* Halo خلف النص يحمي القراءة فوق أي خلفية */
-.hero__content::before {
-  content: '';
-  position: absolute;
-  inset: -40px -30px;
-  background: radial-gradient(
-    ellipse at center,
-    var(--sand-paper) 50%,
-    rgba(251, 248, 239, 0.85) 70%,
-    transparent 95%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
+/* سطح المكتب: النص لا يتجاوز الحافة المائلة للّوح البترولي */
 @media (min-width: 1024px) {
-  .hero__content::before { display: none; }
+  .hero__content { max-width: min(760px, calc(52vw - var(--gutter) - 24px)); }
 }
 
 .hero__badge {
@@ -97,10 +126,9 @@
   background: rgba(200, 164, 92, 0.08);
   border: 1px solid rgba(200, 164, 92, 0.25);
   border-radius: 100px;
-  font-family: var(--font-en);
+  font-family: var(--font-ar);
   font-size: 12px;
-  font-style: italic;
-  letter-spacing: 0.05em;
+  font-weight: 500;
   color: var(--gold-deep);
   margin-bottom: 28px;
 }
@@ -111,15 +139,13 @@
 .hero__title {
   font-size: clamp(36px, 9vw, 78px);
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1.2; /* نقاط الحروف العربية لا تتصادم بين السطرين */
   color: var(--petrol-deepest);
   letter-spacing: -0.02em;
   margin-bottom: 20px;
 }
 .hero__title em {
-  font-family: var(--font-en);
-  font-style: italic;
-  font-weight: 500;
+  font-style: normal;
   color: var(--gold-deep);
 }
 @media (min-width: 640px) { .hero__title { margin-bottom: 24px; } }
