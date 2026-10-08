@@ -14,7 +14,7 @@
   // ⚙️ CONFIG
   // ──────────────────────────────────────────────
   const CONFIG = {
-    product: 'MI-LEADERS',
+    product: document.body.dataset.product || 'MI-LEADERS',
 
     // Supabase
     supabaseUrl:    'https://eormhcupwgwpllhrfxxg.supabase.co',
@@ -186,6 +186,7 @@
       const selected = stepEl.querySelector('.tf-option.selected');
       if (!selected) { showError(stepEl, true); return false; }
       formData.interest = selected.dataset.value;
+      formData.interestLabel = (selected.querySelector('.tf-option__title') || selected).textContent.trim();
     }
     else if (stepKey === '5') {
       formData.context = document.getElementById('qContext').value.trim();
@@ -249,7 +250,7 @@
       email:          formData.email          || '',
       phone:          formData.phone          || '',
       interest:       formData.interest       || '',
-      interest_label: INTEREST_LABELS[formData.interest] || '',
+      interest_label: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '',
       context:        formData.context        || '',
       user_agent:     navigator.userAgent,
       language:       navigator.language,
@@ -283,7 +284,7 @@
   // ──────────────────────────────────────────────
   function buildMailtoLink() {
     const subject = encodeURIComponent(
-      `[${CONFIG.product}] طلب جديد — ${INTEREST_LABELS[formData.interest] || 'تواصل'}`
+      `[${CONFIG.product}] طلب جديد — ${(formData.interestLabel || INTEREST_LABELS[formData.interest]) || 'تواصل'}`
     );
     const body = encodeURIComponent(
       `السلام عليكم،\n\n` +
@@ -294,7 +295,7 @@
       `الجهة: ${formData.organization || '—'}\n` +
       `البريد: ${formData.email || '—'}\n` +
       `الجوال: ${formData.phone || '—'}\n` +
-      `نوع الطلب: ${INTEREST_LABELS[formData.interest] || '—'}\n` +
+      `نوع الطلب: ${(formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
       `السياق الإضافي:\n${formData.context || '— لم يُذكر —'}\n\n` +
       `— تم الإرسال عبر Milestone Impact`
@@ -325,7 +326,7 @@
           action: 'notify',
           name: formData.name || '—', organization: formData.organization || '—',
           emailContact: formData.email || '—', phone: formData.phone || '—',
-          interest: formData.interest || '—', interestLabel: INTEREST_LABELS[formData.interest] || '—',
+          interest: formData.interest || '—', interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
           product: CONFIG.product, sourceUrl: window.location.href, submittedAt: new Date().toISOString(),
         }),
       }).catch(() => {});
@@ -340,7 +341,7 @@
           email: formData.email || '',
           product: CONFIG.product,
           interest: formData.interest || '—',
-          interestLabel: INTEREST_LABELS[formData.interest] || '—',
+          interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
         }),
       }).catch(() => {});
 

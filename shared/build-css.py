@@ -30,12 +30,15 @@ PAGES = {
         'video': ['intro-film.webm', 'intro-film.mp4',
                   'intro-film-poster.webp', 'intro-film-poster.jpg'],  # الفيديو التعريفي (home فقط)
     },
-    'leaders': {
-        'css_dir': os.path.join(ROOT, 'leaders', 'assets', 'css'),
+    # صفحات البرامج (/leaders و /projects) تحت home وتتشارك أصولاً واحدة
+    'program': {
+        'css_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'css'),
         'page_file': '05-sections.css',
         'extra': ['typeform.css'],
-        'html': os.path.join(ROOT, 'leaders', 'index.html'),
-        'js_dir': os.path.join(ROOT, 'leaders', 'assets', 'js'),
+        'html': os.path.join(ROOT, 'home', 'leaders', 'index.html'),
+        'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html')],
+        'brand': False,   # الهوية والأيقونات تُخدم من جذر home
+        'js_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'js'),
         'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
     },
 }
@@ -183,18 +186,17 @@ def build(page_name, config):
         f.write(combined)
 
     # تحديث version في HTML
-    html_path = config['html']
-    with open(html_path) as f:
-        html = f.read()
-
     import re
-    html_new = re.sub(
-        r'href="assets/css/main\.css\?v=[^"]*"',
-        f'href="assets/css/main.css?v={version}"',
-        html
-    )
-    with open(html_path, 'w') as f:
-        f.write(html_new)
+    for html_path in [config['html']] + config.get('also_html', []):
+        with open(html_path) as f:
+            html = f.read()
+        html_new = re.sub(
+            r'href="([^"]*assets/(?:program/)?css/main\.css)\?v=[^"]*"',
+            lambda m: f'href="{m.group(1)}?v={version}"',
+            html
+        )
+        with open(html_path, 'w') as f:
+            f.write(html_new)
 
     lines = len(combined.splitlines())
     print(f'✅ {page_name}: main.css — {lines} lines, v={version}')
@@ -206,5 +208,6 @@ if __name__ == '__main__':
         sync_layout_mirror(name, config)
         build(name, config)
         sync_js(name, config)
-        sync_brand(name, config)
+        if config.get('brand', True):
+            sync_brand(name, config)
     print('\n🚀 Done! Commit and push to deploy.')

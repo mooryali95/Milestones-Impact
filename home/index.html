@@ -18,7 +18,7 @@
 
   <!-- Primary SEO -->
   <title>Milestone Impact | من النية... إلى الأثر</title>
-  <meta name="description" content="منهجية متكاملة تُعيد تشكيل العلاقة بين القرار والقيمة والأثر. منتجاتنا: برنامج إدارة المشروعات للقادة، ومصفوفة التأثير. مدعوم من منظومة Manzoma و Sunk Value." />
+  <meta name="description" content="منهجية متكاملة تُعيد تشكيل العلاقة بين القرار والقيمة والأثر. مساراتنا: إدارة المشروعات للقادة، ومصفوفة التأثير، وإدارة المشاريع التنموية. مدعوم من منظومة Manzoma و Sunk Value." />
   <meta name="keywords" content="Milestone Impact, إدارة الأثر, القيادة, مصفوفة التأثير, إدارة المشروعات, Manzoma, Sunk Value, السعودية, هندسة اجتماعية" />
   <meta name="author" content="Milestone Impact" />
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
@@ -75,13 +75,19 @@
             "@type": "ListItem",
             "position": 1,
             "name": "إدارة المشروعات للقادة",
-            "url": "https://mi.sunkvalue.com/leaders"
+            "url": "https://mi.sunkvalue.com/leaders/"
           },
           {
             "@type": "ListItem",
             "position": 2,
             "name": "مصفوفة التأثير",
             "url": "https://matrix.sunkvalue.com"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "إدارة المشاريع التنموية",
+            "url": "https://mi.sunkvalue.com/projects/"
           }
         ]
       }
@@ -92,11 +98,12 @@
   <!-- Fonts — Tajawal (Body) + Cormorant Garamond (English/Logo) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500;600;700&family=Noto+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;600;700;800&family=Noto+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
 
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="assets/css/main.css?v=3fd18c87" />
+  <link rel="stylesheet" href="assets/css/main.css?v=3535f9f0" />
 </head>
 <body>
 
@@ -163,6 +170,7 @@
         <div class="hero__divider" aria-hidden="true">
           <span class="hero__divider-line"></span>
           <span class="hero__divider-diamond"></span>
+          <span class="hero__divider-line"></span>
         </div>
 
         <p class="hero__subtitle">
@@ -182,7 +190,38 @@
           </a>
         </div>
       </div>
+
     </div>
+    <aside class="hero__showcase" aria-label="مسارات Milestone Impact">
+      <img class="hero__showcase-logo" src="assets/brand/svg/milestone-impact-inverted.svg" alt="" width="220" height="100" />
+      <p class="hero__showcase-label" dir="ltr">Three tracks · One methodology</p>
+      <nav class="hero__tracks" aria-label="المسارات">
+        <a class="hero__track" href="/leaders/">
+          <span class="hero__track-num" dir="ltr">01</span>
+          <span class="hero__track-body">
+            <span class="hero__track-name">إدارة المشروعات للقادة</span>
+            <span class="hero__track-desc">برنامج تنفيذي لصُنّاع القرار</span>
+          </span>
+          <span class="hero__track-arrow" aria-hidden="true">←</span>
+        </a>
+        <a class="hero__track" href="https://matrix.sunkvalue.com">
+          <span class="hero__track-num" dir="ltr">02</span>
+          <span class="hero__track-body">
+            <span class="hero__track-name">مصفوفة التأثير</span>
+            <span class="hero__track-desc">منصة رقمية لبناء خطط الأثر</span>
+          </span>
+          <span class="hero__track-arrow" aria-hidden="true">←</span>
+        </a>
+        <a class="hero__track" href="/projects/">
+          <span class="hero__track-num" dir="ltr">03</span>
+          <span class="hero__track-body">
+            <span class="hero__track-name">إدارة المشاريع التنموية</span>
+            <span class="hero__track-desc">فريق متخصص من التصميم إلى الأثر</span>
+          </span>
+          <span class="hero__track-arrow" aria-hidden="true">←</span>
+        </a>
+      </nav>
+    </aside>
   </section>
 
 
@@ -342,7 +381,7 @@
             </div>
           </div>
 
-          <p class="product-card__tagline">From execution... to impact.</p>
+          <p class="product-card__tagline" dir="ltr">From execution... to impact.</p>
 
           <div class="product-card__divider" aria-hidden="true"></div>
 
@@ -366,7 +405,7 @@
           </div>
 
           <div class="product-card__footer">
-            <a href="https://leaders.sunkvalue.com" class="product-card__cta" aria-label="اكتشف برنامج إدارة المشروعات للقادة">
+            <a href="/leaders/" class="product-card__cta" aria-label="اكتشف برنامج إدارة المشروعات للقادة">
               <span>اكتشف البرنامج</span>
               <svg class="product-card__cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             </a>
@@ -383,7 +422,7 @@
             </div>
           </div>
 
-          <p class="product-card__tagline">Social engineering — sixteen strategic operations.</p>
+          <p class="product-card__tagline" dir="ltr">Social engineering — sixteen strategic operations.</p>
 
           <div class="product-card__divider" aria-hidden="true"></div>
 
@@ -409,6 +448,46 @@
           <div class="product-card__footer">
             <a href="https://matrix.sunkvalue.com" class="product-card__cta" aria-label="ادخل منصة مصفوفة التأثير">
               <span>ادخل المنصة</span>
+              <svg class="product-card__cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            </a>
+          </div>
+        </article>
+
+        <article class="product-card product-card--projects reveal reveal-delay-3" aria-labelledby="product-projects-name">
+          <div class="product-card__header">
+            <div class="product-card__icon" aria-hidden="true">◇</div>
+            <div class="product-card__name-block">
+              <span class="product-card__code">MI · Projects</span>
+              <h3 class="product-card__name" id="product-projects-name">إدارة المشاريع التنموية</h3>
+            </div>
+          </div>
+
+          <p class="product-card__tagline" dir="ltr">From funding... to proven impact.</p>
+
+          <div class="product-card__divider" aria-hidden="true"></div>
+
+          <p class="product-card__desc">
+            فريقٌ متخصص يتولّى مشروعكم التنموي من التصميم والإطار المنطقي، إلى التنفيذ المُدار، ثم قياس الأثر وتقارير المانحين.
+          </p>
+
+          <div class="product-card__meta">
+            <div class="product-card__meta-row">
+              <span class="product-card__meta-label">Audience</span>
+              <span class="product-card__meta-value">الجمعيات والمانحون والجهات</span>
+            </div>
+            <div class="product-card__meta-row">
+              <span class="product-card__meta-label">Format</span>
+              <span class="product-card__meta-value">خدمة مُدارة بفريق متخصص</span>
+            </div>
+            <div class="product-card__meta-row">
+              <span class="product-card__meta-label">Scope</span>
+              <span class="product-card__meta-value">تصميم · تنفيذ · أثر</span>
+            </div>
+          </div>
+
+          <div class="product-card__footer">
+            <a href="/projects/" class="product-card__cta" aria-label="اكتشف مسار إدارة المشاريع التنموية">
+              <span>اكتشف المسار</span>
               <svg class="product-card__cta-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             </a>
           </div>
@@ -485,7 +564,7 @@
     <div class="footer__container">
       <div class="footer__top">
         <a href="#hero" class="logo footer__logo" aria-label="Milestone Impact">
-      <img class="logo__img logo__img--inverted" src="assets/brand/svg/milestone-impact-inverted.svg" alt="Milestone Impact" width="220" height="100" />
+      <img class="logo__img logo__img--inverted" loading="lazy" decoding="async" src="assets/brand/svg/milestone-impact-inverted.svg" alt="Milestone Impact" width="220" height="100" />
     </a>
         <div class="footer__powered">
           <span class="footer__powered-label">POWERED BY</span>
@@ -499,7 +578,8 @@
       <div class="footer__bottom">
         <span>© 2026 Milestone Impact — جميع الحقوق محفوظة</span>
         <nav class="footer__bottom-links" aria-label="روابط إضافية">
-          <a href="https://leaders.sunkvalue.com" class="footer__bottom-link">للقادة</a>
+          <a href="/leaders/" class="footer__bottom-link">للقادة</a>
+          <a href="/projects/" class="footer__bottom-link">المشاريع التنموية</a>
           <a href="https://matrix.sunkvalue.com" class="footer__bottom-link">مصفوفة التأثير</a>
           <a href="https://manzoma.sa" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">manzoma.sa</a>
           <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">sunkvalue.com</a>

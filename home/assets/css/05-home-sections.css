@@ -218,6 +218,75 @@
   }
 }
 
+/* نص إنجليزي داخل صفحة RTL: اتجاه LTR لعلامات الترقيم، ومحاذاة يمين */
+.hero__tagline[dir="ltr"],
+.product-card__tagline[dir="ltr"] { text-align: right; }
+
+/* لوحة المسارات داخل الشكل البترولي (شاشات كبيرة فقط)
+   تحل محل الشعار الكبير من 1280px لأنها تحمل الشعار نفسه، فلا يتكرر */
+.hero__showcase { display: none; }
+@media (min-width: 1280px) {
+  .hero__brand { display: none; }
+  /* مثبّتة على اللوح نفسه لا على الحاوية: الحاوية تتوسّط في الشاشات العريضة
+     بينما اللوح ثابت عند 48% من العرض، فتنزلق اللوحة فوق الحافة المائلة */
+  .hero__showcase {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 4vw;
+    width: min(380px, 24vw);
+    transform: translateY(-50%);
+    z-index: 2;
+    color: var(--sand-paper);
+  }
+  .hero__showcase-logo {
+    height: 64px;
+    width: auto;
+    margin-bottom: 28px;
+  }
+  .hero__showcase-label {
+    font-family: var(--font-en);
+    font-style: italic;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--gold-light);
+    margin-bottom: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(239, 231, 216, 0.14);
+    text-align: right;
+  }
+  .hero__tracks { display: flex; flex-direction: column; }
+  .hero__track {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 4px;
+    border-bottom: 1px solid rgba(239, 231, 216, 0.1);
+    color: inherit;
+    text-decoration: none;
+    transition: background 0.3s var(--ease), padding 0.3s var(--ease);
+  }
+  .hero__track:hover,
+  .hero__track:focus-visible {
+    background: rgba(199, 154, 75, 0.08);
+    padding-inline: 12px;
+  }
+  .hero__track-num {
+    font-family: var(--font-en);
+    font-size: 14px;
+    color: var(--gold);
+    min-width: 24px;
+  }
+  .hero__track-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .hero__track-name { font-size: 17px; font-weight: 600; }
+  .hero__track-desc { font-size: 13px; color: rgba(239, 231, 216, 0.62); }
+  .hero__track-arrow {
+    color: var(--gold);
+    transition: transform 0.3s var(--ease);
+  }
+  .hero__track:hover .hero__track-arrow { transform: translateX(-4px); }
+}
+
 
 /* ══════════════════════════════════════════════════════════════════
    ① CONCEPT — الفكرة
@@ -545,11 +614,17 @@
   gap: 28px;
   margin-top: 24px;
 }
-@media (min-width: 900px) {
+@media (min-width: 760px) {
   .products__grid {
     grid-template-columns: 1fr 1fr;
-    gap: 36px;
+    gap: 32px;
     margin-top: 48px;
+  }
+}
+@media (min-width: 1180px) {
+  .products__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
   }
 }
 
@@ -605,7 +680,8 @@
 }
 
 /* اللون التعريفي لكل منتج */
-.product-card--leaders {
+.product-card--leaders,
+.product-card--projects {
   --product-accent: var(--gold);
   --product-glow: rgba(200, 164, 92, 0.1);
 }
