@@ -70,6 +70,38 @@ test('نموذج التواصل: من الترحيب إلى الشكر، ويح�
   });
 });
 
+async function fillContactForm(page) {
+  await page.evaluate(() => window.openTypeform());
+  await page.locator('.tf-welcome__cta').click();
+  await page.locator('#qName').fill('اختبار آلي');
+  await page.locator('#tfNext').click();
+  await page.locator('#qOrg').fill('جهة الاختبار');
+  await page.locator('#tfNext').click();
+  await page.locator('#qEmail').fill('test@example.com');
+  await page.locator('#qPhone').fill('+966500000000');
+  await page.locator('#tfNext').click();
+  await page.locator('.tf-option').first().click();
+  await page.locator('#tfNext').click();
+  await page.locator('#tfNext').click();
+}
+
+for (const path of ['/', '/projects/']) {
+  test(`فشل حفظ الطلب في ${path} يُظهر رسالة وإعادة محاولة، ولا تظهر شاشة الشكر`, async ({ page }) => {
+    let fail = true;
+    await page.route(SUPABASE, (route) => fail
+      ? route.fulfill({ status: 500, body: 'down' })
+      : route.fulfill({ status: 201, contentType: 'application/json', body: '{}' }));
+    await page.goto(BASE + path);
+    await fillContactForm(page);
+    await expect(page.locator('.tf-submit-error')).toBeVisible();
+    await expect(page.locator('.tf-step[data-step="thanks"]')).not.toHaveClass(/active/);
+
+    fail = false;
+    await page.locator('.tf-submit-error__retry').click();
+    await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
+  });
+}
+
 test('صفحة الحوكمة: المخطط يربط المجالس، ومقاعد الأعضاء تظهر', async ({ page }) => {
   await page.goto(BASE + '/governance/');
   await expect(page.locator('.org-node')).toHaveCount(4);

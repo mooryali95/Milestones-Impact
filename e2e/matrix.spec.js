@@ -76,3 +76,33 @@ test('انقطاع الشبكة أثناء التسجيل يُظهر رسالة 
   await expect(page.getByText('خطأ في الاتصال بالخادم')).toBeVisible();
   await expect(page.getByRole('button', { name: /إرسال رمز التحقق/ })).toBeEnabled();
 });
+
+// جلسة محفوظة محليًا قبل تحميل الصفحة
+async function seedSession(page, extra = {}) {
+  await page.addInitScript((extra) => {
+    localStorage.setItem('mi_local_session', JSON.stringify({
+      user: { name: 'مستخدم', phone: '0500000000', email: 'user@example.com' },
+      sessionId: 'r1', token: 'test-token', dates: {}, confirmed: {},
+      submitted: false, reopenRequested: false, savedAt: Date.now(), ...extra,
+    }));
+  }, extra);
+}
+
+test('استعادة الجلسة تأخذ حالة الخطة من الخادم لا من النسخة المحلية', async ({ page }) => {
+  await seedSession(page);
+  await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+    { success: true, registration: { id: 'r1', name: 'مستخدم', phone: '0500000000', email: 'user@example.com', dates: {}, confirmed: {}, submitted: true } }) }));
+  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  await expect(page.locator('.tab', { hasText: 'النهائي' })).toBeVisible();
+});
+
+test('انتهاء الجلسة على الخادم يُخرج المستخدم برسالة', async ({ page }) => {
+  await seedSession(page);
+  await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+    { success: false, message: 'انتهت الجلسة، يرجى تسجيل الدخول مجددًا' }) }));
+  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  await expect(page.getByText(/انتهت الجلسة/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ابدأ رحلتك' }).first()).toBeVisible();
+});

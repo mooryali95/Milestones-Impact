@@ -1497,6 +1497,7 @@ async function callAuth(body) {
 async function handleSendEmail() {
   const email = document.getElementById('loginEmail').value.trim();
   const btn   = document.getElementById('loginBtnSend');
+  if (btn.disabled) return;
   const err   = document.getElementById('loginError');
   err.classList.remove('show'); err.style.display = 'none';
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1539,6 +1540,7 @@ async function handleVerifyCode() {
   const email = currentEmail || document.getElementById('loginEmail').value.trim();
   const code  = document.getElementById('loginCode').value.trim();
   const btn   = document.getElementById('loginBtnVerify');
+  if (btn.disabled) return;
   document.getElementById('loginErrorCode').style.display = 'none';
   if (code.length !== 6) { showLoginError('loginErrorCode', 'الرمز 6 أرقام'); return; }
   btn.disabled = true; btn.textContent = 'جارٍ التحقق...';
@@ -1575,6 +1577,8 @@ function showLoginError(id, msg) {
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
+  // الزر المركّز ينفّذ نقرته بنفسه؛ تجاهل Enter عليه كي لا يُرسل الرمز مرتين
+  if (e.target.tagName === 'BUTTON') return;
   const login = document.getElementById('screen-login');
   if (!login || login.style.display === 'none') return;
   const codeStep = document.getElementById('loginStepCode');
@@ -1998,7 +2002,7 @@ function openDrawer(id) {
       </div>
     </div>
 
-    <button class="reply-btn" onclick="replyByEmail('${esc(r.email)}','${esc(r.name)}')">
+    <button class="reply-btn" onclick="replyByEmail('${esc(r.id)}','${esc(r.email)}','${esc(r.name)}')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z"/>
       </svg>
@@ -2032,7 +2036,10 @@ async function updateStatus(id, status, silent = false) {
     const idx = allData.findIndex(r => r.id === id);
     if (idx !== -1) allData[idx].status = status;
     updateStats();
+    // نبقى في الصفحة نفسها بدل العودة للأولى عند تغيير الحالة
+    const keepPage = currentPage;
     filterTable();
+    currentPage = Math.min(keepPage, Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE)));
     renderTable();
 
     // تحديث الـ drawer إن كان مفتوحاً
@@ -2046,21 +2053,18 @@ async function updateStatus(id, status, silent = false) {
     if (!silent) showToast(`تم تغيير الحالة إلى: ${({ new:'جديد',read:'مقروء',replied:'تم الرد',archived:'مؤرشف' })[status]}`);
 
   } catch (e) {
-    showToast('خطأ في تحديث الحالة');
+    showToast(e.message || 'خطأ في تحديث الحالة');
   }
 }
 
 // ══════════════════════════════════════════════════════
 // UTILITIES
 // ══════════════════════════════════════════════════════
-function replyByEmail(email, name) {
+function replyByEmail(id, email, name) {
   const subject = encodeURIComponent(`رداً على استفساركم — Milestone Impact`);
   const body    = encodeURIComponent(`السلام عليكم ${name}،\n\nشكراً لتواصلكم مع Milestone Impact.\n\n`);
   window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
-  updateStatus(
-    allData.find(r => r.email === email)?.id,
-    'replied'
-  );
+  updateStatus(id, 'replied');
 }
 
 function copyText(text) {
