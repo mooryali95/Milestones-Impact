@@ -143,3 +143,24 @@ for (const [w, h] of [[1280, 950], [1440, 900], [390, 844]]) {
     expect(box.height).toBeGreaterThanOrEqual(h - 1);
   });
 }
+
+// شرائح المسارات على اللوحة الداكنة تُقرأ (WCAG AA: 4.5:1 للنصّ الصغير).
+// كانت بلون المسار نفسه — درجات جرافيت على أرضية جرافيت — من 1.01:1 إلى 2.35:1.
+test('شرائح المسارات في لوحة الدخول تجتاز التباين', async ({ page }) => {
+  await mockUserApi(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  const ratios = await page.evaluate(() => {
+    const lum = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number)
+      .map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+      .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const bg = getComputedStyle(document.querySelector('.auth-left')).backgroundColor;
+    return [...document.querySelectorAll('.auth-left-track')].map((el) => {
+      const [a, b] = [lum(getComputedStyle(el).color), lum(bg)];
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+  });
+  expect(ratios).toHaveLength(4);
+  for (const r of ratios) expect(r).toBeGreaterThanOrEqual(4.5);
+});

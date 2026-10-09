@@ -142,6 +142,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
    ارتفاع محتواها. dvh يتبع شريط العنوان المتحرّك في الجوال كما أُريد بها. */
 .auth-screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 .auth-left { display: none; }
+/* ألوان شرائح المسارات خارج كل استعلام وسائط: القاعدة معرَّفة مرّتين
+   (لوحيّ ومكتبيّ)، وكانت الألوان في إحداهما فقط فتسقط عند العرض الآخر. */
+.auth-left-track { color:#EFE7D8; background:rgba(239,231,216,0.06); border:1px solid rgba(199,154,75,0.38); }
 .auth-right { flex: 1; background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1.5rem; }
 .auth-form-wrap { width: 100%; max-width: 360px; }
 .auth-logo { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.8rem; justify-content: center; }
