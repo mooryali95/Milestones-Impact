@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!-- ═══════════════════════════════════════════════════════════════
+       ░░ META & SEO — MILESTONE IMPACT | مقياس جاهزية الأثر ░░
+       ═══════════════════════════════════════════════════════════════ -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B272F" />
+  <meta name="color-scheme" content="light" />
+
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <title>مقياس جاهزية الأثر | Milestone Impact</title>
+  <meta name="description" content="قيسوا جاهزية جهتكم للأثر المؤسسي في ثلاث دقائق: اثنا عشر سؤالًا عبر حلقات سلسلة الأثر الخمس، ونتيجة فورية بمستوى النضج وأولويات التحسين." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://mi.sunkvalue.com/assessment/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ar_SA" />
+  <meta property="og:site_name" content="Milestone Impact" />
+  <meta property="og:title" content="مقياس جاهزية الأثر | Milestone Impact" />
+  <meta property="og:description" content="قيسوا جاهزية جهتكم للأثر المؤسسي في ثلاث دقائق: اثنا عشر سؤالًا عبر حلقات سلسلة الأثر الخمس، ونتيجة فورية بمستوى النضج وأولويات التحسين." />
+  <meta property="og:url" content="https://mi.sunkvalue.com/assessment/" />
+  <meta property="og:image" content="https://mi.sunkvalue.com/assets/brand/social/og-teal.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="مقياس جاهزية الأثر | Milestone Impact" />
+  <meta name="twitter:description" content="قيسوا جاهزية جهتكم للأثر المؤسسي في ثلاث دقائق: اثنا عشر سؤالًا عبر حلقات سلسلة الأثر الخمس، ونتيجة فورية بمستوى النضج وأولويات التحسين." />
+  <meta name="twitter:image" content="https://mi.sunkvalue.com/assets/brand/social/og-teal.png" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;600;700;800&family=Noto+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=b758b1d2" />
+  <style>
+    .as-wrap{max-width:860px;margin:0 auto;padding:0 var(--gutter,20px)}
+    .as-hero{background:var(--mi-graphite,#0B272F);color:var(--mi-mist,#EAF0F0);padding:150px 0 72px}
+    .as-hero .section-label{color:var(--mi-copper,#C79A4B)}
+    .as-hero__title{font-family:var(--mi-font-ar);font-size:clamp(32px,5vw,54px);line-height:1.35;font-weight:700;margin:14px 0 18px}
+    .as-hero__title em{font-style:normal;color:var(--mi-copper,#C79A4B)}
+    .as-hero__lead{max-width:640px;font-size:17px;line-height:2;color:#B9CACD}
+    .as-stage{background:var(--mi-mist,#EAF0F0);padding:56px 0 96px;scroll-margin-top:90px}
+    .as-card{background:#fff;border:1px solid rgba(11,39,47,.1);border-top:3px solid var(--mi-gold,#A97A2E);padding:clamp(24px,4vw,44px);margin-bottom:24px}
+    .as-card__text{font-size:16px;line-height:2;color:#4A6A72;margin:0 0 24px}
+    .as-chain{list-style:none;padding:0;margin:0 0 28px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .as-chain li{background:var(--mi-graphite,#0B272F);color:#EAF0F0;text-align:center;padding:14px 4px;font-weight:600;font-size:14px;position:relative}
+    .as-chain li span{display:block;color:var(--mi-copper,#C79A4B);font-family:var(--mi-font);font-size:12px;letter-spacing:.2em;margin-bottom:4px}
+    .as-progress{height:3px;background:rgba(11,39,47,.08);margin-bottom:18px}
+    .as-progress__bar{height:100%;width:0;background:var(--mi-gold,#A97A2E);transition:width .35s ease}
+    .as-q__meta{display:flex;justify-content:space-between;font-size:13px;color:#4A6A72;font-weight:600}
+    .as-q__num{font-family:var(--mi-font);font-size:44px;color:var(--mi-gold,#A97A2E);opacity:.35;margin-top:14px;line-height:1}
+    .as-q__text{font-family:var(--mi-font-ar);font-size:clamp(20px,2.8vw,26px);line-height:1.8;color:var(--mi-graphite,#0B272F);margin:8px 0 6px;font-weight:700}
+    .as-q__hint{color:#4A6A72;font-size:14px;margin:0 0 22px}
+    .as-options{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .as-option{display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 8px;border:1px solid rgba(11,39,47,.16);background:#fff;cursor:pointer;font:inherit;color:var(--mi-graphite,#0B272F);transition:border-color .2s,background .2s}
+    .as-option:hover{border-color:var(--mi-gold,#A97A2E)}
+    .as-option:focus-visible{outline:2px solid var(--mi-gold,#A97A2E);outline-offset:2px}
+    .as-option.is-selected{background:var(--mi-graphite,#0B272F);color:#EAF0F0;border-color:var(--mi-graphite,#0B272F)}
+    .as-option__key{font-family:var(--mi-font);font-size:12px;width:24px;height:24px;line-height:22px;border:1px solid currentColor;opacity:.6}
+    .as-option__label{font-weight:600;font-size:15px}
+    .as-q__nav{display:flex;justify-content:space-between;align-items:center;margin-top:22px}
+    .as-q__keys{font-size:12px;color:#7E979C}
+    .as-link{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--mi-gold,#A97A2E);cursor:pointer;text-decoration:underline;text-underline-offset:5px}
+    .as-link:disabled{opacity:.3;cursor:default}
+    .as-result__score{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;margin-bottom:28px}
+    .as-dial{width:130px;height:130px;border-radius:50%;border:3px solid var(--mi-gold,#A97A2E);display:flex;align-items:center;justify-content:center;font-family:var(--mi-font);font-size:46px;font-weight:700;color:var(--mi-graphite,#0B272F)}
+    .as-dial small{font-size:18px;margin-inline-start:2px}
+    .as-result__kicker{font-size:13px;color:#4A6A72;font-weight:600;letter-spacing:.05em}
+    .as-result__level{font-family:var(--mi-font-ar);font-size:28px;margin:4px 0 8px;color:var(--mi-graphite,#0B272F)}
+    .as-result__desc{line-height:1.9;color:#4A6A72;margin:0 0 8px}
+    .as-result__weak{margin:0;color:var(--mi-graphite,#0B272F)}
+    .as-result__weak strong{color:#9A3B2E}
+    .as-chart svg{width:100%;height:auto;display:block}
+    .as-chart__label{font:700 15px var(--mi-font-ar);fill:#0B272F}
+    .as-chart__pct{font:700 14px var(--mi-font);fill:#4A6A72}
+    .as-chart__track{fill:rgba(11,39,47,.07)}
+    .as-chart__bar{fill:#12414E}
+    .as-chart__bar.is-weak{fill:#A97A2E}
+    .as-gate__title{font-family:var(--mi-font-ar);font-size:22px;margin:0 0 8px;color:var(--mi-graphite,#0B272F)}
+    .as-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+    .as-fields label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:var(--mi-graphite,#0B272F)}
+    .as-fields small{font-weight:400;color:#7E979C}
+    .as-fields input{font:inherit;font-weight:400;padding:12px 14px;border:1px solid rgba(11,39,47,.2);background:#FBFDFD;color:#0B272F}
+    .as-fields input:focus{outline:2px solid var(--mi-gold,#A97A2E);outline-offset:0;border-color:transparent}
+    .as-hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+    .as-gate__error{color:#9A3B2E;font-weight:600;margin:0 0 14px}
+    .as-gate__note{font-size:13px;color:#7E979C;margin:16px 0 0}
+    .as-gate__note a{color:inherit}
+    .as-report__head{display:flex;gap:20px;align-items:center;border-bottom:1px solid rgba(11,39,47,.1);padding-bottom:20px;margin-bottom:20px}
+    .as-report__meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:#4A6A72}
+    .as-report__sub{font-size:16px;color:var(--mi-gold,#A97A2E);margin:0 0 12px}
+    .as-rlinks{list-style:none;padding:0;margin:0 0 28px}
+    .as-rlink{border-bottom:1px solid rgba(11,39,47,.08);padding:16px 0}
+    .as-rlink__head{display:flex;align-items:baseline;gap:14px}
+    .as-rlink__rank{font-family:var(--mi-font);color:var(--mi-gold,#A97A2E);font-weight:700}
+    .as-rlink__name{flex:1;font-weight:700;font-size:17px;color:var(--mi-graphite,#0B272F)}
+    .as-rlink__name em{font-family:var(--mi-font);font-style:normal;font-weight:400;font-size:13px;color:#7E979C;margin-inline-start:6px}
+    .as-rlink__pct{font-family:var(--mi-font);font-weight:700;color:#12414E}
+    .as-rlink.is-first .as-rlink__pct{color:#A97A2E}
+    .as-rlink__advice{margin:8px 0 0;padding-inline-start:38px;line-height:1.9;color:#4A6A72}
+    .as-report__cta{background:var(--mi-sand,#EFE7D8);padding:22px}
+    .as-report__cta p{margin:0 0 16px;line-height:1.9}
+    .as-report__actions{display:flex;flex-wrap:wrap;gap:22px;align-items:center}
+    .as-restart{display:block;margin:8px auto 0}
+    @media (max-width:640px){
+      .as-hero{padding:120px 0 52px}
+      .as-chain{grid-template-columns:repeat(5,1fr);gap:4px}
+      .as-chain li{font-size:12px;padding:10px 2px}
+      .as-options{grid-template-columns:1fr 1fr}
+      .as-result__score{grid-template-columns:1fr;justify-items:start}
+      .as-fields{grid-template-columns:1fr}
+      .as-report__head{flex-direction:column;align-items:flex-start}
+    }
+    @media print{
+      .header,.mobile-drawer,.mobile-overlay,.footer,.as-hero,.as-gate,.as-restart,.as-report__actions,.scroll-progress{display:none!important}
+      .as-stage{background:#fff;padding:0}
+      .as-card{border:0;padding:0 0 12px;margin:0;break-inside:avoid}
+      .as-rlink{break-inside:avoid}
+      body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    }
+  </style>
+</head>
+<body data-product="MI-ASSESSMENT">
+
+  <header class="header" id="header" role="banner">
+    <a href="/" class="logo" aria-label="Milestone Impact — العودة للمنظومة">
+      <img class="logo__img" src="/assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
+    </a>
+    <nav class="header__nav" role="navigation" aria-label="القائمة الرئيسية">
+      <a href="/" class="header__nav-link header__nav-link--home">المنظومة ↗</a>
+      <a href="/leaders/" class="header__nav-link">للقادة</a>
+      <a href="/projects/" class="header__nav-link">المشاريع التنموية</a>
+      <a href="/governance/" class="header__nav-link">الحوكمة</a>
+    </nav>
+    <div class="header__actions">
+      <a class="header__cta" href="https://wa.me/966532134539?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D9%88%D8%AF%D9%91%20%D8%AD%D8%AC%D8%B2%20%D9%85%D8%AD%D8%A7%D8%AF%D8%AB%D8%A9%20%D8%AA%D8%B9%D8%B1%D9%8A%D9%81%D9%8A%D8%A9%20%D9%85%D8%B9%20%D9%81%D8%B1%D9%8A%D9%82%20Milestone%20Impact." target="_blank" rel="noopener noreferrer">محادثة</a>
+      <button class="header__burger" id="burgerBtn" aria-label="فتح القائمة" aria-expanded="false" aria-controls="mobileDrawer">
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+        <span class="header__burger-line"></span>
+      </button>
+    </div>
+  </header>
+
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+  <nav class="mobile-drawer" id="mobileDrawer" role="navigation" aria-label="القائمة الرئيسية للجوال">
+    <div class="mobile-drawer__header">
+      <img class="logo__img" src="/assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
+      <button class="mobile-drawer__close" id="drawerCloseBtn" aria-label="إغلاق القائمة">✕</button>
+    </div>
+    <div class="mobile-drawer__links">
+      <a href="/" class="mobile-drawer__link">المنظومة ↗</a>
+      <a href="/leaders/" class="mobile-drawer__link">للقادة</a>
+      <a href="/projects/" class="mobile-drawer__link">المشاريع التنموية</a>
+      <a href="/governance/" class="mobile-drawer__link">الحوكمة</a>
+    </div>
+    <a class="mobile-drawer__cta" href="https://wa.me/966532134539?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D9%88%D8%AF%D9%91%20%D8%AD%D8%AC%D8%B2%20%D9%85%D8%AD%D8%A7%D8%AF%D8%AB%D8%A9%20%D8%AA%D8%B9%D8%B1%D9%8A%D9%81%D9%8A%D8%A9%20%D9%85%D8%B9%20%D9%81%D8%B1%D9%8A%D9%82%20Milestone%20Impact." target="_blank" rel="noopener noreferrer">احجز محادثة</a>
+  </nav>
+
+  <main id="main">
+  <section class="as-hero" aria-labelledby="as-title">
+    <div class="as-wrap">
+      <span class="section-label">مقياس جاهزية الأثر</span>
+      <h1 class="as-hero__title" id="as-title">أين تقف جهتكم<br>من <em>الأثر المؤسسي</em>؟</h1>
+      <p class="as-hero__lead">اثنا عشر سؤالًا تمرّ بحلقات سلسلة الأثر الخمس، من المدخلات إلى الأثر. تحصلون على نتيجة فورية بمستوى النضج وأضعف حلقة، وتقريرًا تفصيليًا بأولويات التحسين.</p>
+    </div>
+  </section>
+
+  <section class="as-stage" id="assessment" aria-live="polite">
+    <div class="as-wrap">
+
+      <!-- ── المقدمة ── -->
+      <div class="as-card" data-screen="intro">
+        <ol class="as-chain" aria-label="حلقات سلسلة الأثر">
+          <li><span>01</span>المدخلات</li>
+          <li><span>02</span>الأنشطة</li>
+          <li><span>03</span>المخرجات</li>
+          <li><span>04</span>النتائج</li>
+          <li><span>05</span>الأثر</li>
+        </ol>
+        <p class="as-card__text">أجيبوا بما هو قائم فعلًا اليوم، لا بما هو مخطط له. يستغرق المقياس نحو ثلاث دقائق، ولا تُطلب منكم أي بيانات قبل رؤية النتيجة.</p>
+        <button type="button" class="btn-primary" id="asStart">
+          <span>ابدأ المقياس</span>
+          <svg class="btn-primary__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        </button>
+      </div>
+
+      <!-- ── الأسئلة ── -->
+      <div class="as-card" data-screen="quiz" hidden>
+        <div class="as-progress"><div class="as-progress__bar" id="asBar"></div></div>
+        <div class="as-q__meta"><span id="asQLink"></span><span id="asCounter"></span></div>
+        <div class="as-q__num" id="asQNum" aria-hidden="true">01</div>
+        <h2 class="as-q__text" id="asQText"></h2>
+        <p class="as-q__hint">إلى أي مدى ينطبق هذا على جهتكم؟</p>
+        <div class="as-options" id="asOptions" role="radiogroup" aria-labelledby="asQText"></div>
+        <div class="as-q__nav">
+          <button type="button" class="as-link" id="asPrev">السابق</button>
+          <span class="as-q__keys">اختصار: الأرقام من 1 إلى 4</span>
+        </div>
+      </div>
+
+      <!-- ── النتيجة ── -->
+      <div data-screen="result" hidden>
+        <div class="as-card as-result">
+          <div class="as-result__score">
+            <div class="as-dial"><span id="asScore">0</span><small>%</small></div>
+            <div>
+              <span class="as-result__kicker">مستوى النضج</span>
+              <h2 class="as-result__level" id="asLevel"></h2>
+              <p class="as-result__desc" id="asLevelDesc"></p>
+              <p class="as-result__weak">الحلقة الأضعف: <strong id="asWeakest"></strong></p>
+            </div>
+          </div>
+          <div class="as-chart" id="asChart"></div>
+        </div>
+
+        <form class="as-card as-gate" id="asGate" novalidate>
+          <h3 class="as-gate__title">احصلوا على التقرير الكامل</h3>
+          <p class="as-card__text">أولويات التحسين مرتّبة من الأضعف إلى الأقوى، مع توصية عملية لكل حلقة، قابلة للطباعة والحفظ PDF.</p>
+          <div class="as-fields">
+            <label>الاسم الكريم<input name="name" type="text" maxlength="120" autocomplete="name" required></label>
+            <label>الجهة<input name="organization" type="text" maxlength="160" autocomplete="organization" required></label>
+            <label>البريد الإلكتروني<input name="email" type="email" maxlength="160" autocomplete="email" dir="ltr" required></label>
+            <label>رقم التواصل <small>(اختياري)</small><input name="phone" type="tel" maxlength="30" inputmode="tel" autocomplete="tel" dir="ltr"></label>
+            <label class="as-hp" aria-hidden="true">Website<input name="website" type="text" tabindex="-1" autocomplete="off"></label>
+          </div>
+          <p class="as-gate__error" id="asGateError" role="alert" hidden></p>
+          <button type="submit" class="btn-primary" id="asGateBtn"><span>اعرض التقرير الكامل</span></button>
+          <p class="as-gate__note">نستخدم بياناتكم للتواصل بشأن نتيجتكم فقط. <a href="/privacy.html">سياسة الخصوصية</a></p>
+        </form>
+
+        <article class="as-card as-report" id="asReport" hidden>
+          <header class="as-report__head">
+            <img src="/assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="160" height="73" />
+            <div>
+              <h3 class="as-gate__title">تقرير جاهزية الأثر</h3>
+              <div class="as-report__meta" id="asReportMeta"></div>
+            </div>
+          </header>
+          <h4 class="as-report__sub">أولويات التحسين</h4>
+          <ol class="as-rlinks" id="asReportLinks"></ol>
+          <div class="as-report__cta">
+            <p>يقدّم برنامج <strong>إدارة المشروعات للقادة</strong> المنهجية الكاملة لسدّ هذه الفجوات، من التكليف حتى إثبات الأثر.</p>
+            <div class="as-report__actions">
+              <button type="button" class="btn-primary" id="asPrint"><span>طباعة أو حفظ PDF</span></button>
+              <a class="as-link" href="/leaders/">تعرّف على البرنامج</a>
+            </div>
+          </div>
+        </article>
+
+        <button type="button" class="as-link as-restart" id="asRestart">إعادة المقياس</button>
+      </div>
+
+    </div>
+  </section>
+  </main>
+
+  <!-- ═════════════════════════════════════ FOOTER ═════════════════════════════════════ -->
+  <footer class="footer" role="contentinfo">
+    <div class="footer__container">
+      <div class="footer__top">
+        <a href="/" class="logo footer__logo" aria-label="Milestone Impact — المنظومة">
+          <img class="logo__img logo__img--inverted" loading="lazy" decoding="async" src="/assets/brand/svg/milestone-impact-inverted.svg" alt="Milestone Impact" width="220" height="100" />
+        </a>
+        <div class="footer__powered">
+          <span class="footer__powered-label">POWERED BY</span>
+          <div class="footer__powered-brands">
+            <a href="https://manzoma.sa" target="_blank" rel="noopener noreferrer" class="footer__brand" aria-label="منظومة — manzoma.sa">منظومة Manzoma</a>
+            <span class="footer__brand-sep" aria-hidden="true"></span>
+            <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__brand" aria-label="Sunk Value — sunkvalue.com">Sunk Value</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Milestone Impact — جميع الحقوق محفوظة</span>
+        <nav class="footer__bottom-links" aria-label="روابط إضافية">
+          <a href="https://manzoma.sa" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">manzoma.sa</a>
+          <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">sunkvalue.com</a>
+        </nav>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/assets/program/js/mobile-menu.js" defer></script>
+  <script src="/assets/program/js/assessment.js" defer></script>
+  <script src="/assets/program/js/whatsapp.js" defer></script>
+
+</body>
+</html>
