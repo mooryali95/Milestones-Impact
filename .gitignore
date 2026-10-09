@@ -22,3 +22,5 @@ yarn-error.log*
 # package-lock.json is committed again. It was excluded because
 # react-scripts' loose peer deps produced a lockfile `npm ci` rejected;
 # Vite's tree resolves cleanly, so builds are reproducible once more.
+test-results/
+playwright-report/
