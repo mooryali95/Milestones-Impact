@@ -65,7 +65,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=5a6c0a3c" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=fe2715d8" />
 </head>
 <body data-product="MI-LEGAL">
 
@@ -81,7 +81,7 @@
       <a href="/" class="header__nav-link header__nav-link--home">المنظومة ↗</a>
       <a href="https://matrix.sunkvalue.com" class="header__nav-link">المصفوفة ↗</a>
       <a href="/leaders/" class="header__nav-link">للقادة</a>
-      <a href="/projects/" class="header__nav-link">المشاريع التنموية</a>
+      <a href="/projects/" class="header__nav-link">المشروعات التنموية</a>
       <a href="/governance/" class="header__nav-link">الحوكمة</a>
     </nav>
     <div class="header__actions">
@@ -104,7 +104,7 @@
       <a href="/" class="mobile-drawer__link">المنظومة ↗</a>
       <a href="https://matrix.sunkvalue.com" class="mobile-drawer__link">المصفوفة ↗</a>
       <a href="/leaders/" class="mobile-drawer__link">للقادة</a>
-      <a href="/projects/" class="mobile-drawer__link">المشاريع التنموية</a>
+      <a href="/projects/" class="mobile-drawer__link">المشروعات التنموية</a>
       <a href="/governance/" class="mobile-drawer__link">الحوكمة</a>
     </div>
     <button class="mobile-drawer__cta" onclick="openTypeform()">احجز محادثة</button>
@@ -118,7 +118,7 @@
       <h1 class="doc-hero__title" id="doc-title">سياسة الخصوصية</h1>
       <div class="doc-hero__divider" aria-hidden="true"><span></span><i></i><span></span></div>
       <p class="doc-hero__lead">ما نجمعه من بيانات، وكيف نستخدمها، وكيف نحميها، وما حقوقكم عليها.</p>
-      <p class="doc-hero__date">آخر تحديث: يناير 2026</p>
+      <p class="doc-hero__date">آخر تحديث: أكتوبر 2026</p>
     </div>
   </section>
 
@@ -150,6 +150,7 @@
           <tr><td>البريد الإلكتروني</td><td>التواصل والإشعارات</td><td>طوال مدة الاشتراك</td></tr>
           <tr><td>بيانات الخطة الاستراتيجية</td><td>حفظ تقدم المستخدم</td><td>طوال مدة الاشتراك + 90 يوماً</td></tr>
           <tr><td>بيانات التحليل الديموغرافي</td><td>أداة التحليل الاستراتيجي</td><td>طوال مدة الاشتراك</td></tr>
+          <tr><td>بيانات نموذج التواصل: الاسم والجهة والبريد والجوال ومجال الاهتمام وما تضيفونه من سياق</td><td>الرد على طلبكم وترتيب المحادثة</td><td>حتى انتهاء الغرض من الطلب، أو حذفها عند طلبكم</td></tr>
           </tbody>
           </table></div>
         </section>
@@ -162,22 +163,23 @@
           <li>إشعار المستشار عند اكتمال خطتك الاستراتيجية.</li>
           <li>تحسين المنصة وتطوير الميزات بناءً على أنماط الاستخدام المجمّعة (بيانات مجهولة الهوية).</li>
           <li>التواصل معك بشأن تحديثات الخدمة أو تجديد الاشتراك.</li>
+          <li>الرد على طلبات التواصل المرسلة عبر نموذج الموقع.</li>
           </ul>
         </section>
         <section class="doc-article" id="s3" aria-labelledby="s3-t">
           <span class="doc-article__num">البند الثالث</span>
           <h2 class="doc-article__title" id="s3-t">تخزين البيانات وحمايتها</h2>
-          <p>تُخزَّن جميع بياناتك على خوادم <strong>Supabase</strong> (مزوّد قاعدة البيانات) في مراكز بيانات آمنة. تُطبَّق تشفيرات SSL/TLS على جميع نقل البيانات.</p>
+          <p>تُخزَّن جميع بياناتك على خوادم <strong>Supabase</strong> (مزوّد قاعدة البيانات) في مراكز بيانات آمنة. وتُشفَّر البيانات كلها أثناء نقلها عبر بروتوكول TLS.</p>
           <p>لا نبيع بياناتك، ولا نشاركها مع أطراف ثالثة لأغراض تجارية.</p>
         </section>
         <section class="doc-article" id="s4" aria-labelledby="s4-t">
           <span class="doc-article__num">البند الرابع</span>
           <h2 class="doc-article__title" id="s4-t">أطراف ثالثة</h2>
-          <p>نستخدم الخدمات التالية لتشغيل المنصة — وكل منها ملتزمة بمعايير خصوصية صارمة:</p>
+          <p>نستخدم الخدمات التالية لتشغيل المنصة، وكلٌّ منها ملتزم بمعايير خصوصية صارمة:</p>
           <ul>
-          <li><strong>Supabase</strong> — تخزين البيانات وقاعدة البيانات</li>
-          <li><strong>AWS Lambda</strong> — خدمات البريد الإلكتروني والإشعارات</li>
-          <li><strong>Cloudflare</strong> — استضافة المنصة وحماية الشبكة</li>
+          <li><strong>Supabase</strong>: تخزين البيانات وقاعدة البيانات، بما فيها طلبات نموذج التواصل.</li>
+          <li><strong>Amazon Web Services (AWS)</strong>: إرسال إشعار المستشار بالبريد الإلكتروني.</li>
+          <li><strong>Cloudflare</strong>: استضافة المنصة وحماية الشبكة.</li>
           </ul>
           <p>لا نشارك بياناتك مع أي جهة أخرى خارج نطاق تشغيل الخدمة.</p>
         </section>
