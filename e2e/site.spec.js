@@ -59,7 +59,7 @@ test('نموذج التواصل: من الترحيب إلى الشكر، ويح�
   await page.locator('#tfNext').click();
 
   await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
-  const insert = calls.find((c) => c.url.includes('/rest/v1/'));
+  const insert = calls.find((c) => c.url.includes('/rest/v1/') && !c.url.includes('page_views'));
   expect(insert?.body).toMatchObject({
     name: 'اختبار آلي',
     organization: 'جهة الاختبار',

@@ -634,6 +634,15 @@ export default function App() {
   ];
   useTabHash({ tab, setTab, allowed: allowedTabs, enabled: screen === "main" });
 
+  // قياس الزيارات: شاشةٌ واحدة = مشاهدةٌ واحدة. الانتظار يبتلع الشاشات
+  // العابرة (splash ثم main عند استعادة الجلسة) فلا تُعدّ مرّتين.
+  const viewPath = screen === "main" ? `/#/${tab}` : screen === "admin" ? `/admin/${adminTab}` : screen === "splash" ? "/" : `/${screen}`;
+  useEffect(() => {
+    if (typeof window.miTrackView !== "function") return;
+    const id = setTimeout(() => window.miTrackView(viewPath), 600);
+    return () => clearTimeout(id);
+  }, [viewPath]);
+
   // Copyright footer
   // الإشعار المنبثق يظهر في كل الشاشات، لا في الشاشة الرئيسية وحدها
   const toastEl = toast && <div className="toast" role="status">{toast}</div>;
