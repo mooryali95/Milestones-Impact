@@ -44,7 +44,7 @@
     .as-hero__title{font-family:var(--mi-font-ar);font-size:clamp(32px,5vw,54px);line-height:1.35;font-weight:700;margin:14px 0 18px}
     .as-hero__title em{font-style:normal;color:var(--mi-copper,#C79A4B)}
     .as-hero__lead{max-width:640px;font-size:17px;line-height:2;color:#B9CACD}
-    .as-stage{background:var(--mi-mist,#EAF0F0);padding:56px 0 96px;scroll-margin-top:90px}
+    .as-stage{overflow-x:clip;background:var(--mi-mist,#EAF0F0);padding:56px 0 96px;scroll-margin-top:90px}
     .as-card{background:#fff;border:1px solid rgba(11,39,47,.1);border-top:3px solid var(--mi-gold,#A97A2E);padding:clamp(24px,4vw,44px);margin-bottom:24px}
     .as-card__text{font-size:16px;line-height:2;color:#4A6A72;margin:0 0 24px}
     .as-chain{list-style:none;padding:0;margin:0 0 28px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
@@ -75,19 +75,21 @@
     .as-result__desc{line-height:1.9;color:#4A6A72;margin:0 0 8px}
     .as-result__weak{margin:0;color:var(--mi-graphite,#0B272F)}
     .as-result__weak strong{color:#9A3B2E}
-    .as-chart svg{width:100%;height:auto;display:block}
-    .as-chart__label{font:700 15px var(--mi-font-ar);fill:#0B272F}
-    .as-chart__pct{font:700 14px var(--mi-font);fill:#4A6A72}
-    .as-chart__track{fill:rgba(11,39,47,.07)}
-    .as-chart__bar{fill:#12414E}
-    .as-chart__bar.is-weak{fill:#A97A2E}
+    .as-bars{list-style:none;padding:0;margin:0;display:grid;gap:14px}
+    .as-bars__row{display:grid;grid-template-columns:90px 1fr 48px;gap:14px;align-items:center}
+    .as-bars__name{font-weight:700;font-size:15px;color:var(--mi-graphite,#0B272F)}
+    .as-bars__track{height:16px;background:rgba(11,39,47,.07);position:relative}
+    .as-bars__fill{position:absolute;inset-block:0;inset-inline-start:0;background:#12414E;transition:width .6s ease}
+    .as-bars__row.is-weak .as-bars__fill{background:#A97A2E}
+    .as-bars__row.is-weak .as-bars__name{color:#9A3B2E}
+    .as-bars__pct{font-family:var(--mi-font);font-weight:700;font-size:14px;color:#4A6A72;text-align:end}
     .as-gate__title{font-family:var(--mi-font-ar);font-size:22px;margin:0 0 8px;color:var(--mi-graphite,#0B272F)}
     .as-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
-    .as-fields label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:var(--mi-graphite,#0B272F)}
+    .as-fields label{min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:var(--mi-graphite,#0B272F)}
     .as-fields small{font-weight:400;color:#7E979C}
-    .as-fields input{font:inherit;font-weight:400;padding:12px 14px;border:1px solid rgba(11,39,47,.2);background:#FBFDFD;color:#0B272F}
+    .as-fields input{width:100%;min-width:0;box-sizing:border-box;font:inherit;font-weight:400;padding:12px 14px;border:1px solid rgba(11,39,47,.2);background:#FBFDFD;color:#0B272F}
     .as-fields input:focus{outline:2px solid var(--mi-gold,#A97A2E);outline-offset:0;border-color:transparent}
-    .as-hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+    .as-hp{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
     .as-gate__error{color:#9A3B2E;font-weight:600;margin:0 0 14px}
     .as-gate__note{font-size:13px;color:#7E979C;margin:16px 0 0}
     .as-gate__note a{color:inherit}
@@ -118,7 +120,7 @@
     }
     @media print{
       .header,.mobile-drawer,.mobile-overlay,.footer,.as-hero,.as-gate,.as-restart,.as-report__actions,.scroll-progress{display:none!important}
-      .as-stage{background:#fff;padding:0}
+      .as-stage{overflow-x:clip;background:#fff;padding:0}
       .as-card{border:0;padding:0 0 12px;margin:0;break-inside:avoid}
       .as-rlink{break-inside:avoid}
       body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -126,6 +128,8 @@
   </style>
 </head>
 <body data-product="MI-ASSESSMENT">
+
+  <div class="scroll-progress" aria-hidden="true"><div class="scroll-progress__bar" id="scrollBar"></div></div>
 
   <header class="header" id="header" role="banner">
     <a href="/" class="logo" aria-label="Milestone Impact — العودة للمنظومة">
@@ -286,6 +290,7 @@
     </div>
   </footer>
 
+  <script src="/assets/program/js/scroll.js" defer></script>
   <script src="/assets/program/js/mobile-menu.js" defer></script>
   <script src="/assets/program/js/assessment.js" defer></script>
   <script src="/assets/program/js/whatsapp.js" defer></script>

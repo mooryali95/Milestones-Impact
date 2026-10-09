@@ -200,26 +200,20 @@
     $('#asLevel').textContent = result.level.name;
     $('#asLevelDesc').textContent = result.level.desc;
     $('#asWeakest').textContent = result.weakest.name;
-    $('#asChart').innerHTML = chartSVG(result.perLink);
+    $('#asChart').innerHTML = chartHTML(result.perLink);
     show('result');
   }
 
   // ──────────────────────────────────────────────
-  // المخطط: أعمدة أفقية لكل حلقة
+  // المخطط: عمود أفقي لكل حلقة
   // ──────────────────────────────────────────────
-  function chartSVG(perLink) {
-    const rowH = 46, w = 560, labelW = 110, barW = w - labelW - 60;
-    const h = perLink.length * rowH + 10;
-    const rows = perLink.map((l, i) => {
-      const y = i * rowH + 10;
-      const len = Math.max(4, (l.pct / 100) * barW);
-      return `
-        <text x="${w}" y="${y + 20}" text-anchor="end" class="as-chart__label">${l.name}</text>
-        <rect x="${w - labelW - barW}" y="${y + 6}" width="${barW}" height="18" rx="1" class="as-chart__track"/>
-        <rect x="${w - labelW - len}" y="${y + 6}" width="${len}" height="18" rx="1" class="as-chart__bar${l === result.weakest ? ' is-weak' : ''}"/>
-        <text x="${w - labelW - barW - 10}" y="${y + 20}" text-anchor="end" class="as-chart__pct">${l.pct}%</text>`;
-    }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="نتيجة كل حلقة من حلقات سلسلة الأثر">${rows}</svg>`;
+  function chartHTML(perLink) {
+    return '<ul class="as-bars" aria-label="نتيجة كل حلقة من حلقات سلسلة الأثر">' + perLink.map(l => `
+      <li class="as-bars__row${l === result.weakest ? ' is-weak' : ''}">
+        <span class="as-bars__name">${l.name}</span>
+        <span class="as-bars__track"><span class="as-bars__fill" style="width:${Math.max(2, l.pct)}%"></span></span>
+        <span class="as-bars__pct">${l.pct}%</span>
+      </li>`).join('') + '</ul>';
   }
 
   // ──────────────────────────────────────────────
