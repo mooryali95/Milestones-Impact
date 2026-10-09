@@ -1,5 +1,10 @@
 import { gregorianToHijri, fmtGregorian, fmtBoth } from "./dateUtils";
 
+// كل قيمة تدخل نافذة الطباعة تمر من هنا: النافذة ترث نطاق التطبيق
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+));
+
 // ════════════════════════════════════════════════════════════════
 // PRINT — نموذج الخطة النهائي (نافذة طباعة مستقلة)
 // ════════════════════════════════════════════════════════════════
@@ -15,11 +20,11 @@ export function printFinalTable(user, procs, dates, confirmed) {
       const status = confirmed[p.key] ? "✓ مؤكد" : "محدد";
       return `<tr>
         <td>${i + 1}</td>
-        <td style="font-weight:600">${p.nameAr}</td>
-        <td><span style="color:${p.trackColor}">${p.trackIcon} ${p.trackNameAr}</span></td>
-        <td>${p.trackWeight}%</td>
-        <td>${p.phaseNameAr}</td>
-        <td>${p.dur} أيام</td>
+        <td style="font-weight:600">${esc(p.nameAr)}</td>
+        <td><span style="color:${esc(p.trackColor)}">${esc(p.trackIcon)} ${esc(p.trackNameAr)}</span></td>
+        <td>${esc(p.trackWeight)}%</td>
+        <td>${esc(p.phaseNameAr)}</td>
+        <td>${esc(p.dur)} أيام</td>
         <td>${g}</td>
         <td style="color:#A97A2E">${h.formatted}</td>
         <td>${status}</td>
@@ -31,7 +36,7 @@ export function printFinalTable(user, procs, dates, confirmed) {
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>مصفوفة التأثير — ${user.name}</title>
+  <title>مصفوفة التأثير — ${esc(user.name)}</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -60,9 +65,9 @@ export function printFinalTable(user, procs, dates, confirmed) {
     <p>نموذج خطة التأثير النهائي • هندسة اجتماعية</p>
   </div>
   <div class="info">
-    <div class="info-item"><div class="info-label">اسم المشارك</div><div class="info-value">${user.name}</div></div>
-    <div class="info-item"><div class="info-label">رقم الجوال</div><div class="info-value" style="direction:ltr">${user.phone}</div></div>
-    <div class="info-item"><div class="info-label">البريد الإلكتروني</div><div class="info-value" style="direction:ltr;font-size:.82rem">${user.email}</div></div>
+    <div class="info-item"><div class="info-label">اسم المشارك</div><div class="info-value">${esc(user.name)}</div></div>
+    <div class="info-item"><div class="info-label">رقم الجوال</div><div class="info-value" style="direction:ltr">${esc(user.phone)}</div></div>
+    <div class="info-item"><div class="info-label">البريد الإلكتروني</div><div class="info-value" style="direction:ltr;font-size:.82rem">${esc(user.email)}</div></div>
   </div>
   <table>
     <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الوزن</th><th>المرحلة</th><th>المدة</th><th>التاريخ الميلادي</th><th>التاريخ الهجري</th><th>الحالة</th></tr></thead>
@@ -70,7 +75,7 @@ export function printFinalTable(user, procs, dates, confirmed) {
   </table>
   <div class="footer">
     <p>تم الإنشاء بتاريخ: <strong>${now.both}</strong></p>
-    <p>المشارك: <strong>${user.name}</strong></p>
+    <p>المشارك: <strong>${esc(user.name)}</strong></p>
     <div class="cr">للتواصل: 0532134539 | omar@sunkvalue.com</div>
     <div class="cr">© ${new Date().getFullYear()} Milestone Impact — جميع الحقوق محفوظة</div>
   </div>

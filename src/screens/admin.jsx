@@ -283,7 +283,7 @@ const AdminPanel = (p) => {
                   <div key={field} className="adm-field">
                     <label htmlFor={`adm-${proc.key}-${field}`}>{{insight:"البصيرة المنهجية",why_it_matters:"لماذا يهم",description:"الوصف التفصيلي"}[field]}</label>
                     <textarea id={`adm-${proc.key}-${field}`} defaultValue={field==="insight"?proc.insight:field==="why_it_matters"?proc.whyItMatters:proc.fullDesc} rows={2}
-                      onBlur={async(e)=>{ try{ const {supabase} = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"); } catch(err){} showToast("التعديل يتم عبر Supabase مباشرة"); }} readOnly />
+                      onBlur={()=>showToast("التعديل يتم عبر Supabase مباشرة")} readOnly />
                   </div>
                 ))}
               </>}
