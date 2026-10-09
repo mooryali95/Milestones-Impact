@@ -129,3 +129,17 @@ test('الرابط المشترَك إلى تبويب يُفتح عليه، وا
   await page.goBack();
   await expect(page).toHaveURL('about:blank');
 });
+
+// شاشات المصادقة تملأ النافذة. كانت min-height معلنة مرّتين:
+// 100vh ثم -webkit-fill-available، والثانية تغلب، وكروم يحسبها stretch
+// فتنهار الشاشة إلى ارتفاع محتواها — نحو نصف النافذة — عند كل عرض.
+for (const [w, h] of [[1280, 950], [1440, 900], [390, 844]]) {
+  test(`شاشة التسجيل تملأ النافذة عند ${w}×${h}`, async ({ page }) => {
+    await mockUserApi(page);
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(BASE + '/');
+    await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+    const box = await page.locator('.auth-screen').boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(h - 1);
+  });
+}

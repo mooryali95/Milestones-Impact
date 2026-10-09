@@ -50,7 +50,7 @@ html { overflow-x: hidden; -webkit-text-size-adjust: 100%; scroll-behavior: smoo
 body, #root {
   font-family: var(--font-ar); direction: rtl;
   background: #F5EFE4; color: #1C1A17;
-  min-height: 100vh; min-height: -webkit-fill-available;
+  min-height: 100vh; min-height: 100dvh;
   overflow-x: hidden; overscroll-behavior-y: none;
 }
 button, input, select, textarea { font-family: inherit; }
@@ -78,7 +78,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 }
 
 /* ── App Shell ── */
-.app { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ════════════════════════════════════════
    TOP NAV — Compact Mobile Bar
@@ -138,7 +138,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 /* ════════════════════════════════════════
    AUTH SCREENS — Split Layout
 ════════════════════════════════════════ */
-.auth-screen { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+/* كانت -webkit-fill-available هنا، وكروم يحسبها stretch فتنهار الشاشة إلى
+   ارتفاع محتواها. dvh يتبع شريط العنوان المتحرّك في الجوال كما أُريد بها. */
+.auth-screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 .auth-left { display: none; }
 .auth-right { flex: 1; background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1.5rem; }
 .auth-form-wrap { width: 100%; max-width: 360px; }
