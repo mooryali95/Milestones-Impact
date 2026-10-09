@@ -1,5 +1,7 @@
 # 🚀 دليل نشر matrix.sunkvalue.com
 
+> **تنبيه (أكتوبر 2026):** هذا دليل الإعداد الأول. التطبيق انتقل من Create React App إلى Vite، والمخرجات ما زالت في `build/`. الخريطة الحالية للمنصات في `README.md`.
+
 > نقل تطبيق Rehab (React) إلى Cloudflare Pages كـ `matrix.sunkvalue.com`
 
 ---
