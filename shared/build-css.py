@@ -37,7 +37,10 @@ PAGES = {
         'extra': ['typeform.css'],
         'html': os.path.join(ROOT, 'home', 'leaders', 'index.html'),
         'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html'),
-                      os.path.join(ROOT, 'home', 'governance', 'index.html')],
+                      os.path.join(ROOT, 'home', 'governance', 'index.html'),
+                      os.path.join(ROOT, 'home', 'pricing.html'),
+                      os.path.join(ROOT, 'home', 'privacy.html'),
+                      os.path.join(ROOT, 'home', 'terms.html')],
         'brand': False,   # الهوية والأيقونات تُخدم من جذر home
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'js'),
         'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
