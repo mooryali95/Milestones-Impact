@@ -80,7 +80,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=37c0e3d4" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=78b9cab6" />
 </head>
 <body data-product="MI-PROJECTS">
 
@@ -474,6 +474,8 @@
       <div class="footer__bottom">
         <span>© 2026 Milestone Impact — جميع الحقوق محفوظة</span>
         <nav class="footer__bottom-links" aria-label="روابط إضافية">
+          <a href="/privacy.html" class="footer__bottom-link">الخصوصية</a>
+          <a href="/terms.html" class="footer__bottom-link">الشروط</a>
           <a href="https://manzoma.sa" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">manzoma.sa</a>
           <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__bottom-link">sunkvalue.com</a>
         </nav>
@@ -518,7 +520,7 @@
         <div class="tf-step__num">01</div>
         <h2 class="tf-step__question">بدايةً، بمن نتشرّف؟</h2>
         <p class="tf-step__hint">الاسم الكريم كاملاً</p>
-        <input type="text" class="tf-input" id="qName" placeholder="اكتب اسمك هنا..." autocomplete="name" aria-label="الاسم الكامل" />
+        <input type="text" class="tf-input" id="qName" maxlength="120" placeholder="اكتب اسمك هنا..." autocomplete="name" aria-label="الاسم الكامل" />
         <div class="tf-step__error">يُرجى تفضّلكم بإدخال الاسم الكريم</div>
       </div>
 
@@ -526,7 +528,7 @@
         <div class="tf-step__num">02</div>
         <h2 class="tf-step__question">أيّ جهةٍ تمثّلون؟</h2>
         <p class="tf-step__hint">المؤسسة، الشركة، أو الكيان الذي تنتمون إليه</p>
-        <input type="text" class="tf-input" id="qOrg" placeholder="اسم الجهة..." autocomplete="organization" aria-label="اسم الجهة" />
+        <input type="text" class="tf-input" id="qOrg" maxlength="160" placeholder="اسم الجهة..." autocomplete="organization" aria-label="اسم الجهة" />
         <div class="tf-step__error">يُرجى ذكر اسم الجهة</div>
       </div>
 
@@ -537,11 +539,11 @@
         <div class="tf-dual">
           <div>
             <label class="tf-field-label" for="qEmail">البريد الإلكتروني</label>
-            <input type="email" class="tf-input" id="qEmail" placeholder="name@example.com" autocomplete="email" dir="ltr" />
+            <input type="email" class="tf-input" id="qEmail" maxlength="160" placeholder="name@example.com" autocomplete="email" dir="ltr" />
           </div>
           <div>
             <label class="tf-field-label" for="qPhone">رقم التواصل</label>
-            <input type="tel" class="tf-input" id="qPhone" placeholder="+966 5X XXX XXXX" autocomplete="tel" dir="ltr" />
+            <input type="tel" class="tf-input" id="qPhone" maxlength="30" inputmode="tel" placeholder="+966 5X XXX XXXX" autocomplete="tel" dir="ltr" />
           </div>
         </div>
         <div class="tf-step__error">يُرجى التكرّم بإدخال بريدٍ إلكتروني صحيح ورقمٍ للتواصل</div>
@@ -584,7 +586,8 @@
         <div class="tf-step__num">05</div>
         <h2 class="tf-step__question">هل ثمّة سياقٌ تودّون مشاركته؟</h2>
         <p class="tf-step__hint">اختياري — أيّ تفصيلٍ يُعيننا على تجهيز محادثةٍ أعمق</p>
-        <textarea class="tf-input tf-input--textarea" id="qContext" placeholder="اكتب هنا..." rows="3" aria-label="سياق إضافي"></textarea>
+        <div class="tf-trap" aria-hidden="true"><label for="qWebsite">اترك هذا الحقل فارغاً</label><input type="text" id="qWebsite" name="website" tabindex="-1" autocomplete="off" /></div>
+        <textarea class="tf-input tf-input--textarea" id="qContext" maxlength="2000" placeholder="اكتب هنا..." rows="3" aria-label="سياق إضافي"></textarea>
       </div>
 
       <div class="tf-step" data-step="thanks">
@@ -639,7 +642,7 @@
   <script src="/assets/program/js/counters.js" defer></script>
   <script src="/assets/program/js/tabs.js" defer></script>
   <script src="/assets/program/js/mobile-menu.js" defer></script>
-  <script src="/assets/program/js/typeform.js?v=3" defer></script>
+  <script src="/assets/program/js/typeform.js?v=4" defer></script>
 
 </body>
 </html>

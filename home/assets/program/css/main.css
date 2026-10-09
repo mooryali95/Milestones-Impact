@@ -1443,6 +1443,36 @@ body::after {
 .tf-step__error.show { display: flex; }
 .tf-step__error::before { content: '◆'; font-size: 5px; }
 
+/* فشل الإرسال — يبقى الزائر في الخطوة الأخيرة ببياناته، ومعه بديل البريد */
+.tf-send-error {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(184,101,28,0.35);
+  background: rgba(184,101,28,0.06);
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: #8A4A12;
+}
+.tf-send-error[hidden] { display: none; }
+.tf-send-error p { margin: 0 0 10px; }
+.tf-send-error__mail {
+  padding: 8px 16px;
+  min-height: 40px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tf-send-error__mail:hover { background: rgba(184,101,28,0.1); }
+.tf-btn-next[disabled] { opacity: 0.7; cursor: progress; }
+
+/* حقل المصيدة للبرامج الآلية — مخفي عن الزوار وقارئات الشاشة */
+.tf-trap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 /* ── FOOTER — ثابت في الأسفل ── */
 .tf-modal__footer {
   padding: 14px 18px 20px;

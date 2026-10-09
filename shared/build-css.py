@@ -25,6 +25,9 @@ PAGES = {
         'page_file': '05-home-sections.css',
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
+        # الصفحات القانونية والتسعير تستعمل main.css نفسه — يتحدّث رقم نسختها معه
+        'also_html': [os.path.join(ROOT, 'home', f) for f in
+                      ('pricing.html', 'privacy.html', 'terms.html', 'refund.html', '404.html')],
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
         'js': ['canvas.js', 'counters.js', 'mobile-menu.js'],            # الملفات المشتركة التي تستعملها الصفحة
         'video': ['intro-film.webm', 'intro-film.mp4',
