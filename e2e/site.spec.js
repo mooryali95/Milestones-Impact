@@ -46,16 +46,16 @@ test('نموذج التواصل: من الترحيب إلى الشكر، ويح�
   await expect(page.locator('#tfModal')).toBeVisible();
 
   await page.locator('.tf-welcome__cta').click();
+  // ثلاث خطوات: الاسم والجهة، ثم التواصل، ثم الاهتمام والسياق
   await page.locator('#qName').fill('اختبار آلي');
-  await page.locator('#tfNext').click();
   await page.locator('#qOrg').fill('جهة الاختبار');
   await page.locator('#tfNext').click();
   await page.locator('#qEmail').fill('test@example.com');
   await page.locator('#qPhone').fill('+966500000000');
   await page.locator('#tfNext').click();
   await page.locator('.tf-option[data-value="B"]').click();
-  await page.locator('#tfNext').click();
   await page.locator('#qContext').fill('سياق تجريبي');
+  await expect(page.locator('#tfNext')).toContainText('إرسال');
   await page.locator('#tfNext').click();
 
   await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
@@ -67,6 +67,7 @@ test('نموذج التواصل: من الترحيب إلى الشكر، ويح�
     product: 'MI-PROJECTS',
     interest: 'B',
     interest_label: 'مشروعٌ قائم يحتاج إدارة',
+    context: 'سياق تجريبي',
   });
 });
 
@@ -74,14 +75,12 @@ async function fillContactForm(page) {
   await page.evaluate(() => window.openTypeform());
   await page.locator('.tf-welcome__cta').click();
   await page.locator('#qName').fill('اختبار آلي');
-  await page.locator('#tfNext').click();
   await page.locator('#qOrg').fill('جهة الاختبار');
   await page.locator('#tfNext').click();
   await page.locator('#qEmail').fill('test@example.com');
   await page.locator('#qPhone').fill('+966500000000');
   await page.locator('#tfNext').click();
   await page.locator('.tf-option').first().click();
-  await page.locator('#tfNext').click();
   await page.locator('#tfNext').click();
 }
 
@@ -101,6 +100,17 @@ for (const path of ['/', '/projects/']) {
     await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
   });
 }
+
+test('النموذج يرفض المتابعة دون اسم الجهة', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto(BASE + '/');
+  await page.evaluate(() => window.openTypeform());
+  await page.locator('.tf-welcome__cta').click();
+  await page.locator('#qName').fill('اختبار آلي');
+  await page.locator('#tfNext').click();
+  await expect(page.locator('.tf-step[data-step="1"] .tf-step__error')).toHaveClass(/show/);
+  await expect(page.locator('.tf-step[data-step="1"]')).toHaveClass(/active/);
+});
 
 test('صفحة الحوكمة: المخطط يربط المجالس، ومقاعد الأعضاء تظهر', async ({ page }) => {
   await page.goto(BASE + '/governance/');
