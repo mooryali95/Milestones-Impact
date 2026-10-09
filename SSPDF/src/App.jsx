@@ -158,14 +158,25 @@ export default function App() {
     }
   };
 
+  const mapEvals = (all, fn) => Object.fromEntries(Object.entries(all).map(([k, ev]) => [k, fn(ev)]));
+  // الدرجات مخزّنة بترتيب المعايير، فكل إضافة أو حذف يجب أن ينعكس عليها
+  // في التحديث نفسه، وإلا انزاحت الدرجات أو تعطّل الحساب.
   const addCriterion = (name) => {
     setCriteria((c) => [...c, { id: `c${Date.now()}`, ar: name, en: "", g: "", w: 0 }]);
+    setEvals((all) => mapEvals(all, (ev) => ({ ...ev, scores: [...ev.scores, 5], conf: [...ev.conf, "M"] })));
     log("إضافة معيار", name);
   };
   const removeCriterion = (id) => {
-    const cr = criteria.find((c) => c.id === id);
+    const idx = criteria.findIndex((c) => c.id === id);
+    if (idx === -1) return;
+    const cr = criteria[idx];
     setCriteria((c) => c.filter((x) => x.id !== id));
-    if (cr) log("حذف معيار", cr.ar);
+    setEvals((all) => mapEvals(all, (ev) => ({
+      ...ev,
+      scores: ev.scores.filter((_, i) => i !== idx),
+      conf: ev.conf.filter((_, i) => i !== idx),
+    })));
+    log("حذف معيار", cr.ar);
   };
 
   const compareAllProjects = () => repo.compareProjects(myProjects.map((p) => p.id));
@@ -182,8 +193,10 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) afterLogin(session.user); else setAuthState("login");
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) afterLogin(session.user);
+    // تحديث التوكن الدوري لا يعني دخولًا جديدًا؛ إعادة التحميل عنده تُضيع آخر التعديلات
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && event === "SIGNED_IN") afterLogin(session.user);
+      else if (session) return;
       else { setAuthUser(null); setAuthState("login"); }
     });
     return () => sub.subscription.unsubscribe();

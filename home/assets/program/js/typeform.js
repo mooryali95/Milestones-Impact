@@ -311,12 +311,21 @@
   // ──────────────────────────────────────────────
   // 🚀 Submit — Supabase أولاً، mailto كـ Fallback
   // ──────────────────────────────────────────────
+  // لا تظهر شاشة الشكر إلا بعد حفظ الطلب فعلًا؛ وعند الفشل يرى الزائر
+  // رسالة واضحة مع إعادة المحاولة أو الإرسال بالبريد، فلا يضيع طلب بصمت.
+  let submitting = false;
   async function submitForm() {
-    currentStep = stepOrder.length - 1;
-    goToStep(currentStep);
+    if (submitting) return;
+    submitting = true;
+    const nextLabel = tfNext.innerHTML;
+    tfNext.disabled = true;
+    tfNext.innerHTML = '<span>جارٍ الإرسال…</span>';
+    hideSubmitError();
 
     try {
       await sendToSupabase();
+      currentStep = stepOrder.length - 1;
+      goToStep(currentStep);
 
       // إشعار الأدمن (fire & forget)
       fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
@@ -347,7 +356,33 @@
 
     } catch (err) {
       console.error('Supabase insert failed:', err);
+      showSubmitError();
+    } finally {
+      submitting = false;
+      tfNext.disabled = false;
+      if (tfNext.innerHTML.includes('جارٍ الإرسال')) tfNext.innerHTML = nextLabel;
     }
+  }
+
+  function hideSubmitError() {
+    document.querySelectorAll('.tf-submit-error').forEach((el) => el.remove());
+  }
+
+  function showSubmitError() {
+    const stepEl = document.querySelector('.tf-step.active');
+    if (!stepEl) return;
+    const box = document.createElement('div');
+    box.className = 'tf-submit-error';
+    box.setAttribute('role', 'alert');
+    box.innerHTML =
+      '<p>تعذّر إرسال طلبكم الآن. بياناتكم محفوظة في النموذج، أعيدوا المحاولة أو أرسلوها بالبريد مباشرة.</p>' +
+      '<div class="tf-submit-error__actions">' +
+      '<button type="button" class="tf-submit-error__retry">إعادة المحاولة</button>' +
+      '<button type="button" class="tf-submit-error__mail">الإرسال بالبريد</button>' +
+      '</div>';
+    box.querySelector('.tf-submit-error__retry').addEventListener('click', submitForm);
+    box.querySelector('.tf-submit-error__mail').addEventListener('click', triggerMailto);
+    stepEl.appendChild(box);
   }
 
   function resendEmail() {

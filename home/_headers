@@ -53,3 +53,6 @@
 # صفحة التسعير مخفية: لا تُفهرس ولا تظهر في الموقع
 /pricing.html
   X-Robots-Tag: noindex, nofollow
+
+/pricing
+  X-Robots-Tag: noindex, nofollow

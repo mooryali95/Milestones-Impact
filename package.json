@@ -14,11 +14,13 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\""
+    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\"",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.29.7",
     "@babel/plugin-syntax-jsx": "^7.29.7",
+    "@playwright/test": "1.56.1",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",

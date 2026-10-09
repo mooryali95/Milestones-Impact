@@ -131,6 +131,11 @@ export default function App() {
       setReopenRequested(session.reopenRequested || false);
       setScreen('main');
       if (session.submitted) setTab('output');
+      // الخادم هو المرجع: نحدّث من النسخة المحفوظة عليه، ونخرج إن انتهت الجلسة
+      UserAPI.get(session.token).then(res => {
+        if (res?.success && res.registration) applyUserSession({ token: session.token, registration: res.registration });
+        else if (res?.message?.includes('الجلسة')) { showToast(res.message); doLogout(); }
+      });
     }
   }, []);
 
@@ -411,7 +416,13 @@ export default function App() {
     if (!sessionToken) return;
     setDemoLoading(true);
     const res = await UserAPI.get(sessionToken);
-    const saved = res?.success ? res.registration?.[DEMO_KEY] : null;
+    if (!res?.success) {
+      setDemoLoading(false);
+      showToast(res?.message || "تعذّر تحميل التحليل، أعد المحاولة");
+      if (res?.message?.includes('الجلسة')) doLogout();
+      return;
+    }
+    const saved = res.registration?.[DEMO_KEY];
     if (Array.isArray(saved) && saved.length > 0) {
       setDemoRows(saved);
     } else {
@@ -457,6 +468,18 @@ export default function App() {
   const addDemoRow = () => setDemoRows(rows => [...rows, emptyDemoRow()]);
   const removeDemoRow = (id) => { if (demoRows.length > 1) setDemoRows(rows => rows.filter(r => r.id !== id)); };
 
+  // ── حفظ على الخادم مع إبلاغ المستخدم عند الفشل ──
+  // يعيد true عند النجاح أو عند عدم وجود جلسة خادم (وضع محلي).
+  // عند الفشل: رسالة واضحة، وخروج إن انتهت الجلسة، ويتولى المستدعي التراجع.
+  const persist = async (fields) => {
+    if (!sessionToken) return true;
+    const res = await UserAPI.save(sessionToken, fields);
+    if (res?.success) return true;
+    showToast(res?.message || "تعذّر الحفظ، تحقّق من الاتصال وأعد المحاولة");
+    if (res?.message?.includes('الجلسة')) doLogout();
+    return false;
+  };
+
   // ── Save Date ──
   const saveDate = async (key, dateStr) => {
     if (isPast(dateStr)) { setDateError("لا يمكن اختيار تاريخ في الماضي"); return false; }
@@ -464,18 +487,32 @@ export default function App() {
     if (conflicts.length) { setDateError(`تعارض مع: ${conflicts.join("، ")}`); return false; }
     setDateError("");
     const newDates = { ...dates, [key]: dateStr };
+    const prev = dates;
     setDates(newDates);
-    if (sessionToken) await UserAPI.save(sessionToken, { dates: newDates });
+    if (!(await persist({ dates: newDates }))) { setDates(prev); return false; }
     LocalSession.update({ dates: newDates });
     return true;
+  };
+
+  // ── Delete a date ──
+  const deleteDate = async (key) => {
+    const newD = { ...dates }; const newC = { ...confirmed };
+    delete newD[key]; delete newC[key];
+    const prevD = dates, prevC = confirmed;
+    setDates(newD); setConfirmed(newC);
+    if (!(await persist({ dates: newD, confirmed: newC }))) { setDates(prevD); setConfirmed(prevC); return; }
+    LocalSession.update({ dates: newD, confirmed: newC });
+    setTempDate("");
+    showToast("تم حذف التاريخ");
   };
 
   // ── Confirm ──
   const toggleConfirm = async (key) => {
     const newConf = { ...confirmed, [key]: !confirmed[key] };
     if (!newConf[key]) delete newConf[key];
+    const prev = confirmed;
     setConfirmed(newConf);
-    if (sessionToken) await UserAPI.save(sessionToken, { confirmed: newConf });
+    if (!(await persist({ confirmed: newConf }))) { setConfirmed(prev); return; }
     LocalSession.update({ confirmed: newConf });
     setSelectedCell(null);
     showToast(newConf[key] ? "تم تأكيد الموعد ✓" : "تم إلغاء التأكيد");
@@ -485,10 +522,9 @@ export default function App() {
   const doFinalSubmit = async () => {
     setConfirmAction(null);
     const submittedAt = new Date().toISOString();
-    if (sessionToken) {
-      await UserAPI.save(sessionToken, { dates, confirmed, submitted: true, submittedAt });
-    }
+    if (!(await persist({ dates, confirmed, submitted: true, submittedAt }))) return;
     setSubmitted(true);
+    LocalSession.update({ submitted: true });
     setTab("output");
     showToast("تم حفظ الخطة النهائية! ✓");
     // ── إشعار المستشار ──
@@ -529,6 +565,7 @@ export default function App() {
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
     setOtpLastSent(null); setOtpFailCount(0);
+    setDemoRows([]); setSelectedCell(null);
   };
 
   const logout = () => {
@@ -548,8 +585,9 @@ export default function App() {
 
   // ── Request Reopen (User) ──
   const requestReopen = async () => {
-    if (sessionToken) await UserAPI.save(sessionToken, { reopenRequested: true });
+    if (!(await persist({ reopenRequested: true }))) return;
     setReopenRequested(true);
+    LocalSession.update({ reopenRequested: true });
     showToast("تم إرسال طلب إعادة الفتح للمدير ✓");
   };
 
@@ -574,106 +612,124 @@ export default function App() {
   useTabHash({ tab, setTab, allowed: allowedTabs, enabled: screen === "main" });
 
   // Copyright footer
+  // الإشعار المنبثق يظهر في كل الشاشات، لا في الشاشة الرئيسية وحدها
+  const toastEl = toast && <div className="toast" role="status">{toast}</div>;
+
   // ════════ SPLASH ════════
   if (screen === "splash") return (
-    <Landing
-      onRegister={() => setScreen("register")}
-      onResume={() => setScreen("resume")}
-      onAdmin={() => setScreen("admin-login")}
-      OPERATIONS={OPERATIONS}
-    />
+    <>
+      <Landing
+        onRegister={() => setScreen("register")}
+        onResume={() => setScreen("resume")}
+        onAdmin={() => setScreen("admin-login")}
+        OPERATIONS={OPERATIONS}
+      />
+      {toastEl}
+    </>
   );
 
   // ════════ REGISTER ════════
   if (screen === "register") return (
-    <RegisterScreen
-      otpStep={otpStep}
-      setOtpStep={setOtpStep}
-      user={user}
-      setUser={setUser}
-      regErrors={regErrors}
-      setRegErrors={setRegErrors}
-      otpSending={otpSending}
-      otpCode={otpCode}
-      setOtpCode={setOtpCode}
-      otpError={otpError}
-      setOtpError={setOtpError}
-      handleRegister={handleRegister}
-      handleVerifyOtp={handleVerifyOtp}
-      handleResendOtp={handleResendOtp}
-      setScreen={setScreen}
-    />
+    <>
+      <RegisterScreen
+        otpStep={otpStep}
+        setOtpStep={setOtpStep}
+        user={user}
+        setUser={setUser}
+        regErrors={regErrors}
+        setRegErrors={setRegErrors}
+        otpSending={otpSending}
+        otpCode={otpCode}
+        setOtpCode={setOtpCode}
+        otpError={otpError}
+        setOtpError={setOtpError}
+        handleRegister={handleRegister}
+        handleVerifyOtp={handleVerifyOtp}
+        handleResendOtp={handleResendOtp}
+        setScreen={setScreen}
+      />
+      {toastEl}
+    </>
   );
 
   // ════════ RESUME ════════
   if (screen === "resume") return (
-    <ResumeScreen
-      otpStep={otpStep}
-      setOtpStep={setOtpStep}
-      user={user}
-      otpSending={otpSending}
-      otpCode={otpCode}
-      setOtpCode={setOtpCode}
-      otpError={otpError}
-      setOtpError={setOtpError}
-      handleResendOtp={handleResendOtp}
-      setScreen={setScreen}
-      resumePhone={resumePhone}
-      setResumePhone={setResumePhone}
-      resumeError={resumeError}
-      setResumeError={setResumeError}
-      resumeLoading={resumeLoading}
-      handleResume={handleResume}
-      handleResumeVerify={handleResumeVerify}
-    />
+    <>
+      <ResumeScreen
+        otpStep={otpStep}
+        setOtpStep={setOtpStep}
+        user={user}
+        otpSending={otpSending}
+        otpCode={otpCode}
+        setOtpCode={setOtpCode}
+        otpError={otpError}
+        setOtpError={setOtpError}
+        handleResendOtp={handleResendOtp}
+        setScreen={setScreen}
+        resumePhone={resumePhone}
+        setResumePhone={setResumePhone}
+        resumeError={resumeError}
+        setResumeError={setResumeError}
+        resumeLoading={resumeLoading}
+        handleResume={handleResume}
+        handleResumeVerify={handleResumeVerify}
+      />
+      {toastEl}
+    </>
   );
 
   // ════════ ADMIN LOGIN ════════
   if (screen === "admin-login") return (
-    <AdminLoginScreen
-      setScreen={setScreen}
-      adminOtpStep={adminOtpStep}
-      setAdminOtpStep={setAdminOtpStep}
-      adminEmail={adminEmail}
-      setAdminEmail={setAdminEmail}
-      adminCode={adminCode}
-      setAdminCode={setAdminCode}
-      adminError={adminError}
-      setAdminError={setAdminError}
-      adminSending={adminSending}
-      handleAdminSendCode={handleAdminSendCode}
-      handleAdminVerify={handleAdminVerify}
-    />
+    <>
+      <AdminLoginScreen
+        setScreen={setScreen}
+        adminOtpStep={adminOtpStep}
+        setAdminOtpStep={setAdminOtpStep}
+        adminEmail={adminEmail}
+        setAdminEmail={setAdminEmail}
+        adminCode={adminCode}
+        setAdminCode={setAdminCode}
+        adminError={adminError}
+        setAdminError={setAdminError}
+        adminSending={adminSending}
+        handleAdminSendCode={handleAdminSendCode}
+        handleAdminVerify={handleAdminVerify}
+      />
+      {toastEl}
+    </>
   );
 
   // ════════ ADMIN PANEL ════════
   if (screen === "admin") return (
-    <AdminPanel
-      DEMO_KEY={DEMO_KEY}
-      adminReportReg={adminReportReg}
-      adminTab={adminTab}
-      adminUnlock={adminUnlock}
-      allRegs={allRegs}
-      appContent={appContent}
-      confirmed={confirmed}
-      dates={dates}
-      expandedContent={expandedContent}
-      loadRegs={loadRegs}
-      loading={loading}
-      logout={logout}
-      procs={procs}
-      reopenRequested={reopenRequested}
-      selectedReg={selectedReg}
-      selectedRegTab={selectedRegTab}
-      setAdminReportReg={setAdminReportReg}
-      setAdminTab={setAdminTab}
-      setExpandedContent={setExpandedContent}
-      setSelectedReg={setSelectedReg}
-      setSelectedRegTab={setSelectedRegTab}
-      showToast={showToast}
-      submitted={submitted}
-      tab={tab}
-    />
+    <>
+      <AdminPanel
+        DEMO_KEY={DEMO_KEY}
+        adminReportReg={adminReportReg}
+        adminTab={adminTab}
+        adminUnlock={adminUnlock}
+        allRegs={allRegs}
+        appContent={appContent}
+        confirmed={confirmed}
+        dates={dates}
+        expandedContent={expandedContent}
+        loadRegs={loadRegs}
+        loading={loading}
+        logout={logout}
+        procs={procs}
+        reopenRequested={reopenRequested}
+        selectedReg={selectedReg}
+        selectedRegTab={selectedRegTab}
+        setAdminReportReg={setAdminReportReg}
+        setAdminTab={setAdminTab}
+        setExpandedContent={setExpandedContent}
+        setSelectedReg={setSelectedReg}
+        setSelectedRegTab={setSelectedRegTab}
+        showToast={showToast}
+        submitted={submitted}
+        tab={tab}
+      />
+      {toastEl}
+    </>
   );
 
   // ════════ USER MAIN ════════
@@ -751,7 +807,6 @@ export default function App() {
           setSelectedCell={setSelectedCell}
           setTab={setTab}
           setTempDate={setTempDate}
-          showToast={showToast}
           submitted={submitted}
         />
       )}
@@ -815,18 +870,15 @@ export default function App() {
           confirmed={confirmed}
           dateError={dateError}
           dates={dates}
+          deleteDate={deleteDate}
           openDemoScreen={openDemoScreen}
           procs={procs}
           saveDate={saveDate}
           selectedCell={selectedCell}
-          sessionToken={sessionToken}
-          setConfirmed={setConfirmed}
           setDateError={setDateError}
-          setDates={setDates}
           setHighlightedKeys={setHighlightedKeys}
           setSelectedCell={setSelectedCell}
           setTempDate={setTempDate}
-          showToast={showToast}
           submitted={submitted}
           tempDate={tempDate}
           toggleConfirm={toggleConfirm}
@@ -841,7 +893,7 @@ export default function App() {
         />
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toastEl}
       <Footer />
 
       {/* ═══ شاشة التحليل الديموغرافي ═══ */}

@@ -2,8 +2,6 @@ import React from "react";
 import Skeleton from "./Skeleton";
 import Icon from "./Icon";
 import { gregorianToHijri } from "../lib/dateUtils";
-import { UserAPI } from "../lib/api";
-import { LocalSession } from "../lib/session";
 
 // ════════════════════════════════════════════════════════════════
 // PROCESS MODAL — تفاصيل العملية وتحديد موعدها
@@ -16,18 +14,15 @@ const ProcessModal = (p) => {
     confirmed,
     dateError,
     dates,
+    deleteDate,
     openDemoScreen,
     procs,
     saveDate,
     selectedCell,
-    sessionToken,
-    setConfirmed,
     setDateError,
-    setDates,
     setHighlightedKeys,
     setSelectedCell,
     setTempDate,
-    showToast,
     submitted,
     tempDate,
     toggleConfirm,
@@ -103,7 +98,7 @@ const ProcessModal = (p) => {
               {dates[selectedCell.key] && <div className="hijri-badge">🌙 {gregorianToHijri(dates[selectedCell.key]).formatted}</div>}
               {dates[selectedCell.key] && !submitted && <div style={{marginTop:".5rem"}}>
                 <button style={{background:"none",border:"none",color:"var(--rd)",fontFamily:"var(--font-ar)",fontSize:".75rem",cursor:"pointer"}}
-                  onClick={()=>{const newD={...dates};const newC={...confirmed};delete newD[selectedCell.key];delete newC[selectedCell.key];setDates(newD);setConfirmed(newC);if(sessionToken){UserAPI.save(sessionToken,{dates:newD,confirmed:newC});}LocalSession.update({dates:newD,confirmed:newC});setTempDate("");showToast("تم حذف التاريخ");}}>
+                  onClick={()=>deleteDate(selectedCell.key)}>
                   ✕ حذف التاريخ
                 </button>
               </div>}
