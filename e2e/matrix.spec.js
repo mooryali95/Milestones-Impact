@@ -106,3 +106,26 @@ test('انتهاء الجلسة على الخادم يُخرج المستخدم 
   await expect(page.getByText(/انتهت الجلسة/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'ابدأ رحلتك' }).first()).toBeVisible();
 });
+
+// رابطٌ مشترَك إلى تبويب: يُفتح عليه، ورجوعٌ واحد يغادر التطبيق.
+// كان تأثير الكتابة يعمل في تصيير الاعتماد نفسه فيرى التبويب القديم:
+// يستبدل المدخل بـ #/matrix ثم يدفع #/schedule — فالرجوع يهبط على
+// المصفوفة بدل مغادرة الموقع، وهو فخّ الرجوع الذي وُجد الخطّاف ليرفعه.
+test('الرابط المشترَك إلى تبويب يُفتح عليه، والرجوع منه يغادر التطبيق', async ({ page, context }) => {
+  await mockUserApi(page);
+  await register(page);
+  await expect(page.locator('.tabs')).toBeVisible();
+
+  // تبويبٌ جديد يشارك الجلسة ولا يشارك تاريخ التصفّح — كمن يفتح رابطاً أُرسل إليه
+  page = await context.newPage();
+  await mockUserApi(page);
+  await page.goto('about:blank');
+  await page.goto(BASE + '/#/schedule');
+  await expect(page.locator('.tab.on')).toHaveText('الجدول');
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/schedule');
+  // مدخلان فقط: الصفحة السابقة والرابط — لا مدخل زائد لتبويبٍ لم يُزَر
+  expect(await page.evaluate(() => history.length)).toBe(2);
+
+  await page.goBack();
+  await expect(page).toHaveURL('about:blank');
+});

@@ -27,6 +27,10 @@ const readHash = () => {
 export default function useTabHash({ tab, setTab, allowed, enabled }) {
   const adopted = useRef(false);
   const wroteOnce = useRef(false);
+  // تبويبٌ اعتُمد من الرابط ولم يصل بعدُ إلى الحالة. تأثير الكتابة يعمل
+  // في التصيير نفسه الذي طلب فيه الاعتماد setTab، فيرى tab القديم —
+  // ولولا هذا المرجع لكتب الافتراضيّ فوق الرابط المشترَك ثم دفع الصحيح.
+  const pendingAdopt = useRef(null);
   // هل دخلنا الشاشة الرئيسية من قبل؟ يميّز «الخروج منها» عن «لم ندخلها بعد».
   const everEnabled = useRef(false);
   if (enabled) everEnabled.current = true;
@@ -40,20 +44,27 @@ export default function useTabHash({ tab, setTab, allowed, enabled }) {
     if (!enabled || adopted.current) return;
     const fromUrl = readHash();
     if (fromUrl && allowedRef.current.includes(fromUrl)) {
-      setTab(fromUrl);
-    } else if (fromUrl) {
-      // تبويب غير متاح (كالتقرير قبل ثلاثة مواعيد) أو اسم لا وجود له.
-      // نصحّح العنوان بدل تركه يعِد بما لا يعرضه — عنوانٌ كاذب أسوأ
-      // من لا عنوان، ولأن تأثير الكتابة أدناه لا يعمل ما لم يتغيّر tab.
-      window.history.replaceState(null, '', `#/${tab}`);
+      pendingAdopt.current = fromUrl;
+      // الرابط صحيح أصلاً، فهو بمنزلة كتابةٍ تمّت: التبديل التالي يدفع
+      // لا يستبدل، وإلا محا أوّلُ تبديل المدخلَ الذي فُتح عليه الرابط.
       wroteOnce.current = true;
+      setTab(fromUrl);
     }
+    // تبويب غير متاح (كالتقرير قبل ثلاثة مواعيد) أو اسم لا وجود له:
+    // تأثير الكتابة أدناه يعمل في هذا التصيير نفسه ويستبدل الهاش الكاذب
+    // بالمعروض فعلاً — عنوانٌ كاذب أسوأ من لا عنوان. لا نصحّحه هنا كي
+    // تبقى الكتابة في موضع واحد.
     adopted.current = true;
   }, [enabled, setTab, tab]);
 
   // ── 2. كتابة التبويب الحالي في العنوان ──
   useEffect(() => {
     if (!enabled || !adopted.current) return;
+    if (pendingAdopt.current) {
+      // ما زلنا في تصيير ما قبل الاعتماد: لا نكتب فوق الرابط الذي نقرأ منه.
+      if (pendingAdopt.current !== tab) return;
+      pendingAdopt.current = null;
+    }
     const target = `#/${tab}`;
     if (window.location.hash === target) return;
     if (wroteOnce.current) window.history.pushState(null, '', target);
@@ -80,6 +91,7 @@ export default function useTabHash({ tab, setTab, allowed, enabled }) {
     if (enabled || !everEnabled.current) return;
     adopted.current = false;
     wroteOnce.current = false;
+    pendingAdopt.current = null;
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
