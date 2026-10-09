@@ -14,57 +14,49 @@
 
 ---
 
-## النشر على AWS Amplify
+## النشر
 
-### الطريقة 1: عبر GitHub (الموصى بها)
+النشر على **Cloudflare Pages** ويتم تلقائياً عند كل دمج في `main`. AWS Amplify لم يعد مستخدماً.
+المستودع الواحد يغذي خمس منصات مستقلة:
 
-```bash
-# 1. افتح Terminal في مجلد المشروع
-cd milestone-impact
+| النطاق | المجلد | مشروع Cloudflare | البناء |
+|---|---|---|---|
+| `mi.sunkvalue.com` | `home/` | `mi-home` | بلا بناء. يشمل `/leaders/` و`/projects/` و`/governance/` |
+| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | تحويل 301 فقط إلى `mi.sunkvalue.com/leaders/` |
+| `matrix.sunkvalue.com` | الجذر (`src/` و`index.html` و`public/`) | `mi-matrix` | `npm run build` إلى `build/` |
+| `admin.sunkvalue.com` | `admin/` | `mi-admin` | بلا بناء |
+| SSPDF | `SSPDF/` | `mi-sspdf` | تطبيق Vite مستقل |
 
-# 2. ثبّت المكتبات وتأكد يشتغل محلياً
-npm install
-npm start
-# يفتح المتصفح على http://localhost:3000
+كل طلب دمج يحصل على معاينة لكل منصة، ويشغّل فحص `build-and-test` في GitHub Actions.
 
-# 3. ارفع على GitHub
-git init
-git add .
-git commit -m "Milestone Impact v5"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/milestone-impact.git
-git push -u origin main
-
-# 4. اذهب لـ AWS Console → Amplify → New App → Host Web App
-# 5. اختر GitHub → اختر المستودع → Deploy
-# 6. خلال 3-5 دقائق يعطيك رابط
-```
-
-### الطريقة 2: رفع يدوي (بدون GitHub)
+### قبل الدفع
 
 ```bash
-# 1. بناء المشروع
-npm install
-npm run build
-
-# 2. اذهب لـ AWS Amplify → New App → Deploy without Git
-# 3. ارفع مجلد build/ كملف مضغوط
+npm ci && npm run lint && npm test && npm run build
 ```
+
+بعد أي تعديل على CSS أو `shared/` شغّل `python3 shared/build-css.py`، ولا تعدّل `main.css` يدوياً (التفاصيل في `shared/README.md`).
+
+### تنبيهات
+
+1. محتوى صفحة القادة في `home/leaders/`، والمجلد `leaders/` للتحويل فقط.
+2. لا تفصل نطاق `leaders.sunkvalue.com` عن مشروع `mi-leaders`، وإلا توقف التحويل.
+3. ابدأ كل عمل من فرع جديد مأخوذ من `main`، وادمج عبر طلب دمج.
+4. كود الخادم (سياسات RLS ودوال Supabase) غير موجود في المستودع ويُراجع من لوحة Supabase.
+
+`DEPLOY-CLOUDFLARE.md` و`DEPLOY-MATRIX.md` دليلا الإعداد الأول، وبعض ما فيهما تغيّر (انظر التنبيه أعلى كل منهما).
 
 ---
 
 ## هيكل الملفات
 
 ```
-milestone-impact/
-├── public/
-│   └── index.html          ← الصفحة الرئيسية
-├── src/
-│   ├── App.jsx              ← التطبيق بالكامل
-│   └── index.js             ← نقطة الدخول
-├── amplify.yml              ← إعدادات Amplify
-├── package.json             ← المكتبات
-└── README.md                ← هذا الملف
+home/       ← الموقع الأم وصفحات القادة والمشاريع والحوكمة
+leaders/    ← تحويل النطاق القديم فقط
+admin/      ← لوحة الإدارة
+src/        ← تطبيق مصفوفة التأثير (React + Vite)
+SSPDF/      ← منصة SSPDF
+shared/     ← الهوية والأنماط المشتركة وسكربت البناء
 ```
 
 ---

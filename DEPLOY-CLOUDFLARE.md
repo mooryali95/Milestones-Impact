@@ -1,5 +1,7 @@
 # 🚀 دليل نشر Cloudflare Pages
 
+> **تنبيه (أكتوبر 2026):** هذا دليل الإعداد الأول. منذ دمج #23 صارت صفحة القادة على `mi.sunkvalue.com/leaders/` ومحتواها في `home/leaders/`، ومشروع `mi-leaders` يخدم تحويل 301 فقط من `leaders.sunkvalue.com`. الخريطة الحالية للمنصات في `README.md`.
+
 > دليل خطوة بخطوة لربط `home/` و `leaders/` بـ Cloudflare Pages.
 
 ---
