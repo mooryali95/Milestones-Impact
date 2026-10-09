@@ -164,3 +164,32 @@ test('شرائح المسارات في لوحة الدخول تجتاز التب
   expect(ratios).toHaveLength(4);
   for (const r of ratios) expect(r).toBeGreaterThanOrEqual(4.5);
 });
+
+// «إعادة إرسال» لا تبعث بريداً في كل ضغطة. كان otpLastSent يُكتب في أربعة
+// مواضع ولا يُقرأ في أيٍّ منها، فالمهلة المعلنة (60 ثانية) لم توجد:
+// إحدى عشرة ضغطة كانت تعني أحد عشر بريداً من حصّة الإرسال.
+test('زرّ إعادة الإرسال ينتظر المهلة ولا يبعث بريداً في كل ضغطة', async ({ page }) => {
+  await page.clock.install();
+  const calls = await mockUserApi(page);
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.locator('#reg-name').fill('مستخدم الاختبار');
+  await page.locator('#reg-phone').fill('0500000000');
+  await page.locator('#reg-email').fill('user@example.com');
+  await page.getByRole('button', { name: /إرسال رمز التحقق/ }).click();
+  await expect(page.locator('#reg-otp')).toBeVisible();
+
+  const resend = page.getByRole('button', { name: /إعادة/ });
+  await expect(resend).toBeDisabled();
+  await expect(resend).toHaveText(/بعد \d+ ثانية/);
+  for (let i = 0; i < 10; i++) await resend.click({ force: true });
+  expect(calls.filter((c) => c.action === 'register-send')).toHaveLength(1);
+
+  // وبعد المهلة يعود الزرّ ويُرسل مرّة واحدة، ثم تبدأ مهلةٌ جديدة
+  await page.clock.fastForward(61_000);
+  await expect(resend).toBeEnabled();
+  await expect(resend).toHaveText('↻ إعادة إرسال');
+  await resend.click();
+  await expect.poll(() => calls.filter((c) => c.action === 'register-send').length).toBe(2);
+  await expect(resend).toBeDisabled();
+});
