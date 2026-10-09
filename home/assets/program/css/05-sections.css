@@ -196,7 +196,7 @@
 }
 .hero__subtitle strong {
   font-weight: 800;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 @media (min-width: 640px) { .hero__subtitle { margin-bottom: 32px; } }
 
@@ -397,7 +397,7 @@
   font-family: var(--font-en);
   font-size: 13px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.05em;
   display: block;
   margin-bottom: 10px;
@@ -558,7 +558,7 @@
   font-family: var(--font-en);
   font-size: 16px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.05em;
 }
 .framework__order-label {
@@ -619,7 +619,7 @@
   font-family: var(--font-en);
   font-style: normal;
   font-weight: 700;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   font-size: 1.5em;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -630,7 +630,7 @@
 
 .framework__sub {
   font-size: 13.5px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   font-weight: 500;
   margin-bottom: 16px;
 }
@@ -953,7 +953,7 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   z-index: 2;
 }
 @media (min-width: 768px) { .chain__step::after { display: flex; } }
@@ -963,7 +963,7 @@
   font-family: var(--font-en);
   font-size: 13px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 12px;
   letter-spacing: 0.05em;
 }
@@ -1036,7 +1036,7 @@
 .chain__quote-text em {
   font-family: var(--font-en);
   font-style: italic;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   font-weight: 600;
 }
 
@@ -1399,7 +1399,7 @@
   font-family: var(--font-en);
   font-size: 22px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   transition: color 0.4s var(--ease);
 }
 @media (min-width: 768px) { .roadmap-stage__num { font-size: 28px; } }
@@ -1458,7 +1458,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.04em;
   margin-bottom: 12px;
 }
@@ -1528,7 +1528,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .contact__desc {
@@ -1673,7 +1673,7 @@
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -1755,7 +1755,7 @@
   font-family: var(--font-en);
   font-size: 13px;
   font-weight: 600;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .gov-tier__card {
@@ -1777,7 +1777,7 @@
   font-style: italic;
   font-size: 13px;
   letter-spacing: 0.06em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 6px;
   text-align: right;
 }
@@ -1803,7 +1803,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 12px;
 }
 .gov-tier__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
@@ -1830,7 +1830,7 @@
   padding-right: 14px;
   border-right: 2px solid rgba(199, 154, 75, 0.35);
 }
-.gov-tier__meta dt { font-size: 12px; color: var(--gold-deep); letter-spacing: 0.04em; }
+.gov-tier__meta dt { font-size: 12px; color: var(--gold-text); letter-spacing: 0.04em; }
 .gov-tier__meta dd { margin: 0; font-size: 15px; font-weight: 600; color: var(--petrol-deepest); }
 
 /* مجلس الأمناء: قمة الهيكل بالأرضية البترولية */
@@ -1918,7 +1918,7 @@
   top: -22px;
   white-space: nowrap;
   font-size: 11px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 /* التشغيلي تحت التنفيذي (اليسار في RTL) */
@@ -1968,7 +1968,7 @@
   border-color: var(--gold);
   box-shadow: 0 18px 36px -24px rgba(11, 39, 47, 0.5);
 }
-.org-node__num { font-family: var(--font-en); font-size: 12px; color: var(--gold-deep); }
+.org-node__num { font-family: var(--font-en); font-size: 12px; color: var(--gold-text); }
 .org-node__name { font-size: 17px; font-weight: 700; color: var(--petrol-deepest); }
 .org-node__role { font-size: 12px; color: var(--petrol-deep); opacity: 0.7; }
 
@@ -2019,7 +2019,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 16px;
 }
 .gov-members__grid {
@@ -2056,7 +2056,7 @@
 }
 .gov-member__initials { font-size: 22px; font-weight: 700; color: var(--petrol-deep); }
 .gov-member__name { font-size: 14px; font-weight: 700; color: var(--petrol-deepest); line-height: 1.4; }
-.gov-member__title { font-size: 12px; color: var(--gold-deep); }
+.gov-member__title { font-size: 12px; color: var(--gold-text); }
 .gov-member__org { font-size: 12px; color: var(--petrol-deep); opacity: 0.7; }
 
 /* مقعد شاغر: صورة ظلية هادئة */
@@ -2163,7 +2163,7 @@ body:has(.doc-hero) .header:not(.scrolled) .logo__img {
   font-weight: 700;
   border-radius: 100px;
 }
-.plan__tier { font-size: 13px; letter-spacing: 0.04em; color: var(--gold-deep); margin-bottom: 6px; }
+.plan__tier { font-size: 13px; letter-spacing: 0.04em; color: var(--gold-text); margin-bottom: 6px; }
 .plan--featured .plan__tier { color: var(--gold-light); }
 .plan__name { font-size: 28px; font-weight: 800; color: var(--petrol-deepest); margin-bottom: 18px; }
 .plan--featured .plan__name { color: var(--sand-paper); }
@@ -2226,9 +2226,9 @@ body:has(.doc-hero) .header:not(.scrolled) .logo__img {
 .doc-note__list { margin: 0; display: grid; gap: 14px; }
 .doc-note__list div { display: grid; gap: 4px; }
 @media (min-width: 640px) { .doc-note__list div { grid-template-columns: 150px 1fr; gap: 16px; } }
-.doc-note__list dt { font-weight: 700; color: var(--gold-deep); }
+.doc-note__list dt { font-weight: 700; color: var(--gold-text); }
 .doc-note__list dd { margin: 0; line-height: 1.8; color: var(--petrol-deep); }
-.doc-note a, .doc-content a { color: var(--gold-deep); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.doc-note a, .doc-content a { color: var(--gold-text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
 /* ─── الوثائق النظامية ─── */
 .doc-layout { display: grid; gap: 40px; }
@@ -2242,7 +2242,7 @@ body:has(.doc-hero) .header:not(.scrolled) .logo__img {
   border: 1px solid rgba(11, 39, 47, 0.08);
   border-radius: 4px;
 }
-.doc-toc__title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--gold-deep); margin-bottom: 14px; }
+.doc-toc__title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--gold-text); margin-bottom: 14px; }
 .doc-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .doc-toc a {
   display: flex;
@@ -2254,7 +2254,7 @@ body:has(.doc-hero) .header:not(.scrolled) .logo__img {
   border-radius: 2px;
   transition: background 0.25s var(--ease), color 0.25s var(--ease);
 }
-.doc-toc a span { font-family: var(--font-en); font-size: 12px; color: var(--gold-deep); min-width: 20px; padding-top: 2px; }
+.doc-toc a span { font-family: var(--font-en); font-size: 12px; color: var(--gold-text); min-width: 20px; padding-top: 2px; }
 .doc-toc a:hover { background: var(--sand-light); color: var(--petrol-deepest); }
 
 .doc-content { max-width: 760px; }
@@ -2269,7 +2269,7 @@ body:has(.doc-hero) .header:not(.scrolled) .logo__img {
   box-shadow: 0 20px 40px -32px rgba(11, 39, 47, 0.4);
 }
 .doc-article { padding: 8px 0 36px; margin-bottom: 36px; border-bottom: 1px solid rgba(11, 39, 47, 0.08); scroll-margin-top: 110px; }
-.doc-article__num { display: block; font-size: 13px; color: var(--gold-deep); margin-bottom: 6px; }
+.doc-article__num { display: block; font-size: 13px; color: var(--gold-text); margin-bottom: 6px; }
 .doc-article__title { font-size: clamp(21px, 2.6vw, 26px); font-weight: 700; color: var(--petrol-deepest); margin-bottom: 16px; }
 .doc-article p { font-size: 16px; line-height: 1.95; color: var(--petrol-deep); margin-bottom: 12px; }
 .doc-article ul { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 10px; }

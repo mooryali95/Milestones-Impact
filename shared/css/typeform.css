@@ -71,7 +71,7 @@
   color: var(--ink-light);
   letter-spacing: 0.05em;
 }
-.tf-modal__counter strong { color: var(--gold-deep); font-weight: 600; }
+.tf-modal__counter strong { color: var(--gold-text); font-weight: 600; }
 
 /* ── BODY ── */
 .tf-modal__body {
@@ -115,7 +115,7 @@
   font-family: var(--font-en);
   font-size: 13px;
   font-weight: 600;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.08em;
   margin-bottom: 14px;
   display: flex;
@@ -193,7 +193,7 @@
 .tf-field-label {
   font-size: 10px;
   font-weight: 700;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -247,7 +247,7 @@
   font-family: var(--font-en);
   font-weight: 600;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   flex-shrink: 0;
 }
 .tf-option.selected .tf-option__key {
@@ -427,7 +427,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.04em;
   margin-bottom: 14px;
 }
@@ -455,7 +455,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 12px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 32px;
 }
 @media (min-width: 768px) { .tf-welcome__time { margin-bottom: 44px; } }
@@ -487,7 +487,7 @@
 .tf-welcome__cta > * { position: relative; z-index: 1; }
 .tf-welcome__cta:hover::before { transform: translateX(0); }
 
-.tf-thanks__highlight { color: var(--gold-deep); font-weight: 700; }
+.tf-thanks__highlight { color: var(--gold-text); font-weight: 700; }
 
 .tf-thanks__status {
   display: inline-flex;

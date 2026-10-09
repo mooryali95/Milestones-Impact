@@ -164,7 +164,7 @@ export const AdminLoginScreen = ({
           <Wordmark width={200} variant="inverted" />
           <div className="auth-left-quote" style={{color:"rgba(255,255,255,0.7)",fontSize:"1rem",marginTop:"1.5rem"}}>
             لوحة إدارة المستشار<br/>
-            <span style={{color:"#14495E",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
+            <span style={{color:"#6B9DAD",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
           </div>
           <div className="auth-left-attr" style={{marginTop:"1rem"}}>Milestone Impact • نسخة المستشار</div>
         </div>

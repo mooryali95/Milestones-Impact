@@ -129,7 +129,7 @@
   font-family: var(--font-ar);
   font-size: 12px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 28px;
 }
 @media (min-width: 640px) {
@@ -146,7 +146,7 @@
 }
 .hero__title em {
   font-style: normal;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 @media (min-width: 640px) { .hero__title { margin-bottom: 24px; } }
 @media (min-width: 1024px) {
@@ -188,7 +188,7 @@
 }
 .hero__subtitle strong {
   font-weight: 800;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 @media (min-width: 640px) { .hero__subtitle { margin-bottom: 28px; } }
 
@@ -196,7 +196,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 15px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.03em;
   margin-bottom: 40px;
 }
@@ -374,7 +374,7 @@
   font-style: italic;
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   text-transform: uppercase;
   margin-bottom: 8px;
 }
@@ -748,7 +748,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 16px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 20px;
   line-height: 1.4;
   position: relative;
@@ -940,7 +940,7 @@
   font-style: italic;
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -988,7 +988,7 @@
   z-index: 1;
 }
 .partner-card__url:hover {
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 .partner-card--center .partner-card__url {
   color: var(--sand-cream);
@@ -1051,7 +1051,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.04em;
   margin-bottom: 18px;
 }
@@ -1075,7 +1075,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .ecosystem__contact-text {

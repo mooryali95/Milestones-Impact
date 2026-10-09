@@ -10,13 +10,13 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp{font-family:var(--font-ar);direction:rtl;background:#0D0D0F;color:#E8E2D9;overflow-x:hidden;}
 /* ══ TOP NAV — رابط العودة للبراند الأم ══ */
 .lp-topnav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.6rem;background:rgba(13,13,15,.85);}
-.lp-topnav-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none;color:rgba(232,226,217,.85);font-family:var(--font-ar);font-size:.95rem;transition:color .3s;}
+.lp-topnav-brand{white-space:nowrap;display:flex;align-items:center;gap:.55rem;text-decoration:none;color:rgba(232,226,217,.85);font-family:var(--font-ar);font-size:.95rem;transition:color .3s;}
 .lp-topnav-brand:hover{color:#C8A45C;}
 .lp-topnav-links{display:flex;align-items:center;gap:.6rem;}
-.lp-topnav-home{display:flex;align-items:center;gap:.45rem;text-decoration:none;padding:.45rem 1rem;border:1px solid rgba(42,100,120,.4);border-radius: 2px;color:#2A6478;font-family:var(--font-ar);font-size:.78rem;font-weight:500;letter-spacing:.5px;transition:all .3s;}
+.lp-topnav-home{display:flex;align-items:center;gap:.45rem;text-decoration:none;padding:.45rem 1rem;border:1px solid rgba(107,157,173,.4);border-radius: 2px;color:#6B9DAD;font-family:var(--font-ar);font-size:.78rem;font-weight:500;letter-spacing:.5px;white-space:nowrap;transition:all .3s;}
 .lp-topnav-home:hover{border-color:#2A6478;background:rgba(20,73,94,.1);color:#8BBCC8;}
 .lp-hero{padding-top:5rem;}
-.lp-hero{min-height:100vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 2rem;overflow:hidden;}
+.lp-hero{min-height:100vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6rem 2rem 7rem;overflow:hidden;}
 .lp-hero-bg{position:absolute;inset:0;z-index:0;background:#0D0D0F;}
 .lp-hero-grid{position:absolute;inset:0;z-index:1;opacity:.06;background-image:linear-gradient(rgba(169,122,46,.8) 1px,transparent 1px),linear-gradient(90deg,rgba(169,122,46,.8) 1px,transparent 1px);background-size:60px 60px;}
 .lp-hero-glow{position:absolute;width:600px;height:600px;border-radius:50%;background:none;top:50%;left:50%;transform:translate(-50%,-55%);z-index:1;pointer-events:none;}
@@ -26,7 +26,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-hero-logo{margin-bottom:1.8rem;animation:lp-float 6s ease-in-out infinite;}
 @keyframes lp-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .lp-hero-title{font-family:var(--font-ar);font-size:clamp(2.8rem,7vw,5rem);font-weight:700;line-height:1.1;margin-bottom:.6rem;background:#E8E2D9;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.lp-hero-en{font-family:var(--font-ar);font-weight:200;font-size:clamp(1rem,2.5vw,1.5rem);letter-spacing:6px;color:rgba(107,157,173,.7);margin-bottom:1.4rem;}
+.lp-hero-en{font-family:var(--font-ar);font-weight:200;font-size:clamp(1rem,2.5vw,1.5rem);letter-spacing:6px;color:#6B9DAD;margin-bottom:1.4rem;}
 .lp-hero-sub{font-size:clamp(.9rem,2vw,1.1rem);color:rgba(232,226,217,.55);line-height:1.8;max-width:520px;margin:0 auto 2.8rem;font-weight:300;}
 .lp-hero-line{width:1px;height:50px;background:#C79A4B;margin:0 auto 2.8rem;}
 .lp-hero-actions{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;}
@@ -36,9 +36,9 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-btn-primary:hover{transform:translateY(-2px);}
 .lp-btn-ghost{padding:.85rem 2.2rem;border-radius: 2px;border:1px solid rgba(107,157,173,.35);background:transparent;color:#6B9DAD;font-family:var(--font-ar);font-size:.9rem;font-weight:500;cursor:pointer;letter-spacing:1px;transition:all .3s;}
 .lp-btn-ghost:hover{border-color:#6B9DAD;background:rgba(107,157,173,.08);transform:translateY(-2px);}
-.lp-btn-admin{display:block;margin:1.5rem auto 0;background:none;border:none;color:rgba(232,226,217,.2);font-family:var(--font-ar);font-size:.72rem;cursor:pointer;letter-spacing:2px;transition:color .3s;}
-.lp-btn-admin:hover{color:rgba(232,226,217,.45);}
-.lp-scroll-hint{pointer-events:none;position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.2);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
+.lp-btn-admin{display:block;margin:1.5rem auto 0;background:none;border:none;color:rgba(232,226,217,.55);font-family:var(--font-ar);font-size:.72rem;cursor:pointer;letter-spacing:2px;transition:color .3s;}
+.lp-btn-admin:hover{color:rgba(232,226,217,.85);}
+.lp-scroll-hint{pointer-events:none;position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.55);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
 @keyframes lp-bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
 .lp-scroll-line{width:1px;height:30px;background:rgba(199,154,75,.5);}
 .lp-divider{display:flex;align-items:center;gap:1.5rem;padding:0 2rem;max-width:900px;margin:0 auto;}
@@ -47,7 +47,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-section{padding:6rem 2rem;max-width:1100px;margin:0 auto;}
 .lp-section-label{font-size:.62rem;letter-spacing:4px;text-transform:uppercase;color:#C79A4B;margin-bottom:.8rem;font-weight:600;}
 .lp-section-title{font-family:var(--font-ar);font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;line-height:1.2;margin-bottom:1rem;color:#E8E2D9;}
-.lp-section-body{font-size:1rem;color:rgba(232,226,217,.5);line-height:1.9;max-width:620px;font-weight:300;}
+.lp-section-body{font-size:1rem;color:rgba(232,226,217,.6);line-height:1.9;max-width:620px;font-weight:300;}
 .lp-manifesto{background:#0A0A0C;padding:6rem 2rem;}
 .lp-manifesto-inner{max-width:760px;margin:0 auto;text-align:center;}
 .lp-manifesto-quote{font-family:var(--font-ar);font-size:clamp(1.2rem,3vw,1.9rem);color:#E8E2D9;line-height:1.9;margin-bottom:2rem;position:relative;padding:0 1rem;}
@@ -67,9 +67,9 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-track-icon{font-size:1.4rem;margin-bottom:.8rem;}
 .lp-track-name{font-family:var(--font-ar);font-size:1.2rem;font-weight:700;margin-bottom:.3rem;}
 .lp-track-weight{font-size:2rem;font-weight:200;opacity:.12;position:absolute;top:1rem;left:1.5rem;font-family:var(--font-ar);}
-.lp-track-desc{font-size:.75rem;color:rgba(232,226,217,.4);line-height:1.6;margin-bottom:.8rem;}
+.lp-track-desc{font-size:.75rem;color:rgba(232,226,217,.6);line-height:1.6;margin-bottom:.8rem;}
 .lp-track-ops{display:flex;flex-direction:column;gap:.3rem;margin-top:.8rem;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.05);}
-.lp-track-op{font-size:.68rem;color:rgba(232,226,217,.3);padding:.2rem 0;display:flex;align-items:center;gap:.4rem;}
+.lp-track-op{font-size:.68rem;color:rgba(232,226,217,.6);padding:.2rem 0;display:flex;align-items:center;gap:.4rem;}
 .lp-track-op::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0;}
 .lp-track-creation .lp-track-op::before{background:#EFE7D8;}
 .lp-track-innovation .lp-track-op::before{background:#D9A85A;}
@@ -81,14 +81,14 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-step-num{width:56px;height:56px;border-radius:50%;border:1px solid rgba(199,154,75,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;font-family:var(--font-ar);font-size:1.4rem;color:#C79A4B;position:relative;}
 .lp-step-num::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid rgba(199,154,75,.15);}
 .lp-step-title{font-family:var(--font-ar);font-size:1.1rem;margin-bottom:.5rem;color:#E8E2D9;}
-.lp-step-desc{font-size:.78rem;color:rgba(232,226,217,.4);line-height:1.7;}
+.lp-step-desc{font-size:.78rem;color:rgba(232,226,217,.6);line-height:1.7;}
 .lp-cta-final{padding:8rem 2rem;text-align:center;background:#0D0D0F;position:relative;overflow:hidden;}
 .lp-cta-final::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(169,122,46,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(169,122,46,.04) 1px,transparent 1px);background-size:40px 40px;}
 .lp-cta-final-inner{position:relative;z-index:1;}
 .lp-cta-final-title{font-family:var(--font-ar);font-size:clamp(2rem,5vw,3.5rem);margin-bottom:.8rem;background:#E8E2D9;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.lp-cta-final-sub{color:rgba(232,226,217,.4);font-size:.9rem;margin-bottom:2.5rem;letter-spacing:1px;}
+.lp-cta-final-sub{color:rgba(232,226,217,.6);font-size:.9rem;margin-bottom:2.5rem;letter-spacing:1px;}
 .lp-footer{padding:2rem;border-top:1px solid rgba(199,154,75,.1);text-align:center;background:#0D0D0F;}
-.lp-footer-text{font-size:.68rem;color:rgba(232,226,217,.18);letter-spacing:2px;line-height:2;}
+.lp-footer-text{font-size:.68rem;color:rgba(232,226,217,.55);letter-spacing:2px;line-height:2;}
 @keyframes lp-fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
 .lp-a1{animation:lp-fade-up .9s ease both;}
 .lp-a2{animation:lp-fade-up .9s .15s ease both;}
@@ -169,7 +169,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
               {id:"making",name:"الجعل",icon:"◇",color:"#A97A2E",weight:13,desc:"الاندماج وإغلاق حلقة الأثر",ops:OPERATIONS.making.map(o=>o.nameAr)},
             ].map(t=>(
               <div key={t.id} className={`lp-track lp-track-${t.id}`}>
-                <div className="lp-track-weight">{t.weight}%</div>
+                <div className="lp-track-weight" aria-hidden="true">{t.weight}%</div>
                 <div className="lp-track-icon" style={{color:t.color}}>{t.icon}</div>
                 <div className="lp-track-name" style={{color:t.color}}>{t.name}</div>
                 <div className="lp-track-desc">{t.desc}</div>

@@ -107,6 +107,10 @@
      لذلك --gold يشير إلى copper، و--gold-deep إلى الذهب الرسمي. */
   --gold-deep:      var(--mi-gold);      /* رسمي #A97A2E */
   --gold:           var(--mi-copper);    /* رسمي #C79A4B */
+  /* الذهب الرسمي نصّاً على الأرضيات الرملية يبلغ 3.3–3.8:1 فقط — دون
+     حدّ القراءة 4.5:1. هذا ظلّه الأعمق للنصوص الصغيرة على الفاتح
+     (4.9–5.7:1)؛ الذهب الرسمي يبقى للخطوط والزخارف والمعيّن. */
+  --gold-text:      #86601F;
   --gold-light:     #D9A85A;             /* رسمي goldLight من brand-tokens.json */
   --gold-pale:      #EBD9B4;             /* لا مقابل رسمي — أبقيَ كما هو */
 
@@ -468,12 +472,12 @@ body::after {
 .header__nav-link:hover::after { width: 100%; }
 
 /* Active state (scrollspy) */
-.header__nav-link.is-active { color: var(--gold-deep); }
+.header__nav-link.is-active { color: var(--gold-text); }
 .header__nav-link.is-active::after { width: 100%; }
 
 /* Home link — distinct (back to mother site) */
 .header__nav-link--home {
-  color: var(--gold-deep);
+  color: var(--gold-text);
   font-weight: 600;
   padding: 4px 12px;
   border: 1px solid var(--line-gold);
@@ -641,7 +645,7 @@ body::after {
 }
 .mobile-drawer__link:hover,
 .mobile-drawer__link:active {
-  color: var(--gold-deep);
+  color: var(--gold-text);
   padding-right: 14px;
 }
 
@@ -950,7 +954,7 @@ body::after {
   .btn-text { font-size: 15px; gap: 10px; }
 }
 .btn-text:hover {
-  color: var(--gold-deep);
+  color: var(--gold-text);
   border-bottom-color: var(--gold);
 }
 
@@ -966,7 +970,7 @@ body::after {
   font-style: italic;
   font-size: 13px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.06em;
   margin-bottom: 16px;
 }
@@ -999,7 +1003,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .section-intro {
@@ -1216,7 +1220,7 @@ body::after {
   color: var(--ink-light);
   letter-spacing: 0.05em;
 }
-.tf-modal__counter strong { color: var(--gold-deep); font-weight: 600; }
+.tf-modal__counter strong { color: var(--gold-text); font-weight: 600; }
 
 /* ── BODY ── */
 .tf-modal__body {
@@ -1260,7 +1264,7 @@ body::after {
   font-family: var(--font-en);
   font-size: 13px;
   font-weight: 600;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.08em;
   margin-bottom: 14px;
   display: flex;
@@ -1338,7 +1342,7 @@ body::after {
 .tf-field-label {
   font-size: 10px;
   font-weight: 700;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.18em;
   text-transform: uppercase;
   margin-bottom: 4px;
@@ -1392,7 +1396,7 @@ body::after {
   font-family: var(--font-en);
   font-weight: 600;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   flex-shrink: 0;
 }
 .tf-option.selected .tf-option__key {
@@ -1572,7 +1576,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.04em;
   margin-bottom: 14px;
 }
@@ -1600,7 +1604,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 12px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 32px;
 }
 @media (min-width: 768px) { .tf-welcome__time { margin-bottom: 44px; } }
@@ -1632,7 +1636,7 @@ body::after {
 .tf-welcome__cta > * { position: relative; z-index: 1; }
 .tf-welcome__cta:hover::before { transform: translateX(0); }
 
-.tf-thanks__highlight { color: var(--gold-deep); font-weight: 700; }
+.tf-thanks__highlight { color: var(--gold-text); font-weight: 700; }
 
 .tf-thanks__status {
   display: inline-flex;
@@ -1834,7 +1838,7 @@ body::after {
   font-family: var(--font-ar);
   font-size: 12px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 28px;
 }
 @media (min-width: 640px) {
@@ -1851,7 +1855,7 @@ body::after {
 }
 .hero__title em {
   font-style: normal;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 @media (min-width: 640px) { .hero__title { margin-bottom: 24px; } }
 @media (min-width: 1024px) {
@@ -1893,7 +1897,7 @@ body::after {
 }
 .hero__subtitle strong {
   font-weight: 800;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 @media (min-width: 640px) { .hero__subtitle { margin-bottom: 28px; } }
 
@@ -1901,7 +1905,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 15px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.03em;
   margin-bottom: 40px;
 }
@@ -2079,7 +2083,7 @@ body::after {
   font-style: italic;
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   text-transform: uppercase;
   margin-bottom: 8px;
 }
@@ -2453,7 +2457,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 16px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   margin-bottom: 20px;
   line-height: 1.4;
   position: relative;
@@ -2645,7 +2649,7 @@ body::after {
   font-style: italic;
   font-size: 11px;
   letter-spacing: 0.18em;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -2693,7 +2697,7 @@ body::after {
   z-index: 1;
 }
 .partner-card__url:hover {
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 .partner-card--center .partner-card__url {
   color: var(--sand-cream);
@@ -2756,7 +2760,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 13px;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.04em;
   margin-bottom: 18px;
 }
@@ -2780,7 +2784,7 @@ body::after {
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .ecosystem__contact-text {

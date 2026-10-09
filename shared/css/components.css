@@ -129,7 +129,7 @@
   .btn-text { font-size: 15px; gap: 10px; }
 }
 .btn-text:hover {
-  color: var(--gold-deep);
+  color: var(--gold-text);
   border-bottom-color: var(--gold);
 }
 
@@ -145,7 +145,7 @@
   font-style: italic;
   font-size: 13px;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
   letter-spacing: 0.06em;
   margin-bottom: 16px;
 }
@@ -178,7 +178,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-deep);
+  color: var(--gold-text);
 }
 
 .section-intro {

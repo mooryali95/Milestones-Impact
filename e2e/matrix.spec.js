@@ -238,3 +238,30 @@ test('إحصائيات المدير: مسارٌ اكتمل حجزه يبلغ ع�
   const widths = await page.locator('.rpt-bar-fill').evaluateAll((els) => els.map((e) => e.style.width));
   expect(widths).toEqual(['75%', '50%', '50%', '50%']);
 });
+
+test('الشعار في لوحة الدخول موسَّط مع النص تحته', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto(BASE + '/');
+  await page.getByText('ابدأ رحلتك').first().click();
+  const d = await page.evaluate(() => {
+    const img = document.querySelector('.auth-left-content img').getBoundingClientRect();
+    const box = document.querySelector('.auth-left-content').getBoundingClientRect();
+    return Math.abs((img.left + img.width / 2) - (box.left + box.width / 2));
+  });
+  expect(d).toBeLessThan(3);
+});
+
+for (const [w, h] of [[360, 640], [390, 844], [1280, 720]]) {
+  test(`صفحة الهبوط عند ${w}×${h}: لا شيء تحت الشريط العلوي ولا تراكب أسفلها`, async ({ page }) => {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(BASE + '/');
+    await page.waitForTimeout(1200);
+    const r = await page.evaluate(() => {
+      const box = (s) => document.querySelector(s).getBoundingClientRect();
+      return { nav: box('.lp-topnav').bottom, eyebrow: box('.lp-eyebrow').top,
+        admin: box('.lp-btn-admin').bottom, hint: box('.lp-scroll-hint').top };
+    });
+    expect(r.eyebrow).toBeGreaterThanOrEqual(r.nav);
+    expect(r.admin).toBeLessThanOrEqual(r.hint);
+  });
+}

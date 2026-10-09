@@ -189,7 +189,7 @@ export const MatrixTab = (p) => {
               <p>{confirmedCount}/16 مؤكدة</p>
               <button className="btn btn-s btn-gold" onClick={handleSubmit}>✓ موافقة نهائية</button>
             </> : <>
-              <h3 style={{color:"#aaa"}}>يجب تحديد جميع المواعيد الـ 16</h3>
+              <h3 style={{color:"var(--text-muted)"}}>يجب تحديد جميع المواعيد الـ 16</h3>
               <p style={{color:"var(--wg)"}}>{datedCount}/16 محدد</p>
               {datedCount>0 && <span className="submit-missing-link" onClick={()=>{ const m=missingProcs[0]; if(m){setSelectedCell(m);setTempDate("");setDateError("");}}}>
                 ابدأ بـ: {missingProcs[0]?.nameAr} ←
