@@ -49,3 +49,7 @@
 
 /assets/program/css/*
   Cache-Control: public, max-age=31536000, immutable
+
+# صفحة التسعير مخفية: لا تُفهرس ولا تظهر في الموقع
+/pricing.html
+  X-Robots-Tag: noindex, nofollow
