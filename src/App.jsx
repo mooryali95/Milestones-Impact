@@ -34,6 +34,13 @@ import { CSS } from './styles/appCss';
 
 
 
+const DEMO_CSS = `
+.demo-banner{display:flex;align-items:center;justify-content:center;gap:1rem;flex-wrap:wrap;padding:.7rem 1rem;background:#EFE7D8;border-bottom:1px solid rgba(169,122,46,.35);color:#0B272F;font-size:.85rem;text-align:center}
+.demo-banner strong{color:#8E6524}
+.demo-banner-btn{padding:.45rem 1.1rem;border-radius:2px;border:1px solid #C79A4B;background:#C79A4B;color:#0D0D0F;font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer}
+.demo-banner-btn:hover{filter:brightness(1.08)}
+`;
+
 // ════════════════════════════════════════════════════════════════
 // MAIN APP
 // ════════════════════════════════════════════════════════════════
@@ -57,6 +64,8 @@ export default function App() {
   const [confirmed, setConfirmed] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [reopenRequested, setReopenRequested] = useState(false);
+  // الجولة التجريبية: بيانات نموذجية بلا تسجيل ولا حفظ على الخادم
+  const [demoMode, setDemoMode] = useState(false);
 
   const [adminEmail, setAdminEmail] = useState("");
   const [adminCode, setAdminCode] = useState("");
@@ -111,6 +120,11 @@ export default function App() {
 
   // ── Auto-restore local session ──
   useEffect(() => {
+    // رابط مباشر للجولة التجريبية: ?demo أو #demo
+    if (/[?&]demo\b/.test(window.location.search) || window.location.hash === '#demo') {
+      startDemo();
+      return;
+    }
     // Restore admin session (4h)
     const savedAdminToken = AdminSession.load();
     if (savedAdminToken) {
@@ -408,6 +422,7 @@ export default function App() {
   });
 
   const loadDemoData = async () => {
+    if (demoMode) { if (!demoRows.length) setDemoRows([emptyDemoRow(), emptyDemoRow(), emptyDemoRow()]); return; }
     if (!sessionToken) return;
     setDemoLoading(true);
     const res = await UserAPI.get(sessionToken);
@@ -457,6 +472,43 @@ export default function App() {
   const addDemoRow = () => setDemoRows(rows => [...rows, emptyDemoRow()]);
   const removeDemoRow = (id) => { if (demoRows.length > 1) setDemoRows(rows => rows.filter(r => r.id !== id)); };
 
+  // ── الجولة التجريبية ──
+  // مواعيد نموذجية بفاصل خمسة أيام تبدأ بعد أسبوع من اليوم، وثلثا العمليات مؤكدة،
+  // فيرى الزائر المصفوفة والتقرير والمخرجات ممتلئة كما سيراها بعد التسجيل.
+  const startDemo = () => {
+    const base = new Date();
+    base.setHours(12, 0, 0, 0);
+    const sampleDates = {};
+    const sampleConfirmed = {};
+    PHASES.forEach(ph => TRACKS.forEach((tr, ti) => {
+      const i = (ph.id - 1) * TRACKS.length + ti;
+      const d = new Date(base);
+      d.setDate(base.getDate() + 7 + i * 5);
+      const key = `${tr.id}-${ph.id}`;
+      sampleDates[key] = d.toISOString().slice(0, 10);
+      if (i < 11) sampleConfirmed[key] = true;
+    }));
+    LocalSession.clear();
+    setUser({ name: "جولة تجريبية", phone: "", email: "" });
+    setSessionId(null);
+    setSessionToken(null);
+    setDates(sampleDates);
+    setConfirmed(sampleConfirmed);
+    setSubmitted(false);
+    setReopenRequested(false);
+    setDemoMode(true);
+    setTab("matrix");
+    setScreen("main");
+  };
+
+  const leaveDemoToRegister = () => {
+    setDemoMode(false);
+    setUser({ name: "", phone: "", email: "" });
+    setDates({}); setConfirmed({}); setSubmitted(false); setTab("matrix");
+    if (window.location.hash === '#demo') window.history.replaceState(null, '', window.location.pathname);
+    setScreen("register");
+  };
+
   // ── Save Date ──
   const saveDate = async (key, dateStr) => {
     if (isPast(dateStr)) { setDateError("لا يمكن اختيار تاريخ في الماضي"); return false; }
@@ -490,6 +542,7 @@ export default function App() {
     }
     setSubmitted(true);
     setTab("output");
+    if (demoMode) { showToast("هذه خطة تجريبية ولم تُحفظ. سجّل لتبني خطتك الحقيقية"); return; }
     showToast("تم حفظ الخطة النهائية! ✓");
     // ── إشعار المستشار ──
     try {
@@ -529,10 +582,11 @@ export default function App() {
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
     setOtpLastSent(null); setOtpFailCount(0);
+    setDemoMode(false); setDemoRows([]);
   };
 
   const logout = () => {
-    if (datedCount > 0 && !submitted) {
+    if (datedCount > 0 && !submitted && !demoMode) {
       setConfirmAction({
         title: "تأكيد الخروج",
         message: "لديك بيانات غير مُقدَّمة.\nيمكنك العودة لاحقاً عبر زر \"استئناف\".",
@@ -548,6 +602,7 @@ export default function App() {
 
   // ── Request Reopen (User) ──
   const requestReopen = async () => {
+    if (demoMode) { setSubmitted(false); setTab("matrix"); showToast("أُعيد فتح الخطة التجريبية"); return; }
     if (sessionToken) await UserAPI.save(sessionToken, { reopenRequested: true });
     setReopenRequested(true);
     showToast("تم إرسال طلب إعادة الفتح للمدير ✓");
@@ -580,6 +635,7 @@ export default function App() {
       onRegister={() => setScreen("register")}
       onResume={() => setScreen("resume")}
       onAdmin={() => setScreen("admin-login")}
+      onDemo={startDemo}
       OPERATIONS={OPERATIONS}
     />
   );
@@ -692,7 +748,7 @@ export default function App() {
   ];
 
   return (
-    <><style>{CSS}</style><div className="app">
+    <><style>{CSS + DEMO_CSS}</style><div className="app">
 
       {/* ══ Nav ══ */}
       <nav className="nav">
@@ -712,9 +768,16 @@ export default function App() {
             <div className="nav-prog-bar"><div className="nav-prog-fill" style={{width:`${progressPct}%`}}/></div>
             <span className="nav-prog-pct">{progressPct}%</span>
           </div>
-          <button className="btn-logout" onClick={logout}>خروج</button>
+          <button className="btn-logout" onClick={logout}>{demoMode ? "إنهاء الجولة" : "خروج"}</button>
         </div>
       </nav>
+
+      {demoMode && (
+        <div className="demo-banner" role="status">
+          <span>أنت في <strong>الجولة التجريبية</strong>: البيانات نموذجية ولا يُحفظ شيء منها.</span>
+          <button className="demo-banner-btn" onClick={leaveDemoToRegister}>ابدأ رحلتك الحقيقية</button>
+        </div>
+      )}
 
       {/* ══ Bottom Bar (mobile) ══ */}
       <div className="bottom-bar">

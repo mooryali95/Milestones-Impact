@@ -2,7 +2,7 @@ import React from "react";
 import Wordmark from "./components/Wordmark";
 import MILogo from "./MILogo";
 
-export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
+export default function Landing({ onRegister, onResume, onAdmin, onDemo, OPERATIONS }) {
   return (
     <><style>{`
 /* LANDING PAGE — Luxury Editorial */
@@ -36,6 +36,8 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-btn-primary:hover{transform:translateY(-2px);}
 .lp-btn-ghost{padding:.85rem 2.2rem;border-radius: 2px;border:1px solid rgba(107,157,173,.35);background:transparent;color:#6B9DAD;font-family:var(--font-ar);font-size:.9rem;font-weight:500;cursor:pointer;letter-spacing:1px;transition:all .3s;}
 .lp-btn-ghost:hover{border-color:#6B9DAD;background:rgba(107,157,173,.08);transform:translateY(-2px);}
+.lp-btn-demo{display:block;margin:1.4rem auto 0;background:none;border:none;border-bottom:1px solid rgba(199,154,75,.45);padding:0 0 .2rem;color:#C79A4B;font-family:var(--font-ar);font-size:.88rem;font-weight:600;cursor:pointer;letter-spacing:.5px;transition:border-color .3s;}
+.lp-btn-demo:hover{border-color:#C79A4B;}
 .lp-btn-admin{display:block;margin:1.5rem auto 0;background:none;border:none;color:rgba(232,226,217,.2);font-family:var(--font-ar);font-size:.72rem;cursor:pointer;letter-spacing:2px;transition:color .3s;}
 .lp-btn-admin:hover{color:rgba(232,226,217,.45);}
 .lp-scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.2);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
@@ -126,6 +128,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
             <button className="lp-btn-primary" onClick={onRegister}>ابدأ رحلتك</button>
             <button className="lp-btn-ghost" onClick={onResume}>استئناف الجلسة</button>
           </div>
+          {onDemo && <button className="lp-btn-demo" onClick={onDemo}>جرّب جولة تجريبية بلا تسجيل ←</button>}
           <button className="lp-btn-admin" onClick={onAdmin}>⌘ دخول المدير</button>
         </div>
         <div className="lp-scroll-hint"><span>اكتشف</span><div className="lp-scroll-line"/></div>
@@ -215,6 +218,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
           <div style={{display:"flex",gap:"1rem",justifyContent:"center",flexWrap:"wrap"}}>
             <button className="lp-btn-primary" onClick={onRegister}>ابدأ رحلتك ←</button>
             <button className="lp-btn-ghost" onClick={onResume}>استئناف الجلسة</button>
+            {onDemo && <button className="lp-btn-ghost" onClick={onDemo}>جولة تجريبية</button>}
           </div>
         </div>
       </div>
