@@ -38,7 +38,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-btn-ghost:hover{border-color:#6B9DAD;background:rgba(107,157,173,.08);transform:translateY(-2px);}
 .lp-btn-admin{display:block;margin:1.5rem auto 0;background:none;border:none;color:rgba(232,226,217,.2);font-family:var(--font-ar);font-size:.72rem;cursor:pointer;letter-spacing:2px;transition:color .3s;}
 .lp-btn-admin:hover{color:rgba(232,226,217,.45);}
-.lp-scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.2);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
+.lp-scroll-hint{pointer-events:none;position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:rgba(232,226,217,.2);font-size:.65rem;letter-spacing:2px;animation:lp-bounce 2s ease-in-out infinite;}
 @keyframes lp-bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
 .lp-scroll-line{width:1px;height:30px;background:rgba(199,154,75,.5);}
 .lp-divider{display:flex;align-items:center;gap:1.5rem;padding:0 2rem;max-width:900px;margin:0 auto;}
