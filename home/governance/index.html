@@ -69,7 +69,7 @@
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="/assets/program/css/main.css?v=b758b1d2" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/program/css/hub.css?v=2" />
+  <link rel="stylesheet" href="/assets/program/css/hub.css?v=3" />
 </head>
 <body data-product="MI-GOVERNANCE">
 
@@ -238,13 +238,13 @@
 
       <!-- طبقة القيادة: المجلس، والمكتبان التنفيذيان، وقادة المسارات -->
       <div class="hub__command reveal">
-        <div class="hub__band" aria-hidden="true"></div>
-
-        <div class="hub__leads hub__leads--start" data-hub="leads-start" data-seats="2"></div>
-
+        <div class="hub__tier-head">
+          <span class="hub__kicker" dir="ltr">Leadership</span>
+          <strong>طبقة القيادة</strong>
+        </div>
         <div class="hub__board">
-          <span class="hub__board-pill" dir="ltr"><i></i>board</span>
-          <span class="hub__board-stem" aria-hidden="true"></span>
+          <span class="hub__board-pill">المجلس</span>
+          <span class="hub__stem" aria-hidden="true"></span>
           <div class="hub__offices">
             <div class="hub-office">
               <span class="hub-office__code" dir="ltr">CAO</span>
@@ -253,15 +253,15 @@
             <div class="hub-office">
               <span class="hub-office__code" dir="ltr">SPMO</span>
               <span class="hub-office__ar">مكتب إدارة المشاريع الاستراتيجية</span>
-              <span class="hub-office__team" data-hub="spmo" data-seats="2"></span>
+              <span class="hub-office__team" data-hub="spmo" data-seats="0"></span>
             </div>
           </div>
-          <div class="hub__nodes" aria-hidden="true"><i></i><i></i></div>
+          <span class="hub__stem" aria-hidden="true"></span>
         </div>
-
-        <div class="hub__leads hub__leads--end" data-hub="leads-end" data-seats="2"></div>
-
-        <p class="hub__command-caption"><span>قادة المسارات</span><span>المجلس التنفيذي والتشغيلي</span><span>قادة المسارات</span></p>
+        <div class="hub__leads-row">
+          <div class="hub__leads" data-hub="leads-start" data-seats="2"></div>
+          <div class="hub__leads" data-hub="leads-end" data-seats="2"></div>
+        </div>
       </div>
 
       <!-- أرقام المنظومة -->
