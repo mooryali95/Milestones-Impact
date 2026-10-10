@@ -42,7 +42,7 @@
   // 📊 State
   // ──────────────────────────────────────────────
   let currentStep = 0;
-  const stepOrder = ['welcome', '1', '2', '3', '4', '5', 'thanks'];
+  const stepOrder = ['welcome', '1', '2', '3', 'thanks'];
   let formData = {};
   let lastMailtoLink = '';
 
@@ -117,7 +117,7 @@
 
     tfPrev.style.visibility = (idx > 1 && stepKey !== 'thanks') ? 'visible' : 'hidden';
 
-    if (stepKey === '5') {
+    if (stepKey === '3') {
       tfNext.innerHTML = '<span>إرسال الرسالة</span><span class="tf-btn-next__enter">Enter ↵</span>';
     } else {
       tfNext.innerHTML = '<span>موافق</span><span class="tf-btn-next__enter">Enter ↵</span>';
@@ -138,7 +138,7 @@
     const currentKey = stepOrder[currentStep];
     if (currentKey !== 'welcome' && !validateStep(currentKey)) return;
 
-    if (currentKey === '5') {
+    if (currentKey === '3') {
       submitForm();
       return;
     }
@@ -165,16 +165,13 @@
     if (!stepEl) return true;
 
     if (stepKey === '1') {
-      const val = document.getElementById('qName').value.trim();
-      if (val.length < 2) { showError(stepEl, true); return false; }
-      formData.name = val;
+      const name = document.getElementById('qName').value.trim();
+      const org = document.getElementById('qOrg').value.trim();
+      if (name.length < 2 || org.length < 2) { showError(stepEl, true); return false; }
+      formData.name = name;
+      formData.organization = org;
     }
     else if (stepKey === '2') {
-      const val = document.getElementById('qOrg').value.trim();
-      if (val.length < 2) { showError(stepEl, true); return false; }
-      formData.organization = val;
-    }
-    else if (stepKey === '3') {
       const email = document.getElementById('qEmail').value.trim();
       const phone = document.getElementById('qPhone').value.trim();
       const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -182,15 +179,14 @@
       formData.email = email;
       formData.phone = phone;
     }
-    else if (stepKey === '4') {
+    else if (stepKey === '3') {
       const selected = stepEl.querySelector('.tf-option.selected');
       if (!selected) { showError(stepEl, true); return false; }
       formData.interest = selected.dataset.value;
       formData.interestLabel = (selected.querySelector('.tf-option__title') || selected).textContent.trim();
+      formData.context = (document.getElementById('qContext')?.value || '').trim();
     }
-    else if (stepKey === '5') {
-      formData.context = document.getElementById('qContext').value.trim();
-    }
+
 
     showError(stepEl, false);
     return true;
@@ -208,9 +204,7 @@
       opt.classList.add('selected');
       opt.setAttribute('aria-checked', 'true');
 
-      setTimeout(() => {
-        if (stepOrder[currentStep] === '4') nextStep();
-      }, 400);
+      // الاختيار لا ينقل تلقائيًا: السياق الاختياري في الخطوة نفسها
     });
   });
 
