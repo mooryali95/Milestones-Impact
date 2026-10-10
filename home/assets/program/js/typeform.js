@@ -45,16 +45,25 @@
   const stepOrder = ['welcome', '1', '2', '3', 'thanks'];
   let formData = {};
   let lastMailtoLink = '';
+  let submitting = false;
+  // true بعد إرسال ناجح (أو قبل أول فتح): الفتح التالي يبدأ نموذجاً فارغاً.
+  // false أثناء التعبئة: إغلاق النافذة بالخطأ (Escape أو ✕) لا يمسح ما كُتب.
+  let pristine = true;
+  let lastFocus = null;
+
+  const SEND_TIMEOUT_MS = 15000;
 
   // ──────────────────────────────────────────────
   // 🔓 PUBLIC API — Open/Close
   // ──────────────────────────────────────────────
   window.openTypeform = function(presetInterest) {
+    lastFocus = document.activeElement;
     tfModal.classList.add('open');
     document.body.style.overflow = 'hidden';
     currentStep = 0;
     formData = {};
     if (presetInterest) formData.interest = presetInterest;
+    hideSendError();
     goToStep(0);
 
     if (presetInterest) {
@@ -68,22 +77,25 @@
           }
         });
       }, 50);
-    } else {
+    } else if (pristine) {
       document.querySelectorAll('.tf-option').forEach(opt => {
         opt.classList.remove('selected');
         opt.setAttribute('aria-checked', 'false');
       });
     }
 
-    ['qName', 'qOrg', 'qEmail', 'qPhone', 'qContext'].forEach(id => {
+    if (!pristine) return;
+    ['qName', 'qOrg', 'qEmail', 'qPhone', 'qContext', 'qWebsite'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
+    pristine = false;
   };
 
   window.closeTypeform = function() {
     tfModal.classList.remove('open');
     document.body.style.overflow = '';
+    if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
   };
 
   window.nextStep = nextStep;
@@ -125,7 +137,7 @@
 
     setTimeout(() => {
       if (target) {
-        const input = target.querySelector('input, textarea');
+        const input = target.querySelector('.tf-input');
         if (input) input.focus();
       }
     }, 400);
@@ -214,6 +226,7 @@
   document.addEventListener('keydown', (e) => {
     if (!tfModal.classList.contains('open')) return;
     if (e.key === 'Escape') { closeTypeform(); return; }
+    if (submitting) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       const activeEl = document.activeElement;
       if (activeEl && activeEl.tagName === 'TEXTAREA') return;
@@ -251,10 +264,13 @@
       status:         'new',
     };
 
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), SEND_TIMEOUT_MS);
     const res = await fetch(
       `${CONFIG.supabaseUrl}/rest/v1/${CONFIG.table}`,
       {
         method: 'POST',
+        signal: ctrl.signal,
         headers: {
           'Content-Type':  'application/json',
           'apikey':        CONFIG.supabaseKey,
@@ -263,7 +279,7 @@
         },
         body: JSON.stringify(payload),
       }
-    );
+    ).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
       const err = await res.text();
@@ -316,6 +332,16 @@
     tfNext.innerHTML = '<span>جارٍ الإرسال…</span>';
     hideSubmitError();
 
+  async function submitForm() {
+    if (submitting) return;
+    hideSendError();
+
+    // حقل خفي لا يراه الزائر: إن امتلأ فالمُرسِل برنامج آلي — نُظهر الشكر ولا نرسل شيئاً
+    const trap = document.getElementById('qWebsite');
+    if (trap && trap.value) { finishSubmission(); return; }
+
+    submitting = true;
+    setSending(true);
     try {
       await sendToSupabase();
       currentStep = stepOrder.length - 1;
@@ -356,6 +382,36 @@
       tfNext.disabled = false;
       if (tfNext.innerHTML.includes('جارٍ الإرسال')) tfNext.innerHTML = nextLabel;
     }
+    submitting = false;
+    setSending(false);
+    finishSubmission();
+
+    // إشعار الأدمن (fire & forget)
+    fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
+      body: JSON.stringify({
+        action: 'notify',
+        name: formData.name || '—', organization: formData.organization || '—',
+        emailContact: formData.email || '—', phone: formData.phone || '—',
+        interest: formData.interest || '—', interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
+        product: CONFIG.product, sourceUrl: window.location.href, submittedAt: new Date().toISOString(),
+      }),
+    }).catch(() => {});
+
+    // إيميل تأكيد للمتقدم (مع حماية rate limit)
+    fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
+      body: JSON.stringify({
+        action: 'confirm',
+        name: formData.name || '—',
+        email: formData.email || '',
+        product: CONFIG.product,
+        interest: formData.interest || '—',
+        interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
+      }),
+    }).catch(() => {});
   }
 
   function hideSubmitError() {
