@@ -11,11 +11,11 @@ class ErrorBoundary extends React.Component {
       return (
         <div dir="rtl" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#FBF8EF", fontFamily: "Tahoma, sans-serif", padding: 24 }}>
           <div style={{ textAlign: "center", maxWidth: 360 }}>
-            <div style={{ display: "inline-block", background: "#061E2C", color: "#C8A45C", fontWeight: 900, borderRadius: 8, padding: "6px 14px", marginBottom: 16 }}>SSPDF</div>
-            <h2 style={{ color: "#061E2C", fontSize: "1.1rem", marginBottom: 8 }}>حدث خطأ غير متوقع</h2>
+            <div style={{ display: "inline-block", background: "#061318", color: "#C79A4B", fontWeight: 900, borderRadius: 8, padding: "6px 14px", marginBottom: 16 }}>SSPDF</div>
+            <h2 style={{ color: "#061318", fontSize: "1.1rem", marginBottom: 8 }}>حدث خطأ غير متوقع</h2>
             <p style={{ color: "#5C6B74", fontSize: "0.85rem", marginBottom: 20 }}>لم تُفقد بياناتك — أعد تحميل الصفحة للمتابعة.</p>
             <button onClick={() => window.location.reload()}
-              style={{ background: "#C8A45C", color: "#061E2C", fontWeight: 700, border: "none", borderRadius: 8, padding: "10px 24px", fontSize: "0.9rem", cursor: "pointer" }}>
+              style={{ background: "#C79A4B", color: "#061318", fontWeight: 700, border: "none", borderRadius: 8, padding: "10px 24px", fontSize: "0.9rem", cursor: "pointer" }}>
               إعادة تحميل الصفحة
             </button>
           </div>

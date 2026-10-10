@@ -1,17 +1,17 @@
 /* ════════ هوية Milestone Impact — Petrol · Gold · Sand ════════ */
 export const B = {
-  petrol: "#061E2C",
+  petrol: "#061318",
   petrolSoft: "#3E6E8C",
-  gold: "#C8A45C",
-  goldText: "#8A6432",
-  goldSoft: "#F3E9D7",
+  gold: "#C79A4B",
+  goldText: "#8A6424",
+  goldSoft: "#EFE7D8",
   sand: "#FBF8EF",
   card: "#FFFFFF",
-  line: "#E7E0CF",
-  lineSoft: "#F0EAD9",
+  line: "#EFE7D8",
+  lineSoft: "#EFE7D8",
   muted: "#5C6B74",
   ok: "#1C6B4F",
-  warn: "#8A6A1F",
+  warn: "#8A6424",
   bad: "#A13A2C",
 };
 
