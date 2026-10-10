@@ -2380,229 +2380,235 @@ body::after {
 
 /* ══════════════════════════════════════════════════════════════════
    03b ─ DBOTC METHOD (projects)
-   علامة المنهجية: الحروف تُقرأ من اليسار إلى اليمين بترتيب المراحل
+   كتلة واحدة: شريط داكن للحروف + أعمدة المراحل، تُقرأ من اليسار إلى اليمين
    ══════════════════════════════════════════════════════════════════ */
-.dbotc-mark {
+.dbotc {
+  --dbotc-letter: clamp(84px, 8.4vw, 150px);
+  --dbotc-gold-fill: linear-gradient(180deg, #F6EBCF 0%, var(--gold-light) 48%, var(--gold) 100%);
   position: relative;
-  margin: 40px 0 0;
-  padding: 28px 16px 26px;
-  background: var(--petrol-deepest);
+  margin-top: 40px;
+  border: 1px solid var(--line-gold);
   border-radius: var(--radius);
-  color: var(--sand-cream);
+  background: var(--sand-paper);
+  box-shadow: 0 40px 90px -50px rgba(6, 19, 24, 0.45);
   overflow: hidden;
 }
-@media (min-width: 768px) {
-  .dbotc-mark { margin-top: 64px; padding: 44px 40px 40px; }
-}
-.dbotc-mark::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(199, 154, 75, 0.16) 0%, transparent 45%),
-    radial-gradient(circle at 88% 100%, rgba(199, 154, 75, 0.10) 0%, transparent 45%);
-  pointer-events: none;
-}
-.dbotc-mark__caption {
+@media (min-width: 768px) { .dbotc { margin-top: 64px; } }
+
+/* الترويسة: اسم المنهجية وتوقيعها */
+.dbotc__head {
   position: relative;
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 22px;
+  justify-content: space-between;
+  gap: 10px 20px;
+  padding: 18px 20px;
+  background: var(--petrol-deepest);
+  border-bottom: 1px solid rgba(199, 154, 75, 0.28);
 }
-@media (min-width: 768px) { .dbotc-mark__caption { margin-bottom: 34px; } }
-.dbotc-mark__caption-en {
+@media (min-width: 768px) { .dbotc__head { padding: 22px 36px; } }
+.dbotc__head-en {
   font-family: var(--font-en);
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.28em;
+  font-weight: 600;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--gold-light);
 }
-.dbotc-mark__caption-ar {
-  font-size: 12px;
-  color: rgba(239, 231, 216, 0.7);
-  padding-right: 14px;
-  border-right: 1px solid rgba(199, 154, 75, 0.4);
+.dbotc__head-ar {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(239, 231, 216, 0.78);
 }
-.dbotc-mark__letters {
-  position: relative;
+.dbotc__lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-en);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--sand-cream);
+}
+.dbotc__lockup i {
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+  transform: rotate(45deg);
+}
+@media (max-width: 767px) { .dbotc__lockup { order: 3; width: 100%; justify-content: center; } }
+
+/* الأعمدة */
+.dbotc__cols {
   list-style: none;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
 }
-.dbotc-mark__step {
+@media (min-width: 768px) and (max-width: 1199px) {
+  .dbotc__cols { grid-template-columns: repeat(2, 1fr); }
+  .dbotc-col--final { grid-column: 1 / -1; }
+}
+@media (min-width: 1200px) {
+  .dbotc__cols { grid-template-columns: repeat(5, 1fr); }
+}
+.dbotc-col {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  font-size: clamp(48px, 9vw, 128px);   /* وحدة em للحرف والخيط */
+  border-top: 1px solid var(--line-gold);
 }
-/* الخيط الذهبي بين كل حرفين، ومعيّن الهوية في منتصفه */
-.dbotc-mark__step:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: calc(18px + 0.58em);
-  left: calc(50% + 0.42em);
-  right: calc(-50% + 0.42em);
-  height: 1px;
-  background: rgba(199, 154, 75, 0.55);
-}
-.dbotc-mark__step:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  top: calc(18px + 0.58em);
-  left: 100%;
-  width: 7px;
-  height: 7px;
-  background: var(--gold);
-  transform: translate(-50%, -50%) rotate(45deg);
-  z-index: 1;
-}
-.dbotc-mark__num {
-  font-family: var(--font-en);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  color: var(--gold-light);
-  height: 18px;
-}
-.dbotc-mark__letter {
-  position: relative;
-  font-family: var(--font-en);
-  font-size: 1em;
-  font-weight: 300;
-  line-height: 1.16;
-  letter-spacing: -0.02em;
-  color: var(--sand-cream);
-}
-.dbotc-mark__step:last-child .dbotc-mark__letter { color: var(--gold-light); }
-.dbotc-mark__en {
-  margin-top: 10px;
-  font-family: var(--font-en);
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(239, 231, 216, 0.75);
-}
-.dbotc-mark__ar {
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--gold-light);
-}
+.dbotc-col:first-child { border-top: 0; }
 @media (min-width: 768px) {
-  .dbotc-mark__en { font-size: 11px; letter-spacing: 0.24em; margin-top: 14px; }
-  .dbotc-mark__ar { font-size: 15px; margin-top: 6px; }
-  .dbotc-mark__num { font-size: 11px; }
-}
-
-/* بطاقات المراحل: نفس ترتيب الحروف من اليسار إلى اليمين */
-.dbotc__grid {
-  list-style: none;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  margin: 20px 0 0;
-  padding: 0;
-}
-@media (min-width: 768px) {
-  .dbotc__grid { grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 28px; }
-}
-@media (min-width: 768px) and (max-width: 1199px) {
-  .dbotc-stage--final { grid-column: 1 / -1; }
+  .dbotc-col { border-top: 0; border-left: 1px solid var(--line-gold); }
+  .dbotc-col:nth-child(odd) { border-left: 0; }
+  .dbotc-col:nth-child(n+3) { border-top: 1px solid var(--line-gold); }
 }
 @media (min-width: 1200px) {
-  .dbotc__grid { grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .dbotc-col,
+  .dbotc-col:nth-child(n+3) { border-top: 0; border-left: 1px solid var(--line-gold); }
+  .dbotc-col:first-child { border-left: 0; }
 }
-.dbotc-stage {
-  position: relative;
-  padding: 28px 24px;
-  background: var(--sand-paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  transition: transform 0.5s var(--ease), box-shadow 0.5s var(--ease), background 0.5s var(--ease);
-}
-@media (min-width: 1200px) { .dbotc-stage { padding: 32px 22px; } }
-.dbotc-stage::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--gold-deep), var(--gold));
-  transition: width 0.6s var(--ease);
-}
-.dbotc-stage:hover {
-  transform: translateY(-4px);
-  background: var(--off-white);
-  box-shadow: 0 24px 60px -24px rgba(10, 42, 61, 0.18);
-}
-.dbotc-stage:hover::before { width: 100%; }
-.dbotc-stage--final { background: var(--off-white); border-color: var(--line-gold); }
 
-.dbotc-stage__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--line-gold);
+/* رأس العمود: الحرف */
+.dbotc-col__cap {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "letter num" "letter en";
+  align-items: end;
+  column-gap: 18px;
+  padding: 22px 24px 20px;
+  background:
+    radial-gradient(circle at 30% 0%, rgba(199, 154, 75, 0.16) 0%, transparent 60%),
+    var(--petrol-deepest);
 }
-.dbotc-stage__letter {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+@media (min-width: 1200px) {
+  .dbotc-col__cap {
+    grid-template-columns: 1fr;
+    grid-template-areas: "num" "letter" "en";
+    justify-items: center;
+    text-align: center;
+    padding: 30px 16px 28px;
+    row-gap: 6px;
+  }
+}
+.dbotc-col__num {
+  grid-area: num;
+  align-self: end;
   font-family: var(--font-en);
-  font-size: 24px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--gold-light);
+}
+.dbotc-col__letter {
+  grid-area: letter;
+  position: relative;
+  font-family: var(--font-en);
+  font-size: 72px;
   font-weight: 300;
-  color: var(--sand-cream);
-  background: var(--petrol-deepest);
-  border-radius: var(--radius);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  background: var(--dbotc-gold-fill);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.dbotc-stage--final .dbotc-stage__letter { color: var(--gold-light); }
-.dbotc-stage__meta {
+@media (min-width: 1200px) { .dbotc-col__letter { font-size: var(--dbotc-letter); line-height: 1; } }
+.dbotc-col__en {
+  grid-area: en;
   font-family: var(--font-en);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: var(--ink-light);
+  color: rgba(239, 231, 216, 0.82);
 }
-.dbotc-stage__num { color: var(--gold-text); margin-right: 6px; }
-.dbotc-stage__title {
+
+/* الخيط الذهبي على حافة الشريط: معيّن عند كل انتقال وسهم في النهاية */
+@media (min-width: 1200px) {
+  .dbotc-col__cap::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold-deep), var(--gold-light));
+    transform: scaleX(0.18);
+    transform-origin: left;
+    transition: transform 0.7s var(--ease);
+  }
+  .dbotc-col:hover .dbotc-col__cap::after { transform: scaleX(1); }
+  .dbotc-col + .dbotc-col .dbotc-col__cap::before {
+    content: '';
+    position: absolute;
+    z-index: 2;
+    left: -1px;
+    bottom: 0;
+    width: 9px;
+    height: 9px;
+    background: var(--gold);
+    border: 2px solid var(--sand-paper);
+    transform: translate(-50%, 50%) rotate(45deg);
+  }
+}
+
+/* جسم العمود */
+.dbotc-col__body {
+  position: relative;
+  flex: 1;
+  padding: 26px 24px 28px;
+  background: var(--sand-paper);
+  overflow: hidden;
+  transition: background 0.5s var(--ease);
+}
+@media (min-width: 1200px) { .dbotc-col__body { padding: 30px 24px 32px; } }
+.dbotc-col:hover .dbotc-col__body { background: var(--off-white); }
+.dbotc-col--final .dbotc-col__body { background: var(--off-white); }
+.dbotc-col__ghost {
+  position: absolute;
+  left: -0.08em;
+  bottom: -0.22em;
+  font-family: var(--font-en);
+  font-size: 220px;
+  font-weight: 300;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(169, 122, 46, 0.16);
+  pointer-events: none;
+  user-select: none;
+}
+.dbotc-col__body > :not(.dbotc-col__ghost) { position: relative; }
+.dbotc-col__title {
   font-size: 22px;
   font-weight: 700;
   color: var(--petrol-deepest);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.dbotc-stage__sub {
+.dbotc-col__sub {
   font-size: 13.5px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--gold-text);
   margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-gold);
 }
-.dbotc-stage__desc {
+.dbotc-col__desc {
   font-size: 14px;
   line-height: 1.85;
   color: var(--ink-mid);
   margin-bottom: 18px;
 }
-.dbotc-stage__list {
+.dbotc-col__list {
   list-style: none;
-  padding: 16px 0 0;
   margin: 0;
-  border-top: 1px dashed var(--line-gold);
+  padding: 0;
 }
-.dbotc-stage__list li {
+.dbotc-col__list li {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2611,10 +2617,13 @@ body::after {
   font-weight: 500;
   color: var(--petrol-deep);
 }
-.dbotc-stage__list li::before {
-  content: '\25C6';
-  color: var(--gold);
-  font-size: 7px;
+.dbotc-col__list li::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+  transform: rotate(45deg);
 }
 
 /* ══════════════════════════════════════════════════════════════════
