@@ -111,7 +111,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=f6452c24" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=f3950831" />
 </head>
 <body data-product="MI-LEADERS">
 
@@ -736,7 +736,7 @@
           <p class="tf-welcome__desc">
             ندعوكم لمحادثةٍ موجزة، تُمكّننا من فهم سياقكم، وتقديم ما يليق بطموحكم.
           </p>
-          <p class="tf-welcome__time">— تستغرق دقيقتَين فقط —</p>
+          <p class="tf-welcome__time">— ثلاث خطوات، أقل من دقيقة —</p>
           <button class="tf-welcome__cta" onclick="nextStep()">
             <span>ابدأ المحادثة</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
@@ -747,21 +747,22 @@
       <div class="tf-step" data-step="1" data-field="name">
         <div class="tf-step__num">01</div>
         <h2 class="tf-step__question">بدايةً، بمن نتشرّف؟</h2>
-        <p class="tf-step__hint">الاسم الكريم كاملاً</p>
-        <input type="text" class="tf-input" id="qName" placeholder="اكتب اسمك هنا..." autocomplete="name" aria-label="الاسم الكامل" />
-        <div class="tf-step__error">يُرجى تفضّلكم بإدخال الاسم الكريم</div>
+        <p class="tf-step__hint">الاسم الكريم والجهة التي تمثّلونها</p>
+        <div class="tf-dual">
+          <div>
+            <label class="tf-field-label" for="qName">الاسم الكامل</label>
+            <input type="text" class="tf-input" id="qName" placeholder="اكتب اسمك هنا..." autocomplete="name" />
+          </div>
+          <div>
+            <label class="tf-field-label" for="qOrg">الجهة</label>
+            <input type="text" class="tf-input" id="qOrg" placeholder="المؤسسة أو الشركة..." autocomplete="organization" />
+          </div>
+        </div>
+        <div class="tf-step__error">يُرجى تفضّلكم بإدخال الاسم والجهة</div>
       </div>
 
-      <div class="tf-step" data-step="2" data-field="organization">
+      <div class="tf-step" data-step="2" data-field="contact">
         <div class="tf-step__num">02</div>
-        <h2 class="tf-step__question">أيّ جهةٍ تمثّلون؟</h2>
-        <p class="tf-step__hint">المؤسسة، الشركة، أو الكيان الذي تنتمون إليه</p>
-        <input type="text" class="tf-input" id="qOrg" placeholder="اسم الجهة..." autocomplete="organization" aria-label="اسم الجهة" />
-        <div class="tf-step__error">يُرجى ذكر اسم الجهة</div>
-      </div>
-
-      <div class="tf-step" data-step="3" data-field="contact">
-        <div class="tf-step__num">03</div>
         <h2 class="tf-step__question">كيف يسعدنا الوصول إليكم؟</h2>
         <p class="tf-step__hint">سنحرص على التواصل عبر القناة الأنسب لكم</p>
         <div class="tf-dual">
@@ -777,8 +778,8 @@
         <div class="tf-step__error">يُرجى التكرّم بإدخال بريدٍ إلكتروني صحيح ورقمٍ للتواصل</div>
       </div>
 
-      <div class="tf-step" data-step="4" data-field="interest">
-        <div class="tf-step__num">04</div>
+      <div class="tf-step" data-step="3" data-field="interest">
+        <div class="tf-step__num">03</div>
         <h2 class="tf-step__question">ما الذي يستقطب اهتمامكم؟</h2>
         <p class="tf-step__hint">اختيارٌ واحد يكفي — وسنبني عليه حوارنا القادم</p>
         <div class="tf-options" role="radiogroup" aria-label="نوع الاهتمام">
@@ -808,13 +809,8 @@
           </button>
         </div>
         <div class="tf-step__error">يُرجى اختيار ما يناسب اهتمامكم</div>
-      </div>
-
-      <div class="tf-step" data-step="5" data-field="context">
-        <div class="tf-step__num">05</div>
-        <h2 class="tf-step__question">هل ثمّة سياقٌ تودّون مشاركته؟</h2>
-        <p class="tf-step__hint">اختياري — أيّ تفصيلٍ يُعيننا على تجهيز محادثةٍ أعمق</p>
-        <textarea class="tf-input tf-input--textarea" id="qContext" placeholder="اكتب هنا..." rows="3" aria-label="سياق إضافي"></textarea>
+        <label class="tf-field-label tf-field-label--spaced" for="qContext">سياق إضافي (اختياري)</label>
+        <textarea class="tf-input tf-input--textarea" id="qContext" placeholder="اكتب هنا..." rows="2"></textarea>
       </div>
 
       <div class="tf-step" data-step="thanks">

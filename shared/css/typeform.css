@@ -555,3 +555,4 @@
   color: inherit;
 }
 .tf-submit-error__retry { background: var(--gold) !important; border-color: var(--gold) !important; color: var(--petrol-deepest) !important; }
+.tf-field-label--spaced { display: block; margin-top: 22px; }
