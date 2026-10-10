@@ -26,6 +26,8 @@
       --gold:        #C79A4B;
       --gold-deep:   #A97A2E;
       --gold-light:  #D9A85A;
+      --gold-text:   #8A6424;
+      --ink-muted:   #5E6E78;
       --gold-pale:   #EBD9B4;
       --sand-cream:  #EFE7D8;
       --sand-light:  #F7F2E5;
@@ -164,9 +166,9 @@
       position: relative;
       z-index: 1;
     }
-    .login-left-top .mi-logo-text span:first-child { color: rgba(242,235,217,0.65); }
+    .login-left-top .mi-logo-text span:first-child { color: rgba(242,235,217,0.8); }
     .login-left-top .mi-logo-text span:last-child { color: var(--gold); }
-    .login-left-top .mi-logo-badge { color: rgba(235,217,180,0.55); }
+    .login-left-top .mi-logo-badge { color: rgba(235,217,180,0.75); }
 
     .login-left-mid {
       flex: 1;
@@ -213,7 +215,7 @@
       font-family: var(--font-en);
       font-size: 1rem;
       font-weight: 300;
-      color: rgba(242,235,217,0.45);
+      color: rgba(242,235,217,0.7);
       letter-spacing: 0.08em;
       text-transform: none;
       margin-bottom: 40px;
@@ -281,7 +283,7 @@
     }
     .login-footnote {
       font-size: 0.7rem;
-      color: rgba(242,235,217,0.22);
+      color: rgba(242,235,217,0.55);
       letter-spacing: 0.06em;
     }
 
@@ -314,7 +316,7 @@
       font-size: 0.62rem;
       letter-spacing: 4px;
       text-transform: none;
-      color: var(--gold-deep);
+      color: var(--gold-text);
       margin-bottom: 14px;
     }
     .login-form-title {
@@ -328,7 +330,7 @@
     }
     .login-form-sub {
       font-size: 0.87rem;
-      color: var(--ink-light);
+      color: var(--ink-muted);
       margin-bottom: 36px;
       line-height: 1.6;
     }
@@ -449,9 +451,9 @@
     }
 
     .dash-header-left { display: flex; align-items: center; gap: 0; }
-    .dash-header .mi-logo-text span:first-child { color: rgba(242,235,217,0.6); }
+    .dash-header .mi-logo-text span:first-child { color: rgba(242,235,217,0.8); }
     .dash-header .mi-logo-text span:last-child { color: var(--gold); }
-    .dash-header .mi-logo-badge { color: rgba(235,217,180,0.5); }
+    .dash-header .mi-logo-badge { color: rgba(235,217,180,0.75); }
 
     .dash-header-sep {
       width: 1px; height: 20px;
@@ -889,7 +891,7 @@
       font-size: 0.62rem;
       letter-spacing: 3px;
       text-transform: none;
-      color: var(--gold-deep);
+      color: var(--gold-text);
       margin-bottom: 3px;
     }
     .drawer-title { font-family: var(--font-ar); font-size: 1rem; font-weight: 600; color: var(--petrol); }

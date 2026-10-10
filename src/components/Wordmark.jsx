@@ -47,7 +47,10 @@ const Wordmark = ({
       width={w}
       height={Math.round((w * 1454) / 3200)}   // نسبة viewBox الأصلية
       className={className}
-      style={{ display: "block", height: "auto", ...style }}
+      // display:block يُسقط text-align:center عن الأب، فيلتصق الشعار
+      // بحافة البداية (اليمين في RTL) بينما النص تحته في الوسط.
+      // الهامش التلقائي يوسّطه؛ ومن أراد غير ذلك مرّر style.
+      style={{ display: "block", height: "auto", marginInline: "auto", ...style }}
       draggable="false"
     />
   );

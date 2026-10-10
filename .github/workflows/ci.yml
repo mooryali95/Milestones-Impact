@@ -35,6 +35,13 @@ jobs:
 
       # يمسك المراجع غير المعرّفة — أخطاء تشغيلية لا يكشفها البناء.
       # (فقدان استيراد عند نقل كود بين ملفات هو أشهر صورها.)
+      # النسخ المولّدة من shared/ (ومنها analytics.js في public/) يجب
+      # أن تطابق مصدرها — وإلا نُشرت نسخةٌ قديمة دون أن يلحظ أحد.
+      - name: Generated files are in sync
+        run: |
+          python3 shared/build-css.py > /dev/null
+          git diff --exit-code -- home public src/styles src/assets
+
       - name: Lint
         run: npm run lint
 
