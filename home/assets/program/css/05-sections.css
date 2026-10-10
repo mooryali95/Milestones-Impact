@@ -811,6 +811,15 @@
 .pin-attribute--bl     { bottom: 18%; left: 8%; }
 .pin-attribute--tl     { top: 18%; left: 8%; }
 
+/* أبعاد المعلم الخمسة على رؤوس مخمّس: النقطة على المدار والتسمية تحتها */
+.pin-attribute--p1 { top: 0;     left: 50%; }
+.pin-attribute--p2 { top: 34.5%; left: 97.6%; }
+.pin-attribute--p3 { top: 90.5%; left: 79.4%; }
+.pin-attribute--p4 { top: 90.5%; left: 20.6%; }
+.pin-attribute--p5 { top: 34.5%; left: 2.4%; }
+.pin-attribute--p1, .pin-attribute--p2, .pin-attribute--p3,
+.pin-attribute--p4, .pin-attribute--p5 { transform: translate(-50%, -18px); }
+
 .pin-content {
   padding: 0;
   text-align: center;
