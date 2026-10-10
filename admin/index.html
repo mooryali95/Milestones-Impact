@@ -19,15 +19,15 @@
        TOKENS — متطابقة مع البراند الأم
     ══════════════════════════════════════════════════ */
     :root {
-      --petrol:      #061E2C;
-      --petrol-mid:  #0A2A3D;
-      --petrol-s:    #14495E;
+      --petrol:      #061318;
+      --petrol-mid:  #0B272F;
+      --petrol-s:    #12414E;
       --petrol-soft: #2A6478;
-      --gold:        #C8A45C;
-      --gold-deep:   #A8862E;
-      --gold-light:  #D9BC7E;
+      --gold:        #C79A4B;
+      --gold-deep:   #A97A2E;
+      --gold-light:  #D9A85A;
       --gold-pale:   #EBD9B4;
-      --sand-cream:  #F2EBD9;
+      --sand-cream:  #EFE7D8;
       --sand-light:  #F7F2E5;
       --sand-paper:  #FBF8EF;
       --off-white:   #FDFCF8;
@@ -49,7 +49,7 @@
       --c-new-bg:   rgba(46,107,138,0.09);
       --c-read:     #4A7A3A;
       --c-read-bg:  rgba(74,122,58,0.09);
-      --c-replied:  #8B6914;
+      --c-replied:  #8A6424;
       --c-replied-bg: rgba(139,105,20,0.09);
       --c-archived: #6B4E3D;
       --c-archived-bg: rgba(107,78,61,0.09);
@@ -181,7 +181,7 @@
     .login-eyebrow {
       font-size: 0.62rem;
       letter-spacing: 4px;
-      text-transform: uppercase;
+      text-transform: none;
       color: var(--gold-deep);
       margin-bottom: 20px;
       display: flex;
@@ -215,7 +215,7 @@
       font-weight: 300;
       color: rgba(242,235,217,0.45);
       letter-spacing: 0.08em;
-      text-transform: uppercase;
+      text-transform: none;
       margin-bottom: 40px;
     }
 
@@ -313,7 +313,7 @@
     .login-form-eyebrow {
       font-size: 0.62rem;
       letter-spacing: 4px;
-      text-transform: uppercase;
+      text-transform: none;
       color: var(--gold-deep);
       margin-bottom: 14px;
     }
@@ -522,7 +522,7 @@
     .page-eyebrow {
       font-size: 0.6rem;
       letter-spacing: 4px;
-      text-transform: uppercase;
+      text-transform: none;
       color: var(--gold-deep);
       margin-bottom: 6px;
     }
@@ -575,7 +575,7 @@
     }
     .stat-card.s-total::before  { background: linear-gradient(90deg, var(--petrol-s), var(--petrol-soft)); }
     .stat-card.s-new::before    { background: linear-gradient(90deg, var(--c-new), #5A9BBC); }
-    .stat-card.s-replied::before { background: linear-gradient(90deg, var(--c-replied), #C4A24E); }
+    .stat-card.s-replied::before { background: linear-gradient(90deg, var(--c-replied), #C79A4B); }
     .stat-card.s-archived::before{ background: linear-gradient(90deg, var(--c-archived), #9A7060); }
 
     .stat-label {
@@ -584,7 +584,7 @@
       font-weight: 500;
       margin-bottom: 10px;
       letter-spacing: 0.04em;
-      text-transform: uppercase;
+      text-transform: none;
     }
     .stat-value {
       font-family: var(--font-en);
@@ -696,7 +696,7 @@
       color: var(--ink-mid);
       text-align: right;
       letter-spacing: 0.06em;
-      text-transform: uppercase;
+      text-transform: none;
       white-space: nowrap;
     }
     .data-table td {
@@ -888,7 +888,7 @@
     .drawer-label {
       font-size: 0.62rem;
       letter-spacing: 3px;
-      text-transform: uppercase;
+      text-transform: none;
       color: var(--gold-deep);
       margin-bottom: 3px;
     }
@@ -911,7 +911,7 @@
       font-weight: 600;
       color: var(--ink-light);
       letter-spacing: 0.09em;
-      text-transform: uppercase;
+      text-transform: none;
       margin-bottom: 12px;
       padding-bottom: 8px;
       border-bottom: 1px solid var(--line);
@@ -1145,6 +1145,7 @@
     .add-user-form.open { display:block; }
     .form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:10px; }
     @media(max-width:480px) { .form-row-3 { grid-template-columns:1fr; } }
+      .mi-logo-img { height: 40px; width: auto; display: block; }
   </style>
 </head>
 <body>
@@ -1158,27 +1159,19 @@
   <div class="login-left">
     <div class="login-left-top">
       <div class="mi-logo">
-        <svg class="mi-logo-icon" viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 2L24 10L24 22L14 30L4 22L4 10Z" stroke="rgba(200,164,92,0.5)" stroke-width="1"/>
-          <path d="M14 7L20 12L20 20L14 25L8 20L8 12Z" stroke="#C8A45C" stroke-width="1.2"/>
-          <circle cx="14" cy="16" r="2.5" fill="#C8A45C" opacity="0.8"/>
-        </svg>
-        <div class="mi-logo-text">
-          <span>Milestone</span>
-          <span>Impact</span>
-        </div>
+        <img class="mi-logo-img" src="/assets/milestone-impact-inverted.svg" alt="Milestone Impact" width="132" height="60" />
         <div class="mi-logo-divider"></div>
         <div class="mi-logo-badge">لوحة الإدارة</div>
       </div>
     </div>
 
     <div class="login-left-mid">
-      <div class="login-eyebrow">Unified Dashboard</div>
+      <div class="login-eyebrow">منصة الإدارة</div>
       <div class="login-heading">
         لوحة الإدارة<br/>
         <em>الموحّدة</em>
       </div>
-      <div class="login-sub-heading">Milestone Impact Ecosystem</div>
+      <div class="login-sub-heading">منظومة Milestone Impact</div>
 
       <div class="login-products">
         <div class="login-product active">
@@ -1190,7 +1183,7 @@
     </div>
 
     <div class="login-left-bottom">
-      <div class="login-footnote">BASEERH · بصيرة · منظومة الابتكار الرقمي</div>
+      <div class="login-footnote">Milestone Impact · بدعم من منظومة و Sunk Value</div>
     </div>
   </div>
 
@@ -1200,7 +1193,7 @@
 
       <!-- Step 1: Email -->
       <div id="loginStepEmail">
-        <div class="login-form-eyebrow">Admin Access</div>
+        <div class="login-form-eyebrow">دخول المدراء</div>
         <div class="login-form-title">مرحباً بك</div>
         <div class="login-form-sub">أدخل بريدك الإلكتروني للمتابعة</div>
         <div class="form-group">
@@ -1249,15 +1242,7 @@
   <header class="dash-header">
     <div class="dash-header-left">
       <div class="mi-logo">
-        <svg class="mi-logo-icon" viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 2L24 10L24 22L14 30L4 22L4 10Z" stroke="rgba(200,164,92,0.35)" stroke-width="1"/>
-          <path d="M14 7L20 12L20 20L14 25L8 20L8 12Z" stroke="#C8A45C" stroke-width="1.2"/>
-          <circle cx="14" cy="16" r="2.5" fill="#C8A45C" opacity="0.7"/>
-        </svg>
-        <div class="mi-logo-text">
-          <span>Milestone</span>
-          <span>Impact</span>
-        </div>
+        <img class="mi-logo-img" src="/assets/milestone-impact-inverted.svg" alt="Milestone Impact" width="132" height="60" />
       </div>
       <div class="dash-header-sep"></div>
       <div class="dash-header-title">لوحة الإدارة</div>
@@ -1681,7 +1666,7 @@ function drawQR(uri, containerId) {
   const wrap = document.getElementById(containerId); if (!wrap) return;
   function render() {
     wrap.innerHTML = '';
-    new QRCode(wrap, { text: uri, width: 160, height: 160, colorDark: '#061E2C', colorLight: '#FDFCF8', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(wrap, { text: uri, width: 160, height: 160, colorDark: '#061318', colorLight: '#FDFCF8', correctLevel: QRCode.CorrectLevel.M });
   }
   if (!window.QRCode) {
     const sc = document.createElement('script');
