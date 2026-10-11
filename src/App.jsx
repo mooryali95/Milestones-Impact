@@ -38,6 +38,14 @@ import { CSS } from './styles/appCss';
 // MAIN APP
 // ════════════════════════════════════════════════════════════════
 
+// ثوانٍ بين إرسال الرمز وإعادته.
+const OTP_COOLDOWN_SEC = 60;
+
+// كان هنا OTP_MAX_FAILS = 3 لقفل المحاولات الفاشلة، وotpFailCount يُصفَّر عند
+// النجاح ولا يزيد عند الفشل قطّ — فالقفل لم يوجد. ولم يُستكمل عمداً: قفلٌ في
+// المتصفّح يمحوه تحديث الصفحة، فيمنع صاحب الحساب ولا يمنع المهاجم. مكانه
+// user-api في الخادم (انظر HANDOFF.md، بنود الأمان).
+
 export default function App() {
   const [introVisible, setIntroVisible] = useState(true);
   const [screen, setScreen] = useState("splash");
@@ -85,10 +93,24 @@ export default function App() {
   const [otpPending, setOtpPending] = useState(null);
 
   // OTP Rate Limiting — client-side guard
+  // كان otpLastSent يُكتب في أربعة مواضع ولا يُقرأ في أيٍّ منها، فالمهلة
+  // المعلنة لم توجد وزرّ «إعادة إرسال» يبعث بريداً في كل ضغطة.
   const [otpLastSent, setOtpLastSent] = useState(null);       // timestamp of last send
   const [otpFailCount, setOtpFailCount] = useState(0);        // consecutive failed verifications
-  const OTP_COOLDOWN_SEC = 60;   // seconds between resends
-  const OTP_MAX_FAILS    = 3;    // max failed verifications before lockout
+  const [otpCooldown, setOtpCooldown] = useState(0);          // ثوانٍ متبقّية، 0 = مسموح
+
+  useEffect(() => {
+    if (!otpLastSent) { setOtpCooldown(0); return; }
+    const left = () => Math.max(0, OTP_COOLDOWN_SEC - Math.floor((Date.now() - otpLastSent) / 1000));
+    setOtpCooldown(left());
+    if (left() === 0) return;
+    const id = setInterval(() => {
+      const l = left();
+      setOtpCooldown(l);
+      if (l === 0) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [otpLastSent]);
 
   // Process details from Supabase (rich data)
   const [processDetails, setProcessDetails] = useState({});
@@ -354,6 +376,7 @@ export default function App() {
 
   // ── Resend OTP ──
   const handleResendOtp = async () => {
+    if (otpCooldown > 0) return;   // الزرّ معطَّل أصلاً؛ وهذا يحرس النقر البرمجيّ
     setOtpSending(true);
     setOtpError("");
     const res = (otpPending?.type === "resume" && otpPending.phone)
@@ -611,6 +634,15 @@ export default function App() {
   ];
   useTabHash({ tab, setTab, allowed: allowedTabs, enabled: screen === "main" });
 
+  // قياس الزيارات: شاشةٌ واحدة = مشاهدةٌ واحدة. الانتظار يبتلع الشاشات
+  // العابرة (splash ثم main عند استعادة الجلسة) فلا تُعدّ مرّتين.
+  const viewPath = screen === "main" ? `/#/${tab}` : screen === "admin" ? `/admin/${adminTab}` : screen === "splash" ? "/" : `/${screen}`;
+  useEffect(() => {
+    if (typeof window.miTrackView !== "function") return;
+    const id = setTimeout(() => window.miTrackView(viewPath), 600);
+    return () => clearTimeout(id);
+  }, [viewPath]);
+
   // Copyright footer
   // الإشعار المنبثق يظهر في كل الشاشات، لا في الشاشة الرئيسية وحدها
   const toastEl = toast && <div className="toast" role="status">{toast}</div>;
@@ -646,6 +678,7 @@ export default function App() {
         handleRegister={handleRegister}
         handleVerifyOtp={handleVerifyOtp}
         handleResendOtp={handleResendOtp}
+      otpCooldown={otpCooldown}
         setScreen={setScreen}
       />
       {toastEl}
@@ -665,6 +698,7 @@ export default function App() {
         otpError={otpError}
         setOtpError={setOtpError}
         handleResendOtp={handleResendOtp}
+      otpCooldown={otpCooldown}
         setScreen={setScreen}
         resumePhone={resumePhone}
         setResumePhone={setResumePhone}

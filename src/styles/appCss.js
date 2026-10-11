@@ -50,7 +50,7 @@ html { overflow-x: hidden; -webkit-text-size-adjust: 100%; scroll-behavior: smoo
 body, #root {
   font-family: var(--font-ar); direction: rtl;
   background: #F5EFE4; color: #1C1A17;
-  min-height: 100vh; min-height: -webkit-fill-available;
+  min-height: 100vh; min-height: 100dvh;
   overflow-x: hidden; overscroll-behavior-y: none;
 }
 button, input, select, textarea { font-family: inherit; }
@@ -68,7 +68,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   /* Neutral */
   --bg: #F5EFE4; --bg-card: #FDFAF6; --bg-deep: #EDE5D8;
   --border: #E0D5C4; --border-strong: #C8BFAE;
-  --text: #1C1A17; --text-secondary: #6B6055; --text-muted: #9E948A;
+  --text: #1C1A17; --text-secondary: #6B6055; --text-muted: #6F655B; /* كان #9E948A: 2.4–2.9:1 على الرملي */
   /* Status */
   --ok: #4A7A3A; --warn: #8B6914; --err: #A83422;
   /* Spacing */
@@ -78,7 +78,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 }
 
 /* ── App Shell ── */
-.app { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ════════════════════════════════════════
    TOP NAV — Compact Mobile Bar
@@ -138,8 +138,13 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 /* ════════════════════════════════════════
    AUTH SCREENS — Split Layout
 ════════════════════════════════════════ */
-.auth-screen { min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; }
+/* كانت -webkit-fill-available هنا، وكروم يحسبها stretch فتنهار الشاشة إلى
+   ارتفاع محتواها. dvh يتبع شريط العنوان المتحرّك في الجوال كما أُريد بها. */
+.auth-screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 .auth-left { display: none; }
+/* ألوان شرائح المسارات خارج كل استعلام وسائط: القاعدة معرَّفة مرّتين
+   (لوحيّ ومكتبيّ)، وكانت الألوان في إحداهما فقط فتسقط عند العرض الآخر. */
+.auth-left-track { color:#EFE7D8; background:rgba(239,231,216,0.06); border:1px solid rgba(199,154,75,0.38); }
 .auth-right { flex: 1; background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1.5rem; }
 .auth-form-wrap { width: 100%; max-width: 360px; }
 .auth-logo { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.8rem; justify-content: center; }
@@ -196,7 +201,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .mx-track-icon { font-size: 1.1rem; }
 .mx-track-name { font-family: var(--font-ar); font-size: 1rem; font-weight: 700; }
 .mx-track-weight { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 2px; color: #fff; margin-right: auto; }
-.mx-track-desc { font-size: 0.65rem; color: rgba(255,255,255,0.6); }
+.mx-track-desc { font-size: 0.65rem; color: rgba(255,255,255,0.88); }
 .mx-cells-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
 
 /* ── Cell ── */
@@ -545,7 +550,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .auth-left-content { position:relative; z-index:1; text-align:center; }
   .auth-left-quote { font-family:var(--font-ar); font-size:1rem; color:rgba(255,255,255,0.78); line-height:1.85; margin:1.2rem 0; }
   .auth-left-quote span { color:#C8A45C; }
-  .auth-left-attr { font-size:0.62rem; letter-spacing:2.5px; color:rgba(255,255,255,0.28); text-transform:uppercase; }
+  .auth-left-attr { font-size:0.62rem; letter-spacing:2.5px; color:rgba(255,255,255,0.58); text-transform:uppercase; }
   .auth-left-tracks { display:flex; gap:0.38rem; justify-content:center; margin-top:1.5rem; flex-wrap:wrap; }
   .auth-left-track { padding:0.22rem 0.55rem; border-radius: 2px; font-size:0.62rem; font-weight:600; }
   .sec { padding:1.1rem 1.3rem 1.3rem; max-width:960px; margin:0 auto; width:100%; }
@@ -620,7 +625,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .auth-left-content { position:relative; z-index:1; text-align:center; max-width:320px; }
   .auth-left-quote { font-family:var(--font-ar); font-size:1.25rem; color:rgba(255,255,255,0.85); line-height:1.95; margin:2rem 0; }
   .auth-left-quote span { color:#C8A45C; }
-  .auth-left-attr { font-size:0.65rem; letter-spacing:3px; color:rgba(255,255,255,0.3); text-transform:uppercase; }
+  .auth-left-attr { font-size:0.65rem; letter-spacing:3px; color:rgba(255,255,255,0.58); text-transform:uppercase; }
   .auth-left-tracks { display:flex; gap:0.45rem; justify-content:center; margin-top:2rem; flex-wrap:wrap; }
   .auth-left-track { padding:0.28rem 0.7rem; border-radius: 2px; font-size:0.65rem; font-weight:600; letter-spacing:0.8px; }
   .auth-right { padding:3rem; }
@@ -748,7 +753,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
     border-radius: 2px; color: #fff; background: rgba(0,0,0,0.28) !important;
     margin-right: 0; margin-top: 0.2rem; letter-spacing: 0.3px;
   }
-  .mx-track-desc { font-size: 0.65rem; opacity: 0.7; margin-top: 0.1rem; line-height: 1.4; }
+  .mx-track-desc { font-size: 0.65rem; margin-top: 0.1rem; line-height: 1.4; }
 
   /* Cells grid — removed, cells flow directly */
   .mx-cells-grid {

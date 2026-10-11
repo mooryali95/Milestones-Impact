@@ -1,10 +1,13 @@
 # Cloudflare Pages — Security Headers
+# CSP لا تمسّ السكربتات والأنماط المضمّنة: تمنع التضمين في مواقع أخرى،
+# والإضافات (object/embed)، وتغيير <base>، وإرسال النماذج لعناوين خارجية.
 /*
   X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self'; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://cloudflareinsights.com; form-action 'self' mailto:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; upgrade-insecure-requests
 
 # JS files — short cache to allow updates

@@ -25,8 +25,11 @@ PAGES = {
         'page_file': '05-home-sections.css',
         'extra': ['typeform.css'],     # من shared
         'html': os.path.join(ROOT, 'home', 'index.html'),
+        # الصفحات القانونية والتسعير تستعمل main.css نفسه — يتحدّث رقم نسختها معه
+        'also_html': [os.path.join(ROOT, 'home', f) for f in
+                      ('pricing.html', 'privacy.html', 'terms.html', 'refund.html', '404.html')],
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'js'),
-        'js': ['canvas.js', 'counters.js', 'mobile-menu.js'],            # الملفات المشتركة التي تستعملها الصفحة
+        'js': ['canvas.js', 'counters.js', 'mobile-menu.js', 'analytics.js'],            # الملفات المشتركة التي تستعملها الصفحة
         'video': ['intro-film.webm', 'intro-film.mp4',
                   'intro-film-poster.webp', 'intro-film-poster.jpg'],  # الفيديو التعريفي (home فقط)
     },
@@ -44,7 +47,7 @@ PAGES = {
                       os.path.join(ROOT, 'home', 'refund.html')],
         'brand': False,   # الهوية والأيقونات تُخدم من جذر home
         'js_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'js'),
-        'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js'],
+        'js': ['canvas.js', 'counters.js', 'tabs.js', 'mobile-menu.js', 'analytics.js'],
     },
 }
 
@@ -81,6 +84,19 @@ def sync_js(page_name, config):
         with open(out_path, 'w') as f:
             f.write(JS_HEADER + content)
         print(f'   ↳ js: {page_name}/assets/js/{filename}')
+
+def sync_js_to_react():
+    """ينسخ analytics.js إلى public/ فيخدمه Vite على /analytics.js
+    بوسم script في index.html — خارج الحزمة، والمصدر واحد مع الصفحات."""
+    out_dir = os.path.join(ROOT, 'public')
+    if not os.path.isdir(out_dir):
+        return
+    for filename in ('analytics.js',):
+        with open(os.path.join(SHARED_JS, filename)) as f:
+            content = f.read()
+        with open(os.path.join(out_dir, filename), 'w') as f:
+            f.write(JS_HEADER + content)
+        print('   \u21b3 react: public/%s' % filename)
 
 def sync_brand_to_react():
     """ينسخ شعارات الهوية إلى src/assets/brand ليستوردها تطبيق React.
@@ -208,6 +224,7 @@ def build(page_name, config):
 
 if __name__ == '__main__':
     build_react_tokens()
+    sync_js_to_react()
     sync_brand_to_react()
     for name, config in PAGES.items():
         sync_layout_mirror(name, config)

@@ -32,6 +32,7 @@ export const RegisterScreen = ({
   handleRegister,
   handleVerifyOtp,
   handleResendOtp,
+  otpCooldown = 0,
   setScreen,
 }) => (
   <AuthShell>
@@ -65,7 +66,7 @@ export const RegisterScreen = ({
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+              <button style={{ background: "none", border: "none", color: BRAND.color, fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: otpCooldown > 0 ? "default" : "pointer", opacity: otpCooldown > 0 ? 0.55 : 1 }} onClick={handleResendOtp} disabled={otpSending || otpCooldown > 0}>{otpCooldown > 0 ? `↻ إعادة الإرسال بعد ${otpCooldown} ثانية` : "↻ إعادة إرسال"}</button>
               <button style={{ background: "none", border: "none", color: "var(--wg)", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← تغيير البيانات</button>
             </div>
           </>}
@@ -85,6 +86,7 @@ export const ResumeScreen = ({
   otpError,
   setOtpError,
   handleResendOtp,
+  otpCooldown = 0,
   setScreen,
   resumePhone,
   setResumePhone,
@@ -131,7 +133,7 @@ export const ResumeScreen = ({
               <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
-              <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={handleResendOtp} disabled={otpSending}>↻ إعادة إرسال</button>
+              <button style={{ background: "none", border: "none", color: "#5B7B3A", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: otpCooldown > 0 ? "default" : "pointer", opacity: otpCooldown > 0 ? 0.55 : 1 }} onClick={handleResendOtp} disabled={otpSending || otpCooldown > 0}>{otpCooldown > 0 ? `↻ إعادة الإرسال بعد ${otpCooldown} ثانية` : "↻ إعادة إرسال"}</button>
               <button style={{ background: "none", border: "none", color: "var(--wg)", fontFamily: "var(--font-ar)", fontSize: "0.8rem", cursor: "pointer" }} onClick={() => { setOtpStep("form"); setOtpCode(""); setOtpError(""); }}>← رقم آخر</button>
             </div>
           </>}
@@ -162,7 +164,7 @@ export const AdminLoginScreen = ({
           <Wordmark width={200} variant="inverted" />
           <div className="auth-left-quote" style={{color:"rgba(255,255,255,0.7)",fontSize:"1rem",marginTop:"1.5rem"}}>
             لوحة إدارة المستشار<br/>
-            <span style={{color:"#14495E",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
+            <span style={{color:"#6B9DAD",fontSize:"0.8rem",letterSpacing:"2px"}}>CONSULTANT DASHBOARD</span>
           </div>
           <div className="auth-left-attr" style={{marginTop:"1rem"}}>Milestone Impact • نسخة المستشار</div>
         </div>

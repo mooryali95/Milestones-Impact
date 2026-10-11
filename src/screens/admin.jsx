@@ -209,8 +209,8 @@ const AdminPanel = (p) => {
                           <div className="demo-section-head" style={{marginBottom:'0.55rem'}}>توزيع المسارات</div>
                           {trackDist.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.38rem'}}>
                             <div style={{fontSize:'0.7rem',fontWeight:700,color:t.color,width:'50px',flexShrink:0}}>{t.name}</div>
-                            <div style={{flex:1,height:'9px',background:'var(--border)',borderRadius:'5px',overflow:'hidden'}}><div style={{height:'100%',background:t.color,borderRadius:'5px',width:`${(t.count/4)*100}%`}}/></div>
-                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)',width:'26px',textAlign:'center'}}>{t.count}/4</div>
+                            <div style={{flex:1,height:'9px',background:'var(--border)',borderRadius:'5px',overflow:'hidden'}}><div style={{height:'100%',background:t.color,borderRadius:'5px',width:`${(t.count/t.max)*100}%`}}/></div>
+                            <div style={{fontSize:'0.68rem',color:'var(--text-muted)',width:'26px',textAlign:'center'}}>{t.count}/{t.max}</div>
                           </div>)}
                           <div className="demo-section-head" style={{margin:'0.75rem 0 0.55rem'}}>مسار التخطيط ({bookedProcs.length} خطوة)</div>
                           {bookedProcs.length===0 ? <div className="empty"><p>لم يحدد أي مواعيد</p></div>
@@ -298,7 +298,11 @@ const AdminPanel = (p) => {
             <h4><Icon name="report" size={16} style={{marginLeft:".35rem"}} /> توزيع المسارات</h4>
             {TRACKS.map(tr => {
               const count = allRegs.reduce((acc,r) => acc + Object.keys(r.dates||{}).filter(k=>k.startsWith(tr.id)).length, 0);
-              const max = 16 * (allRegs.length || 1);
+              // المقام عمليات هذا المسار لا عمليات المصفوفة كلها. كان 16 والمسار
+              // لا يسع إلا أربعاً، فسقف كل عمود 25% مهما اكتمل. ويُشتقّ من procs
+              // فلا يتخلّف لو تغيّر شكل المصفوفة.
+              const perTrack = procs.filter(pr => pr.trackId === tr.id).length || 1;
+              const max = perTrack * (allRegs.length || 1);
               return <div key={tr.id} className="rpt-bar-row" style={{marginTop:"0.5rem"}}>
                 <div className="rpt-bar-label" style={{color:tr.color,fontWeight:700}}>{tr.nameAr}</div>
                 <div className="rpt-bar-track"><div className="rpt-bar-fill" style={{width:`${(count/max)*100}%`,background:tr.color}}/></div>

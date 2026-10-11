@@ -18,11 +18,10 @@ const AuthLeft = ({ quote }) => (
       <div className="auth-left-attr">Milestone Impact • الإطار الحاكم</div>
       <div className="auth-left-tracks">
         {TRACKS.map(t => (
-          <div
-            key={t.id}
-            className="auth-left-track"
-            style={{ background: t.color + '22', color: t.color, border: '1px solid ' + t.color + '44' }}
-          >
+          // ألوان المسارات درجاتٌ على محور الجرافيت: تُقرأ على الأرضيات الفاتحة
+          // وتختفي على هذه اللوحة الداكنة — كانت بين 1.01:1 و2.35:1، و«الإنشاء»
+          // لا يُرى أصلاً. فالنصّ رمليّ والحدّ نحاسيّ، والتتابع يحمله الترتيب.
+          <div key={t.id} className="auth-left-track">
             {t.nameAr} {t.weight}%
           </div>
         ))}
