@@ -1749,8 +1749,9 @@ body::after {
    00. HERO
    ① CONCEPT     — الفكرة
    ② MODEL       — النموذج (Decision → Value → Impact)
-   ③ PRODUCTS    — المنتجات (Leaders + Impact Matrix)
-   ④ ECOSYSTEM   — المنظومة + تواصل
+   ③ GOVERNANCE  — الحوكمة (أربعة مجالس وسلسلة قيمة واحدة)
+   ④ PRODUCTS    — المنتجات (Leaders + Impact Matrix)
+   ⑤ ECOSYSTEM   — المنظومة + تواصل
    ════════════════════════════════════════════════════════════════════ */
 
 
@@ -1782,9 +1783,10 @@ body::after {
 .hero__shape {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, var(--petrol-deepest) 0%, var(--petrol-deep) 50%, var(--petrol-mid) 100%);
+  /* لوح فاتح بارد يقابل أرضية الرمل: الفاتح أساس، والداكن للإبراز */
+  background: linear-gradient(135deg, var(--mist) 0%, #E2EBEB 55%, #D5E1E2 100%);
   z-index: -2;
-  opacity: 0.06;
+  opacity: 0.5;
 }
 @media (min-width: 1024px) {
   .hero__shape {
@@ -1792,19 +1794,19 @@ body::after {
     top: 0; left: 0; right: auto;
     width: 48%; height: 100%;
     clip-path: polygon(0 0, 55% 0, 100% 100%, 0 100%);
-    opacity: 0.97;
+    opacity: 1;
   }
   .hero__shape::after {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-      radial-gradient(circle at 30% 40%, rgba(200, 164, 92, 0.18) 0%, transparent 30%),
-      radial-gradient(circle at 70% 70%, rgba(200, 164, 92, 0.1) 0%, transparent 35%);
+      radial-gradient(circle at 30% 40%, rgba(199, 154, 75, 0.12) 0%, transparent 32%),
+      radial-gradient(circle at 70% 70%, rgba(11, 39, 47, 0.05) 0%, transparent 38%);
   }
 }
 
-/* الشعار المعكوس داخل اللوح البترولي — سطح المكتب فقط */
+/* الشعار داخل اللوح الفاتح — سطح المكتب فقط */
 .hero__brand { display: none; }
 @media (min-width: 1024px) {
   .hero__brand {
@@ -1823,7 +1825,6 @@ body::after {
   .hero__brand-logo {
     width: 100%;
     height: auto;
-    filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.35));
   }
   .hero__brand-rule {
     width: 64px;
@@ -1834,15 +1835,7 @@ body::after {
     font-family: var(--font-ar);
     font-size: 14px;
     letter-spacing: 0.08em;
-    color: rgba(247, 248, 246, 0.72);
-  }
-  /* زر المحادثة يقع فوق اللوح الداكن قبل التمرير — نمنحه تبايناً ذهبياً */
-  .header:not(.scrolled) .header__cta {
-    background: var(--gold);
-    color: var(--petrol-deepest);
-  }
-  .header:not(.scrolled) .header__cta:hover {
-    background: var(--off-white);
+    color: var(--ink-mid);
   }
 }
 
@@ -1858,7 +1851,7 @@ body::after {
   position: relative;
   z-index: 2;
 }
-/* سطح المكتب: النص لا يتجاوز الحافة المائلة للّوح البترولي */
+/* سطح المكتب: النص لا يتجاوز الحافة المائلة للّوح الجانبي */
 @media (min-width: 1024px) {
   .hero__content { max-width: min(760px, calc(52vw - var(--gutter) - 24px)); }
 }
@@ -1967,7 +1960,7 @@ body::after {
 .hero__tagline[dir="ltr"],
 .product-card__tagline[dir="ltr"] { text-align: right; }
 
-/* لوحة المسارات داخل الشكل البترولي (شاشات كبيرة فقط)
+/* لوحة المسارات داخل اللوح الجانبي (شاشات كبيرة فقط)
    تحل محل الشعار الكبير من 1280px لأنها تحمل الشعار نفسه، فلا يتكرر */
 .hero__showcase { display: none; }
 @media (min-width: 1280px) {
@@ -1982,7 +1975,7 @@ body::after {
     width: min(380px, 24vw);
     transform: translateY(-50%);
     z-index: 2;
-    color: var(--sand-paper);
+    color: var(--petrol-deepest);
   }
   .hero__showcase-logo {
     height: 64px;
@@ -1994,10 +1987,10 @@ body::after {
     font-style: italic;
     font-size: 13px;
     letter-spacing: 0.08em;
-    color: var(--gold-light);
+    color: var(--gold-text);
     margin-bottom: 18px;
     padding-bottom: 18px;
-    border-bottom: 1px solid rgba(239, 231, 216, 0.14);
+    border-bottom: 1px solid rgba(11, 39, 47, 0.14);
     text-align: right;
   }
   .hero__tracks { display: flex; flex-direction: column; }
@@ -2006,29 +1999,38 @@ body::after {
     align-items: center;
     gap: 16px;
     padding: 18px 4px;
-    border-bottom: 1px solid rgba(239, 231, 216, 0.1);
+    border-bottom: 1px solid rgba(11, 39, 47, 0.1);
     color: inherit;
     text-decoration: none;
-    transition: background 0.3s var(--ease), padding 0.3s var(--ease);
+    transition: background 0.3s var(--ease), color 0.3s var(--ease), padding 0.3s var(--ease);
   }
+  /* الداكن للتمرير: المسار المختار يتحوّل إلى لوح بترولي */
   .hero__track:hover,
   .hero__track:focus-visible {
-    background: rgba(199, 154, 75, 0.08);
+    background: var(--petrol-deepest);
+    color: var(--sand-paper);
     padding-inline: 12px;
   }
   .hero__track-num {
     font-family: var(--font-en);
     font-size: 14px;
-    color: var(--gold);
+    color: var(--gold-text);
     min-width: 24px;
+    transition: color 0.3s var(--ease);
   }
   .hero__track-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .hero__track-name { font-size: 17px; font-weight: 600; }
-  .hero__track-desc { font-size: 13px; color: rgba(239, 231, 216, 0.62); }
+  .hero__track-desc { font-size: 13px; color: var(--ink-mid); transition: color 0.3s var(--ease); }
   .hero__track-arrow {
-    color: var(--gold);
-    transition: transform 0.3s var(--ease);
+    color: var(--gold-text);
+    transition: transform 0.3s var(--ease), color 0.3s var(--ease);
   }
+  .hero__track:hover .hero__track-num,
+  .hero__track:hover .hero__track-arrow,
+  .hero__track:focus-visible .hero__track-num,
+  .hero__track:focus-visible .hero__track-arrow { color: var(--gold-light); }
+  .hero__track:hover .hero__track-desc,
+  .hero__track:focus-visible .hero__track-desc { color: rgba(239, 231, 216, 0.7); }
   .hero__track:hover .hero__track-arrow { transform: translateX(-4px); }
 }
 
@@ -2149,9 +2151,9 @@ body::after {
    ② MODEL — النموذج (سلسلة الأثر)
    ══════════════════════════════════════════════════════════════════ */
 .model {
-  background: var(--petrol-deepest);
+  background: var(--mist);
   position: relative;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   overflow: hidden;
 }
 
@@ -2163,27 +2165,14 @@ body::after {
   width: 100%;
   height: 100%;
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(200, 164, 92, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(42, 100, 120, 0.15) 0%, transparent 45%);
+    radial-gradient(circle at 20% 30%, rgba(199, 154, 75, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(42, 100, 120, 0.06) 0%, transparent 45%);
   pointer-events: none;
 }
 
 .model__container {
   position: relative;
   z-index: 1;
-}
-
-.model .section-title {
-  color: var(--sand-cream);
-}
-.model .section-title em {
-  color: var(--gold-light);
-}
-.model .section-intro {
-  color: rgba(242, 235, 217, 0.75);
-}
-.model .section-label {
-  color: var(--gold-light);
 }
 
 .model__chain {
@@ -2215,19 +2204,31 @@ body::after {
   flex: 1;
   padding: 24px 16px;
   text-align: center;
-  background: rgba(10, 42, 61, 0.4);
-  border: 1px solid rgba(200, 164, 92, 0.15);
+  background: #FFFFFF;
+  border: 1px solid var(--line);
   transition: all 0.5s var(--ease);
 }
 @media (min-width: 900px) {
   .model__node { padding: 32px 18px; }
 }
 
-.model__node:hover {
-  background: rgba(20, 73, 94, 0.5);
-  border-color: rgba(200, 164, 92, 0.35);
-  transform: translateY(-2px);
+/* الداكن للإبراز: الحلقة الأخيرة (الأثر) والعقدة عند التمرير */
+.model__node:hover,
+.model__node--final {
+  background: var(--petrol-deepest);
+  border-color: var(--petrol-deepest);
 }
+.model__node:hover { transform: translateY(-2px); }
+.model__node:hover .model__node-title-ar,
+.model__node--final .model__node-title-ar { color: var(--sand-cream); }
+.model__node:hover .model__node-title-en,
+.model__node:hover .model__node-icon,
+.model__node:hover .model__node-num,
+.model__node--final .model__node-title-en,
+.model__node--final .model__node-icon,
+.model__node--final .model__node-num { color: var(--gold-light); }
+.model__node:hover .model__node-desc,
+.model__node--final .model__node-desc { color: rgba(242, 235, 217, 0.72); }
 
 /* الموصلات بين العقد */
 .model__node:not(:last-child)::after {
@@ -2263,15 +2264,17 @@ body::after {
   font-style: italic;
   font-size: 12px;
   letter-spacing: 0.1em;
-  color: var(--gold);
+  color: var(--gold-text);
   margin-bottom: 8px;
+  transition: color 0.4s var(--ease);
 }
 
 .model__node-icon {
   font-family: var(--font-en);
   font-size: 32px;
-  color: var(--gold-light);
+  color: var(--gold);
   line-height: 1;
+  transition: color 0.4s var(--ease);
   margin-bottom: 12px;
   display: block;
 }
@@ -2279,24 +2282,27 @@ body::after {
 .model__node-title-ar {
   font-size: 20px;
   font-weight: 800;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   margin-bottom: 4px;
   letter-spacing: -0.01em;
+  transition: color 0.4s var(--ease);
 }
 
 .model__node-title-en {
   font-family: var(--font-en);
   font-style: italic;
   font-size: 15px;
-  color: var(--gold-light);
+  color: var(--gold-text);
   margin-bottom: 12px;
   letter-spacing: 0.01em;
+  transition: color 0.4s var(--ease);
 }
 
 .model__node-desc {
   font-size: 13.5px;
   line-height: 1.7;
-  color: rgba(242, 235, 217, 0.7);
+  color: var(--ink-mid);
+  transition: color 0.4s var(--ease);
 }
 
 /* خط الموصل عند Mobile - عمودي */
@@ -2309,7 +2315,7 @@ body::after {
 .model__caption {
   margin-top: 40px;
   padding-top: 32px;
-  border-top: 1px solid rgba(200, 164, 92, 0.15);
+  border-top: 1px solid var(--line-gold);
   text-align: center;
 }
 @media (min-width: 768px) {
@@ -2319,7 +2325,7 @@ body::after {
 .model__caption-text {
   font-size: 15px;
   line-height: 1.85;
-  color: rgba(242, 235, 217, 0.75);
+  color: var(--ink-mid);
   max-width: 720px;
   margin: 0 auto;
 }
@@ -2327,13 +2333,290 @@ body::after {
   .model__caption-text { font-size: 17px; }
 }
 .model__caption-text strong {
-  color: var(--gold-light);
+  color: var(--gold-text);
   font-weight: 700;
 }
 
 
 /* ══════════════════════════════════════════════════════════════════
-   ③ PRODUCTS — المنتجات
+   ③ GOVERNANCE — الحوكمة: أربعة مجالس وسلسلة قيمة واحدة
+   ══════════════════════════════════════════════════════════════════
+   الحوكمة جزء من هوية Milestone لا من مساراتها، فتأتي بعد النموذج
+   وقبل المسارات. الفاتح أساس، والداكن لا يظهر إلا للإبراز:
+   المخرج الأخير (الأداء) وبطاقة المجلس عند التمرير. */
+.gov-chain {
+  background: var(--off-white);
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+
+/* العمود الفقري: مخرج كل مجلس على خط ذهبي واحد */
+.gov-chain__spine {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  position: relative;
+}
+.gov-chain__spine::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 12.5%;
+  left: 12.5%;
+  height: 1px;
+  background: linear-gradient(270deg, var(--line-gold), var(--gold));
+}
+@media (min-width: 768px) {
+  .gov-chain__spine { margin-top: 56px; gap: 24px; }
+}
+@media (min-width: 1024px) {
+  .gov-chain__spine { gap: 28px; }
+}
+
+.gov-chain__node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.gov-chain__mark {
+  width: 11px;
+  height: 11px;
+  background: var(--off-white);
+  border: 1px solid var(--gold);
+  transform: rotate(45deg);
+  margin-bottom: 14px;
+}
+.gov-chain__out {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--petrol-deepest);
+  line-height: 1.5;
+}
+.gov-chain__out-en {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-en);
+  font-size: 9.5px;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+@media (min-width: 768px) {
+  .gov-chain__out {
+    padding: 10px 18px;
+    border: 1px solid var(--line-gold);
+    background: #FFFFFF;
+    font-size: 15px;
+  }
+  .gov-chain__out-en { font-size: 10px; margin-top: 8px; }
+}
+.gov-chain__node--final .gov-chain__mark {
+  background: var(--gold);
+}
+@media (min-width: 768px) {
+  .gov-chain__node--final .gov-chain__out {
+    background: var(--petrol-deepest);
+    border-color: var(--petrol-deepest);
+    color: var(--sand-cream);
+  }
+}
+
+/* بطاقات المجالس */
+.gov-chain__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 28px;
+}
+@media (min-width: 640px) {
+  .gov-chain__grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+}
+@media (min-width: 1024px) {
+  .gov-chain__grid { grid-template-columns: repeat(4, 1fr); gap: 28px; margin-top: 36px; }
+}
+
+.gov-council {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 24px 22px;
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--gold);
+  border-radius: var(--radius);
+  transition: background 0.5s var(--ease), border-color 0.5s var(--ease), transform 0.5s var(--ease), box-shadow 0.5s var(--ease);
+}
+@media (min-width: 1024px) {
+  .gov-council { padding: 32px 26px 24px; }
+}
+.gov-council__num {
+  font-family: var(--font-en);
+  font-weight: var(--display-weight);
+  font-size: 44px;
+  line-height: 1;
+  color: var(--gold-text);
+  margin-bottom: 18px;
+  transition: color 0.5s var(--ease);
+}
+.gov-council__name {
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--petrol-deepest);
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+  transition: color 0.5s var(--ease);
+}
+.gov-council__en {
+  font-family: var(--font-en);
+  font-size: 10px;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-light);
+  text-align: right;
+  margin-bottom: 14px;
+  transition: color 0.5s var(--ease);
+}
+.gov-council__role {
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--ink-mid);
+  padding-bottom: 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  transition: color 0.5s var(--ease), border-color 0.5s var(--ease);
+}
+.gov-council__facts { margin: 0 0 18px; flex: 1; }
+.gov-council__fact + .gov-council__fact { margin-top: 14px; }
+.gov-council__fact dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-light);
+  margin-bottom: 4px;
+  transition: color 0.5s var(--ease);
+}
+.gov-council__fact dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+  transition: color 0.5s var(--ease);
+}
+.gov-council__fact--out dd {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--gold-text);
+}
+.gov-council__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-mid);
+  transition: color 0.5s var(--ease), border-color 0.5s var(--ease);
+}
+.gov-council__meta span:first-child { font-weight: 700; color: var(--petrol-deepest); transition: color 0.5s var(--ease); }
+
+/* الداكن للتمرير */
+.gov-council:hover {
+  background: var(--petrol-deepest);
+  border-color: var(--petrol-deepest);
+  border-top-color: var(--gold);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px -18px rgba(6, 19, 24, 0.45);
+}
+.gov-council:hover .gov-council__role,
+.gov-council:hover .gov-council__fact dd,
+.gov-council:hover .gov-council__meta { color: rgba(239, 231, 216, 0.78); }
+.gov-council:hover .gov-council__en,
+.gov-council:hover .gov-council__fact dt { color: rgba(239, 231, 216, 0.55); }
+.gov-council:hover .gov-council__name,
+.gov-council:hover .gov-council__meta span:first-child { color: var(--sand-cream); }
+.gov-council:hover .gov-council__num,
+.gov-council:hover .gov-council__fact--out dd { color: var(--gold-light); }
+.gov-council:hover .gov-council__role,
+.gov-council:hover .gov-council__meta { border-color: rgba(239, 231, 216, 0.14); }
+
+/* حلقة المساءلة */
+.gov-chain__loop {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-gold);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 1024px) {
+  .gov-chain__loop {
+    margin-top: 48px;
+    flex-direction: row;
+    align-items: center;
+    gap: 28px;
+  }
+}
+.gov-chain__loop-title {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--gold-text);
+  white-space: nowrap;
+}
+.gov-chain__loop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  flex: 1;
+  font-size: 14px;
+  color: var(--ink-mid);
+}
+.gov-chain__loop-list li { display: inline-flex; align-items: center; gap: 8px; }
+.gov-chain__loop-list li::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: var(--gold);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+.gov-chain__loop-list strong { color: var(--petrol-deepest); font-weight: 800; }
+.gov-chain__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 12px 20px;
+  border: 1px solid var(--petrol-deepest);
+  color: var(--petrol-deepest);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  border-radius: var(--radius);
+  transition: background 0.35s var(--ease), color 0.35s var(--ease);
+}
+.gov-chain__link svg { width: 16px; height: 16px; transition: transform 0.3s var(--ease); }
+.gov-chain__link:hover,
+.gov-chain__link:focus-visible {
+  background: var(--petrol-deepest);
+  color: var(--sand-paper);
+}
+.gov-chain__link:hover svg { transform: translateX(-4px); }
+@media (min-width: 1024px) {
+  .gov-chain__link { align-self: auto; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   ④ PRODUCTS — المنتجات
    ══════════════════════════════════════════════════════════════════ */
 .products {
   background: var(--sand-paper);
@@ -2606,7 +2889,7 @@ body::after {
 
 
 /* ══════════════════════════════════════════════════════════════════
-   ④ ECOSYSTEM — المنظومة + تواصل
+   ⑤ ECOSYSTEM — المنظومة + تواصل
    ══════════════════════════════════════════════════════════════════ */
 .ecosystem {
   background: linear-gradient(180deg, var(--off-white) 0%, var(--sand-light) 100%);

@@ -4,16 +4,22 @@
    السلسلة C→P من اليسار، ثم مجلس الخبراء، ثم طبقة القيادة كمخطط
    هرمي (المجلس ← المكتبان ← قادة المسارات)، ثم أرقام المنظومة.
    الأسماء والصور من GOVERNANCE_MEMBERS في governance.js.
+   الفاتح أساس القسم، والداكن للإبراز (لوحة ابتكار القيمة، المجلس)
+   وللتمرير (مراحل السلسلة).
    ════════════════════════════════════════════════════════════════════ */
 
 .hub {
-  --g: #C9A45E;
-  --line: rgba(234,240,240,.12);
-  --line-g: rgba(201,164,94,.35);
-  --bg: #071419;
-  --card: #0C1D23;
-  --text: #EEF2F1;
-  --muted: #8DA2A7;
+  --g: #8E6524;
+  --line: rgba(11,39,47,.1);
+  --line-g: rgba(169,122,46,.4);
+  --bg: #EAF0F0;
+  --card: #FFFFFF;
+  --text: #0B272F;
+  --head: #061318;
+  --muted: #4A6A72;
+  --dark: #0B272F;
+  --on-dark: #EFE7D8;
+  --g-on-dark: #D9A85A;
   --serif: "Cormorant Garamond", "Times New Roman", serif;
   --sans: "Noto Sans", system-ui, sans-serif;
   background: var(--bg); color: var(--text);
@@ -28,7 +34,7 @@
 .hub__brand-en { display: block; font-family: var(--sans); font-size: 11px; letter-spacing: .4em; text-transform: uppercase; color: var(--muted); }
 .hub__brand-hub { display: block; font-family: var(--serif); font-weight: 300; font-size: clamp(56px, 6.5vw, 84px); letter-spacing: .16em; color: var(--g); margin-top: 6px; }
 .hub__intro .section-label { color: var(--g); }
-.hub__title { font-size: clamp(26px, 3vw, 38px); line-height: 1.55; font-weight: 700; margin: 12px 0; color: #fff; }
+.hub__title { font-size: clamp(26px, 3vw, 38px); line-height: 1.55; font-weight: 700; margin: 12px 0; color: var(--head); }
 .hub__title em { font-style: normal; color: var(--g); }
 .hub__desc { max-width: 580px; margin: 0; font-size: 15.5px; line-height: 2; color: var(--muted); }
 
@@ -43,10 +49,15 @@
 .hub-stage + .hub-stage { border-left: 1px solid var(--line); }
 .hub-stage__num { font-family: var(--sans); font-size: 11px; letter-spacing: .2em; color: var(--muted); }
 .hub-stage__glyph { order: 2; font-family: var(--serif); font-weight: 300; font-size: clamp(44px, 4.6vw, 64px); line-height: 1; color: var(--g); margin: 18px 0 14px; transition: transform .4s ease; }
-.hub-stage__ar { order: 3; font-size: 15px; font-weight: 700; color: #fff; direction: rtl; }
+.hub-stage__ar { order: 3; font-size: 15px; font-weight: 700; color: var(--head); direction: rtl; }
 .hub-stage__en { order: 4; font-family: var(--sans); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
 .hub-stage__dots { display: none; }
-.hub-stage:hover .hub-stage__glyph { transform: translateY(-3px); }
+.hub-stage { transition: background .4s ease; }
+.hub-stage:hover { background: var(--dark); }
+.hub-stage:hover .hub-stage__glyph { transform: translateY(-3px); color: var(--g-on-dark); }
+.hub-stage:hover .hub-stage__ar { color: var(--on-dark); }
+.hub-stage:hover .hub-stage__num,
+.hub-stage:hover .hub-stage__en { color: rgba(239,231,216,.6); }
 
 /* سهم التدفق */
 .hub__flow { display: grid; grid-template-columns: repeat(6, 1fr); padding-top: 14px; }
@@ -61,7 +72,7 @@
 .hub__experts-grid { grid-column: 1 / span 3; order: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
 .hub-tile { grid-column: 4; order: 2; }
 .hub__experts-label { grid-column: 5 / span 2; order: 3; display: flex; flex-direction: column; gap: 10px; padding-inline-start: 28px; border-inline-start: 1px solid var(--line-g); align-self: start; }
-.hub__experts-label strong { font-size: 22px; color: #fff; }
+.hub__experts-label strong { font-size: 22px; color: var(--head); }
 .hub__experts-label span:last-child { font-size: 13.5px; line-height: 1.9; color: var(--muted); }
 
 .hub-portrait { margin: 0; }
@@ -70,12 +81,12 @@
 .hub-portrait__img img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1); transition: filter .6s ease; }
 .hub-portrait:hover .hub-portrait__img img { filter: none; }
 .hub-portrait figcaption { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-g); display: flex; flex-direction: column; gap: 2px; direction: rtl; text-align: right; }
-.hub-portrait__name { font-size: 14px; font-weight: 700; color: #fff; }
+.hub-portrait__name { font-size: 14px; font-weight: 700; color: var(--head); }
 .hub-portrait__role { font-size: 12px; color: var(--muted); }
-.hub-silhouette { width: 64%; height: auto; color: rgba(234,240,240,.06); }
+.hub-silhouette { width: 64%; height: auto; color: rgba(11,39,47,.1); }
 .hub-initials { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 34px; color: var(--g); }
 
-.hub-tile { aspect-ratio: 4 / 5; border: 1px solid var(--line-g); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 16px; color: var(--g); }
+.hub-tile { aspect-ratio: 4 / 5; background: var(--dark); border: 1px solid var(--dark); --g: var(--g-on-dark); --muted: rgba(239,231,216,.6); --text: var(--on-dark); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 16px; color: var(--g); }
 .hub-tile__dots { display: grid; grid-template-columns: repeat(4, 6px); gap: 8px; }
 .hub-tile__dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--g); }
 .hub-tile__dots i:nth-child(6), .hub-tile__dots i:nth-child(7) { background: transparent; box-shadow: inset 0 0 0 1px var(--g); }
@@ -86,15 +97,15 @@
 /* ── طبقة القيادة: مخطط هرمي ── */
 .hub__command { margin-top: 88px; padding-top: 40px; border-top: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; }
 .hub__tier-head { align-self: stretch; display: flex; align-items: baseline; gap: 16px; margin-bottom: 40px; }
-.hub__tier-head strong { font-size: 22px; color: #fff; }
+.hub__tier-head strong { font-size: 22px; color: var(--head); }
 .hub__board { display: flex; flex-direction: column; align-items: center; }
-.hub__board-pill { padding: 10px 36px; border: 1px solid var(--g); color: var(--g); font-size: 15px; font-weight: 700; letter-spacing: .04em; }
+.hub__board-pill { padding: 10px 36px; background: var(--dark); border: 1px solid var(--dark); color: var(--g-on-dark); font-size: 15px; font-weight: 700; letter-spacing: .04em; }
 .hub__stem { width: 1px; height: 32px; background: var(--line-g); }
 .hub__offices { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding-top: 32px; }
 .hub__offices::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 1px; background: var(--line-g); }
 .hub-office { position: relative; min-width: 220px; padding: 20px 24px; background: var(--card); border: 1px solid var(--line); border-top: 2px solid var(--g); display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
 .hub-office::before { content: ""; position: absolute; top: -34px; left: 50%; width: 1px; height: 32px; background: var(--line-g); }
-.hub-office__code { font-family: var(--serif); font-size: 30px; letter-spacing: .14em; color: #fff; line-height: 1; }
+.hub-office__code { font-family: var(--serif); font-size: 30px; letter-spacing: .14em; color: var(--head); line-height: 1; }
 .hub-office__ar { font-size: 12.5px; color: var(--muted); }
 .hub-office__team { display: none; }
 .hub-office__team:not(:empty) { display: flex; gap: 4px; margin-top: 6px; }
@@ -110,7 +121,7 @@
 .hub-lead__img img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1); }
 .hub-lead__seat { display: none; }
 .hub-lead figcaption { margin-top: 14px; display: flex; flex-direction: column; gap: 2px; }
-.hub-lead__name { font-size: 14px; font-weight: 700; color: #fff; }
+.hub-lead__name { font-size: 14px; font-weight: 700; color: var(--head); }
 .hub-lead__role { font-size: 12px; color: var(--muted); }
 
 /* ── الأرقام ── */

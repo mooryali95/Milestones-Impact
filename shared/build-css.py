@@ -41,6 +41,7 @@ PAGES = {
         'html': os.path.join(ROOT, 'home', 'leaders', 'index.html'),
         'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html'),
                       os.path.join(ROOT, 'home', 'governance', 'index.html'),
+                      os.path.join(ROOT, 'home', 'assessment', 'index.html'),
                       os.path.join(ROOT, 'home', 'pricing.html'),
                       os.path.join(ROOT, 'home', 'privacy.html'),
                       os.path.join(ROOT, 'home', 'terms.html'),
