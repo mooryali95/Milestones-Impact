@@ -129,3 +129,14 @@ test('الخطوط مستضافة ذاتيًا: لا طلبات إلى Google Fo
   }
   expect(external).toEqual([]);
 });
+
+test('لكل صفحة برنامج صورة مشاركة خاصة بها وموجودة فعلًا', async ({ page }) => {
+  for (const slug of ['leaders', 'projects', 'governance', 'assessment']) {
+    await page.goto(`${BASE}/${slug}/`);
+    const og = await page.locator('meta[property="og:image"]').getAttribute('content');
+    expect(og).toBe(`https://mi.sunkvalue.com/assets/og/${slug}.png`);
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute('content', og);
+    const res = await page.request.get(BASE + new URL(og).pathname);
+    expect(res.status()).toBe(200);
+  }
+});

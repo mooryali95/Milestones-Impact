@@ -31,6 +31,7 @@
 | [#40](https://github.com/mooryali95/Milestones-Impact/pull/40) | دمج طلبات الجلسات الأخرى مع حل تعارضاتها: #29 (صفحة 404 وترويسة COOP فقط، وبقي النموذج وصفحات التوثيق المعاد بناؤها)، #30 (مقياس جاهزية الأثر `/assessment/` وزر واتساب)، #31 (قسم المنظومة القيادية في الحوكمة)، #35 (خمسة إصلاحات مع اختبارات وتحليلات)، #36 (بريد تواصل موحّد mi@sunkvalue.com)، #37 (شعارات الشركاء في الفوتر)، #39 (منهجية DBOTC في صفحة المشروعات) |
 | [#41](https://github.com/mooryali95/Milestones-Impact/pull/41) | آخر تعديل على #39: اتجاه علامة DBOTC |
 | (هذا الطلب) | الخطوط مستضافة ذاتيًا في `home/assets/fonts/` بدل Google Fonts، وتحميل مسبق للخط العربي، وإزالة نطاقات Google من CSP. بيانات Schema لصفحة المقياس. اختبار يمنع عودة طلبات الخطوط الخارجية |
+| (هذا الطلب) | صورة مشاركة مستقلة لكل صفحة برنامج (القادة، المشروعات، الحوكمة، المقياس) في `home/assets/og/`، يولّدها `shared/og/generate.mjs` من خطوط وشعار الهوية |
 
 ## 3. طريقة العمل
 
@@ -62,6 +63,11 @@ python3 shared/build-css.py
 ### الخطوط
 مستضافة في `home/assets/fonts/` (Noto Kufi Arabic وNoto Sans وCormorant Garamond، خطوط متغيرة بترخيص OFL، مجموعات العربية واللاتينية فقط). عند تعديل `fonts.css` ارفع رقم `?v=` في روابط الصفحات لأن المجلد مخزّن مؤقتًا لسنة.
 
+### صور المشاركة
+النصوص في `shared/og/generate.mjs`. بعد تعديلها أو إضافة صفحة شغّل:
+`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node shared/og/generate.mjs`
+ثم اربط الصورة في `og:image` و`twitter:image` للصفحة.
+
 ### فحوص قبل الدفع
 ```
 npm ci && npm run lint && npm test && npm run build
@@ -89,6 +95,5 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx playwright test
 4. SSPDF يحمّل Tailwind من CDN غير مثبت النسخة، ولا يملك ملف `_headers`.
 
 ### تحسينات هوية مقترحة
-1. صورة مشاركة مستقلة لكل صفحة.
-2. نطاق مستقل باسم العلامة (مثل `milestoneimpact.sa`) ونقل الموقع إليه بتحويلات 301.
-3. إرسال `mi.sunkvalue.com/sitemap.xml` في Google Search Console.
+1. نطاق مستقل باسم العلامة (مثل `milestoneimpact.sa`) ونقل الموقع إليه بتحويلات 301.
+2. إرسال `mi.sunkvalue.com/sitemap.xml` في Google Search Console.
