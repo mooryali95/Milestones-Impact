@@ -55,7 +55,8 @@
     right: auto;
     width: 50%;
     height: 100%;
-    background: linear-gradient(225deg, var(--petrol-deepest) 0%, var(--petrol-deep) 100%);
+    /* لوح فاتح بارد: الفاتح أساس، والداكن للإبراز والتمرير فقط */
+    background: linear-gradient(225deg, var(--mist) 0%, #DCE6E7 100%);
     clip-path: polygon(0 0, 80% 0, 100% 100%, 0 100%);
     z-index: 0;
   }
@@ -64,13 +65,13 @@
     position: absolute;
     inset: 0;
     background-image:
-      radial-gradient(circle at 70% 40%, rgba(200, 164, 92, 0.15) 0%, transparent 40%),
-      radial-gradient(circle at 30% 70%, rgba(200, 164, 92, 0.08) 0%, transparent 45%);
+      radial-gradient(circle at 70% 40%, rgba(199, 154, 75, 0.12) 0%, transparent 40%),
+      radial-gradient(circle at 30% 70%, rgba(11, 39, 47, 0.05) 0%, transparent 45%);
   }
 }
 
-/* الهيدر فوق اللوح البترولي قبل التمرير: قائمة الروابط هنا أطول من الصفحة الأم
-   فتمتد فوق اللوح الداكن ويختفي نصها، لذا نمنحها خلفية فاتحة خاصة بها */
+/* الهيدر فوق اللوح الجانبي قبل التمرير: قائمة الروابط هنا أطول من الصفحة الأم
+   فتمتد فوق اللوح، لذا نمنحها كبسولة فاتحة خاصة بها */
 .header__nav-link { white-space: nowrap; }
 @media (min-width: 1024px) {
   .header:not(.scrolled) .header__nav {
@@ -80,13 +81,8 @@
     border-radius: 100px;
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
-    box-shadow: 0 8px 24px rgba(6, 30, 44, 0.14);
+    box-shadow: 0 8px 24px rgba(6, 30, 44, 0.08);
   }
-  .header:not(.scrolled) .header__cta {
-    background: var(--gold);
-    color: var(--petrol-deepest);
-  }
-  .header:not(.scrolled) .header__cta:hover { background: var(--off-white); }
 }
 /* سبعة روابط لا تتسع للتابلت: القائمة الجانبية حتى 1024px */
 @media (min-width: 768px) and (max-width: 1023px) {
@@ -233,12 +229,13 @@
   flex-direction: column;
   gap: 22px;
   padding: 36px 28px;
-  background: var(--petrol-deepest);
-  border: 1px solid rgba(200, 164, 92, 0.2);
-  border-radius: 6px;
+  background: var(--off-white);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--gold);
+  border-radius: 2px;
   opacity: 0;
   animation: fadeIn 1.2s var(--ease-out) 1s forwards;
-  box-shadow: 0 24px 48px -16px rgba(10, 42, 61, 0.25);
+  box-shadow: 0 24px 48px -24px rgba(10, 42, 61, 0.18);
 }
 @media (min-width: 1024px) {
   .hero__pillars {
@@ -275,7 +272,7 @@
   align-items: flex-start;
   gap: 16px;
   padding-bottom: 22px;
-  border-bottom: 1px solid rgba(200, 164, 92, 0.18);
+  border-bottom: 1px solid rgba(11, 39, 47, 0.1);
 }
 @media (min-width: 1024px) { .pillar { gap: 18px; padding-bottom: 28px; } }
 .pillar:last-child { padding-bottom: 0; border-bottom: none; }
@@ -284,7 +281,7 @@
   font-family: var(--font-en);
   font-size: 22px;
   font-weight: 700;
-  color: var(--gold);
+  color: var(--gold-text);
   line-height: 1;
   min-width: 30px;
 }
@@ -295,14 +292,14 @@
 .pillar__title {
   font-size: 16px;
   font-weight: 700;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   margin-bottom: 6px;
   letter-spacing: -0.01em;
 }
 @media (min-width: 1024px) { .pillar__title { font-size: 18px; } }
 .pillar__text {
   font-size: 13.5px;
-  color: rgba(242, 235, 217, 0.85);
+  color: var(--ink-mid);
   line-height: 1.75;
 }
 @media (min-width: 1024px) { .pillar__text { font-size: 14px; } }
@@ -820,15 +817,19 @@
   align-items: center;
   gap: 14px;
   padding: 16px 22px;
-  background: var(--petrol-deep);
+  background: var(--mist);
+  transition: background 0.5s var(--ease);
 }
 .dbotc-col__letter { width: 46px; height: 46px; flex: none; }
+/* على الفاتح: ذهبي مصمت؛ التدرّج الفاتح يعود حين يصبح الرأس داكنًا */
+.dbotc-col__cap .dbotc-col__letter { stroke: var(--gold-deep); }
 .dbotc-col__num {
   font-family: var(--font-en);
   font-size: 22px;
   font-weight: 300;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   letter-spacing: 0.02em;
+  transition: color 0.5s var(--ease);
 }
 .dbotc-col__en {
   margin-inline-start: auto;
@@ -837,8 +838,18 @@
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--gold-light);
+  color: var(--gold-text);
+  transition: color 0.5s var(--ease);
 }
+/* الداكن للإبراز: المرحلة الأخيرة، وأي مرحلة عند المرور */
+.dbotc-col:hover .dbotc-col__cap,
+.dbotc-col--final .dbotc-col__cap { background: var(--petrol-deep); }
+.dbotc-col:hover .dbotc-col__letter,
+.dbotc-col--final .dbotc-col__letter { stroke: url(#dbotc-gold); }
+.dbotc-col:hover .dbotc-col__num,
+.dbotc-col--final .dbotc-col__num { color: var(--sand-cream); }
+.dbotc-col:hover .dbotc-col__en,
+.dbotc-col--final .dbotc-col__en { color: var(--gold-light); }
 /* الخط الذهبي يمتد عند المرور، ومعيّن عند كل انتقال */
 .dbotc-col__cap::after {
   content: '';
@@ -920,8 +931,8 @@
    04 ─ MILESTONE REIMAGINED (Dark section)
    ══════════════════════════════════════════════════════════════════ */
 .reimagined {
-  background: var(--petrol-deepest);
-  color: var(--sand-cream);
+  background: var(--mist);
+  color: var(--petrol-deepest);
   position: relative;
   overflow: hidden;
 }
@@ -930,16 +941,10 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 20% 30%, rgba(200, 164, 92, 0.12) 0%, transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(200, 164, 92, 0.08) 0%, transparent 40%);
+    radial-gradient(circle at 20% 30%, rgba(199, 154, 75, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(11, 39, 47, 0.04) 0%, transparent 40%);
   pointer-events: none;
 }
-
-.reimagined .section-label { color: var(--gold-light); }
-.reimagined .section-label::before,
-.reimagined .section-label::after { background: var(--gold-light); }
-.reimagined .section-title { color: var(--sand-cream); }
-.reimagined .section-title em { color: var(--gold-light); }
 
 .reimagined__container { position: relative; z-index: 1; }
 
@@ -969,7 +974,7 @@
 .pin-orbit {
   position: absolute;
   inset: 0;
-  border: 1px dashed rgba(200, 164, 92, 0.25);
+  border: 1px dashed rgba(169, 122, 46, 0.4);
   border-radius: 50%;
   animation: rotate 60s linear infinite;
 }
@@ -1015,7 +1020,7 @@
 .pin-attribute__dot {
   width: 34px;
   height: 34px;
-  background: var(--petrol-deep);
+  background: #FFFFFF;
   border: 1px solid var(--gold);
   border-radius: 50%;
   display: flex;
@@ -1029,9 +1034,10 @@
 .pin-attribute__dot svg {
   width: 16px;
   height: 16px;
-  stroke: var(--gold);
+  stroke: var(--gold-deep);
   fill: none;
   stroke-width: 1.5;
+  transition: stroke 0.4s var(--ease);
 }
 @media (min-width: 640px) {
   .pin-attribute__dot svg { width: 18px; height: 18px; }
@@ -1039,15 +1045,16 @@
 .pin-attribute__label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   white-space: nowrap;
 }
 @media (min-width: 640px) { .pin-attribute__label { font-size: 13px; } }
 .pin-attribute:hover .pin-attribute__dot {
-  background: var(--gold);
+  background: var(--petrol-deepest);
+  border-color: var(--petrol-deepest);
   transform: scale(1.15);
 }
-.pin-attribute:hover .pin-attribute__dot svg { stroke: var(--petrol-deepest); }
+.pin-attribute:hover .pin-attribute__dot svg { stroke: var(--gold-light); }
 
 .pin-attribute--top    { top: -10px; left: 50%; transform: translateX(-50%); }
 .pin-attribute--tr     { top: 18%; right: 8%; }
@@ -1077,7 +1084,7 @@
   font-family: var(--font-en);
   font-style: italic;
   font-size: 15px;
-  color: var(--gold-light);
+  color: var(--gold-text);
   margin-bottom: 14px;
   letter-spacing: 0.01em;
 }
@@ -1088,7 +1095,7 @@
 .pin-content__title {
   font-size: 24px;
   font-weight: 700;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   line-height: 1.35;
   margin-bottom: 22px;
 }
@@ -1099,13 +1106,13 @@
   font-family: var(--font-en);
   font-style: italic;
   font-weight: 500;
-  color: var(--gold-light);
+  color: var(--gold-text);
 }
 
 .pin-content__body {
   font-size: 15px;
   line-height: 1.95;
-  color: rgba(242, 235, 217, 0.75);
+  color: var(--ink-mid);
   margin-bottom: 20px;
 }
 @media (min-width: 1024px) {
@@ -1118,7 +1125,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   padding-top: 20px;
-  border-top: 1px solid rgba(200, 164, 92, 0.2);
+  border-top: 1px solid var(--line-gold);
   text-align: right;
 }
 @media (min-width: 1024px) {
@@ -1129,7 +1136,7 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--sand-cream);
+  color: var(--petrol-deep);
 }
 @media (min-width: 1024px) {
   .pin-content__list-item { gap: 10px; font-size: 14px; }
@@ -1478,8 +1485,8 @@
    07 ─ NUMBERS (Dark section)
    ══════════════════════════════════════════════════════════════════ */
 .numbers {
-  background: var(--petrol-deepest);
-  color: var(--sand-cream);
+  background: var(--off-white);
+  color: var(--petrol-deepest);
   padding: 72px var(--gutter);
   position: relative;
   overflow: hidden;
@@ -1490,16 +1497,10 @@
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(circle at 10% 50%, rgba(200, 164, 92, 0.08) 0%, transparent 30%),
-    radial-gradient(circle at 90% 50%, rgba(200, 164, 92, 0.08) 0%, transparent 30%);
+    radial-gradient(circle at 10% 50%, rgba(199, 154, 75, 0.07) 0%, transparent 30%),
+    radial-gradient(circle at 90% 50%, rgba(199, 154, 75, 0.07) 0%, transparent 30%);
   pointer-events: none;
 }
-
-.numbers .section-label { color: var(--gold-light); }
-.numbers .section-label::before,
-.numbers .section-label::after { background: var(--gold-light); }
-.numbers .section-title { color: var(--sand-cream); }
-.numbers .section-title em { color: var(--gold-light); }
 
 .numbers__container { position: relative; z-index: 1; }
 .numbers__head { text-align: center; margin-bottom: 48px; }
@@ -1509,8 +1510,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px 12px;
-  border-top: 1px solid rgba(200, 164, 92, 0.2);
-  border-bottom: 1px solid rgba(200, 164, 92, 0.2);
+  border-top: 1px solid var(--line-gold);
+  border-bottom: 1px solid var(--line-gold);
   padding: 32px 0;
 }
 @media (min-width: 768px) {
@@ -1520,11 +1521,17 @@
 .stat {
   text-align: center;
   padding: 14px 10px;
+  transition: background 0.4s var(--ease);
 }
+/* الداكن للتمرير */
+.stat:hover { background: var(--petrol-deepest); }
+.stat:hover .stat__value { color: var(--gold-light); }
+.stat:hover .stat__label { color: var(--sand-cream); }
+.stat:hover .stat__sub { color: rgba(242, 235, 217, 0.6); }
 @media (min-width: 768px) {
   .stat {
     padding: 16px 12px;
-    border-right: 1px dashed rgba(200, 164, 92, 0.15);
+    border-right: 1px dashed var(--line-gold);
   }
   .stat:last-child { border-right: none; }
 }
@@ -1533,7 +1540,8 @@
   font-family: var(--font-en);
   font-size: clamp(32px, 7vw, 56px);
   font-weight: 500;
-  color: var(--gold);
+  color: var(--gold-deep);
+  transition: color 0.4s var(--ease);
   line-height: 1;
   margin-bottom: 12px;
   letter-spacing: -0.02em;
@@ -1543,15 +1551,16 @@
 
 .stat__value-suffix {
   font-size: 0.5em;
-  color: var(--gold-light);
+  color: inherit;
   margin-right: 2px;
 }
 
 .stat__label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--sand-cream);
+  color: var(--petrol-deepest);
   margin-bottom: 4px;
+  transition: color 0.4s var(--ease);
 }
 @media (min-width: 768px) {
   .stat__label { font-size: 14px; margin-bottom: 6px; }
@@ -1559,7 +1568,8 @@
 
 .stat__sub {
   font-size: 10.5px;
-  color: rgba(242, 235, 217, 0.55);
+  color: var(--ink-light);
+  transition: color 0.4s var(--ease);
   letter-spacing: 0.04em;
 }
 @media (min-width: 768px) { .stat__sub { font-size: 11.5px; } }
@@ -2334,9 +2344,10 @@
   padding: 150px var(--gutter) 84px;
   text-align: center;
   background:
-    radial-gradient(circle at 50% 120%, rgba(199, 154, 75, 0.18) 0%, transparent 55%),
-    linear-gradient(160deg, var(--petrol-deepest) 0%, var(--petrol-deep) 60%, var(--petrol-mid) 100%);
-  color: var(--sand-paper);
+    radial-gradient(circle at 50% 120%, rgba(199, 154, 75, 0.14) 0%, transparent 55%),
+    linear-gradient(160deg, var(--mist) 0%, #E2EBEB 100%);
+  color: var(--petrol-deepest);
+  border-bottom: 1px solid var(--line);
   overflow: hidden;
 }
 .doc-hero__inner { max-width: 760px; margin: 0 auto; position: relative; }
@@ -2346,21 +2357,21 @@
   border: 1px solid rgba(199, 154, 75, 0.45);
   border-radius: 100px;
   font-size: 13px;
-  color: var(--gold-light);
+  color: var(--gold-text);
   margin-bottom: 26px;
 }
 .doc-hero__title {
   font-size: clamp(36px, 6vw, 64px);
   font-weight: 800;
   line-height: 1.15;
-  color: var(--sand-paper);
+  color: var(--petrol-deepest);
   margin-bottom: 22px;
 }
 .doc-hero__divider { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 22px; }
 .doc-hero__divider span { width: 48px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
 .doc-hero__divider i { width: 6px; height: 6px; background: var(--gold); transform: rotate(45deg); }
-.doc-hero__lead { font-size: clamp(16px, 2vw, 19px); line-height: 1.85; color: rgba(239, 231, 216, 0.82); }
-.doc-hero__date { margin-top: 18px; font-size: 13px; color: rgba(239, 231, 216, 0.5); }
+.doc-hero__lead { font-size: clamp(16px, 2vw, 19px); line-height: 1.85; color: var(--ink-mid); }
+.doc-hero__date { margin-top: 18px; font-size: 13px; color: var(--ink-light); }
 
 .doc-section {
   max-width: 1120px;

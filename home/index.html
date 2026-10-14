@@ -7,7 +7,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0B272F" />
+  <meta name="theme-color" content="#FBF8EF" />
   <meta name="color-scheme" content="light" />
 
   <!-- Favicon & PWA — Logo Package v5 -->
@@ -102,7 +102,7 @@
 
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="assets/css/main.css?v=f13ce698" />
+  <link rel="stylesheet" href="assets/css/main.css?v=646a7d66" />
 </head>
 <body>
 
@@ -118,8 +118,8 @@
     <nav class="header__nav" role="navigation" aria-label="القائمة الرئيسية">
       <a href="#concept" class="header__nav-link">المفهوم</a>
       <a href="#model" class="header__nav-link">النموذج</a>
+      <a href="#governance" class="header__nav-link">الحوكمة</a>
       <a href="#products" class="header__nav-link">المسارات</a>
-      <a href="/governance/" class="header__nav-link">الحوكمة</a>
       <a href="/assessment/" class="header__nav-link">مقياس الأثر</a>
       <a href="#ecosystem" class="header__nav-link">المنظومة</a>
     </nav>
@@ -142,8 +142,8 @@
     <div class="mobile-drawer__links">
       <a href="#concept" class="mobile-drawer__link">المفهوم</a>
       <a href="#model" class="mobile-drawer__link">النموذج</a>
+      <a href="#governance" class="mobile-drawer__link">الحوكمة</a>
       <a href="#products" class="mobile-drawer__link">المسارات</a>
-      <a href="/governance/" class="mobile-drawer__link">الحوكمة</a>
       <a href="/assessment/" class="mobile-drawer__link">مقياس الأثر</a>
       <a href="#ecosystem" class="mobile-drawer__link">المنظومة</a>
     </div>
@@ -157,9 +157,9 @@
     <div class="hero__shape" aria-hidden="true"></div>
     <canvas class="hero__canvas" id="heroCanvas" aria-hidden="true"></canvas>
 
-    <!-- الشعار داخل اللوح البترولي (سطح المكتب) — يملأ المساحة التي كانت فارغة -->
+    <!-- الشعار داخل اللوح الجانبي (سطح المكتب) -->
     <div class="hero__brand" aria-hidden="true">
-      <img class="hero__brand-logo" src="assets/brand/svg/milestone-impact-inverted.svg" alt="" width="360" height="164" />
+      <img class="hero__brand-logo" src="assets/brand/svg/milestone-impact.svg" alt="" width="360" height="164" />
       <span class="hero__brand-rule"></span>
       <span class="hero__brand-caption">القرار · القيمة · الأثر</span>
     </div>
@@ -196,7 +196,7 @@
 
     </div>
     <aside class="hero__showcase" aria-label="مسارات Milestone Impact">
-      <img class="hero__showcase-logo" src="assets/brand/svg/milestone-impact-inverted.svg" alt="" width="220" height="100" />
+      <img class="hero__showcase-logo" src="assets/brand/svg/milestone-impact.svg" alt="" width="220" height="100" />
       <p class="hero__showcase-label" dir="ltr">Three tracks · One methodology</p>
       <nav class="hero__tracks" aria-label="المسارات">
         <a class="hero__track" href="/leaders/">
@@ -343,7 +343,7 @@
             <p class="model__node-desc">التحوّل الذي يُحدثه المخرج في المستفيدين والسياق</p>
           </div>
 
-          <div class="model__node">
+          <div class="model__node model__node--final">
             <span class="model__node-num">05</span>
             <span class="model__node-icon">✦</span>
             <h3 class="model__node-title-ar">الأثر</h3>
@@ -362,7 +362,104 @@
   </section>
 
 
-  <!-- ═════════════════════════════════════ ③ PRODUCTS ═════════════════════════════════════ -->
+  <!-- ═════════════════════════════════════ ③ GOVERNANCE ═════════════════════════════════════ -->
+  <section class="section gov-chain" id="governance" aria-labelledby="governance-title">
+    <div class="section__container">
+      <div class="section-head--center reveal">
+        <span class="section-label">الحوكمة · الهيكل المؤسسي</span>
+        <h2 class="section-title" id="governance-title">من <em>المفهوم</em> إلى الأداء... أربعة مجالس وسلسلة قيمة واحدة</h2>
+        <p class="section-intro">
+          يستلم كل مجلس مدخلًا ممن قبله، ويسلّم مخرجًا لمن بعده، ويرفع تقاريره لمن فوقه. <strong>لا يتداخل مجلسان في صلاحية واحدة.</strong>
+        </p>
+      </div>
+
+      <ol class="gov-chain__spine reveal reveal-delay-1" aria-label="مخرجات المجالس بالترتيب">
+          <li class="gov-chain__node">
+            <span class="gov-chain__mark" aria-hidden="true"></span>
+            <span class="gov-chain__out">المفهوم</span>
+            <span class="gov-chain__out-en" dir="ltr">Concept</span>
+          </li>
+          <li class="gov-chain__node">
+            <span class="gov-chain__mark" aria-hidden="true"></span>
+            <span class="gov-chain__out">العلامة التجارية</span>
+            <span class="gov-chain__out-en" dir="ltr">Brand</span>
+          </li>
+          <li class="gov-chain__node">
+            <span class="gov-chain__mark" aria-hidden="true"></span>
+            <span class="gov-chain__out">منهجية DBOTC</span>
+            <span class="gov-chain__out-en" dir="ltr">Method</span>
+          </li>
+          <li class="gov-chain__node gov-chain__node--final">
+            <span class="gov-chain__mark" aria-hidden="true"></span>
+            <span class="gov-chain__out">الأداء</span>
+            <span class="gov-chain__out-en" dir="ltr">Performance</span>
+          </li>
+      </ol>
+
+      <div class="gov-chain__grid reveal reveal-delay-1">
+        <article class="gov-council">
+          <span class="gov-council__num" dir="ltr">01</span>
+          <h3 class="gov-council__name">مجلس الأمناء</h3>
+          <p class="gov-council__en" dir="ltr">Board of Trustees</p>
+          <p class="gov-council__role">الفاعل الذي يصنع المفهوم ويحرس الرسالة.</p>
+          <dl class="gov-council__facts">
+            <div class="gov-council__fact gov-council__fact--out"><dt>يسلّم</dt><dd>المفهوم والرؤية</dd></div>
+            <div class="gov-council__fact"><dt>يقرّر</dt><dd>الاستراتيجية، والميزانية، وتعيين رئيس المجلس التنفيذي ومساءلته</dd></div>
+          </dl>
+          <p class="gov-council__meta"><span>نصف سنوي</span><span>تُرفع إليه التقارير</span></p>
+        </article>
+        <article class="gov-council">
+          <span class="gov-council__num" dir="ltr">02</span>
+          <h3 class="gov-council__name">المجلس التأسيسي</h3>
+          <p class="gov-council__en" dir="ltr">Founding Council</p>
+          <p class="gov-council__role">الإرث الذي يحوّل المفهوم إلى علامة ويصون الهوية.</p>
+          <dl class="gov-council__facts">
+            <div class="gov-council__fact gov-council__fact--out"><dt>يسلّم</dt><dd>العلامة ومعاييرها</dd></div>
+            <div class="gov-council__fact"><dt>يقرّر</dt><dd>المنهجية والملكية الفكرية، وإطلاق المسارات، والشراكات الاستراتيجية</dd></div>
+          </dl>
+          <p class="gov-council__meta"><span>ربع سنوي</span><span>إلى مجلس الأمناء</span></p>
+        </article>
+        <article class="gov-council">
+          <span class="gov-council__num" dir="ltr">03</span>
+          <h3 class="gov-council__name">المجلس التنفيذي</h3>
+          <p class="gov-council__en" dir="ltr">Executive Council</p>
+          <p class="gov-council__role">المشروع الذي يحوّل العلامة إلى خطة ومحفظة.</p>
+          <dl class="gov-council__facts">
+            <div class="gov-council__fact gov-council__fact--out"><dt>يسلّم</dt><dd>الخطة والمحفظة</dd></div>
+            <div class="gov-council__fact"><dt>يقرّر</dt><dd>الخطة السنوية ومؤشرات الأثر، وتخصيص الموارد، وقيادة المسارات</dd></div>
+          </dl>
+          <p class="gov-council__meta"><span>شهري</span><span>إلى مجلس الأمناء</span></p>
+        </article>
+        <article class="gov-council">
+          <span class="gov-council__num" dir="ltr">04</span>
+          <h3 class="gov-council__name">المجلس التشغيلي</h3>
+          <p class="gov-council__en" dir="ltr">Operational Council</p>
+          <p class="gov-council__role">الميدان الذي يحقق الأداء بإشراف المجلس التنفيذي.</p>
+          <dl class="gov-council__facts">
+            <div class="gov-council__fact gov-council__fact--out"><dt>يسلّم</dt><dd>الأداء والإنجاز</dd></div>
+            <div class="gov-council__fact"><dt>يقرّر</dt><dd>التنفيذ اليومي، ونقاط التحكّم والمخاطر، وضمان الجودة</dd></div>
+          </dl>
+          <p class="gov-council__meta"><span>أسبوعي</span><span>إلى المجلس التنفيذي</span></p>
+        </article>
+      </div>
+
+      <div class="gov-chain__loop reveal reveal-delay-2">
+        <p class="gov-chain__loop-title">حلقة المساءلة</p>
+        <ul class="gov-chain__loop-list">
+          <li><strong>الأداء</strong> يُقاس تنفيذيًا كل شهر</li>
+          <li><strong>العلامة</strong> تُراجَع تأسيسيًا كل ربع</li>
+          <li><strong>المفهوم</strong> يُراجَع من الأمناء كل نصف سنة</li>
+        </ul>
+        <a href="/governance/" class="gov-chain__link">
+          <span>الهيكل الكامل وأعضاء المجالس</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═════════════════════════════════════ ④ PRODUCTS ═════════════════════════════════════ -->
   <section class="section products" id="products" aria-labelledby="products-title">
     <div class="section__container">
       <div class="section-head--center reveal">
@@ -502,7 +599,7 @@
   </section>
 
 
-  <!-- ═════════════════════════════════════ ④ ECOSYSTEM ═════════════════════════════════════ -->
+  <!-- ═════════════════════════════════════ ⑤ ECOSYSTEM ═════════════════════════════════════ -->
   <section class="section ecosystem" id="ecosystem" aria-labelledby="ecosystem-title">
     <div class="section__container">
       <div class="section-head--center reveal">
