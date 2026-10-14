@@ -4036,6 +4036,11 @@ body::after {
   gap: 10px;
 }
 .gov-member figcaption { display: flex; flex-direction: column; gap: 2px; }
+/* الجوال: ثلاثة مقاعد في الصف بدل عمود طويل */
+@media (max-width: 639px) {
+  .gov-members__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; }
+  .gov-member .gov-member__photo { width: 68px; height: 68px; }
+}
 .gov-member__photo {
   position: relative;
   width: 92px; height: 92px;
