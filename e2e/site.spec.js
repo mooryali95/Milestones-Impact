@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:4301';
 const SUPABASE = /eormhcupwgwpllhrfxxg\.supabase\.co/;
-const PAGES = ['/', '/leaders/', '/projects/', '/governance/', '/privacy.html', '/terms.html', '/refund.html', '/pricing.html'];
+const PAGES = ['/', '/assessment/', '/leaders/', '/projects/', '/governance/', '/privacy.html', '/terms.html', '/refund.html', '/pricing.html'];
 
 // الخلفية مُحاكاة: كل طلب إلى Supabase يُسجَّل ويُرد عليه بنجاح.
 async function mockBackend(page) {
@@ -118,4 +118,14 @@ test('صفحة الحوكمة: المخطط يربط المجالس، ومقاع
   await expect(page.locator('.gov-member')).toHaveCount(16);
   await page.locator('.org-node[href="#council-operational"]').click();
   await expect(page).toHaveURL(/#council-operational$/);
+});
+
+test('الخطوط مستضافة ذاتيًا: لا طلبات إلى Google Fonts، والخط العربي محمّل', async ({ page }) => {
+  const external = [];
+  page.on('request', (r) => { if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) external.push(r.url()); });
+  for (const path of ['/', '/governance/']) {
+    await page.goto(BASE + path, { waitUntil: 'networkidle' });
+    expect(await page.evaluate(() => document.fonts.check('700 16px "Noto Kufi Arabic"', 'مرحبا'))).toBe(true);
+  }
+  expect(external).toEqual([]);
 });
