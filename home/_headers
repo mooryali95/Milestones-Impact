@@ -59,3 +59,7 @@
 
 /pricing
   X-Robots-Tag: noindex, nofollow
+
+# صور المشاركة لكل صفحة (تُولَّد عبر shared/og/generate.mjs)
+/assets/og/*
+  Cache-Control: public, max-age=604800
