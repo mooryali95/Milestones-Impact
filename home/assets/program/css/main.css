@@ -3832,6 +3832,8 @@ body::after {
 }
 .gov-tier__meta dt { font-size: 12px; color: var(--gold-text); letter-spacing: 0.04em; }
 .gov-tier__meta dd { margin: 0; font-size: 15px; font-weight: 600; color: var(--petrol-deepest); }
+.gov-tier__out dd { color: var(--gold-deep); }
+.gov-tier--trustees .gov-tier__meta .gov-tier__out dd { color: var(--gold-light); }
 
 /* مجلس الأمناء: قمة الهيكل بالأرضية البترولية */
 .gov-tier--trustees .gov-tier__card {
@@ -4006,6 +4008,207 @@ body::after {
   .org-node--trustees .org-node__name { font-size: 17px; }
   .org { --org-gap: 20px; }
   .org__link span { display: none; }
+}
+
+/* ─── سلسلة القيمة: لوحة داكنة تكمّل مخطط المساءلة ─── */
+.vchain {
+  --vc-gold: var(--gold);
+  --vc-gold-soft: rgba(200, 164, 92, 0.42);
+  --vc-hair: rgba(239, 231, 216, 0.10);
+  --vc-text: var(--sand-paper);
+  --vc-muted: rgba(239, 231, 216, 0.62);
+  --vc-foil: linear-gradient(160deg, #F1DDAE 0%, var(--gold) 50%, var(--gold-deep) 100%);
+  position: relative;
+  isolation: isolate;
+  margin: 40px auto 0;
+  max-width: 1180px;
+  padding: 44px 28px 28px;
+  color: var(--vc-text);
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(42, 100, 120, 0.55) 0%, transparent 62%),
+    radial-gradient(60% 70% at 0% 100%, rgba(200, 164, 92, 0.10) 0%, transparent 60%),
+    linear-gradient(180deg, var(--petrol-deep) 0%, var(--petrol-deepest) 100%);
+  border-radius: 4px;
+  box-shadow: 0 40px 80px -48px rgba(6, 30, 44, 0.75);
+}
+/* إطار داخلي محفور */
+.vchain::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1px solid var(--vc-hair);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.vchain__head { text-align: center; max-width: 620px; margin: 0 auto; }
+.vchain__eyebrow {
+  display: inline-flex; align-items: center; gap: 12px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--vc-gold);
+}
+.vchain__eyebrow::before,
+.vchain__eyebrow::after { content: ''; width: 28px; height: 1px; background: var(--vc-gold-soft); }
+.vchain__title {
+  margin: 12px 0 0;
+  font-size: clamp(24px, 3.2vw, 34px);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--vc-text);
+}
+.vchain__title strong {
+  font-weight: 800;
+  background: var(--vc-foil);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+.vchain__intro { margin: 12px auto 0; font-size: 15px; line-height: 1.9; color: var(--vc-muted); }
+
+/* المسار: عمودي على الجوال، أفقي على الشاشات الواسعة */
+.vchain__track {
+  list-style: none;
+  margin: 36px 0 0;
+  padding: 0;
+  position: relative;
+  display: grid;
+  gap: 32px;
+}
+.vchain__track::before {
+  content: '';
+  position: absolute;
+  top: 22px; bottom: 22px; right: 21px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(200, 164, 92, 0.3), var(--vc-gold) 70%, #F1DDAE);
+}
+.vchain__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: start;
+}
+.vchain__step > :not(.vchain__node) { grid-column: 2; }
+.vchain__node {
+  grid-row: 1 / span 6;
+  position: relative; z-index: 1;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--gold-light);
+  background: var(--petrol-deep);
+  box-shadow: 0 0 0 1px var(--vc-gold-soft), 0 0 0 6px var(--petrol-deep), 0 0 0 7px var(--vc-hair);
+}
+.vchain__node svg { width: 18px; height: 18px; }
+.vchain__num {
+  font-family: var(--font-en);
+  font-size: 44px; font-weight: 300; line-height: 1;
+  background: var(--vc-foil);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  justify-self: start;
+}
+.vchain__name {
+  margin-top: 10px;
+  font-size: 20px; font-weight: 700;
+  color: var(--vc-text);
+  text-decoration: none;
+  justify-self: start;
+  background: linear-gradient(var(--vc-gold), var(--vc-gold)) no-repeat 100% 100% / 0 1px;
+  transition: background-size 0.4s var(--ease);
+}
+.vchain__name:hover,
+.vchain__name:focus-visible { background-size: 100% 1px; }
+.vchain__en {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--vc-muted);
+}
+.vchain__role { margin: 12px 0 0; font-size: 14.5px; line-height: 1.85; color: var(--vc-muted); }
+.vchain__role b { color: var(--gold-light); font-weight: 600; }
+.vchain__out {
+  margin-top: 14px;
+  justify-self: start;
+  display: inline-flex; align-items: baseline; gap: 10px;
+  padding: 8px 14px;
+  font-size: 15px; font-weight: 600;
+  color: var(--gold-pale);
+  border: 1px solid var(--vc-gold-soft);
+  border-radius: 2px;
+  background: rgba(6, 30, 44, 0.55);
+}
+.vchain__out small { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--vc-muted); }
+.vchain__out--final { background: var(--vc-foil); border-color: var(--gold); color: var(--petrol-deepest); }
+.vchain__out--final small { color: rgba(6, 30, 44, 0.7); }
+
+.vchain__foot {
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px solid var(--vc-gold-soft);
+  display: grid;
+  gap: 20px;
+  align-items: center;
+}
+.vchain__loop { display: grid; gap: 10px; font-size: 13.5px; color: var(--vc-muted); }
+.vchain__loop-label { display: inline-flex; align-items: center; gap: 8px; color: var(--vc-gold); font-weight: 600; }
+.vchain__loop-label svg { width: 16px; height: 16px; }
+.vchain__loop ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.vchain__loop li { display: inline-flex; align-items: center; gap: 6px; }
+.vchain__loop li b { color: var(--vc-text); font-weight: 600; }
+.vchain__loop li + li::before {
+  content: ''; width: 5px; height: 5px; margin-left: 16px;
+  transform: rotate(45deg); background: var(--vc-gold-soft);
+}
+.vchain__dbotc {
+  justify-self: start;
+  display: inline-flex; align-items: center; gap: 14px;
+  color: var(--vc-muted); text-decoration: none; font-size: 12px;
+}
+.vchain__dbotc-letters { display: inline-flex; }
+.vchain__dbotc-letters i {
+  font-style: normal;
+  font-family: var(--font-en);
+  font-size: 24px; font-weight: 400; line-height: 1;
+  padding: 0 10px;
+  border-left: 1px solid var(--vc-hair);
+  background: var(--vc-foil);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  transition: transform 0.35s var(--ease);
+}
+.vchain__dbotc-letters i:first-child { border-left: 0; }
+.vchain__dbotc:hover .vchain__dbotc-letters i,
+.vchain__dbotc:focus-visible .vchain__dbotc-letters i { transform: translateY(-2px); }
+
+@media (min-width: 960px) {
+  .vchain { padding: 56px 44px 32px; }
+  .vchain__name { white-space: nowrap; }
+  .vchain__out { white-space: nowrap; font-size: 14px; padding: 8px 12px; }
+  .vchain::after { inset: 16px; }
+  .vchain__track { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: 48px; }
+  /* خط التدفق الأفقي يُقرأ من اليمين إلى اليسار وينتهي بالأداء */
+  .vchain__track::before {
+    top: 22px; bottom: auto; right: 0; left: 0;
+    width: auto; height: 1px;
+    background: linear-gradient(to left, rgba(200, 164, 92, 0.3), var(--vc-gold) 35%, #F1DDAE);
+  }
+  .vchain__step {
+    display: flex; flex-direction: column; align-items: flex-start;
+    padding: 0 22px;
+  }
+  .vchain__step:first-child { padding-right: 0; }
+  .vchain__step:last-child { padding-left: 0; }
+  .vchain__step + .vchain__step::before {
+    content: '';
+    position: absolute; right: 0; top: 68px; bottom: 0;
+    width: 1px;
+    background: linear-gradient(180deg, var(--vc-gold-soft), var(--vc-hair) 45%, transparent);
+  }
+  .vchain__num { margin-top: 26px; font-size: 54px; }
+  .vchain__out { margin-top: auto; }
+  .vchain__role { margin-bottom: 18px; }
+  .vchain__foot { grid-template-columns: minmax(0, 1fr) auto; gap: 32px; margin-top: 40px; }
+  .vchain__loop { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 22px; }
 }
 
 /* ─── أعضاء المجالس ─── */

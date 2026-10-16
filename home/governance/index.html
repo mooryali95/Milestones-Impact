@@ -66,7 +66,7 @@
   
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=d937430f" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=c37e2db4" />
   <link rel="stylesheet" href="/assets/fonts/fonts-serif.css?v=1" />
   <link rel="stylesheet" href="/assets/program/css/hub.css?v=4" />
 </head>
@@ -320,6 +320,65 @@
         </figcaption>
       </figure>
 
+      <!-- سلسلة القيمة: من يسلّم ماذا لمن (يكمّل مخطط المساءلة أعلاه) -->
+      <figure class="vchain reveal" aria-labelledby="vchain-title">
+        <header class="vchain__head">
+          <span class="vchain__eyebrow">سلسلة القيمة</span>
+          <h3 class="vchain__title" id="vchain-title">من <strong>المفهوم</strong> إلى <strong>الأداء</strong></h3>
+          <p class="vchain__intro">المخطط أعلاه يبيّن من يُساءل أمام من. وهذه السلسلة تبيّن ما يصنعه كل مجلس: يستلم مدخلًا ممن قبله، ويسلّم مخرجًا لمن بعده.</p>
+        </header>
+
+        <ol class="vchain__track">
+          <li class="vchain__step">
+            <span class="vchain__node" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span>
+            <span class="vchain__num" dir="ltr">01</span>
+            <a class="vchain__name" href="#council-trustees">مجلس الأمناء</a>
+            <span class="vchain__en" dir="ltr">Board of Trustees</span>
+            <p class="vchain__role"><b>الفاعل</b> الذي يصنع المفهوم ويحرس الرسالة.</p>
+            <span class="vchain__out"><small>يسلّم</small>المفهوم والرؤية</span>
+          </li>
+          <li class="vchain__step">
+            <span class="vchain__node" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" transform="rotate(45 12 12)" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="10.2" y="10.2" width="3.6" height="3.6" transform="rotate(45 12 12)" fill="currentColor"/></svg></span>
+            <span class="vchain__num" dir="ltr">02</span>
+            <a class="vchain__name" href="#council-founding">المجلس التأسيسي</a>
+            <span class="vchain__en" dir="ltr">Founding Council</span>
+            <p class="vchain__role"><b>الإرث</b> الذي يحوّل المفهوم إلى علامة ويصون الهوية.</p>
+            <span class="vchain__out"><small>يسلّم</small>العلامة ومعاييرها</span>
+          </li>
+          <li class="vchain__step">
+            <span class="vchain__node" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6" y="12" width="12" height="6" fill="currentColor"/></svg></span>
+            <span class="vchain__num" dir="ltr">03</span>
+            <a class="vchain__name" href="#council-executive">المجلس التنفيذي</a>
+            <span class="vchain__en" dir="ltr">Executive Council</span>
+            <p class="vchain__role"><b>المشروع</b> الذي يحوّل العلامة إلى خطة ومحفظة وفق منهجية <bdi>DBOTC</bdi>.</p>
+            <span class="vchain__out"><small>يسلّم</small>الخطة والمحفظة</span>
+          </li>
+          <li class="vchain__step">
+            <span class="vchain__node" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg></span>
+            <span class="vchain__num" dir="ltr">04</span>
+            <a class="vchain__name" href="#council-operational">المجلس التشغيلي</a>
+            <span class="vchain__en" dir="ltr">Operational Council</span>
+            <p class="vchain__role"><b>الميدان</b> الذي يحقق الأداء بإشراف المجلس التنفيذي.</p>
+            <span class="vchain__out vchain__out--final"><small>يسلّم</small>الأداء والإنجاز</span>
+          </li>
+        </ol>
+
+        <figcaption class="vchain__foot">
+          <div class="vchain__loop">
+            <span class="vchain__loop-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 3.5v4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>حلقة المساءلة</span>
+            <ul>
+              <li><b>الأداء</b> يُقاس تنفيذيًا كل شهر</li>
+              <li><b>العلامة</b> تُراجع تأسيسيًا كل ربع</li>
+              <li><b>المفهوم</b> يُراجع من الأمناء كل نصف سنة</li>
+            </ul>
+          </div>
+          <a class="vchain__dbotc" href="/projects/#frameworks" aria-label="منهجية DBOTC: التصميم، البناء، التشغيل، النقل، الاستشارة">
+            <span class="vchain__dbotc-label">منهجية</span>
+            <span class="vchain__dbotc-letters" dir="ltr"><i>D</i><i>B</i><i>O</i><i>T</i><i>C</i></span>
+          </a>
+        </figcaption>
+      </figure>
+
       <ol class="gov__tiers" aria-label="المجالس الأربعة">
 
         <li class="gov-tier gov-tier--trustees reveal" id="council-trustees" aria-labelledby="gov1-title">
@@ -341,6 +400,7 @@
                 </ul>
               </div>
               <dl class="gov-tier__meta">
+                <div class="gov-tier__out"><dt>يسلّم</dt><dd>المفهوم والرؤية</dd></div>
                 <div><dt>التكوين</dt><dd>شخصيات مستقلة ذات ثقل مؤسسي وأكاديمي</dd></div>
                 <div><dt>الانعقاد</dt><dd>نصف سنوي، واستثنائي عند الحاجة</dd></div>
                 <div><dt>تُرفع إليه</dt><dd>تقارير المجلسين التأسيسي والتنفيذي</dd></div>
@@ -369,6 +429,7 @@
                 </ul>
               </div>
               <dl class="gov-tier__meta">
+                <div class="gov-tier__out"><dt>يسلّم</dt><dd>العلامة ومعاييرها</dd></div>
                 <div><dt>التكوين</dt><dd>المؤسسون والشركاء المؤسِّسون</dd></div>
                 <div><dt>الانعقاد</dt><dd>ربع سنوي</dd></div>
                 <div><dt>يرفع تقاريره إلى</dt><dd>مجلس الأمناء</dd></div>
@@ -397,6 +458,7 @@
                 </ul>
               </div>
               <dl class="gov-tier__meta">
+                <div class="gov-tier__out"><dt>يسلّم</dt><dd>الخطة والمحفظة</dd></div>
                 <div><dt>التكوين</dt><dd>الرئيس التنفيذي وقادة المسارات والوظائف المساندة</dd></div>
                 <div><dt>الانعقاد</dt><dd>شهري</dd></div>
                 <div><dt>يرفع تقاريره إلى</dt><dd>مجلس الأمناء</dd></div>
@@ -425,6 +487,7 @@
                 </ul>
               </div>
               <dl class="gov-tier__meta">
+                <div class="gov-tier__out"><dt>يسلّم</dt><dd>الأداء والإنجاز</dd></div>
                 <div><dt>التكوين</dt><dd>مديرو البرامج والمشروعات وقادة الفرق</dd></div>
                 <div><dt>الانعقاد</dt><dd>أسبوعي</dd></div>
                 <div><dt>يرفع تقاريره إلى</dt><dd>المجلس التنفيذي</dd></div>
