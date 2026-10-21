@@ -76,6 +76,16 @@ export async function participant(b: Body) {
   };
 }
 
+// قائمة المراجعة: كل ما أرسله المشاركون وينتظر قرار المستشار
+export async function reviews() {
+  const rows = must(await db.from('participant_requirements')
+    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants(full_name, email), stage_requirements(code, title_ar, stage_key, kind)')
+    .eq('status', 'submitted').limit(200)) ?? [];
+  const { data: waiting } = await db.from('participants').select('id, full_name, email, organization_name, updated_at')
+    .eq('status', 'pending_approval').order('updated_at', { ascending: true }).limit(200);
+  return { success: true, submitted: rows, pending_approval: waiting || [] };
+}
+
 export async function evidenceUrl(b: Body) {
   const path = String(b.path || '');
   const { data } = await storage.from(BUCKET).createSignedUrl(path, 600);

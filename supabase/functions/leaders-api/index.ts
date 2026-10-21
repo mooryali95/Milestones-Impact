@@ -44,6 +44,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.overview': () => A.overview(),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => A.participant(b),
+  'admin.reviews': () => A.reviews(),
   'admin.evidence-url': (_a, b) => A.evidenceUrl(b),
   'admin.approve': A.approve,
   'admin.status': A.setStatus,

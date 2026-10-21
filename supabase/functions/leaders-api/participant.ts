@@ -329,7 +329,7 @@ export async function assessmentSubmit(p: any, b: Body) {
 export async function requirementUpdate(p: any, b: Body) {
   const r = must(await db.from('stage_requirements').select('*').eq('id', String(b.requirement_id)).maybeSingle());
   if (!r || !r.active) throw new Fail('متطلب غير موجود', 404);
-  if (r.kind === 'auto' || r.kind === 'meeting' || AUTO_CHECKS[r.code]) throw new Fail('هذا المتطلب يُحدَّث تلقائيًا أو من المستشار');
+  if (r.kind === 'auto' || r.kind === 'meeting' || r.code in AUTO_CHECKS) throw new Fail('هذا المتطلب يُحدَّث تلقائيًا أو من المستشار');
   const state = await mePayload(p);
   const stage = state.journey.find((s: any) => s.key === r.stage_key);
   if (!stage || stage.status === 'locked') throw new Fail('هذه المرحلة لم تُفتح بعد', 400, 'locked');
