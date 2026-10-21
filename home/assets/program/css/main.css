@@ -785,6 +785,13 @@ body::after {
   .footer__brand-logo { height: 52px; }
 }
 
+/* القيمة الغارقة: العلامة أصغر من منظومة لأنها أعرض، ومعها الاسم */
+.footer__brand--lockup { gap: 10px; font-family: var(--font-en); font-weight: 600; letter-spacing: 0.06em; }
+.footer__brand--lockup .footer__brand-logo { height: 22px; }
+@media (min-width: 768px) {
+  .footer__brand--lockup .footer__brand-logo { height: 26px; }
+}
+
 .footer__brand-sep {
   width: 1px;
   height: 16px;

@@ -35,7 +35,7 @@
   <link rel="preload" href="/assets/fonts/NotoKufiArabic-arabic.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/assets/fonts/fonts.css?v=1" />
 
-  <link rel="stylesheet" href="/assets/program/css/main.css?v=c37e2db4" />
+  <link rel="stylesheet" href="/assets/program/css/main.css?v=2f44c541" />
   <style>
     .as-wrap{max-width:860px;margin:0 auto;padding:0 var(--gutter,20px)}
     .as-hero{background:linear-gradient(160deg,var(--sand-paper,#FBF8EF) 0%,var(--mi-sand,#EFE7D8) 100%);color:var(--mi-graphite,#0B272F);padding:150px 0 72px;border-bottom:1px solid rgba(11,39,47,.08)}
@@ -155,7 +155,7 @@
       <a href="/governance/" class="header__nav-link">الحوكمة</a>
     </nav>
     <div class="header__actions">
-      <a class="header__cta" href="https://wa.me/966532134539?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D9%88%D8%AF%D9%91%20%D8%AD%D8%AC%D8%B2%20%D9%85%D8%AD%D8%A7%D8%AF%D8%AB%D8%A9%20%D8%AA%D8%B9%D8%B1%D9%8A%D9%81%D9%8A%D8%A9%20%D9%85%D8%B9%20%D9%81%D8%B1%D9%8A%D9%82%20Milestone%20Impact." target="_blank" rel="noopener noreferrer">محادثة</a>
+      <button class="header__cta" onclick="openTypeform()" aria-label="تواصل معنا">تواصل معنا</button>
       <button class="header__burger" id="burgerBtn" aria-label="فتح القائمة" aria-expanded="false" aria-controls="mobileDrawer">
         <span class="header__burger-line"></span>
         <span class="header__burger-line"></span>
@@ -176,7 +176,7 @@
       <a href="/projects/" class="mobile-drawer__link">المشاريع التنموية</a>
       <a href="/governance/" class="mobile-drawer__link">الحوكمة</a>
     </div>
-    <a class="mobile-drawer__cta" href="https://wa.me/966532134539?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D9%88%D8%AF%D9%91%20%D8%AD%D8%AC%D8%B2%20%D9%85%D8%AD%D8%A7%D8%AF%D8%AB%D8%A9%20%D8%AA%D8%B9%D8%B1%D9%8A%D9%81%D9%8A%D8%A9%20%D9%85%D8%B9%20%D9%81%D8%B1%D9%8A%D9%82%20Milestone%20Impact." target="_blank" rel="noopener noreferrer">احجز محادثة</a>
+    <button class="mobile-drawer__cta" onclick="openTypeform()">احجز محادثة</button>
   </nav>
 
   <main id="main">
@@ -289,7 +289,7 @@
           <div class="footer__powered-brands">
             <a href="https://manzoma.sa" target="_blank" rel="noopener noreferrer" class="footer__brand" aria-label="منظومة — manzoma.sa">منظومة Manzoma</a>
             <span class="footer__brand-sep" aria-hidden="true"></span>
-            <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__brand" aria-label="Sunk Value — sunkvalue.com">Sunk Value</a>
+            <a href="https://sunkvalue.com" target="_blank" rel="noopener noreferrer" class="footer__brand footer__brand--logo footer__brand--lockup" aria-label="Sunk Value — sunkvalue.com"><img class="footer__brand-logo" src="/assets/brand/partners/sunkvalue-white.svg" alt="" width="28" height="22" loading="lazy" decoding="async" /><span>Sunk Value</span></a>
           </div>
         </div>
       </div>
@@ -303,10 +303,156 @@
     </div>
   </footer>
 
+  <!-- ═════════════════════════════════════ TYPEFORM MODAL ═════════════════════════════════════ -->
+  <div class="tf-modal" id="tfModal" role="dialog" aria-modal="true" aria-labelledby="tf-modal-title">
+    <h2 class="sr-only" id="tf-modal-title">نموذج التواصل الاستراتيجي</h2>
+    <div class="tf-modal__progress" aria-hidden="true"><div class="tf-modal__progress-bar" id="tfProgress"></div></div>
+
+    <div class="tf-modal__header">
+      <a href="#" class="logo" onclick="event.preventDefault()" aria-label="Milestone Impact">
+        <img class="logo__img" src="/assets/brand/svg/milestone-impact.svg" alt="Milestone Impact" width="220" height="100" />
+      </a>
+      <div class="tf-modal__counter" id="tfCounter"></div>
+      <button class="tf-modal__close" onclick="closeTypeform()" aria-label="إغلاق النموذج">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="tf-modal__body" id="tfBody">
+
+      <div class="tf-step active" data-step="welcome">
+        <div class="tf-welcome">
+          <div class="tf-welcome__diamond" aria-hidden="true"></div>
+          <p class="tf-welcome__lead">— Strategic Conversation</p>
+          <h2 class="tf-welcome__title">تشرّفنا بزيارتكم</h2>
+          <p class="tf-welcome__desc">
+            ندعوكم لمحادثةٍ موجزة، تُمكّننا من فهم سياقكم، وتقديم ما يليق بطموحكم.
+          </p>
+          <p class="tf-welcome__time">— ثلاث خطوات، أقل من دقيقة —</p>
+          <button class="tf-welcome__cta" onclick="nextStep()">
+            <span>ابدأ المحادثة</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tf-step" data-step="1" data-field="name">
+        <div class="tf-step__num">01</div>
+        <h2 class="tf-step__question">بدايةً، بمن نتشرّف؟</h2>
+        <p class="tf-step__hint">الاسم الكريم والجهة التي تمثّلونها</p>
+        <div class="tf-dual">
+          <div>
+            <label class="tf-field-label" for="qName">الاسم الكامل</label>
+            <input type="text" class="tf-input" id="qName" placeholder="اكتب اسمك هنا..." autocomplete="name" />
+          </div>
+          <div>
+            <label class="tf-field-label" for="qOrg">الجهة</label>
+            <input type="text" class="tf-input" id="qOrg" placeholder="المؤسسة أو الشركة..." autocomplete="organization" />
+          </div>
+        </div>
+        <div class="tf-step__error">يُرجى تفضّلكم بإدخال الاسم والجهة</div>
+      </div>
+
+      <div class="tf-step" data-step="2" data-field="contact">
+        <div class="tf-step__num">02</div>
+        <h2 class="tf-step__question">كيف يسعدنا الوصول إليكم؟</h2>
+        <p class="tf-step__hint">سنحرص على التواصل عبر القناة الأنسب لكم</p>
+        <div class="tf-dual">
+          <div>
+            <label class="tf-field-label" for="qEmail">البريد الإلكتروني</label>
+            <input type="email" class="tf-input" id="qEmail" placeholder="name@example.com" autocomplete="email" dir="ltr" />
+          </div>
+          <div>
+            <label class="tf-field-label" for="qPhone">رقم التواصل</label>
+            <input type="tel" class="tf-input" id="qPhone" placeholder="+966 5X XXX XXXX" autocomplete="tel" dir="ltr" />
+          </div>
+        </div>
+        <div class="tf-step__error">يُرجى التكرّم بإدخال بريدٍ إلكتروني صحيح ورقمٍ للتواصل</div>
+      </div>
+
+      <div class="tf-step" data-step="3" data-field="interest">
+        <div class="tf-step__num">03</div>
+        <h2 class="tf-step__question">ما الذي يستقطب اهتمامكم؟</h2>
+        <p class="tf-step__hint">اختيارٌ واحد يكفي — وسنبني عليه حوارنا القادم</p>
+        <div class="tf-options" role="radiogroup" aria-label="نوع الاهتمام">
+          <button class="tf-option" data-value="A" type="button" role="radio" aria-checked="false">
+            <span class="tf-option__key">A</span>
+            <span class="tf-option__content">
+              <span class="tf-option__title">مناقشة نتيجة المقياس</span>
+              <span class="tf-option__desc">قراءة متخصصة لنتيجتكم وأولويات التحسين</span>
+            </span>
+            <span class="tf-option__check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+          </button>
+          <button class="tf-option" data-value="B" type="button" role="radio" aria-checked="false">
+            <span class="tf-option__key">B</span>
+            <span class="tf-option__content">
+              <span class="tf-option__title">تقييمٌ مؤسسي معمّق</span>
+              <span class="tf-option__desc">تشخيص شامل لجاهزية جهتكم لصناعة الأثر</span>
+            </span>
+            <span class="tf-option__check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+          </button>
+          <button class="tf-option" data-value="C" type="button" role="radio" aria-checked="false">
+            <span class="tf-option__key">C</span>
+            <span class="tf-option__content">
+              <span class="tf-option__title">استشارةٌ عامة</span>
+              <span class="tf-option__desc">استفسار عن المنظومة ومساراتها</span>
+            </span>
+            <span class="tf-option__check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+          </button>
+        </div>
+        <div class="tf-step__error">يُرجى اختيار ما يناسب اهتمامكم</div>
+        <label class="tf-field-label tf-field-label--spaced" for="qContext">سياق إضافي (اختياري)</label>
+        <textarea class="tf-input tf-input--textarea" id="qContext" placeholder="اكتب هنا..." rows="2"></textarea>
+      </div>
+
+      <div class="tf-step" data-step="thanks">
+        <div class="tf-thanks">
+          <div class="tf-thanks__diamond" aria-hidden="true"></div>
+          <p class="tf-thanks__lead">— Message Received</p>
+          <div class="tf-thanks__status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+            <span>تم إرسال طلبكم بنجاح</span>
+          </div>
+          <h2 class="tf-thanks__title">وصلتنا رسالتكم</h2>
+          <p class="tf-thanks__desc">
+            سيتواصل معكم فريق <strong>Milestone Impact</strong> خلال <span class="tf-thanks__highlight">48 ساعة عمل</span>،<br>
+            بمحادثةٍ تليق بمستوى تطلّعاتكم.
+          </p>
+          <p class="tf-thanks__desc">
+            <em style="font-family: var(--font-en); color: var(--gold-text);">— في غضون ذلك، نشكر لكم ثقتكم —</em>
+          </p>
+          <div class="tf-thanks__actions">
+            <button class="tf-thanks__btn-primary" onclick="closeTypeform()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              <span>العودة إلى الصفحة</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="tf-modal__footer" id="tfFooter">
+      <div class="tf-modal__nav">
+        <button class="tf-btn-next" id="tfNext" onclick="nextStep()">
+          <span>موافق</span>
+          <span class="tf-btn-next__enter">Enter ↵</span>
+        </button>
+        <button class="tf-btn-prev" id="tfPrev" onclick="prevStep()">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <span>السابق</span>
+        </button>
+      </div>
+      <div class="tf-modal__keyhint">
+        <span>اضغط</span><kbd>Enter ↵</kbd><span>للانتقال</span>
+      </div>
+    </div>
+  </div>
+
   <script src="/assets/program/js/scroll.js" defer></script>
   <script src="/assets/program/js/mobile-menu.js" defer></script>
   <script src="/assets/program/js/assessment.js" defer></script>
-  <script src="/assets/program/js/whatsapp.js" defer></script>
+  <script src="/assets/program/js/typeform.js?v=3" defer></script>
 
 </body>
 </html>
