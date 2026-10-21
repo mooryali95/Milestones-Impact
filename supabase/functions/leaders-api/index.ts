@@ -10,6 +10,7 @@
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
+//             handbook.toc · handbook.chapter
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
@@ -25,7 +26,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'passkey.auth-verify': K.authVerify,
 };
 
-const participant: Record<string, (p: any, b: Body, sessionId: string) => Promise<unknown>> = {
+const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'logout': (_p, _b, sid) => P.logout(sid),
   'profile.save': P.profileSave,
@@ -38,6 +39,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string) => Promis
   'passkey.register-options': (p) => K.registerOptions(p),
   'passkey.register-verify': K.registerVerify,
   'passkey.dismiss': (p) => P.passkeyDismiss(p),
+  'handbook.toc': (p) => P.handbookToc(p),
+  'handbook.chapter': (p, b, _s, ctx) => P.handbookChapter(p, b, ctx),
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
@@ -70,7 +73,7 @@ Deno.serve(async (req) => {
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
-      return reply(req, await participant[action](p, b, sessionId));
+      return reply(req, await participant[action](p, b, sessionId, ctx));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);

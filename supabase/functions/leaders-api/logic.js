@@ -146,3 +146,32 @@ export function normalizePhone(p) {
   if (/^\+\d{8,15}$/.test(d)) return d;
   return null;
 }
+
+// ── الكتيب ──
+const RANK = { beginner: 0, intermediate: 1, advanced: 2 };
+
+// أبواب الكتيب التي تخص المشارك: مستواه في البُعد ≥ أدنى مستوى للباب
+export function handbookModulesFor(modules, levels) {
+  return modules
+    .filter((m) => levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && (m.body_md || '').trim())
+    .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
+}
+
+// كتل المستوى داخل الباب:
+//   :::min=intermediate … :::  لمن مستواه متوسط فأعلى
+//   :::only=beginner   … :::  لمستوى واحد فقط
+// تُحذف على الخادم قبل الإرسال، فلا يصل للمشارك ما لا يخص مستواه.
+export function filterHandbookMd(md, level) {
+  const out = [];
+  let keep = true;
+  for (const line of String(md || '').split('\n')) {
+    const open = line.trim().match(/^:::(min|only)=(beginner|intermediate|advanced)$/);
+    if (open) {
+      keep = open[1] === 'min' ? RANK[level] >= RANK[open[2]] : level === open[2];
+      continue;
+    }
+    if (line.trim() === ':::') { keep = true; continue; }
+    if (keep) out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}

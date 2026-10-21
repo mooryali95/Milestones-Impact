@@ -202,7 +202,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -289,9 +289,13 @@ export default function Journey({ me, onUpdate, onEditProfile }) {
       <div className="card row between">
         <div>
           <b>كتيب مصمم على مستواك في الأبعاد الثلاثة</b>
-          <p className="small muted">{approved ? 'يُفتح للقراءة داخل المنصة مع بدء مرحلة التدريب.' : 'يُفتح بعد اعتماد مسارك.'}</p>
+          <p className="small muted">{approved
+            ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك في كل بُعد. للقراءة داخل المنصة فقط.'
+            : 'يُفتح بعد اعتماد مسارك.'}</p>
         </div>
-        <span className="chip">🔒 {approved ? 'قريبًا' : 'مقفل'}</span>
+        {approved
+          ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
+          : <span className="chip">🔒 مقفل</span>}
       </div>
 
       {toast && <div className="toast" role="status">{toast}</div>}

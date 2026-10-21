@@ -1,6 +1,6 @@
 // منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
 import {
-  buildJourney, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, placementFromAnswers,
+  buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, placementFromAnswers,
   requirementApplies, scoreFor, seededShuffle, tierPercents,
 } from '../../supabase/functions/leaders-api/logic.js';
 
@@ -153,5 +153,25 @@ describe('helpers', () => {
     expect(normalizePhone('966501234567')).toBe('+966501234567');
     expect(normalizePhone('+447700900123')).toBe('+447700900123');
     expect(normalizePhone('12')).toBeNull();
+  });
+});
+
+describe('handbook', () => {
+  const mods = [
+    { id: 'a', dimension: 'impact', sort: 2, min_level: 'beginner', body_md: 'x' },
+    { id: 'b', dimension: 'milestone', sort: 1, min_level: 'intermediate', body_md: 'x' },
+    { id: 'c', dimension: 'milestone', sort: 2, min_level: 'advanced', body_md: 'x' },
+    { id: 'd', dimension: 'impact', sort: 1, min_level: 'beginner', body_md: '  ' },
+  ];
+
+  it('includes chapters up to the participant level per dimension, skipping empty ones', () => {
+    const got = handbookModulesFor(mods, { milestone: 'intermediate', impact: 'beginner' }).map((m) => m.id);
+    expect(got).toEqual(['b', 'a']);
+  });
+
+  it('keeps only the level blocks that apply', () => {
+    const md = 'عام\n:::min=intermediate\nمتوسط فأعلى\n:::\n:::only=beginner\nتأسيسي فقط\n:::\nختام';
+    expect(filterHandbookMd(md, 'beginner')).toBe('عام\nتأسيسي فقط\nختام');
+    expect(filterHandbookMd(md, 'advanced')).toBe('عام\nمتوسط فأعلى\nختام');
   });
 });

@@ -433,6 +433,7 @@
     const mods = S.catalog.handbook_modules;
     return `
       <p class="la-muted">كتيب كل مشارك = الأبواب التي مستواها الأدنى ≤ مستواه في ذلك البُعد. يُعرض للقراءة فقط داخل المنصة بعلامة مائية باسم المشارك.</p>
+      <p class="la-muted">داخل المحتوى: <code>## عنوان</code> و<code>### عنوان فرعي</code> و<code>- بند</code> و<code>**غامق**</code> و<code>&gt; خلاصة</code>. لتخصيص فقرة لمستوى: <code>:::min=intermediate</code> (من متوسط فأعلى) أو <code>:::only=beginner</code> (للتأسيسي فقط) ثم السطور ثم <code>:::</code>. المستويات: beginner تأسيسي، intermediate متوسط، advanced احترافي.</p>
       ${DIMS.map((d) => `
         <h3 class="la-phase">${DIM_EN[d]} · ${DIM[d]}</h3>
         <ul class="la-reqs">${mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort).map((m) => `

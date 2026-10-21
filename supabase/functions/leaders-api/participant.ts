@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, isEmail, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle,
 } from './logic.js';
 
@@ -351,4 +351,42 @@ export async function requirementUpdate(p: any, b: Body) {
 export async function passkeyDismiss(p: any) {
   await db.from('participants').update({ passkey_dismissed_at: new Date().toISOString() }).eq('id', p.id);
   return { success: true };
+}
+
+// ── 7. الكتيب الشخصي ──
+// يُفتح بعد اعتماد المستوى. المحتوى يُرسل بابًا بابًا بعد تصفيته بمستوى
+// المشارك، ويُسجَّل كل فتح في handbook_views. العرض في المتصفح رسم على
+// لوحة (canvas) بعلامة مائية باسم المشارك، فلا نص قابل للنسخ في الصفحة.
+const HANDBOOK_VIEWS_PER_HOUR = 120;
+
+async function approvedLevels(p: any) {
+  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
+  if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح الكتيب بعد اعتماد مسارك', 403, 'locked');
+  return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
+}
+
+export async function handbookToc(p: any) {
+  const levels = await approvedLevels(p);
+  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) ?? [];
+  return {
+    success: true,
+    levels,
+    chapters: handbookModulesFor(mods, levels).map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar })),
+  };
+}
+
+export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
+  const levels = await approvedLevels(p);
+  const hourAgo = new Date(Date.now() - 36e5).toISOString();
+  const { count } = await db.from('handbook_views').select('id', { count: 'exact', head: true })
+    .eq('participant_id', p.id).gte('viewed_at', hourAgo);
+  if ((count ?? 0) >= HANDBOOK_VIEWS_PER_HOUR) throw new Fail('فتحت صفحات كثيرة خلال ساعة، تابع بعد قليل', 429, 'rate');
+  const m = must(await db.from('handbook_modules').select('*').eq('id', String(b.id)).maybeSingle());
+  if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
+  await db.from('handbook_views').insert({ participant_id: p.id, module_id: m.id, ip: ctx.ip, user_agent: ctx.ua });
+  return {
+    success: true,
+    chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) },
+    watermark: `${p.full_name} · ${p.email}`,
+  };
 }

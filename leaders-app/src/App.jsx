@@ -14,13 +14,14 @@ import SignIn from './screens/SignIn.jsx';
 import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
+import Handbook from './screens/Handbook.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
 
 export default function App() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [view, setView] = useState('home');   // home | profile
+  const [view, setView] = useState('home');   // home | profile | handbook
   const [verifyError, setVerifyError] = useState('');
 
   const accept = useCallback((res) => {
@@ -62,7 +63,8 @@ export default function App() {
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;
   } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} />;
+  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} onBack={() => setView('home')} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} onHandbook={() => setView('handbook')} />;
 
   return (
     <>
