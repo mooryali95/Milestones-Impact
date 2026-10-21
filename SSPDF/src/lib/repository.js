@@ -15,6 +15,18 @@ class SupabaseRepo {
     this.segmentIdByCode = {};
     this.critIdByCode = {};
     this.comboIdByKey = {}; // "S2|C5" → uuid
+    // آخر قيمة وصلت الخادم لكل صف، فلا يُعاد إرسال ما لم يتغيّر
+    this.synced = {};       // "services|S2" → JSON
+    this._pending = null;   // آخر حالة تنتظر المزامنة
+    this._running = null;   // المزامنة الجارية
+  }
+
+  /** يُعيد true إن تغيّرت قيمة الصف منذ آخر مزامنة، ويحفظ الجديدة */
+  _changed(key, value) {
+    const json = JSON.stringify(value);
+    if (this.synced[key] === json) return false;
+    this.synced[key] = json;
+    return true;
   }
 
   /** قائمة المشاريع التي أملك عضوية فعلية فيها (بحسب الجلسة الحالية) */
@@ -69,17 +81,16 @@ class SupabaseRepo {
     this.projectId = project.id;
     this.serviceIdByCode = {}; this.segmentIdByCode = {}; this.critIdByCode = {}; this.comboIdByKey = {};
 
-    const [sv, sg, cr, cb, rk, lg, mb] = await Promise.all([
+    const [sv, sg, cr, cb, lg, mb] = await Promise.all([
       this.sb.from("services").select("*").eq("project_id", project.id).order("sort"),
       this.sb.from("segments").select("*").eq("project_id", project.id).order("sort"),
       this.sb.from("criteria").select("*").eq("project_id", project.id).order("sort"),
       this.sb.from("combinations").select("*").eq("project_id", project.id),
-      this.sb.from("risks").select("*"),
       this.sb.from("activity_log").select("*").eq("project_id", project.id)
         .order("created_at", { ascending: false }).limit(100),
       this.sb.from("project_members").select("*").eq("project_id", project.id).order("created_at"),
     ]);
-    for (const r of [sv, sg, cr, cb, rk, lg, mb]) if (r.error) throw r.error;
+    for (const r of [sv, sg, cr, cb, lg, mb]) if (r.error) throw r.error;
 
     const services = sv.data.map((x) => ({ id: x.code, ar: x.name_ar, en: x.name_en || "" }));
     const segments = sg.data.map((x) => ({ id: x.code, ar: x.name_ar, en: x.name_en || "" }));
@@ -95,10 +106,16 @@ class SupabaseRepo {
     const critOrder = cr.data.map((x) => x.code);
 
     const comboIds = cb.data.map((x) => x.id);
-    const { data: scores, error: sErr } = comboIds.length
-      ? await this.sb.from("scores").select("*").in("combination_id", comboIds)
-      : { data: [], error: null };
+    // المخاطر مقصورة على تركيبات هذا المشروع، لا الجدول كله
+    const empty = { data: [], error: null };
+    const [{ data: scores, error: sErr }, rk] = comboIds.length
+      ? await Promise.all([
+          this.sb.from("scores").select("*").in("combination_id", comboIds),
+          this.sb.from("risks").select("*").in("combination_id", comboIds),
+        ])
+      : [empty, empty];
     if (sErr) throw sErr;
+    if (rk.error) throw rk.error;
 
     const riskByCombo = Object.fromEntries(rk.data.map((x) => [x.combination_id, x]));
     const evals = {};
@@ -135,6 +152,22 @@ class SupabaseRepo {
       role: m.role, userId: m.user_id, linked: !!m.user_id,
     }));
 
+    // ما حُمّل هو ما على الخادم: المزامنة الأولى لا تعيد إرساله
+    this.synced = {};
+    services.forEach((x) => this._changed(`services|${x.id}`, [x.ar, x.en || null]));
+    segments.forEach((x) => this._changed(`segments|${x.id}`, [x.ar, x.en || null]));
+    criteria.forEach((x) => this._changed(`criteria|${x.id}`, [x.w, x.ar, x.en || null, x.g || null]));
+    // التقييمات الموجودة فعلاً فقط؛ الافتراضية التي لا صف لها تُرسل في أول مزامنة كما كانت
+    const comboKeyById = Object.fromEntries(Object.entries(this.comboIdByKey).map(([k, id]) => [id, k]));
+    for (const sc of scores) {
+      const key = comboKeyById[sc.combination_id], code = critCodeById[sc.criterion_id];
+      if (key && code) this._changed(`scores|${key}|${code}`, [sc.score, sc.confidence, sc.evidence || null]);
+    }
+    for (const r of rk.data) {
+      const key = comboKeyById[r.combination_id];
+      if (key) this._changed(`risks|${key}`, [r.risk_score, r.note || null]);
+    }
+
     return { project, services, segments, criteria, evals, audit, team };
   }
 
@@ -163,16 +196,36 @@ class SupabaseRepo {
     return { ok: true };
   }
 
-  /** مزامنة شاملة (Debounced من الواجهة): بنية + أوزان + تركيبات + تقييمات + مخاطر */
-  async syncAll({ services, segments, criteria, evals }) {
+  /**
+   * مزامنة شاملة (Debounced من الواجهة): بنية + أوزان + تركيبات + تقييمات + مخاطر.
+   * مزامنة واحدة فقط في كل لحظة: ما يصل أثناء الجارية ينتظرها، ويبقى منه الأحدث.
+   * بدون ذلك تتداخل مزامنتان إن طالت الأولى أكثر من مهلة التأجيل، فتُدرج الصفوف مرتين.
+   */
+  syncAll(state) {
+    this._pending = state;
+    if (!this._running) {
+      this._running = (async () => {
+        while (this._pending) {
+          const next = this._pending;
+          this._pending = null;
+          await this._syncOnce(next);
+        }
+      })().finally(() => { this._running = null; });
+    }
+    return this._running;
+  }
+
+  async _syncOnce({ services, segments, criteria, evals }) {
     if (!this.projectId) return;
     const pid = this.projectId;
 
     // 1) الخدمات: تحديث الموجود، إضافة الجديد، حذف المُزال من الواجهة
     for (const s of services) {
       if (this.serviceIdByCode[s.id]) {
-        await this.sb.from("services").update({ name_ar: s.ar, name_en: s.en || null })
+        if (!this._changed(`services|${s.id}`, [s.ar, s.en || null])) continue;
+        const { error } = await this.sb.from("services").update({ name_ar: s.ar, name_en: s.en || null })
           .eq("project_id", pid).eq("code", s.id);
+        if (error) delete this.synced[`services|${s.id}`]; // يُعاد في المزامنة التالية
       } else {
         const { data, error } = await this.sb.from("services")
           .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
@@ -185,14 +238,17 @@ class SupabaseRepo {
       if (!currentSvcCodes.has(code)) {
         await this.sb.from("services").delete().eq("id", this.serviceIdByCode[code]);
         delete this.serviceIdByCode[code];
+        delete this.synced[`services|${code}`];
       }
     }
 
     // 2) الشرائح: نفس المنطق
     for (const s of segments) {
       if (this.segmentIdByCode[s.id]) {
-        await this.sb.from("segments").update({ name_ar: s.ar, name_en: s.en || null })
+        if (!this._changed(`segments|${s.id}`, [s.ar, s.en || null])) continue;
+        const { error } = await this.sb.from("segments").update({ name_ar: s.ar, name_en: s.en || null })
           .eq("project_id", pid).eq("code", s.id);
+        if (error) delete this.synced[`segments|${s.id}`]; // يُعاد في المزامنة التالية
       } else {
         const { data, error } = await this.sb.from("segments")
           .insert({ project_id: pid, code: s.id, name_ar: s.ar, name_en: s.en || null, sort: 99 })
@@ -205,14 +261,17 @@ class SupabaseRepo {
       if (!currentSegCodes.has(code)) {
         await this.sb.from("segments").delete().eq("id", this.segmentIdByCode[code]);
         delete this.segmentIdByCode[code];
+        delete this.synced[`segments|${code}`];
       }
     }
 
     // 2) المعايير: تحديث الموجود، وإضافة الجديد فعلياً (ضروري للمشاريع الفارغة الجديدة)
     for (const c of criteria) {
       if (this.critIdByCode[c.id]) {
-        await this.sb.from("criteria").update({ weight: c.w, name_ar: c.ar, name_en: c.en || null, grp: c.g || null })
+        if (!this._changed(`criteria|${c.id}`, [c.w, c.ar, c.en || null, c.g || null])) continue;
+        const { error } = await this.sb.from("criteria").update({ weight: c.w, name_ar: c.ar, name_en: c.en || null, grp: c.g || null })
           .eq("project_id", pid).eq("code", c.id);
+        if (error) delete this.synced[`criteria|${c.id}`]; // يُعاد في المزامنة التالية
       } else {
         const { data, error } = await this.sb.from("criteria")
           .insert({ project_id: pid, code: c.id, name_ar: c.ar, name_en: c.en || null, grp: c.g || null, weight: c.w, sort: 99 })
@@ -225,6 +284,7 @@ class SupabaseRepo {
       if (!currentCritCodes.has(code)) {
         await this.sb.from("criteria").delete().eq("id", this.critIdByCode[code]);
         delete this.critIdByCode[code];
+        delete this.synced[`criteria|${code}`];
       }
     }
 
@@ -246,18 +306,23 @@ class SupabaseRepo {
       if (!activeKeys.has(key)) {
         await this.sb.from("combinations").update({ active: false }).eq("id", comboId);
         delete this.comboIdByKey[key];
+        // إن عادت التركيبة لاحقاً تُرسل تقييماتها كاملة
+        for (const k of Object.keys(this.synced))
+          if (k.startsWith(`scores|${key}|`) || k === `risks|${key}`) delete this.synced[k];
       }
     }
 
     // 4) التقييمات والمخاطر (Upsert دفعة واحدة)
-    const scoreRows = [];
-    const riskRows = [];
+    const scoreRows = [], scoreKeys = [];
+    const riskRows = [], riskKeys = [];
     for (const [key, ev] of Object.entries(evals)) {
       const comboId = this.comboIdByKey[key];
       if (!comboId) continue;
       criteria.forEach((c, i) => {
         const critId = this.critIdByCode[c.id];
         if (!critId) return;
+        if (!this._changed(`scores|${key}|${c.id}`, [ev.scores[i], ev.conf[i], ev.evidence[c.id] || null])) return;
+        scoreKeys.push(`scores|${key}|${c.id}`);
         scoreRows.push({
           combination_id: comboId,
           criterion_id: critId,
@@ -266,12 +331,19 @@ class SupabaseRepo {
           evidence: ev.evidence[c.id] || null,
         });
       });
+      if (!this._changed(`risks|${key}`, [ev.risk, ev.riskNote || null])) continue;
+      riskKeys.push(`risks|${key}`);
       riskRows.push({ combination_id: comboId, risk_score: ev.risk, note: ev.riskNote || null });
     }
-    if (scoreRows.length)
-      await this.sb.from("scores").upsert(scoreRows, { onConflict: "combination_id,criterion_id" });
-    if (riskRows.length)
-      await this.sb.from("risks").upsert(riskRows, { onConflict: "combination_id" });
+    // عند الفشل تُنسى القيم المرسلة، فتُعاد في المزامنة التالية
+    if (scoreRows.length) {
+      const { error } = await this.sb.from("scores").upsert(scoreRows, { onConflict: "combination_id,criterion_id" });
+      if (error) scoreKeys.forEach((k) => delete this.synced[k]);
+    }
+    if (riskRows.length) {
+      const { error } = await this.sb.from("risks").upsert(riskRows, { onConflict: "combination_id" });
+      if (error) riskKeys.forEach((k) => delete this.synced[k]);
+    }
   }
 
   /** نسخ بنية مشروع (خدمات، شرائح، معايير فقط — بلا تقييمات) كقالب لمشروع جديد */

@@ -1,5 +1,5 @@
 /* SSPDF Service Worker — عمل كامل دون إنترنت بعد أول زيارة */
-const CACHE = "sspdf-v1";
+const CACHE = "sspdf-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {
