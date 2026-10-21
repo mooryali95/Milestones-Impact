@@ -1,0 +1,300 @@
+// ════════════════════════════════════════════════════════════════
+// الرحلة: ملف الكفاءة 3×3 ومراحل البرنامج بقوائم تحققها
+// ════════════════════════════════════════════════════════════════
+// كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
+// من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
+import React, { useEffect, useState } from 'react';
+import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
+import { call, uploadFile } from '../api.js';
+import { DIMENSIONS, dimOf, levelOf, PHASES, REQ_STATUS } from '../labels.js';
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Mac/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows';
+  return 'جهاز';
+}
+
+function Ring({ value }) {
+  const r = 46, c = 2 * Math.PI * r;
+  return (
+    <div className="ring" aria-label={`نسبة التقدم ${value}%`}>
+      <svg width="104" height="104" viewBox="0 0 104 104">
+        <circle cx="52" cy="52" r={r} fill="none" stroke="rgba(234,240,240,.15)" strokeWidth="8" />
+        <circle cx="52" cy="52" r={r} fill="none" stroke="#C79A4B" strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} style={{ transition: 'stroke-dashoffset .6s' }} />
+      </svg>
+      <b>{value}%</b>
+    </div>
+  );
+}
+
+function PasskeyBanner({ onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (!browserSupportsWebAuthn()) return null;
+  const setup = async () => {
+    setBusy(true); setError('');
+    const opt = await call('passkey.register-options');
+    if (!opt.success) { setBusy(false); return setError(opt.message); }
+    let response;
+    try { response = await startRegistration({ optionsJSON: opt.options }); }
+    catch { setBusy(false); return setError('لم يكتمل الإعداد. يمكنك المحاولة لاحقًا.'); }
+    const res = await call('passkey.register-verify', { response, label: deviceLabel() });
+    setBusy(false);
+    if (res.success) onDone('set'); else setError(res.message);
+  };
+  const later = async () => { await call('passkey.dismiss'); onDone('dismissed'); };
+  return (
+    <div className="banner mist">
+      <span className="ico">🔐</span>
+      <div className="grow">
+        <b>ادخل المرة القادمة ببصمتك أو وجهك</b>
+        <p className="small muted">مفتاح المرور أسرع وأأمن من رمز البريد، ويبقى على جهازك فقط.</p>
+        {error && <p className="small" style={{ color: 'var(--bad)' }}>{error}</p>}
+      </div>
+      <div className="row">
+        <button className="btn sm" onClick={setup} disabled={busy}>{busy ? 'لحظة…' : 'فعّله الآن'}</button>
+        <button className="link small" onClick={later}>لاحقًا</button>
+      </div>
+    </div>
+  );
+}
+
+function Competency({ profile }) {
+  return (
+    <div className="matrix">
+      {DIMENSIONS.map((d) => {
+        const x = profile.dimensions.find((y) => y.dimension === d.key);
+        const lvl = levelOf(x?.level);
+        return (
+          <div key={d.key} className={`dim ${d.key}`}>
+            <div className="row between">
+              <span className="en">{d.short.toUpperCase()}</span>
+              {x?.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
+            </div>
+            <h3>{d.title}</h3>
+            <div className="steps">{[1, 2, 3].map((s) => <div key={s} className={s <= lvl.step ? 'on' : ''} />)}</div>
+            <div className="lvl">{lvl.title}</div>
+            {x?.path && <p className="small"><b>مسارك:</b> {x.path}</p>}
+            {x?.description && <p className="small muted">{x.description}</p>}
+            {x?.note && <p className="small alert info">ملاحظة المستشار: {x.note}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const AUTO_HINT = {
+  'P-INFO': 'يكتمل بحفظ بياناتك الأساسية.',
+  'P-CV': 'يكتمل برفع سيرتك من ملفك الشخصي.',
+  'A-DONE': 'يكتمل بإرسال إجابات القياس.',
+  'AP-OK': 'يراجع المستشار نتيجتك ويعتمد مسارك، ويصلك بريد بذلك.',
+  'E-POST': 'يُفتح القياس البعدي في نهاية الدعم.',
+  'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
+};
+
+function Requirement({ item, open, onUpdate, onEditProfile, setToast }) {
+  const [busy, setBusy] = useState(false);
+  const act = async (extra) => {
+    setBusy(true);
+    const res = await call('requirement.update', { requirement_id: item.id, ...extra });
+    setBusy(false);
+    if (res.success) {
+      onUpdate(res);
+      if (!extra.undo) setToast(item.needs_review ? 'أُرسل للمستشار للمراجعة' : 'أحسنت، خطوة منجزة');
+    } else setToast(res.message);
+  };
+  const pick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    const up = await uploadFile(file, 'evidence');
+    setBusy(false);
+    if (!up.success) return setToast(up.message);
+    act({ evidence_path: up.path });
+  };
+
+  const sys = item.auto || item.kind === 'meeting';
+  const canAct = open && !sys && (item.status === 'pending' || item.status === 'returned' || (item.status === 'done' && !item.needs_review));
+  const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
+
+  return (
+    <li className={`item ${item.status}`}>
+      <span className="box" aria-hidden="true">{mark}</span>
+      <div className="grow">
+        <div className="row between">
+          <span className="t">{item.title_ar}{!item.required && <span className="muted small"> (اختياري)</span>}</span>
+          {item.status !== 'pending' && (
+            <span className={`chip ${item.status === 'done' ? 'ok' : item.status === 'returned' ? 'bad' : 'warn'}`}>{REQ_STATUS[item.status]}</span>
+          )}
+        </div>
+        {item.help_ar && <p className="h">{item.help_ar}</p>}
+        {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
+        {sys && item.status !== 'done' && (
+          <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
+            {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
+          </p>
+        )}
+        {canAct && item.status !== 'done' && (
+          <div className="actions">
+            {item.kind === 'upload' ? (
+              <label className="btn sm" style={{ cursor: 'pointer' }}>
+                {busy ? 'جارٍ الرفع…' : 'ارفع الملف'}
+                <input type="file" className="sr" accept=".pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg" onChange={pick} disabled={busy} />
+              </label>
+            ) : (
+              <button className="btn sm" disabled={busy} onClick={() => act({})}>
+                {item.needs_review ? 'أنجزته، أرسله للمراجعة' : 'أنجزته'}
+              </button>
+            )}
+          </div>
+        )}
+        {canAct && item.status === 'done' && item.kind !== 'upload' && (
+          <div className="actions"><button className="link small" disabled={busy} onClick={() => act({ undo: true })}>تراجع</button></div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function Stage({ stage, n, expanded, onToggle, ...rest }) {
+  const locked = stage.status === 'locked';
+  const chip = stage.status === 'done' ? <span className="chip ok">مكتملة</span>
+    : stage.status === 'active' ? <span className="chip gold">الحالية</span>
+      : <span className="chip">مقفلة</span>;
+  return (
+    <div className={`stage ${stage.status}${expanded ? ' open' : ''}`}>
+      <span className="dot">{stage.status === 'done' ? '✓' : n}</span>
+      <div className="stage-card">
+        <button className="stage-top" onClick={onToggle} aria-expanded={expanded}>
+          <div className="grow">
+            <h4>{stage.title_ar}</h4>
+            <div className="meta">{stage.duration_label}{stage.total ? ` · ${stage.done} من ${stage.total}` : ''}</div>
+          </div>
+          {chip}
+          <span className="chev" aria-hidden="true">⌄</span>
+        </button>
+        {expanded && (
+          <div className="stage-body">
+            {stage.description_ar && <p style={{ marginTop: 14 }}>{stage.description_ar}</p>}
+            {(stage.activities_ar || stage.outcome_ar) && (
+              <div className="blocks">
+                {stage.activities_ar && <div className="blk"><b>ماذا يتم</b>{stage.activities_ar}</div>}
+                {stage.outcome_ar && <div className="blk"><b>ما تخرج به</b>{stage.outcome_ar}</div>}
+              </div>
+            )}
+            {stage.items.length > 0 && (
+              <ul className="checklist" style={{ marginTop: 12 }}>
+                {stage.items.map((it) => <Requirement key={it.id} item={it} open={!locked} {...rest} />)}
+              </ul>
+            )}
+            {locked && <p className="small muted" style={{ marginTop: 10 }}>تُفتح هذه المرحلة بعد إكمال ما قبلها.</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function Journey({ me, onUpdate, onEditProfile }) {
+  const { journey, profile, participant } = me;
+  const current = journey.find((s) => s.status === 'active');
+  const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
+  const [toast, setToast] = useState('');
+  const [passkey, setPasskey] = useState(me.prompt_passkey);
+  const approved = !!profile?.approved;
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(''), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const toggle = (key) => setExpanded((s) => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
+
+  const firstName = participant.full_name.split(' ')[0];
+  const doneCount = journey.filter((s) => s.status === 'done').length;
+  let order = 0;
+
+  return (
+    <div className="page">
+      <section className="hero">
+        <div className="stack">
+          <p className="eyebrow">رحلتك القيادية</p>
+          <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
+          <p className="muted">
+            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {journey.length} مراحل</>
+              : 'أكملت الرحلة كاملة. أثرك الآن موثّق.'}
+          </p>
+          <div className="row"><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={onEditProfile}>ملفي الشخصي</button></div>
+        </div>
+        <Ring value={me.progress} />
+      </section>
+
+      {!approved && profile && (
+        <div className="banner gold">
+          <span className="ico">⏳</span>
+          <div className="grow">
+            <b>نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن</b>
+            <p className="small">بعد اعتماد مسارك في الأبعاد الثلاثة يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.</p>
+          </div>
+        </div>
+      )}
+      {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
+
+      {profile && (
+        <>
+          <div className="section-title">
+            <h2>ملف كفاءتك</h2>
+            <span className="small muted">مستواك في كل بُعد مستقل عن غيره</span>
+          </div>
+          <Competency profile={profile} />
+        </>
+      )}
+
+      <div className="section-title">
+        <h2>مراحل الرحلة</h2>
+        <span className="small muted">{me.progress}% من الرحلة</span>
+      </div>
+      {PHASES.map((ph) => {
+        const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+        if (!stages.length) return null;
+        return (
+          <div className="phase" key={ph.key}>
+            <div className="phase-head"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
+            <div className="timeline">
+              {stages.map((s) => {
+                order += 1;
+                return (
+                  <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                    onUpdate={onUpdate} onEditProfile={onEditProfile} setToast={setToast} />
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="section-title"><h2>كتيبك الشخصي</h2></div>
+      <div className="card row between">
+        <div>
+          <b>كتيب مصمم على مستواك في الأبعاد الثلاثة</b>
+          <p className="small muted">{approved ? 'يُفتح للقراءة داخل المنصة مع بدء مرحلة التدريب.' : 'يُفتح بعد اعتماد مسارك.'}</p>
+        </div>
+        <span className="chip">🔒 {approved ? 'قريبًا' : 'مقفل'}</span>
+      </div>
+
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
+  );
+}
