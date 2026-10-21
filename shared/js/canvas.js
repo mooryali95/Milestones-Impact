@@ -5,11 +5,17 @@
    - متجاوبة مع حجم الشاشة
    - تقلل عدد النقاط على الجوال للأداء
    - تستخدم DPR للجودة على شاشات الـ Retina
+   - تتوقف حين تخرج من الشاشة أو يُخفى التبويب، وتسكن لمن يطلب حركة أقل
    ════════════════════════════════════════════════════════════════════ */
 
 (function initHeroCanvas() {
   const canvas = document.getElementById('heroCanvas');
   if (!canvas) return;
+
+  // من طلب حركة أقل يرى رسماً ساكناً واحداً بلا حلقة
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // سقف للنقاط: الرسم يقارن كل زوج، فالكلفة تتضاعف مع مربع العدد
+  const MAX_NODES = 90;
 
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -28,7 +34,8 @@
     // Adaptive density — fewer nodes on mobile for performance
     const isMobile = window.innerWidth < 768;
     const divisor = isMobile ? 50000 : 30000;
-    const count = Math.floor((width * height) / divisor);
+    // المساحة بالبكسل المنطقي لا الفعلي، وإلا ضاعفت شاشات Retina العدد أربعاً
+    const count = Math.min(MAX_NODES, Math.floor((width * height) / (dpr * dpr) / divisor));
 
     for (let i = 0; i < count; i++) {
       nodes.push({
@@ -42,7 +49,10 @@
     }
   }
 
-  function animate() {
+  let rafId = 0;
+  let onScreen = true;
+
+  function frame() {
     ctx.clearRect(0, 0, width, height);
     const maxDist = 180 * dpr;
 
@@ -92,13 +102,39 @@
       }
     });
 
-    requestAnimationFrame(animate);
+  }
+
+  function loop() {
+    frame();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (reduceMotion || rafId || !onScreen || document.hidden) return;
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function stop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
   }
 
   // Initialize
   resize();
   initNodes();
-  animate();
+  frame();
+  start();
+
+  // لا رسم والقسم خارج الشاشة أو التبويب مخفي: يوفر المعالج والبطارية
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(entries => {
+      onScreen = entries[0].isIntersecting;
+      onScreen ? start() : stop();
+    }).observe(canvas);
+  }
+  document.addEventListener('visibilitychange', () => {
+    document.hidden ? stop() : start();
+  });
 
   // Handle resize (debounced)
   let resizeTimer;
@@ -107,6 +143,7 @@
     resizeTimer = setTimeout(() => {
       resize();
       initNodes();
+      frame();
     }, 200);
   });
 })();
