@@ -48,7 +48,26 @@ update leaders.journey_stages set sort = 7 where key = 'leadership_coaching';
 update leaders.journey_stages set sort = 8 where key = 'support';
 update leaders.journey_stages set sort = 9 where key = 'evaluation';
 
-alter table leaders.journey_stages add column if not exists active boolean not null default true;
+-- كل ما يظهر للمشارك في بطاقة المرحلة يُحرَّر من اللوحة: الاسم، المدة،
+-- ماذا يحدث فيها، وماذا يخرج منها، والترتيب والتفعيل.
+alter table leaders.journey_stages add column if not exists active        boolean not null default true;
+alter table leaders.journey_stages add column if not exists activities_ar text;   -- ماذا يتم في المرحلة
+alter table leaders.journey_stages add column if not exists outcome_ar    text;   -- الإنجاز المتوقع منها
+alter table leaders.journey_stages add column if not exists phase         text check (phase in ('admission', 'qualification', 'impact'));
+
+update leaders.journey_stages set phase = 'admission'     where key in ('profile', 'assessment', 'approval') and phase is null;
+update leaders.journey_stages set phase = 'qualification' where key in ('training', 'ojt_coaching', 'consulting', 'leadership_coaching') and phase is null;
+update leaders.journey_stages set phase = 'impact'        where key in ('support', 'evaluation', 'report') and phase is null;
+
+update leaders.journey_stages set outcome_ar = v.o from (values
+  ('training',            'فهم الأطر الثلاثة بعمق يناسب مستواك'),
+  ('ojt_coaching',        'سجل معالم وسجل منافع لمشروع حقيقي من عملك'),
+  ('consulting',          'توصيات متخصصة لمشروعك'),
+  ('leadership_coaching', 'خطة تطوير قيادي شخصية'),
+  ('support',             'تطبيق مستقل بمتابعة الموجّه'),
+  ('evaluation',          'قياس التطور في الأبعاد الثلاثة'),
+  ('report',              'تقرير نهائي لك أو لجهتك')
+) as v(k, o) where key = v.k and outcome_ar is null;
 
 -- تقدّم المشارك في كل مرحلة
 create table if not exists leaders.participant_stages (
