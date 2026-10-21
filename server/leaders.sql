@@ -65,23 +65,18 @@ insert into leaders.levels (key, title_ar, title_en, sort) values
   ('advanced',     'متقدم',  'Advanced',     3)
 on conflict (key) do nothing;
 
--- الخلايا التسع: وصف كل خلية وحدود درجتها. الحدود تحدد المستوى
--- آليًا من نتيجة القياس، وتُعدَّل من لوحة الإدارة لا من الكود.
+-- الخلايا التسع: وصف كل خلية. قواعد تحديد المستوى في level_rules
+-- (الترحيل الثاني)، وتُعدَّل من لوحة الإدارة لا من الكود.
 create table if not exists leaders.grid_cells (
   dimension      text not null references leaders.dimensions(key),
   level          text not null references leaders.levels(key),
   description_ar text,
-  min_score      numeric(5,2),          -- من 0 إلى 100، شامل
-  max_score      numeric(5,2),          -- شامل
   updated_at     timestamptz not null default now(),
-  primary key (dimension, level),
-  check (min_score is null or max_score is null or min_score <= max_score)
+  primary key (dimension, level)
 );
 
-insert into leaders.grid_cells (dimension, level, min_score, max_score)
-select d.key, l.key,
-       case l.key when 'beginner' then 0 when 'intermediate' then 40 else 70 end,
-       case l.key when 'beginner' then 39.99 when 'intermediate' then 69.99 else 100 end
+insert into leaders.grid_cells (dimension, level)
+select d.key, l.key
 from leaders.dimensions d cross join leaders.levels l
 on conflict (dimension, level) do nothing;
 
