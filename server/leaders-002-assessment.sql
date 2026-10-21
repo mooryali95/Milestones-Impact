@@ -73,17 +73,17 @@ create table if not exists leaders.journey_stages (
   description_ar text
 );
 
-insert into leaders.journey_stages values ('training', 1, 'التدريب', '4 أيام تدريبية', 4, 'أيام تدريبية مكثفة على الأطر الثلاثة بعمق يناسب مستوى المشارك في كل بُعد.')
+insert into leaders.journey_stages values ('training', 4, 'التدريب', '4 أيام تدريبية', 4, 'أيام تدريبية مكثفة على الأطر الثلاثة بعمق يناسب مستوى المشارك في كل بُعد.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
-insert into leaders.journey_stages values ('ojt_coaching', 2, 'التوجيه على رأس العمل', '4 أسابيع', 28, 'تطبيق أدوات الإطار على مشروع حقيقي من عمل المشارك بمتابعة الموجّه.')
+insert into leaders.journey_stages values ('ojt_coaching', 5, 'التوجيه على رأس العمل', '4 أسابيع', 28, 'تطبيق أدوات الإطار على مشروع حقيقي من عمل المشارك بمتابعة الموجّه.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
-insert into leaders.journey_stages values ('consulting', 3, 'الاستشارة', 'أسبوعان', 14, 'جلسة استشارية متخصصة مرتبطة بمشروعات المشارك.')
+insert into leaders.journey_stages values ('consulting', 6, 'الاستشارة', 'أسبوعان', 14, 'جلسة استشارية متخصصة مرتبطة بمشروعات المشارك.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
-insert into leaders.journey_stages values ('leadership_coaching', 4, 'التوجيه القيادي', '4 أسابيع', 28, 'جلسات توجيه فردية لدعم المسار القيادي وخطة التطوير الذاتي.')
+insert into leaders.journey_stages values ('leadership_coaching', 7, 'التوجيه القيادي', '4 أسابيع', 28, 'جلسات توجيه فردية لدعم المسار القيادي وخطة التطوير الذاتي.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
-insert into leaders.journey_stages values ('support', 5, 'الدعم والتمكين', '3 أشهر', 90, 'دعم فني وتقني مستمر عبر المنصة حتى استقلال المشارك.')
+insert into leaders.journey_stages values ('support', 8, 'الدعم والتمكين', '3 أشهر', 90, 'دعم فني وتقني مستمر عبر المنصة حتى استقلال المشارك.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
-insert into leaders.journey_stages values ('evaluation', 6, 'التقييم والقياس', 'أسبوعان', 14, 'القياس البعدي والتقييم النهائي وإصدار التقرير للمشارك أو جهته.')
+insert into leaders.journey_stages values ('evaluation', 9, 'التقييم والقياس', 'أسبوعان', 14, 'القياس البعدي والتقييم النهائي وإصدار التقرير للمشارك أو جهته.')
   on conflict (key) do update set sort = excluded.sort, title_ar = excluded.title_ar, duration_label = excluded.duration_label, duration_days = excluded.duration_days, description_ar = excluded.description_ar;
 
 alter table leaders.step_catalog add column if not exists stage_key text references leaders.journey_stages(key);
