@@ -1641,10 +1641,18 @@ async function handleSettingsConfirmTotp() {
   showToast('✅ تم تفعيل TOTP');
 }
 
+// تغيير TOTP المفعّل أو تعطيله يطلب رمزه الحالي، فلا تكفي جلسة مسروقة لإزالته.
+function currentTotpCode() {
+  const code = (prompt('أدخل الرمز الحالي من تطبيق المصادقة (6 أرقام)') || '').trim();
+  if (!/^\d{6}$/.test(code)) { if (code) showToast('❌ الرمز 6 أرقام'); return ''; }
+  return code;
+}
+
 async function handleResetTotp() {
   if (!confirm('سيتم توليد رمز QR جديد — التطبيق القديم لن يعمل. متابعة؟')) return;
   const email = settingsUser?.email; if (!email) return;
-  const d = await callAuth({ action: 'reset-totp', email });
+  const code = currentTotpCode(); if (!code) return;
+  const d = await callAuth({ action: 'reset-totp', email, code });
   if (!d.success) { showToast('❌ ' + d.message); return; }
   document.getElementById('settingsQrSecret').textContent = d.secret;
   drawQR(d.uri, 'settingsQrCanvas');
@@ -1655,7 +1663,8 @@ async function handleResetTotp() {
 async function handleDisableTotp() {
   if (!confirm('سيتم تعطيل TOTP. ستعتمد على OTP البريد فقط. متابعة؟')) return;
   const email = settingsUser?.email; if (!email) return;
-  const d = await callAuth({ action: 'disable-totp', email });
+  const code = currentTotpCode(); if (!code) return;
+  const d = await callAuth({ action: 'disable-totp', email, code });
   if (!d.success) { showToast('❌ ' + d.message); return; }
   const session = Session.load();
   if (session) { session.user.totp_enabled = false; Session.save(session.token, session.user); }
