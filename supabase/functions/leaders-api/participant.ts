@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle,
 } from './logic.js';
 
@@ -446,14 +446,46 @@ async function approvedLevels(p: any) {
   return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
 }
 
+// نقاط المشارك ولقبه من سجل النقاط
+export async function pointsOf(participantId: string) {
+  const rows = must(await db.from('points_ledger').select('source, ref_id, points, note, created_at')
+    .eq('participant_id', participantId).order('created_at', { ascending: false })) ?? [];
+  const total = rows.reduce((a: number, r: any) => a + (r.points || 0), 0);
+  return { total, rank: rankFor(total), ledger: rows };
+}
+
+// يمنح النقاط مرة واحدة لكل إنجاز (قيد فريد على المصدر والمرجع)
+async function award(participantId: string, source: string, refId: string, points: number, note: string) {
+  if (!points) return 0;
+  const { error } = await db.from('points_ledger').insert({ participant_id: participantId, source, ref_id: refId, points, note });
+  return error ? 0 : points;
+}
+
 export async function handbookToc(p: any) {
   const levels = await approvedLevels(p);
-  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) ?? [];
+  const [mods, prog, models, subs, pts] = await Promise.all([
+    db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md, quiz_md'),
+    db.from('handbook_progress').select('module_id, quiz_score, quiz_total, completed_at').eq('participant_id', p.id),
+    db.from('learning_models').select('id, dimension, sort, min_level, active, points'),
+    db.from('model_submissions').select('model_id, status').eq('participant_id', p.id),
+    pointsOf(p.id),
+  ]);
+  const chapters = handbookModulesFor(must(mods) ?? [], levels);
+  const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
+  const mine = modelsFor(models.data || [], levels);
+  const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
     success: true,
     level: overallLevel(levels),
     track: trackView(await trackFor(levels), 'participant'),
-    chapters: handbookModulesFor(mods, levels).map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar })),
+    chapters: chapters.map((m: any) => ({
+      id: m.id, dimension: m.dimension, title: m.title_ar, quiz: parseQuiz(m.quiz_md).length,
+      done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
+    })),
+    models: { total: mine.length, submitted: mine.filter((m: any) => submitted.has(m.id)).length,
+      points: mine.reduce((a: number, m: any) => a + (m.points || 0), 0) },
+    points: { total: pts.total, rank: pts.rank },
+    name: p.full_name,
   };
 }
 
@@ -466,9 +498,89 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   const m = must(await db.from('handbook_modules').select('*').eq('id', String(b.id)).maybeSingle());
   if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
   await db.from('handbook_views').insert({ participant_id: p.id, module_id: m.id, ip: ctx.ip, user_agent: ctx.ua });
+  const { data: done } = await db.from('handbook_progress').select('*').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   return {
     success: true,
     chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) },
+    // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
+    quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),
+    reflection: m.reflection_ar || '',
+    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
   };
+}
+
+// إتمام الباب: يصحح الاختبار، ويحفظ التأمل، ويمنح النقاط أول مرة فقط
+export async function handbookComplete(p: any, b: Body) {
+  const levels = await approvedLevels(p);
+  const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md, quiz_md, title_ar').eq('id', String(b.id)).maybeSingle());
+  if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
+  const quiz = parseQuiz(m.quiz_md);
+  const g = gradeQuiz(quiz, b.answers);
+  if (quiz.length && (!Array.isArray(b.answers) || b.answers.length < quiz.length || b.answers.some((x: any) => x === null || x === undefined))) {
+    throw new Fail('أجب عن كل الأسئلة أولًا');
+  }
+  const reflection = String(b.reflection || '').trim().slice(0, 4000) || null;
+  const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
+  // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
+  if (prev) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
+  else must(await db.from('handbook_progress').insert({ participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection }));
+  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
+  const pts = await pointsOf(p.id);
+  return { success: true, ...g, first: !prev, counted: prev || { quiz_score: g.score, quiz_total: g.total }, gained, points: { total: pts.total, rank: pts.rank } };
+}
+
+// ── 8. النماذج التعليمية ──
+async function myModel(p: any, id: unknown) {
+  const levels = await approvedLevels(p);
+  const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
+  if (!m || !modelsFor([m], levels).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
+  return m;
+}
+
+export async function modelsList(p: any) {
+  const levels = await approvedLevels(p);
+  const [models, subs, pts] = await Promise.all([
+    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active'),
+    db.from('model_submissions').select('model_id, status, rating, bonus, submitted_at, updated_at').eq('participant_id', p.id),
+    pointsOf(p.id),
+  ]);
+  const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
+  return {
+    success: true,
+    models: modelsFor(must(models) ?? [], levels).map((m: any) => ({ ...m, submission: by[m.id] || null })),
+    points: { total: pts.total, rank: pts.rank },
+  };
+}
+
+export async function modelGet(p: any, b: Body) {
+  const m = await myModel(p, b.id);
+  const { data: sub } = await db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
+  return { success: true, model: m, submission: sub || null };
+}
+
+// حفظ مسودة أو تسليم نهائي؛ التسليم يمنح نقاط النموذج مرة واحدة
+export async function modelSave(p: any, b: Body) {
+  const m = await myModel(p, b.id);
+  const answers = cleanAnswers(m.fields, b.answers);
+  const { data: prev } = await db.from('model_submissions').select('id, status').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
+  if (prev?.status === 'reviewed') throw new Fail('قُيّم هذا النموذج ولا يمكن تعديله');
+  const submit = !!b.submit;
+  if (submit) {
+    const missing = missingFields(m.fields, answers);
+    if (missing.length) throw new Fail(`أكمل قبل التسليم: ${missing.join('، ')}`, 400, 'incomplete');
+  }
+  const row: Body = { participant_id: p.id, model_id: m.id, answers, updated_at: new Date().toISOString() };
+  if (submit) Object.assign(row, { status: 'submitted', submitted_at: new Date().toISOString() });
+  else if (!prev) row.status = 'draft';
+  const saved = must(await db.from('model_submissions').upsert(row, { onConflict: 'participant_id,model_id' }).select('*').single());
+  const gained = submit ? await award(p.id, 'model', m.id, m.points, m.title_ar) : 0;
+  const pts = await pointsOf(p.id);
+  return { success: true, submission: saved, gained, points: { total: pts.total, rank: pts.rank } };
+}
+
+export async function achievements(p: any) {
+  await approvedLevels(p);
+  const pts = await pointsOf(p.id);
+  return { success: true, ...pts };
 }

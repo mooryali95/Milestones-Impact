@@ -235,3 +235,89 @@ export function filterHandbookMd(md, level) {
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
+
+// ── الكتاب التفاعلي: الاختبارات والنقاط ──
+// صيغة الاختبار في quiz_md:
+//   س: نص السؤال
+//   - خيار
+//   * الخيار الصحيح
+//   لماذا: شرح يظهر بعد الإجابة
+export function parseQuiz(md) {
+  const qs = [];
+  let cur = null;
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trim();
+    let m;
+    if ((m = line.match(/^س\s*[:：]\s*(.+)$/))) { cur = { q: m[1].trim(), options: [], answer: -1, why: '' }; qs.push(cur); }
+    else if (cur && (m = line.match(/^([-*])\s+(.+)$/))) {
+      if (m[1] === '*') cur.answer = cur.options.length;
+      cur.options.push(m[2].trim());
+    } else if (cur && (m = line.match(/^لماذا\s*[:：]\s*(.+)$/))) cur.why = m[1].trim();
+  }
+  return qs.filter((q) => q.options.length >= 2 && q.answer >= 0);
+}
+
+export const POINTS = { chapter: 10, perCorrect: 5, reflection: 5 };
+
+// يصحح إجابات المشارك ويعيد النتيجة بلا كشف الإجابات قبل الإرسال
+export function gradeQuiz(quiz, answers) {
+  const list = Array.isArray(answers) ? answers : [];
+  const results = quiz.map((q, i) => ({ correct: Number(list[i]) === q.answer, answer: q.answer, why: q.why }));
+  return { score: results.filter((r) => r.correct).length, total: quiz.length, results };
+}
+
+export function chapterPoints(score, reflection) {
+  return POINTS.chapter + score * POINTS.perCorrect + (String(reflection || '').trim().length >= 20 ? POINTS.reflection : 0);
+}
+
+// ألقاب التقدم بحسب مجموع النقاط
+export const RANKS = [
+  { min: 0, title: 'مستكشف' },
+  { min: 75, title: 'ممارس' },
+  { min: 200, title: 'متمكّن' },
+  { min: 400, title: 'قائد أثر' },
+  { min: 650, title: 'سفير الأثر' },
+];
+export function rankFor(points) {
+  const i = RANKS.reduce((a, r, j) => (points >= r.min ? j : a), 0);
+  const next = RANKS[i + 1] || null;
+  return { title: RANKS[i].title, index: i, next: next ? { title: next.title, at: next.min, left: next.min - points } : null };
+}
+
+// النماذج التعليمية المتاحة بمستوى المشارك في كل بُعد
+export function modelsFor(models, levels) {
+  return models
+    .filter((m) => m.active !== false && levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level])
+    .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
+}
+
+// يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
+export function missingFields(fields, answers) {
+  const a = answers && typeof answers === 'object' ? answers : {};
+  const missing = [];
+  for (const f of fields || []) {
+    if (f.required === false) continue;
+    const v = a[f.key];
+    if (f.type === 'table') {
+      const rows = (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
+      if (rows.length < (f.min_rows || 1)) missing.push(`${f.label}: ${f.min_rows || 1} صفوف على الأقل`);
+    } else if (!String(v ?? '').trim()) missing.push(f.label);
+  }
+  return missing;
+}
+
+// يقلّم إجابات النموذج إلى حقوله فقط وبأطوال معقولة
+export function cleanAnswers(fields, answers) {
+  const a = answers && typeof answers === 'object' ? answers : {};
+  const out = {};
+  for (const f of fields || []) {
+    const v = a[f.key];
+    if (f.type === 'table') {
+      const cols = (f.columns || []).length || 1;
+      out[f.key] = (Array.isArray(v) ? v : []).slice(0, 40)
+        .map((r) => Array.from({ length: cols }, (_, i) => String((Array.isArray(r) ? r[i] : '') ?? '').slice(0, 600)));
+    } else if (f.type === 'select') out[f.key] = (f.options || []).includes(v) ? v : '';
+    else out[f.key] = String(v ?? '').slice(0, f.type === 'textarea' ? 4000 : 300);
+  }
+  return out;
+}

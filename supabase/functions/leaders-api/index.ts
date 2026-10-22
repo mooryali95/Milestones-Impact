@@ -10,7 +10,7 @@
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter
+//             handbook.toc · handbook.chapter · handbook.complete · models.list · models.get · models.save · achievements
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
@@ -42,6 +42,11 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'passkey.dismiss': (p) => P.passkeyDismiss(p),
   'handbook.toc': (p) => P.handbookToc(p),
   'handbook.chapter': (p, b, _s, ctx) => P.handbookChapter(p, b, ctx),
+  'handbook.complete': (p, b) => P.handbookComplete(p, b),
+  'models.list': (p) => P.modelsList(p),
+  'models.get': (p, b) => P.modelGet(p, b),
+  'models.save': (p, b) => P.modelSave(p, b),
+  'achievements': (p) => P.achievements(p),
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
@@ -60,6 +65,10 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),
   'admin.assign-org': A.assignOrg,
+  'admin.book-preview': (_a, b) => A.bookPreview(b),
+  'admin.submissions': (_a, b) => A.submissions(b),
+  'admin.submission': (_a, b) => A.submission(b),
+  'admin.review-submission': A.reviewSubmission,
   'admin.save': A.save,
   'admin.delete': A.remove,
   'admin.reorder': A.reorder,

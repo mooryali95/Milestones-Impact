@@ -10,6 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
+import { Models, Wins } from './Models.jsx';
 
 const FONT = '"Noto Kufi Arabic", "Noto Sans Arabic", system-ui, sans-serif';
 const COLORS = { text: '#0B272F', muted: '#4A6A72', accent: '#8E6524', quote: '#12414E', rule: 'rgba(11,39,47,.12)' };
@@ -172,43 +173,138 @@ function render(canvas, chapter, watermark, cssWidth) {
   ctx.restore();
 }
 
+const PART = { milestone: 'الجزء الأول', impact: 'الجزء الثاني', leadership: 'الجزء الثالث' };
+const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
+const pad = (n) => String(n).padStart(2, '0');
+
+// حلقة تقدم صغيرة
+function Ring({ value, total, size = 64 }) {
+  const r = (size - 8) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = total ? value / total : 0;
+  return (
+    <svg className="bring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      <circle cx={size / 2} cy={size / 2} r={r} className="bring-bg" />
+      <circle cx={size / 2} cy={size / 2} r={r} className="bring-fg" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} />
+    </svg>
+  );
+}
+
+// مراجعة الباب: سؤال تأمل واختبار قصير، والنقاط تُمنح أول مرة
+function Review({ data, onDone }) {
+  const [answers, setAnswers] = useState(() => data.quiz.map(() => null));
+  const [reflection, setReflection] = useState(data.done?.reflection || '');
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const ready = answers.every((x) => x !== null);
+  const potential = 10 + data.quiz.length * 5 + 5;
+
+  const submit = async () => {
+    setBusy(true); setError('');
+    const r = await call('handbook.complete', { id: data.chapter.id, answers, reflection });
+    setBusy(false);
+    if (!r.success) return setError(r.message);
+    setResult(r);
+    onDone(r);
+  };
+
+  return (
+    <section className="review">
+      <header className="review-head">
+        <div><span className="eyebrow">مراجعة الباب</span><h3>ثبّت ما قرأت</h3></div>
+        {data.done
+          ? <span className="chip ok">أتممته · {data.done.score}/{data.done.total}</span>
+          : <span className="chip gold">حتى {potential} نقطة</span>}
+      </header>
+
+      {data.reflection && (
+        <label className="reflect">
+          <span className="reflect-q"><b>سؤال للتأمل</b>{data.reflection}</span>
+          <textarea className="input" rows={3} value={reflection} onChange={(e) => setReflection(e.target.value)}
+            placeholder="اكتب تأملك على عملك الحقيقي. سطران يكفيان." />
+          <small className="muted">التأمل الصادق يمنحك 5 نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
+        </label>
+      )}
+
+      {data.quiz.map((q, i) => {
+        const res = result?.results?.[i];
+        return (
+          <fieldset key={i} className="quiz-q">
+            <legend><span className="qn">{i + 1}</span>{q.q}</legend>
+            <div className="quiz-opts">
+              {q.options.map((o, j) => {
+                const cls = res ? (j === res.answer ? ' right' : answers[i] === j ? ' wrong' : '') : answers[i] === j ? ' on' : '';
+                return (
+                  <button key={j} type="button" className={`quiz-opt${cls}`} disabled={!!res}
+                    onClick={() => setAnswers((a) => a.map((x, k) => (k === i ? j : x)))}>{o}</button>
+                );
+              })}
+            </div>
+            {res && <p className={`quiz-why ${res.correct ? 'ok' : 'bad'}`}><b>{res.correct ? 'إجابة صحيحة.' : 'ليست الإجابة الأدق.'}</b> {res.why}</p>}
+          </fieldset>
+        );
+      })}
+
+      {error && <div className="alert err">{error}</div>}
+      {result ? (
+        <div className={`review-out${result.gained ? ' win' : ''}`}>
+          <b>{result.score} من {result.total}</b>
+          <span>{result.gained ? `+${result.gained} نقطة أضيفت إلى رصيدك` : 'المحاولة الأولى هي التي تُحتسب، وهذه للتعلم.'}</span>
+        </div>
+      ) : (
+        <button className="btn gold block" disabled={busy || (data.quiz.length > 0 && !ready)} onClick={submit}>
+          {busy ? 'لحظة…' : data.done ? 'أعد الاختبار وحدّث تأملك' : 'أتممت الباب'}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export default function Handbook({ me, onBack }) {
   const [toc, setToc] = useState(null);
+  const [tab, setTab] = useState('read');
   const [error, setError] = useState('');
   const [current, setCurrent] = useState(null);
-  const [chapter, setChapter] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [shield, setShield] = useState(false);
+  const [toast, setToast] = useState('');
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      const r = await call('handbook.toc');
-      if (!r.success) return setError(r.message);
-      setToc(r);
-      if (r.chapters[0]) setCurrent(r.chapters[0].id);
-    })();
+  const loadToc = useCallback(async (first) => {
+    const r = await call('handbook.toc');
+    if (!r.success) return setError(r.message);
+    setToc(r);
+    if (first && r.chapters.length) setCurrent((r.chapters.find((c) => !c.done) || r.chapters[0]).id);
   }, []);
+  useEffect(() => { loadToc(true); }, [loadToc]);
 
   useEffect(() => {
-    if (!current) return;
+    if (!current || tab !== 'read') return;
     (async () => {
       setLoading(true);
       const r = await call('handbook.chapter', { id: current });
       setLoading(false);
       if (!r.success) return setError(r.message);
       setError('');
-      setChapter(r);
-      (document.querySelector('.hb-sheet') || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setData(r);
+      document.querySelector('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })();
-  }, [current]);
+  }, [current, tab]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(''), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const paint = useCallback(async () => {
-    if (!chapter || !canvasRef.current || !wrapRef.current) return;
+    if (!data || !canvasRef.current || !wrapRef.current) return;
     try { await document.fonts.load(`400 15px ${FONT}`); await document.fonts.load(`700 15px ${FONT}`); } catch { /* الخط الاحتياطي */ }
-    render(canvasRef.current, chapter.chapter, chapter.watermark, Math.min(wrapRef.current.clientWidth, 780));
-  }, [chapter]);
+    render(canvasRef.current, data.chapter, data.watermark, Math.min(wrapRef.current.clientWidth, 780));
+  }, [data]);
 
   useEffect(() => {
     paint();
@@ -224,7 +320,7 @@ export default function Handbook({ me, onBack }) {
     const onVis = () => (document.hidden ? hide() : show());
     const onKey = (e) => {
       const k = e.key?.toLowerCase();
-      const combo = (e.ctrlKey || e.metaKey) && ['p', 's', 'c', 'a'].includes(k);
+      const combo = (e.ctrlKey || e.metaKey) && ['p', 's', 'c', 'a'].includes(k) && !e.target.closest?.('textarea, input');
       const mac = e.metaKey && e.shiftKey && ['3', '4', '5', 's'].includes(k);
       if (k === 'printscreen' || combo || mac) {
         e.preventDefault();
@@ -238,7 +334,7 @@ export default function Handbook({ me, onBack }) {
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('keyup', onKey, true);
-    const block = (e) => e.preventDefault();
+    const block = (e) => { if (!e.target.closest?.('textarea, input')) e.preventDefault(); };
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     document.addEventListener('copy', block);
@@ -263,47 +359,99 @@ export default function Handbook({ me, onBack }) {
 
   const list = toc.chapters;
   const idx = list.findIndex((c) => c.id === current);
+  const doneN = list.filter((c) => c.done).length;
   const go = (d) => { const n = list[idx + d]; if (n) setCurrent(n.id); };
+  const pts = toc.points || { total: 0, rank: { title: 'مستكشف', next: null } };
+  const nextPct = pts.rank.next ? Math.min(100, (1 - pts.rank.next.left / Math.max(1, pts.rank.next.at)) * 100) : 100;
+  const numInPart = (c) => list.filter((x) => x.dimension === c.dimension).findIndex((x) => x.id === c.id) + 1;
+  const onPoints = (r) => {
+    if (r.gained) setToast(`+${r.gained} نقطة`);
+    loadToc(false);
+  };
 
   return (
-    <div className="page hb">
-      <div className="row between" style={{ marginBottom: 16 }}>
-        <div>
-          <p className="eyebrow">كتيبك الشخصي</p>
-          <h1 style={{ fontSize: 22 }}>{toc?.track?.title || `مصمم على مستواك${toc?.level ? `: ${levelOf(toc.level).title}` : ''}`}</h1>
-          {toc?.track?.title && <p className="small muted">كتيب مركّب لمسارك من الأطر الثلاثة{toc?.level ? ` · المستوى العام: ${levelOf(toc.level).title}` : ''}</p>}
+    <div className="page book">
+      <section className="book-hero">
+        <div className="book-hero-main">
+          <span className="book-eyebrow">The Leader's Book</span>
+          <h1>{toc.track?.title || 'كتاب القائد'}</h1>
+          <p>نسخة شخصية مركّبة لمسارك من الأطر الثلاثة، باسم <b>{toc.name || me.participant.full_name}</b>{toc.level ? ` · المستوى العام: ${levelOf(toc.level).title}` : ''}</p>
         </div>
-        <button className="btn ghost sm" onClick={onBack}>رجوع للرحلة</button>
-      </div>
-      <div className="hb-grid">
-        <nav className="hb-toc" aria-label="فهرس الكتيب">
-          {DIMENSIONS.map((d) => {
-            const items = list.filter((c) => c.dimension === d.key);
-            if (!items.length) return null;
-            return (
-              <div key={d.key} className="hb-group">
-                <div className="hb-dim">{d.short}</div>
-                {items.map((c) => (
-                  <button key={c.id} className={c.id === current ? 'on' : ''} onClick={() => setCurrent(c.id)}>{c.title}</button>
-                ))}
-              </div>
-            );
-          })}
+        <div className="book-stats">
+          <div className="book-stat bring-wrap">
+            <Ring value={doneN} total={list.length} />
+            <span className="bring-n">{doneN}<small>/{list.length}</small></span>
+            <small>باب أتممته</small>
+          </div>
+          <div className="book-stat">
+            <b className="pts">{pts.total}</b>
+            <small>نقطة</small>
+          </div>
+          <div className="book-stat rank">
+            <span className="rank-badge">{pts.rank.title}</span>
+            <span className="bar"><i style={{ width: `${nextPct}%` }} /></span>
+            <small>{pts.rank.next ? `${pts.rank.next.left} نقطة إلى ${pts.rank.next.title}` : 'أعلى لقب في البرنامج'}</small>
+          </div>
+        </div>
+        <nav className="book-tabs" role="tablist">
+          {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+          ))}
+          <span className="spacer" />
+          <button className="link small book-back" onClick={onBack}>رجوع للرحلة</button>
         </nav>
-        <div className="hb-reader" ref={wrapRef}>
-          {chapter && <div className="small muted" style={{ marginBottom: 8 }}>{dimOf(chapter.chapter.dimension).title} · الباب {idx + 1} من {list.length}</div>}
-          <div className={`hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
-            <canvas ref={canvasRef} role="img" aria-label={chapter?.chapter.title || 'صفحة الكتيب'} />
-            {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
+      </section>
+
+      {tab === 'models' && <Models onPoints={onPoints} />}
+      {tab === 'wins' && <Wins />}
+
+      {tab === 'read' && (
+        <div className="book-grid">
+          <nav className="book-toc" aria-label="فهرس الكتاب">
+            {DIMENSIONS.map((d) => {
+              const items = list.filter((c) => c.dimension === d.key);
+              if (!items.length) return null;
+              const partDone = items.filter((c) => c.done).length;
+              return (
+                <div key={d.key} className="toc-part">
+                  <div className="toc-part-head">
+                    <span className="toc-roman">{ROMAN[d.key]}</span>
+                    <div><small>{PART[d.key]} · {d.short}</small><b>{d.title}</b></div>
+                    <span className="toc-part-n">{partDone}/{items.length}</span>
+                  </div>
+                  {items.map((c, i) => (
+                    <button key={c.id} className={`toc-ch${c.id === current ? ' on' : ''}${c.done ? ' done' : ''}`} onClick={() => setCurrent(c.id)}>
+                      <span className="toc-num">{c.done ? '✓' : pad(i + 1)}</span>
+                      <span className="toc-t">{c.title}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </nav>
+
+          <div className="book-reader" ref={wrapRef}>
+            {data && idx >= 0 && (
+              <div className="page-head">
+                <span>{PART[data.chapter.dimension]} · {dimOf(data.chapter.dimension).title}</span>
+                <span>الباب {pad(numInPart(list[idx]))} · {idx + 1} من {list.length}</span>
+              </div>
+            )}
+            <div className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
+              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتاب'} />
+              {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
+            </div>
+            {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
+            {data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
+            <div className="row between book-nav">
+              <button className="btn ghost sm" disabled={idx <= 0} onClick={() => go(-1)}>الباب السابق</button>
+              <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => go(1)}>الباب التالي</button>
+            </div>
+            <p className="small muted" style={{ marginTop: 12 }}>المحتوى ملكية فكرية لـ Milestone Impact، ومرخص لك للقراءة داخل المنصة فقط. كل صفحة تحمل اسمك.</p>
           </div>
-          {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
-          <div className="row between" style={{ marginTop: 14 }}>
-            <button className="btn ghost sm" disabled={idx <= 0} onClick={() => go(-1)}>السابق</button>
-            <button className="btn ghost sm" disabled={idx >= list.length - 1} onClick={() => go(1)}>الباب التالي</button>
-          </div>
-          <p className="small muted" style={{ marginTop: 12 }}>المحتوى ملكية فكرية لـ Milestone Impact، ومرخص لك للقراءة داخل المنصة فقط. كل صفحة تحمل اسمك.</p>
         </div>
-      </div>
+      )}
+      {toast && <div className="toast pts-toast" role="status">{toast}</div>}
     </div>
   );
 }

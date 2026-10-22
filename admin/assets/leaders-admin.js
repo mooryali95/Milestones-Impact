@@ -121,7 +121,7 @@
           S.catalog = c;
         }
         body.innerHTML = S.tab === 'tracks' && S.track ? await viewTrack(S.track)
-          : { journey: viewJourney, assessment: viewAssessment, levels: viewLevels, tracks: viewTracks, handbook: viewHandbook }[S.tab]();
+          : await ({ journey: viewJourney, assessment: viewAssessment, levels: viewLevels, tracks: viewTracks, handbook: viewHandbook }[S.tab]());
       }
     } catch (e) {
       console.error(e);
@@ -481,6 +481,7 @@
           </div>`).join('')}</div>
       </section>
 
+      ${bookCard(r)}
       <section class="la-card"><h3>السجل</h3><ul class="la-log">${(r.history || []).map((h) => `<li><small>${date(h.created_at)}</small> ${esc(h.action)} <small class="la-muted">${esc(h.actor || '')}</small></li>`).join('') || '<li class="la-muted">لا شيء</li>'}</ul></section>`;
   }
 
@@ -852,13 +853,12 @@
   }
 
   // ══ الكتيب ══
-  function viewHandbook() {
+  function hbChapters() {
     const w = canWrite();
     const mods = S.catalog.handbook_modules || [];
     const words = (m) => (String(m.body_md || '').replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length;
-    const done = mods.filter((m) => words(m) > 30).length;
-    const total = mods.reduce((a, m) => a + words(m), 0);
     const pad = (n) => String(n).padStart(2, '0');
+    const cs = (id) => S.catalog.book_stats?.chapters?.[id] || {};
     const dimSec = (d) => {
       const list = mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
       return `<section class="hb-dim">
@@ -873,7 +873,9 @@
             <button class="hb-main" data-act="edit-mod" data-id="${m.id}">
               <b>${esc(m.title_ar)}</b>
               <span class="hb-meta"><span class="la-lvl ${m.min_level}">من ${LVL[m.min_level]}</span>
-                <span>${n ? `${n.toLocaleString('ar')} كلمة` : 'بلا محتوى بعد'}</span>${tiered ? '<span>فقرات مخصصة لكل مستوى</span>' : ''}</span>
+                <span>${n ? `${n.toLocaleString('ar')} كلمة` : 'بلا محتوى بعد'}</span>${tiered ? '<span>فقرات مخصصة لكل مستوى</span>' : ''}
+                <span class="${quizN(m) ? '' : 'hb-warn'}">${quizN(m) ? `اختبار ${quizN(m)} أسئلة` : 'بلا اختبار'}</span>
+                ${cs(m.id).done ? `<span class="hb-stat">أتمّه ${cs(m.id).done} · متوسط ${Math.round(cs(m.id).score / Math.max(1, cs(m.id).total) * 100)}%</span>` : ''}</span>
             </button>
             <span class="hb-acts">${moveBtns('handbook_modules', m.id)}
               ${w ? `<button class="btn-sm ghost" data-act="edit-mod" data-id="${m.id}">تحرير</button><button class="hb-del" data-act="del-mod" data-id="${m.id}" title="حذف الباب">حذف</button>` : `<button class="btn-sm ghost" data-act="edit-mod" data-id="${m.id}">قراءة</button>`}</span>
@@ -881,24 +883,339 @@
         }).join('')}</ol>` : '<p class="la-muted hb-none">لا أبواب في هذا الإطار بعد.</p>'}
       </section>`;
     };
+    return DIMS.map(dimSec).join('');
+  }
+
+  // ══ كتيب القائد: الأبواب، والنماذج، والمعاينة كمشارك، والتقييم ══
+  const words = (m) => (String(m.body_md || '').replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length;
+  const quizN = (m) => parseQuiz(m.quiz_md).length;
+  // نسخة العرض من parseQuiz في logic.js
+  function parseQuiz(md) {
+    const qs = [];
+    let cur = null;
+    for (const raw of String(md || '').split('\n')) {
+      const line = raw.trim();
+      let m;
+      if ((m = line.match(/^س\s*[:：]\s*(.+)$/))) { cur = { q: m[1].trim(), options: [], answer: -1, why: '' }; qs.push(cur); }
+      else if (cur && (m = line.match(/^([-*])\s+(.+)$/))) { if (m[1] === '*') cur.answer = cur.options.length; cur.options.push(m[2].trim()); }
+      else if (cur && (m = line.match(/^لماذا\s*[:：]\s*(.+)$/))) cur.why = m[1].trim();
+    }
+    return qs.filter((q) => q.options.length >= 2 && q.answer >= 0);
+  }
+  const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'كما يراه المشارك'], ['reviews', 'التقييم']];
+  const SUB_ST = { submitted: ['بانتظار تقييمك', 'warn'], reviewed: ['قُيّم', 'ok'], returned: ['أُعيد للتطوير', ''], draft: ['مسودة', ''] };
+  const starsTxt = (n) => '★★★★★'.slice(0, n || 0) + '☆☆☆☆☆'.slice(0, 5 - (n || 0));
+
+  async function viewHandbook() {
+    const v = S.hbView || 'chapters';
+    const mods = S.catalog.handbook_modules || [];
+    const models = S.catalog.learning_models || [];
+    const bs = S.catalog.book_stats || { chapters: {}, models: {}, points: {}, to_review: 0 };
+    const doneCh = Object.values(bs.chapters || {}).reduce((a, c) => a + c.done, 0);
+    const sc = Object.values(bs.chapters || {}).reduce((a, c) => [a[0] + c.score, a[1] + c.total], [0, 0]);
+    const body = v === 'models' ? hbModels() : v === 'preview' ? await hbPreview() : v === 'reviews' ? await hbReviews() : hbChapters();
     return `
       <section class="tx-hero">
         <div class="tx-hero-head">
-          <div><span class="tx-eyebrow">The Leader's Handbook</span><h2>كتيب القائد</h2>
-            <p>هنا تدير الكتيب كله: تضيف بابًا، وتحرر محتواه، وتعيد ترتيبه، أو تحذفه. كتيب كل مشارك يُركَّب تلقائيًا من هذه الأبواب حسب مستواه في كل إطار، ويقرؤه داخل المنصة فقط بعلامة مائية باسمه.</p></div>
-          <div class="hb-preview">
-            <select id="laHbTrack">${(S.catalog.tracks || []).map((t) => `<option value="${t.key}">${t.key} · ${esc(shortTitle(t.title_ar))}</option>`).join('')}</select>
-            <button class="tx-btn" data-act="open-track-sel">معاينة كتيب مسار</button>
-          </div>
+          <div><span class="tx-eyebrow">The Leader's Book</span><h2>كتاب القائد</h2>
+            <p>الكتاب التفاعلي والنماذج التعليمية في مكان واحد: تحرر المحتوى والاختبارات، وترى الكتاب كما يراه أي مسار، وتتابع تقدم المشاركين وتقيّم أعمالهم.</p></div>
         </div>
         <div class="tx-kpis">
-          <div><b>${mods.length}</b><span>باب في الأطر الثلاثة</span></div>
-          <div><b>${done}</b><span>باب مكتمل المحتوى</span></div>
-          <div class="${mods.length - done ? 'warn' : ''}"><b>${mods.length - done}</b><span>باب يحتاج محتوى</span></div>
-          <div><b>${total.toLocaleString('ar')}</b><span>كلمة إجمالًا</span></div>
+          <div><b>${mods.length}</b><span>بابًا في الكتاب · ${models.length} نماذج تعليمية</span></div>
+          <div><b>${doneCh}</b><span>إتمام باب${sc[1] ? ` · دقة ${Math.round(sc[0] / sc[1] * 100)}%` : ''}</span></div>
+          <div><b>${bs.points?.participants || 0}</b><span>مشارك بدأ يجمع النقاط${bs.points?.avg ? ` · متوسط ${bs.points.avg}` : ''}</span></div>
+          <div class="${bs.to_review ? 'warn' : ''}"><b>${bs.to_review || 0}</b><span>نموذج بانتظار تقييمك</span></div>
         </div>
+        <nav class="hb-views">${HB_VIEWS.map(([k, l]) => `<button data-act="hb-view" data-v="${k}" class="${v === k ? 'on' : ''}">${l}${k === 'reviews' && bs.to_review ? ` <i>${bs.to_review}</i>` : ''}</button>`).join('')}</nav>
       </section>
-      ${DIMS.map(dimSec).join('')}`;
+      ${body}`;
+  }
+
+  // ── النماذج التعليمية: قائمة بالتتبع ──
+  function hbModels() {
+    const w = canWrite();
+    const list = S.catalog.learning_models || [];
+    const ms = S.catalog.book_stats?.models || {};
+    return DIMS.map((d) => {
+      const items = list.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
+      return `<section class="hb-dim">
+        <header><span class="tx-roman">${DIM_EN[d][0]}</span><div><small>${DIM_EN[d]}</small><b>${DIM[d]}</b></div>
+          <span class="hb-dim-n">${items.length} نموذج</span>
+          ${w ? `<button class="tx-btn gold" data-act="add-model" data-dim="${d}">+ نموذج جديد</button>` : ''}</header>
+        ${items.length ? `<ol class="hb-list">${items.map((m) => {
+          const x = ms[m.id] || {};
+          return `<li class="hb-ch${m.active ? '' : ' empty'}">
+            <span class="hb-num hb-icon">${esc(m.icon || '◆')}</span>
+            <button class="hb-main" data-act="edit-model" data-id="${m.id}">
+              <b>${esc(m.title_ar)}${m.active ? '' : ' <small class="la-chip">موقوف</small>'}</b>
+              <span class="hb-meta"><span class="la-lvl ${m.min_level}">من ${LVL[m.min_level]}</span><span>${m.points} نقطة</span><span>${(m.fields || []).length} حقول</span>
+                ${x.submitted || x.reviewed || x.draft ? `<span class="hb-stat">مسودات ${x.draft || 0} · مسلّمة ${(x.submitted || 0)} · مقيّمة ${x.reviewed || 0}${x.rated ? ` · ${(x.rating / x.rated).toFixed(1)}★` : ''}</span>` : '<span>لا أعمال بعد</span>'}</span>
+            </button>
+            <span class="hb-acts">${moveBtns('learning_models', m.id)}
+              ${x.submitted ? `<button class="btn-sm primary" data-act="model-subs" data-id="${m.id}">قيّم ${x.submitted}</button>` : ''}
+              ${w ? `<button class="btn-sm ghost" data-act="edit-model" data-id="${m.id}">تحرير</button>` : ''}</span>
+          </li>`;
+        }).join('')}</ol>` : '<p class="la-muted hb-none">لا نماذج في هذا الإطار بعد.</p>'}
+      </section>`;
+    }).join('');
+  }
+
+  // معاينة نموذج كما يراه المشارك (حقول معطلة)
+  function modelFormHtml(m, answers) {
+    const a = answers || {};
+    return (m.fields || []).map((f) => {
+      const v = a[f.key];
+      let input;
+      if (f.type === 'select') input = `<div class="mp-seg">${(f.options || []).map((o) => `<span class="${v === o ? 'on' : ''}">${esc(o)}</span>`).join('')}</div>`;
+      else if (f.type === 'table') {
+        const rows = Array.isArray(v) && v.length ? v : Array.from({ length: f.min_rows || 1 }, () => []);
+        input = `<div class="mp-table-wrap"><table class="mp-table"><thead><tr><th>#</th>${(f.columns || []).map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td>${(f.columns || []).map((_, j) => `<td>${esc((r || [])[j] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+      } else input = `<div class="mp-in${f.type === 'textarea' ? ' big' : ''}">${esc(v || '')}</div>`;
+      return `<div class="mp-f"><b>${esc(f.label)}</b>${f.hint ? `<small>${esc(f.hint)}</small>` : ''}${input}</div>`;
+    }).join('');
+  }
+  function modelGuideHtml(m) {
+    return `<div class="mp-hero"><span class="mp-icon">${esc(m.icon || '◆')}</span><div><small>${DIM_EN[m.dimension]} · من مستوى ${LVL[m.min_level]}</small><h3>${esc(m.title_ar)}</h3><p>${esc(m.summary_ar || '')}</p></div><span class="mp-pts"><b>${m.points}</b>نقطة</span></div>
+      <div class="mp-guide">${m.when_ar ? `<h4>متى تستخدمه</h4><p>${esc(m.when_ar)}</p>` : ''}
+        ${m.steps_ar ? `<h4>الخطوات</h4><ol>${String(m.steps_ar).split('\n').filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
+        ${m.source_ar ? `<p class="mp-src">${esc(m.source_ar)}</p>` : ''}</div>`;
+  }
+
+  // محرر النموذج: بياناته، وحقوله كبانٍ مرئي، ومعاينة حية كما يراه المشارك
+  const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
+  function openModel(m, dim) {
+    const w = canWrite();
+    const d = m?.dimension || dim;
+    const st = { fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true }])) };
+    let dlg = document.getElementById('laModel');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'laModel'; dlg.className = 'hb-editor'; document.body.appendChild(dlg); }
+    const fieldRow = (f, i) => `<div class="fb-row" data-i="${i}">
+      <span class="fb-n">${i + 1}</span>
+      <input data-f="label" value="${esc(f.label)}" placeholder="عنوان الحقل">
+      <select data-f="type">${Object.entries(FTYPE).map(([k, l]) => `<option value="${k}"${f.type === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <input data-f="hint" value="${esc(f.hint || '')}" placeholder="تلميح (اختياري)">
+      ${f.type === 'select' ? `<input data-f="options" value="${esc((f.options || []).join('، '))}" placeholder="الخيارات مفصولة بفاصلة">` : ''}
+      ${f.type === 'table' ? `<input data-f="columns" value="${esc((f.columns || []).join('، '))}" placeholder="الأعمدة مفصولة بفاصلة"><input data-f="min_rows" type="number" min="1" max="30" value="${f.min_rows || 1}" title="أقل عدد صفوف">` : ''}
+      <label class="fb-req"><input type="checkbox" data-f="required"${f.required !== false ? ' checked' : ''}> إلزامي</label>
+      <span class="fb-acts"><button type="button" data-fb="up" title="أعلى">▲</button><button type="button" data-fb="down" title="أسفل">▼</button><button type="button" data-fb="del" title="حذف">×</button></span>
+    </div>`;
+    dlg.innerHTML = `<form class="hb-ed two" method="dialog">
+      <header class="hb-ed-head">
+        <div class="hb-ed-name"><small>${DIM_EN[d]} · ${DIM[d]} · نموذج تعليمي</small>
+          <input name="title_ar" required placeholder="اسم النموذج" value="${esc(m?.title_ar || '')}" ${w ? '' : 'readonly'}></div>
+        <div class="hb-ed-lvl"><small>يظهر لمن مستواه</small><div class="hb-seg">${LVLS.map((l) => `<label><input type="radio" name="min_level" value="${l}"${(m?.min_level || 'beginner') === l ? ' checked' : ''}><span>${LVL[l]}${l === 'advanced' ? '' : ' فأعلى'}</span></label>`).join('')}</div></div>
+        <div class="hb-ed-btns">
+          ${w ? '<button class="btn-sm primary" value="save">حفظ النموذج</button>' : ''}
+          <button class="btn-sm ghost" value="cancel" formnovalidate>إغلاق</button>
+          ${w && m ? '<button class="hb-del" value="delete" formnovalidate>حذف</button>' : ''}
+        </div>
+      </header>
+      <div class="hb-ed-panes">
+        <div class="hb-ed-src me-src">
+          <div class="me-grid">
+            <label>الأيقونة<input name="icon" value="${esc(m?.icon || '◆')}" maxlength="2"></label>
+            <label>النقاط عند التسليم<input name="points" type="number" min="0" max="500" value="${m?.points ?? 30}"></label>
+            <label class="me-check"><input type="checkbox" name="active"${m?.active === false ? '' : ' checked'}> ظاهر للمشاركين</label>
+          </div>
+          <label>الوصف المختصر<textarea name="summary_ar" rows="2">${esc(m?.summary_ar || '')}</textarea></label>
+          <label>متى يستخدمه<textarea name="when_ar" rows="2">${esc(m?.when_ar || '')}</textarea></label>
+          <label>الخطوات (سطر لكل خطوة)<textarea name="steps_ar" rows="4">${esc(m?.steps_ar || '')}</textarea></label>
+          <label>المصدر الملهم<input name="source_ar" value="${esc(m?.source_ar || '')}" placeholder="مستلهم من …"></label>
+          <div class="fb"><div class="fb-head"><b>حقول النموذج</b><button type="button" class="btn-sm ghost" data-fb="add">+ حقل</button></div><div class="fb-list"></div></div>
+        </div>
+        <div class="hb-ed-out"><div class="hb-ed-cap">كما يراه المشارك</div><article class="hb-page mp"></article></div>
+      </div>
+      <div class="la-err" hidden></div>
+    </form>`;
+    const f = dlg.querySelector('form');
+    const listEl = f.querySelector('.fb-list');
+    const drawFields = () => { listEl.innerHTML = st.fields.map(fieldRow).join(''); };
+    const read = () => ({
+      title_ar: f.title_ar.value.trim(), icon: f.icon.value.trim(), points: Number(f.points.value) || 0, active: f.active.checked,
+      summary_ar: f.summary_ar.value, when_ar: f.when_ar.value, steps_ar: f.steps_ar.value, source_ar: f.source_ar.value,
+      min_level: f.querySelector('[name=min_level]:checked').value, fields: st.fields,
+    });
+    const paint = () => {
+      const x = { ...read(), dimension: d };
+      f.querySelector('.mp').innerHTML = modelGuideHtml(x) + `<div class="mp-form">${modelFormHtml(x)}</div>`;
+    };
+    listEl.addEventListener('input', (e) => {
+      const row = e.target.closest('.fb-row'); const k = e.target.dataset.f;
+      if (!row || !k) return;
+      const fl = st.fields[row.dataset.i];
+      if (k === 'options' || k === 'columns') fl[k] = e.target.value.split(/[,،]/).map((x) => x.trim()).filter(Boolean);
+      else if (k === 'min_rows') fl.min_rows = Number(e.target.value) || 1;
+      else if (k === 'required') fl.required = e.target.checked;
+      else fl[k] = e.target.value;
+      if (k === 'type') drawFields();
+      paint();
+    });
+    listEl.addEventListener('change', (e) => { if (e.target.dataset.f === 'type' || e.target.dataset.f === 'required') listEl.dispatchEvent(new Event('input', { bubbles: true })) || null; });
+    f.addEventListener('input', (e) => { if (!e.target.closest('.fb-list')) paint(); });
+    f.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fb]');
+      if (!b) return;
+      const act = b.dataset.fb;
+      if (act === 'add') st.fields.push({ key: `f${Date.now().toString(36)}`, label: 'حقل جديد', type: 'textarea', required: true });
+      else {
+        const i = Number(b.closest('.fb-row').dataset.i);
+        if (act === 'del') st.fields.splice(i, 1);
+        if (act === 'up' && i > 0) [st.fields[i - 1], st.fields[i]] = [st.fields[i], st.fields[i - 1]];
+        if (act === 'down' && i < st.fields.length - 1) [st.fields[i + 1], st.fields[i]] = [st.fields[i], st.fields[i + 1]];
+      }
+      drawFields(); paint();
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.submitter?.value;
+      if (btn === 'cancel') return dlg.close();
+      const err = f.querySelector('.la-err');
+      let r;
+      if (btn === 'delete') {
+        if (!confirm(`حذف النموذج "${m.title_ar}"؟`)) return;
+        r = await L('admin.delete', { entity: 'learning_models', id: m.id });
+      } else {
+        const row = read();
+        if (!row.title_ar) { err.hidden = false; err.textContent = 'اسم النموذج مطلوب'; return; }
+        if (m) row.id = m.id;
+        else Object.assign(row, { dimension: d, sort: Math.max(0, ...(S.catalog.learning_models || []).filter((x) => x.dimension === d).map((x) => x.sort || 0)) + 1 });
+        r = await L('admin.save', { entity: 'learning_models', row });
+      }
+      if (!r.success) { err.hidden = false; err.textContent = r.message; return; }
+      dlg.close(); toast(btn === 'delete' ? 'حُذف النموذج' : 'حُفظ النموذج'); render(true);
+    });
+    drawFields(); paint();
+    dlg.showModal();
+  }
+
+  // ── كما يراه المشارك: الكتاب والنماذج لمسار محدد ──
+  async function hbPreview() {
+    const tracks = S.catalog.tracks || [];
+    S.pvTrack ||= tracks[0]?.key || 'M1I1L1';
+    const r = await L('admin.book-preview', { track: S.pvTrack });
+    if (!r.success) return `<div class="la-err">${esc(r.message)}</div>`;
+    const w = canWrite();
+    const chs = r.chapters;
+    const cur = chs.find((c) => c.id === S.pvCh) || chs[0];
+    const curModel = S.pvModel && r.models.find((m) => m.id === S.pvModel);
+    const ROM = { milestone: 'I', impact: 'II', leadership: 'III' };
+    return `
+      <div class="pv-bar">
+        <label>المسار <select id="pvTrack">${tracks.map((t) => `<option value="${t.key}"${t.key === S.pvTrack ? ' selected' : ''}>${t.key} · ${esc(shortTitle(t.title_ar))}</option>`).join('')}</select></label>
+        <span class="la-row">${DIMS.map((d) => `<span class="la-lvl ${r.levels[d]}">${DIM_EN[d][0]} ${LVL[r.levels[d]]}</span>`).join('')}</span>
+        <span class="la-muted">${chs.length} بابًا · ${r.models.length} نماذج · الإجابات الصحيحة ظاهرة لك فقط</span>
+      </div>
+      <div class="pv">
+        <nav class="pv-toc">
+          ${DIMS.map((d) => { const items = chs.filter((c) => c.dimension === d); return items.length ? `<div class="pv-part"><div class="pv-part-h"><span>${ROM[d]}</span>${DIM_EN[d]} · ${DIM[d]}</div>
+            ${items.map((c, i) => `<button class="${!curModel && c.id === cur?.id ? 'on' : ''}" data-act="pv-ch" data-id="${c.id}"><i>${String(i + 1).padStart(2, '0')}</i>${esc(c.title)}${c.quiz.length ? '' : ' <small class="hb-warn">بلا اختبار</small>'}</button>`).join('')}</div>` : ''; }).join('')}
+          <div class="pv-part"><div class="pv-part-h"><span>✦</span>النماذج التعليمية</div>
+            ${r.models.map((m) => `<button class="${curModel?.id === m.id ? 'on' : ''}" data-act="pv-model" data-id="${m.id}"><i>${esc(m.icon || '◆')}</i>${esc(m.title_ar)}</button>`).join('') || '<p class="la-muted">لا نماذج لهذا المسار</p>'}</div>
+        </nav>
+        <div class="pv-main">
+          ${curModel ? `
+            <div class="pv-acts">${w ? `<button class="btn-sm ghost" data-act="edit-model" data-id="${curModel.id}">تحرير النموذج</button>` : ''}</div>
+            <article class="hb-page mp">${modelGuideHtml(curModel)}<div class="mp-form">${modelFormHtml(curModel)}</div></article>`
+          : cur ? `
+            <div class="pv-acts"><span class="la-muted">${DIM_EN[cur.dimension]} · ${DIM[cur.dimension]} · من ${LVL[cur.min_level]}</span>${w ? `<button class="btn-sm ghost" data-act="edit-mod" data-id="${cur.id}">تحرير الباب واختباره</button>` : ''}</div>
+            <article class="hb-page"><h3 class="hb-page-t">${esc(cur.title)}</h3><div class="la-md">${mdHtml(cur.md)}</div></article>
+            <section class="pv-review">
+              <h4>مراجعة الباب كما يراها المشارك</h4>
+              ${cur.reflection ? `<div class="pv-reflect"><b>سؤال للتأمل</b>${esc(cur.reflection)}</div>` : '<p class="hb-warn">لا سؤال تأمل لهذا الباب.</p>'}
+              ${cur.quiz.map((q, i) => `<div class="pv-q"><b><span>${i + 1}</span>${esc(q.q)}</b>${q.options.map((o, j) => `<div class="pv-o${j === q.answer ? ' right' : ''}">${esc(o)}${j === q.answer ? ' <small>الإجابة الصحيحة</small>' : ''}</div>`).join('')}${q.why ? `<p class="pv-why">${esc(q.why)}</p>` : ''}</div>`).join('') || '<p class="hb-warn">لا اختبار لهذا الباب بعد.</p>'}
+              <p class="la-muted">أقصى نقاط هذا الباب: ${10 + cur.quiz.length * 5 + (cur.reflection ? 5 : 0)}</p>
+            </section>` : '<p class="la-muted">لا أبواب لهذا المسار.</p>'}
+        </div>
+      </div>`;
+  }
+
+  // ── التقييم: أعمال المشاركين في النماذج ──
+  async function hbReviews() {
+    const st = S.subStatus ?? 'submitted';
+    const r = await L('admin.submissions', { status: st || undefined, model_id: S.subModel || undefined });
+    if (!r.success) return `<div class="la-err">${esc(r.message)}</div>`;
+    const list = r.submissions;
+    const models = S.catalog.learning_models || [];
+    return `
+      <section class="la-card">
+        <div class="toolbar">
+          <select class="filter-select" id="subStatus">${[['submitted', 'بانتظار تقييمك'], ['reviewed', 'قُيّمت'], ['returned', 'أُعيدت للتطوير'], ['', 'الكل']].map(([k, l]) => `<option value="${k}"${st === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+          <select class="filter-select" id="subModel"><option value="">كل النماذج</option>${models.map((m) => `<option value="${m.id}"${S.subModel === m.id ? ' selected' : ''}>${esc(m.title_ar)}</option>`).join('')}</select>
+          <span class="la-muted">${list.length} عمل</span>
+        </div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>المشارك</th><th>النموذج</th><th>سُلّم</th><th>الحالة</th><th>التقييم</th><th></th></tr></thead>
+          <tbody>${list.length ? list.map((x) => `<tr>
+            <td><b>${esc(x.participants?.full_name || '')}</b><br><small class="la-muted">${esc(x.participants?.organization_name || x.participants?.email || '')}</small></td>
+            <td>${esc(x.learning_models?.title_ar || '')}<br><small class="la-muted">${DIM_EN[x.learning_models?.dimension] || ''}</small></td>
+            <td>${date(x.submitted_at)}</td>
+            <td><span class="la-chip ${SUB_ST[x.status]?.[1] || ''}">${SUB_ST[x.status]?.[0] || x.status}</span></td>
+            <td class="stars-c">${x.rating ? starsTxt(x.rating) : ''}${x.bonus ? ` <small>+${x.bonus}</small>` : ''}</td>
+            <td><button class="btn-sm ${x.status === 'submitted' ? 'primary' : 'ghost'}" data-act="open-sub" data-id="${x.id}">${x.status === 'submitted' ? 'قيّم' : 'عرض'}</button></td>
+          </tr>`).join('') : '<tr><td colspan="6" class="la-empty">لا أعمال هنا</td></tr>'}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  async function openSubmission(id) {
+    const r = await L('admin.submission', { id });
+    if (!r.success) return toast(r.message);
+    const x = r.submission;
+    const m = x.learning_models;
+    const w = canWrite();
+    let dlg = document.getElementById('laSub');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'laSub'; dlg.className = 'hb-editor'; document.body.appendChild(dlg); }
+    dlg.innerHTML = `<form class="hb-ed two" method="dialog">
+      <header class="hb-ed-head">
+        <div class="hb-ed-name"><small>${esc(m.title_ar)} · ${DIM_EN[m.dimension]}</small><b class="sub-who">${esc(x.participants.full_name)}</b>
+          <small class="sub-meta">${esc([x.participants.job_title, x.participants.organization_name].filter(Boolean).join(' · '))} · سُلّم ${date(x.submitted_at)}</small></div>
+        <div class="hb-ed-btns"><span class="la-chip ${SUB_ST[x.status]?.[1] || ''}">${SUB_ST[x.status]?.[0] || ''}</span><button class="btn-sm ghost" value="cancel" formnovalidate>إغلاق</button></div>
+      </header>
+      <div class="hb-ed-panes sub-panes">
+        <div class="hb-ed-out"><div class="hb-ed-cap">عمل المشارك</div><article class="hb-page mp"><div class="mp-form">${modelFormHtml(m, x.answers)}</div></article></div>
+        <aside class="sub-review">
+          <h4>تقييمك</h4>
+          <div class="sub-stars">${[1, 2, 3, 4, 5].map((n) => `<label class="${n <= (x.rating || 0) ? 'on' : ''}"><input type="radio" name="rating" value="${n}"${x.rating === n ? ' checked' : ''} ${w ? '' : 'disabled'}><span>★</span></label>`).join('')}</div>
+          <label>ملاحظاتك للمشارك<textarea name="feedback" rows="7" ${w ? '' : 'readonly'} placeholder="ما الذي أجاده، وما الذي يطوّره في هذا النموذج؟">${esc(x.feedback_ar || '')}</textarea></label>
+          <label>نقاط تميّز إضافية (اختياري)<input name="bonus" type="number" min="0" max="100" value="${x.bonus || 0}" ${w ? '' : 'readonly'}></label>
+          <p class="la-muted">نقاط النموذج (${m.points}) مُنحت عند التسليم. نقاط التميّز تُضاف عند الاعتماد فقط.</p>
+          ${w ? `<button class="btn-sm primary" value="reviewed">اعتماد التقييم</button><button class="btn-sm ghost" value="returned">إعادة للتطوير مع الملاحظات</button>` : ''}
+          <div class="la-err" hidden></div>
+        </aside>
+      </div>
+    </form>`;
+    const f = dlg.querySelector('form');
+    f.addEventListener('change', (e) => {
+      if (e.target.name === 'rating') f.querySelectorAll('.sub-stars label').forEach((l, i) => l.classList.toggle('on', i < Number(e.target.value)));
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.submitter?.value;
+      if (btn === 'cancel') return dlg.close();
+      const rating = f.querySelector('[name=rating]:checked')?.value;
+      const err = f.querySelector('.la-err');
+      if (btn === 'reviewed' && !rating) { err.hidden = false; err.textContent = 'اختر تقييمًا من 1 إلى 5'; return; }
+      if (btn === 'returned' && !f.feedback.value.trim()) { err.hidden = false; err.textContent = 'اكتب ملاحظاتك ليعرف المشارك ما يطوّره'; return; }
+      const res = await L('admin.review-submission', { id: x.id, status: btn, rating, feedback: f.feedback.value, bonus: f.bonus.value });
+      if (!res.success) { err.hidden = false; err.textContent = res.message; return; }
+      dlg.close(); toast(btn === 'reviewed' ? 'اعتُمد التقييم' : 'أُعيد للمشارك'); render(true);
+    });
+    dlg.showModal();
+  }
+
+  // بطاقة الكتاب والنماذج في صفحة المشارك
+  function bookCard(r) {
+    const pts = r.points || { total: 0, rank: { title: 'مستكشف' }, ledger: [] };
+    const book = r.book || [];
+    const sc = book.reduce((a, b) => [a[0] + b.quiz_score, a[1] + b.quiz_total], [0, 0]);
+    return `<section class="la-card la-book-card">
+      <div class="la-row between"><h3>كتاب القائد والنماذج</h3><span class="rank-chip">${esc(pts.rank.title)} · ${pts.total} نقطة</span></div>
+      <div class="la-book-kpis"><span><b>${book.length}</b>باب أتمّه</span><span><b>${sc[1] ? Math.round(sc[0] / sc[1] * 100) : 0}%</b>دقة الاختبارات</span><span><b>${(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span></div>
+      ${(r.models || []).length ? `<ul class="la-reqs">${r.models.map((x) => `<li><span>${esc(x.learning_models?.title_ar || '')} <span class="la-chip ${SUB_ST[x.status]?.[1] || ''}">${SUB_ST[x.status]?.[0] || ''}</span>${x.rating ? ` <span class="stars-c">${starsTxt(x.rating)}</span>` : ''}</span>
+        ${x.status !== 'draft' ? `<button class="la-link" data-act="open-sub" data-id="${x.id}">${x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>` : ''}</li>`).join('')}</ul>` : ''}
+      ${book.filter((b) => b.reflection).length ? `<details><summary class="la-link">تأملاته (${book.filter((b) => b.reflection).length})</summary><ul class="la-reflections">${book.filter((b) => b.reflection).map((b) => `<li><small>${esc(b.handbook_modules?.title_ar || '')}</small>${esc(b.reflection)}</li>`).join('')}</ul></details>` : ''}
+    </section>`;
   }
 
   // محرر الباب: عنوان، ومستوى الظهور، ومحتوى بمعاينة حية لكل مستوى
@@ -935,11 +1252,25 @@
           ${w && m ? '<button class="hb-del" value="delete" formnovalidate>حذف</button>' : ''}
         </div>
       </header>
+      <nav class="hb-ed-tabs"><button type="button" data-pane="content" class="on">المحتوى</button><button type="button" data-pane="review">التأمل والاختبار <i class="qcount"></i></button></nav>
+      <div class="hb-ed-pane" data-p="content">
       ${w ? `<div class="hb-ed-tools">${HB_TOOLS.map(([ins, label, mode], i) => `<button type="button" data-tool="${i}" class="${mode === 'block' ? 'blk' : ''}">${label}</button>`).join('')}</div>` : ''}
       <div class="hb-ed-panes">
         <div class="hb-ed-src"><div class="hb-ed-cap">المحتوى</div><textarea name="body_md" spellcheck="false" ${w ? '' : 'readonly'} placeholder="اكتب محتوى الباب هنا. استخدم الأزرار أعلاه للعناوين والبنود والفقرات المخصصة لكل مستوى.">${esc(m?.body_md || '')}</textarea></div>
         <div class="hb-ed-out"><div class="hb-ed-cap">كما يقرؤه المشارك <span class="hb-seg sm">${LVLS.map((l) => `<button type="button" data-view="${l}">${LVL[l]}</button>`).join('')}</span><span class="hb-ed-wc"></span></div>
           <article class="hb-page"><h3 class="hb-page-t"></h3><div class="la-md"></div></article></div>
+      </div>
+      </div>
+      <div class="hb-ed-pane" data-p="review" hidden>
+        <div class="hb-ed-panes">
+          <div class="hb-ed-src qz-src">
+            <label>سؤال التأمل<textarea name="reflection_ar" rows="2" ${w ? '' : 'readonly'} placeholder="سؤال يربط الباب بعمل المشارك الحقيقي">${esc(m?.reflection_ar || '')}</textarea></label>
+            <div class="qz-head"><b>الاختبار القصير</b>${w ? '<button type="button" class="btn-sm ghost" data-qz="add">+ سؤال</button>' : ''}</div>
+            <small class="la-muted">س: السؤال · ثم الخيارات، كل خيار يبدأ بـ - والخيار الصحيح بـ * · ثم لماذا: شرح يظهر بعد الإجابة.</small>
+            <textarea name="quiz_md" class="qz-md" spellcheck="false" ${w ? '' : 'readonly'}>${esc(m?.quiz_md || '')}</textarea>
+          </div>
+          <div class="hb-ed-out"><div class="hb-ed-cap">كما يراه المشارك بعد الباب</div><article class="hb-page qz-out"></article></div>
+        </div>
       </div>
       <div class="la-err" hidden></div>
     </form>`;
@@ -954,9 +1285,28 @@
         ? `<p class="la-muted">هذا الباب لا يظهر لمستوى ${LVL[view]}؛ يبدأ من ${LVL[minL]}.</p>` : (mdHtml(md) || '<p class="la-muted">لا محتوى بعد.</p>');
       f.querySelector('.hb-ed-wc').textContent = `${(ta.value.replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length} كلمة`;
     };
-    f.addEventListener('input', paint);
+    const paintQuiz = () => {
+      const qs = parseQuiz(f.quiz_md.value);
+      f.querySelector('.qcount').textContent = qs.length ? `(${qs.length})` : '';
+      f.querySelector('.qz-out').innerHTML = (f.reflection_ar.value.trim() ? `<div class="pv-reflect"><b>سؤال للتأمل</b>${esc(f.reflection_ar.value)}</div>` : '')
+        + (qs.map((q, i) => `<div class="pv-q"><b><span>${i + 1}</span>${esc(q.q)}</b>${q.options.map((o, j) => `<div class="pv-o${j === q.answer ? ' right' : ''}">${esc(o)}${j === q.answer ? ' <small>الصحيحة</small>' : ''}</div>`).join('')}${q.why ? `<p class="pv-why">${esc(q.why)}</p>` : ''}</div>`).join('')
+        || '<p class="la-muted">اكتب أول سؤال بالصيغة الموضحة، أو اضغط + سؤال.</p>')
+        + `<p class="la-muted">أقصى نقاط الباب: ${10 + qs.length * 5 + (f.reflection_ar.value.trim() ? 5 : 0)}</p>`;
+    };
+    f.addEventListener('input', () => { paint(); paintQuiz(); });
     f.addEventListener('change', paint);
     f.addEventListener('click', (e) => {
+      const pane = e.target.closest('[data-pane]');
+      if (pane) {
+        f.querySelectorAll('[data-pane]').forEach((b) => b.classList.toggle('on', b === pane));
+        f.querySelectorAll('.hb-ed-pane').forEach((p) => { p.hidden = p.dataset.p !== pane.dataset.pane; });
+        return;
+      }
+      if (e.target.closest('[data-qz=add]')) {
+        const ta = f.quiz_md;
+        ta.value = `${ta.value.trim() ? `${ta.value.trim()}\n\n` : ''}س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير`;
+        ta.focus(); paintQuiz(); return;
+      }
       const v = e.target.closest('[data-view]');
       if (v) { view = v.dataset.view; return paint(); }
       const tb = e.target.closest('[data-tool]');
@@ -983,7 +1333,10 @@
         if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
         r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
       } else {
-        const row = { title_ar: f.title_ar.value.trim(), min_level: f.querySelector('[name=min_level]:checked').value, body_md: ta.value };
+        const row = { title_ar: f.title_ar.value.trim(), min_level: f.querySelector('[name=min_level]:checked').value, body_md: ta.value,
+          reflection_ar: f.reflection_ar.value.trim() || null, quiz_md: f.quiz_md.value.trim() || null };
+        const bad = f.quiz_md.value.split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(f.quiz_md.value).length;
+        if (bad > 0 && !confirm(`${bad} من الأسئلة بلا خيار صحيح (*) أو بأقل من خيارين، ولن تظهر للمشارك. احفظ على أي حال؟`)) return;
         if (!row.title_ar) { err.hidden = false; err.textContent = 'عنوان الباب مطلوب'; return; }
         if (m) row.id = m.id;
         else {
@@ -997,7 +1350,7 @@
       toast(btn === 'delete' ? 'حُذف الباب' : 'حُفظ الباب');
       render(true);
     });
-    paint();
+    paint(); paintQuiz();
     dlg.showModal();
   }
 
@@ -1182,6 +1535,16 @@
       return openChapter(S.catalog.handbook_modules.find((x) => x.id === t.dataset.id));
     }
     if (a === 'add-mod') return openChapter(null, t.dataset.dim);
+    if (a === 'hb-view') { S.hbView = t.dataset.v; return render(true); }
+    if (a === 'add-model') return openModel(null, t.dataset.dim);
+    if (a === 'edit-model') {
+      if (!S.catalog) S.catalog = await L('admin.catalog');
+      return openModel(S.catalog.learning_models.find((x) => x.id === t.dataset.id));
+    }
+    if (a === 'model-subs') { S.hbView = 'reviews'; S.subModel = t.dataset.id; S.subStatus = 'submitted'; return render(); }
+    if (a === 'pv-ch') { S.pvCh = t.dataset.id; S.pvModel = null; await render(); return el.querySelector('.pv-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    if (a === 'pv-model') { S.pvModel = t.dataset.id; await render(); return el.querySelector('.pv-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    if (a === 'open-sub') return openSubmission(t.dataset.id);
     if (a === 'del-mod') {
       const m = S.catalog.handbook_modules.find((x) => x.id === t.dataset.id);
       if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
@@ -1191,6 +1554,9 @@
   });
 
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'pvTrack') { S.pvTrack = e.target.value; S.pvCh = null; S.pvModel = null; render(); }
+    if (e.target.id === 'subStatus') { S.subStatus = e.target.value; render(); }
+    if (e.target.id === 'subModel') { S.subModel = e.target.value; render(); }
     if (e.target.id === 'laInst') { S.instrument = e.target.value; render(); }
     if (e.target.id === 'ovOrg') { S.org = e.target.value; render(); }
     if (e.target.id === 'ofStatus') { S.of.status = e.target.value; render(); }
