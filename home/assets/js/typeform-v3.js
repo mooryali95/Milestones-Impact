@@ -289,8 +289,8 @@
       `الجوال: ${formData.phone || '—'}\n` +
       `نوع الطلب: ${INTEREST_LABELS[formData.interest] || '—'}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `السياق الإضافي:\n${formData.context || '— لم يُذكر —'}\n\n` +
-      `— تم الإرسال عبر Milestone Impact`
+      `السياق الإضافي:\n${formData.context || 'لم يُذكر'}\n\n` +
+      `أُرسل عبر نموذج التواصل في موقع Milestone Impact`
     );
     return `mailto:${CONFIG.recipientEmail}?subject=${subject}&body=${body}`;
   }
