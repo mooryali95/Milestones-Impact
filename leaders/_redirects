@@ -1,2 +1,5 @@
+# روابط الجهات القصيرة: /j/<رمز> أو /j/<رمز>/<حملة>
+/j/:code/:campaign  /?org=:code&c=:campaign  302
+/j/:code            /?org=:code              302
 # تطبيق صفحة واحدة: كل المسارات (ومنها /verify) تفتح index.html
 /*  /index.html  200

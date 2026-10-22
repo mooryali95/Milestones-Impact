@@ -4,17 +4,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { call } from '../api.js';
+import { attribution } from '../attribution.js';
 
 const RESEND_SECONDS = 45;
-
-// رمز دعوة الجهة من الرابط (?org=...)، يُحفظ حتى يكتمل التسجيل ولو أُعيد تحميل الصفحة
-function inviteCode() {
-  try {
-    const q = new URLSearchParams(location.search).get('org');
-    if (q) sessionStorage.setItem('mi_leaders_org', q);
-    return q || sessionStorage.getItem('mi_leaders_org') || '';
-  } catch { return ''; }
-}
 
 export default function SignIn({ onSignedIn, initialError }) {
   const [step, setStep] = useState('email');   // email | name | code
@@ -27,12 +19,13 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [wait, setWait] = useState(0);
   const codeRef = useRef(null);
   const [org, setOrg] = useState(null);
-  const [orgCode] = useState(inviteCode);
+  const [via] = useState(attribution);
 
+  // اسم الجهة يظهر إن جاء الزائر برابطها أو من موقعها
   useEffect(() => {
-    if (!orgCode) return;
-    call('org.info', { org: orgCode }).then((r) => { if (r.success) setOrg(r.org); });
-  }, [orgCode]);
+    if (!via.org && !via.ref) return;
+    call('org.info', { org: via.org, ref: via.ref }).then((r) => { if (r.success) setOrg(r.org); });
+  }, [via]);
 
   useEffect(() => {
     if (!wait) return undefined;
@@ -45,7 +38,7 @@ export default function SignIn({ onSignedIn, initialError }) {
     e?.preventDefault();
     setBusy(true); setError('');
     const res = await call('auth.start', {
-      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, org: org ? orgCode : undefined,
+      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, ...via,
     });
     setBusy(false);
     if (!res.success) return setError(res.message);

@@ -34,19 +34,57 @@ export async function participantFromToken(token: unknown) {
   return { participant: p, sessionId: s.id as string };
 }
 
-// ── رابط دعوة الجهة ──
+// ── نسب المشارك لجهته ──
+// الأولوية: رمز الرابط ثم نطاق الموقع الذي جاء منه (أو أحد نطاقاته الأم)
+const ORG_COLS = 'id, name, short_name, color, status';
+const live = (o: any) => (o && o.status !== 'inactive' ? o : null);
+
 async function orgByCode(code: unknown) {
   const c = String(code || '').trim().toLowerCase();
   if (!/^[a-z0-9-]{4,40}$/.test(c)) return null;
-  const { data } = await db.from('organizations').select('id, name, short_name, color, status').ilike('invite_code', c).maybeSingle();
-  return data && data.status !== 'inactive' ? data : null;
+  const { data } = await db.from('organizations').select(ORG_COLS).ilike('invite_code', c).maybeSingle();
+  return live(data);
+}
+
+export function hostOf(ref: unknown) {
+  const s = String(ref || '').trim().toLowerCase();
+  if (!s) return null;
+  try {
+    const h = new URL(s.includes('://') ? s : `https://${s}`).hostname.replace(/^www\./, '');
+    return /^[a-z0-9.-]{3,120}$/.test(h) && h.includes('.') ? h : null;
+  } catch { return null; }
+}
+
+async function orgByHost(host: string | null) {
+  if (!host) return null;
+  // mi.manzoma.sa تطابق mi.manzoma.sa ثم manzoma.sa، والأدق يفوز
+  const parts = host.split('.');
+  const candidates = parts.slice(0, -1).map((_, i) => parts.slice(i).join('.'));
+  const { data } = await db.from('organizations').select(`${ORG_COLS}, domains`).overlaps('domains', candidates);
+  for (const c of candidates) {
+    const hit = (data || []).find((o: any) => live(o) && (o.domains || []).includes(c));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+const campaignOf = (c: unknown) => {
+  const s = String(c || '').trim().toLowerCase();
+  return /^[a-z0-9_-]{1,40}$/.test(s) ? s : null;
+};
+
+async function resolveOrg(b: Body) {
+  const byCode = await orgByCode(b.org);
+  if (byCode) return { org: byCode, via: 'link' as const };
+  const byHost = await orgByHost(hostOf(b.ref));
+  return byHost ? { org: byHost, via: 'domain' as const } : null;
 }
 
 // يعرض اسم الجهة في شاشة التسجيل قبل إدخال البريد
 export async function orgInfo(b: Body) {
-  const org = await orgByCode(b.org);
-  if (!org) return { success: false, message: 'رابط الجهة غير صالح أو منتهٍ', code: 'org' };
-  return { success: true, org: { name: org.name, short_name: org.short_name, color: org.color } };
+  const r = await resolveOrg(b);
+  if (!r) return { success: false, message: 'رابط الجهة غير صالح أو منتهٍ', code: 'org' };
+  return { success: true, via: r.via, org: { name: r.org.name, short_name: r.org.short_name, color: r.org.color } };
 }
 
 // ── 1. بدء الدخول أو التسجيل ──
@@ -73,9 +111,12 @@ export async function authStart(b: Body, ctx: Ctx) {
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
-    // التسجيل عبر رابط جهة: يُنسب المشارك لها تلقائيًا
-    const org = await orgByCode(b.org);
-    pending = { full_name: name.slice(0, 120), phone, ...(org ? { organization_id: org.id, organization_name: org.name } : {}) };
+    // التسجيل عبر رابط جهة أو من موقعها: يُنسب المشارك لها تلقائيًا
+    const r = await resolveOrg(b);
+    pending = {
+      full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
+      ...(r ? { organization_id: r.org.id, organization_name: r.org.name, org_via: r.via } : {}),
+    };
   }
 
   const code = randomCode();
@@ -123,6 +164,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
     p = must(await db.from('participants').insert({
       email, full_name: ch.pending_profile.full_name, phone: ch.pending_profile.phone,
       organization_id: ch.pending_profile.organization_id || null, organization_name: ch.pending_profile.organization_name || null,
+      org_via: ch.pending_profile.org_via || null, campaign: ch.pending_profile.campaign || null, referrer_host: ch.pending_profile.referrer_host || null,
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);

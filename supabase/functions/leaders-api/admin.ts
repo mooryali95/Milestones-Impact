@@ -5,7 +5,7 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
 import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, trackKey } from './logic.js';
-import { mePayload } from './participant.ts';
+import { hostOf, mePayload } from './participant.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
@@ -69,7 +69,7 @@ export async function org(b: Body) {
   const o = id === 'none' ? { id: 'none', name: 'بدون جهة' } : must(await db.from('organizations').select('*').eq('id', id).maybeSingle());
   if (!o) throw new Fail('الجهة غير موجودة', 404);
   const rows = must(await orgFilter(db.from('participants')
-    .select('id, full_name, email, phone, job_title, organization_name, status, source, created_at, last_login_at, placements(dimension, level, approved_at)'), id)
+    .select('id, full_name, email, phone, job_title, organization_name, status, source, org_via, campaign, referrer_host, created_at, last_login_at, placements(dimension, level, approved_at)'), id)
     .order('created_at', { ascending: false }).limit(2000)) as any[] ?? [];
   const { data: tracks } = await db.from('tracks').select('key, title_ar');
   const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
@@ -80,8 +80,18 @@ export async function org(b: Body) {
     return { ...rest, track: key, track_title: key ? titles[key] || null : null, approved: (p.placements || []).length === 3 && p.placements.every((x: any) => x.approved_at) };
   });
   const byTrack: Record<string, number> = {};
-  for (const p of participants) if (p.track) byTrack[p.track] = (byTrack[p.track] || 0) + 1;
-  return { success: true, org: o, participants, funnel: funnel(participants), by_track: byTrack };
+  // من أين جاؤوا: طريقة الانتساب، والحملة، والموقع
+  const byVia: Record<string, number> = {};
+  const byCampaign: Record<string, number> = {};
+  const bySite: Record<string, number> = {};
+  for (const p of participants) {
+    if (p.track) byTrack[p.track] = (byTrack[p.track] || 0) + 1;
+    const v = p.org_via || 'none';
+    byVia[v] = (byVia[v] || 0) + 1;
+    if (p.campaign) byCampaign[p.campaign] = (byCampaign[p.campaign] || 0) + 1;
+    if (p.referrer_host) bySite[p.referrer_host] = (bySite[p.referrer_host] || 0) + 1;
+  }
+  return { success: true, org: o, participants, funnel: funnel(participants), by_track: byTrack, by_via: byVia, by_campaign: byCampaign, by_site: bySite };
 }
 
 export async function assignOrg(a: Admin, b: Body) {
@@ -93,7 +103,7 @@ export async function assignOrg(a: Admin, b: Body) {
     if (!target) throw new Fail('الجهة غير موجودة', 404);
   }
   // ربط كل من كتب اسمًا معينًا في خانة الجهة دفعة واحدة
-  let q = db.from('participants').update({ organization_id: target?.id || null, ...(target ? { organization_name: target.name } : {}) });
+  let q = db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null, ...(target ? { organization_name: target.name } : {}) });
   if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
   else if (ids.length) q = q.in('id', ids);
   else throw new Fail('لم يُحدَّد مشاركون');
@@ -274,7 +284,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
+                        fields: ['name', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
@@ -387,6 +397,21 @@ export async function save(a: Admin, b: Body) {
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
+    if ('domains' in row) {
+      // يقبل الروابط الكاملة أو النطاقات، مفصولة بفواصل أو أسطر
+      const raw = Array.isArray(row.domains) ? row.domains : String(row.domains || '').split(/[\s,،]+/);
+      const list = [...new Set(raw.map((d: unknown) => String(d || '').trim()).filter(Boolean).map((d: string) => {
+        const h = hostOf(d);
+        if (!h) throw new Fail(`نطاق غير صحيح: ${d}`);
+        return h;
+      }))].slice(0, 20) as string[];
+      if (list.length) {
+        const { data: taken } = await db.from('organizations').select('id, name, domains').overlaps('domains', list);
+        const clash = (taken || []).find((o: any) => o.id !== b.row.id);
+        if (clash) throw new Fail(`النطاق ${list.find((d) => clash.domains.includes(d))} مرتبط بجهة ${clash.name}`);
+      }
+      row.domains = list;
+    }
   }
 
   let saved;
