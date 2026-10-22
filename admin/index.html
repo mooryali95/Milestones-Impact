@@ -1149,6 +1149,8 @@
     @media(max-width:480px) { .form-row-3 { grid-template-columns:1fr; } }
       .mi-logo-img { height: 40px; width: auto; display: block; }
   </style>
+  <link rel="stylesheet" href="/assets/leaders-admin.css" />
+  <script src="/assets/leaders-admin.js" defer></script>
 </head>
 <body>
 
@@ -1260,8 +1262,15 @@
     </div>
   </header>
 
-  <!-- Body -->
-  <div class="dash-body">
+  <!-- مبدّل السياق: كل منتج في سياقه، بلا تداخل -->
+  <nav class="ctx-bar" aria-label="السياق">
+    <button class="ctx-tab active" data-ctx="contacts"><span class="dot"></span>طلبات التواصل</button>
+    <button class="ctx-tab" data-ctx="leaders"><span class="dot"></span>تطبيق القادة</button>
+    <a class="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener">مصفوفة التأثير ↗</a>
+  </nav>
+
+  <!-- سياق: طلبات التواصل -->
+  <div class="dash-body" id="ctx-contacts">
 
     <!-- Page Header -->
     <div class="page-header">
@@ -1354,6 +1363,8 @@
     </div>
 
   </div>
+  <!-- سياق: تطبيق القادة (assets/leaders-admin.js) -->
+  <div class="dash-body" id="ctx-leaders" hidden></div>
 </div><!-- /screen-dashboard -->
 
 
