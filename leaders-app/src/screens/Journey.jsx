@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, uploadFile } from '../api.js';
-import { LEVEL_SUMMARY, levelOf, PHASES, REQ_STATUS } from '../labels.js';
+import { LEVEL_SUMMARY, LEVELS, levelOf, PHASES, REQ_STATUS } from '../labels.js';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -64,8 +64,16 @@ function PasskeyBanner({ onDone }) {
   );
 }
 
+// مستوى واحد ملخص. الخادم يرسله جاهزًا؛ والاحتياط للنسخة الأقدم منه.
+function summaryLevel(profile) {
+  if (profile.level) return profile.level;
+  const steps = (profile.dimensions || []).map((d) => levelOf(d.level).step).filter(Boolean).sort();
+  return steps.length ? LEVELS[steps[Math.floor((steps.length - 1) / 2)] - 1].key : null;
+}
+
 function Competency({ profile }) {
-  const lvl = levelOf(profile.level);
+  const key = summaryLevel(profile);
+  const lvl = levelOf(key);
   return (
     <div className="dim overall">
       <div className="row between">
@@ -74,7 +82,7 @@ function Competency({ profile }) {
       </div>
       <h3>مستواك: {lvl.title}</h3>
       <div className="steps">{[1, 2, 3].map((s) => <div key={s} className={s <= lvl.step ? 'on' : ''} />)}</div>
-      {LEVEL_SUMMARY[profile.level] && <p className="small muted">{LEVEL_SUMMARY[profile.level]}</p>}
+      {LEVEL_SUMMARY[key] && <p className="small muted">{LEVEL_SUMMARY[key]}</p>}
     </div>
   );
 }
