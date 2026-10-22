@@ -164,6 +164,21 @@ async function revokeSessions(sb: SB, userId: string) {
   await sb.from("api_sessions").delete().eq("kind", "admin").eq("subject", String(userId));
 }
 
+// معرّف حساب Supabase Auth لهذا البريد، يُنشأ مؤكَّدًا إن لم يوجد. الدخول نفسه
+// لا يمر بـ Auth (رمز البريد أو مفتاح المرور عبر هذه الدالة)، فلا كلمة مرور.
+async function authUserId(sb: SB, email: string): Promise<string | null> {
+  const { data, error } = await sb.auth.admin.createUser({ email, email_confirm: true });
+  if (data?.user?.id) return data.user.id;
+  if (error) console.error("admin-api createUser:", error.message);
+  for (let page = 1; page <= 20; page++) {
+    const { data: list } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+    const found = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
+    if (found) return found.id;
+    if (!list?.users?.length || list.users.length < 1000) break;
+  }
+  return null;
+}
+
 type Ctx = { ip: string; ua: string };
 const clientCtx = (req: Request): Ctx => ({
   ip: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
@@ -649,8 +664,11 @@ Deno.serve(async (req: Request) => {
         if (newRole === "super_admin" && !(await mayGrantSuper())) {
           return json({ success: false, message: "منح صلاحية المدير العام للمالك وحده" }, 403);
         }
+        // admin_users.id مفتاح أجنبي إلى auth.users: نأخذ معرّف حساب Auth بالبريد أو ننشئه.
+        const authId = await authUserId(sb, newEmail);
+        if (!authId) return json({ success: false, message: "تعذّر إنشاء حساب الدخول لهذا البريد" }, 500);
         const { error } = await sb.from("admin_users")
-          .insert({ name: newName, email: newEmail, role_id: newRole, is_active: true });
+          .insert({ id: authId, name: newName, email: newEmail, role_id: newRole, is_active: true });
         if (error) {
           console.error("admin-api add-user:", error);
           return json({ success: false, message: "تعذّرت الإضافة، ربما البريد مسجّل مسبقًا" }, 400);
