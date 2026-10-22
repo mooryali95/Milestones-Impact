@@ -20,6 +20,11 @@
   const REQ = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد' };
   const DIMS = Object.keys(DIM);
   const LVLS = Object.keys(LVL);
+  // رمز المسار من الأطر الثلاثة: M1I1L2 = مبتدئ، مبتدئ، متوسط (27 مسارًا)
+  const trackOf = (levels) => {
+    const n = DIMS.map((d) => LVLS.indexOf(levels[d]) + 1);
+    return n.every((x) => x > 0) ? `M${n[0]}I${n[1]}L${n[2]}` : null;
+  };
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const date = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -61,7 +66,7 @@
   // ══ الهيكل ══
   const TABS = [
     ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['journey', 'الرحلة والمتطلبات'],
-    ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد'], ['handbook', 'الكتيب'],
+    ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد'], ['tracks', 'المسارات الـ27'], ['handbook', 'الكتيب'],
   ];
 
   function shell(inner) {
@@ -94,7 +99,7 @@
           if (!c.success) { body.innerHTML = `<div class="la-err">${esc(c.message)}</div>`; return; }
           S.catalog = c;
         }
-        body.innerHTML = { journey: viewJourney, assessment: viewAssessment, levels: viewLevels, handbook: viewHandbook }[S.tab]();
+        body.innerHTML = { journey: viewJourney, assessment: viewAssessment, levels: viewLevels, tracks: viewTracks, handbook: viewHandbook }[S.tab]();
       }
     } catch (e) {
       console.error(e);
@@ -159,15 +164,16 @@
         ${canWrite() ? '<button class="refresh-btn" data-act="add-person">+ مشارك</button>' : ''}
       </div>
       <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>الاسم</th><th>الجهة</th>${DIMS.map((d) => `<th>${DIM_EN[d]}</th>`).join('')}<th>الحالة</th><th>التسجيل</th></tr></thead>
+        <thead><tr><th>الاسم</th><th>الجهة</th>${DIMS.map((d) => `<th>${DIM_EN[d]}</th>`).join('')}<th>المسار</th><th>الحالة</th><th>التسجيل</th></tr></thead>
         <tbody>${S.list.length ? S.list.map((p) => `
           <tr data-act="open" data-id="${p.id}">
             <td><b>${esc(p.full_name)}</b><br><small class="la-muted" dir="ltr">${esc(p.email)}</small></td>
             <td>${esc(p.organization_name || '')}<br><small class="la-muted">${esc(p.job_title || '')}</small></td>
             ${DIMS.map((d) => `<td>${lv(p, d)}</td>`).join('')}
+            <td>${(() => { const k = trackOf(Object.fromEntries((p.placements || []).map((x) => [x.dimension, x.level]))); return k ? `<code class="la-code">${k}</code>` : '<span class="la-muted">·</span>'; })()}</td>
             <td><span class="la-chip ${p.status === 'pending_approval' ? 'warn' : ''}">${STATUS[p.status] || p.status}</span></td>
             <td>${date(p.created_at)}</td>
-          </tr>`).join('') : '<tr><td colspan="7" class="la-empty">لا مشاركين بعد</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="8" class="la-empty">لا مشاركين بعد</td></tr>'}
         </tbody></table></div>`;
   }
 
@@ -207,6 +213,8 @@
         <section class="la-card">
           <div class="la-row between"><h3>المستوى في الأبعاد الثلاثة</h3>${prof ? (prof.approved ? '<span class="la-chip ok">معتمد</span>' : '<span class="la-chip warn">مبدئي، بانتظارك</span>') : ''}</div>
           ${!prof && !latest ? '<p class="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>' : ''}
+          ${prof?.track ? `<div class="la-track-now"><code class="la-code">${esc(prof.track.key)}</code><b>${esc(prof.track.title || 'مسار بلا عنوان')}</b>
+            <p class="la-muted">${esc(prof.track.summary || '')}</p><small class="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>` : ''}
           <table class="la-table"><thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead><tbody>
           ${DIMS.map((d) => {
             const x = prof?.dimensions.find((y) => y.dimension === d);
@@ -430,6 +438,35 @@
       </section>`;
   }
 
+  // ══ المسارات الـ27 ══
+  // كل مسار تركيبة من مستويات الأطر الثلاثة. الكتيب والرحلة يُركَّبان من
+  // الوحدات التسع تلقائيًا، وهنا تُحرَّر هوية المسار التي يقرؤها المشارك.
+  const TRACK_FIELDS = [
+    ['title_ar', 'اسم المسار'], ['summary_ar', 'لمن صُمّم المسار', 'textarea', { rows: 3 }],
+    ['focus_ar', 'أولويات التطوير (كل سطر بند)', 'textarea', { rows: 4 }],
+    ['project_ar', 'المشروع التطبيقي', 'textarea', { rows: 2 }],
+    ['journey_ar', 'كيف تتوجه الرحلة: التدريب والكوتشينغ والأقران (كل سطر بند)', 'textarea', { rows: 4 }],
+    ['priority_dimension', 'محور التركيز الأول', 'select', { map: DIM }],
+  ];
+  function viewTracks() {
+    const w = canWrite();
+    const tracks = S.catalog.tracks || [];
+    const counts = S.catalog.track_counts || {};
+    if (!tracks.length) return '<div class="la-note">جدول المسارات غير موجود بعد. شغّل الترحيل server/leaders-007-tracks.sql في Supabase.</div>';
+    const chip = (t, d) => `<span class="la-lvl ${t[`${d}_level`]}">${DIM_EN[d][0]} ${LVL[t[`${d}_level`]]}</span>`;
+    return `
+      <p class="la-muted">المسار = تركيبة مستويات المشارك في الأطر الثلاثة (3×3×3 = 27). يُسكَّن المشارك آليًا بعد القياس ويتغير مساره إن عدّلت مستوياته. الكتيب والمتطلبات تُركَّب من الوحدات التسع، وهنا هوية المسار التي يقرؤها المشارك: اسمه ووصفه وأولوياته ومشروعه. المشارك لا يرى الرمز ولا مستوى كل إطار.</p>
+      ${LVLS.map((ml) => `
+        <h3 class="la-phase">${DIM_EN.milestone} ${LVL[ml]}</h3>
+        <div class="la-tracks">${tracks.filter((t) => t.milestone_level === ml).sort((a, b) => a.sort - b.sort).map((t) => `
+          <article class="la-track" ${w ? `data-act="edit-track" data-key="${t.key}"` : ''}>
+            <div class="la-row between"><code class="la-code">${t.key}</code><small class="la-muted">${counts[t.key] || 0} مشارك</small></div>
+            <b>${esc(t.title_ar)}</b>
+            <div class="la-row">${DIMS.map((d) => chip(t, d)).join('')}</div>
+            <p class="la-muted">${esc((t.summary_ar || '').slice(0, 140))}${(t.summary_ar || '').length > 140 ? '…' : ''}</p>
+          </article>`).join('')}</div>`).join('')}`;
+  }
+
   // ══ الكتيب ══
   function viewHandbook() {
     const w = canWrite();
@@ -573,6 +610,10 @@
       el.querySelectorAll(`[data-rule^="${d}|${l}|"]`).forEach((i) => { row[i.dataset.rule.split('|')[2]] = Number(i.value); });
       const r = await L('admin.save', { entity: 'level_rules', row });
       toast(r.success ? 'حُفظت القاعدة' : r.message); return r.success && render(true);
+    }
+    if (a === 'edit-track') {
+      const tr = c.tracks.find((x) => x.key === t.dataset.key);
+      return openForm(`مسار ${tr.key}`, TRACK_FIELDS, tr, saveRow('tracks', { key: tr.key }));
     }
     if (a === 'edit-mod') {
       const m = c.handbook_modules.find((x) => x.id === t.dataset.id);

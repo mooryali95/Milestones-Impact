@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { DIMENSIONS, LEVELS } from './logic.js';
+import { DIMENSIONS, LEVELS, trackKey } from './logic.js';
 import { mePayload } from './participant.ts';
 
 type Body = Record<string, any>;
@@ -170,6 +170,8 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort'] },
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort'] },
+  tracks:             { table: 'tracks', key: ['key'], sortable: true,
+                        fields: ['title_ar', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
@@ -187,6 +189,13 @@ export async function catalog() {
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
   const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
   out.locked_instruments = [...new Set((used || []).map((u: any) => u.instrument_id))];
+  // عدد المشاركين في كل مسار من الـ27، من مستوياتهم الحالية (مبدئية أو معتمدة)
+  const { data: pl } = await db.from('placements').select('participant_id, dimension, level');
+  const byP: Record<string, Record<string, string>> = {};
+  for (const r of pl || []) (byP[r.participant_id] ||= {})[r.dimension] = r.level;
+  const counts: Record<string, number> = {};
+  for (const lv of Object.values(byP)) { const k = trackKey(lv); if (k) counts[k] = (counts[k] || 0) + 1; }
+  out.track_counts = counts;
   return out;
 }
 

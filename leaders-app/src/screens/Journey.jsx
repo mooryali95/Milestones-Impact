@@ -87,6 +87,56 @@ function Competency({ profile }) {
   );
 }
 
+// المسار: واحد من 27 تركيبة لمستوياتك في الأطر الثلاثة. يرى المشارك
+// اسمه ووصفه وتوجيه رحلته فقط، والتفصيل لكل إطار للإدارة.
+const points = (t) => String(t || '').split('\n').map((x) => x.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
+
+function TrackCard({ profile }) {
+  const t = profile.track;
+  const lvl = levelOf(summaryLevel(profile));
+  const focus = points(t.focus);
+  const journey = points(t.journey);
+  return (
+    <section className="track">
+      <header className="track-head">
+        <div className="row between">
+          <span className="track-eyebrow">مسارك في البرنامج</span>
+          <span className="row" style={{ gap: 6 }}>
+            {lvl.title && <span className="chip track-lvl">المستوى العام: {lvl.title}</span>}
+            {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
+          </span>
+        </div>
+        <h3>{t.title}</h3>
+        {t.summary && <p>{t.summary}</p>}
+      </header>
+      <div className="track-body">
+        {focus.length > 0 && (
+          <div className="track-col">
+            <h4>أولويات تطويرك</h4>
+            <ol className="track-focus">{focus.map((f, i) => <li key={i}><span>{i + 1}</span>{f}</li>)}</ol>
+          </div>
+        )}
+        {t.project && (
+          <div className="track-col">
+            <h4>مشروعك التطبيقي</h4>
+            <p>{t.project.replace(/^مشروعك التطبيقي:\s*/, '')}</p>
+            <span className="small muted">تعمل عليه طوال الرحلة، ويُبنى عليه التقييم النهائي.</span>
+          </div>
+        )}
+        {journey.length > 0 && (
+          <div className="track-col">
+            <h4>كيف تُوجَّه رحلتك</h4>
+            <ul className="track-journey">{journey.map((j, i) => {
+              const [k, ...rest] = j.split(':');
+              return <li key={i}>{rest.length ? <><b>{k}</b>{rest.join(':')}</> : j}</li>;
+            })}</ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const AUTO_HINT = {
   'P-INFO': 'يكتمل بحفظ بياناتك الأساسية.',
   'P-CV': 'يكتمل برفع سيرتك من ملفك الشخصي.',
@@ -283,10 +333,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
       {profile && (
         <>
           <div className="section-title">
-            <h2>ملف كفاءتك</h2>
+            <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
             <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
           </div>
-          <Competency profile={profile} />
+          {profile.track?.title ? <TrackCard profile={profile} /> : <Competency profile={profile} />}
         </>
       )}
 

@@ -270,7 +270,8 @@ export default function Handbook({ me, onBack }) {
       <div className="row between" style={{ marginBottom: 16 }}>
         <div>
           <p className="eyebrow">كتيبك الشخصي</p>
-          <h1 style={{ fontSize: 22 }}>مصمم على مستواك{toc?.level ? `: ${levelOf(toc.level).title}` : ''}</h1>
+          <h1 style={{ fontSize: 22 }}>{toc?.track?.title || `مصمم على مستواك${toc?.level ? `: ${levelOf(toc.level).title}` : ''}`}</h1>
+          {toc?.track?.title && <p className="small muted">كتيب مركّب لمسارك من الأطر الثلاثة{toc?.level ? ` · المستوى العام: ${levelOf(toc.level).title}` : ''}</p>}
         </div>
         <button className="btn ghost sm" onClick={onBack}>رجوع للرحلة</button>
       </div>

@@ -159,6 +159,14 @@ export function overallLevel(levels) {
   return LEVELS[ranks[Math.floor((ranks.length - 1) / 2)]];
 }
 
+// رمز المسار من مستويات الأطر الثلاثة: M{1..3}I{1..3}L{1..3}، أي 27 مسارًا.
+// لا مسار قبل أن تتحدد المستويات الثلاثة كلها.
+export function trackKey(levels) {
+  const n = (d) => (levels?.[d] in RANK ? RANK[levels[d]] + 1 : null);
+  const [m, i, l] = DIMENSIONS.map(n);
+  return m && i && l ? `M${m}I${i}L${l}` : null;
+}
+
 export function handbookModulesFor(modules, levels) {
   return modules
     .filter((m) => levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && (m.body_md || '').trim())

@@ -343,3 +343,35 @@ textarea.input { min-height: 96px; resize: vertical; }
 .hb-cover { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(11,39,47,.55); color: #fff; font-weight: 600; }
 body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 @media print { body.protected main, body.protected .topbar { display: none !important; } body.protected::after { content: "الطباعة غير متاحة لمحتوى الكتيب"; display: block; padding: 40px; font-size: 20px; } }
+
+/* ── المسار ── */
+.track { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.track-head {
+  background: linear-gradient(135deg, var(--graphite) 0%, var(--slate) 100%); color: #fff;
+  padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 10px; position: relative;
+}
+.track-head::after { content: ""; position: absolute; inset-inline-start: 0; bottom: 0; height: 3px; width: 100%; background: linear-gradient(90deg, var(--gold), var(--copper)); }
+.track-eyebrow { font-size: 12px; letter-spacing: .06em; color: var(--copper); font-weight: 700; }
+.track-head h3 { font-size: 21px; line-height: 1.5; font-weight: 800; }
+.track-head p { font-size: 14px; line-height: 1.9; color: rgba(255, 255, 255, .82); max-width: 760px; }
+.track-head .chip.track-lvl { background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255, 255, 255, .2); }
+.track-body { display: grid; grid-template-columns: repeat(3, 1fr); }
+.track-col { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.track-col + .track-col { border-inline-start: 1px solid var(--line); }
+.track-col h4 { font-size: 13px; color: var(--accent); letter-spacing: .02em; }
+.track-col p { font-size: 14px; line-height: 1.85; }
+.track-focus { list-style: none; display: flex; flex-direction: column; gap: 10px; padding: 0; margin: 0; }
+.track-focus li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 14px; line-height: 1.7; align-items: start; }
+.track-focus li span {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--sand); color: var(--accent); font-weight: 800; font-size: 12px;
+}
+.track-focus li:first-child span { background: var(--gold); color: #fff; }
+.track-journey { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.track-journey li { font-size: 13.5px; line-height: 1.8; padding-inline-start: 12px; border-inline-start: 2px solid var(--sand); }
+.track-journey li b { color: var(--slate); }
+@media (max-width: 820px) {
+  .track-body { grid-template-columns: 1fr; }
+  .track-col + .track-col { border-inline-start: 0; border-top: 1px solid var(--line); }
+  .track-head h3 { font-size: 18px; }
+}
