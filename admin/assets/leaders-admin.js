@@ -85,8 +85,8 @@
 
   // ══ الهيكل ══
   const TABS = [
-    ['overview', 'نظرة عامة'], ['orgs', 'الجهات'], ['participants', 'المشاركون'], ['journey', 'الرحلة والمتطلبات'],
-    ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد'], ['tracks', 'المسارات الـ27'], ['handbook', 'الكتيب'],
+    ['overview', 'نظرة عامة'], ['orgs', 'الجهات'], ['participants', 'المشاركون'], ['tracks', 'المسارات الـ27'], ['handbook', 'كتيب القائد'],
+    ['journey', 'الرحلة والمتطلبات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد'],
   ];
 
   function shell(inner) {
@@ -687,42 +687,65 @@
   const trackLevels = (key) => Object.fromEntries(DIMS.map((d, i) => [d, LVLS[Number(key[i * 2 + 1]) - 1]]));
   const lvlChips = (key) => { const lv = trackLevels(key); return DIMS.map((d) => `<span class="la-lvl ${lv[d]}">${DIM_EN[d][0]} ${LVL[lv[d]]}</span>`).join(''); };
 
+  // لوحات المسارات: لكل مستوى في Milestone لوحة 3×3، صفوفها مستوى Impact وأعمدتها مستوى Leadership
+  const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
+  const LNUM = { beginner: 1, intermediate: 2, advanced: 3 };
+  const shortTitle = (t) => String(t || '').replace(/^مسار\s+/, '');
   function viewTracks() {
     const tracks = S.catalog.tracks || [];
     const st = S.catalog.track_stats || {};
     if (!tracks.length) return '<div class="la-note">جدول المسارات غير موجود بعد. شغّل الترحيل server/leaders-007-tracks.sql في Supabase.</div>';
+    const byKey = Object.fromEntries(tracks.map((t) => [t.key, t]));
     const sum = (f) => Object.values(st).reduce((a, x) => a + (x[f] || 0), 0);
     const used = tracks.filter((t) => st[t.key]?.total).length;
-    const max = Math.max(1, ...Object.values(st).map((x) => x.total));
-    const card = (t) => {
-      const x = st[t.key] || { total: 0, active: 0, pending: 0, completed: 0 };
-      if (S.onlyUsed && !x.total) return '';
-      const pc = (n) => `${(n / Math.max(1, x.total) * 100).toFixed(0)}%`;
-      return `
-        <article class="la-track${x.total ? '' : ' empty'}" data-act="open-track" data-key="${t.key}" style="--fill:${(x.total / max).toFixed(2)}">
-          <div class="la-row between"><code class="la-code">${t.key}</code><span class="la-track-n"><b>${x.total}</b> مشارك</span></div>
-          <b class="la-track-title">${esc(t.title_ar)}</b>
-          <div class="la-row">${lvlChips(t.key)}</div>
-          <div class="la-track-bar" title="مفعّل ${x.active} · بانتظار الاعتماد ${x.pending} · أنهى ${x.completed}">
-            <span class="act" style="width:${pc(x.active)}"></span><span class="pen" style="width:${pc(x.pending)}"></span><span class="done" style="width:${pc(x.completed)}"></span>
-          </div>
-          <div class="la-track-meta"><span><i class="act"></i>مفعّل ${x.active}</span><span><i class="pen"></i>بانتظار ${x.pending}</span><span><i class="done"></i>أنهى ${x.completed}</span></div>
-        </article>`;
+    const max = Math.max(1, ...Object.values(st).map((x) => x.total || 0));
+    const cell = (key) => {
+      const t = byKey[key] || {};
+      const x = st[key] || {};
+      const heat = x.total ? (0.25 + 0.75 * x.total / max).toFixed(2) : 0;
+      return `<button class="tx-cell${x.total ? ' on' : ''}" style="--heat:${heat}" data-act="open-track" data-key="${key}" title="${esc(t.title_ar || key)}">
+        <span class="tx-key">${key}</span>
+        <span class="tx-title">${esc(shortTitle(t.title_ar))}</span>
+        <span class="tx-n"><b>${x.total || 0}</b>${x.pending ? `<small>${x.pending} بانتظارك</small>` : x.total ? `<small>${x.active || 0} مفعّل</small>` : ''}</span>
+      </button>`;
     };
+    const board = (ml) => {
+      const n = tracks.filter((t) => t.milestone_level === ml).reduce((a, t) => a + (st[t.key]?.total || 0), 0);
+      return `<section class="tx-board">
+        <header><span class="tx-roman">${ROMAN[ml]}</span><div><small>Milestone</small><b>${LVL[ml]}</b></div><span class="tx-board-n"><b>${n}</b>مشارك</span></header>
+        <div class="tx-grid">
+          <span class="tx-corner">Impact ↓<br>Leadership ←</span>
+          ${LVLS.map((l) => `<span class="tx-axis col"><i>L</i>${LVL[l]}</span>`).join('')}
+          ${LVLS.map((il) => `<span class="tx-axis row"><i>I</i>${LVL[il]}</span>${LVLS.map((ll) => cell(`M${LNUM[ml]}I${LNUM[il]}L${LNUM[ll]}`)).join('')}`).join('')}
+        </div>
+      </section>`;
+    };
+    const top = tracks.filter((t) => st[t.key]?.total).sort((a, b) => st[b.key].total - st[a.key].total).slice(0, 5);
     return `
-      <div class="stats-grid">
-        <div class="stat-card"><div class="stat-label">مسارات بها مشاركون</div><div class="stat-value">${used}<small> / 27</small></div><div class="stat-sub">من كل التركيبات الممكنة</div></div>
-        <div class="stat-card"><div class="stat-label">مشاركون مسكّنون</div><div class="stat-value">${sum('total')}</div><div class="stat-sub">لهم مسار محدد</div></div>
-        <div class="stat-card"><div class="stat-label">مفعّلون</div><div class="stat-value s-replied">${sum('active')}</div><div class="stat-sub">اعتُمد مسارهم وبدأوا</div></div>
-        <div class="stat-card"><div class="stat-label">بانتظار الاعتماد</div><div class="stat-value s-new">${sum('pending')}</div><div class="stat-sub">مسار مبدئي ينتظرك</div></div>
+      <section class="tx-hero">
+        <div class="tx-hero-head">
+          <div><span class="tx-eyebrow">Leadership Tracks</span><h2>المسارات السبعة والعشرون</h2>
+            <p>كل مسار تركيبة فريدة من مستويات الأطر الثلاثة، له هويته وكتيبه ورحلته. افتح أي مسار لترى مشاركيه وكتيبه كاملًا.</p></div>
+          <button class="tx-btn" data-act="tab" data-tab="handbook">إدارة كتيب القائد</button>
+        </div>
+        <div class="tx-kpis">
+          <div><b>${used}<small>/27</small></b><span>مسار به مشاركون</span></div>
+          <div><b>${sum('total')}</b><span>مشارك مسكّن</span></div>
+          <div><b>${sum('active')}</b><span>مفعّل</span></div>
+          <div class="${sum('pending') ? 'warn' : ''}"><b>${sum('pending')}</b><span>بانتظار اعتمادك</span></div>
+        </div>
+      </section>
+      <div class="tx-legend">
+        <span>كل لوحة مستوى في <b>Milestone</b>، صفوفها مستوى <b>Impact</b>، وأعمدتها مستوى <b>Leadership</b>.</span>
+        <span class="tx-scale"><i></i>شدة الذهبي = عدد المشاركين</span>
       </div>
-      <div class="la-row between la-tracks-bar">
-        <p class="la-muted">كل مسار = تركيبة مستويات الأطر الثلاثة، وله كتيب ورحلة تُركَّب تلقائيًا. افتح أي مسار لترى مشاركيه وكتيبه كاملًا وتعدّل هويته أو أي باب فيه.</p>
-        <button class="la-pill${S.onlyUsed ? ' on' : ''}" data-act="only-used">${S.onlyUsed ? 'عرض الكل' : 'المسارات المشغولة فقط'}</button>
-      </div>
-      ${LVLS.map((ml) => `
-        <h3 class="la-phase">${DIM_EN.milestone} · ${LVL[ml]} <small class="la-muted">${tracks.filter((t) => t.milestone_level === ml).reduce((a, t) => a + (st[t.key]?.total || 0), 0)} مشارك</small></h3>
-        <div class="la-tracks">${tracks.filter((t) => t.milestone_level === ml).sort((a, b) => a.sort - b.sort).map(card).join('')}</div>`).join('')}`;
+      <div class="tx-boards">${LVLS.map(board).join('')}</div>
+      ${top.length ? `<section class="la-card tx-top"><h3>الأكثر شغلًا</h3>${top.map((t, i) => {
+        const x = st[t.key];
+        return `<button class="tx-rank" data-act="open-track" data-key="${t.key}"><span class="tx-rank-i">${i + 1}</span>
+          <span class="tx-rank-t"><b>${esc(t.title_ar)}</b><small><code>${t.key}</code> ${lvlChips(t.key)}</small></span>
+          <span class="tx-rank-bar"><i style="width:${(x.total / max * 100).toFixed(0)}%"></i></span><b class="tx-rank-n">${x.total}</b></button>`;
+      }).join('')}</section>` : ''}`;
   }
 
   async function viewTrack(key) {
@@ -831,27 +854,152 @@
   // ══ الكتيب ══
   function viewHandbook() {
     const w = canWrite();
-    const mods = S.catalog.handbook_modules;
+    const mods = S.catalog.handbook_modules || [];
+    const words = (m) => (String(m.body_md || '').replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length;
+    const done = mods.filter((m) => words(m) > 30).length;
+    const total = mods.reduce((a, m) => a + words(m), 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    const dimSec = (d) => {
+      const list = mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
+      return `<section class="hb-dim">
+        <header><span class="tx-roman">${DIM_EN[d][0]}</span><div><small>${DIM_EN[d]}</small><b>${DIM[d]}</b></div>
+          <span class="hb-dim-n">${list.length} باب</span>
+          ${w ? `<button class="tx-btn gold" data-act="add-mod" data-dim="${d}">+ باب جديد</button>` : ''}</header>
+        ${list.length ? `<ol class="hb-list">${list.map((m, i) => {
+          const n = words(m);
+          const tiered = /^:::(min|only)=/m.test(m.body_md || '');
+          return `<li class="hb-ch${n ? '' : ' empty'}">
+            <span class="hb-num">${pad(i + 1)}</span>
+            <button class="hb-main" data-act="edit-mod" data-id="${m.id}">
+              <b>${esc(m.title_ar)}</b>
+              <span class="hb-meta"><span class="la-lvl ${m.min_level}">من ${LVL[m.min_level]}</span>
+                <span>${n ? `${n.toLocaleString('ar')} كلمة` : 'بلا محتوى بعد'}</span>${tiered ? '<span>فقرات مخصصة لكل مستوى</span>' : ''}</span>
+            </button>
+            <span class="hb-acts">${moveBtns('handbook_modules', m.id)}
+              ${w ? `<button class="btn-sm ghost" data-act="edit-mod" data-id="${m.id}">تحرير</button><button class="hb-del" data-act="del-mod" data-id="${m.id}" title="حذف الباب">حذف</button>` : `<button class="btn-sm ghost" data-act="edit-mod" data-id="${m.id}">قراءة</button>`}</span>
+          </li>`;
+        }).join('')}</ol>` : '<p class="la-muted hb-none">لا أبواب في هذا الإطار بعد.</p>'}
+      </section>`;
+    };
     return `
-      <section class="la-card la-hb-pick">
-        <h3>معاينة كتيب مسار</h3>
-        <p class="la-muted">لكل مسار من الـ27 كتيب خاص يُركَّب تلقائيًا من الأبواب أدناه. اختر مسارًا لتقرأ كتيبه كاملًا كما يراه المشارك.</p>
-        <div class="la-row"><select id="laHbTrack">${(S.catalog.tracks || []).map((t) => `<option value="${t.key}">${t.key} · ${esc(t.title_ar)}</option>`).join('')}</select>
-        <button class="btn-sm primary" data-act="open-track-sel">فتح الكتيب</button></div>
+      <section class="tx-hero">
+        <div class="tx-hero-head">
+          <div><span class="tx-eyebrow">The Leader's Handbook</span><h2>كتيب القائد</h2>
+            <p>هنا تدير الكتيب كله: تضيف بابًا، وتحرر محتواه، وتعيد ترتيبه، أو تحذفه. كتيب كل مشارك يُركَّب تلقائيًا من هذه الأبواب حسب مستواه في كل إطار، ويقرؤه داخل المنصة فقط بعلامة مائية باسمه.</p></div>
+          <div class="hb-preview">
+            <select id="laHbTrack">${(S.catalog.tracks || []).map((t) => `<option value="${t.key}">${t.key} · ${esc(shortTitle(t.title_ar))}</option>`).join('')}</select>
+            <button class="tx-btn" data-act="open-track-sel">معاينة كتيب مسار</button>
+          </div>
+        </div>
+        <div class="tx-kpis">
+          <div><b>${mods.length}</b><span>باب في الأطر الثلاثة</span></div>
+          <div><b>${done}</b><span>باب مكتمل المحتوى</span></div>
+          <div class="${mods.length - done ? 'warn' : ''}"><b>${mods.length - done}</b><span>باب يحتاج محتوى</span></div>
+          <div><b>${total.toLocaleString('ar')}</b><span>كلمة إجمالًا</span></div>
+        </div>
       </section>
-      <p class="la-muted">كتيب كل مشارك = الأبواب التي مستواها الأدنى ≤ مستواه في ذلك البُعد. يُعرض للقراءة فقط داخل المنصة بعلامة مائية باسم المشارك.</p>
-      <p class="la-muted">داخل المحتوى: <code>## عنوان</code> و<code>### عنوان فرعي</code> و<code>- بند</code> و<code>**غامق**</code> و<code>&gt; خلاصة</code>. لتخصيص فقرة لمستوى: <code>:::min=intermediate</code> (من متوسط فأعلى) أو <code>:::only=beginner</code> (للتأسيسي فقط) ثم السطور ثم <code>:::</code>. المستويات: beginner تأسيسي، intermediate متوسط، advanced احترافي.</p>
-      ${DIMS.map((d) => `
-        <h3 class="la-phase">${DIM_EN[d]} · ${DIM[d]}</h3>
-        <ul class="la-reqs">${mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort).map((m) => `
-          <li><span>${esc(m.title_ar)} <small class="la-chip">من ${LVL[m.min_level]}</small> <small class="la-muted">${(m.body_md || '').length ? `${(m.body_md || '').length} حرف` : 'بلا محتوى بعد'}</small></span>
-          <span class="la-row">${moveBtns('handbook_modules', m.id)}${w ? `<button class="la-link" data-act="edit-mod" data-id="${m.id}">تحرير</button>` : ''}</span></li>`).join('')}</ul>
-        ${w ? `<button class="la-link" data-act="add-mod" data-dim="${d}">+ باب</button>` : ''}`).join('')}`;
+      ${DIMS.map(dimSec).join('')}`;
   }
-  const MOD_FIELDS = [
-    ['title_ar', 'عنوان الباب'], ['chapter_key', 'مفتاح الباب (فريد داخل البُعد)'],
-    ['min_level', 'يظهر ابتداءً من مستوى', 'select', { map: LVL }], ['body_md', 'المحتوى (Markdown)', 'textarea', { rows: 14 }],
+
+  // محرر الباب: عنوان، ومستوى الظهور، ومحتوى بمعاينة حية لكل مستوى
+  const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
+  function filterMd(md, level) {
+    const out = [];
+    let keep = true;
+    for (const line of String(md || '').split('\n')) {
+      const open = line.trim().match(/^:::(min|only)=(beginner|intermediate|advanced)$/);
+      if (open) { keep = open[1] === 'min' ? RANK[level] >= RANK[open[2]] : level === open[2]; continue; }
+      if (line.trim() === ':::') { keep = true; continue; }
+      if (keep) out.push(line);
+    }
+    return out.join('\n');
+  }
+  const HB_TOOLS = [
+    ['## ', 'عنوان'], ['### ', 'عنوان فرعي'], ['- ', 'بند'], ['1. ', 'ترقيم'], ['**', 'غامق', 'wrap'], ['> ', 'خلاصة'],
+    [':::min=intermediate\n', 'فقرة للمتوسط فأعلى', 'block'], [':::min=advanced\n', 'فقرة للاحترافي', 'block'], [':::only=beginner\n', 'فقرة للتأسيسي فقط', 'block'],
   ];
+  function openChapter(m, dim) {
+    const w = canWrite();
+    const d = m?.dimension || dim;
+    let dlg = document.getElementById('laChapter');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'laChapter'; dlg.className = 'hb-editor'; document.body.appendChild(dlg); }
+    let view = m?.min_level || 'beginner';
+    dlg.innerHTML = `<form class="hb-ed" method="dialog">
+      <header class="hb-ed-head">
+        <div class="hb-ed-name"><small>${DIM_EN[d]} · ${DIM[d]}</small>
+          <input name="title_ar" required placeholder="عنوان الباب" value="${esc(m?.title_ar || '')}" ${w ? '' : 'readonly'}></div>
+        <div class="hb-ed-lvl"><small>يظهر لمن مستواه</small><div class="hb-seg">${LVLS.map((l) => `<label><input type="radio" name="min_level" value="${l}"${(m?.min_level || 'beginner') === l ? ' checked' : ''} ${w ? '' : 'disabled'}><span>${LVL[l]}${l === 'advanced' ? '' : ' فأعلى'}</span></label>`).join('')}</div></div>
+        <div class="hb-ed-btns">
+          ${w ? '<button class="btn-sm primary" value="save">حفظ الباب</button>' : ''}
+          <button class="btn-sm ghost" value="cancel" formnovalidate>إغلاق</button>
+          ${w && m ? '<button class="hb-del" value="delete" formnovalidate>حذف</button>' : ''}
+        </div>
+      </header>
+      ${w ? `<div class="hb-ed-tools">${HB_TOOLS.map(([ins, label, mode], i) => `<button type="button" data-tool="${i}" class="${mode === 'block' ? 'blk' : ''}">${label}</button>`).join('')}</div>` : ''}
+      <div class="hb-ed-panes">
+        <div class="hb-ed-src"><div class="hb-ed-cap">المحتوى</div><textarea name="body_md" spellcheck="false" ${w ? '' : 'readonly'} placeholder="اكتب محتوى الباب هنا. استخدم الأزرار أعلاه للعناوين والبنود والفقرات المخصصة لكل مستوى.">${esc(m?.body_md || '')}</textarea></div>
+        <div class="hb-ed-out"><div class="hb-ed-cap">كما يقرؤه المشارك <span class="hb-seg sm">${LVLS.map((l) => `<button type="button" data-view="${l}">${LVL[l]}</button>`).join('')}</span><span class="hb-ed-wc"></span></div>
+          <article class="hb-page"><h3 class="hb-page-t"></h3><div class="la-md"></div></article></div>
+      </div>
+      <div class="la-err" hidden></div>
+    </form>`;
+    const f = dlg.querySelector('form');
+    const ta = f.body_md;
+    const paint = () => {
+      f.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
+      f.querySelector('.hb-page-t').textContent = f.title_ar.value || 'عنوان الباب';
+      const md = filterMd(ta.value, view);
+      const minL = f.querySelector('[name=min_level]:checked')?.value || 'beginner';
+      f.querySelector('.hb-page .la-md').innerHTML = RANK[view] < RANK[minL]
+        ? `<p class="la-muted">هذا الباب لا يظهر لمستوى ${LVL[view]}؛ يبدأ من ${LVL[minL]}.</p>` : (mdHtml(md) || '<p class="la-muted">لا محتوى بعد.</p>');
+      f.querySelector('.hb-ed-wc').textContent = `${(ta.value.replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length} كلمة`;
+    };
+    f.addEventListener('input', paint);
+    f.addEventListener('change', paint);
+    f.addEventListener('click', (e) => {
+      const v = e.target.closest('[data-view]');
+      if (v) { view = v.dataset.view; return paint(); }
+      const tb = e.target.closest('[data-tool]');
+      if (!tb) return;
+      const [ins, , mode] = HB_TOOLS[tb.dataset.tool];
+      const { selectionStart: s0, selectionEnd: s1, value } = ta;
+      const sel = value.slice(s0, s1);
+      let text;
+      if (mode === 'wrap') text = `**${sel || 'نص غامق'}**`;
+      else if (mode === 'block') text = `${s0 && value[s0 - 1] !== '\n' ? '\n' : ''}${ins}${sel || 'اكتب الفقرة هنا'}\n:::\n`;
+      else {
+        const ls = value.lastIndexOf('\n', s0 - 1) + 1;
+        ta.setRangeText(ins, ls, ls, 'end'); ta.focus(); return paint();
+      }
+      ta.setRangeText(text, s0, s1, 'end'); ta.focus(); paint();
+    });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.submitter?.value;
+      if (btn === 'cancel') return dlg.close();
+      const err = f.querySelector('.la-err');
+      let r;
+      if (btn === 'delete') {
+        if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
+        r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
+      } else {
+        const row = { title_ar: f.title_ar.value.trim(), min_level: f.querySelector('[name=min_level]:checked').value, body_md: ta.value };
+        if (!row.title_ar) { err.hidden = false; err.textContent = 'عنوان الباب مطلوب'; return; }
+        if (m) row.id = m.id;
+        else {
+          const sib = (S.catalog?.handbook_modules || []).filter((x) => x.dimension === d);
+          Object.assign(row, { dimension: d, sort: Math.max(0, ...sib.map((x) => x.sort || 0)) + 1, chapter_key: `ch-${Date.now().toString(36)}` });
+        }
+        r = await L('admin.save', { entity: 'handbook_modules', row });
+      }
+      if (!r.success) { err.hidden = false; err.textContent = r.message; return; }
+      dlg.close();
+      toast(btn === 'delete' ? 'حُذف الباب' : 'حُفظ الباب');
+      render(true);
+    });
+    paint();
+    dlg.showModal();
+  }
 
   // ══ الأحداث ══
   async function move(entity, id, dir) {
@@ -1030,12 +1178,15 @@
       return openForm(`مسار ${tr.key}`, TRACK_FIELDS, tr, saveRow('tracks', { key: tr.key }));
     }
     if (a === 'edit-mod') {
-      const m = (S.catalog || await L('admin.catalog')).handbook_modules.find((x) => x.id === t.dataset.id);
-      return openForm(`باب: ${m.title_ar}`, MOD_FIELDS, m, saveRow('handbook_modules', { id: m.id }), delRow('handbook_modules', m.id));
+      if (!S.catalog) S.catalog = await L('admin.catalog');
+      return openChapter(S.catalog.handbook_modules.find((x) => x.id === t.dataset.id));
     }
-    if (a === 'add-mod') {
-      const n = c.handbook_modules.filter((x) => x.dimension === t.dataset.dim).length;
-      return openForm('باب جديد', MOD_FIELDS, { min_level: 'beginner' }, saveRow('handbook_modules', { dimension: t.dataset.dim, sort: n + 1 }));
+    if (a === 'add-mod') return openChapter(null, t.dataset.dim);
+    if (a === 'del-mod') {
+      const m = S.catalog.handbook_modules.find((x) => x.id === t.dataset.id);
+      if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
+      const r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
+      toast(r.success ? 'حُذف الباب' : r.message); return r.success && render(true);
     }
   });
 
