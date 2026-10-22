@@ -452,3 +452,11 @@
   transition: color 0.3s var(--ease);
 }
 .footer__bottom-link:hover { color: var(--gold-light); }
+
+/* ملصق عربي في موضع صُمّم أصلًا لنص لاتيني: تباعد الحروف يفصل الحروف العربية المتصلة */
+.label-ar {
+  font-family: var(--font-ar) !important;
+  font-style: normal !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}

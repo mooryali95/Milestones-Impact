@@ -49,8 +49,8 @@
     {
       key: 'outcomes', name: 'النتائج', en: 'Outcomes',
       questions: [
-        'لدينا مؤشرات نتائج تقيس التغيّر لدى المستفيد، لا حجم النشاط.',
-        'نجمع بيانات خط الأساس قبل التدخل لنقارن بها النتائج.',
+        'تتوفر مؤشرات نتائج تقيس التغيّر لدى المستفيد، لا حجم النشاط.',
+        'تُجمع بيانات خط الأساس قبل التدخل للمقارنة بها.',
         'تُراجَع النتائج دوريًا على مستوى القيادة لاتخاذ قرارات تصحيحية.',
       ],
       advice: 'انقلوا القياس من عدّ الأنشطة إلى رصد التغيّر: خط أساس قبل التدخل، ومؤشر نتيجة لكل هدف، ومراجعة قيادية ربع سنوية.',
@@ -68,7 +68,7 @@
 
   const SCALE = [
     { v: 0, label: 'غير قائم' },
-    { v: 1, label: 'بدايات' },
+    { v: 1, label: 'في بداياته' },
     { v: 2, label: 'قائم جزئيًا' },
     { v: 3, label: 'راسخ ومُقاس' },
   ];
@@ -208,7 +208,7 @@
   // المخطط: عمود أفقي لكل حلقة
   // ──────────────────────────────────────────────
   function chartHTML(perLink) {
-    return '<ul class="as-bars" aria-label="نتيجة كل حلقة من حلقات سلسلة الأثر">' + perLink.map(l => `
+    return '<ul class="as-bars" aria-label="نتيجة كل حلقة من حلقات سلسلة النتائج">' + perLink.map(l => `
       <li class="as-bars__row${l === result.weakest ? ' is-weak' : ''}">
         <span class="as-bars__name">${l.name}</span>
         <span class="as-bars__track"><span class="as-bars__fill" style="width:${Math.max(2, l.pct)}%"></span></span>
@@ -251,7 +251,7 @@
       revealReport(data);
     } catch (err) {
       console.warn('[Assessment] Save failed:', err);
-      gateError.innerHTML = 'تعذّر حفظ بياناتكم الآن. عرضنا لكم التقرير، ويمكنكم إرسال النتيجة لنا عبر <a href="' + mailtoLink(data) + '">البريد</a>.';
+      gateError.innerHTML = 'تعذّر حفظ بياناتكم حاليًا. يمكنكم الاطلاع على التقرير وإرسال النتيجة إلينا عبر <a href="' + mailtoLink(data) + '">البريد</a>.';
       gateError.hidden = false;
       revealReport(data);
     } finally {
