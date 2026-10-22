@@ -7,6 +7,15 @@ import { call } from '../api.js';
 
 const RESEND_SECONDS = 45;
 
+// رمز دعوة الجهة من الرابط (?org=...)، يُحفظ حتى يكتمل التسجيل ولو أُعيد تحميل الصفحة
+function inviteCode() {
+  try {
+    const q = new URLSearchParams(location.search).get('org');
+    if (q) sessionStorage.setItem('mi_leaders_org', q);
+    return q || sessionStorage.getItem('mi_leaders_org') || '';
+  } catch { return ''; }
+}
+
 export default function SignIn({ onSignedIn, initialError }) {
   const [step, setStep] = useState('email');   // email | name | code
   const [email, setEmail] = useState('');
@@ -17,6 +26,13 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [error, setError] = useState(initialError || '');
   const [wait, setWait] = useState(0);
   const codeRef = useRef(null);
+  const [org, setOrg] = useState(null);
+  const [orgCode] = useState(inviteCode);
+
+  useEffect(() => {
+    if (!orgCode) return;
+    call('org.info', { org: orgCode }).then((r) => { if (r.success) setOrg(r.org); });
+  }, [orgCode]);
 
   useEffect(() => {
     if (!wait) return undefined;
@@ -28,7 +44,9 @@ export default function SignIn({ onSignedIn, initialError }) {
   const start = async (e) => {
     e?.preventDefault();
     setBusy(true); setError('');
-    const res = await call('auth.start', { email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined });
+    const res = await call('auth.start', {
+      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, org: org ? orgCode : undefined,
+    });
     setBusy(false);
     if (!res.success) return setError(res.message);
     if (res.needs_name) return setStep('name');
@@ -66,6 +84,12 @@ export default function SignIn({ onSignedIn, initialError }) {
   return (
     <div className="auth-wrap">
       <div className="auth card stack">
+        {org && (
+          <div className="org-ribbon" style={org.color ? { '--org': org.color } : undefined}>
+            <span className="org-dot" aria-hidden="true" />
+            <div><small>تسجيل عبر</small><b>{org.name}</b></div>
+          </div>
+        )}
         {step === 'email' && (
           <form className="stack" onSubmit={start}>
             <div>

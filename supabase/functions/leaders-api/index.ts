@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   auth.start · auth.verify · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   auth.start · auth.verify · org.info · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
@@ -22,6 +22,7 @@ type Body = Record<string, any>;
 const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
+  'org.info': (b) => P.orgInfo(b),
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
 };
@@ -44,7 +45,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
-  'admin.overview': () => A.overview(),
+  'admin.overview': (_a, b) => A.overview(b),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => A.participant(b),
   'admin.reviews': () => A.reviews(),
@@ -56,6 +57,9 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.create-participant': A.createParticipant,
   'admin.catalog': () => A.catalog(),
   'admin.track': (_a, b) => A.track(b),
+  'admin.orgs': () => A.orgs(),
+  'admin.org': (_a, b) => A.org(b),
+  'admin.assign-org': A.assignOrg,
   'admin.save': A.save,
   'admin.delete': A.remove,
   'admin.reorder': A.reorder,

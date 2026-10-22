@@ -68,7 +68,7 @@
     } catch { return { success: false, message: 'تعذّر الاتصال بالخادم' }; }
   }
 
-  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone', track: null, onlyUsed: false };
+  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone', track: null, onlyUsed: false, org: '', orgView: null, orgList: null, of: { status: '', track: '', q: '' }, picked: new Set() };
   const root = () => document.getElementById('ctx-leaders');
 
   // ══ السياق ══
@@ -85,7 +85,7 @@
 
   // ══ الهيكل ══
   const TABS = [
-    ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['journey', 'الرحلة والمتطلبات'],
+    ['overview', 'نظرة عامة'], ['orgs', 'الجهات'], ['participants', 'المشاركون'], ['journey', 'الرحلة والمتطلبات'],
     ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد'], ['tracks', 'المسارات الـ27'], ['handbook', 'الكتيب'],
   ];
 
@@ -113,6 +113,7 @@
     try {
       if (S.tab === 'overview') body.innerHTML = await viewOverview();
       else if (S.tab === 'participants') body.innerHTML = S.person ? await viewPerson(S.person) : await viewList(refetch);
+      else if (S.tab === 'orgs') body.innerHTML = S.orgView ? await viewOrg(S.orgView, refetch) : await viewOrgs();
       else {
         if (!S.catalog || refetch) {
           const c = await L('admin.catalog');
@@ -128,13 +129,187 @@
     }
   }
 
+  // ══ الجهات ══
+  const APP_URL = 'https://leaders.sunkvalue.com';
+  const inviteUrl = (o) => `${APP_URL}/?org=${encodeURIComponent(o.invite_code || '')}`;
+  const orgColor = (o) => o?.color || '#A97A2E';
+  async function orgList(force) {
+    if (!S.orgList || force) { const r = await L('admin.orgs'); S.orgList = r.success ? r : { orgs: [], unassigned: {} }; }
+    return S.orgList;
+  }
+  const orgSelect = (id, cur, all = 'كل الجهات') => `<select class="filter-select" id="${id}">
+      <option value="">${all}</option>${(S.orgList?.orgs || []).map((o) => `<option value="${o.id}"${cur === o.id ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}
+      <option value="none"${cur === 'none' ? ' selected' : ''}>بدون جهة</option></select>`;
+  const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
+  function funnelHtml(f, big) {
+    const top = Math.max(1, f.registered || 0);
+    return `<div class="la-funnel${big ? ' big' : ''}">${FUNNEL.map(([k, l]) => `
+      <div class="la-fn"><span class="la-fn-l">${l}</span><span class="la-fn-bar"><i style="width:${((f[k] || 0) / top * 100).toFixed(1)}%"></i></span><b>${f[k] || 0}</b></div>`).join('')}</div>`;
+  }
+  const seatsHtml = (n, seats) => seats ? `<div class="la-seats"><div class="la-row between"><span>المقاعد</span><b>${n} <small>/ ${seats}</small></b></div>
+      <span class="la-fn-bar"><i style="width:${Math.min(100, n / seats * 100).toFixed(1)}%"></i></span></div>`
+    : `<div class="la-seats"><div class="la-row between"><span>المشاركون</span><b>${n}</b></div></div>`;
+  const ORG_FIELDS = [
+    ['name', 'اسم الجهة'], ['short_name', 'اسم مختصر (اختياري)'], ['seats', 'عدد المقاعد المتعاقد عليها', 'number'],
+    ['color', 'لون الجهة (مثل #12414E)'], ['invite_code', 'رمز رابط الدعوة (يُولَّد تلقائيًا إن تُرك فارغًا)'],
+    ['sector', 'القطاع'], ['contact_name', 'منسق الجهة'], ['contact_email', 'بريد المنسق'], ['contact_phone', 'جوال المنسق'],
+    ['status', 'الحالة', 'select', { map: { active: 'نشطة', inactive: 'موقوفة (يتعطل رابطها)' } }], ['notes', 'ملاحظات', 'textarea', { rows: 3 }],
+  ];
+
+  async function viewOrgs() {
+    const d = await orgList(true);
+    const w = canWrite();
+    const list = d.orgs || [];
+    const un = d.unassigned || {};
+    const total = list.reduce((a, o) => a + o.stats.total, 0) + (un.total || 0);
+    const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
+    const filled = list.reduce((a, o) => a + (o.seats ? o.stats.total : 0), 0);
+    return `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">الجهات</div><div class="stat-value">${list.length}</div><div class="stat-sub">${list.filter((o) => o.status !== 'inactive').length} نشطة</div></div>
+        <div class="stat-card"><div class="stat-label">المشاركون</div><div class="stat-value">${total}</div><div class="stat-sub">من كل الجهات</div></div>
+        <div class="stat-card"><div class="stat-label">المقاعد المشغولة</div><div class="stat-value s-replied">${filled}<small> / ${seats || '·'}</small></div><div class="stat-sub">من المتعاقد عليه</div></div>
+        <div class="stat-card"><div class="stat-label">بدون جهة</div><div class="stat-value s-new">${un.total || 0}</div><div class="stat-sub">اربطهم بجهاتهم</div></div>
+      </div>
+      <div class="la-row between la-tracks-bar">
+        <p class="la-muted">لكل جهة رابط تسجيل خاص؛ من يسجّل منه يُنسب لها تلقائيًا. افتح أي جهة لترى مشاركيها وتقدمهم وتصدّر تقريرها.</p>
+        ${w ? '<button class="btn-sm primary" data-act="add-org">+ جهة جديدة</button>' : ''}
+      </div>
+      <div class="la-orgs">${list.map((o) => `
+        <article class="la-org${o.status === 'inactive' ? ' off' : ''}" style="--org:${orgColor(o)}">
+          <header data-act="open-org" data-id="${o.id}">
+            <span class="la-org-mark">${esc((o.short_name || o.name).slice(0, 2))}</span>
+            <div><b>${esc(o.name)}</b><small>${esc(o.sector || '')}${o.status === 'inactive' ? ' · موقوفة' : ''}</small></div>
+          </header>
+          ${seatsHtml(o.stats.total, o.seats)}
+          ${funnelHtml(o.stats)}
+          <div class="la-org-foot">
+            ${o.stats.pending_approval ? `<span class="la-chip warn">${o.stats.pending_approval} بانتظار اعتمادك</span>` : '<span class="la-chip ok">لا شيء ينتظرك</span>'}
+            <span class="la-muted">${o.stats.active_week} نشط هذا الأسبوع</span>
+          </div>
+          <div class="la-row la-org-acts">
+            <button class="btn-sm primary" data-act="open-org" data-id="${o.id}">لوحة الجهة</button>
+            <button class="btn-sm ghost" data-act="copy-invite" data-url="${esc(inviteUrl(o))}">نسخ رابط الدعوة</button>
+            ${w ? `<button class="la-link" data-act="edit-org" data-id="${o.id}">تحرير</button>` : ''}
+          </div>
+        </article>`).join('')}
+        <article class="la-org none" style="--org:#8A9AA0">
+          <header data-act="open-org" data-id="none"><span class="la-org-mark">؟</span><div><b>بدون جهة</b><small>سجّلوا دون رابط جهة</small></div></header>
+          ${seatsHtml(un.total || 0, null)}
+          ${(un.typed || []).length ? `<div class="la-typed"><small class="la-muted">ما كتبوه في خانة الجهة، اربطه بنقرة:</small>
+            ${(un.typed || []).map((t) => `<div class="la-row between"><span>${esc(t.name)} <small class="la-muted">${t.n}</small></span>
+              ${w && list.length ? `<span class="la-row"><select data-typed-org="${esc(t.name)}">${list.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select><button class="la-link" data-act="link-typed" data-name="${esc(t.name)}">ربط</button></span>` : ''}</div>`).join('')}</div>` : '<p class="la-muted">كل المشاركين مربوطون بجهاتهم.</p>'}
+          <div class="la-row la-org-acts"><button class="btn-sm ghost" data-act="open-org" data-id="none">عرض القائمة</button></div>
+        </article>
+      </div>`;
+  }
+
+  async function viewOrg(id, refetch) {
+    if (refetch || !S.orgData || S.orgData.org.id !== id) {
+      const [r] = await Promise.all([L('admin.org', { id }), orgList()]);
+      if (!r.success) return `<div class="la-err">${esc(r.message)}</div>`;
+      S.orgData = r;
+    }
+    const { org: o, participants: all, funnel: f, by_track: bt } = S.orgData;
+    const w = canWrite();
+    const F = S.of;
+    const rows = all.filter((p) => (!F.status || p.status === F.status) && (!F.track || p.track === F.track)
+      && (!F.q || `${p.full_name} ${p.email} ${p.job_title || ''}`.toLowerCase().includes(F.q.toLowerCase())));
+    const tracks = Object.entries(bt).sort((a, b) => b[1] - a[1]);
+    const isNone = o.id === 'none';
+    return `
+      <button class="la-link" data-act="orgs-back">→ كل الجهات</button>
+      <section class="la-org-hero" style="--org:${orgColor(o)}">
+        <div class="la-row between">
+          <div class="la-row"><span class="la-org-mark lg">${esc((o.short_name || o.name).slice(0, 2))}</span>
+            <div><h2>${esc(o.name)}</h2><small>${esc([o.sector, o.contact_name, o.contact_email].filter(Boolean).join(' · '))}</small></div></div>
+          <div class="la-row">
+            ${isNone ? '' : `<button class="btn-sm ghost" data-act="copy-invite" data-url="${esc(inviteUrl(o))}">نسخ رابط الدعوة</button>`}
+            <button class="btn-sm ghost" data-act="org-csv">تصدير Excel</button>
+            <button class="btn-sm ghost" data-act="org-print">تقرير للطباعة</button>
+            ${w && !isNone ? `<button class="btn-sm ghost" data-act="edit-org" data-id="${o.id}">تحرير</button>` : ''}
+          </div>
+        </div>
+        ${isNone ? '' : `<code class="la-invite" dir="ltr">${esc(inviteUrl(o))}</code>`}
+        <div class="la-org-hero-grid">
+          <div>${seatsHtml(all.length, o.seats)}<div class="la-org-kpis">
+            <span><b>${f.pending_approval}</b>بانتظار الاعتماد</span><span><b>${f.approved}</b>اعتُمد مسارهم</span><span><b>${f.completed}</b>أنهوا</span><span><b>${f.withdrawn}</b>منسحب أو موقوف</span></div></div>
+          <div>${funnelHtml(f, true)}</div>
+        </div>
+      </section>
+
+      <section class="la-card">
+        <h3>توزيع المشاركين على المسارات</h3>
+        ${tracks.length ? `<div class="la-pills">${tracks.map(([k, n]) => `<button class="la-pill${F.track === k ? ' on' : ''}" data-act="org-track" data-key="${k}" title="${esc(all.find((p) => p.track === k)?.track_title || '')}"><code>${k}</code> ${esc(all.find((p) => p.track === k)?.track_title || '')} <b>${n}</b></button>`).join('')}</div>`
+          : '<p class="la-muted">لم يُسكَّن أحد من هذه الجهة بعد.</p>'}
+      </section>
+
+      <section class="la-card">
+        <div class="toolbar">
+          <div class="search-wrap"><input class="search-input" id="ofQ" placeholder="بحث بالاسم أو البريد أو المسمى…" value="${esc(F.q)}"></div>
+          <select class="filter-select" id="ofStatus">${opts(STATUS, F.status, 'كل الحالات')}</select>
+          <select class="filter-select" id="ofTrack"><option value="">كل المسارات</option>${tracks.map(([k]) => `<option value="${k}"${F.track === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
+          <span class="la-muted">${rows.length} من ${all.length}</span>
+        </div>
+        ${w ? `<div class="la-bulk"${S.picked.size ? '' : ' hidden'}><span><b>${S.picked.size}</b> محدد</span>${orgSelect('ofMove', '', 'نقل إلى جهة…')}<button class="btn-sm primary" data-act="org-move">نقل</button></div>` : ''}
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr>${w ? '<th><input type="checkbox" data-pick-all></th>' : ''}<th>الاسم</th><th>المسمى</th><th>المسار</th><th>الحالة</th><th>آخر دخول</th><th>التسجيل</th></tr></thead>
+          <tbody>${rows.length ? rows.map((p) => `<tr>
+            ${w ? `<td><input type="checkbox" data-pick="${p.id}"${S.picked.has(p.id) ? ' checked' : ''}></td>` : ''}
+            <td><button class="la-link" data-act="open" data-id="${p.id}"><b>${esc(p.full_name)}</b></button><br><small class="la-muted" dir="ltr">${esc(p.email)}</small></td>
+            <td>${esc(p.job_title || '')}</td>
+            <td>${p.track ? `<code class="la-code">${p.track}</code> ${p.approved ? '' : '<small class="la-muted">مبدئي</small>'}` : '<span class="la-muted">·</span>'}</td>
+            <td><span class="la-chip ${p.status === 'pending_approval' ? 'warn' : p.status === 'completed' ? 'ok' : ''}">${STATUS[p.status] || p.status}</span></td>
+            <td>${date(p.last_login_at)}</td><td>${date(p.created_at)}${p.source === 'invite' ? '<br><small class="la-muted">برابط الجهة</small>' : ''}</td>
+          </tr>`).join('') : `<tr><td colspan="7" class="la-empty">لا نتائج</td></tr>`}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  function orgCsv() {
+    const { org: o, participants } = S.orgData;
+    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الحالة', 'المسار', 'اسم المسار', 'معتمد', 'آخر دخول', 'التسجيل'];
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [head.map(q).join(','), ...participants.map((p) => [p.full_name, p.email, p.phone, p.job_title, STATUS[p.status] || p.status,
+      p.track, p.track_title, p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at)].map(q).join(','))];
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `مشاركو ${o.name} ${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function orgPrint() {
+    const { org: o, participants: ps, funnel: f, by_track: bt } = S.orgData;
+    const win = window.open('', '_blank');
+    if (!win) return toast('اسمح بالنوافذ المنبثقة لطباعة التقرير');
+    const c = orgColor(o);
+    win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير ${esc(o.name)}</title>
+      <style>body{font-family:"Noto Kufi Arabic",system-ui,sans-serif;color:#0B272F;margin:32px;}
+      .hd{border-bottom:3px solid ${c};padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:end}
+      h1{margin:0;font-size:22px} small{color:#4A6A72} .k{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}
+      .k div{border:1px solid #ddd;border-radius:8px;padding:10px} .k b{display:block;font-size:22px}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px} th,td{border-bottom:1px solid #e5e5e5;padding:6px;text-align:right}
+      th{background:#f4f1ea} h2{font-size:15px;margin-top:22px;border-inline-start:3px solid ${c};padding-inline-start:8px}</style></head><body>
+      <div class="hd"><div><small>Milestone Impact · برنامج القادة</small><h1>تقرير ${esc(o.name)}</h1></div><small>${date(new Date())}</small></div>
+      <div class="k">${FUNNEL.map(([k, l]) => `<div><small>${l}</small><b>${f[k] || 0}</b></div>`).join('')}</div>
+      ${o.seats ? `<p>المقاعد المشغولة: <b>${ps.length}</b> من <b>${o.seats}</b></p>` : ''}
+      <h2>التوزيع على المسارات</h2><table><tr><th>المسار</th><th>العدد</th></tr>${Object.entries(bt).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(ps.find((p) => p.track === k)?.track_title || k)}</td><td>${n}</td></tr>`).join('')}</table>
+      <h2>المشاركون</h2><table><tr><th>الاسم</th><th>المسمى</th><th>المسار</th><th>الحالة</th></tr>
+      ${ps.map((p) => `<tr><td>${esc(p.full_name)}</td><td>${esc(p.job_title || '')}</td><td>${esc(p.track_title || '')}</td><td>${STATUS[p.status] || p.status}</td></tr>`).join('')}</table>
+      <script>onload=()=>print()<\/script></body></html>`);
+    win.document.close();
+  }
+
   // ══ نظرة عامة ══
   async function viewOverview() {
-    const [o, r] = await Promise.all([L('admin.overview'), L('admin.reviews')]);
+    const [o, r] = await Promise.all([L('admin.overview', { org: S.org }), L('admin.reviews'), orgList()]);
     if (!o.success) return `<div class="la-err">${esc(o.message)}</div>`;
     const st = (k) => o.by_status[k] || 0;
     const max = Math.max(1, ...DIMS.flatMap((d) => LVLS.map((l) => o.matrix[d][l])));
     return `
+      <div class="la-row between la-ov-bar"><span class="la-muted">${S.org ? 'تعرض الأرقام لجهة واحدة' : 'كل الجهات'}</span>${orgSelect('ovOrg', S.org)}</div>
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-label">المشاركون</div><div class="stat-value">${o.total}</div><div class="stat-sub">كل الحالات</div></div>
         <div class="stat-card"><div class="stat-label">بانتظار الاعتماد</div><div class="stat-value s-new">${st('pending_approval')}</div><div class="stat-sub">أنهوا القياس</div></div>
@@ -160,6 +335,11 @@
           </ul>
         </section>
       </div>
+      ${o.funnel ? `<div class="la-grid2">
+        <section class="la-card"><h3>قمع الرحلة</h3>${funnelHtml(o.funnel, true)}</section>
+        <section class="la-card"><div class="la-row between"><h3>أكثر المسارات مشاركين</h3><span class="la-muted">${o.tracks_used} من 27 مسارًا مشغولة</span></div>
+          ${(o.top_tracks || []).length ? `<ul class="la-queue">${o.top_tracks.map((t) => `<li><button class="la-link" data-act="open-track" data-key="${t.key}"><code class="la-code">${t.key}</code> ${esc(t.title || '')}</button><b>${t.n}</b></li>`).join('')}</ul>` : '<p class="la-muted">لا مسارات بعد.</p>'}
+        </section></div>` : ''}
       <section class="la-card">
         <h3>الحالات</h3>
         <div class="la-pills">${Object.entries(STATUS).map(([k, l]) => `<button class="la-pill" data-act="filter-status" data-status="${k}">${l} <b>${st(k)}</b></button>`).join('')}</div>
@@ -169,7 +349,7 @@
   // ══ المشاركون ══
   async function viewList(refetch) {
     if (refetch || !S.list.length) {
-      const r = await L('admin.participants', { search: S.search, status: S.status });
+      const [r] = await Promise.all([L('admin.participants', { search: S.search, status: S.status, org: S.org }), orgList()]);
       if (!r.success) return `<div class="la-err">${esc(r.message)}</div>`;
       S.list = r.participants;
     }
@@ -181,6 +361,7 @@
       <div class="toolbar">
         <div class="search-wrap"><input class="search-input" id="laSearch" placeholder="بحث بالاسم أو البريد أو الجهة…" value="${esc(S.search)}"></div>
         <select class="filter-select" id="laStatus">${opts(STATUS, S.status, 'كل الحالات')}</select>
+        ${orgSelect('laOrg', S.org)}
         <button class="refresh-btn" data-act="search">بحث</button>
         ${canWrite() ? '<button class="refresh-btn" data-act="add-person">+ مشارك</button>' : ''}
       </div>
@@ -189,7 +370,7 @@
         <tbody>${S.list.length ? S.list.map((p) => `
           <tr data-act="open" data-id="${p.id}">
             <td><b>${esc(p.full_name)}</b><br><small class="la-muted" dir="ltr">${esc(p.email)}</small></td>
-            <td>${esc(p.organization_name || '')}<br><small class="la-muted">${esc(p.job_title || '')}</small></td>
+            <td>${(() => { const og = (S.orgList?.orgs || []).find((x) => x.id === p.organization_id); return og ? `<span class="la-orgtag" style="--org:${orgColor(og)}">${esc(og.short_name || og.name)}</span>` : esc(p.organization_name || ''); })()}<br><small class="la-muted">${esc(p.job_title || '')}</small></td>
             ${DIMS.map((d) => `<td>${lv(p, d)}</td>`).join('')}
             <td>${(() => { const k = trackOf(Object.fromEntries((p.placements || []).map((x) => [x.dimension, x.level]))); return k ? `<code class="la-code">${k}</code>` : '<span class="la-muted">·</span>'; })()}</td>
             <td><span class="la-chip ${p.status === 'pending_approval' ? 'warn' : ''}">${STATUS[p.status] || p.status}</span></td>
@@ -337,7 +518,7 @@
         }
         res = await onSave(out);
       }
-      if (res?.success) { dlg.close(); toast('تم الحفظ'); render(true); } else { err.hidden = false; err.textContent = res?.message || 'تعذّر الحفظ'; }
+      if (res?.success) { dlg.close(); toast('تم الحفظ'); S.orgList = null; render(true); } else { err.hidden = false; err.textContent = res?.message || 'تعذّر الحفظ'; }
     });
     dlg.showModal();
   }
@@ -673,7 +854,7 @@
     const a = t.dataset.act;
     const c = S.catalog;
 
-    if (a === 'tab') { S.tab = t.dataset.tab; S.person = null; S.track = null; return render(); }
+    if (a === 'tab') { S.tab = t.dataset.tab; S.person = null; S.track = null; S.orgView = null; S.orgData = null; return render(); }
     if (a === 'open-track') { S.tab = 'tracks'; S.track = t.dataset.key; S.person = null; return render(!S.catalog); }
     if (a === 'open-track-sel') { S.tab = 'tracks'; S.track = el.querySelector('#laHbTrack').value; await render(); setTimeout(() => el.querySelector('.la-hb')?.scrollIntoView({ behavior: 'smooth' }), 50); return; }
     if (a === 'tracks-back') { S.track = null; return render(); }
@@ -691,7 +872,33 @@
     if (a === 'open') { S.tab = 'participants'; S.person = t.dataset.id; return render(); }
     if (a === 'back') { S.person = null; return render(); }
     if (a === 'filter-status') { S.tab = 'participants'; S.status = t.dataset.status; S.person = null; return render(true); }
-    if (a === 'search') { S.search = el.querySelector('#laSearch').value.trim(); S.status = el.querySelector('#laStatus').value; return render(true); }
+    if (a === 'search') { S.search = el.querySelector('#laSearch').value.trim(); S.status = el.querySelector('#laStatus').value; S.org = el.querySelector('#laOrg')?.value || ''; return render(true); }
+    if (a === 'open-org') { S.tab = 'orgs'; S.orgView = t.dataset.id; S.of = { status: '', track: '', q: '' }; S.picked = new Set(); return render(true); }
+    if (a === 'orgs-back') { S.orgView = null; S.orgData = null; return render(); }
+    if (a === 'org-track') { S.of.track = S.of.track === t.dataset.key ? '' : t.dataset.key; return render(); }
+    if (a === 'org-csv') return orgCsv();
+    if (a === 'org-print') return orgPrint();
+    if (a === 'copy-invite') {
+      try { await navigator.clipboard.writeText(t.dataset.url); toast('نُسخ رابط الدعوة'); } catch { prompt('انسخ رابط الدعوة:', t.dataset.url); }
+      return;
+    }
+    if (a === 'add-org') return openForm('جهة جديدة', ORG_FIELDS, { status: 'active' }, saveRow('organizations', {}));
+    if (a === 'edit-org') {
+      const o = (await orgList()).orgs.find((x) => x.id === t.dataset.id);
+      return openForm(`جهة: ${o.name}`, ORG_FIELDS, o, saveRow('organizations', { id: o.id }), delRow('organizations', o.id));
+    }
+    if (a === 'link-typed') {
+      const sel = el.querySelector(`[data-typed-org="${CSS.escape(t.dataset.name)}"]`);
+      const r = await L('admin.assign-org', { typed_name: t.dataset.name, organization_id: sel.value });
+      toast(r.success ? `رُبط ${r.moved} مشارك` : r.message); return r.success && render(true);
+    }
+    if (a === 'org-move') {
+      const target = el.querySelector('#ofMove').value;
+      if (!target) return toast('اختر الجهة');
+      const r = await L('admin.assign-org', { participant_ids: [...S.picked], organization_id: target === 'none' ? null : target });
+      toast(r.success ? `نُقل ${r.moved} مشارك` : r.message);
+      if (r.success) { S.picked = new Set(); S.orgList = null; } return r.success && render(true);
+    }
     if (a === 'qdim') { S.qDim = t.dataset.dim; return render(); }
     if (a === 'move') return move(t.dataset.entity, t.dataset.id, t.dataset.dir);
 
@@ -801,9 +1008,18 @@
 
   document.addEventListener('change', (e) => {
     if (e.target.id === 'laInst') { S.instrument = e.target.value; render(); }
+    if (e.target.id === 'ovOrg') { S.org = e.target.value; render(); }
+    if (e.target.id === 'ofStatus') { S.of.status = e.target.value; render(); }
+    if (e.target.id === 'ofTrack') { S.of.track = e.target.value; render(); }
+    if (e.target.matches?.('[data-pick]')) { e.target.checked ? S.picked.add(e.target.dataset.pick) : S.picked.delete(e.target.dataset.pick); render(); }
+    if (e.target.matches?.('[data-pick-all]')) {
+      const ids = [...root().querySelectorAll('[data-pick]')].map((i) => i.dataset.pick);
+      ids.forEach((id) => (e.target.checked ? S.picked.add(id) : S.picked.delete(id))); render();
+    }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.id === 'laSearch') { S.search = e.target.value.trim(); render(true); }
+    if (e.key === 'Enter' && e.target.id === 'ofQ') { S.of.q = e.target.value.trim(); render(); }
   });
 
   // السياق المحفوظ عند تحديث الصفحة

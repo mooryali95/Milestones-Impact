@@ -34,6 +34,21 @@ export async function participantFromToken(token: unknown) {
   return { participant: p, sessionId: s.id as string };
 }
 
+// ── رابط دعوة الجهة ──
+async function orgByCode(code: unknown) {
+  const c = String(code || '').trim().toLowerCase();
+  if (!/^[a-z0-9-]{4,40}$/.test(c)) return null;
+  const { data } = await db.from('organizations').select('id, name, short_name, color, status').ilike('invite_code', c).maybeSingle();
+  return data && data.status !== 'inactive' ? data : null;
+}
+
+// يعرض اسم الجهة في شاشة التسجيل قبل إدخال البريد
+export async function orgInfo(b: Body) {
+  const org = await orgByCode(b.org);
+  if (!org) return { success: false, message: 'رابط الجهة غير صالح أو منتهٍ', code: 'org' };
+  return { success: true, org: { name: org.name, short_name: org.short_name, color: org.color } };
+}
+
 // ── 1. بدء الدخول أو التسجيل ──
 // بريد واحد يحمل رابطًا ورمزًا. لبريد جديد نطلب الاسم أولًا (needs_profile)،
 // ولا نكشف أبدًا هل البريد مسجل لغير صاحبه: الرد واحد في الحالتين بعد الإرسال.
@@ -58,7 +73,9 @@ export async function authStart(b: Body, ctx: Ctx) {
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
-    pending = { full_name: name.slice(0, 120), phone };
+    // التسجيل عبر رابط جهة: يُنسب المشارك لها تلقائيًا
+    const org = await orgByCode(b.org);
+    pending = { full_name: name.slice(0, 120), phone, ...(org ? { organization_id: org.id, organization_name: org.name } : {}) };
   }
 
   const code = randomCode();
@@ -105,7 +122,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
     if (ch.purpose !== 'register' || !ch.pending_profile) throw new Fail('ابدأ التسجيل من جديد', 400, 'restart');
     p = must(await db.from('participants').insert({
       email, full_name: ch.pending_profile.full_name, phone: ch.pending_profile.phone,
-      email_verified_at: new Date().toISOString(), source: 'self',
+      organization_id: ch.pending_profile.organization_id || null, organization_name: ch.pending_profile.organization_name || null,
+      email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
   } else if (!p.email_verified_at) {

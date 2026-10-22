@@ -375,3 +375,14 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .track-col + .track-col { border-inline-start: 0; border-top: 1px solid var(--line); }
   .track-head h3 { font-size: 18px; }
 }
+
+/* ── شريط جهة الدعوة في التسجيل ── */
+.org-ribbon {
+  --org: var(--gold);
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(11, 39, 47, .04), rgba(169, 122, 46, .08));
+  border: 1px solid var(--line); border-inline-start: 4px solid var(--org);
+}
+.org-ribbon small { display: block; font-size: 11px; color: var(--muted); }
+.org-ribbon b { font-size: 15px; }
+.org-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--org); box-shadow: 0 0 0 4px rgba(169, 122, 46, .15); }
