@@ -54,13 +54,57 @@ export function levelFor(pcts, rules) {
   return 'beginner';
 }
 
-export function placementFromAnswers(questions, answers, rules) {
+// ── نموذج التسكين المركّب ──
+// المؤشر المركّب = متوسط موزون لجوانب الإطار الثلاثة. الأوزان تعطي
+// المواقف (اختبار الحكم الموقفي) الثقل الأكبر لأنها أصدق تنبؤًا بالأداء،
+// وتعطي الممارسة (تقدير ذاتي) الأقل لأنها تميل إلى التضخم.
+// المستوى يُمنح بالمؤشر المركّب، بشرط ألا يقل أي جانب عن حدّ أدنى،
+// فلا تُخفي قوة جانب فجوة حقيقية في آخر. وتُعلَّم الحالة الحدّية للمستشار.
+export const DEFAULT_MODEL = {
+  w_knowledge: 30, w_skill: 45, w_behavior: 25,
+  min_intermediate: 55, min_advanced: 80,
+  floor_intermediate: 25, floor_advanced: 50,
+  borderline: 5,
+};
+const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
+const LEVEL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
+
+export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
+  const m = { ...DEFAULT_MODEL, ...(model || {}) };
+  const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
+  const tiers = TIERS.filter((t) => pcts?.[t] != null && w[t] > 0);
+  const wsum = tiers.reduce((a, t) => a + w[t], 0);
+  if (!wsum) return { level: 'beginner', composite: null, borderline: false, reason: 'لا إجابات كافية للاحتساب' };
+  const composite = Math.round(tiers.reduce((a, t) => a + w[t] * Number(pcts[t]), 0) / wsum * 10) / 10;
+  const weakest = tiers.reduce((a, t) => (Number(pcts[t]) < Number(pcts[a]) ? t : a), tiers[0]);
+  const low = Number(pcts[weakest]);
+  const gate = (min, floor) => composite >= Number(min) && low >= Number(floor);
+  const level = gate(m.min_advanced, m.floor_advanced) ? 'advanced' : gate(m.min_intermediate, m.floor_intermediate) ? 'intermediate' : 'beginner';
+
+  let reason, borderline = false;
+  const next = level === 'beginner' ? ['intermediate', m.min_intermediate, m.floor_intermediate]
+    : level === 'intermediate' ? ['advanced', m.min_advanced, m.floor_advanced] : null;
+  if (!next) reason = `المؤشر ${composite} بلغ حد مستوى احترافي (${m.min_advanced}) ولا جانب دون ${m.floor_advanced}`;
+  else {
+    const [nl, nmin, nfloor] = next;
+    const gap = Math.round((Number(nmin) - composite) * 10) / 10;
+    if (composite >= Number(nmin)) {
+      reason = `المؤشر ${composite} يكفي لمستوى ${LEVEL_AR[nl]}، لكن ${TIER_AR[weakest]} ${low}% دون الحد الأدنى ${nfloor}%`;
+      borderline = Number(nfloor) - low <= Number(m.borderline);
+    } else {
+      reason = `المؤشر ${composite} من 100، ويبعد ${gap} عن حد مستوى ${LEVEL_AR[nl]} (${nmin})`;
+      borderline = gap <= Number(m.borderline);
+    }
+  }
+  return { level, composite, borderline, reason };
+}
+
+export function placementFromAnswers(questions, answers, rules, model = null) {
   const pcts = tierPercents(questions, answers);
-  return DIMENSIONS.map((dimension) => ({
-    dimension,
-    ...pcts[dimension],
-    level: levelFor(pcts[dimension], rules.filter((r) => r.dimension === dimension)),
-  }));
+  return DIMENSIONS.map((dimension) => {
+    if (model) return { dimension, ...pcts[dimension], ...evaluatePlacement(pcts[dimension], model) };
+    return { dimension, ...pcts[dimension], level: levelFor(pcts[dimension], rules.filter((r) => r.dimension === dimension)) };
+  });
 }
 
 // هل يخص المتطلب هذا المشارك؟ عام، أو لبُعد، أو لبُعد ومستوى محددين.

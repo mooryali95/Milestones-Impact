@@ -116,13 +116,76 @@
 
 /* المسارات الـ27 */
 .la-code { font-family: ui-monospace, Menlo, monospace; font-size: .74rem; font-weight: 700; letter-spacing: .04em; direction: ltr; display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--petrol-s); color: #fff; }
-.la-tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-bottom: 18px; }
-.la-track { border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: #fff; }
-.la-track[data-act] { cursor: pointer; }
-.la-track[data-act]:hover { border-color: var(--gold); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
-.la-track b { font-size: .9rem; line-height: 1.5; }
-.la-track p { font-size: .78rem; line-height: 1.6; margin: 0; }
+.la-tracks-bar { margin: 6px 0 4px; gap: 12px; }
+.la-tracks-bar p { margin: 0; max-width: 760px; }
+.la-pill.on { background: var(--petrol-s); color: #fff; }
+.la-phase small { font-weight: 400; margin-inline-start: 8px; }
+.la-tracks { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.la-track {
+  border: 1px solid var(--line-strong); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: linear-gradient(180deg, rgba(169,122,46,calc(var(--fill, 0) * .10)) 0%, #fff 70%); cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.la-track:hover { border-color: var(--gold); box-shadow: 0 4px 16px rgba(0,0,0,.07); }
+.la-track.empty { opacity: .62; }
+.la-track.empty:hover { opacity: 1; }
+.la-track-title { font-size: .9rem; line-height: 1.55; }
+.la-track-n { font-size: .78rem; color: var(--ink-mid); }
+.la-track-n b { font-size: 1.05rem; color: var(--ink, #111); }
 .la-track .la-row { flex-wrap: wrap; gap: 4px; }
+.la-track-bar { display: flex; height: 6px; border-radius: 4px; overflow: hidden; background: var(--sand-light); }
+.la-track-bar span { display: block; height: 100%; }
+.la-track-bar .act, .la-track-meta i.act { background: #2E7D5B; }
+.la-track-bar .pen, .la-track-meta i.pen { background: var(--gold); }
+.la-track-bar .done, .la-track-meta i.done { background: var(--petrol-s); }
+.la-track-meta { display: flex; gap: 10px; font-size: .72rem; color: var(--ink-mid); flex-wrap: wrap; }
+.la-track-meta i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-inline-end: 4px; }
 .la-track-now { border: 1px solid var(--line-strong); border-inline-start: 3px solid var(--gold); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; display: grid; gap: 4px; }
 .la-track-now .la-code { justify-self: start; }
 .la-track-now p { margin: 0; font-size: .82rem; }
+
+/* تفصيل المسار */
+.la-track-hero { background: linear-gradient(135deg, #0B272F 0%, #12414E 100%); color: #fff; border-radius: 12px; padding: 22px; margin: 10px 0 16px; display: grid; gap: 10px; position: relative; overflow: hidden; }
+.la-track-hero::after { content: ""; position: absolute; inset-inline: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, var(--gold), #C79A4B); }
+.la-track-hero h2 { font-size: 1.3rem; line-height: 1.5; margin: 0; }
+.la-track-hero > p { margin: 0; color: rgba(255,255,255,.82); line-height: 1.9; max-width: 820px; }
+.la-track-hero .la-code { background: var(--gold); }
+.la-track-hero .btn-sm.ghost { color: #fff; border-color: rgba(255,255,255,.35); }
+.la-track-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 6px; }
+.la-track-cols > div { background: rgba(255,255,255,.06); border-radius: 8px; padding: 12px 14px; }
+.la-track-cols h4 { color: #C79A4B; font-size: .8rem; margin: 0 0 6px; }
+.la-track-cols ol, .la-track-cols ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: .84rem; line-height: 1.7; }
+.la-track-cols p { margin: 0; font-size: .84rem; line-height: 1.7; }
+.la-click { cursor: pointer; }
+.la-click:hover td { background: var(--sand-light); }
+.la-hb { display: grid; grid-template-columns: 240px 1fr; gap: 18px; align-items: start; }
+.la-hb-toc { position: sticky; top: 12px; display: grid; gap: 12px; max-height: 80vh; overflow: auto; border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px; }
+.la-hb-toc > div { display: grid; gap: 4px; }
+.la-hb-toc b { font-size: .78rem; color: var(--gold); }
+.la-hb-toc .la-link { text-align: start; font-size: .8rem; line-height: 1.5; }
+.la-hb-body { display: grid; gap: 14px; }
+.la-hb-ch { border: 1px solid var(--line-strong); border-radius: 10px; padding: 18px 22px; background: #fff; scroll-margin-top: 12px; }
+.la-hb-ch > h3 { font-size: 1.1rem; margin: 6px 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); display: inline-block; }
+.la-md { font-size: .9rem; line-height: 1.95; }
+.la-md h3 { font-size: 1rem; margin: 14px 0 6px; }
+.la-md h4 { font-size: .92rem; margin: 12px 0 4px; }
+.la-md ul, .la-md ol { padding-inline-start: 20px; margin: 6px 0; }
+.la-md p { margin: 6px 0; }
+.la-md blockquote { margin: 10px 0; padding: 8px 12px; background: var(--sand-light); border-inline-start: 3px solid var(--gold); font-weight: 600; }
+.la-hb-pick { margin-bottom: 14px; }
+@media (max-width: 900px) { .la-track-cols, .la-hb { grid-template-columns: 1fr; } .la-hb-toc { position: static; max-height: none; } }
+
+/* معيار التسكين */
+.la-model-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 10px 0 12px; }
+.la-model-grid > div { border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px; display: grid; gap: 8px; align-content: start; }
+.la-model-grid h4 { font-size: .82rem; color: var(--gold); margin: 0; }
+.la-mf { display: grid; grid-template-columns: 1fr 80px; align-items: center; gap: 2px 8px; font-size: .84rem; }
+.la-mf input { width: 80px; }
+.la-mf small { grid-column: 1 / -1; color: var(--ink-mid); font-size: .72rem; }
+.la-calc { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-strong); display: grid; gap: 8px; }
+.la-calc h4 { margin: 0; font-size: .85rem; }
+.la-calc label { font-size: .82rem; display: inline-flex; gap: 6px; align-items: center; }
+.la-calc input { width: 70px; }
+.la-why { color: var(--ink-mid); font-size: .74rem; line-height: 1.5; display: inline-block; max-width: 260px; }
+@media (max-width: 900px) { .la-model-grid { grid-template-columns: 1fr; } }
+.la-track-hero .la-lvl { color: #0B272F; }
+.la-track-hero .la-lvl.advanced { color: #fff; background: rgba(255,255,255,.18); }
