@@ -28,6 +28,14 @@ export const PHASES = [
   { key: 'impact', title: 'الأثر', hint: 'دعم حتى الاستقلال ثم قياس ما تغيّر' },
 ];
 
+// طريقة تنفيذ المرحلة كما تظهر للمشارك
+export const MODES = {
+  in_person: { title: 'حضوري', icon: '◉' },
+  online: { title: 'عن بعد', icon: '◎' },
+  hybrid: { title: 'مدمج', icon: '◐' },
+  self: { title: 'ذاتي عبر المنصة', icon: '○' },
+};
+
 export const REQ_STATUS = {
   pending: 'لم يُنجز',
   submitted: 'بانتظار المراجعة',

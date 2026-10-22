@@ -314,10 +314,13 @@
     ? `<button class="la-mv" data-act="move" data-entity="${entity}" data-id="${id}" data-dir="-1" title="أعلى">▲</button><button class="la-mv" data-act="move" data-entity="${entity}" data-id="${id}" data-dir="1" title="أسفل">▼</button>` : '');
 
   // ══ الرحلة ══
+  const MODE = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
   const STAGE_FIELDS = [
     ['title_ar', 'اسم المرحلة'], ['phase', 'المحور', 'select', { map: PHASE }],
     ['duration_label', 'المدة كما تظهر للمشارك'], ['duration_days', 'المدة بالأيام', 'number'],
-    ['description_ar', 'الوصف', 'textarea', { rows: 3 }], ['activities_ar', 'ماذا يتم', 'textarea', { rows: 3 }],
+    ['mode', 'طريقة التنفيذ', 'select', { map: MODE }], ['mode_note_ar', 'تفصيل الطريقة (مثال: حضوري في الرياض أو مباشر عن بعد)'],
+    ['description_ar', 'الوصف', 'textarea', { rows: 3 }], ['builds_on_ar', 'تنطلق من (مخرج المرحلة السابقة)'],
+    ['activities_ar', 'ماذا يتم (كل سطر بند)', 'textarea', { rows: 5 }],
     ['outcome_ar', 'ما يخرج به المشارك', 'textarea', { rows: 3 }], ['active', 'ظاهرة للمشاركين', 'check'],
   ];
   function viewJourney() {
@@ -331,7 +334,7 @@
         ${stages.filter((s) => s.phase === ph).map((s) => `
           <section class="la-card la-stage-ed${s.active ? '' : ' off'}">
             <div class="la-row between">
-              <div><b>${s.sort}. ${esc(s.title_ar)}</b> <small class="la-muted">${esc(s.duration_label)}${s.active ? '' : ' · مخفية'}</small></div>
+              <div><b>${s.sort}. ${esc(s.title_ar)}</b> <small class="la-muted">${esc(s.duration_label)}${s.mode ? ` · ${MODE[s.mode]}` : ''}${s.active ? '' : ' · مخفية'}</small></div>
               <div class="la-row">${moveBtns('journey_stages', s.key)}${w ? `<button class="btn-sm ghost" data-act="edit-stage" data-key="${s.key}">تحرير</button>` : ''}</div>
             </div>
             ${s.description_ar ? `<p class="la-muted">${esc(s.description_ar)}</p>` : ''}
