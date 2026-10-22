@@ -11,6 +11,13 @@ export const LEVELS = [
   { key: 'intermediate', title: 'متوسط', step: 2 },
   { key: 'advanced', title: 'احترافي', step: 3 },
 ];
+// وصف المستوى الملخص الذي يراه المشارك (التفصيل لكل بُعد للإدارة فقط)
+export const LEVEL_SUMMARY = {
+  beginner: 'تبني أساسك: لغة مشتركة وأدوات عملية تربط التنفيذ بالأثر والقيادة.',
+  intermediate: 'تطبّق بثبات، ورحلتك تعمّق الربط بين إدارة التنفيذ وصناعة الأثر وقيادة الفريق.',
+  advanced: 'تقود بنضج، ورحلتك تنقلك إلى بناء الأنظمة ونقل الخبرة إلى فريقك ومؤسستك.',
+};
+
 export const levelOf = (k) => LEVELS.find((l) => l.key === k) || { key: k, title: k, step: 0 };
 
 export const TIERS = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };

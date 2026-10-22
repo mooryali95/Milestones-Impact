@@ -270,7 +270,7 @@ export default function Handbook({ me, onBack }) {
       <div className="row between" style={{ marginBottom: 16 }}>
         <div>
           <p className="eyebrow">كتيبك الشخصي</p>
-          <h1 style={{ fontSize: 22 }}>مصمم على مستواك في الأبعاد الثلاثة</h1>
+          <h1 style={{ fontSize: 22 }}>مصمم على مستواك{toc?.level ? `: ${levelOf(toc.level).title}` : ''}</h1>
         </div>
         <button className="btn ghost sm" onClick={onBack}>رجوع للرحلة</button>
       </div>
@@ -281,7 +281,7 @@ export default function Handbook({ me, onBack }) {
             if (!items.length) return null;
             return (
               <div key={d.key} className="hb-group">
-                <div className="hb-dim">{d.short} <span className="chip gold">{levelOf(toc.levels[d.key]).title}</span></div>
+                <div className="hb-dim">{d.short}</div>
                 {items.map((c) => (
                   <button key={c.id} className={c.id === current ? 'on' : ''} onClick={() => setCurrent(c.id)}>{c.title}</button>
                 ))}

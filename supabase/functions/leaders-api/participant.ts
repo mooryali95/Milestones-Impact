@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, overallLevel, isEmail, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle,
 } from './logic.js';
 
@@ -127,7 +127,9 @@ async function activeInstrument(kind = 'baseline') {
   return data;
 }
 
-export async function mePayload(p: any) {
+// audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.
+// audience 'admin': التفصيل الكامل لكل بُعد.
+export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
   const [placements, stages, reqs, progress, assessments, passkeys, cells, reports] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     db.from('journey_stages').select('*').eq('active', true),
@@ -161,15 +163,16 @@ export async function mePayload(p: any) {
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
-    profile: pl.length ? {
+    profile: !pl.length ? null : audience === 'admin' ? {
       approved,
       dimensions: pl.map((x: any) => ({
         dimension: x.dimension, level: x.level, approved: !!x.approved_at, note: x.admin_note,
         description: cellOf(x.dimension, x.level)?.description_ar || null,
         path: cellOf(x.dimension, x.level)?.path_title_ar || null,
       })),
-    } : null,
-    journey,
+    } : { approved, level: overallLevel(levels) },
+    journey: audience === 'admin' ? journey
+      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => it) })),
     progress: journeyProgress(journey),
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
@@ -370,7 +373,7 @@ export async function handbookToc(p: any) {
   const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) ?? [];
   return {
     success: true,
-    levels,
+    level: overallLevel(levels),
     chapters: handbookModulesFor(mods, levels).map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar })),
   };
 }

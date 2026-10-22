@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, uploadFile } from '../api.js';
-import { DIMENSIONS, dimOf, levelOf, PHASES, REQ_STATUS } from '../labels.js';
+import { LEVEL_SUMMARY, levelOf, PHASES, REQ_STATUS } from '../labels.js';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -65,26 +65,16 @@ function PasskeyBanner({ onDone }) {
 }
 
 function Competency({ profile }) {
+  const lvl = levelOf(profile.level);
   return (
-    <div className="matrix">
-      {DIMENSIONS.map((d) => {
-        const x = profile.dimensions.find((y) => y.dimension === d.key);
-        const lvl = levelOf(x?.level);
-        return (
-          <div key={d.key} className={`dim ${d.key}`}>
-            <div className="row between">
-              <span className="en">{d.short.toUpperCase()}</span>
-              {x?.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
-            </div>
-            <h3>{d.title}</h3>
-            <div className="steps">{[1, 2, 3].map((s) => <div key={s} className={s <= lvl.step ? 'on' : ''} />)}</div>
-            <div className="lvl">{lvl.title}</div>
-            {x?.path && <p className="small"><b>مسارك:</b> {x.path}</p>}
-            {x?.description && <p className="small muted">{x.description}</p>}
-            {x?.note && <p className="small alert info">ملاحظة المستشار: {x.note}</p>}
-          </div>
-        );
-      })}
+    <div className="dim overall">
+      <div className="row between">
+        <span className="en">MILESTONE · IMPACT · LEADERSHIP</span>
+        {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
+      </div>
+      <h3>مستواك: {lvl.title}</h3>
+      <div className="steps">{[1, 2, 3].map((s) => <div key={s} className={s <= lvl.step ? 'on' : ''} />)}</div>
+      {LEVEL_SUMMARY[profile.level] && <p className="small muted">{LEVEL_SUMMARY[profile.level]}</p>}
     </div>
   );
 }
@@ -246,7 +236,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
           <span className="ico">⏳</span>
           <div className="grow">
             <b>نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن</b>
-            <p className="small">بعد اعتماد مسارك في الأبعاد الثلاثة يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.</p>
+            <p className="small">بعد اعتماد مستواك يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.</p>
           </div>
         </div>
       )}
@@ -256,7 +246,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
         <>
           <div className="section-title">
             <h2>ملف كفاءتك</h2>
-            <span className="small muted">مستواك في كل بُعد مستقل عن غيره</span>
+            <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
           </div>
           <Competency profile={profile} />
         </>

@@ -151,6 +151,14 @@ export function normalizePhone(p) {
 const RANK = { beginner: 0, intermediate: 1, advanced: 2 };
 
 // أبواب الكتيب التي تخص المشارك: مستواه في البُعد ≥ أدنى مستوى للباب
+// المستوى الملخص الذي يراه المشارك: وسيط مستوياته في الأبعاد الثلاثة.
+// التفصيل لكل بُعد للإدارة فقط، ويبقى يوجّه الرحلة والكتيب داخليًا.
+export function overallLevel(levels) {
+  const ranks = Object.values(levels || {}).filter((l) => l in RANK).map((l) => RANK[l]).sort((a, b) => a - b);
+  if (!ranks.length) return null;
+  return LEVELS[ranks[Math.floor((ranks.length - 1) / 2)]];
+}
+
 export function handbookModulesFor(modules, levels) {
   return modules
     .filter((m) => levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && (m.body_md || '').trim())

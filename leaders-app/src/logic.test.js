@@ -1,6 +1,6 @@
 // منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
 import {
-  buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, placementFromAnswers,
+  buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
   requirementApplies, scoreFor, seededShuffle, tierPercents,
 } from '../../supabase/functions/leaders-api/logic.js';
 
@@ -173,5 +173,16 @@ describe('handbook', () => {
     const md = 'عام\n:::min=intermediate\nمتوسط فأعلى\n:::\n:::only=beginner\nتأسيسي فقط\n:::\nختام';
     expect(filterHandbookMd(md, 'beginner')).toBe('عام\nتأسيسي فقط\nختام');
     expect(filterHandbookMd(md, 'advanced')).toBe('عام\nمتوسط فأعلى\nختام');
+  });
+});
+
+describe('overallLevel', () => {
+  it('takes the median of the three dimensions', () => {
+    expect(overallLevel({ milestone: 'beginner', impact: 'intermediate', leadership: 'advanced' })).toBe('intermediate');
+    expect(overallLevel({ milestone: 'beginner', impact: 'beginner', leadership: 'advanced' })).toBe('beginner');
+    expect(overallLevel({ milestone: 'advanced', impact: 'advanced', leadership: 'beginner' })).toBe('advanced');
+  });
+  it('is null without placements', () => {
+    expect(overallLevel({})).toBe(null);
   });
 });
