@@ -95,6 +95,9 @@ export const ResumeScreen = ({
   resumeLoading,
   handleResume,
   handleResumeVerify,
+  passkeyAvailable,
+  passkeyBusy,
+  handlePasskeyLogin,
 }) => (
   <AuthShell>
       <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل — بل بالهندسة" />
@@ -116,6 +119,10 @@ export const ResumeScreen = ({
                 {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
               </button>
             </form>
+            {passkeyAvailable && <>
+              <div className="auth-or">أو</div>
+              <button type="button" className="btn btn-passkey" style={{ borderColor: "#4A5628", color: "#4A5628" }} disabled={passkeyBusy} onClick={handlePasskeyLogin}>{passkeyBusy ? "..." : "🔑 الدخول بمفتاح المرور"}</button>
+            </>}
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
               مسجّل جديد؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"var(--font-ar)",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("register"); setOtpStep("form"); }}>ابدأ رحلتك</button>
             </div>
@@ -156,6 +163,9 @@ export const AdminLoginScreen = ({
   adminSending,
   handleAdminSendCode,
   handleAdminVerify,
+  passkeyAvailable,
+  passkeyBusy,
+  handlePasskeyLogin,
 }) => (
   <AuthShell>
       <div className="auth-left" style={{background:"#0f1923"}}>
@@ -178,6 +188,10 @@ export const AdminLoginScreen = ({
             <form onSubmit={handleAdminSendCode}>
               <div className={`fg ${adminError ? "fg-err" : ""}`}><label htmlFor="admin-email">البريد الإلكتروني</label><input id="admin-email" type="email" dir="ltr" placeholder="admin@example.com" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setAdminError(""); }} />{adminError && <div className="fg-msg">{adminError}</div>}</div>
               <button type="submit" disabled={adminSending} className="btn" style={{background:`${BRAND.deep}`}}>{adminSending ? "..." : "إرسال الرمز ←"}</button>
+              {passkeyAvailable && <>
+              <div className="auth-or">أو</div>
+              <button type="button" className="btn btn-passkey" style={{ borderColor: BRAND.deep, color: BRAND.deep }} disabled={passkeyBusy} onClick={handlePasskeyLogin}>{passkeyBusy ? "..." : "🔑 الدخول بمفتاح المرور"}</button>
+            </>}
             </form>
           ) : (
             <form onSubmit={handleAdminVerify}>

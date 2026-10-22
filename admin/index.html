@@ -1120,6 +1120,17 @@
     .totp-status-dot.off { background:var(--ink-faint); }
     .totp-status-label { font-size:.88rem; font-weight:500; color:var(--ink); }
     .totp-status-sub { font-size:.73rem; color:var(--ink-light); }
+    .passkey-login-btn { width:100%; padding:12px 20px; margin-top:4px; border-radius:10px; border:1.5px solid var(--petrol); background:transparent; color:var(--petrol); font-size:.9rem; font-weight:500; font-family:inherit; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:background .2s, color .2s; }
+    .passkey-login-btn:hover { background:var(--petrol); color:var(--sand-cream); }
+    .passkey-login-btn:disabled { opacity:.55; cursor:not-allowed; }
+    .login-or { display:flex; align-items:center; gap:10px; color:var(--ink-faint); font-size:.75rem; margin:16px 0 10px; }
+    .login-or::before, .login-or::after { content:''; flex:1; height:1px; background:var(--line); }
+    .pk-list { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+    .pk-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:var(--sand-light); }
+    .pk-name { font-size:.85rem; font-weight:500; color:var(--ink); }
+    .pk-sub { font-size:.72rem; color:var(--ink-light); }
+    .owner-badge { display:inline-block; font-size:.66rem; font-weight:600; padding:2px 8px; border-radius:99px; background:rgba(200,164,92,.16); color:#8A6A2A; margin-inline-start:6px; vertical-align:middle; }
+    .security-note { font-size:.74rem; color:var(--ink-light); line-height:1.7; margin:4px 0 12px; }
     .btn-sm { padding:6px 14px; border-radius:7px; font-size:.78rem; font-weight:500; border:1.5px solid transparent; transition:all .15s; white-space:nowrap; }
     .btn-sm.primary { background:var(--petrol); color:var(--sand-cream); border-color:var(--petrol); }
     .btn-sm.primary:hover { background:var(--petrol-s); }
@@ -1205,6 +1216,10 @@
           <input class="form-input" type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email"/>
         </div>
         <button class="login-btn" id="loginBtnSend" onclick="handleSendEmail()">متابعة</button>
+        <div id="passkeyLoginWrap" style="display:none">
+          <div class="login-or">أو</div>
+          <button class="passkey-login-btn" id="loginBtnPasskey" onclick="handlePasskeyLogin()">🔑 الدخول بمفتاح المرور</button>
+        </div>
         <div class="login-error" id="loginError"></div>
       </div>
 
@@ -1387,6 +1402,12 @@
         <div class="settings-section-title">أمان الحساب</div>
         <div class="totp-status-row"><div class="totp-status-info"><div class="totp-status-dot" id="totpDot"></div><div><div class="totp-status-label" id="totpLabel">—</div><div class="totp-status-sub" id="totpSub">—</div></div></div></div>
         <div class="btn-row" id="totpBtns" style="margin-bottom:12px"></div>
+        <div class="settings-section-title" style="margin-top:18px"><span>مفاتيح المرور</span><button class="btn-sm primary" id="pkAddBtn" onclick="handleAddPasskey()" style="font-size:.72rem;padding:4px 10px">+ إضافة مفتاح</button></div>
+        <div class="security-note">بصمة الوجه أو الإصبع أو قفل الجهاز. يعمل في لوحة الإدارة ودخول المستشار في المصفوفة، ولا يمكن تصيّده.</div>
+        <div class="pk-list" id="pkList"></div>
+        <div class="totp-status-row"><div class="totp-status-info"><div class="totp-status-dot" id="pkOnlyDot"></div><div><div class="totp-status-label" id="pkOnlyLabel">—</div><div class="totp-status-sub" id="pkOnlySub">—</div></div></div><button class="btn-sm ghost" id="pkOnlyBtn" onclick="handleTogglePasskeyOnly()">—</button></div>
+        <div class="settings-section-title" style="margin-top:18px"><span>الجلسات النشطة</span><button class="btn-sm danger" onclick="handleRevokeOthers()" style="font-size:.72rem;padding:4px 10px">إنهاء الجلسات الأخرى</button></div>
+        <div class="pk-list" id="sessList"></div>
         <div id="settingsQrWrap" style="display:none">
           <div class="qr-wrap-modal"><div id="settingsQrCanvas"></div><div class="qr-apps"><span class="qr-app-tag">Google Authenticator</span><span class="qr-app-tag">Authy</span><span class="qr-app-tag">1Password</span></div><div style="font-size:.74rem;color:var(--ink-light)">أو أدخل يدوياً:</div><div class="qr-secret-txt" id="settingsQrSecret">—</div></div>
           <div class="form-group"><label class="form-label">رمز التأكيد من التطبيق</label><input class="form-input code-input" type="text" id="settingsConfirmToken" placeholder="• • • • • •" maxlength="6" inputmode="numeric"/></div>
@@ -1595,6 +1616,8 @@ function openSettings() {
   document.getElementById('settingsEmail').textContent = session.user.email || '—';
   document.getElementById('settingsRole').textContent  = ROLE_LABELS[session.user.role] || session.user.role || '—';
   renderTotpStatus(!!session.user.totp_enabled);
+  document.getElementById('settingsName').insertAdjacentHTML('beforeend', session.user.is_owner ? '<span class="owner-badge">المالك</span>' : '');
+  loadSecurity();
   const uSection = document.getElementById('usersSection');
   if (session.user.role === 'super_admin') { uSection.style.display = 'block'; loadUsers(); }
   else uSection.style.display = 'none';
@@ -1700,6 +1723,152 @@ function drawQR(uri, containerId) {
 }
 
 // ══════════════════════════════════════════════════════
+// مفاتيح المرور (WebAuthn)
+// ══════════════════════════════════════════════════════
+// الخادم يرسل الخيارات بصيغة JSON (base64url)، والمتصفح يريد ArrayBuffer.
+const b64uToBuf = s => {
+  const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+  return Uint8Array.from(b, c => c.charCodeAt(0)).buffer;
+};
+const bufToB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const passkeySupported = () => !!(window.PublicKeyCredential && navigator.credentials);
+
+async function passkeyGet(o) {
+  const cred = await navigator.credentials.get({ publicKey: {
+    ...o, challenge: b64uToBuf(o.challenge),
+    allowCredentials: (o.allowCredentials || []).map(c => ({ ...c, id: b64uToBuf(c.id) })),
+  } });
+  const r = cred.response;
+  return {
+    id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+    authenticatorAttachment: cred.authenticatorAttachment || undefined,
+    clientExtensionResults: cred.getClientExtensionResults(),
+    response: {
+      clientDataJSON: bufToB64u(r.clientDataJSON), authenticatorData: bufToB64u(r.authenticatorData),
+      signature: bufToB64u(r.signature), userHandle: r.userHandle ? bufToB64u(r.userHandle) : undefined,
+    },
+  };
+}
+
+async function passkeyCreate(o) {
+  const cred = await navigator.credentials.create({ publicKey: {
+    ...o, challenge: b64uToBuf(o.challenge), user: { ...o.user, id: b64uToBuf(o.user.id) },
+    excludeCredentials: (o.excludeCredentials || []).map(c => ({ ...c, id: b64uToBuf(c.id) })),
+  } });
+  const r = cred.response;
+  return {
+    id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+    authenticatorAttachment: cred.authenticatorAttachment || undefined,
+    clientExtensionResults: cred.getClientExtensionResults(),
+    response: {
+      clientDataJSON: bufToB64u(r.clientDataJSON), attestationObject: bufToB64u(r.attestationObject),
+      transports: r.getTransports ? r.getTransports() : undefined,
+    },
+  };
+}
+
+// إلغاء المستخدم للنافذة ليس خطأ يستحق رسالة حمراء.
+const passkeyCancelled = e => e && (e.name === 'NotAllowedError' || e.name === 'AbortError');
+
+if (passkeySupported()) document.getElementById('passkeyLoginWrap').style.display = 'block';
+
+async function handlePasskeyLogin() {
+  const btn = document.getElementById('loginBtnPasskey');
+  if (btn.disabled) return;
+  document.getElementById('loginError').style.display = 'none';
+  btn.disabled = true;
+  try {
+    const o = await callAuth({ action: 'passkey-login-options' });
+    if (!o.success) throw new Error(o.message);
+    const response = await passkeyGet(o.options);
+    const d = await callAuth({ action: 'passkey-login-verify', response });
+    if (!d.success || !d.token) throw new Error(d.message || 'تعذّر الدخول');
+    authToken = d.token;
+    Session.save(d.token, d.user);
+    showDashboard(d.user, d.user.email);
+  } catch (e) {
+    if (!passkeyCancelled(e)) showLoginError('loginError', e.message || 'تعذّر الدخول بمفتاح المرور');
+  } finally { btn.disabled = false; }
+}
+
+async function loadSecurity() {
+  const list = document.getElementById('pkList');
+  const d = await callAuth({ action: 'security-status' });
+  if (!d.success) { list.innerHTML = ''; return; }
+  const methodLabel = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة', email: 'رمز البريد' };
+  list.innerHTML = d.passkeys.length ? d.passkeys.map(p => `<div class="pk-row">
+      <div><div class="pk-name">🔑 ${esc(p.device_label || 'مفتاح مرور')}${p.backed_up ? ' · متزامن' : ''}</div>
+      <div class="pk-sub">أُضيف ${fmtDate(p.created_at)}${p.last_used_at ? ' · آخر استخدام ' + fmtDate(p.last_used_at) : ''}</div></div>
+      <button class="btn-sm danger" data-pk-del="${esc(p.id)}">حذف</button></div>`).join('')
+    : '<div class="pk-sub">لا توجد مفاتيح بعد. أضف مفتاحًا لهذا الجهاز ثم مفتاحًا احتياطيًا.</div>';
+  const only = !!d.passkey_only;
+  document.getElementById('pkOnlyDot').className = 'totp-status-dot ' + (only ? 'on' : 'off');
+  document.getElementById('pkOnlyLabel').textContent = only ? 'الدخول بمفتاح المرور وحده: مفعّل' : 'الدخول بمفتاح المرور وحده: غير مفعّل';
+  document.getElementById('pkOnlySub').textContent = only
+    ? 'رموز البريد وتطبيق المصادقة لا تفتح حسابك'
+    : 'يتطلب مفتاحين ودخولًا بمفتاح. الجلسة الحالية: ' + (methodLabel[d.method] || 'قديمة');
+  document.getElementById('pkOnlyBtn').textContent = only ? 'تعطيل' : 'تفعيل';
+  document.getElementById('pkOnlyBtn').dataset.enable = only ? 'false' : 'true';
+  loadSessions();
+}
+
+async function loadSessions() {
+  const box = document.getElementById('sessList');
+  const d = await callAuth({ action: 'sessions-list' });
+  if (!d.success) { box.innerHTML = ''; return; }
+  const methodLabel = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة', email: 'رمز البريد' };
+  box.innerHTML = d.sessions.map(x => `<div class="pk-row"><div>
+      <div class="pk-name">${x.current ? '● هذه الجلسة' : 'جلسة أخرى'} · ${esc(methodLabel[x.method] || 'قديمة')}</div>
+      <div class="pk-sub" style="direction:ltr;text-align:right">${esc(x.ip || '')} ${esc((x.ua || '').slice(0, 60))}</div>
+      <div class="pk-sub">${x.auth_at ? 'الدخول ' + fmtDate(new Date(x.auth_at).toISOString()) : ''}</div></div></div>`).join('');
+}
+
+async function handleAddPasskey() {
+  if (!passkeySupported()) { showToast('❌ المتصفح لا يدعم مفاتيح المرور'); return; }
+  const label = prompt('اسم الجهاز (مثل: آيفون، ماك العمل)', '');
+  if (label === null) return;
+  const btn = document.getElementById('pkAddBtn');
+  btn.disabled = true;
+  try {
+    const o = await callAuth({ action: 'passkey-register-options' });
+    if (!o.success) throw new Error(o.message);
+    const response = await passkeyCreate(o.options);
+    const d = await callAuth({ action: 'passkey-register-verify', response, label });
+    if (!d.success) throw new Error(d.message);
+    showToast('✅ ' + d.message);
+    loadSecurity();
+  } catch (e) {
+    if (e && e.name === 'InvalidStateError') showToast('هذا الجهاز مسجّل مسبقًا');
+    else if (!passkeyCancelled(e)) showToast('❌ ' + (e.message || 'تعذّر حفظ المفتاح'));
+  } finally { btn.disabled = false; }
+}
+
+async function handleDeletePasskey(id) {
+  if (!confirm('حذف هذا المفتاح؟ لن يفتح حسابك بعد الآن.')) return;
+  const d = await callAuth({ action: 'passkey-delete', id });
+  showToast((d.success ? '✅ ' : '❌ ') + d.message);
+  if (d.success) loadSecurity();
+}
+
+async function handleTogglePasskeyOnly() {
+  const enable = document.getElementById('pkOnlyBtn').dataset.enable === 'true';
+  if (enable && !confirm('بعد التفعيل لن تقبل رموز البريد ولا تطبيق المصادقة، وتُنهى الجلسات المفتوحة بها. تأكد أن لديك مفتاحين يعملان. متابعة؟')) return;
+  const d = await callAuth({ action: 'passkey-only', enable });
+  if (!d.success) { showToast('❌ ' + d.message); return; }
+  const session = Session.load();
+  if (session) { session.user.passkey_only = d.passkey_only; Session.save(session.token, session.user); }
+  showToast(d.passkey_only ? '✅ الدخول الآن بمفتاح المرور وحده' : '✅ عادت رموز البريد وتطبيق المصادقة');
+  loadSecurity();
+}
+
+async function handleRevokeOthers() {
+  if (!confirm('إنهاء كل جلساتك في الأجهزة الأخرى؟')) return;
+  const d = await callAuth({ action: 'sessions-revoke-others' });
+  showToast((d.success ? '✅ ' : '❌ ') + d.message);
+  if (d.success) loadSessions();
+}
+
+// ══════════════════════════════════════════════════════
 // USER MANAGEMENT
 // ══════════════════════════════════════════════════════
 async function loadUsers() {
@@ -1712,11 +1881,11 @@ async function loadUsers() {
     return;
   }
   tbody.innerHTML = d.users.map(u => `<tr>
-    <td style="font-weight:500">${esc(u.name)}</td>
+    <td style="font-weight:500">${esc(u.name)}${u.is_owner ? '<span class="owner-badge">المالك</span>' : ''}</td>
     <td style="font-size:.78rem;color:var(--ink-mid);direction:ltr">${esc(u.email)}</td>
-    <td><select class="role-select" data-user-role="${esc(u.id)}">${['super_admin','admin','viewer'].map(r => `<option value="${r}"${u.role_id===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td>
+    <td><select class="role-select" data-user-role="${esc(u.id)}"${u.is_owner ? ' disabled title="حساب المالك محمي"' : ''}>${['super_admin','admin','viewer'].map(r => `<option value="${r}"${u.role_id===r?' selected':''}>${ROLE_LABELS[r]}</option>`).join('')}</select></td>
     <td><span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:${u.totp_enabled?'rgba(74,122,58,.1)':'var(--sand-light)'};color:${u.totp_enabled?'#4A7A3A':'var(--ink-faint)'};">${u.totp_enabled?'✓ نشط':'—'}</span></td>
-    <td><button class="toggle-btn ${u.is_active?'on':'off'}" data-user-toggle="${esc(u.id)}" data-active="${u.is_active === true}"></button></td>
+    <td>${u.is_owner ? '🔒' : `<button class="toggle-btn ${u.is_active?'on':'off'}" data-user-toggle="${esc(u.id)}" data-active="${u.is_active === true}"></button>`}</td>
   </tr>`).join('');
 }
 
@@ -2071,8 +2240,9 @@ async function updateStatus(id, status, silent = false) {
 // المتصفح يفك &#39; إلى ' داخل الخاصية قبل التنفيذ، فيكسر esc() هناك.
 // تُحمل المعرّفات في data-* وتُلتقط هنا، ثم تُجلب القيم من allData.
 document.addEventListener('click', e => {
-  const el = e.target.closest('[data-copy],[data-reply],[data-status-id],[data-user-toggle],[data-open]');
+  const el = e.target.closest('[data-copy],[data-reply],[data-status-id],[data-user-toggle],[data-open],[data-pk-del]');
   if (!el) return;
+  if (el.dataset.pkDel) { handleDeletePasskey(el.dataset.pkDel); return; }
   if (el.dataset.copy !== undefined) { e.stopPropagation(); copyText(el.dataset.copy); return; }
   if (el.dataset.reply) {
     const r = allData.find(x => x.id === el.dataset.reply);

@@ -16,8 +16,8 @@ const ConfirmDialog = (p) => {
           <h3>{confirmAction.title}</h3>
           <p>{confirmAction.message}</p>
           <div className="confirm-btns">
-            <button className="btn btn-danger" onClick={confirmAction.onConfirm}>نعم، متأكد</button>
-            <button className="btn btn-outline" onClick={()=>setConfirmAction(null)}>إلغاء</button>
+            <button className={`btn ${confirmAction.tone === "primary" ? "" : "btn-danger"}`} onClick={confirmAction.onConfirm}>{confirmAction.confirmLabel || "نعم، متأكد"}</button>
+            <button className="btn btn-outline" onClick={()=>setConfirmAction(null)}>{confirmAction.cancelLabel || "إلغاء"}</button>
           </div>
         </div>
       </div>
