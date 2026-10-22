@@ -14,6 +14,8 @@ export const CONFIG = {
   rpId: env('LEADERS_RP_ID', 'leaders.sunkvalue.com'),
   rpName: 'Milestone Impact',
   origins: env('LEADERS_ORIGINS', 'https://leaders.sunkvalue.com').split(',').map((s) => s.trim()),
+  // لوحة الإدارة تنادي نفس الدالة؛ مسموحة في CORS فقط وليست أصلًا لمفاتيح المرور
+  adminOrigins: env('LEADERS_ADMIN_ORIGINS', 'https://admin.sunkvalue.com').split(',').map((s) => s.trim()),
   resendKey: env('RESEND_API_KEY'),
   mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
   sessionDays: 30,
@@ -32,7 +34,7 @@ export const BUCKET = 'leaders-private';
 
 // ── الردود ──
 const cors = (origin: string | null) => ({
-  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(['http://localhost:5174']).includes(origin) ? origin : CONFIG.origins[0],
+  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins, ['http://localhost:5174']).includes(origin) ? origin : CONFIG.origins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Vary': 'Origin',
