@@ -175,6 +175,10 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .btn-gold { background: var(--gold-d);  }
 .btn-gold:active {  }
 .btn-outline { background: none; border: 1.5px solid var(--border-strong); color: var(--text-secondary);  }
+.btn-passkey { background: none; border: 1.5px solid var(--mi-d); color: var(--mi-d); }
+.btn-passkey:disabled { opacity: 0.55; cursor: not-allowed; }
+.auth-or { display: flex; align-items: center; gap: 10px; color: var(--wg); font-size: 0.75rem; margin: 1rem 0 0.7rem; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border-strong); }
 .btn-outline:active { background: var(--bg-deep); }
 .btn-danger { background: #8B2A1A;  }
 .btn-dark { background: #1a1a2e; }

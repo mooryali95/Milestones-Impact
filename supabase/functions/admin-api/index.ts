@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "npm:@simplewebauthn/server@13.3.3";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -7,18 +11,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // عقد مع leaders-api (لا تغيّره دون تنسيق): جدول api_sessions،
 // token_hash = sha256 hex للتوكن بلا ملح، kind = 'admin'، expires_at،
 // meta.email وmeta.role ('super_admin' | 'admin' | 'viewer').
+//
+// مفاتيح المرور: النطاق sunkvalue.com، فالمفتاح نفسه يدخل لوحة الإدارة
+// ودخول المستشار في المصفوفة. الجداول في 20261022100000_passkeys_owner.sql.
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND = Deno.env.get("RESEND_API_KEY") || "";
 const FROM = "Milestone Impact <milestoneimpact@basserh.com>";
 const APP = "Milestone Impact Admin";
+const RP_ID = Deno.env.get("ADMIN_RP_ID") || "sunkvalue.com";
+const RP_NAME = "Milestone Impact";
+const ORIGINS = (Deno.env.get("ADMIN_ORIGINS") ||
+  "https://admin.sunkvalue.com,https://matrix.sunkvalue.com,https://mi.sunkvalue.com").split(",").map((s) => s.trim());
 
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4h admin sessions
 const OTP_COOLDOWN_MS = 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_FAILS = 5;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+// العمليات الحساسة (مفاتيح المرور ووضع المفتاح وحده) تتطلب دخولًا حديثًا.
+const FRESH_MS = 10 * 60 * 1000;
 
 const ROLES = ["super_admin", "admin", "viewer"];
 // المراقب يقرأ فقط؛ هذه الإجراءات تكتب.
@@ -128,17 +142,122 @@ async function getAdminSession(sb: SB, token: string) {
   if (!data?.length) return null;
   if (new Date(data[0].expires_at as string).getTime() < Date.now()) return null;
   const userId = data[0].subject as string;
-  const { data: us } = await sb.from("admin_users").select("role_id, is_active, email").eq("id", userId).limit(1);
+  const { data: us } = await sb.from("admin_users")
+    .select("role_id, is_active, email, name, is_owner, passkey_only").eq("id", userId).limit(1);
   if (!us?.length || !us[0].is_active) return null;
+  const meta = (data[0].meta || {}) as Record<string, unknown>;
+  // وضع المفتاح وحده يُسقط الجلسات التي فُتحت برمز قبل تفعيله.
+  if (us[0].passkey_only && meta.method !== "passkey") return null;
   return {
     userId,
     role: String(us[0].role_id || ""),
-    email: String(us[0].email || (data[0].meta as Record<string, unknown>)?.email || ""),
+    email: String(us[0].email || meta.email || ""),
+    name: String(us[0].name || ""),
+    isOwner: !!us[0].is_owner,
+    passkeyOnly: !!us[0].passkey_only,
+    method: String(meta.method || ""),
+    authAt: Number(meta.auth_at || 0),
   };
 }
 
 async function revokeSessions(sb: SB, userId: string) {
   await sb.from("api_sessions").delete().eq("kind", "admin").eq("subject", String(userId));
+}
+
+type Ctx = { ip: string; ua: string };
+const clientCtx = (req: Request): Ctx => ({
+  ip: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
+  ua: (req.headers.get("user-agent") || "").slice(0, 300),
+});
+
+// يُصدر جلسة إدارة. method وauth_at يحددان ما تسمح به الجلسة من عمليات حساسة.
+async function issueSession(sb: SB, user: Record<string, unknown>, email: string, method: "passkey" | "totp" | "email", ctx: Ctx) {
+  const token = randomToken();
+  const { error } = await sb.from("api_sessions").insert({
+    token_hash: await sha256hex(token), kind: "admin", subject: String(user.id),
+    meta: { role: user.role_id, name: user.name, email, method, auth_at: Date.now(), ip: ctx.ip, ua: ctx.ua },
+    expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+  });
+  if (error) throw error;
+  await sb.from("admin_users").update({ last_login: new Date().toISOString() }).eq("id", user.id);
+  try {
+    await sb.from("admin_audit_log").insert({
+      user_id: user.id, user_email: email, action: "login", meta: { role: user.role_id, method, ip: ctx.ip },
+    });
+  } catch { /* audit best-effort */ }
+  // المالك يُبلَّغ بكل دخول إلى حسابه.
+  if (user.is_owner) {
+    await securityMail(email, "دخول جديد إلى حسابك", [
+      ["الطريقة", METHOD_LABELS[method]], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
+    ]);
+  }
+  return {
+    token,
+    user: {
+      id: user.id, name: user.name, role: user.role_id, email, totp_enabled: !!user.totp_enabled,
+      is_owner: !!user.is_owner, passkey_only: !!user.passkey_only,
+    },
+  };
+}
+
+const METHOD_LABELS: Record<string, string> = { passkey: "مفتاح المرور", totp: "تطبيق المصادقة", email: "رمز البريد" };
+
+const escHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+// تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك.
+async function securityMail(to: string, title: string, rows: [string, string][]) {
+  const when = new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
+  const body = rows.concat([["الوقت", when]]).map(([k, v]) =>
+    `<tr><td style="color:#8B9AAB;padding:6px 0;width:90px">${escHtml(k)}</td><td style="color:#1F3340;padding:6px 0;direction:ltr;text-align:right">${escHtml(v)}</td></tr>`).join("");
+  try {
+    await sendEmail(to, `تنبيه أمني: ${title} — ${APP}`, `<div dir="rtl" style="font-family:Tahoma,sans-serif;max-width:480px;margin:0 auto;background:#f5f3ef;padding:24px;border-radius:14px">
+      <div style="background:#061E2C;border-radius:10px;padding:20px 24px;text-align:center;margin-bottom:20px">
+        <span style="color:#C8A45C;font-size:1rem;font-weight:700">${APP}</span>
+      </div>
+      <p style="color:#1F3340;font-size:1rem;font-weight:700;margin:0 0 12px">${escHtml(title)}</p>
+      <table style="width:100%;font-size:.85rem;border-collapse:collapse">${body}</table>
+      <p style="color:#8B9AAB;font-size:.78rem;margin-top:16px">إن لم تكن أنت، ادخل فورًا وأنهِ الجلسات الأخرى واحذف أي مفتاح لا تعرفه.</p>
+    </div>`);
+  } catch (e) { console.error("admin-api securityMail:", e); }
+}
+
+// ── WebAuthn ──
+// bytea عبر PostgREST يُكتب ويُقرأ نصًا سداسيًا يبدأ بـ \x
+const toBytea = (u: Uint8Array) => "\\x" + Array.from(u, (b) => b.toString(16).padStart(2, "0")).join("");
+function fromBytea(s: string): Uint8Array<ArrayBuffer> {
+  const hex = s.startsWith("\\x") ? s.slice(2) : s;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function challengeOf(response: unknown): string {
+  try {
+    const r = response as { response?: { clientDataJSON?: string } };
+    const b64 = String(r?.response?.clientDataJSON || "").replace(/-/g, "+").replace(/_/g, "/");
+    return String(JSON.parse(atob(b64)).challenge || "");
+  } catch { return ""; }
+}
+async function saveChallenge(sb: SB, challenge: string, purpose: "register" | "authenticate", subject: string | null) {
+  const { error } = await sb.from("webauthn_challenges").insert({
+    scope: "admin", purpose, subject, challenge, expires_at: new Date(Date.now() + CHALLENGE_TTL_MS).toISOString(),
+  });
+  if (error) throw error;
+}
+// يستهلك التحدي مرة واحدة فقط.
+async function takeChallenge(sb: SB, challenge: string, purpose: string) {
+  if (!challenge) return null;
+  const { data } = await sb.from("webauthn_challenges").update({ consumed_at: new Date().toISOString() })
+    .eq("challenge", challenge).eq("scope", "admin").eq("purpose", purpose).is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString()).select("*");
+  return data?.[0] || null;
+}
+// سقف لتحديات الدخول المجهولة كي لا يُغرَق الجدول.
+async function challengeFlood(sb: SB): Promise<boolean> {
+  const since = new Date(Date.now() - 60 * 1000).toISOString();
+  const { count } = await sb.from("webauthn_challenges").select("*", { count: "exact", head: true })
+    .eq("scope", "admin").gte("created_at", since);
+  return (count ?? 0) >= 60;
 }
 
 // whitelists: what admin sessions may write
@@ -162,8 +281,9 @@ Deno.serve(async (req: Request) => {
       if (recent?.length) return json({ success: false, message: "يرجى الانتظار دقيقة قبل إعادة الإرسال" }, 429);
 
       // من فعّل TOTP لا يدخل برمز البريد، فلا نرسله له أصلًا.
-      const { data: admins } = await sb.from("admin_users").select("id, is_active, totp_enabled").ilike("email", email).limit(1);
-      if (admins?.length && admins[0].is_active && !admins[0].totp_enabled) {
+      // ومن جعل دخوله بمفتاح المرور وحده لا يُرسل له رمز كذلك.
+      const { data: admins } = await sb.from("admin_users").select("id, is_active, totp_enabled, passkey_only").ilike("email", email).limit(1);
+      if (admins?.length && admins[0].is_active && !admins[0].totp_enabled && !admins[0].passkey_only) {
         const code = randomCode();
         const exp = new Date(Date.now() + OTP_TTL_MS).toISOString();
         const { error } = await sb.from("email_otps")
@@ -182,12 +302,14 @@ Deno.serve(async (req: Request) => {
       if (await tooManyFails(sb, email)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
 
       const { data: admins } = await sb.from("admin_users")
-        .select("id, name, role_id, is_active, totp_secret, totp_enabled").ilike("email", email).limit(1);
+        .select("id, name, role_id, is_active, totp_secret, totp_enabled, is_owner, passkey_only").ilike("email", email).limit(1);
       const user = admins?.[0];
 
       let verified = false;
-      if (user?.is_active) {
+      let method: "totp" | "email" = "email";
+      if (user?.is_active && !user.passkey_only) {
         if (user.totp_enabled && user.totp_secret) {
+          method = "totp";
           // TOTP عامل ثانٍ حقيقي: من فعّله لا يدخل برمز البريد.
           verified = await verifyTotp(user.totp_secret as string, code);
         } else {
@@ -203,17 +325,43 @@ Deno.serve(async (req: Request) => {
       }
       await sb.from("totp_attempts").insert({ email, success: verified });
       if (!verified || !user) return json({ success: false, message: BAD_CODE_MSG });
+      return json({ success: true, ...(await issueSession(sb, user, email, method, clientCtx(req))) });
+    }
 
-      const token = randomToken();
-      const { error } = await sb.from("api_sessions").insert({
-        token_hash: await sha256hex(token), kind: "admin", subject: String(user.id),
-        meta: { role: user.role_id, name: user.name, email },
-        expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-      });
-      if (error) throw error;
-      await sb.from("admin_users").update({ last_login: new Date().toISOString() }).eq("id", user.id);
-      try { await sb.from("admin_audit_log").insert({ user_id: user.id, user_email: email, action: "login", meta: { role: user.role_id } }); } catch { /* audit best-effort */ }
-      return json({ success: true, token, user: { id: user.id, name: user.name, role: user.role_id, email, totp_enabled: !!user.totp_enabled } });
+    // ══ passkey-login: بلا بريد، المتصفح يعرض مفاتيح sunkvalue.com المحفوظة ══
+    if (action === "passkey-login-options") {
+      if (await challengeFlood(sb)) return json({ success: false, message: "محاولات كثيرة، انتظر دقيقة" }, 429);
+      const options = await generateAuthenticationOptions({ rpID: RP_ID, userVerification: "required" });
+      await saveChallenge(sb, options.challenge, "authenticate", null);
+      return json({ success: true, options });
+    }
+
+    if (action === "passkey-login-verify") {
+      const ch = await takeChallenge(sb, challengeOf(body.response), "authenticate");
+      if (!ch) return json({ success: false, message: "انتهت مهلة العملية، حاول مرة أخرى" }, 400);
+      const credId = String(body.response?.id || "");
+      const { data: pks } = await sb.from("admin_passkeys").select("*").eq("credential_id", credId).limit(1);
+      const pk = pks?.[0];
+      if (!pk) return json({ success: false, code: "unknown_passkey", message: "هذا المفتاح غير مسجّل لحساب إدارة، ادخل بالبريد ثم أضفه من الإعدادات" }, 404);
+      let v;
+      try {
+        v = await verifyAuthenticationResponse({
+          response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID,
+          requireUserVerification: true,
+          credential: { id: pk.credential_id, publicKey: fromBytea(pk.public_key), counter: Number(pk.sign_count), transports: pk.transports || undefined },
+        });
+      } catch (e) {
+        console.error("admin-api passkey verify:", e);
+        return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      }
+      if (!v.verified) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      await sb.from("admin_passkeys").update({ sign_count: v.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", pk.id);
+      const { data: us } = await sb.from("admin_users")
+        .select("id, name, email, role_id, is_active, totp_enabled, is_owner, passkey_only").eq("id", pk.admin_id).limit(1);
+      const user = us?.[0];
+      if (!user?.is_active) return json({ success: false, message: "الحساب غير نشط" }, 403);
+      const email = String(user.email || "").toLowerCase();
+      return json({ success: true, ...(await issueSession(sb, user, email, "passkey", clientCtx(req))) });
     }
 
     // ══ everything below requires a valid admin session ══
@@ -266,6 +414,146 @@ Deno.serve(async (req: Request) => {
       await sb.from("admin_users").update({ totp_enabled: true }).eq("id", session.userId);
       await audit("confirm-totp");
       return json({ success: true, message: "تم تفعيل TOTP" });
+    }
+
+    // ══ مفاتيح المرور وأمان الحساب — دائمًا على حساب الجلسة نفسها ══
+    const fresh = Date.now() - session.authAt < FRESH_MS;
+    const STALE = { success: false, code: "reauth", message: "لحمايتك، سجّل خروجك وادخل مجددًا ثم أعد المحاولة خلال 10 دقائق" };
+    const NEED_PASSKEY = { success: false, code: "reauth_passkey", message: "هذه العملية تتطلب دخولًا بمفتاح مرور مسجّل، سجّل خروجك وادخل به" };
+    const myPasskeys = async () => {
+      const { data } = await sb.from("admin_passkeys")
+        .select("id, credential_id, transports, device_label, backed_up, created_at, last_used_at")
+        .eq("admin_id", session.userId).order("created_at", { ascending: true });
+      return data || [];
+    };
+
+    if (action === "security-status") {
+      const pks = await myPasskeys();
+      return json({
+        success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method,
+        passkeys: pks.map(({ credential_id: _c, ...p }) => p),
+      });
+    }
+
+    if (action === "passkey-register-options" || action === "passkey-register-verify") {
+      if (!fresh) return json(STALE, 403);
+      const existing = await myPasskeys();
+      // من لديه مفتاح يضيف غيره بجلسة مفتاح فقط، فلا يكفي رمز بريد مسروق لزرع مفتاح.
+      if (existing.length && session.method !== "passkey") return json(NEED_PASSKEY, 403);
+      if (existing.length >= 10) return json({ success: false, message: "الحد الأقصى 10 مفاتيح" }, 400);
+
+      if (action === "passkey-register-options") {
+        const options = await generateRegistrationOptions({
+          rpName: RP_NAME,
+          rpID: RP_ID,
+          userName: `${adminEmail} (إدارة)`,
+          userDisplayName: `${session.name || adminEmail} (إدارة)`,
+          userID: new TextEncoder().encode(`admin:${session.userId}`),
+          attestationType: "none",
+          excludeCredentials: existing.map((c) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
+          authenticatorSelection: { residentKey: "required", userVerification: "required" },
+        });
+        await saveChallenge(sb, options.challenge, "register", String(session.userId));
+        return json({ success: true, options });
+      }
+
+      const ch = await takeChallenge(sb, challengeOf(body.response), "register");
+      if (!ch || ch.subject !== String(session.userId)) return json({ success: false, message: "انتهت مهلة العملية، حاول مرة أخرى" }, 400);
+      let v;
+      try {
+        v = await verifyRegistrationResponse({
+          response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID,
+          requireUserVerification: true,
+        });
+      } catch (e) {
+        console.error("admin-api passkey register:", e);
+        return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      }
+      if (!v.verified || !v.registrationInfo) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      const info = v.registrationInfo;
+      const label = String(body.label || "").trim().slice(0, 80) || null;
+      const { error } = await sb.from("admin_passkeys").insert({
+        admin_id: session.userId,
+        credential_id: info.credential.id,
+        public_key: toBytea(info.credential.publicKey),
+        sign_count: info.credential.counter,
+        transports: info.credential.transports || body.response?.response?.transports || null,
+        aaguid: info.aaguid,
+        backed_up: info.credentialBackedUp,
+        device_label: label,
+      });
+      if (error) throw error;
+      await audit("passkey-register", { label });
+      const ctx = clientCtx(req);
+      await securityMail(adminEmail, "أُضيف مفتاح مرور إلى حسابك", [
+        ["الجهاز", label || "بلا اسم"], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
+      ]);
+      return json({ success: true, message: "تم حفظ مفتاح المرور" });
+    }
+
+    if (action === "passkey-delete") {
+      if (!fresh) return json(STALE, 403);
+      if (session.method !== "passkey") return json(NEED_PASSKEY, 403);
+      const id = String(body.id || "");
+      const pks = await myPasskeys();
+      const target = pks.find((p) => p.id === id);
+      if (!target) return json({ success: false, message: "المفتاح غير موجود" }, 404);
+      if (session.passkeyOnly && pks.length <= 2) {
+        return json({ success: false, message: "الدخول بالمفتاح وحده يتطلب مفتاحين على الأقل، أضف مفتاحًا آخر أو عطّل الوضع أولًا" });
+      }
+      await sb.from("admin_passkeys").delete().eq("id", id).eq("admin_id", session.userId);
+      await audit("passkey-delete", { label: target.device_label });
+      await securityMail(adminEmail, "حُذف مفتاح مرور من حسابك", [["الجهاز", String(target.device_label || "بلا اسم")]]);
+      return json({ success: true, message: "تم حذف المفتاح" });
+    }
+
+    // الدخول بمفتاح المرور وحده: يُغلق باب رموز البريد وتطبيق المصادقة.
+    if (action === "passkey-only") {
+      if (!fresh) return json(STALE, 403);
+      if (session.method !== "passkey") return json(NEED_PASSKEY, 403);
+      const enable = body.enable === true;
+      if (enable) {
+        const pks = await myPasskeys();
+        if (pks.length < 2) {
+          return json({ success: false, message: "سجّل مفتاحين على الأقل (جهازان، أو مفتاح متزامن ومفتاح احتياطي) قبل التفعيل كي لا تفقد الوصول" });
+        }
+      }
+      await sb.from("admin_users").update({ passkey_only: enable }).eq("id", session.userId);
+      // الجلسات المفتوحة برمز تسقط تلقائيًا في getAdminSession، ونحذفها صراحة أيضًا.
+      if (enable) {
+        const { data: rows } = await sb.from("api_sessions").select("token_hash, meta").eq("kind", "admin").eq("subject", String(session.userId));
+        const drop = (rows || []).filter((r) => (r.meta as Record<string, unknown>)?.method !== "passkey").map((r) => r.token_hash);
+        if (drop.length) await sb.from("api_sessions").delete().in("token_hash", drop);
+      }
+      await audit("passkey-only", { enable });
+      await securityMail(adminEmail, enable ? "فُعّل الدخول بمفتاح المرور وحده" : "عُطّل الدخول بمفتاح المرور وحده", [
+        ["الحالة", enable ? "رموز البريد وتطبيق المصادقة لا تُقبل" : "رموز البريد وتطبيق المصادقة مقبولة"],
+      ]);
+      return json({ success: true, passkey_only: enable });
+    }
+
+    if (action === "sessions-list") {
+      const curHash = await sha256hex(tok);
+      const { data } = await sb.from("api_sessions").select("token_hash, meta, expires_at")
+        .eq("kind", "admin").eq("subject", String(session.userId)).gt("expires_at", new Date().toISOString());
+      return json({
+        success: true,
+        sessions: (data || []).map((r) => {
+          const m = (r.meta || {}) as Record<string, unknown>;
+          return {
+            current: r.token_hash === curHash, method: m.method || null, ip: m.ip || null, ua: m.ua || null,
+            auth_at: m.auth_at || null, expires_at: r.expires_at,
+          };
+        }),
+      });
+    }
+
+    if (action === "sessions-revoke-others") {
+      const { error } = await sb.from("api_sessions").delete().eq("kind", "admin")
+        .eq("subject", String(session.userId)).neq("token_hash", await sha256hex(tok));
+      if (error) throw error;
+      await audit("sessions-revoke-others");
+      return json({ success: true, message: "أُنهيت كل الجلسات الأخرى" });
     }
 
     if (action === "list-regs") {
@@ -339,9 +627,15 @@ Deno.serve(async (req: Request) => {
     // ══ user management: super_admin only ══
     if (action === "list-users" || action === "add-user" || action === "update-user") {
       if (role !== "super_admin") return json({ success: false, message: "غير مصرح" }, 403);
+      // إن وُجد مالك فهو وحده من يمنح صلاحية المدير العام أو يعدّل مديرًا عامًا آخر.
+      const mayGrantSuper = async () => {
+        if (session.isOwner) return true;
+        const { count } = await sb.from("admin_users").select("*", { count: "exact", head: true }).eq("is_owner", true);
+        return (count ?? 0) === 0;
+      };
       if (action === "list-users") {
         const { data } = await sb.from("admin_users")
-          .select("id, name, email, role_id, is_active, totp_enabled, created_at")
+          .select("id, name, email, role_id, is_active, totp_enabled, is_owner, passkey_only, created_at")
           .order("created_at", { ascending: true });
         return json({ success: true, users: data || [] });
       }
@@ -351,6 +645,9 @@ Deno.serve(async (req: Request) => {
         const newRole = String(body.newRole || "");
         if (!newName || newName.length > 120 || !isEmail(newEmail) || !ROLES.includes(newRole)) {
           return json({ success: false, message: "بيانات غير مكتملة" }, 400);
+        }
+        if (newRole === "super_admin" && !(await mayGrantSuper())) {
+          return json({ success: false, message: "منح صلاحية المدير العام للمالك وحده" }, 403);
         }
         const { error } = await sb.from("admin_users")
           .insert({ name: newName, email: newEmail, role_id: newRole, is_active: true });
@@ -372,8 +669,13 @@ Deno.serve(async (req: Request) => {
         return json({ success: false, message: "لا يمكن تغيير دورك أو تعطيل حسابك بنفسك" });
       }
       // لا يُترك النظام بلا مدير عام نشط.
-      const { data: target } = await sb.from("admin_users").select("role_id, is_active").eq("id", targetId).limit(1);
+      const { data: target } = await sb.from("admin_users").select("role_id, is_active, is_owner").eq("id", targetId).limit(1);
       if (!target?.length) return json({ success: false, message: "المستخدم غير موجود" }, 404);
+      // القاعدة تمنع هذا أيضًا (admin_owner_guard)؛ الفحص هنا لرسالة واضحة.
+      if (target[0].is_owner) return json({ success: false, message: "حساب المالك محمي ولا يُعدَّل من اللوحة" }, 403);
+      if ((target[0].role_id === "super_admin" || (field === "role_id" && value === "super_admin")) && !(await mayGrantSuper())) {
+        return json({ success: false, message: "تعديل المدراء العامين للمالك وحده" }, 403);
+      }
       const demotes = target[0].role_id === "super_admin" && target[0].is_active &&
         ((field === "role_id" && value !== "super_admin") || (field === "is_active" && value === false));
       if (demotes) {

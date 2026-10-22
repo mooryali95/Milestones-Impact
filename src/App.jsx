@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { browserSupportsWebAuthn, startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import Landing from './Landing';
 import MILogo from './MILogo';
 import Icon from './components/Icon';
@@ -22,7 +23,7 @@ import { CSS } from './styles/appCss';
 ║  Milestone Impact — مصفوفة التأثير                          ║
 ║  Version 5.0 — Production Ready                             ║
 ║                                                              ║
-║  Auth: email OTP / TOTP via admin-api Edge Function          ║
+║  Auth: passkey / email OTP / TOTP via Edge Functions         ║
 ║  App composition root — feature logic lives in ./lib & ./config ║
 ║                                                              ║
 ║  © 2026 Milestone Impact. All rights reserved.               ║
@@ -83,6 +84,8 @@ export default function App() {
   const [resumePhone, setResumePhone] = useState("");
   const [resumeError, setResumeError] = useState("");
   const [resumeLoading, setResumeLoading] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const passkeyAvailable = useMemo(() => browserSupportsWebAuthn(), []);
   const [confirmAction, setConfirmAction] = useState(null); // {title, message, onConfirm}
 
   // OTP states
@@ -288,6 +291,75 @@ export default function App() {
       reg.submitted || false, reg.reopenRequested || false, res.token);
   };
 
+  // ══ مفاتيح المرور ══
+  // إلغاء المستخدم لنافذة المفتاح ليس خطأ يستحق رسالة.
+  const passkeyCancelled = (e) => e?.name === "NotAllowedError" || e?.name === "AbortError";
+
+  // بعد الدخول بالرمز: نعرض حفظ مفتاح مرور إن لم يكن لديه مفتاح.
+  const offerPasskey = async (token) => {
+    if (!passkeyAvailable) return;
+    const st = await UserAPI.passkeyStatus(token);
+    if (!st?.success || st.count > 0) return;
+    setConfirmAction({
+      title: "دخول أسرع بمفتاح المرور",
+      message: "احفظ مفتاح مرور على هذا الجهاز لتعود ببصمتك أو قفل جهازك دون انتظار رمز البريد.",
+      confirmLabel: "حفظ مفتاح المرور",
+      cancelLabel: "لاحقًا",
+      tone: "primary",
+      onConfirm: async () => {
+        setConfirmAction(null);
+        try {
+          const o = await UserAPI.passkeyRegisterOptions(token);
+          if (!o.success) { showToast(o.message); return; }
+          const response = await startRegistration({ optionsJSON: o.options });
+          const r = await UserAPI.passkeyRegisterVerify(token, response, navigator.platform || "");
+          showToast(r.success ? "تم حفظ مفتاح المرور 🔑" : r.message);
+        } catch (e) {
+          if (e?.name === "InvalidStateError") showToast("هذا الجهاز مسجّل مسبقًا");
+          else if (!passkeyCancelled(e)) showToast("تعذّر حفظ مفتاح المرور");
+        }
+      },
+    });
+  };
+
+  const handleUserPasskeyLogin = async () => {
+    if (passkeyBusy) return;
+    setPasskeyBusy(true);
+    setResumeError("");
+    try {
+      const o = await UserAPI.passkeyLoginOptions();
+      if (!o.success) throw new Error(o.message);
+      const response = await startAuthentication({ optionsJSON: o.options });
+      const res = await UserAPI.passkeyLoginVerify(response);
+      if (!res.success) throw new Error(res.message);
+      applyUserSession(res);
+      setOtpStep("form"); setOtpCode(""); setOtpPending(null);
+      showToast(`مرحباً مجدداً ${res.registration?.name || ""}!`);
+    } catch (e) {
+      if (!passkeyCancelled(e)) { setResumeError(e.message || "تعذّر الدخول بمفتاح المرور"); showToast(e.message || "تعذّر الدخول بمفتاح المرور"); }
+    } finally { setPasskeyBusy(false); }
+  };
+
+  const handleAdminPasskeyLogin = async () => {
+    if (passkeyBusy) return;
+    setPasskeyBusy(true);
+    setAdminError("");
+    try {
+      const o = await AdminAPI.passkeyLoginOptions();
+      if (!o.success) throw new Error(o.message);
+      const response = await startAuthentication({ optionsJSON: o.options });
+      const res = await AdminAPI.passkeyLoginVerify(response);
+      if (!res.success || !res.token) throw new Error(res.message);
+      AdminSession.save(res.token);
+      setAdminToken(res.token);
+      setAdminOtpStep("email");
+      setScreen("admin");
+      loadRegs(res.token);
+    } catch (e) {
+      if (!passkeyCancelled(e)) setAdminError(e.message || "تعذّر الدخول بمفتاح المرور");
+    } finally { setPasskeyBusy(false); }
+  };
+
   // ── Resume Session: Step 1 — server finds account by phone & sends OTP ──
   const handleResume = async (e) => {
     e.preventDefault();
@@ -324,6 +396,7 @@ export default function App() {
     applyUserSession(res);
     setOtpStep("form"); setOtpCode(""); setOtpPending(null);
     showToast(`مرحباً مجدداً ${res.registration?.name || ""}! تم استعادة بياناتك`);
+    offerPasskey(res.token);
   };
 
   // ── Register: Step 1 — validate locally, server sends OTP (dedupe server-side) ──
@@ -372,6 +445,7 @@ export default function App() {
     showToast(res.mode === "new"
       ? `أهلاً ${res.registration?.name || ""}! تم تسجيلك بنجاح`
       : `مرحباً مجدداً ${res.registration?.name || ""}! تم استعادة بياناتك`);
+    offerPasskey(res.token);
   };
 
   // ── Resend OTP ──
@@ -707,6 +781,9 @@ export default function App() {
         resumeLoading={resumeLoading}
         handleResume={handleResume}
         handleResumeVerify={handleResumeVerify}
+        passkeyAvailable={passkeyAvailable}
+        passkeyBusy={passkeyBusy}
+        handlePasskeyLogin={handleUserPasskeyLogin}
       />
       {toastEl}
     </>
@@ -728,6 +805,9 @@ export default function App() {
         adminSending={adminSending}
         handleAdminSendCode={handleAdminSendCode}
         handleAdminVerify={handleAdminVerify}
+        passkeyAvailable={passkeyAvailable}
+        passkeyBusy={passkeyBusy}
+        handlePasskeyLogin={handleAdminPasskeyLogin}
       />
       {toastEl}
     </>

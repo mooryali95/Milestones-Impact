@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "npm:@simplewebauthn/server@13.3.3";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
 //
@@ -8,17 +12,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // - الرمز يُثبت ملكية البريد فقط، فالجلسة تُفتح لتسجيل هذا البريد وحده،
 //   ولا تُفتح أبدًا لتسجيل آخر لمجرد تطابق رقم الجوال.
 // - الرموز من مولّد تشفيري وتُحفظ هاشًا.
+// - مفتاح المرور (النطاق sunkvalue.com) بديل الرمز في الاستئناف، ويُضاف بعد دخول حديث.
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND = Deno.env.get("RESEND_API_KEY") || "";
 const FROM = "Milestone Impact <milestoneimpact@basserh.com>";
+const RP_ID = Deno.env.get("USER_RP_ID") || "sunkvalue.com";
+const ORIGINS = (Deno.env.get("USER_ORIGINS") || "https://matrix.sunkvalue.com,https://mi.sunkvalue.com")
+  .split(",").map((s) => s.trim());
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h user sessions
 const OTP_COOLDOWN_MS = 60 * 1000;           // 60s between sends per email
 const OTP_TTL_MS = 10 * 60 * 1000;           // codes valid 10 min
 const MAX_FAILS = 5;                          // failed verifies per 15 min window
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const FRESH_MS = 10 * 60 * 1000;             // adding a passkey needs a recent sign-in
 
 const BAD_CODE_MSG = "رمز التحقق غير صحيح أو منتهي الصلاحية";
 
@@ -111,23 +121,66 @@ async function checkOtp(sb: SB, email: string, otp: string): Promise<boolean> {
   return true;
 }
 
-async function createSession(sb: SB, subject: string): Promise<string> {
+async function createSession(sb: SB, subject: string, method: "email" | "passkey" = "email"): Promise<string> {
   const token = randomToken();
   const { error } = await sb.from("api_sessions").insert({
     token_hash: await sha256hex(token), kind: "user", subject,
+    meta: { method, auth_at: Date.now() },
     expires_at: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
   });
   if (error) throw error;
   return token;
 }
 
-async function getSession(sb: SB, token: string): Promise<string | null> {
+async function getSessionInfo(sb: SB, token: string): Promise<{ subject: string; method: string; authAt: number } | null> {
   if (!token || token.length < 32) return null;
-  const { data } = await sb.from("api_sessions").select("subject, expires_at")
+  const { data } = await sb.from("api_sessions").select("subject, meta, expires_at")
     .eq("token_hash", await sha256hex(token)).eq("kind", "user").limit(1);
   if (!data?.length) return null;
   if (new Date(data[0].expires_at as string).getTime() < Date.now()) return null;
-  return data[0].subject as string;
+  const meta = (data[0].meta || {}) as Record<string, unknown>;
+  return { subject: data[0].subject as string, method: String(meta.method || ""), authAt: Number(meta.auth_at || 0) };
+}
+
+async function getSession(sb: SB, token: string): Promise<string | null> {
+  return (await getSessionInfo(sb, token))?.subject ?? null;
+}
+
+// ── WebAuthn ──
+// bytea عبر PostgREST يُكتب ويُقرأ نصًا سداسيًا يبدأ بـ \x
+const toBytea = (u: Uint8Array) => "\\x" + Array.from(u, (b) => b.toString(16).padStart(2, "0")).join("");
+function fromBytea(s: string): Uint8Array<ArrayBuffer> {
+  const hex = s.startsWith("\\x") ? s.slice(2) : s;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+function challengeOf(response: unknown): string {
+  try {
+    const r = response as { response?: { clientDataJSON?: string } };
+    const b64 = String(r?.response?.clientDataJSON || "").replace(/-/g, "+").replace(/_/g, "/");
+    return String(JSON.parse(atob(b64)).challenge || "");
+  } catch { return ""; }
+}
+async function saveChallenge(sb: SB, challenge: string, purpose: "register" | "authenticate", subject: string | null) {
+  const { error } = await sb.from("webauthn_challenges").insert({
+    scope: "user", purpose, subject, challenge, expires_at: new Date(Date.now() + CHALLENGE_TTL_MS).toISOString(),
+  });
+  if (error) throw error;
+}
+// يستهلك التحدي مرة واحدة فقط.
+async function takeChallenge(sb: SB, challenge: string, purpose: string) {
+  if (!challenge) return null;
+  const { data } = await sb.from("webauthn_challenges").update({ consumed_at: new Date().toISOString() })
+    .eq("challenge", challenge).eq("scope", "user").eq("purpose", purpose).is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString()).select("*");
+  return data?.[0] || null;
+}
+async function challengeFlood(sb: SB): Promise<boolean> {
+  const since = new Date(Date.now() - 60 * 1000).toISOString();
+  const { count } = await sb.from("webauthn_challenges").select("*", { count: "exact", head: true })
+    .eq("scope", "user").gte("created_at", since);
+  return (count ?? 0) >= 120;
 }
 
 async function emailForPhone(sb: SB, phone: string): Promise<string | null> {
@@ -216,6 +269,98 @@ Deno.serve(async (req: Request) => {
       }
       const token = await createSession(sb, reg.id as string);
       return json({ success: true, mode, token, registration: reg });
+    }
+
+    // ── passkey-login: الاستئناف بمفتاح المرور بدل الرمز ──
+    if (action === "passkey-login-options") {
+      if (await challengeFlood(sb)) return json({ success: false, message: "محاولات كثيرة، انتظر دقيقة" }, 429);
+      const options = await generateAuthenticationOptions({ rpID: RP_ID, userVerification: "preferred" });
+      await saveChallenge(sb, options.challenge, "authenticate", null);
+      return json({ success: true, options });
+    }
+
+    if (action === "passkey-login-verify") {
+      const ch = await takeChallenge(sb, challengeOf(body.response), "authenticate");
+      if (!ch) return json({ success: false, message: "انتهت مهلة العملية، حاول مرة أخرى" }, 400);
+      const { data: pks } = await sb.from("user_passkeys").select("*").eq("credential_id", String(body.response?.id || "")).limit(1);
+      const pk = pks?.[0];
+      if (!pk) return json({ success: false, code: "unknown_passkey", message: "هذا المفتاح غير مسجّل في المصفوفة، ادخل برقم الجوال" }, 404);
+      let v;
+      try {
+        v = await verifyAuthenticationResponse({
+          response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID,
+          credential: { id: pk.credential_id, publicKey: fromBytea(pk.public_key), counter: Number(pk.sign_count), transports: pk.transports || undefined },
+        });
+      } catch (e) {
+        console.error("user-api passkey verify:", e);
+        return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      }
+      if (!v.verified) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      await sb.from("user_passkeys").update({ sign_count: v.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", pk.id);
+      const { data: regs } = await sb.from("registrations").select("*").eq("id", pk.registration_id).limit(1);
+      if (!regs?.length) return json({ success: false, message: "التسجيل غير موجود" }, 404);
+      const token = await createSession(sb, String(regs[0].id), "passkey");
+      return json({ success: true, mode: "resume", token, registration: regs[0] });
+    }
+
+    // ── passkey-register: يُضاف بعد دخول حديث، ومن لديه مفتاح يضيف غيره بجلسة مفتاح ──
+    if (action === "passkey-status" || action === "passkey-register-options" || action === "passkey-register-verify") {
+      const s = await getSessionInfo(sb, String(body.token || ""));
+      if (!s) return json({ success: false, message: "انتهت الجلسة، سجّل دخولك مجددًا" }, 401);
+      const { data: existing } = await sb.from("user_passkeys").select("credential_id, transports").eq("registration_id", s.subject);
+      const count = existing?.length ?? 0;
+      if (action === "passkey-status") return json({ success: true, count });
+
+      if (Date.now() - s.authAt > FRESH_MS) {
+        return json({ success: false, code: "reauth", message: "لحمايتك، سجّل خروجك وادخل مجددًا ثم أضف المفتاح" }, 403);
+      }
+      if (count && s.method !== "passkey") {
+        return json({ success: false, code: "reauth_passkey", message: "ادخل بمفتاحك الحالي لإضافة مفتاح آخر" }, 403);
+      }
+      if (count >= 10) return json({ success: false, message: "الحد الأقصى 10 مفاتيح" }, 400);
+
+      if (action === "passkey-register-options") {
+        const { data: regs } = await sb.from("registrations").select("id, name, email").eq("id", s.subject).limit(1);
+        if (!regs?.length) return json({ success: false, message: "التسجيل غير موجود" }, 404);
+        const options = await generateRegistrationOptions({
+          rpName: "Milestone Impact",
+          rpID: RP_ID,
+          userName: String(regs[0].email),
+          userDisplayName: `${regs[0].name || regs[0].email} (المصفوفة)`,
+          userID: new TextEncoder().encode(`user:${s.subject}`),
+          attestationType: "none",
+          excludeCredentials: (existing || []).map((c) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
+          authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
+        });
+        await saveChallenge(sb, options.challenge, "register", s.subject);
+        return json({ success: true, options });
+      }
+
+      const ch = await takeChallenge(sb, challengeOf(body.response), "register");
+      if (!ch || ch.subject !== s.subject) return json({ success: false, message: "انتهت مهلة العملية، حاول مرة أخرى" }, 400);
+      let v;
+      try {
+        v = await verifyRegistrationResponse({
+          response: body.response, expectedChallenge: ch.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID,
+        });
+      } catch (e) {
+        console.error("user-api passkey register:", e);
+        return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      }
+      if (!v.verified || !v.registrationInfo) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      const info = v.registrationInfo;
+      const { error } = await sb.from("user_passkeys").insert({
+        registration_id: s.subject,
+        credential_id: info.credential.id,
+        public_key: toBytea(info.credential.publicKey),
+        sign_count: info.credential.counter,
+        transports: info.credential.transports || body.response?.response?.transports || null,
+        aaguid: info.aaguid,
+        backed_up: info.credentialBackedUp,
+        device_label: String(body.label || "").trim().slice(0, 80) || null,
+      });
+      if (error) throw error;
+      return json({ success: true, message: "تم حفظ مفتاح المرور" });
     }
 
     // ── get: fetch own registration ──

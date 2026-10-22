@@ -43,3 +43,39 @@ test('قيم طلب التواصل لا تُنفَّذ كودًا عند الن�
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(evil);
 });
+
+test('الإعدادات تعرض مفاتيح المرور والجلسات، وحساب المالك مقفل في جدول المستخدمين', async ({ page }) => {
+  const evil = '<img src=x onerror="window.__pwned=1">';
+  await page.route(/supabase\.co\/functions\/v1\//, async (route) => {
+    const { action } = route.request().postDataJSON();
+    const json = {
+      'security-status': { success: true, is_owner: true, passkey_only: false, method: 'passkey',
+        passkeys: [{ id: 'p1', device_label: evil, backed_up: true, created_at: new Date().toISOString() }] },
+      'sessions-list': { success: true, sessions: [{ current: true, method: 'passkey', ip: '1.2.3.4', ua: evil, auth_at: Date.now() }] },
+      'list-users': { success: true, users: [
+        { id: 'u1', name: 'المالك', email: 'o@example.com', role_id: 'super_admin', is_active: true, is_owner: true },
+        { id: 'u2', name: 'مدير', email: 'a@example.com', role_id: 'admin', is_active: true },
+      ] },
+    }[action] || { success: true, contacts: [] };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(json) });
+  });
+  await page.addInitScript(() => {
+    sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { email: 'o@example.com', name: 'O', role: 'super_admin', is_owner: true }, ts: Date.now() }));
+  });
+  await page.goto(BASE + '/');
+  await page.locator('.dash-settings-btn').click();
+  await expect(page.locator('#pkList .pk-row')).toHaveCount(1);
+  await expect(page.locator('#pkList')).toContainText('متزامن');
+  await expect(page.locator('#pkOnlyBtn')).toHaveText('تفعيل');
+  await expect(page.locator('#sessList')).toContainText('هذه الجلسة');
+  await expect(page.locator('#settingsName .owner-badge')).toBeVisible();
+  await expect(page.locator('select[data-user-role="u1"]')).toBeDisabled();
+  await expect(page.locator('[data-user-toggle="u1"]')).toHaveCount(0);
+  await expect(page.locator('[data-user-toggle="u2"]')).toHaveCount(1);
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+});
+
+test('زر الدخول بمفتاح المرور يظهر حين يدعمه المتصفح', async ({ page }) => {
+  await page.goto(BASE + '/');
+  await expect(page.locator('#loginBtnPasskey')).toBeVisible();
+});
