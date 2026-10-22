@@ -15,8 +15,8 @@ begin;
 alter table public.admin_users add column if not exists is_owner     boolean not null default false;
 alter table public.admin_users add column if not exists passkey_only boolean not null default false;
 
--- مالك واحد فقط.
-create unique index if not exists admin_users_one_owner on public.admin_users ((true)) where is_owner;
+-- يجوز أكثر من مالك (20261022110000_multiple_owners.sql). كل مالك محمي من الآخر،
+-- وإضافة مالك أو إزالته من SQL Editor فقط.
 
 -- ── 2. مفاتيح المدراء والمشاركين ──
 -- نوع المعرّف يُقرأ من الجدول الأصلي كي يصح المفتاح الأجنبي أيًّا كان.
