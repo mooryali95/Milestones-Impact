@@ -1,7 +1,7 @@
 // منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
 import {
   buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
-  requirementApplies, scoreFor, seededShuffle, tierPercents,
+  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const RULES = ['milestone', 'impact', 'leadership'].flatMap((dimension) => [
@@ -184,5 +184,22 @@ describe('overallLevel', () => {
   });
   it('is null without placements', () => {
     expect(overallLevel({})).toBe(null);
+  });
+});
+
+describe('trackKey', () => {
+  it('maps the three levels to one of 27 tracks', () => {
+    expect(trackKey({ milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' })).toBe('M1I1L2');
+    expect(trackKey({ leadership: 'advanced', impact: 'intermediate', milestone: 'advanced' })).toBe('M3I2L3');
+  });
+  it('has no track until every level is known', () => {
+    expect(trackKey({ milestone: 'beginner', impact: 'beginner' })).toBe(null);
+    expect(trackKey({})).toBe(null);
+    expect(trackKey(null)).toBe(null);
+  });
+  it('covers 27 distinct tracks', () => {
+    const L = ['beginner', 'intermediate', 'advanced'];
+    const keys = new Set(L.flatMap((m) => L.flatMap((i) => L.map((l) => trackKey({ milestone: m, impact: i, leadership: l })))));
+    expect(keys.size).toBe(27);
   });
 });

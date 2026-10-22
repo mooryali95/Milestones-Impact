@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, overallLevel, isEmail, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, buildJourney, filterHandbookMd, handbookModulesFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle,
 } from './logic.js';
 
@@ -129,6 +129,20 @@ async function activeInstrument(kind = 'baseline') {
 
 // audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.
 // audience 'admin': التفصيل الكامل لكل بُعد.
+// هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
+const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, project_ar, journey_ar, priority_dimension';
+async function trackFor(levels: Record<string, string>) {
+  const key = trackKey(levels);
+  if (!key) return null;
+  const { data } = await db.from('tracks').select(TRACK_FIELDS).eq('key', key).maybeSingle();
+  return data || { key };
+}
+const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
+  ...(audience === 'admin' ? { key: t.key, priority_dimension: t.priority_dimension || null } : {}),
+  title: t.title_ar || null, summary: t.summary_ar || null, focus: t.focus_ar || null,
+  project: t.project_ar || null, journey: t.journey_ar || null,
+};
+
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
   const [placements, stages, reqs, progress, assessments, passkeys, cells, reports] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
@@ -154,6 +168,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   const journey = buildJourney({ stages: stages.data || [], requirements: reqs.data || [], progress: prog, levels, state });
+  const track = trackView(await trackFor(levels), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
@@ -164,13 +179,13 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
-      approved,
+      approved, track,
       dimensions: pl.map((x: any) => ({
         dimension: x.dimension, level: x.level, approved: !!x.approved_at, note: x.admin_note,
         description: cellOf(x.dimension, x.level)?.description_ar || null,
         path: cellOf(x.dimension, x.level)?.path_title_ar || null,
       })),
-    } : { approved, level: overallLevel(levels) },
+    } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => it) })),
     progress: journeyProgress(journey),
@@ -374,6 +389,7 @@ export async function handbookToc(p: any) {
   return {
     success: true,
     level: overallLevel(levels),
+    track: trackView(await trackFor(levels), 'participant'),
     chapters: handbookModulesFor(mods, levels).map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar })),
   };
 }
