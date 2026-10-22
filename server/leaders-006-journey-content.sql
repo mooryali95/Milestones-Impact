@@ -19,13 +19,29 @@ alter table leaders.journey_stages add column if not exists builds_on_ar text;  
 
 -- ── 2. محتوى المراحل العشر ──
 -- يُكتب فقط حيث لم يُحرَّر من اللوحة (الحقل فارغ أو ما زال بنص البذرة الأولى).
-drop table if exists _stage_content;
-create temporary table _stage_content (
-  key text primary key, mode text, mode_note text, duration_label text, duration_days smallint,
-  description text, activities text, outcome text, builds_on text
-);
-
-insert into _stage_content values
+-- أمر واحد بلا جدول مؤقت، ليعمل في محرر Supabase كما هو.
+update leaders.journey_stages s set
+  mode           = coalesce(s.mode, c.mode),
+  mode_note_ar   = coalesce(s.mode_note_ar, c.mode_note),
+  builds_on_ar   = coalesce(s.builds_on_ar, c.builds_on),
+  activities_ar  = coalesce(nullif(s.activities_ar, ''), c.activities),
+  duration_label = case when s.duration_label in ('دقائق', '12 دقيقة', '3 أيام عمل', '4 أيام تدريبية', '4 أسابيع', 'أسبوعان', '3 أشهر', 'أسبوع')
+                        then c.duration_label else s.duration_label end,
+  description_ar = case when s.description_ar is null or s.description_ar in (
+      'بياناتك الأساسية وسيرتك المهنية.', 'القياس المبدئي في الأبعاد الثلاثة.', 'يراجع المستشار نتيجتك ويعتمد مسارك.',
+      'تقرير مفصل لك أو للجهة التي رشحتك.',
+      'أيام تدريبية مكثفة على الأطر الثلاثة بعمق يناسب مستوى المشارك في كل بُعد.',
+      'تطبيق أدوات الإطار على مشروع حقيقي من عمل المشارك بمتابعة الموجّه.',
+      'جلسة استشارية متخصصة مرتبطة بمشروعات المشارك.',
+      'جلسات توجيه فردية لدعم المسار القيادي وخطة التطوير الذاتي.',
+      'دعم فني وتقني مستمر عبر المنصة حتى استقلال المشارك.',
+      'القياس البعدي والتقييم النهائي وإصدار التقرير للمشارك أو جهته.')
+    then c.description else s.description_ar end,
+  outcome_ar = case when s.outcome_ar is null or s.outcome_ar in (
+      'فهم الأطر الثلاثة بعمق يناسب مستواك', 'سجل معالم وسجل منافع لمشروع حقيقي من عملك', 'توصيات متخصصة لمشروعك',
+      'خطة تطوير قيادي شخصية', 'تطبيق مستقل بمتابعة الموجّه', 'قياس التطور في الأبعاد الثلاثة', 'تقرير نهائي لك أو لجهتك')
+    then c.outcome else s.outcome_ar end
+from (values
 ('profile', 'self', 'عبر المنصة في دقائق', 'دقائق', 0,
  'نقطة البداية: نتعرف على خلفيتك والمشروع الذي تقوده الآن، ليصبح مشروع التطبيق الذي ترافقه طوال البرنامج.',
  E'إكمال بياناتك المهنية: الجهة والقطاع وسنوات الخبرة\nرفع سيرتك الذاتية\nتسمية مشروع حقيقي تقوده الآن ووصفه في سطرين',
@@ -76,30 +92,8 @@ insert into _stage_content values
  E'مقارنة مستواك قبل البرنامج وبعده\nملخص أثر مشروعك بالأرقام\nتوصيات مسارك القادم',
  'تقرير نهائي وشهادة إتمام البرنامج.',
  'نتائج التقييم')
-;
-
-update leaders.journey_stages s set
-  mode           = coalesce(s.mode, c.mode),
-  mode_note_ar   = coalesce(s.mode_note_ar, c.mode_note),
-  builds_on_ar   = coalesce(s.builds_on_ar, c.builds_on),
-  activities_ar  = coalesce(nullif(s.activities_ar, ''), c.activities),
-  duration_label = case when s.duration_label in ('دقائق', '12 دقيقة', '3 أيام عمل', '4 أيام تدريبية', '4 أسابيع', 'أسبوعان', '3 أشهر', 'أسبوع')
-                        then c.duration_label else s.duration_label end,
-  description_ar = case when s.description_ar is null or s.description_ar in (
-      'بياناتك الأساسية وسيرتك المهنية.', 'القياس المبدئي في الأبعاد الثلاثة.', 'يراجع المستشار نتيجتك ويعتمد مسارك.',
-      'تقرير مفصل لك أو للجهة التي رشحتك.',
-      'أيام تدريبية مكثفة على الأطر الثلاثة بعمق يناسب مستوى المشارك في كل بُعد.',
-      'تطبيق أدوات الإطار على مشروع حقيقي من عمل المشارك بمتابعة الموجّه.',
-      'جلسة استشارية متخصصة مرتبطة بمشروعات المشارك.',
-      'جلسات توجيه فردية لدعم المسار القيادي وخطة التطوير الذاتي.',
-      'دعم فني وتقني مستمر عبر المنصة حتى استقلال المشارك.',
-      'القياس البعدي والتقييم النهائي وإصدار التقرير للمشارك أو جهته.')
-    then c.description else s.description_ar end,
-  outcome_ar = case when s.outcome_ar is null or s.outcome_ar in (
-      'فهم الأطر الثلاثة بعمق يناسب مستواك', 'سجل معالم وسجل منافع لمشروع حقيقي من عملك', 'توصيات متخصصة لمشروعك',
-      'خطة تطوير قيادي شخصية', 'تطبيق مستقل بمتابعة الموجّه', 'قياس التطور في الأبعاد الثلاثة', 'تقرير نهائي لك أو لجهتك')
-    then c.outcome else s.outcome_ar end
-from _stage_content c where s.key = c.key;
+) as c(key, mode, mode_note, duration_label, duration_days, description, activities, outcome, builds_on)
+where s.key = c.key;
 
 -- ── 3. قائمة التحقق لكل مرحلة ──
 -- البنود العامة للجميع، والبنود ذات البُعد والمستوى تظهر لمن يخصه فقط.
@@ -136,4 +130,3 @@ update leaders.stage_requirements r set help_ar = v.h from (values
   ('S-CHECK',  'يسجلها الموجّه بعد كل جلسة.')
 ) as v(c, h) where r.code = v.c and r.help_ar is null;
 
-drop table if exists _stage_content;
