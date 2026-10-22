@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, uploadFile } from '../api.js';
-import { LEVEL_SUMMARY, LEVELS, levelOf, PHASES, REQ_STATUS } from '../labels.js';
+import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -161,11 +161,15 @@ function Requirement({ item, open, onUpdate, onEditProfile, setToast }) {
   );
 }
 
+const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
+
 function Stage({ stage, n, expanded, onToggle, ...rest }) {
   const locked = stage.status === 'locked';
+  const mode = MODES[stage.mode];
   const chip = stage.status === 'done' ? <span className="chip ok">مكتملة</span>
     : stage.status === 'active' ? <span className="chip gold">الحالية</span>
       : <span className="chip">مقفلة</span>;
+  const steps = lines(stage.activities_ar);
   return (
     <div className={`stage ${stage.status}${expanded ? ' open' : ''}`}>
       <span className="dot">{stage.status === 'done' ? '✓' : n}</span>
@@ -173,24 +177,43 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
         <button className="stage-top" onClick={onToggle} aria-expanded={expanded}>
           <div className="grow">
             <h4>{stage.title_ar}</h4>
-            <div className="meta">{stage.duration_label}{stage.total ? ` · ${stage.done} من ${stage.total}` : ''}</div>
+            <div className="meta">
+              {mode && <span className="tag"><i aria-hidden="true">{mode.icon}</i>{mode.title}</span>}
+              {stage.duration_label && <span className="tag">{stage.duration_label}</span>}
+              {stage.total > 0 && <span className="tag">{stage.done} من {stage.total}</span>}
+            </div>
           </div>
           {chip}
           <span className="chev" aria-hidden="true">⌄</span>
         </button>
         {expanded && (
           <div className="stage-body">
-            {stage.description_ar && <p style={{ marginTop: 14 }}>{stage.description_ar}</p>}
-            {(stage.activities_ar || stage.outcome_ar) && (
+            {stage.builds_on_ar && <div className="builds"><span>تنطلق من</span>{stage.builds_on_ar}</div>}
+            {stage.description_ar && <p className="lead">{stage.description_ar}</p>}
+            {(steps.length > 0 || stage.outcome_ar) && (
               <div className="blocks">
-                {stage.activities_ar && <div className="blk"><b>ماذا يتم</b>{stage.activities_ar}</div>}
-                {stage.outcome_ar && <div className="blk"><b>ما تخرج به</b>{stage.outcome_ar}</div>}
+                {steps.length > 0 && (
+                  <div className="blk">
+                    <b>ماذا يتم</b>
+                    <ol className="steps-list">{steps.map((x) => <li key={x}>{x}</li>)}</ol>
+                    {stage.mode_note_ar && <p className="mode-note">{mode ? `${mode.title}: ` : ''}{stage.mode_note_ar}</p>}
+                  </div>
+                )}
+                {stage.outcome_ar && (
+                  <div className="blk deliverable">
+                    <b>ما تخرج به</b>
+                    <p>{stage.outcome_ar}</p>
+                  </div>
+                )}
               </div>
             )}
             {stage.items.length > 0 && (
-              <ul className="checklist" style={{ marginTop: 12 }}>
-                {stage.items.map((it) => <Requirement key={it.id} item={it} open={!locked} {...rest} />)}
-              </ul>
+              <>
+                <div className="check-head"><b>قائمة التحقق</b><span className="small muted">{stage.done} من {stage.total}</span></div>
+                <ul className="checklist">
+                  {stage.items.map((it) => <Requirement key={it.id} item={it} open={!locked} {...rest} />)}
+                </ul>
+              </>
             )}
             {locked && <p className="small muted" style={{ marginTop: 10 }}>تُفتح هذه المرحلة بعد إكمال ما قبلها.</p>}
           </div>
@@ -234,6 +257,13 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
             {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {journey.length} مراحل</>
               : 'أكملت الرحلة كاملة. أثرك الآن موثّق.'}
           </p>
+          <div className="phase-rail" aria-label="محاور الرحلة">
+            {PHASES.map((ph) => {
+              const st = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+              const state = st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '';
+              return <div key={ph.key} className={state}><i />{ph.title}</div>;
+            })}
+          </div>
           <div className="row"><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={onEditProfile}>ملفي الشخصي</button></div>
         </div>
         <Ring value={me.progress} />
@@ -264,12 +294,17 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
         <h2>مراحل الرحلة</h2>
         <span className="small muted">{me.progress}% من الرحلة</span>
       </div>
-      {PHASES.map((ph) => {
+      {PHASES.map((ph, pi) => {
         const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
         if (!stages.length) return null;
+        const doneHere = stages.filter((s) => s.status === 'done').length;
         return (
           <div className="phase" key={ph.key}>
-            <div className="phase-head"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
+            <div className="phase-head">
+              <span className="phase-no">{pi + 1}</span>
+              <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
+              <span className="small muted">{doneHere} من {stages.length}</span>
+            </div>
             <div className="timeline">
               {stages.map((s) => {
                 order += 1;
@@ -286,10 +321,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
       <div className="section-title"><h2>كتيبك الشخصي</h2></div>
       <div className="card row between">
         <div>
-          <b>كتيب مصمم على مستواك في الأبعاد الثلاثة</b>
+          <b>كتيب مصمم على مستواك</b>
           <p className="small muted">{approved
-            ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك في كل بُعد. للقراءة داخل المنصة فقط.'
-            : 'يُفتح بعد اعتماد مسارك.'}</p>
+            ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
+            : 'يُفتح بعد اعتماد مستواك.'}</p>
         </div>
         {approved
           ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
