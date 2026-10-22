@@ -3302,6 +3302,141 @@ body::after {
 
 
 /* ══════════════════════════════════════════════════════════════════
+   06b ─ OUTPUTS + TOOLS + PLATFORM + COUNCIL (الإطار التنفيذي)
+   ══════════════════════════════════════════════════════════════════ */
+.eco { background: var(--sand-paper); }
+.council { background: var(--off-white); }
+
+.eco__subhead { text-align: center; margin-bottom: 40px; }
+.eco__kicker { display: block; font-size: 12px; color: var(--gold-text); margin-bottom: 8px; }
+.eco__title {
+  display: inline-block; position: relative; padding-bottom: 14px;
+  font-size: 22px; font-weight: 800; color: var(--petrol-deepest);
+}
+.eco__title::after {
+  content: ''; position: absolute; bottom: 0; left: 50%; width: 48px; height: 1px; margin-left: -24px; background: var(--gold);
+}
+@media (min-width: 768px) { .eco__title { font-size: 26px; } }
+
+/* ── المخرجات: معيّن مقسوم إلى أربعة ── */
+.outputs { display: grid; gap: 48px; align-items: center; max-width: 1040px; margin: 0 auto 104px; }
+@media (min-width: 900px) { .outputs { grid-template-columns: 1.1fr 1fr; gap: 72px; } }
+.outputs__diamond {
+  position: relative; justify-self: center;
+  width: min(54vw, 300px); aspect-ratio: 1; margin: 40px auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--gold); border: 1px solid var(--gold);
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 18px var(--sand-paper), 0 0 0 19px var(--line-gold);
+}
+.outputs__q {
+  display: grid; place-items: center;
+  font-family: var(--font-en); font-size: 26px; color: var(--gold-deep);
+  background: #E4E8E6;
+}
+.outputs__q i { font-style: normal; transform: rotate(-45deg); }
+.outputs__q--1 { background: #E4E8E6; }
+.outputs__q--2 { background: #EEF1EE; }
+.outputs__q--3 { background: #F4F4EF; }
+.outputs__q--4 { background: #C9D1CE; }
+.outputs__list { list-style: none; display: grid; gap: 26px; }
+.outputs__item { position: relative; padding-inline-start: 34px; }
+.outputs__item::before {
+  content: ''; position: absolute; top: 8px; right: 4px; width: 11px; height: 11px;
+  border: 1px solid var(--gold-deep); background: rgba(200, 164, 92, 0.15); transform: rotate(45deg);
+}
+.outputs__num { font-family: var(--font-en); font-size: 13px; color: var(--gold-text); letter-spacing: 0.1em; }
+.outputs__title { font-size: 18px; font-weight: 700; color: var(--petrol-deepest); margin: 2px 0 4px; }
+.outputs__desc { font-size: 14px; color: var(--ink-mid); line-height: 1.85; }
+
+/* ── الأدوات المساندة: ثلاثة معيّنات على خط ── */
+.tools { max-width: 1040px; margin: 0 auto 104px; }
+.tools__row { list-style: none; position: relative; display: grid; gap: 40px; }
+@media (min-width: 768px) {
+  .tools__row { grid-template-columns: repeat(3, 1fr); gap: 32px; }
+  .tools__row::before { content: ''; position: absolute; top: 46px; right: -6%; left: -6%; height: 1px; background: var(--gold); }
+}
+.tools__item { position: relative; text-align: center; }
+.tools__mark {
+  position: relative; display: grid; place-items: center;
+  width: 66px; height: 66px; margin: 13px auto 30px;
+  background: var(--petrol-deep); border: 1px solid var(--gold);
+  outline: 1px solid var(--gold); outline-offset: 6px;
+  transform: rotate(45deg);
+}
+.tools__mark--light { background: var(--off-white); }
+.tools__mark svg { width: 24px; height: 24px; transform: rotate(-45deg); fill: none; stroke: var(--gold-light); stroke-width: 1.5; }
+.tools__mark--light svg { stroke: var(--gold-deep); }
+.tools__title { font-size: 17px; font-weight: 700; color: var(--petrol-deepest); margin-bottom: 6px; }
+.tools__desc { font-size: 13.5px; color: var(--ink-mid); line-height: 1.85; max-width: 260px; margin: 0 auto; }
+.tools__bar {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  max-width: 420px; margin: 44px auto 0; padding: 14px 20px;
+  background: var(--petrol-deepest); color: var(--sand-cream); font-size: 14px; font-weight: 700;
+}
+.tools__bar-num { font-family: var(--font-en); color: var(--gold-light); padding-inline-end: 14px; border-inline-end: 1px solid rgba(200, 164, 92, 0.4); }
+
+/* ── المنصة: معيّن مركزي بأربعة فروع ── */
+.platform { max-width: 1040px; margin: 0 auto; }
+.platform__map { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; }
+.platform__core {
+  grid-column: 1 / -1; justify-self: center;
+  width: 150px; height: 150px; margin: 30px 0;
+  display: grid; place-items: center;
+  background: #D5DDDA; border: 1px solid var(--gold);
+  outline: 1px dashed var(--line-gold); outline-offset: 18px;
+  transform: rotate(45deg);
+}
+.platform__core span { transform: rotate(-45deg); text-align: center; font-size: 15px; font-weight: 700; color: var(--petrol-deepest); line-height: 1.6; }
+.platform__core em { font-style: normal; color: var(--gold-text); }
+.platform__node { padding: 18px 16px; border-top: 1px solid var(--gold); background: var(--off-white); }
+.platform__node h4 { font-size: 17px; font-weight: 700; color: var(--petrol-deepest); margin-bottom: 4px; }
+.platform__node p { font-size: 13px; color: var(--ink-mid); line-height: 1.8; }
+@media (min-width: 900px) {
+  .platform__map { grid-template-columns: 1fr 260px 1fr; grid-template-rows: auto auto; row-gap: 0; column-gap: 0; align-items: center; }
+  .platform__core { grid-column: 2; grid-row: 1 / span 2; margin: 60px auto; width: 170px; height: 170px; }
+  .platform__node { background: none; border: 0; position: relative; }
+  /* الصفحة من اليمين: العمود الأول يمين المعيّن، والنص يلتصق بالجهة القريبة منه */
+  .platform__node--1 { grid-column: 1; grid-row: 1; text-align: left; padding-left: 96px; }
+  .platform__node--3 { grid-column: 1; grid-row: 2; text-align: left; padding-left: 96px; }
+  .platform__node--2 { grid-column: 3; grid-row: 1; padding-right: 96px; }
+  .platform__node--4 { grid-column: 3; grid-row: 2; padding-right: 96px; }
+  .platform__node::after { content: ''; position: absolute; top: 30px; width: 80px; height: 1px; background: var(--gold); opacity: 0.7; }
+  .platform__node--1::after, .platform__node--3::after { left: 0; }
+  .platform__node--2::after, .platform__node--4::after { right: 0; }
+}
+.platform__note {
+  max-width: 640px; margin: 36px auto 0; padding-inline-start: 16px;
+  border-inline-start: 2px solid var(--gold); font-size: 15px; color: var(--ink-soft); line-height: 1.9;
+}
+
+/* ── المجلس ── */
+.council__roles { display: grid; max-width: 960px; margin: 0 auto 64px; }
+@media (min-width: 768px) { .council__roles { grid-template-columns: repeat(3, 1fr); } }
+.council__role { padding: 28px 24px; text-align: center; }
+.council__role + .council__role { border-top: 1px solid var(--line-gold); }
+@media (min-width: 768px) {
+  .council__role { text-align: start; }
+  .council__role + .council__role { border-top: 0; border-inline-start: 1px solid var(--line-gold); }
+}
+.council__icon { display: inline-block; width: 26px; height: 26px; margin-bottom: 14px; }
+.council__icon svg { width: 100%; height: 100%; fill: none; stroke: var(--gold-deep); stroke-width: 1.5; }
+.council__title { font-size: 20px; font-weight: 700; color: var(--petrol-deepest); margin-bottom: 8px; }
+.council__desc { font-size: 14px; color: var(--ink-mid); line-height: 1.85; }
+
+.council__line { list-style: none; position: relative; display: grid; grid-template-columns: repeat(5, 1fr); max-width: 960px; margin: 0 auto; }
+.council__line::before { content: ''; position: absolute; top: 7px; right: 10%; left: 10%; height: 1px; background: var(--gold); }
+.council__line li { position: relative; padding-top: 30px; text-align: center; font-size: 12.5px; color: var(--ink-mid); }
+@media (min-width: 640px) { .council__line li { font-size: 14px; } }
+.council__line li::before {
+  content: ''; position: absolute; top: 1px; left: 50%; width: 12px; height: 12px; margin-left: -6px;
+  background: var(--off-white); border: 1px solid var(--gold-deep); transform: rotate(45deg);
+}
+.council__line li.is-final { color: var(--gold-text); font-weight: 700; }
+.council__line li.is-final::before { background: var(--gold-deep); width: 16px; height: 16px; margin-left: -8px; top: -1px; }
+
+
+/* ══════════════════════════════════════════════════════════════════
    07 ─ NUMBERS (Dark section)
    ══════════════════════════════════════════════════════════════════ */
 .numbers {

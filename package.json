@@ -4,6 +4,7 @@
   "private": true,
   "description": "Milestone Impact — مصفوفة التأثير • هندسة اجتماعية",
   "dependencies": {
+    "@simplewebauthn/browser": "13.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -12,9 +13,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "leaders:dev": "vite --config leaders-app/vite.config.js",
+    "leaders:build": "vite build --config leaders-app/vite.config.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\"",
+    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\" \"leaders-app/src/**/*.{js,jsx}\"",
     "e2e": "playwright test"
   },
   "devDependencies": {

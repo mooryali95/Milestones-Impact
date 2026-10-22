@@ -51,6 +51,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build leaders app
+        run: npm run leaders:build
+
       # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

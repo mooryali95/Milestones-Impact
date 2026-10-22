@@ -1,0 +1,177 @@
+// منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
+import {
+  buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, placementFromAnswers,
+  requirementApplies, scoreFor, seededShuffle, tierPercents,
+} from '../../supabase/functions/leaders-api/logic.js';
+
+const RULES = ['milestone', 'impact', 'leadership'].flatMap((dimension) => [
+  { dimension, level: 'beginner', min_knowledge: 0, min_skill: 0, min_behavior: 0 },
+  { dimension, level: 'intermediate', min_knowledge: 75, min_skill: 50, min_behavior: 0 },
+  { dimension, level: 'advanced', min_knowledge: 75, min_skill: 75, min_behavior: 75 },
+]);
+
+const choice = (id, dimension, tier, correct = 1) => ({
+  id, dimension, tier, kind: 'choice',
+  options: [0, 1, 2, 3].map((i) => ({ label: `o${i}`, score: i === correct ? 1 : 0 })),
+});
+const likert = (id, dimension) => ({
+  id, dimension, tier: 'behavior', kind: 'likert',
+  options: [0, 1, 2, 3, 4].map((score) => ({ label: `l${score}`, score })),
+});
+
+// أربعة أسئلة لكل مستوى إتقان في كل بُعد، كما في baseline-v1
+function instrument() {
+  const qs = [];
+  for (const d of ['milestone', 'impact', 'leadership']) {
+    for (let i = 0; i < 4; i++) {
+      qs.push(choice(`${d}-k${i}`, d, 'knowledge'));
+      qs.push(choice(`${d}-s${i}`, d, 'skill'));
+      qs.push(likert(`${d}-b${i}`, d));
+    }
+  }
+  return qs;
+}
+
+// يجيب: صحيح في أول n من أسئلة المعرفة والمواقف، وقيمة ثابتة للممارسة
+function answer(qs, plan) {
+  const a = {};
+  for (const q of qs) {
+    const p = plan[q.dimension];
+    const i = Number(q.id.slice(-1));
+    if (q.tier === 'knowledge') a[q.id] = i < p.k ? 1 : 0;
+    if (q.tier === 'skill') a[q.id] = i < p.s ? 1 : 0;
+    if (q.tier === 'behavior') a[q.id] = p.b;
+  }
+  return a;
+}
+
+describe('scoring', () => {
+  it('scores by original option index and rejects unknown indexes', () => {
+    const q = choice('q', 'milestone', 'knowledge', 2);
+    expect(scoreFor(q, 2)).toBe(1);
+    expect(scoreFor(q, 0)).toBe(0);
+    expect(scoreFor(q, 9)).toBeNull();
+  });
+
+  it('computes tier percents per dimension', () => {
+    const qs = instrument();
+    const p = tierPercents(qs, answer(qs, {
+      milestone: { k: 3, s: 2, b: 3 }, impact: { k: 4, s: 4, b: 4 }, leadership: { k: 0, s: 0, b: 0 },
+    }));
+    expect(p.milestone).toEqual({ knowledge: 75, skill: 50, behavior: 75 });
+    expect(p.impact).toEqual({ knowledge: 100, skill: 100, behavior: 100 });
+    expect(p.leadership).toEqual({ knowledge: 0, skill: 0, behavior: 0 });
+  });
+
+  it('treats a tier without questions as null and ignores it in rules', () => {
+    const qs = [choice('a', 'milestone', 'knowledge')];
+    const p = tierPercents(qs, { a: 1 });
+    expect(p.milestone.skill).toBeNull();
+    expect(levelFor(p.milestone, RULES.filter((r) => r.dimension === 'milestone'))).toBe('advanced');
+  });
+});
+
+describe('placement', () => {
+  it('places each dimension independently on the 3×3 grid', () => {
+    const qs = instrument();
+    const result = placementFromAnswers(qs, answer(qs, {
+      milestone: { k: 1, s: 1, b: 1 },   // تأسيسي
+      impact: { k: 3, s: 2, b: 0 },      // متوسط: معرفة 75 ومواقف 50
+      leadership: { k: 4, s: 3, b: 3 },  // احترافي: 100/75/75
+    }), RULES);
+    expect(Object.fromEntries(result.map((r) => [r.dimension, r.level]))).toEqual({
+      milestone: 'beginner', impact: 'intermediate', leadership: 'advanced',
+    });
+  });
+
+  it('needs every condition of a level, not an average', () => {
+    const qs = instrument();
+    const [m] = placementFromAnswers(qs, answer(qs, {
+      milestone: { k: 4, s: 4, b: 2 }, impact: { k: 0, s: 0, b: 0 }, leadership: { k: 0, s: 0, b: 0 },
+    }), RULES);
+    expect(m.behavior).toBe(50);
+    expect(m.level).toBe('intermediate');
+  });
+});
+
+describe('journey', () => {
+  const stages = [
+    { key: 'profile', sort: 1 }, { key: 'assessment', sort: 2 }, { key: 'approval', sort: 3 },
+    { key: 'training', sort: 4 }, { key: 'old', sort: 5, active: false },
+  ];
+  const reqs = [
+    { id: 'r1', stage_key: 'profile', code: 'P-INFO', kind: 'form', required: true, sort: 1 },
+    { id: 'r2', stage_key: 'profile', code: 'P-CV', kind: 'upload', required: false, sort: 2 },
+    { id: 'r3', stage_key: 'assessment', code: 'A-DONE', kind: 'auto', required: true, sort: 1 },
+    { id: 'r4', stage_key: 'approval', code: 'AP-OK', kind: 'auto', required: true, sort: 1 },
+    { id: 'r5', stage_key: 'training', code: 'T-ATTEND', kind: 'check', required: true, sort: 1 },
+    { id: 'r6', stage_key: 'training', code: 'O-GATE', kind: 'upload', required: true, sort: 2, dimension: 'milestone', level: 'advanced' },
+  ];
+
+  it('derives system requirements from state whatever their kind', () => {
+    const j = buildJourney({ stages, requirements: reqs, progress: {}, levels: {}, state: { profileCompleted: true } });
+    expect(j.map((s) => s.status)).toEqual(['done', 'active', 'locked', 'locked']);
+    expect(j[0].items.find((i) => i.code === 'P-CV').status).toBe('pending');
+  });
+
+  it('opens training after approval and shows only requirements for the participant level', () => {
+    const state = { profileCompleted: true, baselineSubmitted: true, placementApproved: true };
+    const j = buildJourney({ stages, requirements: reqs, progress: { r5: { status: 'done' } }, levels: { milestone: 'beginner' }, state });
+    expect(j[3].status).toBe('done');
+    expect(j[3].items.map((i) => i.code)).toEqual(['T-ATTEND']);
+    expect(journeyProgress(j)).toBe(100);
+
+    const adv = buildJourney({ stages, requirements: reqs, progress: { r5: { status: 'done' } }, levels: { milestone: 'advanced' }, state });
+    expect(adv[3].status).toBe('active');
+    expect(journeyProgress(adv)).toBe(88);
+  });
+
+  it('does not let a manual status override a system requirement', () => {
+    const j = buildJourney({ stages, requirements: reqs, progress: { r4: { status: 'done' } }, levels: {}, state: { profileCompleted: true, baselineSubmitted: true } });
+    expect(j[2].status).toBe('active');
+  });
+
+  it('applies dimension-wide and level-specific requirements', () => {
+    expect(requirementApplies({ dimension: 'impact' }, {})).toBe(true);
+    expect(requirementApplies({ dimension: 'impact', level: 'advanced' }, { impact: 'beginner' })).toBe(false);
+    expect(requirementApplies({ active: false }, {})).toBe(false);
+  });
+});
+
+describe('helpers', () => {
+  it('shuffles deterministically per seed without losing items', () => {
+    const list = [1, 2, 3, 4, 5, 6];
+    expect(seededShuffle(list, 'a')).toEqual(seededShuffle(list, 'a'));
+    expect([...seededShuffle(list, 'b')].sort()).toEqual(list);
+  });
+
+  it('normalizes email and Saudi phone numbers', () => {
+    expect(normalizeEmail('  Ali@Example.COM ')).toBe('ali@example.com');
+    expect(isEmail('ali@example.com')).toBe(true);
+    expect(isEmail('ali@example')).toBe(false);
+    expect(normalizePhone('050 123 4567')).toBe('+966501234567');
+    expect(normalizePhone('966501234567')).toBe('+966501234567');
+    expect(normalizePhone('+447700900123')).toBe('+447700900123');
+    expect(normalizePhone('12')).toBeNull();
+  });
+});
+
+describe('handbook', () => {
+  const mods = [
+    { id: 'a', dimension: 'impact', sort: 2, min_level: 'beginner', body_md: 'x' },
+    { id: 'b', dimension: 'milestone', sort: 1, min_level: 'intermediate', body_md: 'x' },
+    { id: 'c', dimension: 'milestone', sort: 2, min_level: 'advanced', body_md: 'x' },
+    { id: 'd', dimension: 'impact', sort: 1, min_level: 'beginner', body_md: '  ' },
+  ];
+
+  it('includes chapters up to the participant level per dimension, skipping empty ones', () => {
+    const got = handbookModulesFor(mods, { milestone: 'intermediate', impact: 'beginner' }).map((m) => m.id);
+    expect(got).toEqual(['b', 'a']);
+  });
+
+  it('keeps only the level blocks that apply', () => {
+    const md = 'عام\n:::min=intermediate\nمتوسط فأعلى\n:::\n:::only=beginner\nتأسيسي فقط\n:::\nختام';
+    expect(filterHandbookMd(md, 'beginner')).toBe('عام\nتأسيسي فقط\nختام');
+    expect(filterHandbookMd(md, 'advanced')).toBe('عام\nمتوسط فأعلى\nختام');
+  });
+});
