@@ -29,25 +29,112 @@ function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
 }
 
+// ── الجهات ──
+// ترتيب الحالة في القمع: سجّل، أكمل الملف، أنهى القياس، اعتُمد، أنهى البرنامج
+const STAGE_RANK: Record<string, number> = {
+  registered: 0, profiled: 1, assessing: 1, pending_approval: 2, placed: 3, enrolled: 3, completed: 4,
+};
+function funnel(rows: any[]) {
+  const live = rows.filter((r) => r.status in STAGE_RANK);
+  const at = (n: number) => live.filter((r) => STAGE_RANK[r.status] >= n).length;
+  return {
+    registered: at(0), profiled: at(1), assessed: at(2), approved: at(3), completed: at(4),
+    pending_approval: rows.filter((r) => r.status === 'pending_approval').length,
+    withdrawn: rows.filter((r) => r.status === 'withdrawn' || r.status === 'suspended').length,
+  };
+}
+const orgFilter = (q: any, org: unknown) => (org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q);
+
+export async function orgs() {
+  const [{ data: list }, { data: ps }] = await Promise.all([
+    db.from('organizations').select('*').order('created_at'),
+    db.from('participants').select('id, status, organization_id, organization_name, last_login_at'),
+  ]);
+  const weekAgo = Date.now() - 7 * 864e5;
+  const stats = (rows: any[]) => ({ ...funnel(rows), total: rows.length, active_week: rows.filter((r) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length });
+  const unassigned = (ps || []).filter((p: any) => !p.organization_id);
+  // ما كتبه غير المربوطين في خانة الجهة، لربطهم بجهة بنقرة
+  const typed: Record<string, number> = {};
+  for (const p of unassigned) { const n = String(p.organization_name || '').trim(); if (n) typed[n] = (typed[n] || 0) + 1; }
+  return {
+    success: true,
+    orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)) })),
+    unassigned: { ...stats(unassigned), typed: Object.entries(typed).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, n]) => ({ name, n })) },
+  };
+}
+
+// لوحة جهة واحدة: مشاركوها بمساراتهم وحالاتهم، وتوزيعهم على المسارات
+export async function org(b: Body) {
+  const id = String(b.id || '');
+  const o = id === 'none' ? { id: 'none', name: 'بدون جهة' } : must(await db.from('organizations').select('*').eq('id', id).maybeSingle());
+  if (!o) throw new Fail('الجهة غير موجودة', 404);
+  const rows = must(await orgFilter(db.from('participants')
+    .select('id, full_name, email, phone, job_title, organization_name, status, source, created_at, last_login_at, placements(dimension, level, approved_at)'), id)
+    .order('created_at', { ascending: false }).limit(2000)) as any[] ?? [];
+  const { data: tracks } = await db.from('tracks').select('key, title_ar');
+  const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
+  const participants = rows.map((p: any) => {
+    const lv = Object.fromEntries((p.placements || []).map((x: any) => [x.dimension, x.level]));
+    const key = trackKey(lv);
+    const { placements: _p, ...rest } = p;
+    return { ...rest, track: key, track_title: key ? titles[key] || null : null, approved: (p.placements || []).length === 3 && p.placements.every((x: any) => x.approved_at) };
+  });
+  const byTrack: Record<string, number> = {};
+  for (const p of participants) if (p.track) byTrack[p.track] = (byTrack[p.track] || 0) + 1;
+  return { success: true, org: o, participants, funnel: funnel(participants), by_track: byTrack };
+}
+
+export async function assignOrg(a: Admin, b: Body) {
+  requireWrite(a);
+  const ids = (Array.isArray(b.participant_ids) ? b.participant_ids : []).map(String).slice(0, 1000);
+  let target: any = null;
+  if (b.organization_id) {
+    target = must(await db.from('organizations').select('id, name').eq('id', String(b.organization_id)).maybeSingle());
+    if (!target) throw new Fail('الجهة غير موجودة', 404);
+  }
+  // ربط كل من كتب اسمًا معينًا في خانة الجهة دفعة واحدة
+  let q = db.from('participants').update({ organization_id: target?.id || null, ...(target ? { organization_name: target.name } : {}) });
+  if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
+  else if (ids.length) q = q.in('id', ids);
+  else throw new Fail('لم يُحدَّد مشاركون');
+  const done = must(await q.select('id')) ?? [];
+  await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null });
+  return { success: true, moved: done.length };
+}
+
 // ── نظرة عامة ──
-export async function overview() {
-  const { data } = await db.from('participants').select('status');
+export async function overview(b: Body = {}) {
+  const { data } = await orgFilter(db.from('participants').select('id, status'), b.org);
   const byStatus: Record<string, number> = {};
   for (const r of data || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
   const { count: pendingReviews } = await db.from('participant_requirements')
     .select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted');
-  const { data: grid } = await db.from('placements').select('dimension, level');
+  const ids = new Set((data || []).map((r: any) => r.id));
+  const { data: gridAll } = await db.from('placements').select('participant_id, dimension, level');
+  const grid = (gridAll || []).filter((p: any) => ids.has(p.participant_id));
   const matrix: Record<string, Record<string, number>> = {};
   for (const d of DIMENSIONS) matrix[d] = Object.fromEntries(LEVELS.map((l) => [l, 0]));
-  for (const p of grid || []) matrix[p.dimension][p.level]++;
-  return { success: true, total: (data || []).length, by_status: byStatus, pending_reviews: pendingReviews ?? 0, matrix };
+  for (const p of grid) matrix[p.dimension][p.level]++;
+  // أكثر المسارات مشاركين
+  const lv: Record<string, Record<string, string>> = {};
+  for (const p of grid) (lv[p.participant_id] ||= {})[p.dimension] = p.level;
+  const byTrack: Record<string, number> = {};
+  for (const x of Object.values(lv)) { const k = trackKey(x); if (k) byTrack[k] = (byTrack[k] || 0) + 1; }
+  const { data: tracks } = await db.from('tracks').select('key, title_ar');
+  const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
+  const top_tracks = Object.entries(byTrack).sort((a, c) => c[1] - a[1]).slice(0, 6).map(([key, n]) => ({ key, n, title: titles[key] || null }));
+  return {
+    success: true, total: (data || []).length, by_status: byStatus, pending_reviews: pendingReviews ?? 0, matrix,
+    funnel: funnel(data || []), top_tracks, tracks_used: Object.keys(byTrack).length,
+  };
 }
 
 // ── المشاركون ──
 export async function participants(b: Body) {
   let q = db.from('participants')
-    .select('id, full_name, email, phone, job_title, organization_name, status, created_at, last_login_at, placements(dimension, level, approved_at)')
+    .select('id, full_name, email, phone, job_title, organization_id, organization_name, status, created_at, last_login_at, placements(dimension, level, approved_at)')
     .order('created_at', { ascending: false }).limit(500);
+  q = orgFilter(q, b.org);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.search) {
     const s = String(b.search).replace(/[%,()]/g, ' ').trim();
@@ -186,6 +273,8 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
+  organizations:      { table: 'organizations', key: ['id'],
+                        fields: ['name', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
@@ -289,6 +378,15 @@ export async function save(a: Admin, b: Body) {
       const unsafe = isNew || Object.keys(row).some((k) => !SAFE_QUESTION_FIELDS.has(k));
       if (unsafe) throw new Fail('هذه الأداة لها نتائج سابقة. أنشئ إصدارًا جديدًا لتعديل الخيارات أو الدرجات أو إضافة أسئلة', 409, 'locked');
     }
+  }
+
+  if (b.entity === 'organizations') {
+    if ('invite_code' in row || isNew) {
+      const code = String(row.invite_code || '').trim().toLowerCase() || crypto.randomUUID().slice(0, 8);
+      if (!/^[a-z0-9-]{4,40}$/.test(code)) throw new Fail('رمز الدعوة: أحرف إنجليزية صغيرة وأرقام وشرطة، من 4 إلى 40');
+      row.invite_code = code;
+    }
+    if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
   }
 
   let saved;
