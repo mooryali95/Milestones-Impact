@@ -9,28 +9,26 @@ begin;
 
 drop index if exists public.admin_users_one_owner;
 
--- admin_users.id بلا قيمة افتراضية، فيفشل أي إدراج لا يحدده (ومنه "إضافة مستخدم"
--- في اللوحة). نضبط الافتراضي بحسب نوع العمود.
+-- admin_users.id مفتاح أجنبي إلى auth.users، فالمعرّف يُؤخذ من حساب Supabase Auth
+-- بالبريد نفسه. إن لم يوجد الحساب: Authentication > Users > Add user > Create new user
+-- (البريد، أي كلمة مرور قوية، وفعّل Auto Confirm User)، ثم شغّل هذا الملف.
 do $$
-declare t text;
 begin
-  select format_type(atttypid, atttypmod) into t from pg_attribute
-   where attrelid = 'public.admin_users'::regclass and attname = 'id';
-  if t = 'uuid' then
-    execute 'alter table public.admin_users alter column id set default gen_random_uuid()';
-  elsif t in ('text', 'character varying') then
-    execute 'alter table public.admin_users alter column id set default gen_random_uuid()::text';
+  if not exists (select 1 from auth.users where lower(email) = 'milestonesimpact@gmail.com') then
+    raise exception 'أنشئ milestonesimpact@gmail.com أولًا من Authentication > Users ثم أعد التشغيل';
   end if;
 end $$;
 
--- إن كان البريد مسجّلًا يُرفع إلى مالك، وإلا يُضاف حسابًا جديدًا.
+-- إن كان مسجّلًا مديرًا يُرفع إلى مالك، وإلا يُضاف بمعرّف حسابه في Auth.
 update public.admin_users
    set is_owner = true, role_id = 'super_admin', is_active = true
  where lower(email) = 'milestonesimpact@gmail.com';
 
-insert into public.admin_users (name, email, role_id, is_active, is_owner)
-select 'Milestone Impact', 'milestonesimpact@gmail.com', 'super_admin', true, true
- where not exists (select 1 from public.admin_users where lower(email) = 'milestonesimpact@gmail.com');
+insert into public.admin_users (id, name, email, role_id, is_active, is_owner)
+select u.id, 'Milestone Impact', 'milestonesimpact@gmail.com', 'super_admin', true, true
+  from auth.users u
+ where lower(u.email) = 'milestonesimpact@gmail.com'
+   and not exists (select 1 from public.admin_users where lower(email) = 'milestonesimpact@gmail.com');
 
 commit;
 
