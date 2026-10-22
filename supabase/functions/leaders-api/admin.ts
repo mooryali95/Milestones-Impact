@@ -4,8 +4,8 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, trackKey } from './logic.js';
-import { hostOf, mePayload } from './participant.ts';
+import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
+import { hostOf, mePayload, pointsOf } from './participant.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
@@ -178,10 +178,16 @@ export async function participant(b: Body) {
   }));
   let cvUrl = null;
   if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;
+  const [pts, { data: book }, { data: subs }] = await Promise.all([
+    pointsOf(p.id),
+    db.from('handbook_progress').select('module_id, quiz_score, quiz_total, reflection, completed_at, handbook_modules(title_ar, dimension)').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
+  ]);
   return {
     success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress,
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
+    points: pts, book: book || [], models: subs || [],
   };
 }
 
@@ -280,7 +286,9 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   questions:          { table: 'questions', key: ['id'], sortable: true,
                         fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort'] },
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
-                        fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort'] },
+                        fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort', 'reflection_ar', 'quiz_md'] },
+  learning_models:    { table: 'learning_models', key: ['id'], sortable: true,
+                        fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
@@ -289,6 +297,32 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
 };
+
+// حقول النموذج التعليمي: قائمة مضبوطة الأنواع، بمفاتيح ثابتة لا تتغير بتغيير العنوان
+const FIELD_TYPES = new Set(['text', 'textarea', 'select', 'table']);
+function cleanModelFields(input: unknown) {
+  const list = Array.isArray(input) ? input : [];
+  const keys = new Set<string>();
+  return list.slice(0, 30).map((f: any, i: number) => {
+    const type = FIELD_TYPES.has(f?.type) ? f.type : 'textarea';
+    let key = String(f?.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `f${i + 1}`;
+    while (keys.has(key)) key += '_';
+    keys.add(key);
+    const label = String(f?.label || '').trim().slice(0, 200);
+    if (!label) throw new Fail(`الحقل ${i + 1} بلا عنوان`);
+    const out: Body = { key, label, type, hint: String(f?.hint || '').slice(0, 300), required: f?.required !== false };
+    if (type === 'select') {
+      out.options = (Array.isArray(f.options) ? f.options : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 20);
+      if (out.options.length < 2) throw new Fail(`الحقل "${label}" يحتاج خيارين على الأقل`);
+    }
+    if (type === 'table') {
+      out.columns = (Array.isArray(f.columns) ? f.columns : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 10);
+      if (!out.columns.length) throw new Fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
+      out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+    }
+    return out;
+  });
+}
 
 // ── المسارات الـ27 ──
 // مسار كل مشارك من مستوياته الحالية. "مفعّل" = اعتُمدت مستوياته الثلاثة.
@@ -357,7 +391,92 @@ export async function catalog() {
   const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
   out.locked_instruments = [...new Set((used || []).map((u: any) => u.instrument_id))];
   out.track_stats = await trackStats();
+  out.book_stats = await bookStats();
   return out;
+}
+
+// ── الكتاب والنماذج: التتبع والتقييم ──
+// لكل باب: كم أتمّه ومتوسط نتيجة اختباره. لكل نموذج: المسودات والمسلّم والمقيّم ومتوسط التقييم.
+async function bookStats() {
+  const [{ data: prog }, { data: subs }, { data: pts }] = await Promise.all([
+    db.from('handbook_progress').select('module_id, quiz_score, quiz_total'),
+    db.from('model_submissions').select('model_id, status, rating'),
+    db.from('points_ledger').select('participant_id, points'),
+  ]);
+  const chapters: Record<string, { done: number; score: number; total: number }> = {};
+  for (const r of prog || []) {
+    const c = (chapters[r.module_id] ||= { done: 0, score: 0, total: 0 });
+    c.done++; c.score += r.quiz_score; c.total += r.quiz_total;
+  }
+  const models: Record<string, { draft: number; submitted: number; reviewed: number; returned: number; rated: number; rating: number }> = {};
+  for (const r of subs || []) {
+    const m = (models[r.model_id] ||= { draft: 0, submitted: 0, reviewed: 0, returned: 0, rated: 0, rating: 0 });
+    m[r.status as 'draft']++;
+    if (r.rating) { m.rated++; m.rating += r.rating; }
+  }
+  const per: Record<string, number> = {};
+  for (const r of pts || []) per[r.participant_id] = (per[r.participant_id] || 0) + r.points;
+  const totals = Object.values(per);
+  return {
+    chapters, models,
+    readers: totals.length,
+    points: { participants: totals.length, total: totals.reduce((a, n) => a + n, 0), avg: totals.length ? Math.round(totals.reduce((a, n) => a + n, 0) / totals.length) : 0 },
+    to_review: (subs || []).filter((r: any) => r.status === 'submitted').length,
+  };
+}
+
+// الكتاب والنماذج كما يراها مشارك في مسار معين، مع الإجابات الصحيحة للإدارة
+export async function bookPreview(b: Body) {
+  const key = String(b.track || '');
+  if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
+  const levels = Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(key[i * 2 + 1]) - 1]]));
+  const [t, mods, models] = await Promise.all([
+    db.from('tracks').select('*').eq('key', key).maybeSingle(),
+    db.from('handbook_modules').select('*'),
+    db.from('learning_models').select('*'),
+  ]);
+  return {
+    success: true, track: t.data || { key }, levels,
+    chapters: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
+      id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
+      md: filterHandbookMd(m.body_md, levels[m.dimension]), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+    })),
+    models: modelsFor(models.data || [], levels),
+  };
+}
+
+export async function submissions(b: Body) {
+  let q = db.from('model_submissions')
+    .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants(full_name, email, organization_name), learning_models(title_ar, dimension, points)')
+    .neq('status', 'draft').order('submitted_at', { ascending: false }).limit(500);
+  if (b.status) q = q.eq('status', String(b.status));
+  if (b.model_id) q = q.eq('model_id', String(b.model_id));
+  return { success: true, submissions: must(await q) ?? [] };
+}
+
+export async function submission(b: Body) {
+  const s = must(await db.from('model_submissions')
+    .select('*, participants(id, full_name, email, organization_name, job_title), learning_models(*)').eq('id', String(b.id)).maybeSingle());
+  if (!s) throw new Fail('التسليم غير موجود', 404);
+  return { success: true, submission: s };
+}
+
+// تقييم المستشار: يُعتمد التسليم أو يُعاد للتعديل، ومعه تقييم وملاحظات ونقاط تميّز اختيارية
+export async function reviewSubmission(a: Admin, b: Body) {
+  requireWrite(a);
+  const status = b.status === 'returned' ? 'returned' : 'reviewed';
+  const rating = b.rating ? Math.max(1, Math.min(5, Math.round(Number(b.rating)))) : null;
+  const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));
+  const s = must(await db.from('model_submissions').update({
+    status, rating, bonus, feedback_ar: String(b.feedback || '').slice(0, 4000) || null,
+    reviewed_at: new Date().toISOString(), reviewed_by: a.email,
+  }).eq('id', String(b.id)).select('id, participant_id, learning_models(title_ar)').single()) as any;
+  if (status === 'reviewed' && bonus) {
+    await db.from('points_ledger').upsert({ participant_id: s.participant_id, source: 'review', ref_id: s.id, points: bonus, note: `تميّز: ${s.learning_models?.title_ar || ''}` },
+      { onConflict: 'participant_id,source,ref_id' });
+  }
+  await audit('admin', a.email, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus });
+  return { success: true };
 }
 
 async function instrumentLocked(instrumentId: string) {
@@ -414,6 +533,13 @@ export async function save(a: Admin, b: Body) {
     }
   }
 
+  if (b.entity === 'learning_models') {
+    if (isNew && !row.key) row.key = `m-${Date.now().toString(36)}`;
+    if ('fields' in row) row.fields = cleanModelFields(row.fields);
+    if (isNew && !String(row.title_ar || '').trim()) throw new Fail('اسم النموذج مطلوب');
+    row.updated_at = new Date().toISOString();
+  }
+
   let saved;
   if (isNew) {
     saved = must(await db.from(e.table).insert(row).select('*').single(), 'تعذّر الحفظ، تأكد من عدم تكرار الرمز');
@@ -430,6 +556,10 @@ export async function remove(a: Admin, b: Body) {
   requireWrite(a);
   const e = ENTITIES[b.entity];
   if (!e || e.key[0] !== 'id') throw new Fail('لا يمكن حذف هذا النوع، عطّله بدل حذفه');
+  if (b.entity === 'learning_models') {
+    const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
+    if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
+  }
   if (b.entity === 'questions') {
     const q = (await db.from('questions').select('instrument_id').eq('id', b.id).single()).data;
     if (q && await instrumentLocked(q.instrument_id)) throw new Fail('لا يُحذف سؤال له إجابات سابقة، عطّله بدل ذلك', 409, 'locked');
