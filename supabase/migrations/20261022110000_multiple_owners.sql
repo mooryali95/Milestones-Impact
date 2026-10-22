@@ -9,6 +9,20 @@ begin;
 
 drop index if exists public.admin_users_one_owner;
 
+-- admin_users.id بلا قيمة افتراضية، فيفشل أي إدراج لا يحدده (ومنه "إضافة مستخدم"
+-- في اللوحة). نضبط الافتراضي بحسب نوع العمود.
+do $$
+declare t text;
+begin
+  select format_type(atttypid, atttypmod) into t from pg_attribute
+   where attrelid = 'public.admin_users'::regclass and attname = 'id';
+  if t = 'uuid' then
+    execute 'alter table public.admin_users alter column id set default gen_random_uuid()';
+  elsif t in ('text', 'character varying') then
+    execute 'alter table public.admin_users alter column id set default gen_random_uuid()::text';
+  end if;
+end $$;
+
 -- إن كان البريد مسجّلًا يُرفع إلى مالك، وإلا يُضاف حسابًا جديدًا.
 update public.admin_users
    set is_owner = true, role_id = 'super_admin', is_active = true
