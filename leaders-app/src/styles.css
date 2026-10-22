@@ -217,6 +217,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 .dim.milestone { border-top-color: var(--slate); }
 .dim.impact { border-top-color: var(--gold); }
 .dim.leadership { border-top-color: var(--graphite); }
+.dim.overall { border-top-color: var(--gold); max-width: 560px; }
 .dim h3 { font-size: 15px; }
 .dim .en { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }

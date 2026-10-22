@@ -140,6 +140,6 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
 
 export function approvedMail(name: string) {
   return shell('اعتُمد مستواك، ورحلتك مفتوحة الآن', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، راجع المستشار نتيجتك واعتمد مسارك في الأبعاد الثلاثة. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.</p>
 <p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">افتح رحلتي</a></p>`);
 }

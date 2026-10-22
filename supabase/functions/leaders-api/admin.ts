@@ -66,7 +66,7 @@ export async function participant(b: Body) {
     db.from('handbook_views').select('viewed_at').eq('participant_id', p.id).order('viewed_at', { ascending: false }).limit(1),
     db.from('audit_log').select('*').eq('entity_id', p.id).order('created_at', { ascending: false }).limit(30),
   ]);
-  const state = await mePayload(p);
+  const state = await mePayload(p, 'admin');
   let cvUrl = null;
   if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;
   return {
