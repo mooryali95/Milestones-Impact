@@ -131,7 +131,9 @@
 
   // ══ الجهات ══
   const APP_URL = 'https://leaders.sunkvalue.com';
-  const inviteUrl = (o) => `${APP_URL}/?org=${encodeURIComponent(o.invite_code || '')}`;
+  const inviteUrl = (o, c) => `${APP_URL}/j/${encodeURIComponent(o.invite_code || '')}${c ? `/${encodeURIComponent(c)}` : ''}`;
+  const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'نقل يدوي', none: 'غير محدد' };
+  const domainsOf = (o) => (Array.isArray(o?.domains) ? o.domains : []);
   const orgColor = (o) => o?.color || '#A97A2E';
   async function orgList(force) {
     if (!S.orgList || force) { const r = await L('admin.orgs'); S.orgList = r.success ? r : { orgs: [], unassigned: {} }; }
@@ -152,6 +154,7 @@
   const ORG_FIELDS = [
     ['name', 'اسم الجهة'], ['short_name', 'اسم مختصر (اختياري)'], ['seats', 'عدد المقاعد المتعاقد عليها', 'number'],
     ['color', 'لون الجهة (مثل #12414E)'], ['invite_code', 'رمز رابط الدعوة (يُولَّد تلقائيًا إن تُرك فارغًا)'],
+    ['domains', 'مواقع الجهة: من يصل منها يُنسب لها تلقائيًا (مثل mi.manzoma.sa، افصل بفاصلة)'],
     ['sector', 'القطاع'], ['contact_name', 'منسق الجهة'], ['contact_email', 'بريد المنسق'], ['contact_phone', 'جوال المنسق'],
     ['status', 'الحالة', 'select', { map: { active: 'نشطة', inactive: 'موقوفة (يتعطل رابطها)' } }], ['notes', 'ملاحظات', 'textarea', { rows: 3 }],
   ];
@@ -172,7 +175,7 @@
         <div class="stat-card"><div class="stat-label">بدون جهة</div><div class="stat-value s-new">${un.total || 0}</div><div class="stat-sub">اربطهم بجهاتهم</div></div>
       </div>
       <div class="la-row between la-tracks-bar">
-        <p class="la-muted">لكل جهة رابط تسجيل خاص؛ من يسجّل منه يُنسب لها تلقائيًا. افتح أي جهة لترى مشاركيها وتقدمهم وتصدّر تقريرها.</p>
+        <p class="la-muted">يُنسب المشارك لجهته تلقائيًا إن جاء برابطها أو من موقعها، ويبقى الانتساب محفوظًا 30 يومًا حتى يسجّل. افتح أي جهة لترى مشاركيها ومصادرهم وتصدّر تقريرها.</p>
         ${w ? '<button class="btn-sm primary" data-act="add-org">+ جهة جديدة</button>' : ''}
       </div>
       <div class="la-orgs">${list.map((o) => `
@@ -181,6 +184,7 @@
             <span class="la-org-mark">${esc((o.short_name || o.name).slice(0, 2))}</span>
             <div><b>${esc(o.name)}</b><small>${esc(o.sector || '')}${o.status === 'inactive' ? ' · موقوفة' : ''}</small></div>
           </header>
+          ${domainsOf(o).length ? `<div class="la-domains">${domainsOf(o).map((d) => `<span dir="ltr">${esc(d)}</span>`).join('')}</div>` : ''}
           ${seatsHtml(o.stats.total, o.seats)}
           ${funnelHtml(o.stats)}
           <div class="la-org-foot">
@@ -230,13 +234,21 @@
             ${w && !isNone ? `<button class="btn-sm ghost" data-act="edit-org" data-id="${o.id}">تحرير</button>` : ''}
           </div>
         </div>
-        ${isNone ? '' : `<code class="la-invite" dir="ltr">${esc(inviteUrl(o))}</code>`}
+        ${isNone ? '' : `<div class="la-linkbar">
+          <code class="la-invite" dir="ltr">${esc(inviteUrl(o))}</code>
+          ${domainsOf(o).length ? `<span class="la-domains">${domainsOf(o).map((d) => `<span dir="ltr">${esc(d)}</span>`).join('')}</span>`
+            : `<small>لا مواقع مرتبطة${w ? '؛ أضف موقع الجهة من "تحرير" ليُنسب زوارها تلقائيًا' : ''}</small>`}
+          <span class="la-row la-campaign"><input id="ofCampaign" dir="ltr" placeholder="اسم الحملة: whatsapp, email…" maxlength="40">
+            <button class="btn-sm ghost" data-act="copy-campaign">نسخ رابط الحملة</button></span>
+        </div>`}
         <div class="la-org-hero-grid">
           <div>${seatsHtml(all.length, o.seats)}<div class="la-org-kpis">
             <span><b>${f.pending_approval}</b>بانتظار الاعتماد</span><span><b>${f.approved}</b>اعتُمد مسارهم</span><span><b>${f.completed}</b>أنهوا</span><span><b>${f.withdrawn}</b>منسحب أو موقوف</span></div></div>
           <div>${funnelHtml(f, true)}</div>
         </div>
       </section>
+
+      ${sourcesHtml(S.orgData, all.length)}
 
       <section class="la-card">
         <h3>توزيع المشاركين على المسارات</h3>
@@ -260,18 +272,32 @@
             <td>${esc(p.job_title || '')}</td>
             <td>${p.track ? `<code class="la-code">${p.track}</code> ${p.approved ? '' : '<small class="la-muted">مبدئي</small>'}` : '<span class="la-muted">·</span>'}</td>
             <td><span class="la-chip ${p.status === 'pending_approval' ? 'warn' : p.status === 'completed' ? 'ok' : ''}">${STATUS[p.status] || p.status}</span></td>
-            <td>${date(p.last_login_at)}</td><td>${date(p.created_at)}${p.source === 'invite' ? '<br><small class="la-muted">برابط الجهة</small>' : ''}</td>
+            <td>${date(p.last_login_at)}</td><td>${date(p.created_at)}${p.org_via ? `<br><small class="la-muted">${VIA[p.org_via]}${p.campaign ? ` · <span dir="ltr">${esc(p.campaign)}</span>` : ''}</small>` : ''}</td>
           </tr>`).join('') : `<tr><td colspan="7" class="la-empty">لا نتائج</td></tr>`}</tbody>
         </table></div>
       </section>`;
   }
 
+  // من أين جاء مشاركو الجهة: طريقة الانتساب، والحملات، والمواقع المُحيلة
+  function sourcesHtml(d, total) {
+    const bars = (obj, label = (k) => k, ltr) => {
+      const list = Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (!list.length) return '<p class="la-muted">لا بيانات بعد.</p>';
+      return `<div class="la-funnel">${list.map(([k, n]) => `<div class="la-fn"><span class="la-fn-l"${ltr ? ' dir="ltr"' : ''}>${esc(label(k))}</span>
+        <span class="la-fn-bar"><i style="width:${(n / Math.max(1, total) * 100).toFixed(1)}%"></i></span><b>${n}</b></div>`).join('')}</div>`;
+    };
+    return `<section class="la-card"><h3>مصادر الانضمام</h3><div class="la-sources">
+      <div><h4>طريقة الانتساب</h4>${bars(d.by_via, (k) => VIA[k] || k)}</div>
+      <div><h4>الحملات</h4>${bars(d.by_campaign, (k) => k, true)}</div>
+      <div><h4>المواقع المُحيلة</h4>${bars(d.by_site, (k) => k, true)}</div></div></section>`;
+  }
+
   function orgCsv() {
     const { org: o, participants } = S.orgData;
-    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الحالة', 'المسار', 'اسم المسار', 'معتمد', 'آخر دخول', 'التسجيل'];
+    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الحالة', 'المسار', 'اسم المسار', 'معتمد', 'آخر دخول', 'التسجيل', 'طريقة الانتساب', 'الحملة', 'الموقع المُحيل'];
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [head.map(q).join(','), ...participants.map((p) => [p.full_name, p.email, p.phone, p.job_title, STATUS[p.status] || p.status,
-      p.track, p.track_title, p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at)].map(q).join(','))];
+      p.track, p.track_title, p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at), VIA[p.org_via || 'none'], p.campaign, p.referrer_host].map(q).join(','))];
     const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -880,6 +906,13 @@
     if (a === 'org-print') return orgPrint();
     if (a === 'copy-invite') {
       try { await navigator.clipboard.writeText(t.dataset.url); toast('نُسخ رابط الدعوة'); } catch { prompt('انسخ رابط الدعوة:', t.dataset.url); }
+      return;
+    }
+    if (a === 'copy-campaign') {
+      const c = String(el.querySelector('#ofCampaign')?.value || '').trim().toLowerCase();
+      if (!/^[a-z0-9_-]{1,40}$/.test(c)) return toast('اسم الحملة: أحرف إنجليزية صغيرة وأرقام و _ أو -');
+      const url = inviteUrl(S.orgData.org, c);
+      try { await navigator.clipboard.writeText(url); toast('نُسخ رابط الحملة'); } catch { prompt('انسخ رابط الحملة:', url); }
       return;
     }
     if (a === 'add-org') return openForm('جهة جديدة', ORG_FIELDS, { status: 'active' }, saveRow('organizations', {}));

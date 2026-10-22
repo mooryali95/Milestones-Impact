@@ -235,3 +235,15 @@
 .la-pill code { font-size: .7rem; }
 @media (max-width: 900px) { .la-org-hero-grid { grid-template-columns: 1fr; } }
 .la-org-hero .la-fn-bar i { background: linear-gradient(90deg, #C79A4B, #A97A2E); }
+
+/* مصادر الانضمام ومواقع الجهة */
+.la-domains { display: flex; gap: 6px; flex-wrap: wrap; }
+.la-domains span { font-size: .75rem; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--org, var(--gold)) 14%, transparent); border: 1px solid color-mix(in srgb, var(--org, var(--gold)) 40%, transparent); }
+.la-org > .la-domains { padding: 0 2px; justify-content: flex-start; justify-self: stretch; width: 100%; }
+.la-linkbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.la-org-hero .la-domains span { color: #fff; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.25); }
+.la-campaign input { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 6px; padding: 5px 8px; font: inherit; font-size: .8rem; width: 200px; }
+.la-campaign input::placeholder { color: rgba(255,255,255,.5); }
+.la-sources { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.la-sources h4 { margin: 0 0 8px; font-size: .85rem; color: var(--muted, #4A6A72); }
+@media (max-width: 800px) { .la-sources { grid-template-columns: 1fr; } }
