@@ -54,6 +54,10 @@ jobs:
       - name: Build leaders app
         run: npm run leaders:build
 
+      # mi-leaders ينشر مجلد leaders/ المودع كما هو، فيجب أن يطابق المصدر
+      - name: Leaders build is committed
+        run: git add -N leaders && git diff --exit-code --stat -- leaders
+
       # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

@@ -22,7 +22,7 @@
 | النطاق | المجلد | مشروع Cloudflare | البناء |
 |---|---|---|---|
 | `mi.sunkvalue.com` | `home/` | `mi-home` | بلا بناء. يشمل `/leaders/` و`/projects/` و`/governance/` |
-| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | تحويل 301 فقط إلى `mi.sunkvalue.com/leaders/` |
+| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | منصة القادة (ناتج بناء `leaders-app/` مُودع) |
 | `matrix.sunkvalue.com` | الجذر (`src/` و`index.html` و`public/`) | `mi-matrix` | `npm run build` إلى `build/` |
 | `admin.sunkvalue.com` | `admin/` | `mi-admin` | بلا بناء |
 | SSPDF | `SSPDF/` | `mi-sspdf` | تطبيق Vite مستقل |
@@ -40,7 +40,7 @@ npm ci && npm run lint && npm test && npm run build
 ### تنبيهات
 
 1. محتوى صفحة القادة في `home/leaders/`، والمجلد `leaders/` للتحويل فقط.
-2. لا تفصل نطاق `leaders.sunkvalue.com` عن مشروع `mi-leaders`، وإلا توقف التحويل.
+2. لا تفصل نطاق `leaders.sunkvalue.com` عن مشروع `mi-leaders`، فهو يخدم منصة القادة.
 3. ابدأ كل عمل من فرع جديد مأخوذ من `main`، وادمج عبر طلب دمج.
 4. كود الخادم (سياسات RLS ودوال Supabase) غير موجود في المستودع ويُراجع من لوحة Supabase.
 
