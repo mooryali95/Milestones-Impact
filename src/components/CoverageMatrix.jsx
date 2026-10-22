@@ -53,7 +53,7 @@ const CoverageMatrix = ({ procs, dates, confirmed }) => {
     <div className="cov-wrap">
       <table className="cov-table">
         <caption className="cov-caption">
-          خريطة التغطية — كل معيّن عملية: ممتلئ مؤكَّد، باهت محدَّد، فارغ غير محجوز
+          خريطة التغطية: كل معيّن عملية؛ الممتلئ مؤكَّد، والباهت محدَّد، والفارغ غير محجوز
         </caption>
         <thead>
           <tr>

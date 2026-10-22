@@ -26,7 +26,7 @@ async function mockUserApi(page, { failVerify = false } = {}) {
 
 async function register(page) {
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
   await page.locator('#reg-name').fill('مستخدم الاختبار');
   await page.locator('#reg-phone').fill('0500000000');
   await page.locator('#reg-email').fill('user@example.com');
@@ -38,7 +38,7 @@ async function register(page) {
 test('التسجيل يرفض البيانات غير الصحيحة قبل الاتصال بالخادم', async ({ page }) => {
   const calls = await mockUserApi(page);
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
   await page.locator('#reg-phone').fill('123');
   await page.locator('#reg-email').fill('user@example.com');
   await page.getByRole('button', { name: /إرسال رمز التحقق/ }).click();
@@ -68,7 +68,7 @@ test('رمز تحقق خاطئ يُظهر رسالة واضحة ولا يُدخ�
 test('انقطاع الشبكة أثناء التسجيل يُظهر رسالة بدل التجمد', async ({ page }) => {
   await page.route(FN, (r) => r.abort('internetdisconnected'));
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
   await page.locator('#reg-name').fill('مستخدم');
   await page.locator('#reg-phone').fill('0500000000');
   await page.locator('#reg-email').fill('user@example.com');
@@ -104,7 +104,7 @@ test('انتهاء الجلسة على الخادم يُخرج المستخدم 
   await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.goto(BASE + '/');
   await expect(page.getByText(/انتهت الجلسة/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'ابدأ رحلتك' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'بدء الرحلة' }).first()).toBeVisible();
 });
 
 // رابطٌ مشترَك إلى تبويب: يُفتح عليه، ورجوعٌ واحد يغادر التطبيق.
@@ -138,7 +138,7 @@ for (const [w, h] of [[1280, 950], [1440, 900], [390, 844]]) {
     await mockUserApi(page);
     await page.setViewportSize({ width: w, height: h });
     await page.goto(BASE + '/');
-    await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+    await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
     const box = await page.locator('.auth-screen').boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(h - 1);
   });
@@ -150,7 +150,7 @@ test('شرائح المسارات في لوحة الدخول تجتاز التب
   await mockUserApi(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
   const ratios = await page.evaluate(() => {
     const lum = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number)
       .map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
@@ -172,7 +172,7 @@ test('زرّ إعادة الإرسال ينتظر المهلة ولا يبعث �
   await page.clock.install();
   const calls = await mockUserApi(page);
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: 'ابدأ رحلتك' }).first().click();
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
   await page.locator('#reg-name').fill('مستخدم الاختبار');
   await page.locator('#reg-phone').fill('0500000000');
   await page.locator('#reg-email').fill('user@example.com');
@@ -194,13 +194,13 @@ test('زرّ إعادة الإرسال ينتظر المهلة ولا يبعث �
   await expect(resend).toBeDisabled();
 });
 
-// «دخول المدير» يُنقر عند 1280×720. كان مؤشّر التمرير الزخرفيّ يغطّيه
+// «دخول الإدارة» يُنقر عند 1280×720. كان مؤشّر التمرير الزخرفيّ يغطّيه
 // فيذهب النقر إليه ولا يحدث شيء — على مقاسٍ شائع في الحواسيب المحمولة.
-test('زرّ دخول المدير يُنقر عند 1280×720', async ({ page }) => {
+test('زرّ دخول الإدارة يُنقر عند 1280×720', async ({ page }) => {
   await page.route(/supabase\.co\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: /دخول المدير/ }).click({ timeout: 5000 });
+  await page.getByRole('button', { name: /دخول الإدارة/ }).click({ timeout: 5000 });
   await expect(page.locator('#admin-email')).toBeVisible();
 });
 
@@ -226,15 +226,15 @@ test('إحصائيات المدير: مسارٌ اكتمل حجزه يبلغ ع�
   await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
 
   await page.goto(BASE + '/');
-  await page.getByRole('button', { name: /دخول المدير/ }).click();
+  await page.getByRole('button', { name: /دخول الإدارة/ }).click();
   await page.locator('#admin-email').fill('admin@example.com');
   await page.getByRole('button', { name: /إرسال/ }).click();
   await page.locator('#admin-code').fill('123456');
   await page.getByRole('button', { name: /دخول|تحقق/ }).last().click();
   await page.locator('.tabs .tab', { hasText: 'إحصائيات' }).click();
 
-  // مسجّلان: الأول حجز المسارات الأربعة كاملة، والثاني عمليتين في «الخلق».
-  // فالخلق 6 من 8 = 75%، وكلٌّ من البقية 4 من 8 = 50%.
+  // مسجّلان: الأول حجز المسارات الأربعة كاملة، والثاني عمليتين في «التكوين».
+  // فالتكوين 6 من 8 = 75%، وكلٌّ من البقية 4 من 8 = 50%.
   const widths = await page.locator('.rpt-bar-fill').evaluateAll((els) => els.map((e) => e.style.width));
   expect(widths).toEqual(['75%', '50%', '50%', '50%']);
 });
@@ -242,7 +242,7 @@ test('إحصائيات المدير: مسارٌ اكتمل حجزه يبلغ ع�
 test('الشعار في لوحة الدخول موسَّط مع النص تحته', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto(BASE + '/');
-  await page.getByText('ابدأ رحلتك').first().click();
+  await page.getByText('بدء الرحلة').first().click();
   const d = await page.evaluate(() => {
     const img = document.querySelector('.auth-left-content img').getBoundingClientRect();
     const box = document.querySelector('.auth-left-content').getBoundingClientRect();

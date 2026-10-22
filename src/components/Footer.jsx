@@ -13,7 +13,7 @@ const Footer = () => (
       {" | "}
       <a href="mailto:omar@sunkvalue.com" style={{ color: BRAND.color, textDecoration: "none" }}>omar@sunkvalue.com</a>
     </p>
-    <p>© {new Date().getFullYear()} Milestone Impact — جميع الحقوق محفوظة</p>
+    <p>© {new Date().getFullYear()} Milestone Impact. جميع الحقوق محفوظة.</p>
   </div>
 );
 

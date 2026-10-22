@@ -196,7 +196,7 @@ const AdminPanel = (p) => {
                         const bookedProcs = procs.filter(p=>regDates[p.key]).sort((a,b)=>new Date(regDates[a.key])-new Date(regDates[b.key]));
                         const totalDays = bookedProcs.length>=2 ? Math.round((new Date(regDates[bookedProcs[bookedProcs.length-1].key])-new Date(regDates[bookedProcs[0].key]))/(1000*60*60*24)) : 0;
                         const confCount = Object.keys(r.confirmed||{}).length;
-                        const trackDist=[{id:'creation',name:'الخلق',color:'#8B6914'},{id:'innovation',name:'الإبداع',color:'#5B7B3A'},{id:'establishment',name:'الإنشاء',color:'#2E6B8A'},{id:'making',name:'الجعل',color:'#6B4E3D'}].map(t=>({...t,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
+                        const trackDist=[{id:'creation',name:'التكوين',color:'#8B6914'},{id:'innovation',name:'الإبداع',color:'#5B7B3A'},{id:'establishment',name:'الإنشاء',color:'#2E6B8A'},{id:'making',name:'التشكيل',color:'#6B4E3D'}].map(t=>({...t,count:bookedProcs.filter(p=>p.trackId===t.id).length}));
                         return <div>
                           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
                             {[{v:bookedProcs.length,l:'مواعيد',c:'var(--mi-d)'},{v:confCount,l:'مؤكدة',c:'var(--ok)'},{v:totalDays+'d',l:'مدة التخطيط',c:'var(--gold-d)'}].map((s,i)=>(
