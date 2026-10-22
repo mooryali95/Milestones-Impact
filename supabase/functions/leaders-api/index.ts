@@ -55,6 +55,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.review': A.reviewRequirement,
   'admin.create-participant': A.createParticipant,
   'admin.catalog': () => A.catalog(),
+  'admin.track': (_a, b) => A.track(b),
   'admin.save': A.save,
   'admin.delete': A.remove,
   'admin.reorder': A.reorder,

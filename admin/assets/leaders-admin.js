@@ -32,6 +32,26 @@
   const opts = (map, cur, empty) => (empty != null ? `<option value="">${esc(empty)}</option>` : '')
     + Object.entries(map).map(([v, l]) => `<option value="${esc(v)}"${String(cur ?? '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
 
+  // عرض محتوى الكتيب كما يقرؤه المشارك: عناوين وبنود وغامق واقتباس
+  function mdHtml(text) {
+    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const out = [];
+    let list = null;
+    const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+    for (const raw of String(text || '').split('\n')) {
+      const line = raw.trim();
+      let m;
+      if (!line) { close(); continue; }
+      if ((m = line.match(/^(#{2,4})\s+(.*)$/))) { close(); out.push(`<h${m[1].length + 1}>${inline(m[2])}</h${m[1].length + 1}>`); continue; }
+      if ((m = line.match(/^[-•]\s+(.*)$/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+      if ((m = line.match(/^\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+      if ((m = line.match(/^>\s?(.*)$/))) { close(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+      close(); out.push(`<p>${inline(line)}</p>`);
+    }
+    close();
+    return out.join('');
+  }
+
   const role = () => { try { const s = Session.load(); return s?.user?.role_id || s?.user?.role || 'viewer'; } catch { return 'viewer'; } };
   const canWrite = () => role() !== 'viewer';
 
@@ -48,7 +68,7 @@
     } catch { return { success: false, message: 'تعذّر الاتصال بالخادم' }; }
   }
 
-  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone' };
+  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone', track: null, onlyUsed: false };
   const root = () => document.getElementById('ctx-leaders');
 
   // ══ السياق ══
@@ -99,7 +119,8 @@
           if (!c.success) { body.innerHTML = `<div class="la-err">${esc(c.message)}</div>`; return; }
           S.catalog = c;
         }
-        body.innerHTML = { journey: viewJourney, assessment: viewAssessment, levels: viewLevels, tracks: viewTracks, handbook: viewHandbook }[S.tab]();
+        body.innerHTML = S.tab === 'tracks' && S.track ? await viewTrack(S.track)
+          : { journey: viewJourney, assessment: viewAssessment, levels: viewLevels, tracks: viewTracks, handbook: viewHandbook }[S.tab]();
       }
     } catch (e) {
       console.error(e);
@@ -215,13 +236,19 @@
           ${!prof && !latest ? '<p class="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>' : ''}
           ${prof?.track ? `<div class="la-track-now"><code class="la-code">${esc(prof.track.key)}</code><b>${esc(prof.track.title || 'مسار بلا عنوان')}</b>
             <p class="la-muted">${esc(prof.track.summary || '')}</p><small class="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>` : ''}
-          <table class="la-table"><thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead><tbody>
+          <table class="la-table"><thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المؤشر</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead><tbody>
           ${DIMS.map((d) => {
             const x = prof?.dimensions.find((y) => y.dimension === d);
             const rr = res(d);
+            const ev = rr?.evaluation;
+            // قبل الاعتماد يُقترح مستوى المعيار الحالي؛ بعده يبقى ما اعتمدته
+            const pick = !x?.approved && ev ? ev.level : x?.level;
             return `<tr><td><b>${DIM_EN[d]}</b><br><small>${DIM[d]}</small></td>
               <td>${pct(rr?.knowledge_pct)}</td><td>${pct(rr?.skill_pct)}</td><td>${pct(rr?.behavior_pct)}</td>
-              <td>${w ? `<select data-lvl="${d}">${opts(LVL, x?.level, '...')}</select>` : LVL[x?.level] || ''}${rr && x && rr.level !== x.level ? `<br><small class="la-muted">القياس: ${LVL[rr.level]}</small>` : ''}</td>
+              <td>${ev?.composite != null ? `<b>${ev.composite}</b>${ev.borderline ? '<br><span class="la-chip warn">حدّية</span>' : ''}` : '·'}</td>
+              <td>${w ? `<select data-lvl="${d}">${opts(LVL, pick, '...')}</select>` : LVL[x?.level] || ''}
+                ${ev ? `<br><small class="la-muted">المعيار: ${LVL[ev.level]}</small>` : ''}
+                ${ev?.reason ? `<br><small class="la-why">${esc(ev.reason)}</small>` : ''}</td>
               <td>${w ? `<input data-note="${d}" value="${esc(x?.note || '')}" placeholder="اختياري">` : esc(x?.note || '')}</td></tr>`;
           }).join('')}
           </tbody></table>
@@ -424,7 +451,9 @@
           }).join('')}`).join('')}
         </div>
       </section>
-      <section class="la-card">
+      ${S.catalog.placement_model?.length ? modelCard() : ''}
+      <section class="la-card"${S.catalog.placement_model?.length ? ' hidden' : ''}>
+        <div class="la-note">لتفعيل معيار التسكين المركّب شغّل الترحيل server/leaders-008-placement-model.sql. حتى ذلك الحين تعمل القواعد التالية.</div>
         <h3>قواعد تحديد المستوى</h3>
         <p class="la-muted">يُمنح المشارك أعلى مستوى تتحقق كل شروطه في البُعد. النسب من 0 إلى 100 لكل نوع من الأسئلة.</p>
         <table class="la-table"><thead><tr><th>البُعد</th><th>المستوى</th><th>معرفة ≥</th><th>مواقف ≥</th><th>ممارسة ≥</th><th></th></tr></thead><tbody>
@@ -448,23 +477,148 @@
     ['journey_ar', 'كيف تتوجه الرحلة: التدريب والكوتشينغ والأقران (كل سطر بند)', 'textarea', { rows: 4 }],
     ['priority_dimension', 'محور التركيز الأول', 'select', { map: DIM }],
   ];
+  const trackLevels = (key) => Object.fromEntries(DIMS.map((d, i) => [d, LVLS[Number(key[i * 2 + 1]) - 1]]));
+  const lvlChips = (key) => { const lv = trackLevels(key); return DIMS.map((d) => `<span class="la-lvl ${lv[d]}">${DIM_EN[d][0]} ${LVL[lv[d]]}</span>`).join(''); };
+
   function viewTracks() {
-    const w = canWrite();
     const tracks = S.catalog.tracks || [];
-    const counts = S.catalog.track_counts || {};
+    const st = S.catalog.track_stats || {};
     if (!tracks.length) return '<div class="la-note">جدول المسارات غير موجود بعد. شغّل الترحيل server/leaders-007-tracks.sql في Supabase.</div>';
-    const chip = (t, d) => `<span class="la-lvl ${t[`${d}_level`]}">${DIM_EN[d][0]} ${LVL[t[`${d}_level`]]}</span>`;
+    const sum = (f) => Object.values(st).reduce((a, x) => a + (x[f] || 0), 0);
+    const used = tracks.filter((t) => st[t.key]?.total).length;
+    const max = Math.max(1, ...Object.values(st).map((x) => x.total));
+    const card = (t) => {
+      const x = st[t.key] || { total: 0, active: 0, pending: 0, completed: 0 };
+      if (S.onlyUsed && !x.total) return '';
+      const pc = (n) => `${(n / Math.max(1, x.total) * 100).toFixed(0)}%`;
+      return `
+        <article class="la-track${x.total ? '' : ' empty'}" data-act="open-track" data-key="${t.key}" style="--fill:${(x.total / max).toFixed(2)}">
+          <div class="la-row between"><code class="la-code">${t.key}</code><span class="la-track-n"><b>${x.total}</b> مشارك</span></div>
+          <b class="la-track-title">${esc(t.title_ar)}</b>
+          <div class="la-row">${lvlChips(t.key)}</div>
+          <div class="la-track-bar" title="مفعّل ${x.active} · بانتظار الاعتماد ${x.pending} · أنهى ${x.completed}">
+            <span class="act" style="width:${pc(x.active)}"></span><span class="pen" style="width:${pc(x.pending)}"></span><span class="done" style="width:${pc(x.completed)}"></span>
+          </div>
+          <div class="la-track-meta"><span><i class="act"></i>مفعّل ${x.active}</span><span><i class="pen"></i>بانتظار ${x.pending}</span><span><i class="done"></i>أنهى ${x.completed}</span></div>
+        </article>`;
+    };
     return `
-      <p class="la-muted">المسار = تركيبة مستويات المشارك في الأطر الثلاثة (3×3×3 = 27). يُسكَّن المشارك آليًا بعد القياس ويتغير مساره إن عدّلت مستوياته. الكتيب والمتطلبات تُركَّب من الوحدات التسع، وهنا هوية المسار التي يقرؤها المشارك: اسمه ووصفه وأولوياته ومشروعه. المشارك لا يرى الرمز ولا مستوى كل إطار.</p>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">مسارات بها مشاركون</div><div class="stat-value">${used}<small> / 27</small></div><div class="stat-sub">من كل التركيبات الممكنة</div></div>
+        <div class="stat-card"><div class="stat-label">مشاركون مسكّنون</div><div class="stat-value">${sum('total')}</div><div class="stat-sub">لهم مسار محدد</div></div>
+        <div class="stat-card"><div class="stat-label">مفعّلون</div><div class="stat-value s-replied">${sum('active')}</div><div class="stat-sub">اعتُمد مسارهم وبدأوا</div></div>
+        <div class="stat-card"><div class="stat-label">بانتظار الاعتماد</div><div class="stat-value s-new">${sum('pending')}</div><div class="stat-sub">مسار مبدئي ينتظرك</div></div>
+      </div>
+      <div class="la-row between la-tracks-bar">
+        <p class="la-muted">كل مسار = تركيبة مستويات الأطر الثلاثة، وله كتيب ورحلة تُركَّب تلقائيًا. افتح أي مسار لترى مشاركيه وكتيبه كاملًا وتعدّل هويته أو أي باب فيه.</p>
+        <button class="la-pill${S.onlyUsed ? ' on' : ''}" data-act="only-used">${S.onlyUsed ? 'عرض الكل' : 'المسارات المشغولة فقط'}</button>
+      </div>
       ${LVLS.map((ml) => `
-        <h3 class="la-phase">${DIM_EN.milestone} ${LVL[ml]}</h3>
-        <div class="la-tracks">${tracks.filter((t) => t.milestone_level === ml).sort((a, b) => a.sort - b.sort).map((t) => `
-          <article class="la-track" ${w ? `data-act="edit-track" data-key="${t.key}"` : ''}>
-            <div class="la-row between"><code class="la-code">${t.key}</code><small class="la-muted">${counts[t.key] || 0} مشارك</small></div>
-            <b>${esc(t.title_ar)}</b>
-            <div class="la-row">${DIMS.map((d) => chip(t, d)).join('')}</div>
-            <p class="la-muted">${esc((t.summary_ar || '').slice(0, 140))}${(t.summary_ar || '').length > 140 ? '…' : ''}</p>
-          </article>`).join('')}</div>`).join('')}`;
+        <h3 class="la-phase">${DIM_EN.milestone} · ${LVL[ml]} <small class="la-muted">${tracks.filter((t) => t.milestone_level === ml).reduce((a, t) => a + (st[t.key]?.total || 0), 0)} مشارك</small></h3>
+        <div class="la-tracks">${tracks.filter((t) => t.milestone_level === ml).sort((a, b) => a.sort - b.sort).map(card).join('')}</div>`).join('')}`;
+  }
+
+  async function viewTrack(key) {
+    const r = await L('admin.track', { key });
+    if (!r.success) return `<div class="la-err">${esc(r.message)}</div>`;
+    const t = r.track;
+    const w = canWrite();
+    const lines = (x) => String(x || '').split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
+    const ps = r.participants;
+    const groups = DIMS.map((d) => ({ d, items: r.handbook.filter((c) => c.dimension === d) }));
+    return `
+      <button class="la-link" data-act="tracks-back">→ كل المسارات</button>
+      <section class="la-track-hero">
+        <div class="la-row between">
+          <div class="la-row"><code class="la-code">${esc(t.key)}</code>${lvlChips(t.key)}</div>
+          ${w && t.title_ar ? `<button class="btn-sm ghost" data-act="edit-track" data-key="${t.key}">تحرير هوية المسار</button>` : ''}
+        </div>
+        <h2>${esc(t.title_ar || 'مسار بلا هوية بعد')}</h2>
+        ${t.summary_ar ? `<p>${esc(t.summary_ar)}</p>` : ''}
+        <div class="la-track-cols">
+          <div><h4>أولويات التطوير</h4><ol>${lines(t.focus_ar).map((x) => `<li>${esc(x)}</li>`).join('')}</ol></div>
+          <div><h4>المشروع التطبيقي</h4><p>${esc((t.project_ar || '').replace(/^مشروعك التطبيقي:\s*/, ''))}</p></div>
+          <div><h4>توجيه الرحلة</h4><ul>${lines(t.journey_ar).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>
+        </div>
+      </section>
+
+      <section class="la-card">
+        <div class="la-row between"><h3>المشاركون في هذا المسار</h3><span class="la-muted">${ps.length} مشارك · ${ps.filter((p) => p.approved).length} مفعّل</span></div>
+        ${ps.length ? `<table class="la-table"><thead><tr><th>الاسم</th><th>الجهة</th><th>الحالة</th><th>المسار</th></tr></thead><tbody>
+          ${ps.map((p) => `<tr data-act="open" data-id="${p.id}" class="la-click"><td><b>${esc(p.full_name)}</b><br><small class="la-muted" dir="ltr">${esc(p.email)}</small></td>
+            <td>${esc(p.organization_name || '')}</td><td>${STATUS[p.status] || p.status}</td>
+            <td>${p.approved ? '<span class="la-chip ok">مفعّل</span>' : '<span class="la-chip warn">مبدئي</span>'}</td></tr>`).join('')}
+        </tbody></table>` : '<p class="la-muted">لا مشاركين في هذا المسار بعد.</p>'}
+      </section>
+
+      <section class="la-card">
+        <div class="la-row between"><h3>كتيب المسار كما يقرؤه المشارك</h3><span class="la-muted">${r.handbook.length} بابًا</span></div>
+        <p class="la-muted">الكتيب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه.</p>
+        ${r.handbook.length ? `<div class="la-hb">
+          <nav class="la-hb-toc">${groups.map((g) => g.items.length ? `<div><b>${DIM_EN[g.d]} · ${LVL[r.levels[g.d]]}</b>${g.items.map((c) => `<button class="la-link" data-act="hb-jump" data-id="${c.id}">${esc(c.title)}</button>`).join('')}</div>` : '').join('')}</nav>
+          <div class="la-hb-body">${r.handbook.map((c) => `
+            <article class="la-hb-ch" id="hb-${c.id}">
+              <div class="la-row between"><small class="la-muted">${DIM_EN[c.dimension]} · ${DIM[c.dimension]}</small>${w ? `<button class="btn-sm ghost" data-act="edit-mod" data-id="${c.id}">تعديل الباب</button>` : ''}</div>
+              <h3>${esc(c.title)}</h3>
+              <div class="la-md">${c.md ? mdHtml(c.md) : '<p class="la-muted">هذا الباب بلا محتوى بعد.</p>'}</div>
+            </article>`).join('')}</div>
+        </div>` : '<p class="la-muted">لا أبواب بمحتوى لهذا المسار بعد.</p>'}
+      </section>`;
+  }
+
+  // ══ معيار التسكين المركّب ══
+  // نسخة العرض من evaluatePlacement في logic.js، للحاسبة فقط؛ الاحتساب الرسمي على الخادم.
+  const MODEL_DEFAULT = { w_knowledge: 30, w_skill: 45, w_behavior: 25, min_intermediate: 55, min_advanced: 80, floor_intermediate: 25, floor_advanced: 50, borderline: 5 };
+  function evaluate(p, m) {
+    const w = { knowledge: +m.w_knowledge, skill: +m.w_skill, behavior: +m.w_behavior };
+    const tiers = ['knowledge', 'skill', 'behavior'].filter((t) => p[t] != null && w[t] > 0);
+    const ws = tiers.reduce((a, t) => a + w[t], 0);
+    if (!ws) return null;
+    const c = Math.round(tiers.reduce((a, t) => a + w[t] * p[t], 0) / ws * 10) / 10;
+    const low = Math.min(...tiers.map((t) => p[t]));
+    const level = c >= +m.min_advanced && low >= +m.floor_advanced ? 'advanced' : c >= +m.min_intermediate && low >= +m.floor_intermediate ? 'intermediate' : 'beginner';
+    return { composite: c, level, low };
+  }
+  function modelCard() {
+    const m = { ...MODEL_DEFAULT, ...S.catalog.placement_model[0] };
+    const w = canWrite();
+    const f = (k, label, hint) => `<label class="la-mf"><span>${label}</span><input type="number" min="0" max="100" step="1" data-model="${k}" value="${Number(m[k])}" ${w ? '' : 'disabled'}><small>${hint}</small></label>`;
+    return `
+      <section class="la-card la-model">
+        <h3>معيار التسكين</h3>
+        <p class="la-muted">لكل إطار مؤشر مركّب من 100 = متوسط موزون لجوانبه الثلاثة. يُمنح المستوى بالمؤشر، بشرط ألا يقل أي جانب عن حد أدنى، فلا تُخفي قوة جانب فجوة في آخر. والحالة الحدّية تظهر لك لتحسمها بحكمك. يسري التعديل على القياسات القادمة، ويظهر مقترحه فورًا في صفحة كل مشارك.</p>
+        <div class="la-model-grid">
+          <div><h4>1. أوزان الجوانب</h4>
+            ${f('w_skill', 'المواقف', 'الأصدق تنبؤًا بالأداء')}
+            ${f('w_knowledge', 'المعرفة', 'الفهم والمفاهيم')}
+            ${f('w_behavior', 'الممارسة', 'تقدير ذاتي يميل للتضخم')}</div>
+          <div><h4>2. حدود المستويات</h4>
+            ${f('min_intermediate', 'المؤشر للمتوسط ≥', 'من 100')}
+            ${f('min_advanced', 'المؤشر للاحترافي ≥', 'من 100')}
+            ${f('borderline', 'هامش الحالة الحدّية', 'نقاط تحت الحد')}</div>
+          <div><h4>3. الحد الأدنى لأي جانب</h4>
+            ${f('floor_intermediate', 'للمتوسط ≥', 'نسبة الجانب الأضعف')}
+            ${f('floor_advanced', 'للاحترافي ≥', 'نسبة الجانب الأضعف')}</div>
+        </div>
+        ${w ? '<button class="btn-sm primary" data-act="save-model">حفظ المعيار</button>' : ''}
+        <div class="la-calc">
+          <h4>جرّب المعيار</h4>
+          <div class="la-row">
+            <label>معرفة % <input type="number" min="0" max="100" id="cK" value="75"></label>
+            <label>مواقف % <input type="number" min="0" max="100" id="cS" value="25"></label>
+            <label>ممارسة % <input type="number" min="0" max="100" id="cB" value="69"></label>
+            <button class="btn-sm ghost" data-act="calc">احسب</button>
+          </div>
+          <div id="cOut" class="la-muted">أدخل نسبًا واضغط احسب. القيم الافتراضية مثال من مشارك حقيقي.</div>
+        </div>
+      </section>`;
+  }
+  function calcPlacement() {
+    const el = root();
+    const m = { ...MODEL_DEFAULT };
+    el.querySelectorAll('[data-model]').forEach((i) => { m[i.dataset.model] = Number(i.value); });
+    const r = evaluate({ knowledge: +el.querySelector('#cK').value, skill: +el.querySelector('#cS').value, behavior: +el.querySelector('#cB').value }, m);
+    el.querySelector('#cOut').innerHTML = r ? `المؤشر المركّب <b>${r.composite}</b> · أضعف جانب ${r.low}% · المستوى: <span class="la-lvl ${r.level}">${LVL[r.level]}</span>` : 'أدخل نسبًا صحيحة';
   }
 
   // ══ الكتيب ══
@@ -472,6 +626,12 @@
     const w = canWrite();
     const mods = S.catalog.handbook_modules;
     return `
+      <section class="la-card la-hb-pick">
+        <h3>معاينة كتيب مسار</h3>
+        <p class="la-muted">لكل مسار من الـ27 كتيب خاص يُركَّب تلقائيًا من الأبواب أدناه. اختر مسارًا لتقرأ كتيبه كاملًا كما يراه المشارك.</p>
+        <div class="la-row"><select id="laHbTrack">${(S.catalog.tracks || []).map((t) => `<option value="${t.key}">${t.key} · ${esc(t.title_ar)}</option>`).join('')}</select>
+        <button class="btn-sm primary" data-act="open-track-sel">فتح الكتيب</button></div>
+      </section>
       <p class="la-muted">كتيب كل مشارك = الأبواب التي مستواها الأدنى ≤ مستواه في ذلك البُعد. يُعرض للقراءة فقط داخل المنصة بعلامة مائية باسم المشارك.</p>
       <p class="la-muted">داخل المحتوى: <code>## عنوان</code> و<code>### عنوان فرعي</code> و<code>- بند</code> و<code>**غامق**</code> و<code>&gt; خلاصة</code>. لتخصيص فقرة لمستوى: <code>:::min=intermediate</code> (من متوسط فأعلى) أو <code>:::only=beginner</code> (للتأسيسي فقط) ثم السطور ثم <code>:::</code>. المستويات: beginner تأسيسي، intermediate متوسط، advanced احترافي.</p>
       ${DIMS.map((d) => `
@@ -513,7 +673,21 @@
     const a = t.dataset.act;
     const c = S.catalog;
 
-    if (a === 'tab') { S.tab = t.dataset.tab; S.person = null; return render(); }
+    if (a === 'tab') { S.tab = t.dataset.tab; S.person = null; S.track = null; return render(); }
+    if (a === 'open-track') { S.tab = 'tracks'; S.track = t.dataset.key; S.person = null; return render(!S.catalog); }
+    if (a === 'open-track-sel') { S.tab = 'tracks'; S.track = el.querySelector('#laHbTrack').value; await render(); setTimeout(() => el.querySelector('.la-hb')?.scrollIntoView({ behavior: 'smooth' }), 50); return; }
+    if (a === 'tracks-back') { S.track = null; return render(); }
+    if (a === 'only-used') { S.onlyUsed = !S.onlyUsed; return render(); }
+    if (a === 'hb-jump') { document.getElementById(`hb-${t.dataset.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (a === 'calc') return calcPlacement();
+    if (a === 'save-model') {
+      const row = { id: 1 };
+      el.querySelectorAll('[data-model]').forEach((i) => { row[i.dataset.model] = Number(i.value); });
+      if (row.min_advanced <= row.min_intermediate) return toast('حد الاحترافي يجب أن يكون أعلى من حد المتوسط');
+      const r = await L('admin.save', { entity: 'placement_model', row });
+      toast(r.success ? 'حُفظ معيار التسكين. يسري على القياسات القادمة ويظهر مقترحه لكل مشارك' : r.message);
+      return r.success && render(true);
+    }
     if (a === 'open') { S.tab = 'participants'; S.person = t.dataset.id; return render(); }
     if (a === 'back') { S.person = null; return render(); }
     if (a === 'filter-status') { S.tab = 'participants'; S.status = t.dataset.status; S.person = null; return render(true); }
@@ -612,11 +786,11 @@
       toast(r.success ? 'حُفظت القاعدة' : r.message); return r.success && render(true);
     }
     if (a === 'edit-track') {
-      const tr = c.tracks.find((x) => x.key === t.dataset.key);
+      const tr = (S.catalog || await L('admin.catalog')).tracks.find((x) => x.key === t.dataset.key);
       return openForm(`مسار ${tr.key}`, TRACK_FIELDS, tr, saveRow('tracks', { key: tr.key }));
     }
     if (a === 'edit-mod') {
-      const m = c.handbook_modules.find((x) => x.id === t.dataset.id);
+      const m = (S.catalog || await L('admin.catalog')).handbook_modules.find((x) => x.id === t.dataset.id);
       return openForm(`باب: ${m.title_ar}`, MOD_FIELDS, m, saveRow('handbook_modules', { id: m.id }), delRow('handbook_modules', m.id));
     }
     if (a === 'add-mod') {

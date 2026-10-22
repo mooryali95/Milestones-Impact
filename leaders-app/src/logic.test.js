@@ -1,7 +1,7 @@
 // منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
 import {
   buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
-  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey,
+  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const RULES = ['milestone', 'impact', 'leadership'].flatMap((dimension) => [
@@ -201,5 +201,43 @@ describe('trackKey', () => {
     const L = ['beginner', 'intermediate', 'advanced'];
     const keys = new Set(L.flatMap((m) => L.flatMap((i) => L.map((l) => trackKey({ milestone: m, impact: i, leadership: l })))));
     expect(keys.size).toBe(27);
+  });
+});
+
+describe('evaluatePlacement', () => {
+  const ev = (k, s, b, m) => evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m);
+  it('weights situational judgement above self reported practice', () => {
+    const r = ev(75, 25, 69);
+    expect(r.composite).toBe(51);
+    expect(r.level).toBe('beginner');
+    expect(r.borderline).toBe(true);   // 4 points under 55
+  });
+  it('places intermediate and advanced by composite', () => {
+    expect(ev(75, 50, 50).level).toBe('intermediate');
+    expect(ev(50, 75, 75).level).toBe('intermediate');
+    expect(ev(100, 75, 75).level).toBe('advanced');
+  });
+  it('a weak tier caps the level even with a high composite', () => {
+    const r = ev(100, 100, 25);
+    expect(r.composite).toBeGreaterThan(80);
+    expect(r.level).toBe('intermediate');
+    expect(r.reason).toContain('الممارسة');
+  });
+  it('uses the admin tuned model', () => {
+    expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 50 }).level).toBe('intermediate');
+  });
+  it('ignores missing tiers', () => {
+    expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
+  });
+});
+
+describe('placementFromAnswers with the composite model', () => {
+  it('returns composite, reason and borderline per dimension', () => {
+    const qs = [{ id: 'a', dimension: 'milestone', tier: 'knowledge', options: [{ score: 0 }, { score: 4 }] }];
+    const [m] = placementFromAnswers(qs, { a: 1 }, [], DEFAULT_MODEL);
+    expect(m.composite).toBe(100);
+    expect(m.level).toBe('advanced');
+    expect(m.borderline).toBe(false);
+    expect(typeof m.reason).toBe('string');
   });
 });

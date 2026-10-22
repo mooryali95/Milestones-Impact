@@ -308,22 +308,25 @@ export async function assessmentAnswer(p: any, b: Body) {
 
 export async function assessmentSubmit(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
-  const [qs, ans, rules] = await Promise.all([
+  const [qs, ans, rules, model] = await Promise.all([
     db.from('questions').select('*').eq('instrument_id', a.instrument_id).eq('active', true),
     db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id),
     db.from('level_rules').select('*'),
+    db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
   const questions = qs.data || [];
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
 
-  const result = placementFromAnswers(questions, answers, rules.data || []);
+  // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
+  const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level,
     score: Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
+    ...(r.composite !== undefined ? { composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason } : {}),
   }))));
   // مستوى مبدئي، لا يُكتب فوق مستوى اعتمده المستشار
   const { data: current } = await db.from('placements').select('dimension, approved_at').eq('participant_id', p.id);

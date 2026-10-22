@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { DIMENSIONS, LEVELS, trackKey } from './logic.js';
+import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, trackKey } from './logic.js';
 import { mePayload } from './participant.ts';
 
 type Body = Record<string, any>;
@@ -66,12 +66,24 @@ export async function participant(b: Body) {
     db.from('handbook_views').select('viewed_at').eq('participant_id', p.id).order('viewed_at', { ascending: false }).limit(1),
     db.from('audit_log').select('*').eq('entity_id', p.id).order('created_at', { ascending: false }).limit(30),
   ]);
-  const state = await mePayload(p, 'admin');
+  const [state, { data: model }] = await Promise.all([
+    mePayload(p, 'admin'),
+    db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
+  ]);
+  // تقييم كل نتيجة بالنموذج الحالي: المؤشر المركّب، والمستوى المقترح وسببه،
+  // وهل الحالة حدّية. يُحسب عند العرض فيصلح للنتائج القديمة أيضًا.
+  const assessments = (results.data || []).map((a: any) => ({
+    ...a,
+    assessment_results: (a.assessment_results || []).map((r: any) => ({
+      ...r,
+      evaluation: evaluatePlacement({ knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct }, model || DEFAULT_MODEL),
+    })),
+  }));
   let cvUrl = null;
   if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;
   return {
     success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress,
-    assessments: results.data || [], requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
+    assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
   };
 }
@@ -160,6 +172,8 @@ export async function reviewRequirement(a: Admin, b: Body) {
 // قائمة بيضاء بالجداول وحقولها، فلا يكتب أحد في جدول أو عمود غير مقصود.
 const ENTITIES: Record<string, { table: string; key: string[]; fields: string[]; sortable?: boolean }> = {
   grid_cells:         { table: 'grid_cells', key: ['dimension', 'level'], fields: ['description_ar', 'path_title_ar'] },
+  placement_model:    { table: 'placement_model', key: ['id'],
+                        fields: ['w_knowledge', 'w_skill', 'w_behavior', 'min_intermediate', 'min_advanced', 'floor_intermediate', 'floor_advanced', 'borderline'] },
   level_rules:        { table: 'level_rules', key: ['dimension', 'level'], fields: ['min_knowledge', 'min_skill', 'min_behavior'] },
   journey_stages:     { table: 'journey_stages', key: ['key'], sortable: true,
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
@@ -177,6 +191,60 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
 };
 
+// ── المسارات الـ27 ──
+// مسار كل مشارك من مستوياته الحالية. "مفعّل" = اعتُمدت مستوياته الثلاثة.
+async function placementsByParticipant() {
+  const { data } = await db.from('placements').select('participant_id, dimension, level, approved_at');
+  const byP: Record<string, { levels: Record<string, string>; approved: number }> = {};
+  for (const r of data || []) {
+    const x = (byP[r.participant_id] ||= { levels: {}, approved: 0 });
+    x.levels[r.dimension] = r.level;
+    if (r.approved_at) x.approved++;
+  }
+  return byP;
+}
+
+async function trackStats() {
+  const [byP, { data: ps }] = await Promise.all([placementsByParticipant(), db.from('participants').select('id, status')]);
+  const status = Object.fromEntries((ps || []).map((p: any) => [p.id, p.status]));
+  const out: Record<string, { total: number; active: number; pending: number; completed: number }> = {};
+  for (const [id, x] of Object.entries(byP)) {
+    const k = trackKey(x.levels);
+    if (!k) continue;
+    const t = (out[k] ||= { total: 0, active: 0, pending: 0, completed: 0 });
+    t.total++;
+    if (status[id] === 'completed') t.completed++;
+    else if (x.approved === 3) t.active++;
+    else t.pending++;
+  }
+  return out;
+}
+
+// تفصيل مسار: هويته، ومشاركوه، وكتيبه كما يراه المشارك بابًا بابًا
+export async function track(b: Body) {
+  const key = String(b.key || '');
+  if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
+  const levels = Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(key[i * 2 + 1]) - 1]]));
+  const [t, byP, mods] = await Promise.all([
+    db.from('tracks').select('*').eq('key', key).maybeSingle(),
+    placementsByParticipant(),
+    db.from('handbook_modules').select('*'),
+  ]);
+  const ids = Object.entries(byP).filter(([, x]) => trackKey(x.levels) === key).map(([id, x]) => ({ id, approved: x.approved === 3 }));
+  const { data: ps } = ids.length
+    ? await db.from('participants').select('id, full_name, email, organization_name, status').in('id', ids.map((x) => x.id))
+    : { data: [] };
+  const approved = new Set(ids.filter((x) => x.approved).map((x) => x.id));
+  return {
+    success: true, track: t.data || { key }, levels,
+    participants: (ps || []).map((p: any) => ({ ...p, approved: approved.has(p.id) })),
+    handbook: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
+      id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
+      md: filterHandbookMd(m.body_md, levels[m.dimension]),
+    })),
+  };
+}
+
 export async function catalog() {
   const names = Object.keys(ENTITIES);
   const res = await Promise.all(names.map((n) => {
@@ -189,13 +257,7 @@ export async function catalog() {
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
   const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
   out.locked_instruments = [...new Set((used || []).map((u: any) => u.instrument_id))];
-  // عدد المشاركين في كل مسار من الـ27، من مستوياتهم الحالية (مبدئية أو معتمدة)
-  const { data: pl } = await db.from('placements').select('participant_id, dimension, level');
-  const byP: Record<string, Record<string, string>> = {};
-  for (const r of pl || []) (byP[r.participant_id] ||= {})[r.dimension] = r.level;
-  const counts: Record<string, number> = {};
-  for (const lv of Object.values(byP)) { const k = trackKey(lv); if (k) counts[k] = (counts[k] || 0) + 1; }
-  out.track_counts = counts;
+  out.track_stats = await trackStats();
   return out;
 }
 
