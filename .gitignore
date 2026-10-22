@@ -4,7 +4,6 @@ node_modules/
 
 # Production build output (Cloudflare Pages builds this from source — never commit it)
 /build/
-leaders-app/build/
 SSPDF/dist/
 
 # Environment files (secrets live in the host's env settings, not the repo)

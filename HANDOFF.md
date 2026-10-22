@@ -8,7 +8,7 @@
 | النطاق | المجلد في المستودع | مشروع Cloudflare Pages | ملاحظات |
 |---|---|---|---|
 | `mi.sunkvalue.com` | `home/` | `mi-home` | صفحات ثابتة بلا بناء. تشمل `/leaders/` و`/projects/` و`/governance/` و`/assessment/` |
-| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | تحويل دائم 301 فقط إلى `mi.sunkvalue.com/leaders/`. لا تحذف ربط النطاق |
+| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | منصة القادة: ناتج بناء `leaders-app/` مُودع في `leaders/`. أعد البناء والإيداع بعد أي تعديل |
 | `matrix.sunkvalue.com` | جذر المستودع (`src/`, `index.html`, `public/`) | `mi-matrix` | تطبيق React بـ Vite، يُبنى إلى `build/` |
 | لوحة الإدارة | `admin/` | `mi-admin` | صفحة واحدة `admin/index.html` |
 | SSPDF | `SSPDF/` | `mi-sspdf` | تطبيق Vite مستقل |
