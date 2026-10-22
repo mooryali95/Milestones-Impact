@@ -120,13 +120,13 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
           <div className="lp-hero-logo lp-a2"><Wordmark width={280} variant="inverted" /></div>
           <h1 className="lp-hero-title lp-a3">هندسة القيمة</h1>
           <div className="lp-hero-en lp-a3">MILESTONE IMPACT</div>
-          <p className="lp-hero-sub lp-a4">نموذج تحولي من ستة عشر عملية استراتيجية —<br/>يشتغل على القيمة الكامنة داخل الإنسان، ويحوّلها إلى أثر قابل للقياس</p>
+          <p className="lp-hero-sub lp-a4">نموذج تحوّلي من ست عشرة عملية استراتيجية،<br/>يعمل على القيمة الكامنة في الإنسان، ويحوّلها إلى أثر قابل للقياس</p>
           <div className="lp-hero-line lp-a4"/>
           <div className="lp-hero-actions lp-a5">
-            <button className="lp-btn-primary" onClick={onRegister}>ابدأ رحلتك</button>
+            <button className="lp-btn-primary" onClick={onRegister}>بدء الرحلة</button>
             <button className="lp-btn-ghost" onClick={onResume}>استئناف الجلسة</button>
           </div>
-          <button className="lp-btn-admin" onClick={onAdmin}>⌘ دخول المدير</button>
+          <button className="lp-btn-admin" onClick={onAdmin}>⌘ دخول الإدارة</button>
         </div>
         <div className="lp-scroll-hint"><span>اكتشف</span><div className="lp-scroll-line"/></div>
       </section>
@@ -136,8 +136,8 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-manifesto-inner">
           <div className="lp-section-label" style={{marginBottom:"1.5rem"}}>الفلسفة</div>
           <div className="lp-manifesto-quote">
-            لا يشتغل هذا النموذج على الفرد بوصفه موضوع تطوير،<br/>
-            ولا على السوق بوصفه مجال ربح —<br/>
+            لا يعمل هذا النموذج على الفرد بوصفه موضوع تطوير،<br/>
+            ولا على السوق بوصفه مجال ربح،<br/>
             بل على <span style={{color:"#C4A24E"}}>القيمة الكامنة داخل الإنسان</span>،<br/>
             وكيف تتحرك عبر الشبكات التي يصنعها
           </div>
@@ -150,7 +150,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-section" style={{paddingTop:0,paddingBottom:"3rem"}}>
           <div className="lp-section-label">المنظومة</div>
           <h2 className="lp-section-title">أربعة مسارات تحريك</h2>
-          <p className="lp-section-body" style={{marginBottom:"3rem"}}>المسارات ليست مراحل متتالية — بل حالات تشغيل تعمل في آنٍ واحد، تتشابك وتتبادل التأثير</p>
+          <p className="lp-section-body" style={{marginBottom:"3rem"}}>ليست المسارات مراحل متتالية، بل حالات تشغيل تعمل في آن واحد، تتشابك ويؤثر بعضها في بعض</p>
         </div>
         <div style={{maxWidth:"1100px",margin:"0 auto",padding:"0 2rem 2rem"}}>
           <div className="lp-tracks">
@@ -163,10 +163,10 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
                 تمييز أوسع مما في التطبيق (10.6)، وهو ما تتيحه هذه الأرضية.
                 ويجب أن تبقى مطابقة لقواعد .lp-track-*::before أعلاه. */}
             {[
-              {id:"creation",name:"الخلق",icon:"◈",color:"#EFE7D8",weight:19,desc:"استدعاء الإرث وتفكيك البنية البشرية",ops:OPERATIONS.creation.map(o=>o.nameAr)},
+              {id:"creation",name:"التكوين",icon:"◈",color:"#EFE7D8",weight:19,desc:"استدعاء الإرث وتفكيك البنية البشرية",ops:OPERATIONS.creation.map(o=>o.nameAr)},
               {id:"innovation",name:"الإبداع",icon:"◉",color:"#D9A85A",weight:21,desc:"إعادة تعريف القيمة وإطار الإدراك",ops:OPERATIONS.innovation.map(o=>o.nameAr)},
               {id:"establishment",name:"الإنشاء",icon:"◆",color:"#8AA3A8",weight:47,desc:"تكوين الكيان ومنظومة الإنتاج",ops:OPERATIONS.establishment.map(o=>o.nameAr)},
-              {id:"making",name:"الجعل",icon:"◇",color:"#A97A2E",weight:13,desc:"الاندماج وإغلاق حلقة الأثر",ops:OPERATIONS.making.map(o=>o.nameAr)},
+              {id:"making",name:"التشكيل",icon:"◇",color:"#A97A2E",weight:13,desc:"الاندماج وإغلاق حلقة الأثر",ops:OPERATIONS.making.map(o=>o.nameAr)},
             ].map(t=>(
               <div key={t.id} className={`lp-track lp-track-${t.id}`}>
                 <div className="lp-track-weight" aria-hidden="true">{t.weight}%</div>
@@ -192,9 +192,9 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
           <h2 className="lp-section-title" style={{marginBottom:"3rem"}}>ثلاث لحظات تحول</h2>
           <div className="lp-steps">
             {[
-              {n:"١",title:"التسجيل والتوثيق",desc:"سجّل بياناتك وادخل إلى مصفوفة العمليات الست عشرة — كل عملية تُبنى على ما سبقها"},
-              {n:"٢",title:"التحليل والتخطيط",desc:"حدد مواعيد كل عملية، وابنِ خريطتك الزمنية مع تحليل ديموغرافي للشبكة البشرية حولك"},
-              {n:"٣",title:"الأثر والتحول",desc:"أكمل خطتك التحولية وتسلّم تقريرك الكامل — الأثر مقيس، والقيمة محوّلة"},
+              {n:"١",title:"التسجيل والتوثيق",desc:"تسجيل البيانات والدخول إلى مصفوفة العمليات الست عشرة، حيث تُبنى كل عملية على ما سبقها"},
+              {n:"٢",title:"التحليل والتخطيط",desc:"تحديد مواعيد كل عملية، وبناء الخريطة الزمنية مع تحليل ديموغرافي للشبكة البشرية المحيطة"},
+              {n:"٣",title:"الأثر والتحول",desc:"إكمال الخطة التحوّلية واستلام التقرير الكامل: أثر مقيس، وقيمة محوّلة"},
             ].map((s,i)=>(
               <div key={i} className="lp-step">
                 <div className="lp-step-num">{s.n}</div>
@@ -211,9 +211,9 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-cta-final-inner">
           <div className="lp-section-label" style={{marginBottom:"1.2rem"}}>ابدأ الآن</div>
           <div className="lp-cta-final-title">القيمة الكامنة تنتظر</div>
-          <div className="lp-cta-final-sub">ست عشرة عملية • مسار واحد • أثر لا يُنسى</div>
+          <div className="lp-cta-final-sub">ست عشرة عملية • مسار واحد • أثر قابل للقياس</div>
           <div style={{display:"flex",gap:"1rem",justifyContent:"center",flexWrap:"wrap"}}>
-            <button className="lp-btn-primary" onClick={onRegister}>ابدأ رحلتك ←</button>
+            <button className="lp-btn-primary" onClick={onRegister}>بدء الرحلة ←</button>
             <button className="lp-btn-ghost" onClick={onResume}>استئناف الجلسة</button>
           </div>
         </div>

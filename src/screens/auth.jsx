@@ -36,12 +36,12 @@ export const RegisterScreen = ({
   setScreen,
 }) => (
   <AuthShell>
-      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل — بل بالهندسة" />
+      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل، بل بالهندسة" />
       <div className="auth-right">
         <div className="auth-form-wrap">
           <div className="auth-logo"><MILogo size={28} color={BRAND.dark}/><span className="auth-logo-text">مصفوفة التأثير</span></div>
           {otpStep === "form" ? <>
-            <h1 className="auth-title">ابدأ رحلتك</h1>
+            <h1 className="auth-title">بدء الرحلة</h1>
             <p className="auth-sub">سجّل بياناتك للدخول إلى منظومة العمليات الست عشرة</p>
             <form onSubmit={handleRegister}>
               <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label htmlFor="reg-name">الاسم الكامل</label><input id="reg-name" placeholder="أدخل اسمك" value={user.name} maxLength={80} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
@@ -100,7 +100,7 @@ export const ResumeScreen = ({
   handlePasskeyLogin,
 }) => (
   <AuthShell>
-      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل — بل بالهندسة" />
+      <AuthLeft quote="القيمة الكامنة داخل الإنسان لا تُكتشف بالتأمل، بل بالهندسة" />
       <div className="auth-right">
         <div className="auth-form-wrap">
           <div className="auth-logo"><MILogo size={28} color={BRAND.dark}/><span className="auth-logo-text">مصفوفة التأثير</span></div>
@@ -124,7 +124,7 @@ export const ResumeScreen = ({
               <button type="button" className="btn btn-passkey" style={{ borderColor: "#4A5628", color: "#4A5628" }} disabled={passkeyBusy} onClick={handlePasskeyLogin}>{passkeyBusy ? "..." : "🔑 الدخول بمفتاح المرور"}</button>
             </>}
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
-              مسجّل جديد؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"var(--font-ar)",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("register"); setOtpStep("form"); }}>ابدأ رحلتك</button>
+              مسجّل جديد؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"var(--font-ar)",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("register"); setOtpStep("form"); }}>بدء الرحلة</button>
             </div>
           </> : <>
             <h1 className="auth-title">رمز التحقق</h1>

@@ -544,7 +544,7 @@ export default function App() {
     const res = await UserAPI.save(sessionToken, { [DEMO_KEY]: demoRows });
     if (res?.success) {
       LocalSession.update({ [DEMO_KEY]: demoRows });
-      showToast(`تم حفظ التحليل — ${validRows.length} شخص ✓`);
+      showToast(`تم حفظ التحليل: ${validRows.length} شخص ✓`);
     } else { showToast(res?.message || "خطأ في الحفظ"); }
     setDemoSaving(false);
   };

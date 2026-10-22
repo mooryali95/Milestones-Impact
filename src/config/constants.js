@@ -33,7 +33,7 @@ export const BRAND = {
 // #EFE7D8 — 4.14 و3.94. فكانت مخالفة هوية ومخالفة وصول معاً.
 //
 // المسارات متتابعة لا متوازية، فالتدرّج في القيمة أصدق من اختلاف الصبغة:
-// يفتح عند الخلق ويعتم حتى الجعل، فيقرأ التتابع من ترتيب اللوحة نفسه.
+// يفتح عند التكوين ويعتم حتى التشكيل، فيقرأ التتابع من ترتيب اللوحة نفسه.
 //
 // ثلاث من الدرجات رسمية (slate · graphite · ink) والرابعة #2A6478 هي
 // petrol-soft المشتقّة والموثّقة في tokens.css. أدنى ΔE بين زوجين 10.6 —
@@ -43,10 +43,10 @@ export const BRAND = {
 // الذهبي مستبعَد عمداً: قيس 3.81:1 فوقه أبيض و3.10:1 نصّاً على الرملي —
 // يسقط لوناً لمسار، ويبقى لهجةً كما تريده الهوية.
 export const TRACKS = [
-  { id: "creation", nameAr: "الخلق", weight: 19, color: "#2A6478", contentAr: "الإرث التاريخي", icon: "◈" },
+  { id: "creation", nameAr: "التكوين", weight: 19, color: "#2A6478", contentAr: "الإرث التاريخي", icon: "◈" },
   { id: "innovation", nameAr: "الإبداع", weight: 21, color: "#12414E", contentAr: "إعادة التعريف", icon: "◉" },
   { id: "establishment", nameAr: "الإنشاء", weight: 47, color: "#0B272F", contentAr: "تكوين المنتج", icon: "◆" },
-  { id: "making", nameAr: "الجعل", weight: 13, color: "#061318", contentAr: "الاندماج", icon: "◇" },
+  { id: "making", nameAr: "التشكيل", weight: 13, color: "#061318", contentAr: "الاندماج", icon: "◇" },
 ];
 
 export const PHASES = [

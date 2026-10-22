@@ -342,7 +342,7 @@ export const SummaryTab = (p) => {
   return (
       <div className="sec" style={{animation:"fadeIn 0.4s"}}>
         <div className="sec-head"><h2 className="sec-title">المخرجات</h2></div>
-        {submitted && <div className="output-tab-hint" onClick={()=>setTab("output")}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> الخطة مكتملة — اضغط هنا لعرض النموذج النهائي وطباعته</div>}
+        {submitted && <div className="output-tab-hint" onClick={()=>setTab("output")}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> اكتملت الخطة. يمكنكم عرض النموذج النهائي وطباعته من هنا</div>}
         <div className="sum-card"><h3 className="sum-title">ملخص الخطة</h3>
           <div className="modal-grid" style={{marginBottom:"1rem"}}>
             <div className="modal-item"><div className="modal-item-label">المشارك</div><div className="modal-item-value">{user.name}</div></div>
@@ -399,7 +399,7 @@ export const OutputTab = (p) => {
             })}</tbody>
           </table>
           {dates && Object.keys(dates).length > 0 && <div className="output-stamp"><p>تاريخ الإنشاء: <strong style={{color:BRAND.color}}>{new Date().toLocaleDateString('ar-SA')}</strong></p></div>}
-          <div className="copyright">© {new Date().getFullYear()} Milestone Impact — جميع الحقوق محفوظة</div>
+          <div className="copyright">© {new Date().getFullYear()} Milestone Impact. جميع الحقوق محفوظة.</div>
         </div>
       </div>
   );
