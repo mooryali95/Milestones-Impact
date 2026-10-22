@@ -6,20 +6,14 @@
 
 ```
 npm run leaders:dev     # http://localhost:5174
-npm run leaders:build   # leaders-app/build
+npm run leaders:build   # يكتب في leaders/
 ```
 
 الخلفية دالة `supabase/functions/leaders-api`، ومنطقها الصافي في `logic.js` مختبر في `src/logic.test.js` (ضمن `npm test`).
 
 ## النشر على Cloudflare Pages (مشروع mi-leaders)
 
-| الإعداد | القيمة |
-|---|---|
-| Build command | `npm run leaders:build` |
-| Build output directory | `leaders-app/build` |
-| Root directory | (فارغ، جذر المستودع) |
-
-المجلد القديم `leaders/` (تحويل 301) يبقى في المستودع حتى يُبدَّل إعداد المشروع، ثم يمكن حذفه.
+المشروع ينشر مجلد `leaders/` في جذر المستودع كما هو (Build output directory: `leaders`، بلا أمر بناء)، وهو ناتج بناء هذا التطبيق مُودعًا في Git. بعد أي تعديل في `leaders-app/` شغّل `npm run leaders:build` وأودع مجلد `leaders/` مع التعديل، والفحص المستمر يفشل إن نسيت.
 
 ## الخلفية: خطوات مرة واحدة
 
