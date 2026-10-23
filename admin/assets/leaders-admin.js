@@ -28,7 +28,7 @@
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const date = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
-  const toast = (m) => (typeof showToast === 'function' ? showToast(m) : alert(m));
+  const toast = (m) => (typeof showToast === 'function' ? showToast(m) : console.warn(m));
   const opts = (map, cur, empty) => (empty != null ? `<option value="">${esc(empty)}</option>` : '')
     + Object.entries(map).map(([v, l]) => `<option value="${esc(v)}"${String(cur ?? '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
 
@@ -530,7 +530,7 @@
       const err = form.querySelector('.la-err');
       let res;
       if (btn === 'delete') {
-        if (!confirm('حذف نهائي؟')) return;
+        if (!(await miConfirm('حذف نهائي؟', { danger: true }))) return;
         res = await onDelete();
       } else {
         const out = {};
@@ -1073,7 +1073,7 @@
       const err = f.querySelector('.la-err');
       let r;
       if (btn === 'delete') {
-        if (!confirm(`حذف النموذج "${m.title_ar}"؟`)) return;
+        if (!(await miConfirm(`حذف النموذج "${m.title_ar}"؟`, { danger: true }))) return;
         r = await L('admin.delete', { entity: 'learning_models', id: m.id });
       } else {
         const row = read();
@@ -1330,13 +1330,13 @@
       const err = f.querySelector('.la-err');
       let r;
       if (btn === 'delete') {
-        if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
+        if (!(await miConfirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`, { danger: true }))) return;
         r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
       } else {
         const row = { title_ar: f.title_ar.value.trim(), min_level: f.querySelector('[name=min_level]:checked').value, body_md: ta.value,
           reflection_ar: f.reflection_ar.value.trim() || null, quiz_md: f.quiz_md.value.trim() || null };
         const bad = f.quiz_md.value.split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(f.quiz_md.value).length;
-        if (bad > 0 && !confirm(`${bad} من الأسئلة بلا خيار صحيح (*) أو بأقل من خيارين، ولن تظهر للمشارك. احفظ على أي حال؟`)) return;
+        if (bad > 0 && !(await miConfirm(`${bad} من الأسئلة بلا خيار صحيح (*) أو بأقل من خيارين، ولن تظهر للمشارك. احفظ على أي حال؟`))) return;
         if (!row.title_ar) { err.hidden = false; err.textContent = 'عنوان الباب مطلوب'; return; }
         if (m) row.id = m.id;
         else {
@@ -1406,14 +1406,14 @@
     if (a === 'org-csv') return orgCsv();
     if (a === 'org-print') return orgPrint();
     if (a === 'copy-invite') {
-      try { await navigator.clipboard.writeText(t.dataset.url); toast('نُسخ رابط الدعوة'); } catch { prompt('انسخ رابط الدعوة:', t.dataset.url); }
+      try { await navigator.clipboard.writeText(t.dataset.url); toast('نُسخ رابط الدعوة'); } catch { await miPrompt('انسخ رابط الدعوة:', t.dataset.url, { copy: true }); }
       return;
     }
     if (a === 'copy-campaign') {
       const c = String(el.querySelector('#ofCampaign')?.value || '').trim().toLowerCase();
       if (!/^[a-z0-9_-]{1,40}$/.test(c)) return toast('اسم الحملة: أحرف إنجليزية صغيرة وأرقام و _ أو -');
       const url = inviteUrl(S.orgData.org, c);
-      try { await navigator.clipboard.writeText(url); toast('نُسخ رابط الحملة'); } catch { prompt('انسخ رابط الحملة:', url); }
+      try { await navigator.clipboard.writeText(url); toast('نُسخ رابط الحملة'); } catch { await miPrompt('انسخ رابط الحملة:', url, { copy: true }); }
       return;
     }
     if (a === 'add-org') return openForm('جهة جديدة', ORG_FIELDS, { status: 'active' }, saveRow('organizations', {}));
@@ -1446,7 +1446,7 @@
       el.querySelectorAll('[data-lvl]').forEach((s) => { levels[s.dataset.lvl] = s.value; });
       el.querySelectorAll('[data-note]').forEach((s) => { notes[s.dataset.note] = s.value; });
       if (Object.values(levels).some((v) => !v)) return toast('حدّد مستوى كل بُعد');
-      if (!confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟')) return;
+      if (!(await miConfirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
       const r = await L('admin.approve', { participant_id: t.dataset.id, levels, notes });
       toast(r.success ? 'اعتُمد المسار وأُبلغ المشارك' : r.message);
       return r.success && render();
@@ -1457,14 +1457,14 @@
       return r.success && render();
     }
     if (a === 'reset') {
-      if (!confirm('يُلغى القياس الحالي ويعيده المشارك من البداية. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟')) return;
+      if (!(await miConfirm('يُلغى القياس الحالي ويعيده المشارك من البداية. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
       const r = await L('admin.reset-assessment', { participant_id: t.dataset.id });
       toast(r.success ? 'أُعيد فتح القياس' : r.message);
       return r.success && render();
     }
     if (a === 'review') {
       let note = null;
-      if (t.dataset.status === 'returned') { note = prompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
+      if (t.dataset.status === 'returned') { note = await miPrompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
       const r = await L('admin.review', { participant_id: t.dataset.id, requirement_id: t.dataset.req, status: t.dataset.status, note });
       toast(r.success ? 'تم' : r.message);
       return r.success && render();
@@ -1503,13 +1503,13 @@
         i, saveRow('instruments', { id: i.id }));
     }
     if (a === 'clone-inst') {
-      if (!confirm('إنشاء إصدار جديد غير مفعّل بنسخة من كل الأسئلة؟')) return;
+      if (!(await miConfirm('إنشاء إصدار جديد غير مفعّل بنسخة من كل الأسئلة؟'))) return;
       const r = await L('admin.clone-instrument', { id: t.dataset.id });
       if (!r.success) return toast(r.message);
       S.instrument = r.instrument.id; toast('أُنشئ الإصدار. عدّله ثم فعّله'); return render(true);
     }
     if (a === 'activate-inst') {
-      if (!confirm('تفعيل هذا الإصدار للمشاركين الجدد؟ من بدأ القياس يكمل على إصداره.')) return;
+      if (!(await miConfirm('تفعيل هذا الإصدار للمشاركين الجدد؟ من بدأ القياس يكمل على إصداره.'))) return;
       const r = await L('admin.activate-instrument', { id: t.dataset.id });
       toast(r.success ? 'فُعّل' : r.message); return r.success && render(true);
     }
@@ -1547,7 +1547,7 @@
     if (a === 'open-sub') return openSubmission(t.dataset.id);
     if (a === 'del-mod') {
       const m = S.catalog.handbook_modules.find((x) => x.id === t.dataset.id);
-      if (!confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`)) return;
+      if (!(await miConfirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`, { danger: true }))) return;
       const r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
       toast(r.success ? 'حُذف الباب' : r.message); return r.success && render(true);
     }

@@ -542,3 +542,19 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .model-hero { flex-wrap: wrap; }
 }
 @media (max-width: 520px) { .book-hero { padding: 22px 18px 0; } .review, .model-form { padding: 16px; } }
+
+/* ── حالات الشاشة: هيكل التحميل والفراغ ── */
+.skel { display: block; background: linear-gradient(90deg, rgba(10,60,80,.07) 25%, rgba(10,60,80,.13) 50%, rgba(10,60,80,.07) 75%); background-size: 200% 100%; animation: skel 1.3s ease-in-out infinite; }
+.skel-hero { background: var(--graphite); border-radius: var(--radius); padding: 28px; display: grid; gap: 12px; margin-bottom: 16px; }
+.skel-hero .skel { background: rgba(234,240,240,.14); animation: none; }
+@keyframes skel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+.empty-state { text-align: center; padding: 32px 16px; display: grid; gap: 8px; justify-items: center; }
+.empty-state .ico { font-size: 34px; }
+
+/* ── لوحة المشارك: الخطوة التالية ومتابعة القراءة والترحيب ── */
+.next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+.next-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+.next-card .k { font-size: .72rem; letter-spacing: .5px; color: var(--accent); font-weight: 700; }
+.next-card .row { margin-top: 6px; }
+.welcome ol { margin: 8px 0 0; padding-inline-start: 20px; line-height: 1.9; }

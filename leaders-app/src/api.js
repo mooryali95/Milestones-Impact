@@ -13,6 +13,14 @@ export const session = {
   clear() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* وضع خاص */ } },
 };
 
+// تفضيلات محلية صغيرة: آخر باب قُرئ، وإخفاء بطاقة الترحيب. ضياعها لا يضر.
+const local = (key) => ({
+  get() { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
+  set(v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* وضع خاص */ } },
+});
+export const lastRead = local('mi_leaders_last_read');
+export const welcomeSeen = local('mi_leaders_welcome_seen');
+
 // يُستدعى عند انتهاء الجلسة ليعود التطبيق لشاشة الدخول
 let onExpired = () => {};
 export const setExpiredHandler = (fn) => { onExpired = fn; };

@@ -8,7 +8,8 @@
 //   • لا طباعة ولا قائمة سياق ولا سحب، وتُحجب الصفحة حين تفقد التركيز
 //     (أغلب أدوات التصوير تسرق التركيز) أو عند مفاتيح التصوير والطباعة
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { call } from '../api.js';
+import { call, lastRead } from '../api.js';
+import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
 
@@ -277,8 +278,13 @@ export default function Handbook({ me, onBack }) {
     const r = await call('handbook.toc');
     if (!r.success) return setError(r.message);
     setToc(r);
-    if (first && r.chapters.length) setCurrent((r.chapters.find((c) => !c.done) || r.chapters[0]).id);
+    if (first && r.chapters.length) {
+      const last = lastRead.get();
+      const resume = last && r.chapters.find((c) => c.id === last.id);
+      setCurrent((resume || r.chapters.find((c) => !c.done) || r.chapters[0]).id);
+    }
   }, []);
+  const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
 
   useEffect(() => {
@@ -290,6 +296,7 @@ export default function Handbook({ me, onBack }) {
       if (!r.success) return setError(r.message);
       setError('');
       setData(r);
+      lastRead.set({ id: current, title: r.chapter.title });
       document.querySelector('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })();
   }, [current, tab]);
@@ -353,9 +360,9 @@ export default function Handbook({ me, onBack }) {
   }, []);
 
   if (error && !toc) {
-    return <div className="page narrow"><div className="alert err">{error}</div><button className="btn ghost" style={{ marginTop: 14 }} onClick={onBack}>رجوع للرحلة</button></div>;
+    return <div className="page narrow"><div className="alert err">{error}</div><div className="row" style={{ marginTop: 14 }}><button className="btn sm" onClick={retry}>حاول مرة أخرى</button><button className="btn ghost sm" onClick={onBack}>رجوع للرحلة</button></div></div>;
   }
-  if (!toc) return <div className="center-load"><div className="spinner" /></div>;
+  if (!toc) return <BookSkeleton />;
 
   const list = toc.chapters;
   const idx = list.findIndex((c) => c.id === current);

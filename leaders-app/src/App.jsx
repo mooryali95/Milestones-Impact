@@ -15,6 +15,7 @@ import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
+import { JourneySkeleton } from './ui.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
 
@@ -58,7 +59,7 @@ export default function App() {
   };
 
   let screen;
-  if (booting) screen = <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError} />;
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;

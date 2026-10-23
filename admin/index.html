@@ -1161,7 +1161,8 @@
       .mi-logo-img { height: 40px; width: auto; display: block; }
   </style>
   <link rel="stylesheet" href="/assets/leaders-admin.css?v=20261022d" />
-  <script src="/assets/leaders-admin.js?v=20261022d" defer></script>
+  <script src="/assets/dialog.js?v=20261023a" defer></script>
+  <script src="/assets/leaders-admin.js?v=20261023a" defer></script>
 </head>
 <body>
 
@@ -1676,16 +1677,16 @@ async function handleSettingsConfirmTotp() {
 }
 
 // تغيير TOTP المفعّل أو تعطيله يطلب رمزه الحالي، فلا تكفي جلسة مسروقة لإزالته.
-function currentTotpCode() {
-  const code = (prompt('أدخل الرمز الحالي من تطبيق المصادقة (6 أرقام)') || '').trim();
+async function currentTotpCode() {
+  const code = ((await miPrompt('أدخل الرمز الحالي من تطبيق المصادقة (6 أرقام)')) || '').trim();
   if (!/^\d{6}$/.test(code)) { if (code) showToast('❌ الرمز 6 أرقام'); return ''; }
   return code;
 }
 
 async function handleResetTotp() {
-  if (!confirm('سيتم توليد رمز QR جديد — التطبيق القديم لن يعمل. متابعة؟')) return;
+  if (!(await miConfirm('سيتم توليد رمز QR جديد — التطبيق القديم لن يعمل. متابعة؟'))) return;
   const email = settingsUser?.email; if (!email) return;
-  const code = currentTotpCode(); if (!code) return;
+  const code = await currentTotpCode(); if (!code) return;
   const d = await callAuth({ action: 'reset-totp', email, code });
   if (!d.success) { showToast('❌ ' + d.message); return; }
   document.getElementById('settingsQrSecret').textContent = d.secret;
@@ -1695,9 +1696,9 @@ async function handleResetTotp() {
 }
 
 async function handleDisableTotp() {
-  if (!confirm('سيتم تعطيل TOTP. ستعتمد على OTP البريد فقط. متابعة؟')) return;
+  if (!(await miConfirm('سيتم تعطيل TOTP. ستعتمد على OTP البريد فقط. متابعة؟', { danger: true }))) return;
   const email = settingsUser?.email; if (!email) return;
-  const code = currentTotpCode(); if (!code) return;
+  const code = await currentTotpCode(); if (!code) return;
   const d = await callAuth({ action: 'disable-totp', email, code });
   if (!d.success) { showToast('❌ ' + d.message); return; }
   const session = Session.load();
@@ -1825,7 +1826,7 @@ async function loadSessions() {
 
 async function handleAddPasskey() {
   if (!passkeySupported()) { showToast('❌ المتصفح لا يدعم مفاتيح المرور'); return; }
-  const label = prompt('اسم الجهاز (مثل: آيفون، ماك العمل)', '');
+  const label = await miPrompt('اسم الجهاز (مثل: آيفون، ماك العمل)', '');
   if (label === null) return;
   const btn = document.getElementById('pkAddBtn');
   btn.disabled = true;
@@ -1844,7 +1845,7 @@ async function handleAddPasskey() {
 }
 
 async function handleDeletePasskey(id) {
-  if (!confirm('حذف هذا المفتاح؟ لن يفتح حسابك بعد الآن.')) return;
+  if (!(await miConfirm('حذف هذا المفتاح؟ لن يفتح حسابك بعد الآن.', { danger: true }))) return;
   const d = await callAuth({ action: 'passkey-delete', id });
   showToast((d.success ? '✅ ' : '❌ ') + d.message);
   if (d.success) loadSecurity();
@@ -1852,7 +1853,7 @@ async function handleDeletePasskey(id) {
 
 async function handleTogglePasskeyOnly() {
   const enable = document.getElementById('pkOnlyBtn').dataset.enable === 'true';
-  if (enable && !confirm('بعد التفعيل لن تقبل رموز البريد ولا تطبيق المصادقة، وتُنهى الجلسات المفتوحة بها. تأكد أن لديك مفتاحين يعملان. متابعة؟')) return;
+  if (enable && !(await miConfirm('بعد التفعيل لن تقبل رموز البريد ولا تطبيق المصادقة، وتُنهى الجلسات المفتوحة بها. تأكد أن لديك مفتاحين يعملان. متابعة؟'))) return;
   const d = await callAuth({ action: 'passkey-only', enable });
   if (!d.success) { showToast('❌ ' + d.message); return; }
   const session = Session.load();
@@ -1862,7 +1863,7 @@ async function handleTogglePasskeyOnly() {
 }
 
 async function handleRevokeOthers() {
-  if (!confirm('إنهاء كل جلساتك في الأجهزة الأخرى؟')) return;
+  if (!(await miConfirm('إنهاء كل جلساتك في الأجهزة الأخرى؟', { danger: true }))) return;
   const d = await callAuth({ action: 'sessions-revoke-others' });
   showToast((d.success ? '✅ ' : '❌ ') + d.message);
   if (d.success) loadSessions();
