@@ -3,14 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  csvBlob, date, domainsOf, download, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
+  date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function Funnel({ f, big }) {
   const top = Math.max(1, f.registered || 0);
@@ -129,28 +128,6 @@ function Sources({ d, total }) {
   );
 }
 
-function printOrg({ org: o, participants: ps, funnel: f, by_track: bt }) {
-  const win = window.open('', '_blank');
-  if (!win) return false;
-  const c = esc(orgColor(o));
-  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير ${esc(o.name)}</title>
-    <style>body{font-family:"Noto Kufi Arabic",system-ui,sans-serif;color:#0B272F;margin:32px}
-    .hd{border-bottom:3px solid ${c};padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:end}
-    h1{margin:0;font-size:22px} small{color:#4A6A72} .k{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}
-    .k div{border:1px solid #ddd;border-radius:8px;padding:10px} .k b{display:block;font-size:22px}
-    table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px} th,td{border-bottom:1px solid #e5e5e5;padding:6px;text-align:right}
-    th{background:#f4f1ea} h2{font-size:15px;margin-top:22px;border-inline-start:3px solid ${c};padding-inline-start:8px}</style></head><body>
-    <div class="hd"><div><small>Milestone Impact · برنامج القادة</small><h1>تقرير ${esc(o.name)}</h1></div><small>${date(new Date())}</small></div>
-    <div class="k">${FUNNEL.map(([k, l]) => `<div><small>${l}</small><b>${f[k] || 0}</b></div>`).join('')}</div>
-    ${o.seats ? `<p>المقاعد المشغولة: <b>${ps.length}</b> من <b>${esc(o.seats)}</b></p>` : ''}
-    <h2>التوزيع على المسارات</h2><table><tr><th>المسار</th><th>العدد</th></tr>${Object.entries(bt).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<tr><td>${esc(ps.find((p) => p.track === k)?.track_title || k)}</td><td>${n}</td></tr>`).join('')}</table>
-    <h2>المشاركون</h2><table><tr><th>الاسم</th><th>المسمى</th><th>المسار</th><th>الحالة</th></tr>
-    ${ps.map((p) => `<tr><td>${esc(p.full_name)}</td><td>${esc(p.job_title || '')}</td><td>${esc(p.track_title || '')}</td><td>${esc(STATUS[p.status] || p.status)}</td></tr>`).join('')}</table>
-    <script>onload=()=>print()<\/script></body></html>`);
-  win.document.close();
-  return true;
-}
-
 function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const { toast, confirm } = useUI();
   const copy = useCopy();
@@ -176,11 +153,23 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const titleOf = (k) => all.find((p) => p.track === k)?.track_title || '';
   const allOn = rows.length > 0 && rows.every((p) => picked.has(p.id));
 
-  const exportCsv = () => {
-    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الحالة', 'المسار', 'اسم المسار', 'معتمد', 'آخر دخول', 'التسجيل', 'طريقة الانتساب', 'الحملة', 'الموقع المُحيل'];
-    download(csvBlob(head, all.map((p) => [p.full_name, p.email, p.phone, p.job_title, STATUS[p.status] || p.status, p.track, p.track_title,
-      p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at), VIA[p.org_via || 'none'], p.campaign, p.referrer_host])),
-    `مشاركو ${o.name} ${new Date().toISOString().slice(0, 10)}.csv`);
+  // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
+  const exportXlsx = async () => {
+    const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
+    const cols = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الحالة', 18], ['المسار', 10], ['اسم المسار', 28], ['معتمد', 8], ['آخر دخول', 16], ['التسجيل', 16], ['طريقة الانتساب', 16], ['الحملة', 14], ['الموقع المُحيل', 22]];
+    await exportWorkbook(
+      { kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code },
+      cols.map(([label, width]) => ({ label, width })),
+      all.map((p) => [p.full_name, p.email, p.phone, p.job_title, STATUS[p.status] || p.status, p.track, p.track_title,
+        p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at), VIA[p.org_via || 'none'], p.campaign, p.referrer_host]),
+    );
+    toast(`صُدّر ${all.length} مشارك`);
+  };
+  const printReport = async () => {
+    const win = window.open('', '_blank');
+    const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
+    const { meta, body } = orgReport(d, 'admin');
+    if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض التقرير');
   };
   const copyCampaign = () => {
     const c = campaign.trim().toLowerCase();
@@ -204,8 +193,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
             <div><h2>{o.name}</h2><small>{[o.sector, o.contact_name, o.contact_email].filter(Boolean).join(' · ')}</small></div></div>
           <div className="la-row">
             {!isNone && <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>}
-            <button className="btn-sm ghost" onClick={exportCsv}>تصدير Excel</button>
-            <button className="btn-sm ghost" onClick={() => { if (!printOrg(d)) toast('اسمح بالنوافذ المنبثقة لطباعة التقرير'); }}>تقرير للطباعة</button>
+            <button className="btn-sm ghost" onClick={exportXlsx}>تصدير Excel</button>
+            <button className="btn-sm ghost" onClick={printReport}>تقرير الجهة</button>
             {canWrite && !isNone && <button className="btn-sm ghost" onClick={() => onEdit(orgs.find((x) => x.id === o.id) || o)}>تحرير</button>}
           </div>
         </div>
