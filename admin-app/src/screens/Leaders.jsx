@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// سياق تطبيق القادة: كل التبويبات عدا استوديو الكتيب (رابط للوحة الحالية)
+// سياق تطبيق القادة: المنهجية والكتاب والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
@@ -9,16 +9,15 @@ import Certificates from './Certificates.jsx';
 import Overview from './Overview.jsx';
 import Tracks from './Tracks.jsx';
 import { Assessment, Journey, Levels } from './Methodology.jsx';
+import Handbook from './Handbook.jsx';
 import { Spinner } from '../ui.jsx';
 
 const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['journey', 'الرحلة والمتطلبات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['certs', 'الشهادات'],
+  ['journey', 'الرحلة والمتطلبات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
-const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels']);
-// لم يُنقل بعد: يفتح اللوحة الحالية بالجلسة نفسها
-const LEGACY = [['handbook', 'كتيب القائد']];
+const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook']);
 
 export default function Leaders({ canWrite }) {
   const [tab, setTab] = useState('participants');
@@ -51,6 +50,7 @@ export default function Leaders({ canWrite }) {
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => { setTrack(k); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} />;
+  else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;
   else if (tab === 'levels') body = <Levels key={catalog.placement_model?.[0]?.updated_at || 'm'} {...meth} />;
   else body = <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={setOrgId} onPerson={openPerson} />;
@@ -67,7 +67,6 @@ export default function Leaders({ canWrite }) {
       </div>
       <nav className="la-tabs" aria-label="أقسام تطبيق القادة">
         {TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{l}</button>)}
-        {LEGACY.map(([k, l]) => <a key={k} className="la-tab-legacy" href="/#leaders" title="في اللوحة الحالية">{l} ↗</a>)}
       </nav>
       <div className="la-body">{body}</div>
     </div>
