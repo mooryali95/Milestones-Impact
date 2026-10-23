@@ -1,4 +1,5 @@
 import React from "react";
+import { pressable } from "../lib/a11y";
 import MILogo from "../MILogo";
 import CoverageMatrix from "../components/CoverageMatrix";
 import Icon from "../components/Icon";
@@ -191,7 +192,7 @@ export const MatrixTab = (p) => {
             </> : <>
               <h3 style={{color:"var(--text-muted)"}}>يجب تحديد جميع المواعيد الـ 16</h3>
               <p style={{color:"var(--wg)"}}>{datedCount}/16 محدد</p>
-              {datedCount>0 && <span className="submit-missing-link" onClick={()=>{ const m=missingProcs[0]; if(m){setSelectedCell(m);setTempDate("");setDateError("");}}}>
+              {datedCount>0 && <span className="submit-missing-link" {...pressable(()=>{ const m=missingProcs[0]; if(m){setSelectedCell(m);setTempDate("");setDateError("");}})}>
                 ابدأ بـ: {missingProcs[0]?.nameAr} ←
               </span>}
             </>}
@@ -234,7 +235,7 @@ export const ScheduleTab = (p) => {
           <span style={{fontSize:".78rem",color:"var(--wg)"}}>{datedCount} موعد</span>
         </div>
         {datedCount===0
-          ? <div className="empty"><h3>لا توجد مواعيد بعد</h3><p>حدد المواعيد من <span style={{color:"var(--mi-d)",cursor:"pointer",fontWeight:600}} onClick={()=>setTab("matrix")}>المصفوفة</span></p></div>
+          ? <div className="empty"><h3>لا توجد مواعيد بعد</h3><p>حدد المواعيد من <span style={{color:"var(--mi-d)",cursor:"pointer",fontWeight:600}} {...pressable(()=>setTab("matrix"))}>المصفوفة</span></p></div>
           : <div className="tl">
             {procs.filter(p=>dates[p.key]).sort((a,b)=>new Date(dates[a.key])-new Date(dates[b.key])).map((item,i)=>{
               const d=dates[item.key], h=fmtBoth(d), isDone=!!confirmed[item.key];
@@ -342,7 +343,7 @@ export const SummaryTab = (p) => {
   return (
       <div className="sec" style={{animation:"fadeIn 0.4s"}}>
         <div className="sec-head"><h2 className="sec-title">المخرجات</h2></div>
-        {submitted && <div className="output-tab-hint" onClick={()=>setTab("output")}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> اكتملت الخطة. يمكنكم عرض النموذج النهائي وطباعته من هنا</div>}
+        {submitted && <div className="output-tab-hint" {...pressable(()=>setTab("output"))}><Icon name="output" size={16} style={{marginLeft:".35rem"}} /> اكتملت الخطة. يمكنكم عرض النموذج النهائي وطباعته من هنا</div>}
         <div className="sum-card"><h3 className="sum-title">ملخص الخطة</h3>
           <div className="modal-grid" style={{marginBottom:"1rem"}}>
             <div className="modal-item"><div className="modal-item-label">المشارك</div><div className="modal-item-value">{user.name}</div></div>

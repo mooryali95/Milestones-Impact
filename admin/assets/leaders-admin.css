@@ -501,3 +501,7 @@
   .sub-review { border: 0; border-top: 1px solid var(--line-strong); }
   .tx-kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* سهولة الوصول */
+:focus-visible { outline: 2px solid var(--gold, #C79A4B); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

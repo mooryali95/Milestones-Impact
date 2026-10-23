@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   auth.start · auth.verify · org.info · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
@@ -23,6 +23,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
   'org.info': (b) => P.orgInfo(b),
+  'cron.reminders': (b) => A.reminders(b),
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
 };
