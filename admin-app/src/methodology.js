@@ -97,7 +97,7 @@ export function evaluate(p, m) {
 
 // ── إعادة الترتيب ──
 // يعيد ترتيب المعرّفات بعد تبديل العنصر مع جاره داخل مجموعته، أو null إن كان على الطرف
-const GROUP = { stage_requirements: 'stage_key', questions: 'instrument_id', handbook_modules: 'dimension' };
+const GROUP = { stage_requirements: 'stage_key', questions: 'instrument_id', handbook_modules: 'dimension', learning_models: 'dimension' };
 export function reorderIds(rows, entity, id, dir) {
   const key = entity === 'journey_stages' ? 'key' : 'id';
   const me = rows.find((x) => x[key] === id);

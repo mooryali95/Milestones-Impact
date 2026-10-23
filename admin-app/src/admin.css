@@ -1269,3 +1269,7 @@ a { text-decoration: none; color: inherit; }
 /* خلايا المستويات القابلة للتحرير أزرار: تبقى بمحاذاة النص وخطه */
 button.la-cell { font: inherit; color: inherit; text-align: start; cursor: pointer; width: 100%; }
 button.la-cell:hover { border-color: var(--gold, #A97A2E); }
+
+/* محررات الكتاب داخل طبقة النافذة (بدل <dialog>) */
+.mid-ov > .hb-editor { background: #fff; z-index: 1; }
+.hb-editor fieldset.hb-ed-panes { border: 0; margin: 0; min-width: 0; }

@@ -7,6 +7,8 @@ import {
   date, DIM, DIM_EN, DIMS, filterPeople, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { Submission } from './Handbook.jsx';
+import { stars } from '../handbook.js';
 
 // الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز، بنفس مفتاح اللوحة القديمة
 const SAVED_KEY = 'mi_admin_list_filters';
@@ -150,6 +152,7 @@ function Person({ id, canWrite, onBack }) {
   const [status, setStatus] = useState('');
   const [levels, setLevels] = useState({});
   const [notes, setNotes] = useState({});
+  const [sub, setSub] = useState(null);
 
   const load = useCallback(async () => {
     const d = await L('admin.participant', { id });
@@ -308,10 +311,11 @@ function Person({ id, canWrite, onBack }) {
         </div>
         {(r.models || []).length > 0 && (
           <ul className="la-reqs">{r.models.map((x) => (
-            <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span></span></li>
+            <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>
+              {x.status !== 'draft' && <button className="la-link" onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>}</li>
           ))}</ul>
         )}
-        <p className="la-muted">تقييم النماذج من «كتيب القائد» في اللوحة الحالية حتى يُنقل.</p>
+        {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
       </section>
 
       <section className="la-card"><h3>السجل</h3><ul className="la-log">
