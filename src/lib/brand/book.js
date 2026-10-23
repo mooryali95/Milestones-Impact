@@ -101,12 +101,12 @@ function figureHtml(f) {
     body = `<div class="f-chain">${its.map((x, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${two(i + 1)}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'cycle') {
     const n = its.length;
-    // عكس عقارب الساعة: الأول أعلى ثم يسارًا، كاتجاه القراءة العربية
-    const ang = (i) => (-90 - (360 / n) * i) * Math.PI / 180;
+    // مع عقارب الساعة: الأول أعلى ثم يمينًا
+    const ang = (i) => (-90 + (360 / n) * i) * Math.PI / 180;
     const at = (a, r = 38) => ({ x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) });
     const pos = its.map((_, i) => at(ang(i)));
     // رأس سهم ذهبي في منتصف كل قوس، مماسّ للدائرة باتجاه الحركة
-    const heads = its.map((_, i) => { const a = (ang(i) + ang(i + 1)) / 2; const p = at(a); const deg = (a * 180) / Math.PI - 90; return `<path d="M-1.6 -1.3 L1.2 0 L-1.6 1.3 Z" fill="${C.gold}" transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(1)})"/>`; }).join('');
+    const heads = its.map((_, i) => { const a = (ang(i) + ang(i + 1)) / 2; const p = at(a); const deg = (a * 180) / Math.PI + 90; return `<path d="M-1.6 -1.3 L1.2 0 L-1.6 1.3 Z" fill="${C.gold}" transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(1)})"/>`; }).join('');
     body = `<div class="f-cycle"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" fill="none" stroke="${C.gold}" stroke-width=".35"/>${heads}<rect x="45.5" y="45.5" width="9" height="9" transform="rotate(45 50 50)" fill="${C.graphite}"/></svg>${its.map((x, i) => `<div class="cnode" style="left:${pos[i].x.toFixed(2)}%;top:${pos[i].y.toFixed(2)}%"><span>${i + 1}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'compare') {
     const [h, ...rows] = f.lines.map(cells);
@@ -125,7 +125,7 @@ function figureHtml(f) {
   } else if (f.kind === 'stat') {
     body = `<div class="f-stat">${f.lines.map(cells).map(([v, l]) => `<div><b>${inline(v)}</b><span>${inline(l || '')}</span></div>`).join('')}</div>`;
   } else if (f.kind === 'layers') {
-    body = `<div class="f-layers">${its.map((x, i) => `<div class="ly" style="margin-inline:${i * 4}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
+    body = `<div class="f-layers">${its.map((x, i) => `<div class="ly" style="margin-inline-start:${i * 5}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
   }
   return `<figure class="fig f-${f.kind}-w">${head}${body}</figure>`;
 }
@@ -145,6 +145,13 @@ function chapterBody(md) {
   }).join('');
   return { html, key: key?.text, heads: blocks.filter((b) => b.type === 'h2').map((b) => b.text.replace(/\*\*/g, '')) };
 }
+
+// تعريف كل إطار كما ورد في القسم التمهيدي من الكتاب (عام، لا يخص مسارًا)
+const FW_LINE = {
+  milestone: 'ربط التنفيذ بالأثر عبر نقاط تحكم واضحة وحوكمة فعالة تدعم اتخاذ القرار.',
+  impact: 'تحقيق القيمة وقياسها عبر سلسلة مترابطة من المخرجات إلى الأثر المستدام.',
+  leadership: 'تطوير قادة قادرين على التعامل مع التعقيد وقيادة التحول.',
+};
 
 // ── الأطر الثلاثة: رسم المعالم ← الأثر ← القيادة والحالي مضاء ──
 function frameworks(parts, active) {
@@ -275,6 +282,9 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .title-pg h1 { font-size: 34pt; } .title-pg p { color: ${C.slate}; margin: 0; }
 .howto { break-after: page; }
 .howto h2, .toc h2 { font-size: 22pt; margin-bottom: 6mm; }
+.hw-h { font-weight: 300; font-size: 14pt; margin: 9mm 0 3mm; }
+.hw-fw .node { padding: 5mm 3mm; } .hw-fw .node span { font: 200 16pt "Noto Sans", serif; }
+.hw-note { color: ${C.slate}; font-size: 9.8pt; margin-top: 4mm; }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 6mm; }
 .legend div { border: 1px solid ${C.line}; padding: 4mm 5mm; border-radius: 2px; } .legend b { display: block; font-weight: 400; font-size: 10pt; color: ${C.gold}; } .legend p { margin: 1mm 0 0; font-size: 9pt; color: ${C.slate}; line-height: 1.8; }
 /* المحتويات */
@@ -333,6 +343,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 /* الرسوم */
 .inside li span { display: inline-block; width: 6mm; color: ${C.gold}; font-family: "Noto Sans", sans-serif; }
 .fig { margin: 6mm 0; break-inside: avoid; }
+.fig.f-compare-w, .fig.f-layers-w { break-inside: auto; } .f-compare tr { break-inside: avoid; }
 .fig figcaption { font-size: 9pt; color: ${C.gold}; letter-spacing: .06em; margin-bottom: 3mm; }
 .fig figcaption::before { content: ''; display: inline-block; width: 6mm; height: 1px; background: ${C.gold}; margin-left: 2mm; vertical-align: middle; }
 .fig b { font-weight: 400; } .fig p { margin: 1mm 0 0; font-size: 9pt; line-height: 1.75; color: ${C.slate}; }
@@ -340,7 +351,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .f-chain .node { flex: 1; min-width: 0; background: ${C.graphite}; color: #fff; padding: 3.5mm 3mm; text-align: center; overflow-wrap: anywhere; }
 .f-chain .node:nth-child(4n+1) { background: ${C.graphite}; } .f-chain .node:nth-child(4n+3) { background: #173A44; }
 .f-chain .node span { display: block; font: 300 8pt "Noto Sans", sans-serif; color: ${C.goldLight}; } .f-chain .node b { font-size: 10pt; color: #fff; } .f-chain .node p { color: rgba(255,255,255,.78); font-size: 8.3pt; }
-.f-chain .arw { flex: none; width: 0; height: 0; align-self: center; border-block: 4mm solid transparent; border-left: 3mm solid ${C.gold}; margin: 0 -.5mm; z-index: 1; }
+.f-chain .arw { flex: none; width: 0; height: 0; align-self: center; border-block: 4mm solid transparent; border-right: 3mm solid ${C.gold}; margin: 0 -.5mm; z-index: 1; }
 .f-cycle { position: relative; width: 120mm; height: 104mm; margin: 0 auto; }
 .f-cycle svg { position: absolute; inset: 6mm 14mm; width: calc(100% - 28mm); height: calc(100% - 12mm); }
 .f-cycle .cnode { position: absolute; transform: translate(-50%, -50%); width: 36mm; text-align: center; background: #fff; border: 1px solid ${C.line}; border-top: .6mm solid ${C.gold}; padding: 2mm; }
@@ -418,6 +429,9 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
     <div><b>تأمل</b><p>سؤال يربط الباب بعملك، مع مساحة لتكتب إجابتك.</p></div>
     <div><b>عدّة القائد</b><p>ملحق الأدوات العملية بخطوات تطبيقها.</p></div>
   </div>
+  <h3 class="hw-h">الأطر الثلاثة</h3>
+  <div class="f-chain hw-fw">${parts.map((p, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${esc(p.roman)}</span><b>${esc(p.title)}</b><p>${esc(FW_LINE[p.key] || '')}</p></div>`).join('')}</div>
+  <p class="hw-note">تُقرأ الأطر بترتيبها: يستلم كل إطار ما بناه الذي قبله، فالتنفيذ المنضبط يصنع قيمة مقيسة، والقيمة المقيسة تمكّن القائد من التحول.</p>
 </section>
 <section class="toc"><h2>المحتويات</h2>${toc}</section>
 ${body}

@@ -16,7 +16,7 @@ describe('كتاب القائد', () => {
     expect(h).toContain('MI-BK-20261023-ABCDE');
     expect(h).toContain(encodeURIComponent('s@x.sa'));
     expect(h).toContain('<b>مهم</b>');
-    expect(h).not.toContain('<b>إدارة</b>');
+    expect(h).not.toContain('<small>أ</small><b>إدارة</b>');
   });
 });
 
