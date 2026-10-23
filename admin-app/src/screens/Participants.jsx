@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Form from '../Form.jsx';
 import {
-  csvBlob, date, DIM, DIM_EN, DIMS, download, filterPeople, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, DIM, DIM_EN, DIMS, filterPeople, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 
@@ -65,12 +65,16 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
   };
-  const exportCsv = () => {
-    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الجهة', ...DIMS.map((d) => DIM_EN[d]), 'المسار', 'الحالة', 'التسجيل'];
+  const exportCsv = async () => {
+    const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
+    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['التسجيل', 16]];
     const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
-    download(csvBlob(head, shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
-      ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, date(p.created_at)])),
-    `المشاركون ${new Date().toISOString().slice(0, 10)}.csv`);
+    await exportWorkbook(
+      { kind: 'PPL', title: 'مشاركو برنامج القادة', subtitle: shown.length === all.length ? 'كل المشاركين' : `${shown.length} من ${all.length} حسب الفلاتر`, sheet: 'المشاركون', file: 'Participants' },
+      head.map(([label, width]) => ({ label, width })),
+      shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
+        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, date(p.created_at)]),
+    );
     toast(`صُدّر ${shown.length} مشارك`);
   };
 

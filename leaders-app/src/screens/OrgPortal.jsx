@@ -4,7 +4,7 @@
 // كل ما يظهر يأتي من الخادم مصفّى بصلاحيات المنسق؛ لا تعديل هنا.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
-import { csv, filterRows, sortRows } from '../coord.js';
+import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton } from '../ui.jsx';
 
@@ -98,18 +98,24 @@ function Dashboard({ me, onLogout }) {
   const { org, kpis, funnel, permissions: perms } = d;
   const tracks = Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]);
   const titleOf = (k) => d.participants.find((p) => p.track === k)?.track_title || k;
-  const exportCsv = () => {
-    const head = ['الاسم', 'المسمى', 'المسار', 'المرحلة', 'الإنجاز %', 'آخر دخول', 'التسجيل',
-      ...(perms.contact ? ['البريد', 'الجوال'] : []), ...(perms.scores ? DIMS.map(([, en]) => en) : [])];
-    const body = rows.map((p) => [p.full_name, p.job_title, p.track_title || p.track, STATUS[p.status] || p.status, p.progress, fmt(p.last_login_at), fmt(p.created_at),
-      ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]);
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv(head, body)], { type: 'text/csv;charset=utf-8' }));
-    a.download = `مشاركو ${org.name} ${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
+  const exportXlsx = async () => {
+    const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
+    const head = [['الاسم', 26], ['المسمى', 22], ['المسار', 28], ['المرحلة', 18], ['الإنجاز %', 11], ['آخر دخول', 16], ['التسجيل', 16],
+      ...(perms.contact ? [['البريد', 30], ['الجوال', 16]] : []), ...(perms.scores ? DIMS.map(([, en]) => [en, 12]) : [])];
+    exportWorkbook(
+      { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
+      head.map(([label, width]) => ({ label, width })),
+      rows.map((p) => [p.full_name, p.job_title, p.track_title || p.track, STATUS[p.status] || p.status, p.progress, fmt(p.last_login_at), fmt(p.created_at),
+        ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
+    );
   };
-
+  const printReport = async () => {
+    const win = window.open('', '_blank');   // تُفتح قبل التحميل حتى لا يحجبها المتصفح
+    const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
+    const { meta, body } = orgReport({ ...d, participants: rows }, 'coordinator');
+    if (!writeDocument(win, meta, body)) alert('اسمح بالنوافذ المنبثقة لعرض التقرير');
+  };
   return (
     <div className="page op" style={org.color ? { '--org': org.color } : undefined}>
       <section className="hero op-hero">
@@ -118,8 +124,8 @@ function Dashboard({ me, onLogout }) {
           <h1>{org.name}</h1>
           <p className="muted">أهلًا {me.coordinator.full_name || ''}. هذه لوحة مشاركي جهتك في برنامج القادة، وتتحدث مع كل نشاط.</p>
           <div className="row">
-            {perms.export && <><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={exportCsv}>تصدير Excel</button>
-              <button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={() => window.print()}>طباعة التقرير</button></>}
+            {perms.export && <><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={exportXlsx}>تصدير Excel</button>
+              <button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={printReport}>تقرير الجهة</button></>}
             <button className="link small" style={{ color: '#EAF0F0' }} onClick={onLogout}>خروج</button>
           </div>
         </div>

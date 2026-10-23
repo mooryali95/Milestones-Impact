@@ -100,18 +100,42 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
 }
 
 // ── البريد ──
-// قالب واحد بهوية Milestone Impact. RTL، بلا صور خارجية.
+// قالب البريد بهوية Milestone Impact (الوضع الفاتح): أرضية Mist، بطاقة بيضاء بخط شعري،
+// الشعار ثم خط ذهبي، عنوان خفيف الوزن، زر بإطار ذهبي، وتوقيع وحقوق في التذييل.
+// جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
+const LOGO_URL = 'https://mi.sunkvalue.com/assets/brand/png/milestone-impact-400w.png';
+const MAIL = { graphite: '#0B272F', gold: '#A97A2E', mist: '#F7F8F6', line: '#DCE2E1', slate: '#2C4148', muted: '#6E8085' };
+const FONT = `'Noto Kufi Arabic',Tahoma,Arial,sans-serif`;
+
+export const mailButton = (href: string, label: string) => `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:6px auto 22px"><tr>
+<td style="border:1px solid ${MAIL.gold};border-radius:2px"><a href="${href}" style="display:inline-block;padding:13px 34px;font-family:${FONT};font-size:14px;color:${MAIL.graphite};text-decoration:none;letter-spacing:0">${label}</a></td></tr></table>`;
+
 function shell(title: string, body: string) {
-  return `<!doctype html><html dir="rtl" lang="ar"><body style="margin:0;background:#EFE7D8;font-family:Tahoma,Arial,sans-serif;color:#0B272F">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 12px">
-<table width="100%" style="max-width:520px;background:#ffffff;border-radius:14px;overflow:hidden">
-<tr><td style="background:#0B272F;padding:22px 28px;color:#fff;font-size:15px;font-weight:bold">Milestone Impact · القادة</td></tr>
-<tr><td style="padding:28px">
-<h1 style="font-size:20px;margin:0 0 14px">${title}</h1>
-${body}
+  const year = new Date().getFullYear();
+  return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background:${MAIL.mist};font-family:${FONT};color:${MAIL.graphite}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MAIL.mist}"><tr><td align="center" style="padding:36px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${MAIL.line};border-radius:2px">
+<tr><td style="padding:30px 36px 0" align="left" dir="ltr">
+  <img src="${LOGO_URL}" width="132" alt="Milestone Impact" style="display:block;width:132px;height:auto;border:0;font-family:Arial,sans-serif;font-size:18px;color:${MAIL.graphite}">
 </td></tr>
-<tr><td style="padding:16px 28px;background:#EAF0F0;font-size:12px;color:#12414E">إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.</td></tr>
-</table></td></tr></table></body></html>`;
+<tr><td style="padding:22px 36px 0"><div style="height:1px;line-height:1px;font-size:0;background:${MAIL.gold}">&nbsp;</div></td></tr>
+<tr><td style="padding:26px 36px 8px">
+  <div style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;color:${MAIL.gold};text-transform:uppercase;margin:0 0 8px" dir="ltr" align="right">LEADERS PROGRAM</div>
+  <h1 style="font-family:${FONT};font-weight:300;font-size:22px;line-height:1.5;margin:0 0 16px;color:${MAIL.graphite}">${title}</h1>
+  <div style="font-size:15px;line-height:1.9;color:${MAIL.slate}">${body}</div>
+</td></tr>
+<tr><td style="padding:8px 36px 28px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${MAIL.line}"><tr>
+    <td style="padding-top:16px;font-size:13px;color:${MAIL.slate}">Milestone Impact · <span style="color:${MAIL.gold}">مَعلَم</span><br><span style="font-size:12px;color:${MAIL.muted}">من النية… إلى الأثر</span></td>
+  </tr></table>
+</td></tr>
+</table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px"><tr><td style="padding:16px 8px;font-size:11px;line-height:1.8;color:${MAIL.muted}" align="center">
+  إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.<br>
+  © ${year} Milestone Impact. جميع الحقوق محفوظة. هذه الرسالة ومحتواها مخصصة لمستلمها فقط.
+</td></tr></table>
+</td></tr></table></body></html>`;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -136,9 +160,9 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
   const hello = name ? `أهلًا ${esc(name)}،` : 'أهلًا،';
   return shell(isNew ? 'أكمل تسجيلك في برنامج القادة' : 'رمز الدخول إلى رحلتك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">${hello} اضغط الزر للمتابعة، أو أدخل الرمز في الصفحة التي طلبته منها.</p>
-<p style="text-align:center;margin:0 0 20px"><a href="${link}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">${isNew ? 'تأكيد التسجيل' : 'الدخول الآن'}</a></p>
-<p style="text-align:center;font-size:30px;letter-spacing:8px;font-weight:bold;margin:0 0 8px;direction:ltr">${code}</p>
-<p style="text-align:center;font-size:13px;color:#12414E;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+${mailButton(link, isNew ? 'تأكيد التسجيل' : 'الدخول الآن')}
+<p style="text-align:center;font-family:Arial,sans-serif;font-size:32px;letter-spacing:10px;font-weight:300;color:#0B272F;margin:0 0 8px;direction:ltr">${code}</p>
+<p style="text-align:center;font-size:13px;color:#6E8085;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
 }
 
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
@@ -149,19 +173,19 @@ export function reviewMail(name: string, title: string, returned: boolean, note?
     : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`;
   return shell(head, `
 <p style="font-size:15px;line-height:1.8;margin:0 0 14px">أهلًا ${esc(name)}، ${body}</p>
-${returned && note ? `<p style="font-size:14px;line-height:1.8;margin:0 0 18px;padding:12px 14px;background:#F6EEDC;border-radius:10px">${esc(note)}</p>` : ''}
-<p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">افتح رحلتي</a></p>`);
+${returned && note ? `<p style="font-size:14px;line-height:1.8;margin:0 0 18px;padding:12px 14px;background:#F7F8F6;border-right:2px solid #A97A2E;border-radius:2px">${esc(note)}</p>` : ''}
+${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
 }
 
 // تذكير أسبوعي لمن غاب عن رحلته وما زالت لديه خطوات مفتوحة
 export function reminderMail(name: string, open: number) {
   return shell('رحلتك بانتظارك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>
-<p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">أكمل رحلتي</a></p>`);
+${mailButton(CONFIG.appUrl, 'أكمل رحلتي')}`);
 }
 
 // ── منسق الجهة ──
-const btn = (href: string, label: string) => `<p style="text-align:center;margin:0 0 20px"><a href="${href}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">${label}</a></p>`;
+const btn = mailButton;
 
 export function coordinatorInviteMail(name: string | null, org: string) {
   return shell(`لوحة ${esc(org)} في برنامج القادة`, `
@@ -174,17 +198,17 @@ export function coordinatorSignInMail(name: string | null, code: string, link: s
   return shell('رمز الدخول إلى لوحة الجهة', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} اضغط الزر للدخول، أو أدخل الرمز في الصفحة.</p>
 ${btn(link, 'الدخول الآن')}
-<p style="text-align:center;font-size:30px;letter-spacing:8px;font-weight:bold;margin:0 0 8px;direction:ltr">${code}</p>
-<p style="text-align:center;font-size:13px;color:#12414E;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+<p style="text-align:center;font-family:Arial,sans-serif;font-size:32px;letter-spacing:10px;font-weight:300;color:#0B272F;margin:0 0 8px;direction:ltr">${code}</p>
+<p style="text-align:center;font-size:13px;color:#6E8085;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
 }
 
 export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
-  const row = (l: string, v: number) => `<tr><td style="padding:8px 0;border-bottom:1px solid #EFE7D8">${l}</td><td style="padding:8px 0;border-bottom:1px solid #EFE7D8;text-align:left;font-weight:bold">${v}</td></tr>`;
+  const row = (l: string, v: number | string) => `<tr><td style="padding:8px 0;border-bottom:1px solid #DCE2E1">${l}</td><td style="padding:8px 0;border-bottom:1px solid #DCE2E1;text-align:left;font-family:Arial,sans-serif;font-weight:300;font-size:16px;color:#0B272F">${v}</td></tr>`;
   return shell(`ملخص ${esc(org)} الأسبوعي`, `
 <p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} هذا ملخص مشاركي جهتك في برنامج القادة.</p>
 <table width="100%" style="font-size:14px;margin:0 0 20px">
 ${row('المشاركون', k.total)}${row('انضموا هذا الأسبوع', k.joined_week)}${row('نشطون هذا الأسبوع', k.active_week)}
-${row('اعتُمد مسارهم', k.approved)}${row('أنهوا البرنامج', k.completed)}${row('متوسط الإنجاز', k.avg_progress)}
+${row('اعتُمد مسارهم', k.approved)}${row('أنهوا البرنامج', k.completed)}${row('متوسط الإنجاز', `${k.avg_progress}%`)}
 </table>
 ${btn(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة')}
 <p style="font-size:12px;color:#4A6A72;margin:0">يمكن للإدارة إيقاف هذا الملخص متى طلبت.</p>`);
@@ -193,5 +217,5 @@ ${btn(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة')}
 export function approvedMail(name: string) {
   return shell('اعتُمد مستواك، ورحلتك مفتوحة الآن', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.</p>
-<p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">افتح رحلتي</a></p>`);
+${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
 }
