@@ -1,14 +1,18 @@
 // ════════════════════════════════════════════════════════════════
 // نافذة نموذج عامة: حقول نصية ورقمية وقوائم ومربعات نص
 // ════════════════════════════════════════════════════════════════
-// fields: [{ name, label, type?: text|number|select|textarea|email, options?, rows?, dir? }]
+// fields: [{ name, label, type?: text|number|select|textarea|email|check|options, options?, empty?, rows?, dir? }]
+// check ← قيمة منطقية · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
 import React, { useState } from 'react';
 import { useEscape, useUI } from './ui.jsx';
 
 export default function Form({ title, fields, values = {}, onSave, onDelete, onClose }) {
   const { confirm } = useUI();
-  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.name, values[f.name] ?? ''])));
+  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
+    f.type === 'check' ? !!values[f.name]
+      : f.type === 'options' ? (Array.isArray(values[f.name]) && values[f.name].length ? values[f.name] : [{ label: '', score: 0 }, { label: '', score: 0 }])
+        : values[f.name] ?? ''])));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEscape(onClose);
@@ -20,6 +24,8 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     const out = Object.fromEntries(fields.map((f) => {
       const x = v[f.name];
       if (f.type === 'number') return [f.name, x === '' ? null : Number(x)];
+      if (f.type === 'check') return [f.name, !!x];
+      if (f.type === 'options') return [f.name, x.map((o) => ({ label: String(o.label).trim(), score: Number(o.score || 0) })).filter((o) => o.label)];
       return [f.name, String(x).trim() || null];
     }));
     const res = await onSave(out);
@@ -41,11 +47,35 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
         {fields.map((f) => {
           const id = `f-${f.name}`;
           const common = { id, name: f.name, value: v[f.name], onChange: set(f.name), dir: f.dir };
+          if (f.type === 'check') {
+            return (
+              <label key={f.name} htmlFor={id} className="la-check">
+                <input id={id} type="checkbox" checked={v[f.name]} onChange={(e) => setV({ ...v, [f.name]: e.target.checked })} /> <span>{f.label}</span>
+              </label>
+            );
+          }
+          if (f.type === 'options') {
+            const list = v[f.name];
+            const put = (next) => setV({ ...v, [f.name]: next });
+            return (
+              <div key={f.name} className="la-opts">
+                <span>{f.label}</span>
+                {list.map((o, i) => (
+                  <div key={i} className="la-opt">
+                    <input value={o.label} placeholder="نص الخيار" aria-label={`الخيار ${i + 1}`} onChange={(e) => put(list.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} />
+                    <input type="number" step="any" value={o.score} title="الدرجة" aria-label={`درجة الخيار ${i + 1}`} onChange={(e) => put(list.map((x, k) => (k === i ? { ...x, score: e.target.value } : x)))} />
+                    <button type="button" className="la-link" aria-label={`حذف الخيار ${i + 1}`} onClick={() => put(list.filter((_, k) => k !== i))}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="la-link" onClick={() => put([...list, { label: '', score: 0 }])}>+ خيار</button>
+              </div>
+            );
+          }
           return (
             <label key={f.name} htmlFor={id}>
               <span>{f.label}</span>
               {f.type === 'select' ? (
-                <select {...common}>{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                <select {...common}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               ) : f.type === 'textarea' ? <textarea {...common} rows={f.rows || 3} />
                 : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
             </label>
