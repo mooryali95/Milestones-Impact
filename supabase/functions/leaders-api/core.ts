@@ -11,6 +11,7 @@ export const CONFIG = {
   // ملح الهاش للرموز والتوكنات. سر مستقل حتى لا يكفي تسريب القاعدة وحده.
   pepper: env('LEADERS_TOKEN_PEPPER'),
   appUrl: env('LEADERS_APP_URL', 'https://leaders.sunkvalue.com'),
+  coordinatorDays: 14,
   rpId: env('LEADERS_RP_ID', 'leaders.sunkvalue.com'),
   rpName: 'Milestone Impact',
   origins: env('LEADERS_ORIGINS', 'https://leaders.sunkvalue.com').split(',').map((s) => s.trim()),
@@ -93,7 +94,7 @@ export function must<T>(res: { data: T; error: unknown }, msg = 'تعذّر تن
   return res.data;
 }
 
-export async function audit(actorType: 'admin' | 'participant' | 'system', actor: string | null, action: string,
+export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coordinator', actor: string | null, action: string,
   entity: string, entityId: string | null, before: unknown = null, after: unknown = null) {
   await db.from('audit_log').insert({ actor_type: actorType, actor, action, entity, entity_id: entityId, before, after });
 }
@@ -157,6 +158,36 @@ export function reminderMail(name: string, open: number) {
   return shell('رحلتك بانتظارك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>
 <p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">أكمل رحلتي</a></p>`);
+}
+
+// ── منسق الجهة ──
+const btn = (href: string, label: string) => `<p style="text-align:center;margin:0 0 20px"><a href="${href}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">${label}</a></p>`;
+
+export function coordinatorInviteMail(name: string | null, org: string) {
+  return shell(`لوحة ${esc(org)} في برنامج القادة`, `
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} أُنشئ لك حساب اطلاع بصفتك منسق ${esc(org)} في برنامج القادة من Milestone Impact.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">ترى منه تقدّم مشاركي جهتك وتوزيعهم على المسارات وتقارير الجهة، ويصلك ملخص أسبوعي بالبريد. الدخول برمز يصل إلى هذا البريد، بلا كلمة مرور.</p>
+${btn(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة')}`);
+}
+
+export function coordinatorSignInMail(name: string | null, code: string, link: string) {
+  return shell('رمز الدخول إلى لوحة الجهة', `
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} اضغط الزر للدخول، أو أدخل الرمز في الصفحة.</p>
+${btn(link, 'الدخول الآن')}
+<p style="text-align:center;font-size:30px;letter-spacing:8px;font-weight:bold;margin:0 0 8px;direction:ltr">${code}</p>
+<p style="text-align:center;font-size:13px;color:#12414E;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+}
+
+export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
+  const row = (l: string, v: number) => `<tr><td style="padding:8px 0;border-bottom:1px solid #EFE7D8">${l}</td><td style="padding:8px 0;border-bottom:1px solid #EFE7D8;text-align:left;font-weight:bold">${v}</td></tr>`;
+  return shell(`ملخص ${esc(org)} الأسبوعي`, `
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} هذا ملخص مشاركي جهتك في برنامج القادة.</p>
+<table width="100%" style="font-size:14px;margin:0 0 20px">
+${row('المشاركون', k.total)}${row('انضموا هذا الأسبوع', k.joined_week)}${row('نشطون هذا الأسبوع', k.active_week)}
+${row('اعتُمد مسارهم', k.approved)}${row('أنهوا البرنامج', k.completed)}${row('متوسط الإنجاز', k.avg_progress)}
+</table>
+${btn(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة')}
+<p style="font-size:12px;color:#4A6A72;margin:0">يمكن للإدارة إيقاف هذا الملخص متى طلبت.</p>`);
 }
 
 export function approvedMail(name: string) {

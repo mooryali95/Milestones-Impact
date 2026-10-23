@@ -577,6 +577,13 @@ export async function remove(a: Admin, b: Body) {
     const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
     if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
   }
+  if (b.entity === 'organizations') {
+    const [{ count: ps }, { count: rs }] = await Promise.all([
+      db.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
+      db.from('reports').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
+    ]);
+    if (ps || rs) throw new Fail(`للجهة ${ps || 0} مشارك و${rs || 0} تقرير؛ انقلهم أولًا أو أوقف الجهة بدل حذفها`, 409, 'org_in_use');
+  }
   if (b.entity === 'questions') {
     const q = (await db.from('questions').select('instrument_id').eq('id', b.id).single()).data;
     if (q && await instrumentLocked(q.instrument_id)) throw new Fail('لا يُحذف سؤال له إجابات سابقة، عطّله بدل ذلك', 409, 'locked');

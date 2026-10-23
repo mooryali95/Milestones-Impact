@@ -11,11 +11,13 @@
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · models.list · models.get · models.save · achievements
+//   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
+import * as C from './coordinator.ts';
 
 type Body = Record<string, any>;
 
@@ -23,7 +25,13 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
   'org.info': (b) => P.orgInfo(b),
-  'cron.reminders': (b) => A.reminders(b),
+  // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها في التشغيلة نفسها
+  'cron.reminders': async (b) => {
+    const r: any = await A.reminders(b);
+    return { ...r, coordinator_reports: await C.weeklyReports() };
+  },
+  'coord.auth-start': C.authStart,
+  'coord.auth-verify': C.authVerify,
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
 };
@@ -50,6 +58,13 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'achievements': (p) => P.achievements(p),
 };
 
+// منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
+const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
+  'coord.me': (c) => C.me(c),
+  'coord.dashboard': (c) => C.dashboard(c),
+  'coord.logout': (_c, _b, sid) => C.logout(sid),
+};
+
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.overview': (_a, b) => A.overview(b),
   'admin.participants': (_a, b) => A.participants(b),
@@ -66,6 +81,14 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),
   'admin.assign-org': A.assignOrg,
+  'admin.org-impact': C.orgImpact,
+  'admin.coordinator': C.adminGet,
+  'admin.coordinator-save': C.adminSave,
+  'admin.coordinator-invite': C.adminInvite,
+  'admin.coordinator-status': C.adminSetStatus,
+  'admin.coordinator-revoke': C.adminRevokeSessions,
+  'admin.coordinator-remove': C.adminRemove,
+  'admin.coordinator-preview': C.adminPreview,
   'admin.book-preview': (_a, b) => A.bookPreview(b),
   'admin.submissions': (_a, b) => A.submissions(b),
   'admin.submission': (_a, b) => A.submission(b),
@@ -89,6 +112,10 @@ Deno.serve(async (req) => {
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
       return reply(req, await participant[action](p, b, sessionId, ctx));
+    }
+    if (coordinator[action]) {
+      const { coordinator: c, sessionId } = await C.fromToken(b.token);
+      return reply(req, await coordinator[action](c, b, sessionId));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);

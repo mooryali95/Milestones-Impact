@@ -321,3 +321,39 @@ export function cleanAnswers(fields, answers) {
   }
   return out;
 }
+
+// ── منسق الجهة ──
+// صلاحيات العرض الافتراضية: بلا درجات ولا وسائل تواصل، والتصدير مسموح
+export const COORD_DEFAULTS = { scores: false, contact: false, export: true };
+export function coordPermissions(p) {
+  const x = p && typeof p === 'object' ? p : {};
+  return { scores: x.scores === true, contact: x.contact === true, export: x.export !== false };
+}
+
+// ما يراه المنسق من المشارك: الاسم والمسمى والمسار والمرحلة ونسبة الإنجاز دائمًا،
+// والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
+export function coordParticipant(p, perms) {
+  const out = {
+    id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status,
+    track: p.track || null, track_title: p.track_title || null, approved: !!p.approved,
+    progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at, last_login_at: p.last_login_at || null,
+  };
+  if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }
+  if (perms.scores) out.levels = p.levels || null;
+  return out;
+}
+
+// نسبة الإنجاز: البنود المنجزة من المتطلبات الإلزامية النشطة
+export function progressPct(doneCount, requiredTotal) {
+  if (!requiredTotal) return 0;
+  return Math.min(100, Math.round((doneCount / requiredTotal) * 100));
+}
+
+// مفتاح أسبوع ISO لمنع إرسال التقرير الأسبوعي مرتين
+export function isoWeek(d = new Date()) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return `${t.getUTCFullYear()}-W${String(Math.ceil(((t - y0) / 864e5 + 1) / 7)).padStart(2, '0')}`;
+}
