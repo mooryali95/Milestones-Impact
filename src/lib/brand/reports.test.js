@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analysisReport, orgReport, planReport } from './reports.js';
+import { analysisReport, decisionReport, orgReport, planReport } from './reports.js';
 import { documentHtml, docId } from './doc.js';
 
 const d = {
@@ -70,4 +70,15 @@ it('analysisReport يعرض النمط والفجوات والتوصيات من 
   expect(body).toContain('2026');
   expect(body).toContain('التخطيط');
   expect(body).toContain('ابدأ بالتخطيط');
+});
+
+it('decisionReport يعرض الفئات غير الفارغة فقط ويعدّ الكل في الملخص', () => {
+  const { meta, body } = decisionReport('مشروع <أ>', [
+    { key: 'launch', ar: 'ابدأ الآن', color: '#2E7D5B', items: [{ name: 'خدمة × شريحة', adj: '8.1', risk: 3, trust: '90%', why: 'أقوى محركات النتيجة: القيمة.' }] },
+    { key: 'defer', ar: 'أجّل', color: '#8E6524', items: [] },
+  ]);
+  expect(meta.kind).toBe('DEC');
+  expect(meta.subtitle).toBe('مشروع <أ>');
+  expect(body).toContain('خدمة × شريحة');
+  expect(body.match(/<section/g).length).toBe(2);
 });

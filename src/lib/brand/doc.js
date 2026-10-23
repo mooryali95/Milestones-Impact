@@ -42,8 +42,9 @@ export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="11
 </svg>`;
 
 // ── مكونات المحتوى ──
-// القسم القصير (بلا جدول) لا ينقسم بين صفحتين، فلا يبقى عنوانه وحيدًا أسفل الصفحة
-export const section = (en, ar, body, note) => `<section class="sec${body.includes('<table') ? '' : ' keep'}">
+// القسم القصير لا ينقسم بين صفحتين فلا يبقى عنوانه وحيدًا أسفل الصفحة؛ والجدول الطويل (أكثر من 15 صفًا) ينقسم بصفوفه
+const short = (body) => (body.match(/<tr/g) || []).length <= 16;
+export const section = (en, ar, body, note) => `<section class="sec${short(body) ? ' keep' : ''}">
   <header><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p class="note">${esc(note)}</p>` : ''}</header>
   ${body}
 </section>`;
@@ -115,6 +116,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.gold}; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
+.tbl tr { break-inside: avoid; }
 .sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
 .sec h2 { font-weight: 300; font-size: 15pt; margin: 1mm 0 0; }
 .sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: 8.5pt; }

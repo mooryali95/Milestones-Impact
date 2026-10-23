@@ -138,3 +138,26 @@ export function analysisReport(user, a) {
     body,
   };
 }
+
+// تقرير القرار في SSPDF: التركيبات مصنّفة في فئات القرار كما تعرضها الشاشة
+// buckets: [{ key, ar, color, items: [{ name, adj, risk, trust, why }] }]
+export function decisionReport(project, buckets) {
+  const total = buckets.reduce((s, b) => s + b.items.length, 0);
+  const body = [
+    section('Summary', 'ملخص القرار', kpis(buckets.map((b) => ({ value: b.items.length, label: b.ar })))),
+    ...buckets.filter((b) => b.items.length).map((b) => section('Decision', b.ar, table(
+      [{ label: 'التركيبة' }, { label: 'النتيجة المعدّلة', width: '26mm' }, { label: 'المخاطر', width: '18mm' }, { label: 'الثقة', width: '16mm' }, { label: 'المبرر' }],
+      b.items.map((r) => [raw(`<span style="color:${esc(b.color)}">◆</span> <b style="font-weight:400">${esc(r.name)}</b>`), r.adj, `${r.risk}/9`, r.trust, r.why]),
+    ), `${b.items.length} من ${total} تركيبة.`)),
+  ].join('');
+  return {
+    meta: {
+      kind: 'DEC', kindLabel: 'Decision Report', eyebrow: 'SSPDF · Decision & Recommendations',
+      title: 'تقرير القرار والتوصيات', subtitle: project || 'إطار قرار محفظة الخدمات الاستراتيجية',
+      rows: [['المشروع', project || '·'], ['التركيبات', String(total)], ['المنهجية', 'النتيجة المعدّلة بالثقة ودرجة المخاطر'], ['تاريخ الإصدار', today()]],
+      confidential: 'سري: مخصص لفريق القرار في المشروع',
+      closing: 'صُنّفت التركيبات آليًا وفق النتيجة المعدّلة بالثقة ودرجة المخاطر لحظة الإصدار، وتُعتمد التوصيات بقرار الفريق.',
+    },
+    body,
+  };
+}

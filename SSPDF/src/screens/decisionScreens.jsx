@@ -8,15 +8,25 @@ export const Decision = (p) => {
     const tops = p.criteria.map((c, i) => ({ ar: c.ar, v: c.w * r.ev.scores[i] })).sort((a, b) => b.v - a.v).slice(0, 3).map((x) => x.ar);
     return `أقوى محركات النتيجة: ${tops.join("، ")}.`;
   };
+  // التصدير بمحرك الوثائق الموحّد للمنصة (src/lib/brand): الفئات نفسها التي تعرضها الشاشة
+  const exportPdf = async () => {
+    const win = window.open("", "_blank");
+    const [{ writeDocument }, { decisionReport }] = await Promise.all([import("../../../src/lib/brand/doc.js"), import("../../../src/lib/brand/reports.js")]);
+    const buckets = Object.entries(BUCKETS).map(([k, b]) => ({
+      key: k, ar: b.ar, color: b.color,
+      items: groups[k].map((r) => ({
+        name: r.name, adj: r.adj.toFixed(1), risk: r.risk, trust: `${Math.round((r.adj / r.raw) * 100)}%`,
+        why: r.isUnscored ? "لم يُدخَل تقييم بعد" : rationale(r),
+      })),
+    }));
+    const { meta, body } = decisionReport(p.currentProject?.name, buckets);
+    if (!writeDocument(win, meta, body)) alert("اسمح بالنوافذ المنبثقة لتصدير التقرير");
+  };
   return (
-    <div id="decision-print-area">
-      <div className="flex justify-between items-start flex-wrap gap-3 mb-2 print-hide">
+    <div>
+      <div className="flex justify-between items-start flex-wrap gap-3 mb-2">
         <div></div>
-        <GoldBtn onClick={() => window.print()}>⬇ تصدير PDF</GoldBtn>
-      </div>
-      <div className="hidden print-only mb-4">
-        <div style={{ color: B.petrol, fontWeight: 900, fontSize: "1.1rem" }}>SSPDF — {p.currentProject?.name || "برنامج إدارة المشروعات للقادة"}</div>
-        <div style={{ color: B.muted, fontSize: "0.75rem" }}>تقرير القرار والتوصيات — {new Date().toLocaleDateString("ar-SA")}</div>
+        <GoldBtn onClick={exportPdf}>⬇ تصدير PDF</GoldBtn>
       </div>
       <H ar="القرار والتوصيات" en="Decision & Recommendations" sub="تصنيف تلقائي وفق النتيجة المعدّلة بالثقة ودرجة المخاطر" />
       {Object.entries(BUCKETS).map(([k, b]) => (
