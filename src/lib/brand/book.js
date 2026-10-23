@@ -105,7 +105,8 @@ export const COVER_CSS = `
 .bk-cover .bk-rule { display: flex; align-items: center; gap: 2.4cqi; width: 46%; margin: 5cqi auto; }
 .bk-cover .bk-rule i { flex: 1; height: 1px; background: ${C.goldLight}; opacity: .6; }
 .bk-cover .bk-rule b { width: 1.6cqi; height: 1.6cqi; background: ${C.goldLight}; transform: rotate(45deg); }
-.bk-cover .bk-sub { font-weight: 300; font-size: 3cqi; color: rgba(247,248,246,.82); margin: 0; }
+.bk-cover .bk-sub { font: 300 2.7cqi "Noto Sans", sans-serif; letter-spacing: .28em; text-transform: uppercase; color: rgba(247,248,246,.88); margin: 0; direction: ltr; }
+.bk-cover .bk-sub i { font-style: normal; color: ${C.goldLight}; font-size: 1.6cqi; margin: 0 1.6cqi; vertical-align: middle; }
 .bk-cover .bk-code { display: inline-block; margin-top: 5cqi; padding: 1cqi 3cqi; border: 1px solid rgba(217,168,90,.6); font: 300 2.6cqi "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.goldLight}; direction: ltr; }
 .bk-cover .bk-meta { font-size: 2cqi; color: rgba(247,248,246,.7); line-height: 2; }
 .bk-cover .bk-meta b { font-weight: 300; color: #fff; font-size: 2.6cqi; }
@@ -119,7 +120,7 @@ export function coverHtml(c) {
     <p class="bk-en">The Leader's Book</p>
     <h1>كتاب القائد</h1>
     <div class="bk-rule"><i></i><b></b><i></i></div>
-    <p class="bk-sub">إدارة المشروعات · تحويلها إلى أثر · تمكين القائد</p>
+    <p class="bk-sub">Milestone <i>◆</i> Impact <i>◆</i> Leadership</p>
     ${c.code ? `<span class="bk-code">${esc(c.code)}</span>` : ''}
   </div>
   <div class="bk-meta">${c.name ? `نسخة شخصية مرخصة لـ<br><b>${esc(c.name)}</b><br>` : ''}${c.ref ? `<bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}` : ''}</div>
@@ -188,8 +189,9 @@ ${g.items.map((c, i) => {
   @bottom-left { content: "${esc(book.ref)}   ·   " counter(page); font: 300 6.8pt "Noto Sans", sans-serif; color: ${C.muted}; } }
 @page full { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sheet, .txt, .ch, .appx { max-width: 100%; overflow-wrap: break-word; }
 html, body { margin: 0; background: #fff; }
-body { font: 300 10.4pt/2 "Noto Kufi Arabic", "Noto Sans", sans-serif; color: ${C.graphite}; }
+body { font: 300 11pt/2.05 "Noto Kufi Arabic", "Noto Sans", sans-serif; color: ${C.graphite}; }
 body::before { content: ''; position: fixed; inset: 0; background: url("data:image/svg+xml,${wm}") repeat; pointer-events: none; z-index: 5; }
 .toolbar { display: flex; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; position: sticky; top: 0; z-index: 9; }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; }
@@ -237,41 +239,42 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .ch-num { font: 200 46pt/0.9 "Noto Sans", sans-serif; color: ${C.gold}; }
 .ch-open small { color: ${C.gold}; font-size: 8pt; letter-spacing: .06em; } .ch-open h2 { font-size: 19pt; line-height: 1.4; }
 .inside { background: ${C.mist}; border-right: 0.6mm solid ${C.gold}; padding: 3.5mm 5mm; margin-bottom: 6mm; }
-.inside b { font-weight: 400; font-size: 9pt; color: ${C.gold}; } .inside ol { margin: 1mm 0 0; padding-right: 5mm; font-size: 9.2pt; color: ${C.slate}; line-height: 1.8; }
-.txt h3 { font-weight: 300; font-size: 13pt; margin: 7mm 0 2mm; break-after: avoid; }
+.inside b { font-weight: 400; font-size: 9pt; color: ${C.gold}; } .inside ol { margin: 1mm 0 0; padding-right: 5mm; font-size: 10pt; color: ${C.graphite}; line-height: 1.8; }
+.txt h3 { font-weight: 400; font-size: 13.5pt; margin: 7mm 0 2mm; break-after: avoid; }
 .txt h3::before { content: ''; display: inline-block; width: 2mm; height: 2mm; background: ${C.gold}; transform: rotate(45deg); margin-left: 2.5mm; vertical-align: middle; }
 .txt h4 { font-weight: 400; font-size: 10.4pt; margin: 4mm 0 1mm; color: ${C.slate}; break-after: avoid; }
-.txt p { margin: 0 0 2.6mm; color: ${C.slate}; text-align: justify; orphans: 3; widows: 3; }
+.txt p { margin: 0 0 3mm; color: ${C.graphite}; text-align: start; orphans: 3; widows: 3; }
 .txt b, .card p b, .key b { font-weight: 400; color: ${C.graphite}; }
 /* إنفوجرافيك: بطاقات تعريف */
-.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; margin: 4mm 0 5mm; }
-.cards.c3 { grid-template-columns: 1fr 1fr 1fr; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3.5mm; margin: 4mm 0 5mm; }
+.cards.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .card { border: 1px solid ${C.line}; border-top: 0.6mm solid ${C.gold}; padding: 3.5mm 4mm; break-inside: avoid; background: #fff; }
-.card .n { font: 300 8pt "Noto Sans", sans-serif; color: ${C.gold}; } .card b { display: block; font-weight: 400; font-size: 10pt; margin: .5mm 0 1mm; color: ${C.graphite}; }
-.card p { margin: 0; font-size: 8.8pt; line-height: 1.8; color: ${C.slate}; text-align: start; }
+.card { min-width: 0; overflow-wrap: anywhere; }
+.card .n { font: 300 8pt "Noto Sans", sans-serif; color: ${C.gold}; } .card b { display: block; font-weight: 400; font-size: 10.5pt; margin: .5mm 0 1mm; color: ${C.graphite}; }
+.card p { margin: 0; font-size: 9.6pt; line-height: 1.85; color: ${C.graphite}; text-align: start; }
 /* إنفوجرافيك: مسار خطوات */
 .steps { list-style: none; margin: 4mm 0 5mm; padding: 0; position: relative; }
 .steps::before { content: ''; position: absolute; right: 3.6mm; top: 3mm; bottom: 3mm; width: 1px; background: ${C.gold}; opacity: .45; }
 .steps li { display: flex; gap: 4mm; align-items: flex-start; margin-bottom: 2.6mm; position: relative; break-inside: avoid; }
 .steps .dot { flex: none; width: 7.2mm; height: 7.2mm; border-radius: 50%; background: ${C.graphite}; color: ${C.goldLight}; font: 300 8.5pt/7.2mm "Noto Sans", sans-serif; text-align: center; }
-.steps p { margin: .6mm 0 0; color: ${C.slate}; font-size: 9.8pt; line-height: 1.85; text-align: start; }
+.steps p { margin: .6mm 0 0; color: ${C.graphite}; font-size: 10.6pt; line-height: 1.85; text-align: start; }
 .steps.sm .dot { width: 6mm; height: 6mm; line-height: 6mm; font-size: 7.5pt; } .steps.sm::before { right: 3mm; } .steps.sm p { font-size: 9pt; }
-.bul { margin: 2mm 0 4mm; padding: 0; list-style: none; } .bul li { position: relative; padding-right: 5mm; color: ${C.slate}; margin-bottom: 1.4mm; }
+.bul { margin: 2mm 0 4mm; padding: 0; list-style: none; } .bul li { position: relative; padding-right: 5mm; color: ${C.graphite}; margin-bottom: 1.4mm; }
 .bul li::before { content: ''; position: absolute; right: 0; top: 2.6mm; width: 1.6mm; height: 1.6mm; background: ${C.gold}; transform: rotate(45deg); }
 /* اقتباس بارز والفكرة المحورية والتأمل */
-.pull { margin: 6mm 8mm; padding: 2mm 0; font-size: 13pt; font-weight: 200; line-height: 1.8; color: ${C.graphite}; text-align: center; border-top: 1px solid ${C.line}; border-bottom: 1px solid ${C.line}; }
+.pull { break-inside: avoid; margin: 6mm 8mm; padding: 2mm 0 3mm; font-size: 13.5pt; font-weight: 200; line-height: 1.8; color: ${C.graphite}; text-align: center; border-top: 1px solid ${C.line}; border-bottom: 1px solid ${C.line}; }
 .pull span { display: block; font: 200 30pt/1 "Noto Sans", serif; color: ${C.gold}; height: 9mm; }
 .key { background: ${C.graphite}; color: #fff; padding: 6mm 8mm; margin: 8mm 0 5mm; break-inside: avoid; }
 .key small { color: ${C.goldLight}; letter-spacing: .14em; font-size: 8pt; } .key p { margin: 2mm 0 0; font-size: 13pt; font-weight: 200; line-height: 1.8; } .key b { color: #fff; }
 .reflect { border: 1px solid ${C.gold}; padding: 5mm 6mm; break-inside: avoid; margin-top: 5mm; }
-.reflect small { color: ${C.gold}; font-size: 8pt; letter-spacing: .14em; } .reflect p { margin: 1mm 0 3mm; color: ${C.slate}; }
+.reflect small { color: ${C.gold}; font-size: 8.5pt; letter-spacing: .14em; } .reflect p { margin: 1mm 0 3mm; color: ${C.graphite}; }
 .reflect .lines i { display: block; height: 9mm; border-bottom: 1px dotted ${C.muted}; }
 /* الملحق */
 .lead { color: ${C.slate}; margin: 0 0 6mm; }
 .tool { border: 1px solid ${C.line}; padding: 5mm 6mm; margin-bottom: 5mm; break-inside: avoid; }
 .tool-h { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid ${C.line}; padding-bottom: 2mm; margin-bottom: 2.5mm; }
 .tool-h b { font-weight: 300; font-size: 13pt; } .tool-h small { color: ${C.gold}; font-size: 8pt; }
-.tool p { margin: 0 0 2mm; color: ${C.slate}; font-size: 9.6pt; } .tool .when span { display: inline-block; color: ${C.gold}; margin-left: 2mm; font-weight: 400; }
+.tool p { margin: 0 0 2mm; color: ${C.graphite}; font-size: 10.2pt; } .tool .when span { display: inline-block; color: ${C.gold}; margin-left: 2mm; font-weight: 400; }
 .tool .src { font-size: 8pt; color: ${C.muted}; margin: 2mm 0 0; }
 /* الختام */
 .end { break-before: page; text-align: center; padding-top: 70mm; color: ${C.muted}; font-size: 9pt; line-height: 2.2; }
