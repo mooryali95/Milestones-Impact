@@ -6,7 +6,7 @@
 import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
 import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
-import { issueOnCompletion } from './certificates.ts';
+import { cleanProfile, issueOnCompletion } from './certificates.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
@@ -308,7 +308,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
+                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
@@ -537,6 +537,8 @@ export async function save(a: Admin, b: Body) {
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
+    // تخصيص شهادة الجهة: ما لا يُذكر يُورث من الإعداد العام
+    if ('cert' in row) row.cert = cleanProfile(row.cert && typeof row.cert === 'object' ? row.cert : {}, true);
     if ('domains' in row) {
       // يقبل الروابط الكاملة أو النطاقات، مفصولة بفواصل أو أسطر
       const raw = Array.isArray(row.domains) ? row.domains : String(row.domains || '').split(/[\s,،]+/);

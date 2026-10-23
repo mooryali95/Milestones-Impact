@@ -44,7 +44,7 @@ export default function Leaders({ canWrite }) {
       <div className="la-body">
         {tab === 'participants'
           ? <Participants orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={setPerson} />
-          : tab === 'certs' ? <Certificates canWrite={canWrite} onPerson={openPerson} />
+          : tab === 'certs' ? <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />
           : <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={setOrgId} onPerson={openPerson} />}
       </div>
     </div>

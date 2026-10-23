@@ -30,39 +30,95 @@ async function hmac(text: string) {
   return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ── مصدر واحد لما يظهر على الشهادة ──
+// الإعداد العام (certificate_settings) ثم تخصيص الجهة (organizations.cert) فوقه.
+// profileFor هي الدالة الوحيدة التي تحل الاثنين؛ الإصدار والمعاينة يمرّان بها.
+const DEFAULTS = { enabled: true, program_ar: 'برنامج القادة', program_en: 'Leaders Program', hours: null, signatory: null };
+type Signatory = { name: string; title: string; image?: string };
+type Profile = { program_ar: string; program_en: string; hours: number | null; signatory: Signatory | null };
+
 async function settings() {
   const { data } = await db.from('certificate_settings').select('*').eq('id', 1).maybeSingle();
-  return data || { enabled: true, program_ar: 'برنامج القادة', program_en: 'Leaders Program', hours: null, signatories: [] };
+  return { ...DEFAULTS, ...(data || {}) };
 }
 
-// لقطة الشهادة من بيانات المشارك الحالية
+// تحقق واحد لحقول الإعداد، للعام وللجهة. partial: الحقل الغائب يبقى غائبًا (يُورث)
+function cleanSignatory(x: any): Signatory | null {
+  if (x == null) return null;
+  const name = String(x.name || '').trim().slice(0, 120);
+  if (!name) throw new Fail('اسم الموقّع مطلوب، أو اختر «بلا موقّع»');
+  const title = String(x.title || '').trim().slice(0, 160);
+  const image = typeof x.image === 'string' && x.image.startsWith('data:image/png;base64,') && x.image.length <= 300000 ? x.image : null;
+  return { name, title, ...(image ? { image } : {}) };
+}
+export function cleanProfile(s: Body, partial = false) {
+  const out: Body = {};
+  const text = (k: string, max: number) => {
+    if (!(k in s)) return;
+    const v = String(s[k] ?? '').trim().slice(0, max);
+    if (v) out[k] = v; else if (!partial) out[k] = (DEFAULTS as any)[k];
+  };
+  text('program_ar', 200);
+  text('program_en', 200);
+  if ('hours' in s) {
+    const h = s.hours == null || s.hours === '' ? null : Math.round(Number(s.hours));
+    if (h != null && !(h >= 1 && h <= 2000)) throw new Fail('عدد الساعات بين 1 و2000');
+    if (h != null || !partial) out.hours = h;
+  }
+  if ('signatory' in s) out.signatory = cleanSignatory(s.signatory);
+  return out;
+}
+
+export function profileFor(global: Body, orgCert: Body | null | undefined): Profile {
+  const o = orgCert || {};
+  return {
+    program_ar: o.program_ar || global.program_ar,
+    program_en: o.program_en || global.program_en,
+    hours: o.hours ?? global.hours ?? null,
+    signatory: 'signatory' in o ? o.signatory : global.signatory ?? null,
+  };
+}
+
+const ORG_FIELDS = 'id, name, name_en, logo, cert_cobrand, cert';
+const orgRow = async (id: string | null | undefined) =>
+  id ? (await db.from('organizations').select(ORG_FIELDS).eq('id', id).maybeSingle()).data : null;
+
+// اللقطة: كل ما يظهر على الشهادة، من مصدر واحد
+function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name_en: string | null; track: any; start: string; end: string; org: any; profile: Profile }) {
+  const { profile: pr, org: o } = x;
+  return {
+    serial: x.serial,
+    name_ar: x.name_ar,
+    name_en: x.name_en,
+    program_ar: pr.program_ar,
+    program_en: pr.program_en,
+    track_ar: x.track?.title_ar || null,
+    track_en: x.track?.title_en || null,
+    hours: pr.hours,
+    start: x.start,
+    end: x.end,
+    issued_at: x.issuedAt,
+    org: o ? { id: o.id, name: o.name, name_en: o.name_en || null, logo: o.cert_cobrand && o.logo ? o.logo : null } : null,
+    signatories: pr.signatory ? [pr.signatory] : [],
+    verify_url: verifyUrl(x.serial),
+  };
+}
+
 async function buildSnapshot(p: any, serial: string, issuedAt: string) {
   const [cfg, pl, org, enr] = await Promise.all([
     settings(),
     db.from('placements').select('dimension, level').eq('participant_id', p.id),
-    p.organization_id ? db.from('organizations').select('name, name_en, logo, cert_cobrand').eq('id', p.organization_id).maybeSingle() : Promise.resolve({ data: null }),
+    orgRow(p.organization_id),
     db.from('enrollments').select('cohorts(starts_on, ends_on)').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1),
   ]);
   const key = trackKey(Object.fromEntries((pl.data || []).map((x: any) => [x.dimension, x.level])));
   const track = key ? (await db.from('tracks').select('title_ar, title_en').eq('key', key).maybeSingle()).data : null;
   const cohort = (enr.data?.[0] as any)?.cohorts;
-  const o: any = org.data;
-  return {
-    serial,
-    name_ar: p.full_name,
-    name_en: p.name_en || null,
-    program_ar: cfg.program_ar,
-    program_en: cfg.program_en,
-    track_ar: track?.title_ar || null,
-    track_en: track?.title_en || null,
-    hours: cfg.hours || null,
-    start: cohort?.starts_on || p.created_at,
-    end: cohort?.ends_on || issuedAt,
-    issued_at: issuedAt,
-    org: o ? { name: o.name, name_en: o.name_en || null, logo: o.cert_cobrand && o.logo ? o.logo : null } : null,
-    signatories: (cfg.signatories || []).slice(0, 1),
-    verify_url: verifyUrl(serial),
-  };
+  return snapshotOf({
+    serial, issuedAt, name_ar: p.full_name, name_en: p.name_en || null, track,
+    start: cohort?.starts_on || p.created_at, end: cohort?.ends_on || issuedAt,
+    org, profile: profileFor(cfg, org?.cert),
+  });
 }
 
 async function insertCertificate(p: any, by: string | null) {
@@ -137,10 +193,11 @@ export async function mine(p: any) {
 // ── للإدارة ──
 export async function list(b: Body) {
   let q = db.from('certificates')
-    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_name:snapshot->org->>name')
+    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_id:snapshot->org->>id, org_name:snapshot->org->>name')
     .order('issued_at', { ascending: false }).limit(1000);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
+  if (b.organization_id) q = q.eq('snapshot->org->>id', String(b.organization_id));
   const { data } = await q;
   const { count } = await db.from('certificate_checks').select('id', { count: 'exact', head: true });
   return { success: true, certificates: data || [], checks: count ?? 0 };
@@ -173,46 +230,74 @@ export async function revoke(a: Actor, b: Body) {
   return { success: true };
 }
 
-// إعادة الإصدار لتصحيح الاسم أو البيانات: القديمة «استُبدلت» وتشير إلى الجديدة
+// استبدال شهادة سارية بإصدار جديد من البيانات الحالية: القديمة «استُبدلت» وتشير إلى الجديدة
+async function replace(oldId: string, participantId: string, by: string, reason: string) {
+  must(await db.from('certificates').update({ status: 'replaced', revoked_at: new Date().toISOString(), revoked_by: by, revoke_reason: reason }).eq('id', oldId).eq('status', 'valid'));
+  const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
+  const fresh = await insertCertificate(p, by);
+  if (fresh) await db.from('certificates').update({ replaced_by: fresh.id }).eq('id', oldId);
+  return fresh;
+}
+
+const reasonOf = (b: Body, msg: string) => {
+  const r = String(b.reason || '').trim().slice(0, 500);
+  if (!r) throw new Fail(msg);
+  return r;
+};
+
+// إعادة الإصدار لتصحيح الاسم أو البيانات
 export async function reissue(a: Actor, b: Body) {
-  const reason = String(b.reason || '').trim().slice(0, 500);
-  if (!reason) throw new Fail('سبب إعادة الإصدار مطلوب');
+  const reason = reasonOf(b, 'سبب إعادة الإصدار مطلوب');
   const { data: old } = await db.from('certificates').select('id, status, participant_id').eq('id', String(b.id)).maybeSingle();
   if (!old || old.status !== 'valid') throw new Fail('تُعاد الشهادة السارية فقط', 409);
   const patch: Body = {};
   if (typeof b.name_ar === 'string' && b.name_ar.trim()) patch.full_name = b.name_ar.trim().slice(0, 120);
   if (typeof b.name_en === 'string') patch.name_en = b.name_en.trim().slice(0, 120) || null;
   if (Object.keys(patch).length) must(await db.from('participants').update(patch).eq('id', old.participant_id));
-  must(await db.from('certificates').update({ status: 'replaced', revoked_at: new Date().toISOString(), revoked_by: a.email, revoke_reason: reason }).eq('id', old.id));
-  const { data: p } = await db.from('participants').select('*').eq('id', old.participant_id).single();
-  const fresh = await insertCertificate(p, a.email);
-  if (fresh) await db.from('certificates').update({ replaced_by: fresh.id }).eq('id', old.id);
+  const fresh = await replace(old.id, old.participant_id, a.email, reason);
   await audit('admin', a.email, 'certificate.reissue', 'certificates', old.id, null, { reason, replaced_by: fresh?.id, ...patch });
   return { success: true, certificate: fresh };
 }
 
+// إعادة إصدار كل الشهادات السارية لمشاركي جهة بإعدادها الحالي
+export async function reissueOrg(a: Actor, b: Body) {
+  const reason = reasonOf(b, 'سبب إعادة الإصدار مطلوب');
+  const orgId = String(b.organization_id || '');
+  const { data: ps } = await db.from('participants').select('id').eq('organization_id', orgId);
+  const ids = (ps || []).map((p: any) => p.id);
+  if (!ids.length) return { success: true, count: 0 };
+  const { data: certs } = await db.from('certificates').select('id, participant_id').eq('status', 'valid').in('participant_id', ids);
+  let count = 0;
+  for (const c of certs || []) { if (await replace(c.id, c.participant_id, a.email, reason)) count++; }
+  await audit('admin', a.email, 'certificate.reissue-org', 'organizations', orgId, null, { reason, count });
+  return { success: true, count };
+}
+
+// معاينة بالمصدر نفسه الذي يُصدر منه: إعداد عام أو جهة، باسم تجريبي
+export async function preview(b: Body) {
+  const [cfg, org] = await Promise.all([settings(), orgRow(b.organization_id)]);
+  const draft = b.settings ? { ...cfg, ...cleanProfile(b.settings) } : cfg;
+  const cert = b.cert ? cleanProfile(b.cert, true) : org?.cert;
+  const now = new Date().toISOString();
+  return {
+    success: true,
+    certificate: snapshotOf({
+      serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
+      track: { title_ar: 'مسار التوازن القيادي', title_en: 'Balanced Leadership Track' }, start: now, end: now,
+      org, profile: profileFor(draft, cert),
+    }),
+  };
+}
+
 export async function settingsGet() {
-  return { success: true, settings: await settings() };
+  const { count } = await db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}');
+  return { success: true, settings: await settings(), customized_orgs: count ?? 0 };
 }
 
 export async function settingsSave(a: Actor, b: Body) {
   const s = b.settings || {};
-  const signatories = (Array.isArray(s.signatories) ? s.signatories : []).slice(0, 1).map((x: any) => {
-    const name = String(x?.name || '').trim().slice(0, 120);
-    const title = String(x?.title || '').trim().slice(0, 160);
-    const image = typeof x?.image === 'string' && x.image.startsWith('data:image/png;base64,') && x.image.length <= 300000 ? x.image : null;
-    if (!name) throw new Fail('اسم الموقّع مطلوب');
-    return { name, title, ...(image ? { image } : {}) };
-  });
-  const hours = s.hours == null || s.hours === '' ? null : Math.round(Number(s.hours));
-  if (hours != null && !(hours >= 1 && hours <= 2000)) throw new Fail('عدد الساعات بين 1 و2000');
-  const row = {
-    id: 1, enabled: s.enabled !== false,
-    program_ar: String(s.program_ar || '').trim().slice(0, 200) || 'برنامج القادة',
-    program_en: String(s.program_en || '').trim().slice(0, 200) || 'Leaders Program',
-    hours, signatories, updated_by: a.email, updated_at: new Date().toISOString(),
-  };
+  const row = { id: 1, enabled: s.enabled !== false, ...cleanProfile({ program_ar: '', program_en: '', hours: null, signatory: null, ...s }), updated_by: a.email, updated_at: new Date().toISOString() };
   must(await db.from('certificate_settings').upsert(row));
-  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatories: signatories.map((x: any) => x.name) });
+  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatory: row.signatory?.name || null });
   return { success: true, settings: row };
 }

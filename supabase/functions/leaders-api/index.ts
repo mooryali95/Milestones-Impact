@@ -106,6 +106,8 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
   'admin.certificate-revoke': (a, b) => A.writer(a, Z.revoke, b),
   'admin.certificate-reissue': (a, b) => A.writer(a, Z.reissue, b),
+  'admin.certificate-reissue-org': (a, b) => A.writer(a, Z.reissueOrg, b),
+  'admin.cert-preview': (_a, b) => Z.preview(b),
   'admin.cert-settings': () => Z.settingsGet(),
   'admin.cert-settings-save': (a, b) => A.writer(a, Z.settingsSave, b),
 };
