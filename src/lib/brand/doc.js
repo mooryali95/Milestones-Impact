@@ -42,7 +42,8 @@ export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="11
 </svg>`;
 
 // ── مكونات المحتوى ──
-export const section = (en, ar, body, note) => `<section class="sec">
+// القسم القصير (بلا جدول) لا ينقسم بين صفحتين، فلا يبقى عنوانه وحيدًا أسفل الصفحة
+export const section = (en, ar, body, note) => `<section class="sec${body.includes('<table') ? '' : ' keep'}">
   <header><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p class="note">${esc(note)}</p>` : ''}</header>
   ${body}
 </section>`;
@@ -67,6 +68,10 @@ export const table = (cols, rows, empty = 'لا بيانات') => `<table class=
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
 export const raw = (html) => ({ html });
+// خلاصة مميّزة بشريط ذهبي: عنوان ونص
+export const callout = (title, text) => `<div class="callout"><b>${esc(title)}</b><p>${esc(text)}</p></div>`;
+// قائمة نقاط بمعين ذهبي
+export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${t && t.html != null ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
 
 // ── الوثيقة ──
 // meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص }
@@ -109,6 +114,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${C.gold}; opacity: .45; }
 .eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.gold}; }
 .sec { margin-top: 9mm; break-inside: auto; }
+.sec.keep { break-inside: avoid; }
 .sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
 .sec h2 { font-weight: 300; font-size: 15pt; margin: 1mm 0 0; }
 .sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: 8.5pt; }
@@ -141,6 +147,12 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
 .pg i { display: block; height: 100%; background: ${C.gold}; }
 .pgn { font: 300 8.5pt "Noto Sans", sans-serif; }
+.callout { border-right: 0.6mm solid ${C.gold}; background: ${C.mist}; padding: 4mm 5mm; border-radius: 2px; }
+.callout b { display: block; font-weight: 300; font-size: 15pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
+.callout p { margin: 0; font-size: 9.5pt; line-height: 1.9; color: ${C.slate}; }
+.points { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.2mm; }
+.points li { position: relative; padding-right: 5mm; font-size: 9.5pt; line-height: 1.8; color: ${C.slate}; }
+.points li::before { content: ''; position: absolute; right: 0; top: 2.2mm; width: 1.8mm; height: 1.8mm; background: ${C.gold}; transform: rotate(45deg); }
 .tag { display: inline-block; border: 1px solid ${C.line}; padding: 0 2mm; border-radius: 2px; font-size: 7.5pt; color: ${C.slate}; white-space: nowrap; }
 .tag.gold { border-color: ${C.gold}; color: ${C.gold}; }
 .mono { font-family: "Noto Sans", monospace; font-size: 8pt; letter-spacing: .05em; }
@@ -168,9 +180,9 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
     ${SEAL()}
   </div>
   <footer class="rights">
-    <b>© ${year} Milestone Impact. جميع الحقوق محفوظة.</b>
-    هذه الوثيقة ومحتواها ملكية فكرية لـ Milestone Impact. ${esc(conf)}. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.
-    <span class="mono">${esc(id)} · ${esc(today())}</span>
+    <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
+    هذه الوثيقة ومحتواها ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>. ${esc(conf)}. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.
+    <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
   </footer>
 </article>
 </body></html>`;
