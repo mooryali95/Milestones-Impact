@@ -15,11 +15,30 @@ import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
+import OrgPortal from './screens/OrgPortal.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
 
+// /org و/org/verify: بوابة منسق الجهة، بجلسة مستقلة عن المشارك
+const isOrgPortal = () => location.pathname === '/org' || location.pathname.startsWith('/org/');
+
 export default function App() {
+  return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
+}
+
+function Shell({ tag, children }) {
+  return (
+    <>
+      <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
+      <header className="topbar"><div className="topbar-in"><img src={logo} alt="Milestone Impact" /><span className="tag">{tag}</span><span className="spacer" /></div></header>
+      <main id="main" tabIndex={-1}>{children}</main>
+      <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة.</footer>
+    </>
+  );
+}
+
+function Participant() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');   // home | profile | handbook

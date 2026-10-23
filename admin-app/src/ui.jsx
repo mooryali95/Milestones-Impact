@@ -61,11 +61,11 @@ export function UIProvider({ children }) {
   );
 }
 
-// يغلق النافذة بـ Esc ما لم تكن نافذة تأكيد مفتوحة فوقها
+// يغلق النافذة بـ Esc ما لم تكن نافذة تأكيد (.mid-box) مفتوحة فوقها
 export function useEscape(onClose, active = true) {
   useEffect(() => {
     if (!active) return undefined;
-    const h = (e) => { if (e.key === 'Escape' && !document.querySelector('.mid-ov')) onClose(); };
+    const h = (e) => { if (e.key === 'Escape' && !document.querySelector('.mid-box')) onClose(); };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
   }, [onClose, active]);

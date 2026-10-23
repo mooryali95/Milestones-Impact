@@ -28,7 +28,8 @@ async function setup(page, overrides = {}) {
       'admin.participant': person,
       'admin.org': { success: true, org: orgs[0], participants: [{ ...people[0], track: 'M1I1L2', track_title: 'مسار البداية' }], funnel: { ...orgs[0].stats, withdrawn: 0 }, by_track: { M1I1L2: 1 }, by_via: { link: 1 }, by_campaign: {}, by_site: {} },
       'admin.approve': { success: true }, 'admin.review': { success: true }, 'admin.assign-org': { success: true, moved: 1 },
-      'admin.save': { success: true }, 'admin.create-participant': { success: true },
+      'admin.save': { success: true, row: { id: 'o1' } }, 'admin.create-participant': { success: true },
+      'admin.coordinator': { success: true, coordinator: null },
       ...overrides,
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
@@ -103,12 +104,15 @@ test('الجهات: البطاقات ولوحة الجهة ورابط الحمل
   await expect(page.getByRole('status')).toHaveText('نُسخ رابط الحملة');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://leaders.sunkvalue.com/j/wt01/whatsapp');
 
-  await page.getByRole('button', { name: 'تحرير' }).click();
+  await page.getByRole('button', { name: 'تحرير', exact: true }).first().click();
   const form = page.getByRole('dialog', { name: /وزارة التجربة/ });
-  await expect(form.getByLabel(/مواقع الجهة/)).toHaveValue('wt.gov.sa');
-  await form.getByLabel('عدد المقاعد المتعاقد عليها').fill('25');
-  await form.getByRole('button', { name: 'حفظ' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ id: 'o1', seats: 25, domains: 'wt.gov.sa' });
+  await expect(form.getByText('wt.gov.sa')).toBeVisible();
+  await expect(form.getByRole('button', { name: 'حفظ التعديلات' })).toBeDisabled();
+  await form.getByRole('button', { name: 'زيادة' }).click();
+  await form.getByLabel('أضف موقعًا').fill('portal.wt.gov.sa');
+  await form.getByLabel('أضف موقعًا').press('Enter');
+  await form.getByRole('button', { name: 'حفظ التعديلات' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ id: 'o1', seats: 11, domains: 'wt.gov.sa,portal.wt.gov.sa' });
   await expect(form).toBeHidden();
 
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
