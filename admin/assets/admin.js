@@ -46,18 +46,28 @@ async function callAuth(body) {
   const action = LEGACY_ACTION_MAP[body.action] || body.action;
   const payload = { ...body, action };
   if (authToken) payload.token = authToken;
-  try {
-    const res = await fetch(ADMIN_API, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    return res.json();
-  } catch (e) { return { success: false, message: 'خطأ في الاتصال بالخادم' }; }
+  // إقلاع الدالة يرد 502/503/504 مؤقتًا، والدالة لم تعمل، فتُعاد المحاولة
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(ADMIN_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': `Bearer ${SUPA_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if ([502, 503, 504].includes(res.status)) {
+        if (i < 3) { await new Promise(r => setTimeout(r, 800 * i)); continue; }
+        return { success: false, message: 'الخادم مشغول لحظيًا، حدّث الصفحة بعد ثوانٍ' };
+      }
+      return res.json();
+    } catch (e) {
+      if (i < 2) { await new Promise(r => setTimeout(r, 800)); continue; }
+      return { success: false, message: 'خطأ في الاتصال بالخادم' };
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════

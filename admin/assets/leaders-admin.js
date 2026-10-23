@@ -55,17 +55,28 @@
   const role = () => { try { const s = Session.load(); return s?.user?.role_id || s?.user?.role || 'viewer'; } catch { return 'viewer'; } };
   const canWrite = () => role() !== 'viewer';
 
+  // بوابة Supabase ترد 503 «Service is temporarily unavailable» حين تُقلع الدالة
+  // (أول طلب بعد خمول أو بعد نشر). الدالة لم تعمل حينها، فإعادة المحاولة آمنة.
+  const BUSY = [502, 503, 504];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   async function L(action, body = {}) {
-    try {
-      const r = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
-        body: JSON.stringify({ action, token: authToken, ...body }),
-      });
-      const d = await r.json();
-      if (!d.success && d.code === 'session') toast('انتهت الجلسة، سجّل الدخول من جديد');
-      return d;
-    } catch { return { success: false, message: 'تعذّر الاتصال بالخادم' }; }
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const r = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+          body: JSON.stringify({ action, token: authToken, ...body }),
+        });
+        if (BUSY.includes(r.status) && attempt < 2) { await wait(800 * (attempt + 1)); continue; }
+        if (BUSY.includes(r.status)) return { success: false, message: 'الخادم مشغول لحظيًا، حدّث الصفحة بعد ثوانٍ' };
+        const d = await r.json();
+        if (!d.success && d.code === 'session') toast('انتهت الجلسة، سجّل الدخول من جديد');
+        return d;
+      } catch {
+        if (attempt < 1) { await wait(800); continue; }
+        return { success: false, message: 'تعذّر الاتصال بالخادم' };
+      }
+    }
   }
 
   // الفلاتر المحفوظة لقائمة المشاركين: تبقى بعد التحديث وعلى هذا الجهاز فقط

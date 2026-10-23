@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // نفس منهجية تطبيق المصفوفة: المفتاح العام في الترويسة لبوابة Supabase،
 // وتوكن الجلسة داخل الجسم يُتحقق منه على الخادم.
-import { SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
+import { BUSY_STATUS, fetchRetry, SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
@@ -28,12 +28,14 @@ export const setExpiredHandler = (fn) => { onExpired = fn; };
 export async function call(action, body = {}) {
   let res;
   try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/leaders-api`, {
+    const r = await fetchRetry(`${SUPABASE_URL}/functions/v1/leaders-api`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: session.get(), ...body }),
     });
-    res = await r.json();
+    res = BUSY_STATUS.includes(r.status)
+      ? { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' }
+      : await r.json();
   } catch {
     res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
   }
