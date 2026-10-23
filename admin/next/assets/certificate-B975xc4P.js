@@ -1,16 +1,16 @@
-import{_ as w}from"./index-ChZkRnVS.js";import{C as e,e as i,L as k}from"./doc-ZnIZgExu.js";const F=k.replace(/<\?xml[^>]*>\s*/,"");function v(t="MI",{cx:o=0,cy:a=0,r:s=60,rings:n=6,color:r=e.gold,opacity:l=.11}={}){let c=0;for(const d of String(t))c=c*31+d.charCodeAt(0)>>>0;const m=18+c%7,u=[];for(let d=0;d<n;d+=1){const $=s*(.55+.45*(d/Math.max(1,n-1))),h=$*(.1+.02*(c>>d&3)),x=d*Math.PI/m;let b="";for(let g=0;g<=900;g+=1){const p=g/900*Math.PI*2,y=$-h+h*Math.cos(m*p+x)+h*.35*Math.cos((m*2+1)*p);b+=`${g?"L":"M"}${(o+y*Math.cos(p)).toFixed(2)} ${(a+y*Math.sin(p)).toFixed(2)}`}u.push(`<path d="${b}Z" fill="none" stroke="${r}" stroke-width="0.14" opacity="${l}"/>`)}return u.join("")}function _(){const n=(r,l)=>`<g transform="translate(${r} ${l})">
+import{_ as x}from"./index-DfnMJCCQ.js";import{C as e,e as i,L as k}from"./doc-ZnIZgExu.js";const F=k.replace(/<\?xml[^>]*>\s*/,"");function v(t="MI",{cx:o=0,cy:a=0,r:s=60,rings:r=6,color:n=e.gold,opacity:l=.11}={}){let m=0;for(const d of String(t))m=m*31+d.charCodeAt(0)>>>0;const h=18+m%7,u=[];for(let d=0;d<r;d+=1){const $=s*(.55+.45*(d/Math.max(1,r-1))),f=$*(.1+.02*(m>>d&3)),w=d*Math.PI/h;let b="";for(let c=0;c<=900;c+=1){const g=c/900*Math.PI*2,y=$-f+f*Math.cos(h*g+w)+f*.35*Math.cos((h*2+1)*g);b+=`${c?"L":"M"}${(o+y*Math.cos(g)).toFixed(2)} ${(a+y*Math.sin(g)).toFixed(2)}`}u.push(`<path d="${b}Z" fill="none" stroke="${n}" stroke-width="0.14" opacity="${l}"/>`)}return u.join("")}function I(){const r=(n,l)=>`<g transform="translate(${n} ${l})">
     <rect x="-1.1" y="-1.1" width="2.2" height="2.2" transform="rotate(45)" fill="${e.gold}"/>
     <rect x="-2.1" y="-2.1" width="4.2" height="4.2" transform="rotate(45)" fill="#FFFFFF" fill-opacity="0" stroke="${e.gold}" stroke-width="0.2"/></g>`;return`<svg class="frame" viewBox="0 0 297 210" preserveAspectRatio="none" aria-hidden="true">
     <rect x="9" y="9" width="279" height="192" fill="none" stroke="${e.gold}" stroke-width="0.5"/>
     <rect x="12" y="12" width="273" height="186" fill="none" stroke="${e.graphite}" stroke-width="0.18" opacity=".55"/>
-    ${[[9,9],[288,9],[9,201],[288,201]].map(([r,l])=>n(r,l)).join("")}
-  </svg>`}function I(t,o=42){const a=[...t];return a.map((s,n)=>{const r=n/a.length*360;return`<text x="60" y="${60-o}" transform="rotate(${r.toFixed(2)} 60 60)" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="6.4" fill="${e.gold}">${s===" "?"":i(s)}</text>`}).join("")}const S=`<svg class="cseal" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
+    ${[[9,9],[288,9],[9,201],[288,201]].map(([n,l])=>r(n,l)).join("")}
+  </svg>`}function _(t,o=42){const a=[...t];return a.map((s,r)=>{const n=r/a.length*360;return`<text x="60" y="${60-o}" transform="rotate(${n.toFixed(2)} 60 60)" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="6.4" fill="${e.gold}">${s===" "?"":i(s)}</text>`}).join("")}const S=`<svg class="cseal" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
   <circle cx="60" cy="60" r="56" fill="none" stroke="${e.gold}" stroke-width=".8"/>
   <circle cx="60" cy="60" r="50" fill="none" stroke="${e.gold}" stroke-width=".4" stroke-dasharray="1.2 2.2"/>
   <circle cx="60" cy="60" r="33" fill="none" stroke="${e.gold}" stroke-width=".5"/>
-  ${I("MILESTONE IMPACT · CERTIFIED · FROM INTENTION TO IMPACT · ")}
+  ${_("MILESTONE IMPACT · CERTIFIED · FROM INTENTION TO IMPACT · ")}
   <rect x="50" y="50" width="20" height="20" transform="rotate(45 60 60)" fill="${e.gold}"/>
-</svg>`,f=t=>new Date(t).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"}),N=t=>new Date(t).toLocaleDateString("en-GB",{year:"numeric",month:"long",day:"numeric"});function M(t,o,{status:a}={}){const s=!!t.org?.logo,n=(t.signatories||[]).slice(0,1),r=t.start&&t.end?`${f(t.start)} – ${f(t.end)}`:"",l=t.start&&t.end?`${new Date(t.start).toLocaleDateString("en-GB",{month:"long",year:"numeric"})} – ${new Date(t.end).toLocaleDateString("en-GB",{month:"long",year:"numeric"})}`:"",c=`MILESTONE IMPACT · ${t.serial} · CERTIFICATE OF PARTICIPATION · `.repeat(14);return`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+</svg>`,N=(t,o)=>t?`<div class="attest"><div class="ink">${t.image?`<img src="${i(t.image)}" alt="">`:""}</div><div class="line"></div><b>${i(t.name)}</b>${t.title?`<span>${i(t.title)}</span>`:""}</div>`:`<div class="attest"><div class="ink"><span class="issuer">Milestone Impact</span></div><div class="line"></div><b>الجهة المصدِرة</b><span>${i(p(o.issued_at))}</span></div>`,p=t=>new Date(t).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"});function M(t,o,{status:a}={}){const s=!!t.org?.logo,r=(t.signatories||[]).slice(0,1),n=t.start&&t.end?`${p(t.start)} – ${p(t.end)}`:"",l=t.start&&t.end?`${new Date(t.start).toLocaleDateString("en-GB",{month:"long",year:"numeric"})} – ${new Date(t.end).toLocaleDateString("en-GB",{month:"long",year:"numeric"})}`:"",m=`MILESTONE IMPACT · ${t.serial} · CERTIFICATE OF PARTICIPATION · `.repeat(14);return`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <title>شهادة مشاركة · ${i(t.name_ar)} · ${i(t.serial)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
@@ -47,23 +47,30 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
 .body { font-size: 11pt; color: ${e.slate}; line-height: 1.9; margin: 0 auto; max-width: 200mm; }
 .body b { font-weight: 400; color: ${e.graphite}; }
 .body-en { font: 300 8.5pt "Noto Sans", sans-serif; color: ${e.muted}; direction: ltr; margin: 1.5mm 0 0; line-height: 1.7; }
-.foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 8mm; }
-.verify { display: flex; align-items: flex-end; gap: 3.5mm; direction: ltr; text-align: left; }
-.verify .qr { width: 21mm; height: 21mm; padding: 1.2mm; border: 0.3mm solid ${e.line}; background: #fff; }
+/* التذييل بثلاثة أعمدة متناظرة (اتجاه الصفحة RTL): التوثيق يمينًا، الختم في الوسط، التحقق يسارًا */
+.foot { display: grid; grid-template-columns: 1fr 34mm 1fr; align-items: end; gap: 10mm; }
+.foot > :first-child { justify-self: start; }
+.foot > :last-child { justify-self: end; }
+.cseal { width: 30mm; height: 30mm; display: block; justify-self: center; }
+/* كتلة التوثيق: الموقّع، أو الجهة المصدِرة حين لا موقّع، بالهيئة نفسها */
+.attest { width: 58mm; text-align: center; }
+.attest .ink { height: 12mm; display: flex; align-items: flex-end; justify-content: center; }
+.attest .ink img { max-height: 12mm; max-width: 50mm; }
+.attest .issuer { font: 300 13pt "Noto Sans", sans-serif; letter-spacing: .06em; color: ${e.graphite}; direction: ltr; }
+.attest .line { height: 0.3mm; background: ${e.graphite}; opacity: .5; margin: 1.2mm 0 1.6mm; }
+.attest b { display: block; font-weight: 400; font-size: 9.5pt; color: ${e.graphite}; }
+.attest span { display: block; font-size: 7.5pt; color: ${e.muted}; margin-top: .4mm; }
+/* التحقق: نص عربي بقيم لاتينية معزولة، والرمز عند الحافة الخارجية */
+.verify { display: flex; align-items: center; gap: 3.5mm; }
+.verify dl { margin: 0; text-align: right; display: grid; grid-template-columns: auto auto; gap: .6mm 3mm; font-size: 6.8pt; color: ${e.muted}; line-height: 1.45; }
+.verify dt { white-space: nowrap; }
+.verify dd { margin: 0; color: ${e.graphite}; white-space: nowrap; }
+.verify dd.ltr { direction: ltr; text-align: right; unicode-bidi: isolate; font: 400 7.2pt "Noto Sans", sans-serif; letter-spacing: .04em; }
+.verify .qr { flex: none; width: 17mm; height: 17mm; padding: 1mm; border: 0.25mm solid ${e.line}; background: #fff; }
 .verify .qr svg { width: 100%; height: 100%; display: block; }
-.verify .meta { font: 300 6.8pt "Noto Sans", sans-serif; color: ${e.muted}; line-height: 1.75; }
-.verify .meta b { display: block; font: 400 8.5pt "Noto Sans", sans-serif; letter-spacing: .08em; color: ${e.graphite}; }
-.verify .meta .ar { font-family: "Noto Kufi Arabic", sans-serif; direction: rtl; display: block; }
-.cseal { width: 31mm; height: 31mm; display: block; }
-.signs { display: flex; justify-content: flex-start; gap: 10mm; }
-.sign { min-width: 52mm; text-align: center; }
-.sign .ink { height: 12mm; display: flex; align-items: flex-end; justify-content: center; }
-.sign .ink img { max-height: 12mm; max-width: 46mm; }
-.sign .line { height: 0.3mm; background: ${e.graphite}; opacity: .6; margin: 1mm 0 1.5mm; }
-.sign b { display: block; font-weight: 400; font-size: 9.5pt; }
-.sign span { font-size: 7.5pt; color: ${e.muted}; }
 .micro { position: absolute; left: 16mm; right: 16mm; bottom: 13.3mm; font: 300 3.2pt/1 "Noto Sans", sans-serif; letter-spacing: .08em; color: ${e.gold}; opacity: .75; white-space: nowrap; overflow: hidden; direction: ltr; }
 .rights { position: absolute; left: 0; right: 0; bottom: 4mm; text-align: center; font-size: 6.3pt; color: ${e.muted}; }
+.rights bdi, .rights .en { font-family: "Noto Sans", sans-serif; }
 .status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .status span { border: 1mm solid ${e.muted}; color: ${e.muted}; font-size: 40pt; padding: 2mm 14mm; transform: rotate(-14deg); opacity: .5; }
 </style></head><body>
@@ -71,7 +78,7 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
 <article class="page">
   <div class="lattice"></div>
   <svg class="guil" viewBox="0 0 297 210" aria-hidden="true">${v(t.serial,{cx:148.5,cy:108,r:68})}${v(t.serial+"b",{cx:148.5,cy:108,r:44,rings:5,color:e.graphite,opacity:.08})}</svg>
-  ${_()}
+  ${I()}
   <div class="content">
     <header class="brands">
       <div class="mi">${F}</div>
@@ -84,20 +91,24 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
       <p class="lead">تُمنح هذه الشهادة إلى</p>
       <h2 class="name">${i(t.name_ar)}</h2>
       <p class="name-en">${i(t.name_en)}</p>
-      <p class="body">تقديرًا لإتمام متطلبات المشاركة في <b>${i(t.program_ar)}</b>${t.track_ar?` ضمن <b>${i(t.track_ar)}</b>`:""}${t.hours?` بواقع <b>${i(t.hours)} ساعة</b> تدريبية`:""}${r?`<br>خلال الفترة ${i(r)}`:""}.</p>
+      <p class="body">تقديرًا لإتمام متطلبات المشاركة في <b>${i(t.program_ar)}</b>${t.track_ar?` ضمن <b>${i(t.track_ar)}</b>`:""}${t.hours?` بواقع <b>${i(t.hours)} ساعة</b> تدريبية`:""}${n?`<br>خلال الفترة ${i(n)}`:""}.</p>
       <p class="body-en">In recognition of completing the ${i(t.program_en)}${t.track_en?` · ${i(t.track_en)}`:""}${t.hours?` · ${i(t.hours)} training hours`:""}${l?` · ${i(l)}`:""}</p>
     </section>
     <footer class="foot">
-      <div class="verify">
-        <div class="qr">${o}</div>
-        <div class="meta"><span class="ar">رقم الشهادة</span><b>${i(t.serial)}</b>Issued ${i(N(t.issued_at))}<span class="ar">صدرت في ${i(f(t.issued_at))}</span>${i(t.verify_url.replace(/^https?:\/\//,""))}</div>
-      </div>
+      ${N(r[0],t)}
       ${S}
-      <div class="signs">${n.map(m=>`<div class="sign"><div class="ink">${m.image?`<img src="${i(m.image)}" alt="">`:""}</div><div class="line"></div><b>${i(m.name)}</b><span>${i(m.title)}</span></div>`).join("")}</div>
+      <div class="verify">
+        <dl>
+          <dt>رقم الشهادة</dt><dd class="ltr">${i(t.serial)}</dd>
+          <dt>تاريخ الإصدار</dt><dd>${i(p(t.issued_at))}</dd>
+          <dt>التحقق</dt><dd class="ltr">${i(t.verify_url.replace(/^https?:\/\//,""))}</dd>
+        </dl>
+        <div class="qr">${o}</div>
+      </div>
     </footer>
   </div>
-  <div class="micro">${i(c)}</div>
-  <div class="rights">© ${new Date(t.issued_at).getFullYear()} Milestone Impact. جميع الحقوق محفوظة. تحقق من صحة الشهادة بمسح الرمز أو بزيارة ${i(t.verify_url.replace(/^https?:\/\//,""))}</div>
+  <div class="micro">${i(m)}</div>
+  <div class="rights">جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(t.issued_at).getFullYear()} Milestone Impact</bdi> · تحقّق من صحة الشهادة بمسح الرمز</div>
   ${a?`<div class="status"><span>${i(a)}</span></div>`:""}
 </article>
-</body></html>`}function A(t){const o=new Date(t.issued_at);return`https://www.linkedin.com/profile/add?${new URLSearchParams({startTask:"CERTIFICATION_NAME",name:t.program_en||"Leaders Program",organizationName:"Milestone Impact",issueYear:String(o.getFullYear()),issueMonth:String(o.getMonth()+1),certUrl:t.verify_url,certId:t.serial})}`}async function E(t){const{default:o}=await w(async()=>{const{default:a}=await import("./browser-CqDbEFy1.js").then(s=>s.b);return{default:a}},[]);return o.toString(t,{type:"svg",margin:0,errorCorrectionLevel:"Q",color:{dark:e.graphite,light:"#FFFFFF"}})}async function C(t,o,a={}){if(!t)return!1;const s=M(o,await E(o.verify_url),a);t.document.open(),t.document.write(s),t.document.close();const n=(r,l)=>t.document.querySelector(`[data-act="${r}"]`)?.addEventListener("click",l);return n("print",()=>t.print()),n("close",()=>t.close()),n("linkedin",()=>t.open(A(o),"_blank","noopener")),!0}export{M as certificateHtml,v as guilloche,A as linkedinUrl,E as qrSvgFor,C as writeCertificate};
+</body></html>`}function A(t){const o=new Date(t.issued_at);return`https://www.linkedin.com/profile/add?${new URLSearchParams({startTask:"CERTIFICATION_NAME",name:t.program_en||"Leaders Program",organizationName:"Milestone Impact",issueYear:String(o.getFullYear()),issueMonth:String(o.getMonth()+1),certUrl:t.verify_url,certId:t.serial})}`}async function T(t){const{default:o}=await x(async()=>{const{default:a}=await import("./browser-CqDbEFy1.js").then(s=>s.b);return{default:a}},[]);return o.toString(t,{type:"svg",margin:0,errorCorrectionLevel:"Q",color:{dark:e.graphite,light:"#FFFFFF"}})}async function E(t,o,a={}){if(!t)return!1;const s=M(o,await T(o.verify_url),a);t.document.open(),t.document.write(s),t.document.close();const r=(n,l)=>t.document.querySelector(`[data-act="${n}"]`)?.addEventListener("click",l);return r("print",()=>t.print()),r("close",()=>t.close()),r("linkedin",()=>t.open(A(o),"_blank","noopener")),!0}export{M as certificateHtml,v as guilloche,A as linkedinUrl,T as qrSvgFor,E as writeCertificate};
