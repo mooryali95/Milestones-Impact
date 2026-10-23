@@ -1254,7 +1254,8 @@ a { text-decoration: none; color: inherit; }
 .ce { display: grid; gap: 16px; }
 .ce-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; border: 0; padding: 0; margin: 12px 0; }
 .ce-sub { margin: 8px 0; font-weight: 500; } .ce-sub small { color: var(--ink-mid); font-weight: 400; }
-.ce-signers { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 12px; justify-items: start; }
+.ce-choice { display: grid; gap: 10px; justify-items: start; margin: 0 0 12px; }
+.ce-inherit { font-size: .78rem; color: var(--ink-mid); }
 .ce-signer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--ink-faint); border-radius: 8px; }
 .ce-sig { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ce-sig img { height: 40px; max-width: 160px; object-fit: contain; background: #fff; border: 1px dashed var(--ink-faint); padding: 2px 6px; }
