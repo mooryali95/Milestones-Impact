@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useCallback } from "react";
+import { pressable, useEscape } from "../lib/a11y";
 import Skeleton from "./Skeleton";
 import Icon from "./Icon";
 import { gregorianToHijri } from "../lib/dateUtils";
@@ -28,10 +29,11 @@ const ProcessModal = (p) => {
     toggleConfirm,
   } = p;
 
+  useEscape(useCallback(() => { setSelectedCell(null); setHighlightedKeys([]); }, [setSelectedCell, setHighlightedKeys]));
   return (
       (
         <div className="overlay" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label={selectedCell.nameAr} onClick={e=>e.stopPropagation()}>
             <div className="modal-pull"/>
             <button className="modal-x" aria-label="إغلاق تفاصيل العملية" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
@@ -66,9 +68,9 @@ const ProcessModal = (p) => {
             {(selectedCell.fedBy?.length>0||selectedCell.feeds?.length>0) && <div className="modal-section">
               <div className="modal-section-title"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> شبكة الترابط</div>
               {selectedCell.fedBy?.length>0 && <><div className="modal-related-label">← تُغذّى من:</div>
-                <div className="modal-related">{selectedCell.fedBy.map(k=>{const p=procs.find(x=>x.key===k);return p?<span key={k} className="modal-related-chip" style={{borderColor:p.trackColor+'60',color:p.trackColor,background:p.trackColor+'08'}} onClick={()=>{setSelectedCell(p);setTempDate(dates[p.key]||"");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>{p.trackIcon} {p.nameAr}</span>:null;})}</div></>}
+                <div className="modal-related">{selectedCell.fedBy.map(k=>{const p=procs.find(x=>x.key===k);return p?<span key={k} className="modal-related-chip" style={{borderColor:p.trackColor+'60',color:p.trackColor,background:p.trackColor+'08'}} {...pressable(()=>{setSelectedCell(p);setTempDate(dates[p.key]||"");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);})}>{p.trackIcon} {p.nameAr}</span>:null;})}</div></>}
               {selectedCell.feeds?.length>0 && <><div className="modal-related-label" style={{marginTop:".5rem"}}>→ تُغذّي:</div>
-                <div className="modal-related">{selectedCell.feeds.map(k=>{const p=procs.find(x=>x.key===k);return p?<span key={k} className="modal-related-chip" style={{borderColor:p.trackColor+'60',color:p.trackColor,background:p.trackColor+'08'}} onClick={()=>{setSelectedCell(p);setTempDate(dates[p.key]||"");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>{p.trackIcon} {p.nameAr}</span>:null;})}</div></>}
+                <div className="modal-related">{selectedCell.feeds.map(k=>{const p=procs.find(x=>x.key===k);return p?<span key={k} className="modal-related-chip" style={{borderColor:p.trackColor+'60',color:p.trackColor,background:p.trackColor+'08'}} {...pressable(()=>{setSelectedCell(p);setTempDate(dates[p.key]||"");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);})}>{p.trackIcon} {p.nameAr}</span>:null;})}</div></>}
             </div>}
             <div className="modal-divider"/>
             {selectedCell && (selectedCell.nameAr==="تحليل ديموغرافي"||selectedCell.key==="creation-1") && (

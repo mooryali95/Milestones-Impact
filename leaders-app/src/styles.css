@@ -558,3 +558,8 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .next-card .k { font-size: .72rem; letter-spacing: .5px; color: var(--accent); font-weight: 700; }
 .next-card .row { margin-top: 6px; }
 .welcome ol { margin: 8px 0 0; padding-inline-start: 20px; line-height: 1.9; }
+
+/* ── سهولة الوصول: حلقة تركيز واضحة لمستخدمي لوحة المفاتيح ── */
+:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; border-radius: 4px; }
+.skip-link { position: absolute; inset-inline-start: 12px; top: -48px; z-index: 100; background: var(--graphite); color: #fff; padding: 8px 14px; border-radius: 8px; }
+.skip-link:focus { top: 12px; }

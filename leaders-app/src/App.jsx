@@ -69,6 +69,7 @@ export default function App() {
 
   return (
     <>
+      <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar">
         <div className="topbar-in">
           <img src={logo} alt="Milestone Impact" />
@@ -78,7 +79,7 @@ export default function App() {
           {me && <button className="link small" onClick={logout}>خروج</button>}
         </div>
       </header>
-      <main>{screen}</main>
+      <main id="main" tabIndex={-1}>{screen}</main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة، والمحتوى ملكية فكرية لـ MI.</footer>
     </>
   );
