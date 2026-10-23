@@ -101,12 +101,12 @@ function figureHtml(f) {
     body = `<div class="f-chain">${its.map((x, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${two(i + 1)}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'cycle') {
     const n = its.length;
-    // عكس عقارب الساعة: الأول أعلى ثم يسارًا، كاتجاه القراءة العربية
-    const ang = (i) => (-90 - (360 / n) * i) * Math.PI / 180;
+    // مع عقارب الساعة: الأول أعلى ثم يمينًا
+    const ang = (i) => (-90 + (360 / n) * i) * Math.PI / 180;
     const at = (a, r = 38) => ({ x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) });
     const pos = its.map((_, i) => at(ang(i)));
     // رأس سهم ذهبي في منتصف كل قوس، مماسّ للدائرة باتجاه الحركة
-    const heads = its.map((_, i) => { const a = (ang(i) + ang(i + 1)) / 2; const p = at(a); const deg = (a * 180) / Math.PI - 90; return `<path d="M-1.6 -1.3 L1.2 0 L-1.6 1.3 Z" fill="${C.gold}" transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(1)})"/>`; }).join('');
+    const heads = its.map((_, i) => { const a = (ang(i) + ang(i + 1)) / 2; const p = at(a); const deg = (a * 180) / Math.PI + 90; return `<path d="M-1.6 -1.3 L1.2 0 L-1.6 1.3 Z" fill="${C.gold}" transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(1)})"/>`; }).join('');
     body = `<div class="f-cycle"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" fill="none" stroke="${C.gold}" stroke-width=".35"/>${heads}<rect x="45.5" y="45.5" width="9" height="9" transform="rotate(45 50 50)" fill="${C.graphite}"/></svg>${its.map((x, i) => `<div class="cnode" style="left:${pos[i].x.toFixed(2)}%;top:${pos[i].y.toFixed(2)}%"><span>${i + 1}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'compare') {
     const [h, ...rows] = f.lines.map(cells);
@@ -125,7 +125,7 @@ function figureHtml(f) {
   } else if (f.kind === 'stat') {
     body = `<div class="f-stat">${f.lines.map(cells).map(([v, l]) => `<div><b>${inline(v)}</b><span>${inline(l || '')}</span></div>`).join('')}</div>`;
   } else if (f.kind === 'layers') {
-    body = `<div class="f-layers">${its.map((x, i) => `<div class="ly" style="margin-inline:${i * 4}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
+    body = `<div class="f-layers">${its.map((x, i) => `<div class="ly" style="margin-inline-start:${i * 5}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
   }
   return `<figure class="fig f-${f.kind}-w">${head}${body}</figure>`;
 }
