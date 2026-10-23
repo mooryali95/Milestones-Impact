@@ -101,8 +101,13 @@ function figureHtml(f) {
     body = `<div class="f-chain">${its.map((x, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${two(i + 1)}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'cycle') {
     const n = its.length;
-    const pos = its.map((_, i) => { const a = (-90 + (360 / n) * i) * Math.PI / 180; return { x: 50 + 38 * Math.cos(a), y: 50 + 38 * Math.sin(a) }; });
-    body = `<div class="f-cycle"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" fill="none" stroke="${C.gold}" stroke-width=".35" stroke-dasharray="1.2 1.6"/>${pos.map((p, i) => { const q = pos[(i + 1) % n]; const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2; return `<path d="M${mx - 1.4} ${my - 1.4} l1.4 1.4 l-1.4 1.4" fill="none" stroke="${C.gold}" stroke-width=".4" transform="rotate(${(Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI} ${mx} ${my})"/>`; }).join('')}<rect x="45" y="45" width="10" height="10" transform="rotate(45 50 50)" fill="${C.graphite}"/></svg>${its.map((x, i) => `<div class="cnode" style="left:${pos[i].x}%;top:${pos[i].y}%"><span>${i + 1}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
+    // عكس عقارب الساعة: الأول أعلى ثم يسارًا، كاتجاه القراءة العربية
+    const ang = (i) => (-90 - (360 / n) * i) * Math.PI / 180;
+    const at = (a, r = 38) => ({ x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) });
+    const pos = its.map((_, i) => at(ang(i)));
+    // رأس سهم ذهبي في منتصف كل قوس، مماسّ للدائرة باتجاه الحركة
+    const heads = its.map((_, i) => { const a = (ang(i) + ang(i + 1)) / 2; const p = at(a); const deg = (a * 180) / Math.PI - 90; return `<path d="M-1.6 -1.3 L1.2 0 L-1.6 1.3 Z" fill="${C.gold}" transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${deg.toFixed(1)})"/>`; }).join('');
+    body = `<div class="f-cycle"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" fill="none" stroke="${C.gold}" stroke-width=".35"/>${heads}<rect x="45.5" y="45.5" width="9" height="9" transform="rotate(45 50 50)" fill="${C.graphite}"/></svg>${its.map((x, i) => `<div class="cnode" style="left:${pos[i].x.toFixed(2)}%;top:${pos[i].y.toFixed(2)}%"><span>${i + 1}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'compare') {
     const [h, ...rows] = f.lines.map(cells);
     body = `<table class="f-compare"><thead><tr><th></th>${h.map((x) => `<th>${inline(x)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr><th>${inline(r[0])}</th>${r.slice(1).map((x) => `<td>${inline(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
@@ -112,7 +117,9 @@ function figureHtml(f) {
     const ax = f.lines[0]?.match(/^محاور\s*[:：]\s*(.+)$/);
     const q = (ax ? its.slice(1) : its).slice(0, 4);
     const [x, y] = ax ? cells(ax[1]) : ['', ''];
-    body = `<div class="f-matrix">${y ? `<span class="ay">${inline(y)} ←</span>` : ''}<div class="grid">${q.map((c, i) => `<div class="q${i === 0 ? ' hi' : ''}"><b>${inline(c.k)}</b>${c.v ? `<p>${inline(c.v)}</p>` : ''}</div>`).join('')}</div>${x ? `<span class="ax">← ${inline(x)}</span>` : ''}</div>`;
+    // الربع الأول (أعلى اليمين) هو المرتفع في المحورين: المحور الأفقي يرتفع نحو اليمين، والرأسي نحو الأعلى
+    const axis = (cls, label) => `<div class="${cls}"><span>مرتفع</span><b>${inline(label)}</b><span>منخفض</span></div>`;
+    body = `<div class="f-matrix">${y ? axis('ay', y) : '<i></i>'}<div class="grid">${q.map((c, i) => `<div class="q${i === 0 ? ' hi' : ''}"><b>${inline(c.k)}</b>${c.v ? `<p>${inline(c.v)}</p>` : ''}</div>`).join('')}</div>${x ? axis('ax', x) : ''}</div>`;
   } else if (f.kind === 'timeline') {
     body = `<div class="f-timeline">${its.map((x) => `<div class="t"><i></i><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
   } else if (f.kind === 'stat') {
@@ -133,7 +140,7 @@ function chapterBody(md) {
     if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
     if (b.type === 'list') return listHtml(b);
     if (b.type === 'fig') return figureHtml(b);
-    if (b.type === 'quote') return `<blockquote class="pull"><span>”</span>${inline(b.text)}</blockquote>`;
+    if (b.type === 'quote') return `<blockquote class="pull"><span dir="ltr">«</span>${inline(b.text)}</blockquote>`;
     return `<p>${inline(b.text)}</p>`;
   }).join('');
   return { html, key: key?.text, heads: blocks.filter((b) => b.type === 'h2').map((b) => b.text.replace(/\*\*/g, '')) };
@@ -186,7 +193,7 @@ export function coverHtml(c) {
 // parts: [{ key, roman, label, title, short }] ترتيب الأجزاء ومسمياتها من التطبيق
 export function bookHtml(book, parts) {
   const mark = `${book.name} · ${book.email} · ${book.ref}`;
-  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='560' height='320'><text x='280' y='160' text-anchor='middle' transform='rotate(-28 280 160)' font-family='Noto Sans, Arial' font-size='14' fill='${C.graphite}' fill-opacity='.045'>${esc(mark)}</text></svg>`);
+  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='560' height='320'><text x='280' y='160' text-anchor='middle' direction='rtl' transform='rotate(-28 280 160)' font-family='Noto Sans, Arial' font-size='14' fill='${C.graphite}' fill-opacity='.045'>${esc(mark)}</text></svg>`);
   const groups = parts.map((p) => ({ ...p, items: book.chapters.filter((c) => c.dimension === p.key), tools: (book.tools || []).filter((t) => t.dimension === p.key) })).filter((p) => p.items.length);
   const total = groups.reduce((s, g) => s + g.items.length, 0);
 
@@ -213,7 +220,7 @@ ${g.items.map((c, i) => {
     <span class="ch-num">${two(i + 1)}</span>
     <div><small>${esc(g.label)}</small><h2>${esc(c.title)}</h2></div>
   </header>
-  ${b.heads.length > 1 ? `<aside class="inside"><b>في هذا الباب</b><ol>${b.heads.map((h) => `<li>${esc(h)}</li>`).join('')}</ol></aside>` : ''}
+  ${b.heads.length > 1 ? `<aside class="inside"><b>في هذا الباب</b><ol>${b.heads.map((h, k) => `<li><span>${k + 1}</span>${esc(h)}</li>`).join('')}</ol></aside>` : ''}
   <div class="txt">${b.html}</div>
   ${b.key ? `<div class="key"><small>الفكرة المحورية</small><p>${inline(b.key)}</p></div>` : ''}
   ${c.reflection ? `<div class="reflect"><small>تأمل</small><p>${inline(c.reflection)}</p><div class="lines"><i></i><i></i><i></i><i></i></div></div>` : ''}
@@ -295,7 +302,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .ch-num { font: 200 46pt/0.9 "Noto Sans", sans-serif; color: ${C.gold}; }
 .ch-open small { color: ${C.gold}; font-size: 8pt; letter-spacing: .06em; } .ch-open h2 { font-size: 19pt; line-height: 1.4; }
 .inside { background: ${C.mist}; border-right: 0.6mm solid ${C.gold}; padding: 3.5mm 5mm; margin-bottom: 6mm; }
-.inside b { font-weight: 400; font-size: 9pt; color: ${C.gold}; } .inside ol { margin: 1mm 0 0; padding-right: 5mm; font-size: 10pt; color: ${C.graphite}; line-height: 1.8; }
+.inside b { font-weight: 400; font-size: 9pt; color: ${C.gold}; } .inside ol { list-style: none; margin: 1mm 0 0; padding: 0; font-size: 10pt; color: ${C.graphite}; line-height: 1.8; }
 .txt h3 { font-weight: 400; font-size: 13.5pt; margin: 7mm 0 2mm; break-after: avoid; }
 .txt h3::before { content: ''; display: inline-block; width: 2mm; height: 2mm; background: ${C.gold}; transform: rotate(45deg); margin-left: 2.5mm; vertical-align: middle; }
 .txt h4 { font-weight: 400; font-size: 10.4pt; margin: 4mm 0 1mm; color: ${C.slate}; break-after: avoid; }
@@ -324,6 +331,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .ch.has-img .ch-open { position: relative; z-index: 1; border-bottom-color: ${C.goldLight}; color: #fff; padding: 0 6mm 4mm; margin-bottom: 10mm; }
 .ch.has-img .ch-open h2 { color: #fff; } .ch.has-img .ch-open small, .ch.has-img .ch-num { color: ${C.goldLight}; }
 /* الرسوم */
+.inside li span { display: inline-block; width: 6mm; color: ${C.gold}; font-family: "Noto Sans", sans-serif; }
 .fig { margin: 6mm 0; break-inside: avoid; }
 .fig figcaption { font-size: 9pt; color: ${C.gold}; letter-spacing: .06em; margin-bottom: 3mm; }
 .fig figcaption::before { content: ''; display: inline-block; width: 6mm; height: 1px; background: ${C.gold}; margin-left: 2mm; vertical-align: middle; }
@@ -351,8 +359,12 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .f-matrix { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 2mm; }
 .f-matrix .grid { grid-column: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm; }
 .f-matrix .q { border: 1px solid ${C.line}; padding: 4mm; min-height: 26mm; background: #fff; } .f-matrix .q.hi { background: ${C.graphite}; color: #fff; } .f-matrix .q.hi b { color: ${C.goldLight}; } .f-matrix .q.hi p { color: rgba(255,255,255,.8); }
-.f-matrix .ay { grid-column: 1; grid-row: 1; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8pt; color: ${C.gold}; text-align: center; }
-.f-matrix .ax { grid-column: 2; grid-row: 2; font-size: 8pt; color: ${C.gold}; text-align: center; }
+.f-matrix .ay, .f-matrix .ax { display: flex; justify-content: space-between; align-items: center; gap: 2mm; font-size: 7.6pt; color: ${C.muted}; }
+.f-matrix .ay b, .f-matrix .ax b { font-weight: 400; color: ${C.gold}; font-size: 8.4pt; }
+.f-matrix .ay { grid-column: 1; grid-row: 1; flex-direction: column; width: 9mm; text-align: center; }
+.f-matrix .ay b { writing-mode: vertical-rl; }
+.f-matrix .ax { grid-column: 2; grid-row: 2; border-top: 1px solid ${C.gold}; padding-top: 1.2mm; }
+.f-matrix .ay { border-left: 1px solid ${C.gold}; padding-left: 1.2mm; }
 .f-timeline { display: flex; position: relative; padding-top: 6mm; }
 .f-timeline::before { content: ''; position: absolute; top: 7.6mm; right: 0; left: 0; height: 1px; background: ${C.gold}; }
 .f-timeline .t { flex: 1; min-width: 0; text-align: center; padding: 0 2mm; position: relative; }
