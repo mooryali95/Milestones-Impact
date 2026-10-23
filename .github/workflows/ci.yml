@@ -58,6 +58,13 @@ jobs:
       - name: Leaders build is committed
         run: git add -N leaders && git diff --exit-code --stat -- leaders
 
+      - name: Build admin app
+        run: npm run admin:build
+
+      # mi-admin ينشر admin/ كما هو، فيجب أن يطابق admin/next/ المودع مصدره
+      - name: Admin build is committed
+        run: git add -N admin/next && git diff --exit-code --stat -- admin/next
+
       # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

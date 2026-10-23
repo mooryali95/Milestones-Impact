@@ -15,9 +15,11 @@
     "preview": "vite preview",
     "leaders:dev": "vite --config leaders-app/vite.config.js",
     "leaders:build": "vite build --config leaders-app/vite.config.js",
+    "admin:dev": "vite --config admin-app/vite.config.js",
+    "admin:build": "vite build --config admin-app/vite.config.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\" \"leaders-app/src/**/*.{js,jsx}\"",
+    "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\" \"leaders-app/src/**/*.{js,jsx}\" \"admin-app/src/**/*.{js,jsx}\"",
     "e2e": "playwright test"
   },
   "devDependencies": {
