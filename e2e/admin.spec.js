@@ -79,3 +79,18 @@ test('زر الدخول بمفتاح المرور يظهر حين يدعمه ا�
   await page.goto(BASE + '/');
   await expect(page.locator('#loginBtnPasskey')).toBeVisible();
 });
+
+test('رد 503 المؤقت من بوابة الدوال يُعاد تلقائيًا ولا يظهر للمدير', async ({ page }) => {
+  let n = 0;
+  await page.route(/supabase\.co\/functions\/v1\/admin-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'list-contacts' && n++ === 0) return route.fulfill({ status: 503, json: { code: 'SERVICE_UNAVAILABLE', message: 'Service is temporarily unavailable' } });
+    await route.fulfill({ json: b.action === 'list-contacts' ? { success: true, contacts: [{ id: 'c1', name: 'طلب بعد الإقلاع', email: 'a@b.c', status: 'new', product: 'MI-HOME', created_at: '2026-10-01T00:00:00Z' }] } : { success: true } });
+  });
+  await page.goto('http://localhost:4303/');
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'م', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await expect(page.getByText('طلب بعد الإقلاع')).toBeVisible();
+  await expect(page.getByText('Service is temporarily unavailable')).toHaveCount(0);
+  expect(n).toBe(2);
+});

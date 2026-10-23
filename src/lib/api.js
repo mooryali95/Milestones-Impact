@@ -15,7 +15,7 @@ export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 // is carried inside the JSON body and verified server-side.
 export async function callFn(fn, body) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+    const res = await fetchRetry(`${SUPABASE_URL}/functions/v1/${fn}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -24,6 +24,7 @@ export async function callFn(fn, body) {
       },
       body: JSON.stringify(body),
     });
+    if (BUSY_STATUS.includes(res.status)) return { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ' };
     return await res.json();
   } catch (e) { return { success: false, message: 'خطأ في الاتصال بالخادم' }; }
 }
@@ -66,3 +67,20 @@ export const AdminAPI = {
   passkeyLoginVerify: (response) => callFn('admin-api', { action: 'passkey-login-verify', response }),
   call: (token, action, extra = {}) => callFn('admin-api', { action, token, ...extra }),
 };
+
+// ── طلب يعيد المحاولة حين تُقلع دالة الحافة ──
+// بوابة Supabase ترد 502/503/504 («Service is temporarily unavailable») عند
+// إقلاع الدالة بعد خمول أو نشر؛ الدالة لم تعمل حينها، فالإعادة آمنة.
+// يعيد Response، أو يرمي عند انقطاع الشبكة بعد آخر محاولة.
+export const BUSY_STATUS = [502, 503, 504];
+export async function fetchRetry(url, init, { tries = 3, delay = 800 } = {}) {
+  for (let i = 1; ; i += 1) {
+    try {
+      const r = await fetch(url, init);
+      if (!BUSY_STATUS.includes(r.status) || i >= tries) return r;
+    } catch (e) {
+      if (i >= tries) throw e;
+    }
+    await new Promise((res) => setTimeout(res, delay * i));
+  }
+}
