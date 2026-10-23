@@ -12,7 +12,7 @@ import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
-import { COVER_CSS, coverHtml, parseMd as parse, writeBook } from '../../../src/lib/brand/book.js';
+import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
 
 const FONT = '"Noto Kufi Arabic", "Noto Sans Arabic", system-ui, sans-serif';
 const COLORS = { text: '#0B272F', muted: '#4A6A72', accent: '#8E6524', quote: '#12414E', rule: 'rgba(11,39,47,.12)' };
