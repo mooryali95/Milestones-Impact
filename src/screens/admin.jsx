@@ -1,4 +1,5 @@
 import React from "react";
+import { pressable } from "../lib/a11y";
 import Icon from "../components/Icon";
 import MILogo from "../MILogo";
 import Footer from "../components/Footer";
@@ -246,7 +247,7 @@ const AdminPanel = (p) => {
             const bookedCount = Object.keys(reg.dates || {}).length;
             const isOpen = adminReportReg === reg.id;
             return <div key={reg.id} className="adm-consultant">
-              <div className="adm-edit-header" onClick={() => setAdminReportReg(isOpen ? null : reg.id)}>
+              <div className="adm-edit-header" aria-expanded={isOpen} {...pressable(() => setAdminReportReg(isOpen ? null : reg.id))}>
                 <h4>{reg.name} — {bookedCount} حجوزات {regAnalysis ? `• نمط ${regAnalysis.pattern.nameAr}` : "• أقل من 3"}</h4>
                 <span>{isOpen ? "▲" : "▼"}</span>
               </div>
@@ -274,7 +275,7 @@ const AdminPanel = (p) => {
           {procs.map((proc) => {
             const isOpen = expandedContent === proc.key;
             return <div key={proc.key} className="adm-edit-card">
-              <div className="adm-edit-header" onClick={() => setExpandedContent(isOpen ? null : proc.key)}>
+              <div className="adm-edit-header" aria-expanded={isOpen} {...pressable(() => setExpandedContent(isOpen ? null : proc.key))}>
                 <h4 style={{color:proc.trackColor}}>{proc.trackIcon} {proc.nameAr}</h4>
                 <span>{isOpen ? "▲" : "▼"}</span>
               </div>

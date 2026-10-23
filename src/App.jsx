@@ -9,7 +9,7 @@ import ConfirmDialog from './components/ConfirmDialog';
 import DemographicsScreen from './screens/demographics';
 import { API_URL, TRACKS, PHASES, OPERATIONS } from './config/constants';
 import { validPhone, validEmail, isPast } from './lib/dateUtils';
-import { publicRead, UserAPI, AdminAPI } from './lib/api';
+import { UserAPI, AdminAPI } from './lib/api';
 import { LocalSession, AdminSession } from './lib/session';
 import useTabHash from './lib/useTabHash';
 import { printFinalTable } from './lib/print';
@@ -17,6 +17,9 @@ import AdminPanel from './screens/admin';
 import { MatrixTab, ScheduleTab, ReportTab, SummaryTab, OutputTab } from './screens/tabs';
 import { RegisterScreen, ResumeScreen, AdminLoginScreen } from './screens/auth';
 import { CSS } from './styles/appCss';
+import useDemographics, { DEMO_KEY } from './hooks/useDemographics';
+import usePublicContent from './hooks/usePublicContent';
+import useCooldown from './hooks/useCooldown';
 
 /*
 ╔══════════════════════════════════════════════════════════════╗
@@ -100,37 +103,16 @@ export default function App() {
   // المعلنة لم توجد وزرّ «إعادة إرسال» يبعث بريداً في كل ضغطة.
   const [otpLastSent, setOtpLastSent] = useState(null);       // timestamp of last send
   const [otpFailCount, setOtpFailCount] = useState(0);        // consecutive failed verifications
-  const [otpCooldown, setOtpCooldown] = useState(0);          // ثوانٍ متبقّية، 0 = مسموح
+  const otpCooldown = useCooldown(otpLastSent, OTP_COOLDOWN_SEC); // ثوانٍ متبقّية، 0 = مسموح
 
-  useEffect(() => {
-    if (!otpLastSent) { setOtpCooldown(0); return; }
-    const left = () => Math.max(0, OTP_COOLDOWN_SEC - Math.floor((Date.now() - otpLastSent) / 1000));
-    setOtpCooldown(left());
-    if (left() === 0) return;
-    const id = setInterval(() => {
-      const l = left();
-      setOtpCooldown(l);
-      if (l === 0) clearInterval(id);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [otpLastSent]);
 
-  // Process details from Supabase (rich data)
-  const [processDetails, setProcessDetails] = useState({});
-  // 'loading' | 'ready' | 'error' — حالة جلب المحتوى الغني
-  const [detailsState, setDetailsState] = useState('loading');
-  const [highlightedKeys, setHighlightedKeys] = useState([]);
-  const [appContent, setAppContent] = useState({});
-
-  // ── التحليل الديموغرافي ──
-  const [demoScreen, setDemoScreen] = useState(false); // هل شاشة النموذج مفتوحة
-  const [demoRows, setDemoRows] = useState([]); // صفوف البيانات
-  const [demoSaving, setDemoSaving] = useState(false);
-  // الصفوف تُجلب من الخادم عند فتح الشاشة — تبقى فارغة حتى تصل
-  const [demoLoading, setDemoLoading] = useState(false);
-  const DEMO_KEY = "demographic_analysis"; // مفتاح الحفظ في DB
   const [selectedReg, setSelectedReg] = useState(null); // المسجّل المفتوح في Modal الأدمن
   const [selectedRegTab, setSelectedRegTab] = useState('schedule'); // تبويب Modal الأدمن
+
+  const [highlightedKeys, setHighlightedKeys] = useState([]);
+  const { processDetails, setProcessDetails, appContent, setAppContent, detailsState } = usePublicContent();
+  // حالة الحفظ الظاهرة للمستخدم: '' | 'saving' | 'saved' | 'error'
+  const [saveState, setSaveState] = useState('');
 
   const hideIntro = useCallback(() => setIntroVisible(false), []);
 
@@ -164,35 +146,6 @@ export default function App() {
     }
   }, []);
 
-  // Load rich process details + app content (public, read-only tables).
-  // تُجلب في الخلفية بعد الإقلاع، فتظل تفاصيل العمليات فارغة حتى تصل —
-  // detailsState يخبر الواجهة أن تعرض هيكل انتظار بدل فراغ صامت.
-  useEffect(() => {
-    (async () => {
-      try {
-        const [details, content] = await Promise.all([
-          publicRead('process_details?select=*'),
-          publicRead('app_content?select=*'),
-        ]);
-        if (details && details.length) {
-          const map = {};
-          details.forEach(d => { map[d.process_key] = d; });
-          setProcessDetails(map);
-        }
-        if (content && content.length) {
-          const map = {};
-          content.forEach(c => { map[c.key] = c.value; });
-          setAppContent(map);
-        }
-        // publicRead يعيد null عند تعذّر الوصول، ومصفوفة عند النجاح.
-        // الفشل لا يُلقى استثناءً، فلا يكفي انتظاره في catch وحده.
-        setDetailsState(details === null ? 'error' : 'ready');
-      } catch (e) {
-        console.log('Data not loaded:', e);
-        setDetailsState('error');
-      }
-    })();
-  }, []);
 
   // Build process list (merge local + Supabase data)
   const procs = useMemo(() => {
@@ -233,6 +186,12 @@ export default function App() {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  const {
+    demoScreen, setDemoScreen, demoRows, setDemoRows, demoSaving, demoLoading,
+    loadDemoData, saveDemoData, updateDemoRow, addDemoRow, removeDemoRow,
+  } = useDemographics({ sessionToken, showToast, onSessionEnd: () => doLogout() });
+  const openDemoScreen = () => { loadDemoData(); setDemoScreen(true); setSelectedCell(null); };
 
   const loadRegs = async (tokenArg) => {
     const token = tokenArg || adminToken;
@@ -500,78 +459,16 @@ export default function App() {
 
   // ══ التحليل الديموغرافي — منطق البيانات ══
 
-  const emptyDemoRow = () => ({
-    id: Date.now() + Math.random(),
-    name: "", entity: "", position: "", relation: "",
-    age: "", location: "", sharedEvent: "",
-    strength: { knowledge: 0, social: 0, financial: 0, economic: 0, sovereign: 0 },
-    myRelation: { knowledge: 0, social: 0, financial: 0, economic: 0 },
-    target: { knowledge: false, social: false, financial: false, economic: false },
-  });
-
-  const loadDemoData = async () => {
-    if (!sessionToken) return;
-    setDemoLoading(true);
-    const res = await UserAPI.get(sessionToken);
-    if (!res?.success) {
-      setDemoLoading(false);
-      showToast(res?.message || "تعذّر تحميل التحليل، أعد المحاولة");
-      if (res?.message?.includes('الجلسة')) doLogout();
-      return;
-    }
-    const saved = res.registration?.[DEMO_KEY];
-    if (Array.isArray(saved) && saved.length > 0) {
-      setDemoRows(saved);
-    } else {
-      setDemoRows([emptyDemoRow(), emptyDemoRow(), emptyDemoRow()]);
-    }
-    setDemoLoading(false);
-  };
-
-  const saveDemoData = async () => {
-    if (!sessionToken) return;
-    // ── التحقق: يجب وجود صف واحد على الأقل مكتمل (اسم + بُعد واحد) ──
-    const validRows = demoRows.filter(r => {
-      if (!r.name?.trim()) return false;
-      const hasStrength = Object.values(r.strength || {}).some(v => Number(v) > 0);
-      return hasStrength;
-    });
-    if (validRows.length === 0) {
-      showToast("⚠ يجب إدخال اسم شخص واحد على الأقل مع تحديد قوته");
-      return;
-    }
-    setDemoSaving(true);
-    const res = await UserAPI.save(sessionToken, { [DEMO_KEY]: demoRows });
-    if (res?.success) {
-      LocalSession.update({ [DEMO_KEY]: demoRows });
-      showToast(`تم حفظ التحليل: ${validRows.length} شخص ✓`);
-    } else { showToast(res?.message || "خطأ في الحفظ"); }
-    setDemoSaving(false);
-  };
-
-  const openDemoScreen = () => { loadDemoData(); setDemoScreen(true); setSelectedCell(null); };
-
-  const updateDemoRow = (id, field, value) => {
-    setDemoRows(rows => rows.map(r => {
-      if (r.id !== id) return r;
-      if (Array.isArray(field)) {
-        const [group, key] = field;
-        return { ...r, [group]: { ...r[group], [key]: value } };
-      }
-      return { ...r, [field]: value };
-    }));
-  };
-
-  const addDemoRow = () => setDemoRows(rows => [...rows, emptyDemoRow()]);
-  const removeDemoRow = (id) => { if (demoRows.length > 1) setDemoRows(rows => rows.filter(r => r.id !== id)); };
 
   // ── حفظ على الخادم مع إبلاغ المستخدم عند الفشل ──
   // يعيد true عند النجاح أو عند عدم وجود جلسة خادم (وضع محلي).
   // عند الفشل: رسالة واضحة، وخروج إن انتهت الجلسة، ويتولى المستدعي التراجع.
   const persist = async (fields) => {
     if (!sessionToken) return true;
+    setSaveState('saving');
     const res = await UserAPI.save(sessionToken, fields);
-    if (res?.success) return true;
+    if (res?.success) { setSaveState('saved'); return true; }
+    setSaveState('error');
     showToast(res?.message || "تعذّر الحفظ، تحقّق من الاتصال وأعد المحاولة");
     if (res?.message?.includes('الجلسة')) doLogout();
     return false;
@@ -882,6 +779,11 @@ export default function App() {
             <div className="nav-prog-bar"><div className="nav-prog-fill" style={{width:`${progressPct}%`}}/></div>
             <span className="nav-prog-pct">{progressPct}%</span>
           </div>
+          {saveState && (
+            <span className={`save-pill ${saveState}`} role="status" aria-live="polite">
+              {saveState === 'saving' ? 'جارٍ الحفظ…' : saveState === 'saved' ? 'تم الحفظ ✓' : 'لم يُحفظ'}
+            </span>
+          )}
           <button className="btn-logout" onClick={logout}>خروج</button>
         </div>
       </nav>

@@ -5,7 +5,7 @@
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
-import { call, uploadFile } from '../api.js';
+import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 
 function deviceLabel() {
@@ -221,7 +221,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
       : <span className="chip">مقفلة</span>;
   const steps = lines(stage.activities_ar);
   return (
-    <div className={`stage ${stage.status}${expanded ? ' open' : ''}`}>
+    <div id={`stage-${stage.key}`} className={`stage ${stage.status}${expanded ? ' open' : ''}`}>
       <span className="dot">{stage.status === 'done' ? '✓' : n}</span>
       <div className="stage-card">
         <button className="stage-top" onClick={onToggle} aria-expanded={expanded}>
@@ -273,12 +273,47 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
   );
 }
 
+// الخطوة التالية: أول متطلب يستطيع المشارك إنجازه بنفسه في المرحلة الحالية
+function nextStep(journey) {
+  for (const st of journey.filter((s) => s.status === 'active')) {
+    const it = st.items.find((i) => i.status === 'returned')
+      || st.items.find((i) => i.status === 'pending' && !i.auto && i.kind !== 'meeting');
+    if (it) return { stage: st, item: it };
+  }
+  return null;
+}
+
+function Welcome({ firstName, onClose }) {
+  return (
+    <div className="banner mist welcome">
+      <span className="ico">👋</span>
+      <div className="grow">
+        <b>أهلًا {firstName}، هكذا تعمل رحلتك</b>
+        <ol className="small">
+          <li>كل مرحلة فيها قائمة تحقق. أنجز البند ثم اضغط «أنجزته» أو ارفع ملفه.</li>
+          <li>بعض البنود يراجعها المستشار، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
+          <li>كتيبك الشخصي يُفتح بعد اعتماد مستواك، ويحفظ آخر باب قرأته.</li>
+        </ol>
+      </div>
+      <button className="link small" onClick={onClose}>فهمت</button>
+    </div>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
   const [toast, setToast] = useState('');
   const [passkey, setPasskey] = useState(me.prompt_passkey);
+  const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
+  const closeWelcome = () => { welcomeSeen.set(true); setWelcome(false); };
+  const next = nextStep(journey);
+  const reading = approved ? lastRead.get() : null;
+  const goTo = (key) => {
+    setExpanded((s) => new Set(s).add(key));
+    setTimeout(() => document.getElementById(`stage-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
   const approved = !!profile?.approved;
 
   useEffect(() => {
@@ -326,6 +361,28 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
             <b>نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن</b>
             <p className="small">بعد اعتماد مستواك يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.</p>
           </div>
+        </div>
+      )}
+      {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
+
+      {(next || reading) && (
+        <div className="next-grid">
+          {next && (
+            <div className="next-card">
+              <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
+              <b>{next.item.title_ar}</b>
+              <span className="small muted">{next.stage.title_ar}</span>
+              <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
+            </div>
+          )}
+          {reading && (
+            <div className="next-card">
+              <span className="k">تابع القراءة</span>
+              <b>{reading.title}</b>
+              <span className="small muted">كتيبك الشخصي</span>
+              <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
+            </div>
+          )}
         </div>
       )}
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}

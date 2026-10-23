@@ -23,7 +23,7 @@ const DemographicsScreen = (p) => {
   return (
       (
         <div className="demo-overlay" onClick={() => setDemoScreen(false)}>
-        <div className="demo-screen" onClick={e => e.stopPropagation()}>
+        <div className="demo-screen" role="dialog" aria-modal="true" aria-label="التحليل الديموغرافي" onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="demo-header">

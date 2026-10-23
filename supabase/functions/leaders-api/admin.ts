@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { approvedMail, audit, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
+import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
 import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 
@@ -257,6 +257,17 @@ export async function resetAssessment(a: Admin, b: Body) {
 }
 
 // مراجعة متطلب أرسله المشارك (سجل معالم، خطة تطوير…) أو تسجيل جلسة
+// بريد للمشارك بقرار المراجعة؛ فشله لا يُفشل القرار نفسه
+async function notifyReview(participantId: string, requirementId: string, returned: boolean, note?: unknown) {
+  const [{ data: p }, { data: r }] = await Promise.all([
+    db.from('participants').select('full_name, email').eq('id', participantId).single(),
+    db.from('stage_requirements').select('title_ar').eq('id', requirementId).single(),
+  ]);
+  if (!p?.email) return;
+  sendMail(p.email, returned ? 'ملاحظة من المستشار على رحلتك' : 'اعتُمد بند في رحلتك',
+    reviewMail(p.full_name, r?.title_ar || 'بند في رحلتك', returned, note ? String(note) : null)).catch((e) => console.error(e));
+}
+
 export async function reviewRequirement(a: Admin, b: Body) {
   requireWrite(a);
   const status = b.status === 'done' ? 'done' : b.status === 'returned' ? 'returned' : b.status === 'pending' ? 'pending' : null;
@@ -268,6 +279,7 @@ export async function reviewRequirement(a: Admin, b: Body) {
     completed_at: status === 'done' ? now : null,
   }));
   await audit('admin', a.email, 'requirement.review', 'participants', String(b.participant_id), null, { requirement: b.requirement_id, status });
+  if (status !== 'pending') notifyReview(String(b.participant_id), String(b.requirement_id), status === 'returned', b.note);
   return { success: true };
 }
 
@@ -476,6 +488,11 @@ export async function reviewSubmission(a: Admin, b: Body) {
       { onConflict: 'participant_id,source,ref_id' });
   }
   await audit('admin', a.email, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus });
+  const { data: who } = await db.from('participants').select('full_name, email').eq('id', s.participant_id).single();
+  if (who?.email) {
+    sendMail(who.email, status === 'returned' ? 'ملاحظة على نموذجك' : 'اعتُمد نموذجك',
+      reviewMail(who.full_name, s.learning_models?.title_ar || 'النموذج التعليمي', status === 'returned', b.feedback)).catch((e) => console.error(e));
+  }
   return { success: true };
 }
 
@@ -619,4 +636,30 @@ export async function createParticipant(a: Admin, b: Body) {
   }).select('*').single(), 'هذا البريد مسجل من قبل');
   await audit('admin', a.email, 'participant.create', 'participants', row.id, null, row);
   return { success: true, participant: row };
+}
+
+// ── تذكير أسبوعي (يُشغّله pg_cron بسرّ LEADERS_CRON_SECRET) ──
+// يُذكَّر من غاب 7 أيام وأمامه عمل: بنود أعادها المستشار، أو تسجيل لم يكتمل.
+// لا يُذكَّر أحد أكثر من مرة في الأسبوع، والحد 200 رسالة في التشغيلة.
+export async function reminders(b: Record<string, any>) {
+  if (!CONFIG.cronSecret || b.secret !== CONFIG.cronSecret) throw new Fail('غير مصرّح', 403, 'forbidden');
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const { data: people } = await db.from('participants')
+    .select('id, full_name, email, status')
+    .neq('status', 'suspended')
+    .lt('last_login_at', weekAgo)
+    .or(`reminded_at.is.null,reminded_at.lt.${weekAgo}`)
+    .limit(200);
+  let sent = 0;
+  for (const p of people || []) {
+    const { count } = await db.from('participant_requirements')
+      .select('requirement_id', { count: 'exact', head: true }).eq('participant_id', p.id).eq('status', 'returned');
+    const onboarding = ['registered', 'profiled', 'assessing'].includes(p.status) ? 1 : 0;
+    const open = (count ?? 0) + onboarding;
+    if (!open || !p.email) continue;
+    await db.from('participants').update({ reminded_at: new Date().toISOString() }).eq('id', p.id);
+    await sendMail(p.email, 'رحلتك القيادية بانتظارك', reminderMail(p.full_name, open)).catch((e) => console.error(e));
+    sent += 1;
+  }
+  return { success: true, sent };
 }

@@ -15,6 +15,7 @@ import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
+import { JourneySkeleton } from './ui.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
 
@@ -23,6 +24,26 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');   // home | profile | handbook
   const [verifyError, setVerifyError] = useState('');
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    const offer = (e) => { e.preventDefault(); setInstall(e); };
+    const installed = () => setInstall(null);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    window.addEventListener('beforeinstallprompt', offer);
+    window.addEventListener('appinstalled', installed);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+      window.removeEventListener('beforeinstallprompt', offer);
+      window.removeEventListener('appinstalled', installed);
+    };
+  }, []);
+  const doInstall = async () => { install.prompt(); await install.userChoice; setInstall(null); };
 
   const accept = useCallback((res) => {
     if (res?.token) session.set(res.token);
@@ -58,7 +79,7 @@ export default function App() {
   };
 
   let screen;
-  if (booting) screen = <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError} />;
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;
@@ -68,16 +89,19 @@ export default function App() {
 
   return (
     <>
+      <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar">
         <div className="topbar-in">
           <img src={logo} alt="Milestone Impact" />
           <span className="tag">رحلة القادة</span>
           <span className="spacer" />
+          {install && <button className="link small" onClick={doInstall}>ثبّت التطبيق</button>}
           {me && <span className="who">{me.participant.full_name}</span>}
           {me && <button className="link small" onClick={logout}>خروج</button>}
         </div>
       </header>
-      <main>{screen}</main>
+      {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
+      <main id="main" tabIndex={-1}>{screen}</main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة، والمحتوى ملكية فكرية لـ MI.</footer>
     </>
   );

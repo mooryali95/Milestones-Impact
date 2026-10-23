@@ -107,6 +107,14 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 /* Logout */
 .btn-logout { padding: 0.3rem 0.65rem; border: 1px solid rgba(255,255,255,0.22); border-radius: 2px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); font-family: var(--font-ar); font-size: 0.72rem; cursor: pointer; transition: background 0.2s; }
 .btn-logout:active { background: rgba(255,255,255,0.15); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+[role="button"] { cursor: pointer; }
+.skip-link { position: absolute; right: 12px; top: -48px; z-index: 1000; background: #0B272F; color: #fff; padding: 8px 14px; border-radius: 6px; }
+.skip-link:focus { top: 12px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+.save-pill { font-size: 0.68rem; padding: 0.2rem 0.55rem; border-radius: 999px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); white-space: nowrap; }
+.save-pill.saved { color: #9fd8b8; }
+.save-pill.error { color: #ffb4a8; background: rgba(168,50,45,0.25); }
 /* Nav Admin */
 .nav-admin { background: #12161e; }
 

@@ -17,6 +17,8 @@ export const CONFIG = {
   // لوحة الإدارة تنادي نفس الدالة؛ مسموحة في CORS فقط وليست أصلًا لمفاتيح المرور
   adminOrigins: env('LEADERS_ADMIN_ORIGINS', 'https://admin.sunkvalue.com').split(',').map((s) => s.trim()),
   resendKey: env('RESEND_API_KEY'),
+  // سر يرسله المجدول (pg_cron) لتشغيل التذكيرات؛ بدونه لا يعمل الإجراء
+  cronSecret: env('LEADERS_CRON_SECRET'),
   mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
   sessionDays: 30,
   codeMinutes: 15,
@@ -136,6 +138,25 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
 <p style="text-align:center;margin:0 0 20px"><a href="${link}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">${isNew ? 'تأكيد التسجيل' : 'الدخول الآن'}</a></p>
 <p style="text-align:center;font-size:30px;letter-spacing:8px;font-weight:bold;margin:0 0 8px;direction:ltr">${code}</p>
 <p style="text-align:center;font-size:13px;color:#12414E;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+}
+
+// قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
+export function reviewMail(name: string, title: string, returned: boolean, note?: string | null) {
+  const head = returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك';
+  const body = returned
+    ? `راجع المستشار «${esc(title)}» وطلب تعديلًا قبل اعتماده.`
+    : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`;
+  return shell(head, `
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">أهلًا ${esc(name)}، ${body}</p>
+${returned && note ? `<p style="font-size:14px;line-height:1.8;margin:0 0 18px;padding:12px 14px;background:#F6EEDC;border-radius:10px">${esc(note)}</p>` : ''}
+<p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">افتح رحلتي</a></p>`);
+}
+
+// تذكير أسبوعي لمن غاب عن رحلته وما زالت لديه خطوات مفتوحة
+export function reminderMail(name: string, open: number) {
+  return shell('رحلتك بانتظارك', `
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>
+<p style="text-align:center;margin:0"><a href="${CONFIG.appUrl}" style="display:inline-block;background:#12414E;color:#fff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:bold">أكمل رحلتي</a></p>`);
 }
 
 export function approvedMail(name: string) {
