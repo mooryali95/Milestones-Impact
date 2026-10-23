@@ -3,12 +3,23 @@
 // ════════════════════════════════════════════════════════════════
 // مصدر واحد: محلل الـ Markdown نفسه يغذي القراءة على اللوحة (Handbook.jsx)
 // والنسخة المطبوعة، والغلاف نفسه يظهر داخل المنصة وأول صفحة في الـ PDF.
-// النسخة الشخصية تحمل على كل صفحة اسم المشارك وبريده ورقم الإصدار، فأي
-// تسريب يُعرف مصدره. كل نص يمر عبر esc().
+// الكتاب عام: لا يذكر من المسار إلا رمزه (M1I2L3). الأبواب نفسها مصفّاة
+// بمستوى صاحبه على الخادم. النسخة تحمل على كل صفحة اسمه وبريده ورقمها.
+// الإنفوجرافيك يُستخرج آليًا من أنماط النص، فلا يحتاج المحرر وسومًا خاصة.
+// كل نص يمر عبر esc().
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
+import LOGO_INV_SRC from '../../assets/brand/milestone-impact-inverted.svg?raw';
+import COVER_IMG from '../../assets/book/cover.webp';
+import IMG_MILESTONE from '../../assets/book/milestone.webp';
+import IMG_IMPACT from '../../assets/book/impact.webp';
+import IMG_LEADERSHIP from '../../assets/book/leadership.webp';
 import { C, esc } from './doc.js';
 
-const LOGO = LOGO_SRC.replace(/<\?xml[^>]*>\s*/, '');
+const svgOf = (s) => s.replace(/<\?xml[^>]*>\s*/, '');
+const LOGO = svgOf(LOGO_SRC);
+const LOGO_INV = svgOf(LOGO_INV_SRC);
+const PART_IMG = { milestone: IMG_MILESTONE, impact: IMG_IMPACT, leadership: IMG_LEADERSHIP };
+const abs = (u) => new URL(u, typeof location !== 'undefined' ? location.href : 'http://localhost/').href;
 
 // ── Markdown المبسط إلى كتل: ## و### وقوائم واقتباس وفقرات ──
 export function parseMd(md) {
@@ -17,7 +28,7 @@ export function parseMd(md) {
   const flush = () => { if (para.length) { blocks.push({ type: 'p', text: para.join(' ') }); para = []; } };
   for (const raw of String(md || '').split('\n')) {
     const line = raw.trim();
-    if (!line) { flush(); continue; }
+    if (!line || /^:::/.test(line)) { flush(); continue; }
     let m;
     if ((m = line.match(/^(#{2,3})\s+(.*)$/))) { flush(); blocks.push({ type: m[1].length === 2 ? 'h2' : 'h3', text: m[2] }); }
     else if ((m = line.match(/^[-•]\s+(.*)$/))) { flush(); blocks.push({ type: 'li', marker: '•', text: m[1] }); }
@@ -31,135 +42,284 @@ export function parseMd(md) {
 
 // **غامق** إلى وزن متوسط (الهوية بلا خط عريض)، بعد الترميز
 const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-
 const fmt = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+const two = (n) => String(n).padStart(2, '0');
+const DEF = /^\*\*([^*]{1,60})\*\*\s*[:：]\s*(.+)$/;
 
-// ── الغلاف ──
-// c: { title, name, level?, issued_at?, ref? }
+// ── تحويل الكتل إلى إخراج: القوائم تُجمع ثم يُختار شكلها من نمطها ──
+// قائمة كل بنودها «**مصطلح**: شرح» ← بطاقات · قائمة مرقّمة ← مسار خطوات · غير ذلك ← نقاط
+function layout(blocks) {
+  const out = [];
+  for (const b of blocks) {
+    const last = out[out.length - 1];
+    if (b.type === 'li' && last?.type === 'list' && (last.numbered === (b.marker !== '•'))) last.items.push(b.text);
+    else if (b.type === 'li') out.push({ type: 'list', numbered: b.marker !== '•', items: [b.text] });
+    else out.push(b);
+  }
+  return out;
+}
+
+function listHtml(l) {
+  const defs = l.items.map((t) => t.match(DEF));
+  if (l.items.length >= 2 && defs.every(Boolean)) {
+    return `<div class="cards${l.items.length % 3 === 0 ? ' c3' : ''}">${defs.map((m, i) => `<div class="card"><span class="n">${two(i + 1)}</span><b>${esc(m[1])}</b><p>${inline(m[2])}</p></div>`).join('')}</div>`;
+  }
+  if (l.numbered && l.items.length >= 3) {
+    return `<ol class="steps">${l.items.map((t, i) => `<li><span class="dot">${i + 1}</span><p>${inline(t)}</p></li>`).join('')}</ol>`;
+  }
+  return `<ul class="bul">${l.items.map((t) => `<li>${inline(t)}</li>`).join('')}</ul>`;
+}
+
+function chapterBody(md) {
+  const blocks = layout(parseMd(md));
+  const quotes = blocks.filter((b) => b.type === 'quote');
+  const key = quotes[quotes.length - 1];
+  const html = blocks.map((b) => {
+    if (b === key) return '';
+    if (b.type === 'h2') return `<h3>${inline(b.text)}</h3>`;
+    if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
+    if (b.type === 'list') return listHtml(b);
+    if (b.type === 'quote') return `<blockquote class="pull"><span>”</span>${inline(b.text)}</blockquote>`;
+    return `<p>${inline(b.text)}</p>`;
+  }).join('');
+  return { html, key: key?.text, heads: blocks.filter((b) => b.type === 'h2').map((b) => b.text.replace(/\*\*/g, '')) };
+}
+
+// ── الأطر الثلاثة: رسم المعالم ← الأثر ← القيادة والحالي مضاء ──
+function frameworks(parts, active) {
+  return `<div class="fw">${parts.map((p, i) => `${i ? '<i class="fw-l"></i>' : ''}<div class="fw-n${p.key === active ? ' on' : ''}"><span>${esc(p.roman)}</span><small>${esc(p.short || p.title)}</small></div>`).join('')}</div>`;
+}
+
+// ── الغلاف الداكن (يُستعمل داخل المنصة وأول صفحة في النسخة) ──
+// c: { name?, code?, ref?, issued_at? }
 export const COVER_CSS = `
-.bk-cover { position: relative; background: #fff; border: 1px solid ${C.line}; aspect-ratio: 210 / 297; width: 100%; overflow: hidden; color: ${C.graphite}; font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
-.bk-cover .bk-frame { position: absolute; inset: 4.5%; border: 1px solid ${C.gold}; }
-.bk-cover .bk-frame::after { content: ''; position: absolute; inset: 1.4%; border: 1px solid ${C.line}; }
+.bk-cover { position: relative; aspect-ratio: 210 / 297; width: 100%; overflow: hidden; color: #F7F8F6; background: ${C.graphite}; font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; container-type: inline-size; }
+.bk-cover .bk-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: .55; }
+.bk-cover .bk-shade { position: absolute; inset: 0; background: rgba(11,39,47,.35); }
+.bk-cover .bk-frame { position: absolute; inset: 4.5%; border: 1px solid rgba(217,168,90,.55); }
 .bk-cover .bk-in { position: absolute; inset: 9% 11%; display: grid; grid-template-rows: auto 1fr auto; text-align: center; }
-.bk-cover .bk-logo svg { width: 34%; height: auto; display: block; margin: 0 auto; }
+.bk-cover .bk-logo svg { width: 30%; height: auto; display: block; margin: 0 auto; }
 .bk-cover .bk-mid { align-self: center; }
-.bk-cover .bk-en { font: 300 clamp(7px, 1.25cqi, 11px) "Noto Sans", sans-serif; letter-spacing: .42em; text-transform: uppercase; color: ${C.gold}; margin: 0 0 3%; }
-.bk-cover h1 { font-weight: 200; font-size: clamp(22px, 7.5cqi, 54px); line-height: 1.25; margin: 0; }
-.bk-cover .bk-rule { display: flex; align-items: center; gap: 3%; width: 46%; margin: 6% auto; }
-.bk-cover .bk-rule i { flex: 1; height: 1px; background: ${C.gold}; opacity: .55; }
-.bk-cover .bk-rule b { width: 7px; height: 7px; background: ${C.gold}; transform: rotate(45deg); }
-.bk-cover .bk-track { font-weight: 300; font-size: clamp(12px, 3.2cqi, 22px); color: ${C.slate}; margin: 0; }
-.bk-cover .bk-for { font-size: clamp(9px, 1.9cqi, 13px); color: ${C.muted}; margin: 9% 0 1%; }
-.bk-cover .bk-name { font-weight: 300; font-size: clamp(14px, 4.2cqi, 30px); margin: 0; }
-.bk-cover .bk-meta { font-size: clamp(8px, 1.6cqi, 11px); color: ${C.muted}; line-height: 1.9; }
+.bk-cover .bk-en { font: 300 2.1cqi "Noto Sans", sans-serif; letter-spacing: .42em; text-transform: uppercase; color: ${C.goldLight}; margin: 0 0 3cqi; }
+.bk-cover h1 { font-weight: 200; font-size: 11cqi; line-height: 1.2; margin: 0; color: #fff; }
+.bk-cover .bk-rule { display: flex; align-items: center; gap: 2.4cqi; width: 46%; margin: 5cqi auto; }
+.bk-cover .bk-rule i { flex: 1; height: 1px; background: ${C.goldLight}; opacity: .6; }
+.bk-cover .bk-rule b { width: 1.6cqi; height: 1.6cqi; background: ${C.goldLight}; transform: rotate(45deg); }
+.bk-cover .bk-sub { font-weight: 300; font-size: 3cqi; color: rgba(247,248,246,.82); margin: 0; }
+.bk-cover .bk-code { display: inline-block; margin-top: 5cqi; padding: 1cqi 3cqi; border: 1px solid rgba(217,168,90,.6); font: 300 2.6cqi "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.goldLight}; direction: ltr; }
+.bk-cover .bk-meta { font-size: 2cqi; color: rgba(247,248,246,.7); line-height: 2; }
+.bk-cover .bk-meta b { font-weight: 300; color: #fff; font-size: 2.6cqi; }
 .bk-cover .bk-meta bdi { font-family: "Noto Sans", sans-serif; letter-spacing: .06em; }
-.bk-cover-host { container-type: inline-size; }
 `;
 
 export function coverHtml(c) {
-  return `<div class="bk-cover"><div class="bk-frame"></div><div class="bk-in">
-  <div class="bk-logo">${LOGO}</div>
+  return `<div class="bk-cover"><div class="bk-bg" style="background-image:url('${abs(COVER_IMG)}')"></div><div class="bk-shade"></div><div class="bk-frame"></div><div class="bk-in">
+  <div class="bk-logo">${LOGO_INV}</div>
   <div class="bk-mid">
     <p class="bk-en">The Leader's Book</p>
     <h1>كتاب القائد</h1>
     <div class="bk-rule"><i></i><b></b><i></i></div>
-    ${c.title ? `<p class="bk-track">${esc(c.title)}</p>` : ''}
-    <p class="bk-for">نسخة شخصية مركّبة لمسار</p>
-    <p class="bk-name">${esc(c.name)}</p>
+    <p class="bk-sub">إدارة المشروعات · تحويلها إلى أثر · تمكين القائد</p>
+    ${c.code ? `<span class="bk-code">${esc(c.code)}</span>` : ''}
   </div>
-  <div class="bk-meta">${c.level ? `المستوى العام: ${esc(c.level)}<br>` : ''}${c.ref ? `رقم النسخة <bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}<br>` : ''}جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(c.issued_at || Date.now()).getFullYear()} Milestone Impact</bdi></div>
+  <div class="bk-meta">${c.name ? `نسخة شخصية مرخصة لـ<br><b>${esc(c.name)}</b><br>` : ''}${c.ref ? `<bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}` : ''}</div>
 </div></div>`;
 }
 
 // ── النسخة الشخصية PDF (A4 طولي) ──
-// book: { ref, issued_at, name, email, track?: { title }, chapters: [{ dimension, title, md }] }
-// parts: [{ key, roman, label, title }] ترتيب الأجزاء ومسمياتها من التطبيق
-// levelTitle: اسم المستوى العام للعرض
-function blocksHtml(md) {
-  return parseMd(md).map((b) => {
-    if (b.type === 'h2') return `<h3>${inline(b.text)}</h3>`;
-    if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
-    if (b.type === 'li') return `<p class="li"><span>${esc(b.marker)}</span>${inline(b.text)}</p>`;
-    if (b.type === 'quote') return `<blockquote>${inline(b.text)}</blockquote>`;
-    return `<p>${inline(b.text)}</p>`;
-  }).join('');
-}
-
-export function bookHtml(book, parts, levelTitle) {
+// book: { ref, issued_at, name, email, code, chapters: [{ dimension, title, md, reflection }], tools: [...] }
+// parts: [{ key, roman, label, title, short }] ترتيب الأجزاء ومسمياتها من التطبيق
+export function bookHtml(book, parts) {
   const mark = `${book.name} · ${book.email} · ${book.ref}`;
-  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='520' height='300'><text x='260' y='150' text-anchor='middle' transform='rotate(-28 260 150)' font-family='Noto Sans, Arial' font-size='15' fill='${C.graphite}' fill-opacity='.055'>${esc(mark)}</text></svg>`);
-  const groups = parts.map((p) => ({ ...p, items: book.chapters.filter((c) => c.dimension === p.key) })).filter((p) => p.items.length);
-  let n = 0;
-  const toc = groups.map((g) => `<div class="toc-part"><span class="roman">${esc(g.roman)}</span><div><small>${esc(g.label)}</small><b>${esc(g.title)}</b></div></div>
-    ${g.items.map((c, i) => `<p class="toc-ch"><span>${String(i + 1).padStart(2, '0')}</span>${esc(c.title)}</p>`).join('')}`).join('');
+  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='560' height='320'><text x='280' y='160' text-anchor='middle' transform='rotate(-28 280 160)' font-family='Noto Sans, Arial' font-size='14' fill='${C.graphite}' fill-opacity='.045'>${esc(mark)}</text></svg>`);
+  const groups = parts.map((p) => ({ ...p, items: book.chapters.filter((c) => c.dimension === p.key), tools: (book.tools || []).filter((t) => t.dimension === p.key) })).filter((p) => p.items.length);
+  const total = groups.reduce((s, g) => s + g.items.length, 0);
+
+  const toc = groups.map((g) => `<div class="toc-part"><span class="roman">${esc(g.roman)}</span><div><small>${esc(g.label)}</small><b>${esc(g.title)}</b></div><span class="cnt">${g.items.length} أبواب</span></div>
+    ${g.items.map((c, i) => `<p class="toc-ch"><span>${two(i + 1)}</span>${esc(c.title)}</p>`).join('')}`).join('')
+    + ((book.tools || []).length ? `<div class="toc-part"><span class="roman">◆</span><div><small>ملحق</small><b>عدّة القائد</b></div><span class="cnt">${book.tools.length} أدوات</span></div>` : '');
+
   const body = groups.map((g) => `
-<section class="part"><div class="part-in"><span class="roman">${esc(g.roman)}</span><small>${esc(g.label)}</small><h2>${esc(g.title)}</h2><div class="rule"><i></i><b></b><i></i></div></div></section>
-${g.items.map((c, i) => { n += 1; return `<article class="ch"><header><small>${esc(g.label)} · الباب ${String(i + 1).padStart(2, '0')}</small><h2>${esc(c.title)}</h2></header>${blocksHtml(c.md)}</article>`; }).join('')}`).join('');
+<section class="full part">
+  <div class="part-img" style="background-image:url('${abs(PART_IMG[g.key] || COVER_IMG)}')"></div>
+  <div class="part-in">
+    <span class="roman">${esc(g.roman)}</span><small>${esc(g.label)}</small><h2>${esc(g.title)}</h2>
+    <div class="rule"><i></i><b></b><i></i></div>
+    ${frameworks(parts, g.key)}
+    <ol class="part-list">${g.items.map((c, i) => `<li><span>${two(i + 1)}</span>${esc(c.title)}</li>`).join('')}</ol>
+  </div>
+</section>
+${g.items.map((c, i) => {
+    const b = chapterBody(c.md);
+    return `<article class="ch">
+  <header class="ch-open">
+    <span class="ch-num">${two(i + 1)}</span>
+    <div><small>${esc(g.label)}</small><h2>${esc(c.title)}</h2></div>
+  </header>
+  ${b.heads.length > 1 ? `<aside class="inside"><b>في هذا الباب</b><ol>${b.heads.map((h) => `<li>${esc(h)}</li>`).join('')}</ol></aside>` : ''}
+  <div class="txt">${b.html}</div>
+  ${b.key ? `<div class="key"><small>الفكرة المحورية</small><p>${inline(b.key)}</p></div>` : ''}
+  ${c.reflection ? `<div class="reflect"><small>تأمل</small><p>${inline(c.reflection)}</p><div class="lines"><i></i><i></i><i></i><i></i></div></div>` : ''}
+</article>`;
+  }).join('')}`).join('');
+
+  const tools = (book.tools || []).length ? `
+<section class="appx">
+  <header class="ch-open"><span class="ch-num">◆</span><div><small>ملحق</small><h2>عدّة القائد</h2></div></header>
+  <p class="lead">أدوات عملية مرافقة لأبواب الكتاب، لكل منها متى تستعملها وكيف تطبقها خطوة بخطوة.</p>
+  ${book.tools.map((t) => `<div class="tool">
+    <div class="tool-h"><b>${esc(t.title)}</b><small>${esc(parts.find((p) => p.key === t.dimension)?.title || '')}</small></div>
+    ${t.summary ? `<p>${inline(t.summary)}</p>` : ''}
+    ${t.when ? `<p class="when"><span>متى</span>${inline(t.when)}</p>` : ''}
+    ${t.steps ? `<ol class="steps sm">${String(t.steps).split('\n').map((s) => s.trim()).filter(Boolean).map((s, i) => `<li><span class="dot">${i + 1}</span><p>${inline(s.replace(/^\d+[.)]\s*/, ''))}</p></li>`).join('')}</ol>` : ''}
+    ${t.source ? `<p class="src">${esc(t.source)}</p>` : ''}
+  </div>`).join('')}
+</section>` : '';
 
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <title>كتاب القائد · ${esc(book.name)} · ${esc(book.ref)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
-@page { size: A4; margin: 20mm 22mm 22mm;
-  @bottom-right { content: "نسخة شخصية مرخصة لـ ${esc(book.name).replace(/"/g, '')} · يُمنع النسخ والتداول"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }
-  @bottom-left { content: "${esc(book.ref)} · " counter(page); font: 300 7pt "Noto Sans", sans-serif; color: ${C.muted}; } }
-@page cover { margin: 0; @bottom-right { content: none; } @bottom-left { content: none; } }
+@page { size: A4; margin: 22mm 22mm 22mm;
+  @top-right { content: "كتاب القائد"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.gold}; }
+  @top-left { content: "${esc(book.code || '')}"; font: 300 7pt "Noto Sans", sans-serif; letter-spacing: .2em; color: ${C.muted}; }
+  @bottom-right { content: "نسخة شخصية مرخصة لـ ${esc(book.name).replace(/"/g, '')} · يُمنع النسخ والتداول"; font: 300 6.8pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }
+  @bottom-left { content: "${esc(book.ref)}   ·   " counter(page); font: 300 6.8pt "Noto Sans", sans-serif; color: ${C.muted}; } }
+@page full { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { margin: 0; background: #fff; }
-body { font: 300 10.5pt/2 "Noto Kufi Arabic", "Noto Sans", sans-serif; color: ${C.graphite}; }
+body { font: 300 10.4pt/2 "Noto Kufi Arabic", "Noto Sans", sans-serif; color: ${C.graphite}; }
 body::before { content: ''; position: fixed; inset: 0; background: url("data:image/svg+xml,${wm}") repeat; pointer-events: none; z-index: 5; }
 .toolbar { display: flex; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; position: sticky; top: 0; z-index: 9; }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; }
 .toolbar button.pri { background: ${C.gold}; color: ${C.graphite}; }
 @media print { .toolbar { display: none; } }
-@media screen { body { background: ${C.faint}; } .sheet { max-width: 190mm; margin: 10mm auto; background: #fff; padding: 14mm 18mm; } }
+@media screen { body { background: ${C.faint}; } .sheet { max-width: 200mm; margin: 10mm auto; background: #fff; padding: 16mm 18mm; } }
 ${COVER_CSS}
-.cover-page { page: cover; break-after: page; height: 297mm; width: 210mm; }
-@media screen { .cover-page { width: auto; height: auto; margin: -14mm -18mm 14mm; } }
-.cover-page .bk-cover { border: 0; height: 100%; aspect-ratio: auto; container-type: inline-size; }
+.full { page: full; break-after: page; width: 210mm; height: 296.5mm; position: relative; overflow: hidden; }
+.full .bk-cover { width: 210mm; height: 296.5mm; }
+@media screen { .full { width: auto; height: auto; aspect-ratio: 210/297; margin: -16mm -18mm 16mm; } }
+.full .bk-cover { height: 100%; aspect-ratio: auto; }
+.roman { font: 200 22pt "Noto Sans", serif; color: ${C.gold}; }
+.rule { display: flex; align-items: center; gap: 3mm; width: 60mm; margin: 5mm auto; } .rule i { flex: 1; height: 1px; background: ${C.gold}; opacity: .55; } .rule b { width: 2.2mm; height: 2.2mm; background: ${C.gold}; transform: rotate(45deg); }
+h1, h2, h3, h4 { font-weight: 200; margin: 0; }
+/* صفحة العنوان والقراءة */
+.title-pg { break-after: page; min-height: 240mm; display: grid; align-content: center; text-align: center; }
+.title-pg .lg svg { width: 46mm; height: auto; margin: 0 auto 14mm; display: block; }
+.title-pg h1 { font-size: 34pt; } .title-pg p { color: ${C.slate}; margin: 0; }
+.howto { break-after: page; }
+.howto h2, .toc h2 { font-size: 22pt; margin-bottom: 6mm; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 6mm; }
+.legend div { border: 1px solid ${C.line}; padding: 4mm 5mm; border-radius: 2px; } .legend b { display: block; font-weight: 400; font-size: 10pt; color: ${C.gold}; } .legend p { margin: 1mm 0 0; font-size: 9pt; color: ${C.slate}; line-height: 1.8; }
+/* المحتويات */
 .toc { break-after: page; }
-.toc h2, .part h2, .ch h2 { font-weight: 200; margin: 0; }
-.toc h2 { font-size: 22pt; margin-bottom: 8mm; }
-.toc-part { display: flex; gap: 4mm; align-items: center; margin: 7mm 0 2mm; padding-top: 3mm; border-top: 1px solid ${C.line}; }
-.toc-part small { display: block; color: ${C.gold}; font-size: 8pt; } .toc-part b { font-weight: 300; font-size: 12pt; }
-.roman { font: 200 22pt "Noto Sans", serif; color: ${C.gold}; min-width: 12mm; text-align: center; }
-.toc-ch { margin: 0; padding: 1.4mm 0; border-bottom: 1px dotted ${C.line}; font-size: 10pt; }
-.toc-ch span { display: inline-block; width: 10mm; color: ${C.muted}; font-family: "Noto Sans", sans-serif; }
-.part { break-before: page; break-after: page; height: 230mm; display: grid; place-items: center; text-align: center; }
-.part .roman { display: block; font-size: 54pt; } .part small { color: ${C.gold}; letter-spacing: .2em; } .part h2 { font-size: 26pt; margin-top: 3mm; }
-.rule { display: flex; align-items: center; gap: 3mm; width: 60mm; margin: 6mm auto 0; } .rule i { flex: 1; height: 1px; background: ${C.gold}; opacity: .55; } .rule b { width: 2.2mm; height: 2.2mm; background: ${C.gold}; transform: rotate(45deg); }
-.ch { break-before: page; }
-.ch header { border-bottom: 1px solid ${C.gold}; padding-bottom: 3mm; margin-bottom: 6mm; }
-.ch header small { color: ${C.gold}; font-size: 8pt; letter-spacing: .08em; } .ch h2 { font-size: 18pt; }
-.ch h3 { font-weight: 300; font-size: 13pt; margin: 6mm 0 2mm; color: ${C.graphite}; break-after: avoid; }
-.ch h4 { font-weight: 400; font-size: 10.5pt; margin: 4mm 0 1mm; color: ${C.slate}; break-after: avoid; }
-.ch p { margin: 0 0 2.5mm; color: ${C.slate}; text-align: justify; orphans: 3; widows: 3; }
-.ch p.li { padding-right: 6mm; position: relative; text-align: start; } .ch p.li span { position: absolute; right: 0; color: ${C.gold}; }
-.ch b { font-weight: 400; color: ${C.graphite}; }
-.ch blockquote { margin: 4mm 0; padding: 3mm 5mm; border-right: 0.6mm solid ${C.gold}; background: ${C.mist}; color: ${C.graphite}; }
-.end { break-before: page; text-align: center; padding-top: 80mm; color: ${C.muted}; font-size: 9pt; line-height: 2.2; }
+.toc-part { display: flex; gap: 4mm; align-items: center; margin: 5mm 0 1.5mm; padding-top: 3mm; border-top: 1px solid ${C.line}; }
+.toc-part > div { flex: 1; } .toc-part small { display: block; color: ${C.gold}; font-size: 8pt; } .toc-part b { font-weight: 300; font-size: 12pt; }
+.toc-part .roman { min-width: 12mm; text-align: center; } .toc-part .cnt { font-size: 8pt; color: ${C.muted}; }
+.toc-ch { margin: 0 16mm 0 0; padding: .7mm 0; border-bottom: 1px dotted ${C.line}; font-size: 9.6pt; }
+.toc-ch span { display: inline-block; width: 9mm; color: ${C.gold}; font-family: "Noto Sans", sans-serif; }
+/* فاصل الجزء */
+.full.part { break-before: page; display: grid; grid-template-rows: 118mm 1fr; background: #fff; }
+.part-img { background-size: cover; background-position: center; }
+.part-in { text-align: center; padding: 12mm 26mm 0; }
+.part-in .roman { display: block; font-size: 44pt; line-height: 1; } .part-in small { color: ${C.gold}; letter-spacing: .14em; font-size: 8.5pt; } .part-in h2 { font-size: 24pt; margin-top: 2mm; }
+.fw { display: flex; align-items: center; justify-content: center; gap: 2mm; margin: 4mm 0 7mm; }
+.fw-n { width: 26mm; text-align: center; border: 1px solid ${C.line}; padding: 2mm 1mm; border-radius: 2px; color: ${C.muted}; }
+.fw-n span { display: block; font: 200 13pt "Noto Sans", serif; } .fw-n small { font-size: 7pt; letter-spacing: 0; color: inherit; }
+.fw-n.on { border-color: ${C.gold}; background: ${C.graphite}; color: #fff; } .fw-n.on span { color: ${C.goldLight}; }
+.fw-l { width: 8mm; height: 1px; background: ${C.gold}; opacity: .5; }
+.part-list { list-style: none; margin: 0 auto; padding: 0; max-width: 120mm; text-align: start; columns: 1; }
+.part-list li { padding: 1.4mm 0; border-bottom: 1px solid ${C.line}; font-size: 9.6pt; color: ${C.slate}; } .part-list span { display: inline-block; width: 9mm; color: ${C.gold}; font-family: "Noto Sans", sans-serif; }
+/* افتتاحية الباب */
+.ch, .appx { break-before: page; }
+.ch-open { display: flex; gap: 6mm; align-items: flex-end; padding-bottom: 4mm; border-bottom: 1px solid ${C.gold}; margin-bottom: 6mm; }
+.ch-num { font: 200 46pt/0.9 "Noto Sans", sans-serif; color: ${C.gold}; }
+.ch-open small { color: ${C.gold}; font-size: 8pt; letter-spacing: .06em; } .ch-open h2 { font-size: 19pt; line-height: 1.4; }
+.inside { background: ${C.mist}; border-right: 0.6mm solid ${C.gold}; padding: 3.5mm 5mm; margin-bottom: 6mm; }
+.inside b { font-weight: 400; font-size: 9pt; color: ${C.gold}; } .inside ol { margin: 1mm 0 0; padding-right: 5mm; font-size: 9.2pt; color: ${C.slate}; line-height: 1.8; }
+.txt h3 { font-weight: 300; font-size: 13pt; margin: 7mm 0 2mm; break-after: avoid; }
+.txt h3::before { content: ''; display: inline-block; width: 2mm; height: 2mm; background: ${C.gold}; transform: rotate(45deg); margin-left: 2.5mm; vertical-align: middle; }
+.txt h4 { font-weight: 400; font-size: 10.4pt; margin: 4mm 0 1mm; color: ${C.slate}; break-after: avoid; }
+.txt p { margin: 0 0 2.6mm; color: ${C.slate}; text-align: justify; orphans: 3; widows: 3; }
+.txt b, .card p b, .key b { font-weight: 400; color: ${C.graphite}; }
+/* إنفوجرافيك: بطاقات تعريف */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; margin: 4mm 0 5mm; }
+.cards.c3 { grid-template-columns: 1fr 1fr 1fr; }
+.card { border: 1px solid ${C.line}; border-top: 0.6mm solid ${C.gold}; padding: 3.5mm 4mm; break-inside: avoid; background: #fff; }
+.card .n { font: 300 8pt "Noto Sans", sans-serif; color: ${C.gold}; } .card b { display: block; font-weight: 400; font-size: 10pt; margin: .5mm 0 1mm; color: ${C.graphite}; }
+.card p { margin: 0; font-size: 8.8pt; line-height: 1.8; color: ${C.slate}; text-align: start; }
+/* إنفوجرافيك: مسار خطوات */
+.steps { list-style: none; margin: 4mm 0 5mm; padding: 0; position: relative; }
+.steps::before { content: ''; position: absolute; right: 3.6mm; top: 3mm; bottom: 3mm; width: 1px; background: ${C.gold}; opacity: .45; }
+.steps li { display: flex; gap: 4mm; align-items: flex-start; margin-bottom: 2.6mm; position: relative; break-inside: avoid; }
+.steps .dot { flex: none; width: 7.2mm; height: 7.2mm; border-radius: 50%; background: ${C.graphite}; color: ${C.goldLight}; font: 300 8.5pt/7.2mm "Noto Sans", sans-serif; text-align: center; }
+.steps p { margin: .6mm 0 0; color: ${C.slate}; font-size: 9.8pt; line-height: 1.85; text-align: start; }
+.steps.sm .dot { width: 6mm; height: 6mm; line-height: 6mm; font-size: 7.5pt; } .steps.sm::before { right: 3mm; } .steps.sm p { font-size: 9pt; }
+.bul { margin: 2mm 0 4mm; padding: 0; list-style: none; } .bul li { position: relative; padding-right: 5mm; color: ${C.slate}; margin-bottom: 1.4mm; }
+.bul li::before { content: ''; position: absolute; right: 0; top: 2.6mm; width: 1.6mm; height: 1.6mm; background: ${C.gold}; transform: rotate(45deg); }
+/* اقتباس بارز والفكرة المحورية والتأمل */
+.pull { margin: 6mm 8mm; padding: 2mm 0; font-size: 13pt; font-weight: 200; line-height: 1.8; color: ${C.graphite}; text-align: center; border-top: 1px solid ${C.line}; border-bottom: 1px solid ${C.line}; }
+.pull span { display: block; font: 200 30pt/1 "Noto Sans", serif; color: ${C.gold}; height: 9mm; }
+.key { background: ${C.graphite}; color: #fff; padding: 6mm 8mm; margin: 8mm 0 5mm; break-inside: avoid; }
+.key small { color: ${C.goldLight}; letter-spacing: .14em; font-size: 8pt; } .key p { margin: 2mm 0 0; font-size: 13pt; font-weight: 200; line-height: 1.8; } .key b { color: #fff; }
+.reflect { border: 1px solid ${C.gold}; padding: 5mm 6mm; break-inside: avoid; margin-top: 5mm; }
+.reflect small { color: ${C.gold}; font-size: 8pt; letter-spacing: .14em; } .reflect p { margin: 1mm 0 3mm; color: ${C.slate}; }
+.reflect .lines i { display: block; height: 9mm; border-bottom: 1px dotted ${C.muted}; }
+/* الملحق */
+.lead { color: ${C.slate}; margin: 0 0 6mm; }
+.tool { border: 1px solid ${C.line}; padding: 5mm 6mm; margin-bottom: 5mm; break-inside: avoid; }
+.tool-h { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid ${C.line}; padding-bottom: 2mm; margin-bottom: 2.5mm; }
+.tool-h b { font-weight: 300; font-size: 13pt; } .tool-h small { color: ${C.gold}; font-size: 8pt; }
+.tool p { margin: 0 0 2mm; color: ${C.slate}; font-size: 9.6pt; } .tool .when span { display: inline-block; color: ${C.gold}; margin-left: 2mm; font-weight: 400; }
+.tool .src { font-size: 8pt; color: ${C.muted}; margin: 2mm 0 0; }
+/* الختام */
+.end { break-before: page; text-align: center; padding-top: 70mm; color: ${C.muted}; font-size: 9pt; line-height: 2.2; }
+.end .lg svg { width: 34mm; height: auto; margin: 0 auto 10mm; display: block; }
 .end bdi { font-family: "Noto Sans", sans-serif; }
 </style></head><body>
 <div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
 <main class="sheet">
-<section class="cover-page">${coverHtml({ title: book.track?.title, name: book.name, level: levelTitle, issued_at: book.issued_at, ref: book.ref })}</section>
+<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref })}</section>
+<section class="title-pg">
+  <div class="lg">${LOGO}</div>
+  <p style="font:300 8pt 'Noto Sans';letter-spacing:.42em;color:${C.gold}">THE LEADER'S BOOK</p>
+  <h1>كتاب القائد</h1>
+  <div class="rule"><i></i><b></b><i></i></div>
+  <p>الأطر الثلاثة لبرنامج القادة من Milestone Impact</p>
+  <p style="margin-top:3mm;font-size:9pt;color:${C.muted}">${parts.map((p) => esc(p.title)).join(' · ')}</p>
+</section>
+<section class="howto">
+  <h2>كيف تقرأ هذا الكتاب</h2>
+  <p style="color:${C.slate}">يتألف الكتاب من ${groups.length} أجزاء و${total} بابًا، يبني كل جزء إطارًا من أطر البرنامج، ويسلّم الجزء التالي ما بناه. اقرأ الأبواب بترتيبها، وقف عند كل «تأمل» قبل أن تمضي.</p>
+  <div class="legend">
+    <div><b>في هذا الباب</b><p>خريطة الباب في أوله: عناوينه الكبرى قبل أن تقرأها.</p></div>
+    <div><b>بطاقات المفاهيم</b><p>المصطلحات الأساسية في بطاقات متجاورة تسهل المقارنة بينها.</p></div>
+    <div><b>مسار الخطوات</b><p>الخطوات والأهداف المرقّمة على خط واحد بترتيب تطبيقها.</p></div>
+    <div><b>الفكرة المحورية</b><p>خلاصة الباب في جملة واحدة تحملها معك.</p></div>
+    <div><b>تأمل</b><p>سؤال يربط الباب بعملك، مع مساحة لتكتب إجابتك.</p></div>
+    <div><b>عدّة القائد</b><p>ملحق الأدوات العملية بخطوات تطبيقها.</p></div>
+  </div>
+</section>
 <section class="toc"><h2>المحتويات</h2>${toc}</section>
 ${body}
+${tools}
 <section class="end">
-  <p>انتهت النسخة الشخصية من كتاب القائد · ${n} بابًا</p>
+  <div class="lg">${LOGO}</div>
+  <p>انتهت النسخة الشخصية من كتاب القائد · ${total} بابًا</p>
   <p>صدرت لـ ${esc(book.name)} في ${esc(fmt(book.issued_at))} برقم <bdi dir="ltr">${esc(book.ref)}</bdi></p>
   <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط.<br>يُمنع نسخه أو نشره أو مشاركته مع أي طرف آخر، وكل صفحة تحمل اسم صاحبها ورقم نسختها.</p>
+  <p>جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>
 </section>
 </main>
 </body></html>`;
 }
 
 // تُكتب في نافذة فُتحت متزامنة مع النقرة، وتُربط أزرارها من هنا (سياسة المحتوى تمنع السكربت في الصفحة)
-export function writeBook(win, book, parts, levelTitle) {
+export function writeBook(win, book, parts) {
   if (!win) return false;
   win.document.open();
-  win.document.write(bookHtml(book, parts, levelTitle));
+  win.document.write(bookHtml(book, parts));
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());

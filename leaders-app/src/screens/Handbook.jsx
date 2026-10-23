@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
-import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
+import { DIMENSIONS, dimOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
 import { COVER_CSS, coverHtml, parseMd as parse, writeBook } from '../../../src/lib/brand/book.js';
 
@@ -359,13 +359,12 @@ export default function Handbook({ me, onBack }) {
     loadToc(false);
   };
   // النسخة الشخصية PDF: الخادم يصدرها برقم ويسجلها، والنافذة تُفتح متزامنة مع النقرة
-  const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title }));
-  const levelTitle = toc.level ? levelOf(toc.level).title : '';
+  const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short }));
   const exportBook = async () => {
     const win = window.open('', '_blank');
     const r = await call('handbook.export');
     if (!r.success) { win?.close(); return setToast(r.message); }
-    if (!writeBook(win, r.book, parts, levelTitle)) setToast('اسمح بالنوافذ المنبثقة لفتح النسخة');
+    if (!writeBook(win, r.book, parts)) setToast('اسمح بالنوافذ المنبثقة لفتح النسخة');
   };
 
   return (
@@ -373,8 +372,8 @@ export default function Handbook({ me, onBack }) {
       <section className="book-hero">
         <div className="book-hero-main">
           <span className="book-eyebrow">The Leader's Book</span>
-          <h1>{toc.track?.title || 'كتاب القائد'}</h1>
-          <p>نسخة شخصية مركّبة لمسارك من الأطر الثلاثة، باسم <b>{toc.name || me.participant.full_name}</b>{toc.level ? ` · المستوى العام: ${levelOf(toc.level).title}` : ''}</p>
+          <h1>كتاب القائد</h1>
+          <p>نسخة شخصية مرخصة باسم <b>{toc.name || me.participant.full_name}</b>{toc.code ? <> · <span dir="ltr">{toc.code}</span></> : ''}</p>
         </div>
         <div className="book-stats">
           <div className="book-stat bring-wrap">
@@ -443,7 +442,7 @@ export default function Handbook({ me, onBack }) {
             {current === COVER && (
               <div className={`book-page bk-cover-host${shield ? ' shield' : ''}`}>
                 <style>{COVER_CSS}</style>
-                <div dangerouslySetInnerHTML={{ __html: coverHtml({ title: toc.track?.title, name: toc.name || me.participant.full_name, level: levelTitle }) }} />
+                <div dangerouslySetInnerHTML={{ __html: coverHtml({ name: toc.name || me.participant.full_name, code: toc.code }) }} />
                 {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
               </div>
             )}
