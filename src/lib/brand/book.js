@@ -13,32 +13,52 @@ import COVER_IMG from '../../assets/book/cover.webp';
 import IMG_MILESTONE from '../../assets/book/milestone.webp';
 import IMG_IMPACT from '../../assets/book/impact.webp';
 import IMG_LEADERSHIP from '../../assets/book/leadership.webp';
+import CH_MANIFEST from '../../assets/book/chapters/manifest.json';
 import { C, esc } from './doc.js';
 
 const svgOf = (s) => s.replace(/<\?xml[^>]*>\s*/, '');
 const LOGO = svgOf(LOGO_SRC);
 const LOGO_INV = svgOf(LOGO_INV_SRC);
 const PART_IMG = { milestone: IMG_MILESTONE, impact: IMG_IMPACT, leadership: IMG_LEADERSHIP };
+// صور الأبواب: تُستعمل فقط حين تكتمل كلها (complete في manifest.json)، وقبل ذلك يبقى الكتاب كما هو
+const CH_IMGS = import.meta.glob('../../assets/book/chapters/*.webp', { eager: true, query: '?url', import: 'default' });
+const chapterImg = (id) => (CH_MANIFEST.complete && CH_MANIFEST.images[id] ? CH_IMGS[`../../assets/book/chapters/${CH_MANIFEST.images[id]}`] || null : null);
 const abs = (u) => new URL(u, typeof location !== 'undefined' ? location.href : 'http://localhost/').href;
 
 // ── Markdown المبسط إلى كتل: ## و### وقوائم واقتباس وفقرات ──
+// الرسوم: سطر يبدأ بـ @النوع ثم عنوان اختياري، وبنودها أسطر حتى أول سطر فارغ
+//   @chain سلسلة القيمة        @cycle · @compare · @pyramid · @matrix · @timeline · @stat · @layers
+//   المخرج: ما يُسلَّم
+// لا تستعمل ::: حتى لا تتعارض مع كتل المستوى التي يحذفها الخادم
+export const FIGURES = ['chain', 'cycle', 'compare', 'pyramid', 'matrix', 'timeline', 'stat', 'layers'];
 export function parseMd(md) {
   const blocks = [];
   let para = [];
+  let fig = null;
   const flush = () => { if (para.length) { blocks.push({ type: 'p', text: para.join(' ') }); para = []; } };
   for (const raw of String(md || '').split('\n')) {
     const line = raw.trim();
+    if (fig) {
+      if (line) { fig.lines.push(line.replace(/^[-•]\s+|^\d+[.)]\s+/, '')); continue; }
+      blocks.push(fig); fig = null; continue;
+    }
     if (!line || /^:::/.test(line)) { flush(); continue; }
     let m;
+    if ((m = line.match(/^@([a-z]+)\s*(.*)$/)) && FIGURES.includes(m[1])) { flush(); fig = { type: 'fig', kind: m[1], title: m[2], lines: [] }; continue; }
     if ((m = line.match(/^(#{2,3})\s+(.*)$/))) { flush(); blocks.push({ type: m[1].length === 2 ? 'h2' : 'h3', text: m[2] }); }
     else if ((m = line.match(/^[-•]\s+(.*)$/))) { flush(); blocks.push({ type: 'li', marker: '•', text: m[1] }); }
     else if ((m = line.match(/^(\d+)[.)]\s+(.*)$/))) { flush(); blocks.push({ type: 'li', marker: `${m[1]}.`, text: m[2] }); }
     else if ((m = line.match(/^>\s?(.*)$/))) { flush(); blocks.push({ type: 'quote', text: m[1] }); }
     else para.push(line);
   }
+  if (fig) blocks.push(fig);
   flush();
   return blocks;
 }
+
+// للقراءة على اللوحة (Handbook.jsx): الرسم يُبسَّط إلى عنوان وبنود نصية
+export const readingBlocks = (md) => parseMd(md).flatMap((b) => (b.type !== 'fig' ? [b]
+  : [...(b.title ? [{ type: 'h3', text: b.title }] : []), ...b.lines.map((t) => ({ type: 'li', marker: '◆', text: t.replace(/\s*\|\s*/g, ' · ') }))]));
 
 // **غامق** إلى وزن متوسط (الهوية بلا خط عريض)، بعد الترميز
 const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
@@ -70,6 +90,39 @@ function listHtml(l) {
   return `<ul class="bul">${l.items.map((t) => `<li>${inline(t)}</li>`).join('')}</ul>`;
 }
 
+// ── الرسوم بهوية مَعلَم: خطوط ذهبية دقيقة وكتل Graphite ومعيّن ──
+const item = (t) => { const m = t.match(/^\*{0,2}([^:：*]{1,50})\*{0,2}\s*[:：]\s*(.+)$/); return m ? { k: m[1].trim(), v: m[2] } : { k: t, v: '' }; };
+const cells = (t) => t.split('|').map((x) => x.trim());
+function figureHtml(f) {
+  const its = f.lines.map(item);
+  const head = f.title ? `<figcaption>${inline(f.title)}</figcaption>` : '';
+  let body = '';
+  if (f.kind === 'chain') {
+    body = `<div class="f-chain">${its.map((x, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${two(i + 1)}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
+  } else if (f.kind === 'cycle') {
+    const n = its.length;
+    const pos = its.map((_, i) => { const a = (-90 + (360 / n) * i) * Math.PI / 180; return { x: 50 + 38 * Math.cos(a), y: 50 + 38 * Math.sin(a) }; });
+    body = `<div class="f-cycle"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" fill="none" stroke="${C.gold}" stroke-width=".35" stroke-dasharray="1.2 1.6"/>${pos.map((p, i) => { const q = pos[(i + 1) % n]; const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2; return `<path d="M${mx - 1.4} ${my - 1.4} l1.4 1.4 l-1.4 1.4" fill="none" stroke="${C.gold}" stroke-width=".4" transform="rotate(${(Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI} ${mx} ${my})"/>`; }).join('')}<rect x="45" y="45" width="10" height="10" transform="rotate(45 50 50)" fill="${C.graphite}"/></svg>${its.map((x, i) => `<div class="cnode" style="left:${pos[i].x}%;top:${pos[i].y}%"><span>${i + 1}</span><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
+  } else if (f.kind === 'compare') {
+    const [h, ...rows] = f.lines.map(cells);
+    body = `<table class="f-compare"><thead><tr><th></th>${h.map((x) => `<th>${inline(x)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr><th>${inline(r[0])}</th>${r.slice(1).map((x) => `<td>${inline(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  } else if (f.kind === 'pyramid') {
+    body = `<div class="f-pyramid">${its.map((x, i) => `<div class="lvl" style="width:${34 + (66 * i) / Math.max(1, its.length - 1)}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
+  } else if (f.kind === 'matrix') {
+    const ax = f.lines[0]?.match(/^محاور\s*[:：]\s*(.+)$/);
+    const q = (ax ? its.slice(1) : its).slice(0, 4);
+    const [x, y] = ax ? cells(ax[1]) : ['', ''];
+    body = `<div class="f-matrix">${y ? `<span class="ay">${inline(y)} ←</span>` : ''}<div class="grid">${q.map((c, i) => `<div class="q${i === 0 ? ' hi' : ''}"><b>${inline(c.k)}</b>${c.v ? `<p>${inline(c.v)}</p>` : ''}</div>`).join('')}</div>${x ? `<span class="ax">← ${inline(x)}</span>` : ''}</div>`;
+  } else if (f.kind === 'timeline') {
+    body = `<div class="f-timeline">${its.map((x) => `<div class="t"><i></i><b>${inline(x.k)}</b>${x.v ? `<p>${inline(x.v)}</p>` : ''}</div>`).join('')}</div>`;
+  } else if (f.kind === 'stat') {
+    body = `<div class="f-stat">${f.lines.map(cells).map(([v, l]) => `<div><b>${inline(v)}</b><span>${inline(l || '')}</span></div>`).join('')}</div>`;
+  } else if (f.kind === 'layers') {
+    body = `<div class="f-layers">${its.map((x, i) => `<div class="ly" style="margin-inline:${i * 4}%"><b>${inline(x.k)}</b>${x.v ? `<span>${inline(x.v)}</span>` : ''}</div>`).join('')}</div>`;
+  }
+  return `<figure class="fig f-${f.kind}-w">${head}${body}</figure>`;
+}
+
 function chapterBody(md) {
   const blocks = layout(parseMd(md));
   const quotes = blocks.filter((b) => b.type === 'quote');
@@ -79,6 +132,7 @@ function chapterBody(md) {
     if (b.type === 'h2') return `<h3>${inline(b.text)}</h3>`;
     if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
     if (b.type === 'list') return listHtml(b);
+    if (b.type === 'fig') return figureHtml(b);
     if (b.type === 'quote') return `<blockquote class="pull"><span>”</span>${inline(b.text)}</blockquote>`;
     return `<p>${inline(b.text)}</p>`;
   }).join('');
@@ -152,7 +206,9 @@ export function bookHtml(book, parts) {
 </section>
 ${g.items.map((c, i) => {
     const b = chapterBody(c.md);
-    return `<article class="ch">
+    const img = chapterImg(c.id);
+    return `<article class="ch${img ? ' has-img' : ''}"${img ? ` style="--chimg:url('${abs(img)}')"` : ''}>
+  ${img ? '<div class="ch-band" aria-hidden="true"></div>' : ''}
   <header class="ch-open">
     <span class="ch-num">${two(i + 1)}</span>
     <div><small>${esc(g.label)}</small><h2>${esc(c.title)}</h2></div>
@@ -261,6 +317,53 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .steps.sm .dot { width: 6mm; height: 6mm; line-height: 6mm; font-size: 7.5pt; } .steps.sm::before { right: 3mm; } .steps.sm p { font-size: 9pt; }
 .bul { margin: 2mm 0 4mm; padding: 0; list-style: none; } .bul li { position: relative; padding-right: 5mm; color: ${C.graphite}; margin-bottom: 1.4mm; }
 .bul li::before { content: ''; position: absolute; right: 0; top: 2.6mm; width: 1.6mm; height: 1.6mm; background: ${C.gold}; transform: rotate(45deg); }
+/* صورة الباب: شريط افتتاحي داكن خلف رقم الباب وعنوانه */
+.ch.has-img { position: relative; }
+.ch-band { height: 64mm; margin-bottom: -30mm; background: ${C.graphite} var(--chimg) center / cover; position: relative; }
+.ch-band::after { content: ''; position: absolute; inset: 0; background: rgba(11,39,47,.45); }
+.ch.has-img .ch-open { position: relative; z-index: 1; border-bottom-color: ${C.goldLight}; color: #fff; padding: 0 6mm 4mm; margin-bottom: 10mm; }
+.ch.has-img .ch-open h2 { color: #fff; } .ch.has-img .ch-open small, .ch.has-img .ch-num { color: ${C.goldLight}; }
+/* الرسوم */
+.fig { margin: 6mm 0; break-inside: avoid; }
+.fig figcaption { font-size: 9pt; color: ${C.gold}; letter-spacing: .06em; margin-bottom: 3mm; }
+.fig figcaption::before { content: ''; display: inline-block; width: 6mm; height: 1px; background: ${C.gold}; margin-left: 2mm; vertical-align: middle; }
+.fig b { font-weight: 400; } .fig p { margin: 1mm 0 0; font-size: 9pt; line-height: 1.75; color: ${C.slate}; }
+.f-chain { display: flex; align-items: stretch; gap: 0; }
+.f-chain .node { flex: 1; min-width: 0; background: ${C.graphite}; color: #fff; padding: 3.5mm 3mm; text-align: center; overflow-wrap: anywhere; }
+.f-chain .node:nth-child(4n+1) { background: ${C.graphite}; } .f-chain .node:nth-child(4n+3) { background: #173A44; }
+.f-chain .node span { display: block; font: 300 8pt "Noto Sans", sans-serif; color: ${C.goldLight}; } .f-chain .node b { font-size: 10pt; color: #fff; } .f-chain .node p { color: rgba(255,255,255,.78); font-size: 8.3pt; }
+.f-chain .arw { flex: none; width: 0; height: 0; align-self: center; border-block: 4mm solid transparent; border-left: 3mm solid ${C.gold}; margin: 0 -.5mm; z-index: 1; }
+.f-cycle { position: relative; width: 120mm; height: 104mm; margin: 0 auto; }
+.f-cycle svg { position: absolute; inset: 6mm 14mm; width: calc(100% - 28mm); height: calc(100% - 12mm); }
+.f-cycle .cnode { position: absolute; transform: translate(-50%, -50%); width: 36mm; text-align: center; background: #fff; border: 1px solid ${C.line}; border-top: .6mm solid ${C.gold}; padding: 2mm; }
+.f-cycle .cnode span { display: inline-block; width: 5mm; height: 5mm; border-radius: 50%; background: ${C.graphite}; color: ${C.goldLight}; font: 300 7pt/5mm "Noto Sans", sans-serif; }
+.f-cycle .cnode b { display: block; font-size: 9.5pt; } .f-cycle .cnode p { font-size: 8pt; }
+.f-compare { width: 100%; border-collapse: collapse; font-size: 9.4pt; table-layout: fixed; }
+.f-compare thead th { background: ${C.graphite}; color: #fff; font-weight: 300; padding: 2.5mm 3mm; text-align: center; }
+.f-compare thead th:first-child { background: transparent; }
+.f-compare tbody th { width: 26mm; text-align: start; color: ${C.gold}; font-weight: 400; padding: 2.5mm 2mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
+.f-compare td { padding: 2.5mm 3mm; border-bottom: 1px solid ${C.line}; color: ${C.graphite}; vertical-align: top; line-height: 1.75; }
+.f-compare td + td { border-right: 1px solid ${C.line}; }
+.f-pyramid { display: grid; justify-items: center; gap: 1.2mm; }
+.f-pyramid .lvl { background: ${C.graphite}; color: #fff; text-align: center; padding: 2.4mm 3mm; clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%); }
+.f-pyramid .lvl:first-child { background: ${C.gold}; color: ${C.graphite}; } .f-pyramid .lvl:first-child b { color: ${C.graphite}; }
+.f-pyramid .lvl b { color: #fff; font-size: 10pt; } .f-pyramid .lvl span { display: block; font-size: 8.3pt; opacity: .8; }
+.f-matrix { display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; gap: 2mm; }
+.f-matrix .grid { grid-column: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm; }
+.f-matrix .q { border: 1px solid ${C.line}; padding: 4mm; min-height: 26mm; background: #fff; } .f-matrix .q.hi { background: ${C.graphite}; color: #fff; } .f-matrix .q.hi b { color: ${C.goldLight}; } .f-matrix .q.hi p { color: rgba(255,255,255,.8); }
+.f-matrix .ay { grid-column: 1; grid-row: 1; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8pt; color: ${C.gold}; text-align: center; }
+.f-matrix .ax { grid-column: 2; grid-row: 2; font-size: 8pt; color: ${C.gold}; text-align: center; }
+.f-timeline { display: flex; position: relative; padding-top: 6mm; }
+.f-timeline::before { content: ''; position: absolute; top: 7.6mm; right: 0; left: 0; height: 1px; background: ${C.gold}; }
+.f-timeline .t { flex: 1; min-width: 0; text-align: center; padding: 0 2mm; position: relative; }
+.f-timeline .t i { display: block; width: 3.4mm; height: 3.4mm; margin: 0 auto 3mm; background: ${C.graphite}; border: .5mm solid ${C.gold}; transform: rotate(45deg); }
+.f-timeline .t b { font-size: 9.8pt; }
+.f-stat { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-block: 1px solid ${C.line}; }
+.f-stat div { text-align: center; padding: 4mm 2mm; } .f-stat div + div { border-right: 1px solid ${C.line}; }
+.f-stat b { display: block; font: 200 24pt/1.2 "Noto Sans", "Noto Kufi Arabic", sans-serif; color: ${C.gold}; } .f-stat span { font-size: 8.8pt; color: ${C.slate}; }
+.f-layers { display: grid; gap: 1.2mm; }
+.f-layers .ly { background: ${C.mist}; border-right: .8mm solid ${C.gold}; padding: 2.6mm 4mm; display: flex; gap: 4mm; align-items: baseline; }
+.f-layers .ly:nth-child(odd) { background: #EEF1F0; } .f-layers .ly b { font-size: 10pt; min-width: 30mm; } .f-layers .ly span { font-size: 9pt; color: ${C.slate}; }
 /* اقتباس بارز والفكرة المحورية والتأمل */
 .pull { break-inside: avoid; margin: 6mm 8mm; padding: 2mm 0 3mm; font-size: 13.5pt; font-weight: 200; line-height: 1.8; color: ${C.graphite}; text-align: center; border-top: 1px solid ${C.line}; border-bottom: 1px solid ${C.line}; }
 .pull span { display: block; font: 200 30pt/1 "Noto Sans", serif; color: ${C.gold}; height: 9mm; }

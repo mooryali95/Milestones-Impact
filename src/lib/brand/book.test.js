@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookHtml, coverHtml, parseMd } from './book.js';
+import { bookHtml, coverHtml, parseMd, readingBlocks } from './book.js';
 
 describe('كتاب القائد', () => {
   it('parseMd يميز العناوين والقوائم والاقتباس والفقرات', () => {
@@ -29,5 +29,22 @@ describe('إنفوجرافيك الكتاب', () => {
     expect(h).toMatch(/class="key"><small>الفكرة المحورية<\/small><p>الخلاصة/);
     expect(h).toContain('class="reflect"');
     expect(h).toContain('M1I2L3');
+  });
+});
+
+describe('رسوم الكتاب', () => {
+  const md = '@chain السلسلة\nالمخرجات: ما يُسلَّم\nالمنافع: التحسن\n\n@compare مقارنة\nأ | ب\nالمعنى | س | ص\n\nنص بعدها';
+  it('@النوع يُقرأ رسمًا حتى أول سطر فارغ', () => {
+    const b = parseMd(md);
+    expect(b.map((x) => x.type)).toEqual(['fig', 'fig', 'p']);
+    expect(b[0]).toMatchObject({ kind: 'chain', title: 'السلسلة', lines: ['المخرجات: ما يُسلَّم', 'المنافع: التحسن'] });
+  });
+  it('القراءة على اللوحة تبسّط الرسم إلى عنوان وبنود', () => {
+    expect(readingBlocks(md).slice(0, 3).map((x) => x.type)).toEqual(['h3', 'li', 'li']);
+  });
+  it('النسخة ترسم السلسلة والمقارنة', () => {
+    const h = bookHtml({ ref: 'MI-BK-20261023-ABCDE', issued_at: '2026-10-23T09:00:00Z', name: 'س', email: 'e', chapters: [{ dimension: 'impact', title: 'ب', md }] }, [{ key: 'impact', roman: 'II', label: 'ب', title: 'أثر' }]);
+    expect(h).toContain('class="f-chain"');
+    expect(h).toContain('class="f-compare"');
   });
 });

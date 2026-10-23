@@ -1,0 +1,104 @@
+{
+  "schema": "brandprint/1",
+  "name": "milestone-impact-light",
+  "label": "هوية الشهادات · الوضع الفاتح",
+  "version": 1,
+  "source": {
+    "kind": "manual",
+    "file": null,
+    "extractedAt": "2026-10-23",
+    "canvas": null
+  },
+  "rtl": true,
+  "digits": "western",
+  "color": {
+    "primary": "0B272F",
+    "accent": "A97A2E",
+    "bg": "F7F8F6",
+    "ink": "0B272F",
+    "scale": {
+      "50": "F0F3F4",
+      "200": "C2D9E0",
+      "300": "678088",
+      "500": "0B272F",
+      "700": "071A1F",
+      "900": "030C0F"
+    },
+    "semantic": null,
+    "contrast": {
+      "whiteOnPrimary": 15.61,
+      "inkOnBg": 14.65,
+      "accentOnBg": 3.58,
+      "accentOnPrimary": 4.1
+    },
+    "warnings": [],
+    "rejected": [],
+    "extended": [
+      "D9A85A",
+      "2C4148",
+      "9AA9AD"
+    ]
+  },
+  "type": {
+    "ar": "Noto Kufi Arabic",
+    "en": "Noto Sans",
+    "hasBold": false,
+    "charWidth": 0.49,
+    "space": {
+      "advance": 340,
+      "file": "/root/.fonts/NotoKufiArabic-latin.ttf",
+      "min": 200
+    },
+    "embedWeight": 400,
+    "stem": 0.5,
+    "stemAt": {
+      "400": 0.5
+    },
+    "lineFactor": 1.897,
+    "warnings": [],
+    "scale": {
+      "display": 36,
+      "subhead": 21,
+      "body": 16,
+      "caption": 12,
+      "micro": 9
+    }
+  },
+  "canvas": {
+    "deck": {
+      "W": 13.33,
+      "H": 7.5
+    },
+    "read": {
+      "W": 9.843,
+      "H": 7.894
+    }
+  },
+  "grid": {
+    "margin": 0.5,
+    "top": 0.55,
+    "bottom": 0.55,
+    "cols": 12,
+    "gutter": 0.15
+  },
+  "motif": {
+    "kind": "diamond",
+    "roles": [
+      "cover",
+      "divider",
+      "closing"
+    ],
+    "fade": 0.55
+  },
+  "logo": [
+    {
+      "path": "assets/logo.png",
+      "srcW": 800,
+      "srcH": 364,
+      "side": "left"
+    }
+  ],
+  "ask": [
+    "لا توجد ألوان دلالية (نجاح/تحذير/خطر) في المصدر — كيف تُمثَّل الحالات السلبية؟ لا تُقحم أحمر افتراضيًا."
+  ]
+}
