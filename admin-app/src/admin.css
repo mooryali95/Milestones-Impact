@@ -1265,3 +1265,7 @@ a { text-decoration: none; color: inherit; }
 .ce-act { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .ce-reissue { display: grid; gap: 10px; min-width: min(420px, 92vw); }
 @media (max-width: 640px) { .ce-signer { grid-template-columns: 1fr; } }
+
+/* خلايا المستويات القابلة للتحرير أزرار: تبقى بمحاذاة النص وخطه */
+button.la-cell { font: inherit; color: inherit; text-align: start; cursor: pointer; width: 100%; }
+button.la-cell:hover { border-color: var(--gold, #A97A2E); }

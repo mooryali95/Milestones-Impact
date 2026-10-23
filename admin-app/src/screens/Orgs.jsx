@@ -11,7 +11,7 @@ import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 
 
-function Funnel({ f, big }) {
+export function Funnel({ f, big }) {
   const top = Math.max(1, f.registered || 0);
   return (
     <div className={`la-funnel${big ? ' big' : ''}`}>{FUNNEL.map(([k, l]) => (
