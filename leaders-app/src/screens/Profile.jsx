@@ -9,7 +9,7 @@ const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years
 export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const p = me.participant;
   const [f, setF] = useState({
-    full_name: p.full_name || '', phone: p.phone || '', job_title: p.job_title || '',
+    full_name: p.full_name || '', name_en: p.name_en || '', phone: p.phone || '', job_title: p.job_title || '',
     organization_name: p.organization_name || '', sector: p.sector || '',
     years_experience: p.years_experience ?? '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
   });
@@ -39,7 +39,9 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const save = async (e) => {
     e.preventDefault();
     setBusy(true); setError('');
-    const res = await call('profile.save', { fields: f });
+    // الاسم المقفل لا يُرسل، فلا يرفض الخادم بقية التعديلات
+    const { full_name, name_en, ...rest } = f;
+    const res = await call('profile.save', { fields: p.name_locked ? rest : f });
     setBusy(false);
     if (res.success) onSaved(res);
     else setError(res.message);
@@ -66,8 +68,11 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
         </div>
 
         <div className="grid2">
-          <label className="field"><span>الاسم الكامل</span>
-            <input className="input" required value={f.full_name} onChange={set('full_name')} autoComplete="name" /></label>
+          <label className="field"><span>الاسم الكامل <em>(كما يظهر في الشهادة)</em></span>
+            <input className="input" required value={f.full_name} onChange={set('full_name')} autoComplete="name" readOnly={p.name_locked} /></label>
+          <label className="field"><span>الاسم بالإنجليزية <em>(للشهادة)</em></span>
+            <input className="input ltr" value={f.name_en} onChange={set('name_en')} placeholder="Sarah Abdullah Alahmad" autoComplete="off" lang="en" readOnly={p.name_locked} /></label>
+          {p.name_locked && <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>اسمك مقفل لأن شهادتك صدرت به. لتصحيحه تواصل مع إدارة البرنامج لإعادة إصدارها.</p>}
           <label className="field"><span>رقم الجوال</span>
             <input className="input ltr" required type="tel" value={f.phone} onChange={set('phone')} placeholder="05XXXXXXXX" autoComplete="tel" /></label>
           <label className="field"><span>المسمى الوظيفي</span>

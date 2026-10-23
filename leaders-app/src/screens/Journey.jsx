@@ -300,6 +300,41 @@ function Welcome({ firstName, onClose }) {
   );
 }
 
+// شهادة المشاركة: تظهر لمن أنهى البرنامج، وتُفتح في نافذة جاهزة للطباعة
+function CertificateCard() {
+  const [cert, setCert] = useState(undefined);
+  useEffect(() => { call('certificate').then((r) => setCert(r.success ? r.certificate : null)); }, []);
+  if (cert === undefined) return null;
+  const open = async () => {
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
+    const { writeCertificate } = await import('../../../src/lib/brand/certificate.js');
+    if (!(await writeCertificate(win, cert))) alert('اسمح بالنوافذ المنبثقة لعرض الشهادة');
+  };
+  const share = async () => {
+    const { linkedinUrl } = await import('../../../src/lib/brand/certificate.js');
+    window.open(linkedinUrl(cert), '_blank', 'noopener');
+  };
+  return (
+    <section className="card cert-card" aria-label="شهادة المشاركة">
+      <span className="cert-mark" aria-hidden="true" />
+      <div className="grow stack">
+        <p className="eyebrow">شهادة المشاركة</p>
+        {cert ? <>
+          <h2>مبارك، صدرت شهادتك</h2>
+          <p className="small muted">رقمها <span className="ltr">{cert.serial}</span>، ولها رابط تحقق عام يثبت صحتها لمن تشاركها معه.</p>
+        </> : <>
+          <h2>شهادتك قيد الإصدار</h2>
+          <p className="small muted">أنهيت البرنامج، وستظهر شهادتك هنا حين تصدرها الإدارة.</p>
+        </>}
+      </div>
+      {cert && <div className="row">
+        <button className="btn sm" onClick={open}>اعرض الشهادة</button>
+        <button className="btn sm ghost" onClick={share}>أضفها إلى LinkedIn</button>
+      </div>}
+    </section>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
@@ -353,6 +388,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
         </div>
         <Ring value={me.progress} />
       </section>
+      {participant.status === 'completed' && <CertificateCard />}
 
       {!approved && profile && (
         <div className="banner gold">

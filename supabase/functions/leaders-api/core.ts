@@ -219,3 +219,10 @@ export function approvedMail(name: string) {
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.</p>
 ${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
 }
+
+export function certificateMail(name: string, url: string) {
+  return shell('مبارك، صدرت شهادة مشاركتك', `
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">أهلًا ${esc(name)}، أتممت متطلبات برنامج القادة، وصدرت شهادة مشاركتك باسمك.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">تجدها في رحلتك جاهزة للطباعة والحفظ PDF، ولها رابط تحقق عام يمكنك مشاركته أو إضافته إلى ملفك في LinkedIn.</p>
+${mailButton(url, 'اعرض شهادتي')}`);
+}

@@ -132,7 +132,7 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
 .status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .status span { border: 1mm solid ${C.muted}; color: ${C.muted}; font-size: 40pt; padding: 2mm 14mm; transform: rotate(-14deg); opacity: .5; }
 </style></head><body>
-<div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
+<div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button>${status ? '' : '<button data-act="linkedin">أضفها إلى LinkedIn</button>'}<button data-act="close">إغلاق</button></div>
 <article class="page">
   <div class="lattice"></div>
   <svg class="guil" viewBox="0 0 297 210" aria-hidden="true">${guilloche(c.serial, { cx: 148.5, cy: 108, r: 68 })}${guilloche(c.serial + 'b', { cx: 148.5, cy: 108, r: 44, rings: 5, color: C.graphite, opacity: 0.08 })}</svg>
@@ -166,4 +166,34 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
   ${status ? `<div class="status"><span>${esc(status)}</span></div>` : ''}
 </article>
 </body></html>`;
+}
+
+// رابط «أضف إلى ملفك» في LinkedIn بقسم التراخيص والشهادات
+export function linkedinUrl(c) {
+  const d = new Date(c.issued_at);
+  const q = new URLSearchParams({
+    startTask: 'CERTIFICATION_NAME', name: c.program_en || 'Leaders Program', organizationName: 'Milestone Impact',
+    issueYear: String(d.getFullYear()), issueMonth: String(d.getMonth() + 1), certUrl: c.verify_url, certId: c.serial,
+  });
+  return `https://www.linkedin.com/profile/add?${q}`;
+}
+
+export async function qrSvgFor(url) {
+  const { default: QR } = await import('qrcode');
+  return QR.toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'Q', color: { dark: C.graphite, light: '#FFFFFF' } });
+}
+
+// تكتب الشهادة في نافذة فُتحت متزامنة مع النقرة، وتربط أزرارها من هنا
+// لأن سياسة المحتوى تمنع السكربت داخل الصفحة.
+export async function writeCertificate(win, c, opts = {}) {
+  if (!win) return false;
+  const html = certificateHtml(c, await qrSvgFor(c.verify_url), opts);
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  const on = (act, fn) => win.document.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
+  on('print', () => win.print());
+  on('close', () => win.close());
+  on('linkedin', () => win.open(linkedinUrl(c), '_blank', 'noopener'));
+  return true;
 }

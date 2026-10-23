@@ -42,6 +42,42 @@ function Field({ label, hint, error, children, wide, group }) {
   );
 }
 
+// شعار الجهة للشهادة: يُفرَّغ ويُفحص في المتصفح، ويُختار بين الأصلي والأحادي
+function LogoField({ value, onChange }) {
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(f.type)) return setRes({ error: 'الصيغ المقبولة: PNG أو JPG أو WEBP أو SVG' });
+    setBusy(true);
+    try {
+      const { processLogo } = await import('../../../src/lib/brand/logo.js');
+      const r = await processLogo(f, { maxSide: 900 });
+      setRes(r);
+      onChange(r.report.some((x) => /أحادية اللون/.test(x.text)) ? r.mono : r.dataUrl);
+    } catch { setRes({ error: 'تعذّرت قراءة الصورة' }); }
+    setBusy(false);
+  };
+  return (
+    <div className="of-logo">
+      <div className="of-logo-prev">{value ? <img src={value} alt="شعار الجهة" /> : <span>لا شعار</span>}</div>
+      <div className="of-logo-side">
+        <label className="btn-sm ghost of-logo-btn">{busy ? 'جارٍ المعالجة…' : value ? 'استبدال الشعار' : 'رفع الشعار'}
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={pick} hidden /></label>
+        {value && <button type="button" className="btn-sm ghost" onClick={() => { onChange(null); setRes(null); }}>إزالة</button>}
+        {res?.dataUrl && <div className="of-logo-pick" role="radiogroup" aria-label="نسخة الشعار">
+          <button type="button" role="radio" aria-checked={value === res.dataUrl} className={value === res.dataUrl ? 'on' : ''} onClick={() => onChange(res.dataUrl)}>بألوانه</button>
+          <button type="button" role="radio" aria-checked={value === res.mono} className={value === res.mono ? 'on' : ''} onClick={() => onChange(res.mono)}>أحادي اللون</button>
+        </div>}
+        {res?.error && <small className="of-err" role="alert">{res.error}</small>}
+        {res?.report && <ul className="of-logo-report">{res.report.map((x) => <li key={x.text} className={x.level}>{x.text}</li>)}</ul>}
+      </div>
+    </div>
+  );
+}
+
 function Domains({ list, onChange }) {
   const [draft, setDraft] = useState('');
   const [bad, setBad] = useState('');
@@ -108,7 +144,7 @@ function Danger({ org, onDone, onSuspend }) {
 export default function OrgForm({ org, coordinator, onClose }) {
   const { toast, confirm } = useUI();
   const initial = useMemo(() => ({
-    name: org?.name || '', short_name: org?.short_name || '', sector: org?.sector || '', status: org?.status || 'active',
+    name: org?.name || '', name_en: org?.name_en || '', logo: org?.logo || null, cert_cobrand: org?.cert_cobrand !== false, short_name: org?.short_name || '', sector: org?.sector || '', status: org?.status || 'active',
     color: org?.color || SWATCHES[0], seats: org?.seats ?? '', invite_code: org?.invite_code || '', domains: domainsOf(org), notes: org?.notes || '',
   }), [org]);
   const initialCoord = useMemo(() => ({
@@ -141,7 +177,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
     if (Object.keys(validateOrg(next, coord)).length) return;
     setBusy(true); setServerErr('');
     const row = {
-      name: next.name.trim(), short_name: next.short_name.trim() || null, sector: next.sector.trim() || null, status: next.status,
+      name: next.name.trim(), name_en: next.name_en.trim() || null, logo: next.logo, cert_cobrand: next.cert_cobrand, short_name: next.short_name.trim() || null, sector: next.sector.trim() || null, status: next.status,
       color: next.color, seats: next.seats === '' ? null : Number(next.seats), domains: next.domains.join(','), notes: next.notes.trim() || null,
       contact_name: coord.full_name.trim() || null, contact_email: coord.email.trim().toLowerCase() || null, contact_phone: coord.phone.trim() || null,
       ...(next.invite_code || !org ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
@@ -184,6 +220,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
             <h4>بيانات الجهة</h4>
             <div className="of-grid">
               <Field label="اسم الجهة *" error={err('name')} wide><input autoFocus value={v.name} onChange={set('name')} maxLength={200} aria-invalid={!!err('name')} /></Field>
+              <Field label="الاسم بالإنجليزية" hint="للسطر الإنجليزي في الشهادة" wide><input dir="ltr" value={v.name_en} onChange={set('name_en')} maxLength={200} /></Field>
               <Field label="اسم مختصر" hint="يظهر في الشارات والجداول" error={err('short_name')}><input value={v.short_name} onChange={set('short_name')} maxLength={40} /></Field>
               <Field label="القطاع"><input value={v.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></Field>
               <Field group label="الحالة" hint={v.status === 'active' ? 'رابط الدعوة وحساب المنسق يعملان' : 'الرابط والحساب معطّلان، والبيانات محفوظة'} wide>
@@ -200,6 +237,13 @@ export default function OrgForm({ org, coordinator, onClose }) {
                 {SWATCHES.map((c) => <button key={c} type="button" role="radio" aria-checked={v.color === c} aria-label={c} className={v.color === c ? 'on' : ''} style={{ background: c }} onClick={() => setV({ ...v, color: c })} />)}
                 <label className="of-custom" title="لون مخصص"><input type="color" value={HEX.test(v.color) ? v.color : '#12414E'} onChange={set('color')} aria-label="لون مخصص" /><span dir="ltr">{v.color}</span></label>
               </div>
+            </Field>
+            <Field group label="شعار الجهة" hint="يُفرَّغ من خلفيته آليًا ويُفحص للطباعة. الأفضل PNG شفاف أو SVG." wide>
+              <LogoField value={v.logo} onChange={(logo) => setV({ ...v, logo })} />
+            </Field>
+            <Field group label="العلامة المشتركة على الشهادات" hint={v.cert_cobrand ? 'يظهر شعار الجهة بجانب شعار Milestone Impact' : 'شعار Milestone Impact وحده'} wide>
+              <label className="of-switch"><input type="checkbox" checked={v.cert_cobrand} onChange={(e) => setV({ ...v, cert_cobrand: e.target.checked })} />
+                <span>{v.cert_cobrand ? 'مفعّلة' : 'معطّلة'}</span></label>
             </Field>
           </section>
 

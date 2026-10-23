@@ -6,11 +6,11 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter · handbook.complete · models.list · models.get · models.save · achievements
+//             handbook.toc · handbook.chapter · handbook.complete · models.list · models.get · models.save · achievements · certificate
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -18,6 +18,7 @@ import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
 import * as C from './coordinator.ts';
+import * as Z from './certificates.ts';
 
 type Body = Record<string, any>;
 
@@ -34,6 +35,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'coord.auth-verify': C.authVerify,
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
+  'cert.verify': Z.verify,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
@@ -56,6 +58,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'models.get': (p, b) => P.modelGet(p, b),
   'models.save': (p, b) => P.modelSave(p, b),
   'achievements': (p) => P.achievements(p),
+  'certificate': (p) => Z.mine(p),
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
@@ -98,6 +101,13 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.reorder': A.reorder,
   'admin.clone-instrument': A.cloneInstrument,
   'admin.activate-instrument': A.activateInstrument,
+  'admin.certificates': (_a, b) => Z.list(b),
+  'admin.certificate': (_a, b) => Z.get(b),
+  'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
+  'admin.certificate-revoke': (a, b) => A.writer(a, Z.revoke, b),
+  'admin.certificate-reissue': (a, b) => A.writer(a, Z.reissue, b),
+  'admin.cert-settings': () => Z.settingsGet(),
+  'admin.cert-settings-save': (a, b) => A.writer(a, Z.settingsSave, b),
 };
 
 Deno.serve(async (req) => {
