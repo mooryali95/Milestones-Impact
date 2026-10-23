@@ -24,6 +24,26 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('home');   // home | profile | handbook
   const [verifyError, setVerifyError] = useState('');
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    const offer = (e) => { e.preventDefault(); setInstall(e); };
+    const installed = () => setInstall(null);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    window.addEventListener('beforeinstallprompt', offer);
+    window.addEventListener('appinstalled', installed);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+      window.removeEventListener('beforeinstallprompt', offer);
+      window.removeEventListener('appinstalled', installed);
+    };
+  }, []);
+  const doInstall = async () => { install.prompt(); await install.userChoice; setInstall(null); };
 
   const accept = useCallback((res) => {
     if (res?.token) session.set(res.token);
@@ -75,10 +95,12 @@ export default function App() {
           <img src={logo} alt="Milestone Impact" />
           <span className="tag">رحلة القادة</span>
           <span className="spacer" />
+          {install && <button className="link small" onClick={doInstall}>ثبّت التطبيق</button>}
           {me && <span className="who">{me.participant.full_name}</span>}
           {me && <button className="link small" onClick={logout}>خروج</button>}
         </div>
       </header>
+      {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
       <main id="main" tabIndex={-1}>{screen}</main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة، والمحتوى ملكية فكرية لـ MI.</footer>
     </>
