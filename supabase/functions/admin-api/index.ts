@@ -4,6 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
+import { deliver, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -103,26 +104,12 @@ function totpUri(secret: string, email: string): string {
   return `otpauth://totp/${encodeURIComponent(APP)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(APP)}&algorithm=SHA1&digits=6&period=30`;
 }
 
-async function sendEmail(to: string, subject: string, html: string) {
-  if (!RESEND) return;
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
-  });
-}
-function otpHtml(code: string) {
-  return `<div dir="rtl" style="font-family:Tahoma,sans-serif;max-width:480px;margin:0 auto;background:#f5f3ef;padding:24px;border-radius:14px">
-    <div style="background:#061E2C;border-radius:10px;padding:20px 24px;text-align:center;margin-bottom:20px">
-      <span style="color:#C8A45C;font-size:1rem;font-weight:700">${APP}</span>
-    </div>
-    <p style="color:#1F3340;font-size:.95rem;margin:0 0 18px">رمز الدخول المؤقت:</p>
-    <div style="background:#fff;border-radius:10px;padding:20px;text-align:center;border:1px solid #e8e4df;margin-bottom:16px">
-      <span style="font-size:2.4rem;font-weight:700;color:#14495E;letter-spacing:14px;font-family:monospace;direction:ltr">${code}</span>
-    </div>
-    <p style="color:#8B9AAB;font-size:.78rem;text-align:center">صالح لمدة 10 دقائق فقط</p>
-  </div>`;
-}
+// البريد بالقالب الموحّد (_shared/mail.ts)
+const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
+const ADMIN_MAIL = { eyebrow: "ADMIN CONSOLE" };
+const otpHtml = (code: string) => mailShell("رمز الدخول إلى لوحة الإدارة", `
+${mailText("أدخل هذا الرمز في صفحة الدخول لإكمال تسجيل دخولك.")}
+${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, ADMIN_MAIL);
 
 type SB = ReturnType<typeof createClient>;
 
@@ -217,24 +204,13 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
 
 const METHOD_LABELS: Record<string, string> = { passkey: "مفتاح المرور", totp: "تطبيق المصادقة", email: "رمز البريد" };
 
-const escHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-
 // تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك.
 async function securityMail(to: string, title: string, rows: [string, string][]) {
-  const when = new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
-  const body = rows.concat([["الوقت", when]]).map(([k, v]) =>
-    `<tr><td style="color:#8B9AAB;padding:6px 0;width:90px">${escHtml(k)}</td><td style="color:#1F3340;padding:6px 0;direction:ltr;text-align:right">${escHtml(v)}</td></tr>`).join("");
-  try {
-    await sendEmail(to, `تنبيه أمني: ${title} — ${APP}`, `<div dir="rtl" style="font-family:Tahoma,sans-serif;max-width:480px;margin:0 auto;background:#f5f3ef;padding:24px;border-radius:14px">
-      <div style="background:#061E2C;border-radius:10px;padding:20px 24px;text-align:center;margin-bottom:20px">
-        <span style="color:#C8A45C;font-size:1rem;font-weight:700">${APP}</span>
-      </div>
-      <p style="color:#1F3340;font-size:1rem;font-weight:700;margin:0 0 12px">${escHtml(title)}</p>
-      <table style="width:100%;font-size:.85rem;border-collapse:collapse">${body}</table>
-      <p style="color:#8B9AAB;font-size:.78rem;margin-top:16px">إن لم تكن أنت، ادخل فورًا وأنهِ الجلسات الأخرى واحذف أي مفتاح لا تعرفه.</p>
-    </div>`);
-  } catch (e) { console.error("admin-api securityMail:", e); }
+  const when = new Date().toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh" });
+  const html = mailShell(title, `
+${mailRows(rows.concat([["الوقت", when]]).map(([k, v]) => [k, v, /^[\x00-\x7F]*$/.test(v)] as [string, string, boolean]))}
+${mailNote("إن لم تكن أنت، ادخل فورًا وأنهِ الجلسات الأخرى واحذف أي مفتاح لا تعرفه.")}`, { ...ADMIN_MAIL, footnote: "" });
+  if (!(await sendEmail(to, `تنبيه أمني: ${plain(title)} — ${APP}`, html))) console.error("admin-api securityMail failed");
 }
 
 // ── WebAuthn ──
