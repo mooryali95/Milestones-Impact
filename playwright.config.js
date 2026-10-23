@@ -12,6 +12,8 @@ export default defineConfig({
   webServer: [
     { command: 'python3 -m http.server 4301 --directory home', port: 4301, reuseExistingServer: !process.env.CI },
     { command: 'python3 -m http.server 4303 --directory admin', port: 4303, reuseExistingServer: !process.env.CI },
+    // منصة القادة من ناتجها المودع، بمعاينة Vite لتعمل المسارات مثل /org
+    { command: 'npx vite preview --config leaders-app/vite.config.js --port 4304 --strictPort', port: 4304, reuseExistingServer: !process.env.CI },
     { command: 'npm run build && npx vite preview --port 4302 --strictPort', port: 4302, reuseExistingServer: !process.env.CI, timeout: 120_000 },
   ],
 });

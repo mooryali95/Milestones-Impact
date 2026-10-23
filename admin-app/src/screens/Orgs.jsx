@@ -2,25 +2,13 @@
 // الجهات: البطاقات، ولوحة الجهة بمصادرها ومشاركيها وتقريرها
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Form from '../Form.jsx';
 import {
   csvBlob, date, domainsOf, download, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
-
-const ORG_FIELDS = [
-  { name: 'name', label: 'اسم الجهة' }, { name: 'short_name', label: 'اسم مختصر (اختياري)' },
-  { name: 'seats', label: 'عدد المقاعد المتعاقد عليها', type: 'number' }, { name: 'color', label: 'لون الجهة (مثل #12414E)', dir: 'ltr' },
-  { name: 'invite_code', label: 'رمز رابط الدعوة (يُولَّد تلقائيًا إن تُرك فارغًا)', dir: 'ltr' },
-  { name: 'domains', label: 'مواقع الجهة: من يصل منها يُنسب لها تلقائيًا (افصل بفاصلة)', dir: 'ltr' },
-  { name: 'sector', label: 'القطاع' }, { name: 'contact_name', label: 'منسق الجهة' },
-  { name: 'contact_email', label: 'بريد المنسق', type: 'email', dir: 'ltr' }, { name: 'contact_phone', label: 'جوال المنسق', dir: 'ltr' },
-  { name: 'status', label: 'الحالة', type: 'select', options: { active: 'نشطة', inactive: 'موقوفة (يتعطل رابطها)' } },
-  { name: 'notes', label: 'ملاحظات', type: 'textarea' },
-];
-// الحقل domains مصفوفة في القاعدة ويُحرَّر نصًا مفصولًا بفواصل كما في اللوحة الحالية
-const toForm = (o) => ({ ...o, domains: domainsOf(o).join(', ') });
+import OrgForm from './OrgForm.jsx';
+import CoordinatorPanel from './CoordinatorPanel.jsx';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -240,6 +228,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
+      {!isNone && <CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
+
       <Sources d={d} total={all.length} />
 
       <section className="la-card">
@@ -289,24 +279,28 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
 }
 
 export default function Orgs({ data, reload, canWrite, orgId, onOpen, onPerson }) {
-  const { toast } = useUI();
-  const [form, setForm] = useState(null);   // null | { org? }
+  const [form, setForm] = useState(null);   // null | { org?, coordinator? }
+  const [ver, setVer] = useState(0);        // يعيد تحميل لوحة الجهة بعد الحفظ
   const orgs = data?.orgs || [];
-  const close = (saved) => { setForm(null); if (saved) { toast('تم الحفظ'); reload(); } };
+  const edit = async (o) => {
+    const c = o ? await L('admin.coordinator', { organization_id: o.id }) : null;
+    setForm({ org: o, coordinator: c?.coordinator || null });
+  };
+  // saved: true بعد الحفظ، و'deleted' بعد الحذف فنعود لقائمة الجهات
+  const close = (saved) => {
+    setForm(null);
+    if (!saved) return;
+    if (saved === 'deleted') onOpen(null);
+    reload(); setVer((n) => n + 1);
+  };
 
   if (!data) return <div className="la-load"><Spinner /></div>;
   return (
     <>
       {orgId
-        ? <OrgView key={orgId} id={orgId} orgs={orgs} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onEdit={(o) => setForm({ org: o })} />
-        : <OrgCards data={data} canWrite={canWrite} onOpen={onOpen} reload={reload} onAdd={() => setForm({})} onEdit={(o) => setForm({ org: o })} />}
-      {form && (
-        <Form title={form.org ? `جهة: ${form.org.name}` : 'جهة جديدة'} fields={ORG_FIELDS}
-          values={form.org ? toForm(form.org) : { status: 'active' }}
-          onSave={(row) => L('admin.save', { entity: 'organizations', row: { ...(form.org ? { id: form.org.id } : {}), ...row } })}
-          onDelete={form.org ? () => L('admin.delete', { entity: 'organizations', id: form.org.id }) : undefined}
-          onClose={close} />
-      )}
+        ? <OrgView key={`${orgId}-${ver}`} id={orgId} orgs={orgs} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onEdit={edit} />
+        : <OrgCards data={data} canWrite={canWrite} onOpen={onOpen} reload={reload} onAdd={() => edit(null)} onEdit={edit} />}
+      {form && <OrgForm org={form.org} coordinator={form.coordinator} onClose={close} />}
     </>
   );
 }
