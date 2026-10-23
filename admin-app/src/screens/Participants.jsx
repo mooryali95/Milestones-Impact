@@ -1,0 +1,324 @@
+// ════════════════════════════════════════════════════════════════
+// المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
+// ════════════════════════════════════════════════════════════════
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Form from '../Form.jsx';
+import {
+  csvBlob, date, DIM, DIM_EN, DIMS, download, filterPeople, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+} from '../leaders.js';
+import { Spinner, useUI } from '../ui.jsx';
+
+// الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز، بنفس مفتاح اللوحة القديمة
+const SAVED_KEY = 'mi_admin_list_filters';
+const loadSaved = () => { try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || {}; } catch { return {}; } };
+const saveSaved = (f) => { try { localStorage.setItem(SAVED_KEY, JSON.stringify(f)); } catch { /* */ } };
+
+export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
+  return (
+    <select className="filter-select" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{all}</option>
+      {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      <option value="none">بدون جهة</option>
+    </select>
+  );
+}
+
+function Lvl({ p, d }) {
+  const x = (p.placements || []).find((y) => y.dimension === d);
+  if (!x) return <span className="la-muted">·</span>;
+  return <span className={`la-lvl ${x.level}${x.approved_at ? '' : ' tentative'}`} title={x.approved_at ? 'معتمد' : 'مبدئي'}>{LVL[x.level]}</span>;
+}
+
+function List({ orgs, canWrite, onOpen, initialStatus }) {
+  const { toast, confirm } = useUI();
+  const [srv, setSrv] = useState(() => ({ search: '', status: '', org: '', ...loadSaved(), ...(initialStatus ? { status: initialStatus } : {}) }));
+  const [draft, setDraft] = useState(srv.search);
+  const [list, setList] = useState(null);
+  const [error, setError] = useState('');
+  const [quick, setQuick] = useState({ q: '', track: '' });
+  const [picked, setPicked] = useState(() => new Set());
+  const [moveTo, setMoveTo] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    setList(null); setError('');
+    const r = await L('admin.participants', srv);
+    if (!r.success) { setList([]); return setError(r.message); }
+    setList(r.participants || []);
+  }, [srv]);
+  useEffect(() => { load(); saveSaved(srv); }, [load, srv]);
+
+  const all = list || [];
+  const shown = useMemo(() => filterPeople(all, quick), [all, quick]);
+  const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
+  const orgOf = (p) => orgs.find((o) => o.id === p.organization_id);
+  const filtered = srv.search || srv.status || srv.org;
+
+  const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allOn = shown.length > 0 && shown.every((p) => picked.has(p.id));
+  const toggleAll = () => setPicked((s) => { const n = new Set(s); shown.forEach((p) => (allOn ? n.delete(p.id) : n.add(p.id))); return n; });
+
+  const move = async () => {
+    if (!moveTo) return toast('اختر الجهة');
+    if (!(await confirm(`نقل ${picked.size} مشارك إلى الجهة المختارة؟`))) return;
+    const r = await L('admin.assign-org', { participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo });
+    toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
+    if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
+  };
+  const exportCsv = () => {
+    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الجهة', ...DIMS.map((d) => DIM_EN[d]), 'المسار', 'الحالة', 'التسجيل'];
+    const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
+    download(csvBlob(head, shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
+      ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, date(p.created_at)])),
+    `المشاركون ${new Date().toISOString().slice(0, 10)}.csv`);
+    toast(`صُدّر ${shown.length} مشارك`);
+  };
+
+  return (
+    <>
+      <form className="toolbar" onSubmit={(e) => { e.preventDefault(); setSrv({ ...srv, search: draft.trim() }); }}>
+        <div className="search-wrap"><input className="search-input" aria-label="بحث في الخادم" placeholder="بحث بالاسم أو البريد أو الجهة، ثم Enter" value={draft} onChange={(e) => setDraft(e.target.value)} /></div>
+        <select className="filter-select" aria-label="الحالة" value={srv.status} onChange={(e) => setSrv({ ...srv, status: e.target.value })}>
+          <option value="">كل الحالات</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <OrgSelect orgs={orgs} value={srv.org} onChange={(org) => setSrv({ ...srv, org })} />
+        <button className="refresh-btn" type="submit">بحث</button>
+        {filtered && <button className="refresh-btn" type="button" onClick={() => { setDraft(''); setSrv({ search: '', status: '', org: '' }); }}>مسح الفلاتر</button>}
+        {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
+      </form>
+      <div className="toolbar">
+        <div className="search-wrap"><input className="search-input" aria-label="تصفية فورية" placeholder="تصفية فورية للنتائج…" value={quick.q} onChange={(e) => setQuick({ ...quick, q: e.target.value })} /></div>
+        <select className="filter-select" aria-label="المسار" value={quick.track} onChange={(e) => setQuick({ ...quick, track: e.target.value })}>
+          <option value="">كل المسارات</option>{tracks.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+        <span className="la-muted" aria-live="polite">{shown.length === all.length ? `${all.length} مشارك` : `${shown.length} من ${all.length} مشارك`}</span>
+        <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel</button>
+      </div>
+      {canWrite && picked.size > 0 && (
+        <div className="la-bulk">
+          <span><b>{picked.size}</b> محدد</span>
+          <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
+          <button className="btn-sm primary" onClick={move}>نقل</button>
+          <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
+        </div>
+      )}
+      <div className="table-wrap"><table className="data-table">
+        <thead><tr>
+          {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
+          <th>الاسم</th><th>الجهة</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المسار</th><th>الحالة</th><th>التسجيل</th>
+        </tr></thead>
+        <tbody>
+          {!list ? <tr className="loading-row"><td colSpan={9}><Spinner /></td></tr>
+            : error ? <tr><td colSpan={9}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
+              : !shown.length ? <tr><td colSpan={9} className="la-empty">{filtered || quick.q || quick.track ? 'لا نتائج لهذه الفلاتر. جرّب مسحها.' : 'لا مشاركين بعد'}</td></tr>
+                : shown.map((p) => {
+                  const og = orgOf(p);
+                  const tk = trackOfPlacements(p.placements);
+                  return (
+                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
+                      {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
+                      <td><b>{p.full_name}</b><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
+                      <td>{og ? <span className="la-orgtag" style={{ '--org': og.color || '#A97A2E' }}>{og.short_name || og.name}</span> : p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
+                      {DIMS.map((d) => <td key={d}><Lvl p={p} d={d} /></td>)}
+                      <td>{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
+                      <td><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>
+                      <td>{date(p.created_at)}</td>
+                    </tr>
+                  );
+                })}
+        </tbody>
+      </table></div>
+      {adding && (
+        <Form title="إضافة مشارك"
+          fields={[{ name: 'full_name', label: 'الاسم' }, { name: 'email', label: 'البريد', type: 'email', dir: 'ltr' }, { name: 'organization_name', label: 'الجهة' }, { name: 'job_title', label: 'المسمى' }]}
+          onSave={(row) => L('admin.create-participant', row)}
+          onClose={(saved) => { setAdding(false); if (saved) { toast('أُضيف المشارك'); load(); } }} />
+      )}
+    </>
+  );
+}
+
+const pct = (v) => (v == null ? '·' : `${Math.round(v)}%`);
+
+function Person({ id, canWrite, onBack }) {
+  const { toast, confirm, prompt } = useUI();
+  const [r, setR] = useState(null);
+  const [status, setStatus] = useState('');
+  const [levels, setLevels] = useState({});
+  const [notes, setNotes] = useState({});
+
+  const load = useCallback(async () => {
+    const d = await L('admin.participant', { id });
+    setR(d);
+    if (!d.success) return;
+    setStatus(d.participant.status);
+    const latest = (d.assessments || []).find((a) => a.status === 'submitted');
+    const lv = {}, nt = {};
+    DIMS.forEach((dm) => {
+      const x = d.profile?.dimensions.find((y) => y.dimension === dm);
+      const ev = latest?.assessment_results?.find((y) => y.dimension === dm)?.evaluation;
+      // قبل الاعتماد يُقترح مستوى المعيار؛ بعده يبقى ما اعتُمد
+      lv[dm] = (!x?.approved && ev ? ev.level : x?.level) || '';
+      nt[dm] = x?.note || '';
+    });
+    setLevels(lv); setNotes(nt);
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!r) return <div className="la-load"><Spinner /></div>;
+  if (!r.success) return <><button className="la-link" onClick={onBack}>→ كل المشاركين</button><div className="la-err">{r.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></>;
+
+  const p = r.participant;
+  const prof = r.profile;
+  const latest = (r.assessments || []).find((a) => a.status === 'submitted');
+  const res = (d) => latest?.assessment_results?.find((x) => x.dimension === d);
+  const act = async (action, body, ok) => {
+    const d = await L(action, body);
+    toast(d.success ? ok : d.message);
+    if (d.success) load();
+    return d;
+  };
+
+  const approve = async () => {
+    if (Object.values(levels).some((v) => !v) || DIMS.some((d) => !levels[d])) return toast('حدّد مستوى كل بُعد');
+    if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
+    act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
+  };
+  const reset = async () => {
+    if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
+    act('admin.reset-assessment', { participant_id: p.id }, 'أُعيد فتح القياس');
+  };
+  const review = async (req, st) => {
+    let note = null;
+    if (st === 'returned') { note = await prompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
+    act('admin.review', { participant_id: p.id, requirement_id: req, status: st, note }, st === 'returned' ? 'أُعيد مع الملاحظة' : 'تم');
+  };
+  const evidence = async (path) => {
+    const d = await L('admin.evidence-url', { path });
+    if (d.success) window.open(d.url, '_blank', 'noopener'); else toast(d.message);
+  };
+
+  const pts = r.points || { total: 0, rank: { title: 'مستكشف' } };
+  const book = r.book || [];
+  const sc = book.reduce((a, b) => [a[0] + (b.quiz_score || 0), a[1] + (b.quiz_total || 0)], [0, 0]);
+
+  return (
+    <>
+      <button className="la-link" onClick={onBack}>→ كل المشاركين</button>
+      <div className="la-person">
+        <section className="la-card">
+          <div className="la-row between"><h3>{p.full_name}</h3><span className="la-chip">{STATUS[p.status] || p.status}</span></div>
+          <dl className="la-dl">
+            <dt>البريد</dt><dd dir="ltr">{p.email}</dd>
+            <dt>الجوال</dt><dd dir="ltr">{p.phone}</dd>
+            <dt>المسمى</dt><dd>{p.job_title}</dd>
+            <dt>الجهة</dt><dd>{p.organization_name}</dd>
+            <dt>القطاع</dt><dd>{p.sector}</dd>
+            <dt>الخبرة</dt><dd>{p.years_experience != null ? `${p.years_experience} سنة` : ''}</dd>
+            <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
+            <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
+            <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
+          </dl>
+          {p.bio && <p className="la-bio">{p.bio}</p>}
+          {canWrite && (
+            <div className="la-row">
+              <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
+                {Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+              <button className="btn-sm ghost" disabled={status === p.status} onClick={() => act('admin.status', { participant_id: p.id, status }, 'تم التحديث')}>تغيير الحالة</button>
+              <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
+            </div>
+          )}
+        </section>
+
+        <section className="la-card">
+          <div className="la-row between">
+            <h3>المستوى في الأبعاد الثلاثة</h3>
+            {prof && (prof.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي، بانتظارك</span>)}
+          </div>
+          {!prof && !latest && <p className="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>}
+          {prof?.track && (
+            <div className="la-track-now"><code className="la-code">{prof.track.key}</code><b>{prof.track.title || 'مسار بلا عنوان'}</b>
+              <p className="la-muted">{prof.track.summary}</p><small className="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>
+          )}
+          <div className="table-wrap"><table className="la-table">
+            <thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المؤشر</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead>
+            <tbody>{DIMS.map((d) => {
+              const rr = res(d);
+              const ev = rr?.evaluation;
+              const x = prof?.dimensions.find((y) => y.dimension === d);
+              return (
+                <tr key={d}>
+                  <td><b>{DIM_EN[d]}</b><br /><small>{DIM[d]}</small></td>
+                  <td>{pct(rr?.knowledge_pct)}</td><td>{pct(rr?.skill_pct)}</td><td>{pct(rr?.behavior_pct)}</td>
+                  <td>{ev?.composite != null ? <><b>{ev.composite}</b>{ev.borderline && <><br /><span className="la-chip warn">حدّية</span></>}</> : '·'}</td>
+                  <td>
+                    {canWrite ? (
+                      <select aria-label={`مستوى ${DIM_EN[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
+                        <option value="">...</option>{Object.entries(LVL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                      </select>
+                    ) : LVL[x?.level] || ''}
+                    {ev && <><br /><small className="la-muted">المعيار: {LVL[ev.level]}</small></>}
+                    {ev?.reason && <><br /><small className="la-why">{ev.reason}</small></>}
+                  </td>
+                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder="اختياري" onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div>
+          {canWrite && <>
+            <button className="btn-sm primary" onClick={approve}>{prof?.approved ? 'تحديث الاعتماد' : 'اعتماد المسار وفتح البرنامج'}</button>
+            <p className="la-muted">الاعتماد يفتح مراحل التأهيل والكتيب للمشارك ويرسل له بريدًا.</p>
+          </>}
+        </section>
+      </div>
+
+      <section className="la-card">
+        <div className="la-row between"><h3>الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
+        <div className="la-journey">{r.journey.map((s) => (
+          <div key={s.key} className={`la-stage ${s.status}`}>
+            <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{{ done: 'مكتملة', active: 'الحالية', locked: 'مقفلة' }[s.status]}</span></div>
+            <ul>{s.items.length ? s.items.map((it) => (
+              <li key={it.id} className={it.status}>
+                <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small></span>
+                <span className="la-row">
+                  {it.evidence_path && <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>}
+                  {canWrite && !it.auto && s.status !== 'locked' && <>
+                    {it.status !== 'done' && <button className="btn-sm primary" onClick={() => review(it.id, 'done')}>اعتماد</button>}
+                    {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => review(it.id, 'returned')}>إعادة مع ملاحظة</button>}
+                    {it.status === 'done' && <button className="btn-sm ghost" onClick={() => review(it.id, 'pending')}>إلغاء</button>}
+                  </>}
+                </span>
+              </li>
+            )) : <li className="la-muted">لا متطلبات</li>}</ul>
+          </div>
+        ))}</div>
+      </section>
+
+      <section className="la-card la-book-card">
+        <div className="la-row between"><h3>كتاب القائد والنماذج</h3><span className="rank-chip">{pts.rank.title} · {pts.total} نقطة</span></div>
+        <div className="la-book-kpis">
+          <span><b>{book.length}</b>باب أتمّه</span>
+          <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>
+          <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
+        </div>
+        {(r.models || []).length > 0 && (
+          <ul className="la-reqs">{r.models.map((x) => (
+            <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span></span></li>
+          ))}</ul>
+        )}
+        <p className="la-muted">تقييم النماذج من «كتيب القائد» في اللوحة الحالية حتى يُنقل.</p>
+      </section>
+
+      <section className="la-card"><h3>السجل</h3><ul className="la-log">
+        {(r.history || []).length ? r.history.map((h, i) => <li key={i}><small>{date(h.created_at)}</small> {h.action} <small className="la-muted">{h.actor}</small></li>) : <li className="la-muted">لا شيء</li>}
+      </ul></section>
+    </>
+  );
+}
+
+export default function Participants({ orgs, canWrite, personId, onOpen, initialStatus }) {
+  return personId
+    ? <Person id={personId} canWrite={canWrite} onBack={() => onOpen(null)} />
+    : <List orgs={orgs} canWrite={canWrite} onOpen={onOpen} initialStatus={initialStatus} />;
+}
