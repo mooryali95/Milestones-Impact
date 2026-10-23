@@ -2,6 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { deliver, esc, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -100,58 +101,13 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
 }
 
 // ── البريد ──
-// قالب البريد بهوية Milestone Impact (الوضع الفاتح): أرضية Mist، بطاقة بيضاء بخط شعري،
-// الشعار ثم خط ذهبي، عنوان خفيف الوزن، زر بإطار ذهبي، وتوقيع وحقوق في التذييل.
-// جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
-const LOGO_URL = 'https://mi.sunkvalue.com/assets/brand/png/milestone-impact-400w.png';
-const MAIL = { graphite: '#0B272F', gold: '#A97A2E', mist: '#F7F8F6', line: '#DCE2E1', slate: '#2C4148', muted: '#6E8085' };
-const FONT = `'Noto Kufi Arabic',Tahoma,Arial,sans-serif`;
-
-export const mailButton = (href: string, label: string) => `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:6px auto 22px"><tr>
-<td style="border:1px solid ${MAIL.gold};border-radius:2px"><a href="${href}" style="display:inline-block;padding:13px 34px;font-family:${FONT};font-size:14px;color:${MAIL.graphite};text-decoration:none;letter-spacing:0">${label}</a></td></tr></table>`;
-
-function shell(title: string, body: string) {
-  const year = new Date().getFullYear();
-  return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
-<body style="margin:0;padding:0;background:${MAIL.mist};font-family:${FONT};color:${MAIL.graphite}">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MAIL.mist}"><tr><td align="center" style="padding:36px 12px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${MAIL.line};border-radius:2px">
-<tr><td style="padding:30px 36px 0" align="left" dir="ltr">
-  <img src="${LOGO_URL}" width="132" alt="Milestone Impact" style="display:block;width:132px;height:auto;border:0;font-family:Arial,sans-serif;font-size:18px;color:${MAIL.graphite}">
-</td></tr>
-<tr><td style="padding:22px 36px 0"><div style="height:1px;line-height:1px;font-size:0;background:${MAIL.gold}">&nbsp;</div></td></tr>
-<tr><td style="padding:26px 36px 8px">
-  <div style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;color:${MAIL.gold};text-transform:uppercase;margin:0 0 8px" dir="ltr" align="right">LEADERS PROGRAM</div>
-  <h1 style="font-family:${FONT};font-weight:300;font-size:22px;line-height:1.5;margin:0 0 16px;color:${MAIL.graphite}">${title}</h1>
-  <div style="font-size:15px;line-height:1.9;color:${MAIL.slate}">${body}</div>
-</td></tr>
-<tr><td style="padding:8px 36px 28px">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${MAIL.line}"><tr>
-    <td style="padding-top:16px;font-size:13px;color:${MAIL.slate}">Milestone Impact · <span style="color:${MAIL.gold}">مَعلَم</span><br><span style="font-size:12px;color:${MAIL.muted}">من النية… إلى الأثر</span></td>
-  </tr></table>
-</td></tr>
-</table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px"><tr><td style="padding:16px 8px;font-size:11px;line-height:1.8;color:${MAIL.muted}" align="center">
-  إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.<br>
-  © ${year} Milestone Impact. جميع الحقوق محفوظة. هذه الرسالة ومحتواها مخصصة لمستلمها فقط.
-</td></tr></table>
-</td></tr></table></body></html>`;
-}
-
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+// القالب من المصدر الموحّد (_shared/mail.ts)؛ هنا رسائل البرنامج فقط
+export { mailButton };
+const shell = (title: string, body: string) => mailShell(title, body, { eyebrow: 'LEADERS PROGRAM' });
 
 export async function sendMail(to: string, subject: string, html: string) {
-  if (!CONFIG.resendKey) {
-    console.error('RESEND_API_KEY missing; mail to', to, 'not sent');
-    throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${CONFIG.resendKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: CONFIG.mailFrom, to: [to], subject, html }),
-  });
-  if (!res.ok) {
-    console.error('mail failed', res.status, await res.text());
+  if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
+  if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom }))) {
     throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
   }
 }
@@ -161,8 +117,7 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
   return shell(isNew ? 'أكمل تسجيلك في برنامج القادة' : 'رمز الدخول إلى رحلتك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">${hello} اضغط الزر للمتابعة، أو أدخل الرمز في الصفحة التي طلبته منها.</p>
 ${mailButton(link, isNew ? 'تأكيد التسجيل' : 'الدخول الآن')}
-<p style="text-align:center;font-family:Arial,sans-serif;font-size:32px;letter-spacing:10px;font-weight:300;color:#0B272F;margin:0 0 8px;direction:ltr">${code}</p>
-<p style="text-align:center;font-size:13px;color:#6E8085;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+${mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)}`);
 }
 
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
@@ -188,7 +143,7 @@ ${mailButton(CONFIG.appUrl, 'أكمل رحلتي')}`);
 const btn = mailButton;
 
 export function coordinatorInviteMail(name: string | null, org: string) {
-  return shell(`لوحة ${esc(org)} في برنامج القادة`, `
+  return shell(`لوحة ${org} في برنامج القادة`, `
 <p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} أُنشئ لك حساب اطلاع بصفتك منسق ${esc(org)} في برنامج القادة من Milestone Impact.</p>
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">ترى منه تقدّم مشاركي جهتك وتوزيعهم على المسارات وتقارير الجهة، ويصلك ملخص أسبوعي بالبريد. الدخول برمز يصل إلى هذا البريد، بلا كلمة مرور.</p>
 ${btn(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة')}`);
@@ -198,13 +153,12 @@ export function coordinatorSignInMail(name: string | null, code: string, link: s
   return shell('رمز الدخول إلى لوحة الجهة', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} اضغط الزر للدخول، أو أدخل الرمز في الصفحة.</p>
 ${btn(link, 'الدخول الآن')}
-<p style="text-align:center;font-family:Arial,sans-serif;font-size:32px;letter-spacing:10px;font-weight:300;color:#0B272F;margin:0 0 8px;direction:ltr">${code}</p>
-<p style="text-align:center;font-size:13px;color:#6E8085;margin:0">صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.</p>`);
+${mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)}`);
 }
 
 export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
   const row = (l: string, v: number | string) => `<tr><td style="padding:8px 0;border-bottom:1px solid #DCE2E1">${l}</td><td style="padding:8px 0;border-bottom:1px solid #DCE2E1;text-align:left;font-family:Arial,sans-serif;font-weight:300;font-size:16px;color:#0B272F">${v}</td></tr>`;
-  return shell(`ملخص ${esc(org)} الأسبوعي`, `
+  return shell(`ملخص ${org} الأسبوعي`, `
 <p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} هذا ملخص مشاركي جهتك في برنامج القادة.</p>
 <table width="100%" style="font-size:14px;margin:0 0 20px">
 ${row('المشاركون', k.total)}${row('انضموا هذا الأسبوع', k.joined_week)}${row('نشطون هذا الأسبوع', k.active_week)}

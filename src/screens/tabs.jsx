@@ -6,6 +6,7 @@ import Icon from "../components/Icon";
 import { BRAND, TRACKS, PHASES, OPERATIONS } from "../config/constants";
 import { fmtShort, fmtBoth, fmtGregorian, gregorianToHijri } from "../lib/dateUtils";
 import { analyzeBookings } from "../lib/analysis";
+import { printAnalysis } from "../lib/print";
 
 // ════════════════════════════════════════════════════════════════
 // TABS — شاشات المستخدم: المصفوفة، الجدول، التحليل، الملخص، النموذج
@@ -271,7 +272,8 @@ export const ReportTab = (p) => {
 
   return (
       <div className="sec" style={{animation:"fadeIn 0.4s"}}>
-        <div className="sec-head"><h2 className="sec-title">التقرير التحليلي</h2></div>
+        <div className="sec-head"><h2 className="sec-title">التقرير التحليلي</h2>
+          {analyzeBookings(procs,dates,confirmed) && <button className="btn btn-s btn-print" onClick={()=>printAnalysis(user,procs,dates,confirmed)}>طباعة أو حفظ PDF</button>}</div>
         {(()=>{
           const analysis=analyzeBookings(procs,dates,confirmed);
           if(!analysis) return <div className="rpt-card rpt-empty"><h3>تحتاج حجوزات إضافية</h3><p>أكمل <strong>3 حجوزات</strong> على الأقل</p></div>;

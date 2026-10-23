@@ -2,7 +2,7 @@
 // قوالب التقارير: تبني محتوى الوثيقة من بيانات المنصة
 // ════════════════════════════════════════════════════════════════
 // دوال صافية تعيد { meta, body }؛ يفتحها openDocument أو تُختبر وحدها.
-import { bars, chain, kpis, progress, raw, section, table, today } from './doc.js';
+import { bars, callout, chain, esc, kpis, points, progress, raw, section, table, today } from './doc.js';
 
 export const STATUS = {
   registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
@@ -37,7 +37,7 @@ export function orgReport(d, audience = 'admin') {
   if (audience === 'coordinator' && perms.contact) cols.push({ label: 'البريد', ltr: true });
   if (audience === 'coordinator' && perms.scores) cols.push({ label: 'المستويات' });
   const rows = ps.map((p) => {
-    const r = [raw(`<b style="font-weight:400">${escText(p.full_name)}</b>`), p.job_title || '', p.track_title || p.track || '·', STATUS[p.status] || p.status];
+    const r = [raw(`<b style="font-weight:400">${esc(p.full_name)}</b>`), p.job_title || '', p.track_title || p.track || '·', STATUS[p.status] || p.status];
     if (showProgress) r.push(raw(progress(p.progress || 0)));
     r.push(fmt(p.last_login_at));
     if (audience === 'coordinator' && perms.contact) r.push(p.email || '');
@@ -88,7 +88,7 @@ export function planReport(user, rows) {
     ])),
     section('Schedule', 'جدول العمليات', table(
       [{ label: '#', width: '8mm' }, { label: 'العملية' }, { label: 'المسار' }, { label: 'الوزن' }, { label: 'المرحلة' }, { label: 'المدة' }, { label: 'الميلادي' }, { label: 'الهجري' }, { label: 'الحالة' }],
-      rows.map((r, i) => [String(i + 1), raw(`<b style="font-weight:400">${escText(r.name)}</b>`), raw(`<span style="color:${escText(r.trackColor)}">◆</span> ${escText(r.track)}`), `${r.weight}%`, r.phase, r.duration, r.gregorian, r.hijri,
+      rows.map((r, i) => [String(i + 1), raw(`<b style="font-weight:400">${esc(r.name)}</b>`), raw(`<span style="color:${esc(r.trackColor)}">◆</span> ${esc(r.track)}`), `${r.weight}%`, r.phase, r.duration, r.gregorian, r.hijri,
         raw(r.confirmed ? '<span class="tag gold">مؤكد</span>' : '<span class="tag">محدد</span>')]),
       'لم تُحدد مواعيد بعد',
     )),
@@ -105,6 +105,59 @@ export function planReport(user, rows) {
   };
 }
 
-function escText(v) {
-  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// التقرير التحليلي للمصفوفة: يقرأ نتيجة analyzeBookings كما هي (مصدرها الوحيد)
+export function analysisReport(user, a) {
+  const body = [
+    section('Pattern', 'نمط التخطيط', callout(`نمط ${a.pattern.nameAr}`, a.pattern.desc)),
+    section('Indicators', 'المؤشرات', kpis([
+      { value: a.totalBooked, label: 'عملية محجوزة', hint: `من ${a.totalProcesses}` },
+      { value: `${a.trackCoverage.covered}/${a.trackCoverage.total}`, label: 'مسارات مغطاة' },
+      { value: `${a.phaseCoverage.covered}/${a.phaseCoverage.total}`, label: 'مراحل مغطاة' },
+      { value: a.avgPhase, label: 'متوسط المرحلة' },
+      { value: a.readinessAr, label: 'الجاهزية' },
+    ])),
+    section('Tracks', 'توزيع الاهتمام على المسارات', bars(a.trackDist.map((t) => ({ label: t.nameAr, value: t.count })), 4),
+      `تغطي الخطة ${a.weightBalance.pct}% من وزن المسارات.`),
+    section('Journey', 'رحلة الحجز', table(
+      [{ label: '#', width: '8mm' }, { label: 'العملية' }, { label: 'المسار' }, { label: 'المرحلة' }, { label: 'التاريخ' }, { label: 'الحالة' }],
+      a.timeline.map((t) => [String(t.step), raw(`<b style="font-weight:400">${esc(t.nameAr)}</b>`), raw(`<span style="color:${esc(t.trackColor)}">◆</span> ${esc(t.trackNameAr)}`),
+        t.phaseNameAr, fmt(t.date), raw(t.isConfirmed ? '<span class="tag gold">مؤكد</span>' : '<span class="tag">محدد</span>')]),
+    )),
+    ...(a.depGaps.length ? [section('Gaps', 'فجوات التبعية', points(a.depGaps.map((g) => raw(`حُجزت <b style="font-weight:400">${esc(g.process)}</b> دون <b style="font-weight:400">${esc(g.missing)}</b> التي تغذيها`))),
+      'عمليات تعتمد على مدخلات من عمليات لم تُحجز بعد.')] : []),
+    ...(a.recommendations.length ? [section('Recommendations', 'التوصيات', points(a.recommendations))] : []),
+  ].join('');
+  return {
+    meta: {
+      kind: 'ANL', kindLabel: 'Analytical Report', eyebrow: 'Impact Matrix · Analytical Report',
+      title: 'التقرير التحليلي', subtitle: `مصفوفة التأثير · ${user.name || ''}`,
+      rows: [['المشارك', user.name || '·'], ['العمليات المحجوزة', `${a.totalBooked} من ${a.totalProcesses}`], ['النمط', a.pattern.nameAr], ['تاريخ الإصدار', today()]],
+      confidential: `سري: مخصص لـ ${user.name || 'المشارك'} ومستشاره فقط`,
+      closing: 'أُعدّ هذا التقرير آليًا من حجوزات المشارك على مصفوفة التأثير لحظة إصداره، وهو قراءة أولية تُستكمل بالحوار مع المستشار.',
+    },
+    body,
+  };
+}
+
+// تقرير القرار في SSPDF: التركيبات مصنّفة في فئات القرار كما تعرضها الشاشة
+// buckets: [{ key, ar, color, items: [{ name, adj, risk, trust, why }] }]
+export function decisionReport(project, buckets) {
+  const total = buckets.reduce((s, b) => s + b.items.length, 0);
+  const body = [
+    section('Summary', 'ملخص القرار', kpis(buckets.map((b) => ({ value: b.items.length, label: b.ar })))),
+    ...buckets.filter((b) => b.items.length).map((b) => section('Decision', b.ar, table(
+      [{ label: 'التركيبة' }, { label: 'النتيجة المعدّلة', width: '26mm' }, { label: 'المخاطر', width: '18mm' }, { label: 'الثقة', width: '16mm' }, { label: 'المبرر' }],
+      b.items.map((r) => [raw(`<span style="color:${esc(b.color)}">◆</span> <b style="font-weight:400">${esc(r.name)}</b>`), r.adj, `${r.risk}/9`, r.trust, r.why]),
+    ), `${b.items.length} من ${total} تركيبة.`)),
+  ].join('');
+  return {
+    meta: {
+      kind: 'DEC', kindLabel: 'Decision Report', eyebrow: 'SSPDF · Decision & Recommendations',
+      title: 'تقرير القرار والتوصيات', subtitle: project || 'إطار قرار محفظة الخدمات الاستراتيجية',
+      rows: [['المشروع', project || '·'], ['التركيبات', String(total)], ['المنهجية', 'النتيجة المعدّلة بالثقة ودرجة المخاطر'], ['تاريخ الإصدار', today()]],
+      confidential: 'سري: مخصص لفريق القرار في المشروع',
+      closing: 'صُنّفت التركيبات آليًا وفق النتيجة المعدّلة بالثقة ودرجة المخاطر لحظة الإصدار، وتُعتمد التوصيات بقرار الفريق.',
+    },
+    body,
+  };
 }

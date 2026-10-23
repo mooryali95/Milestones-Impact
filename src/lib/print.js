@@ -1,4 +1,5 @@
 import { gregorianToHijri, fmtGregorian } from "./dateUtils";
+import { analyzeBookings } from "./analysis";
 
 // ════════════════════════════════════════════════════════════════
 // PRINT — نموذج الخطة النهائي (نافذة طباعة مستقلة)
@@ -18,5 +19,17 @@ export async function printFinalTable(user, procs, dates, confirmed) {
   const { meta, body } = planReport(user, rows);
   if (!writeDocument(win, meta, body)) {
     alert("يرجى السماح بالنوافذ المنبثقة (Popup) لطباعة النموذج.\n\nSettings → Allow pop-ups for this site");
+  }
+}
+
+// التقرير التحليلي: من analyzeBookings نفسها التي تعرض التبويب
+export async function printAnalysis(user, procs, dates, confirmed) {
+  const analysis = analyzeBookings(procs, dates, confirmed);
+  if (!analysis) return;
+  const win = window.open("", "_blank");
+  const [{ writeDocument }, { analysisReport }] = await Promise.all([import("./brand/doc.js"), import("./brand/reports.js")]);
+  const { meta, body } = analysisReport(user, analysis);
+  if (!writeDocument(win, meta, body)) {
+    alert("يرجى السماح بالنوافذ المنبثقة (Popup) لطباعة التقرير.\n\nSettings → Allow pop-ups for this site");
   }
 }

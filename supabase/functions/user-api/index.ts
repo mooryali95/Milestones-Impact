@@ -4,6 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
+import { deliver, mailCode, mailShell, mailText } from "../_shared/mail.ts";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
 //
@@ -60,29 +61,11 @@ function randomCode(): string {
 }
 const otpHash = (email: string, code: string) => sha256hex(`user-otp:${email}:${code}`);
 
-async function sendEmail(to: string, subject: string, html: string) {
-  if (!RESEND) { console.log("No RESEND_API_KEY"); return false; }
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
-  });
-  if (!res.ok) { console.error("Resend error:", await res.text()); return false; }
-  return true;
-}
-
-function otpHtml(code: string) {
-  return `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;max-width:520px;margin:0 auto;background:#f5f3ef;padding:24px;border-radius:14px">
-    <div style="background:linear-gradient(135deg,#061E2C,#0A2A3D);border-radius:10px;padding:20px 24px;text-align:center;margin-bottom:20px">
-      <span style="color:#C8A45C;font-size:1rem;font-weight:700">Milestone Impact — مصفوفة التأثير</span>
-    </div>
-    <p style="color:#1F3340;font-size:.95rem;margin:0 0 18px">رمز التحقق الخاص بك:</p>
-    <div style="background:#fff;border-radius:10px;padding:20px;text-align:center;border:1px solid #e8e4df;margin-bottom:16px">
-      <span style="font-size:2.4rem;font-weight:700;color:#14495E;letter-spacing:14px;font-family:monospace;direction:ltr">${code}</span>
-    </div>
-    <p style="color:#8B9AAB;font-size:.78rem;text-align:center">صالح لمدة 10 دقائق فقط — إذا لم تطلبه تجاهل هذا البريد</p>
-  </div>`;
-}
+// البريد بالقالب الموحّد (_shared/mail.ts)
+const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
+const otpHtml = (code: string) => mailShell("رمز التحقق إلى مصفوفة التأثير", `
+${mailText("أدخل هذا الرمز في الصفحة التي طلبته منها لإكمال الدخول.")}
+${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { eyebrow: "IMPACT MATRIX" });
 
 type SB = ReturnType<typeof createClient>;
 
