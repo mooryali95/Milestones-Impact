@@ -4,15 +4,24 @@
 // السياقات المنقولة تُعرض هنا، وغير المنقولة بعد تفتح اللوحة القديمة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
+import { setLeadersExpired } from './leaders.js';
 import { UIProvider } from './ui.jsx';
 import Login from './screens/Login.jsx';
 import Settings from './screens/Settings.jsx';
 import Contacts from './screens/Contacts.jsx';
+import Leaders from './screens/Leaders.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
+// السياق يُحفظ للجلسة، فالتحديث يعيدك حيث كنت
+const CTX_KEY = 'mi_admin_next_ctx';
+const savedCtx = () => { try { return sessionStorage.getItem(CTX_KEY) === 'leaders' ? 'leaders' : 'contacts'; } catch { return 'contacts'; } };
+
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);
+  const [ctx, setCtxState] = useState(savedCtx);
+  const setCtx = (c) => { setCtxState(c); try { sessionStorage.setItem(CTX_KEY, c); } catch { /* */ } };
+  const canWrite = (user.role_id || user.role) !== 'viewer';
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
     <div id="screen-dashboard" className="visible">
@@ -33,13 +42,13 @@ function Dashboard({ user, onUser, onLogout }) {
       </header>
 
       <nav className="ctx-bar" aria-label="السياق">
-        <button className="ctx-tab active" data-ctx="contacts" aria-current="page"><span className="dot" />طلبات التواصل</button>
-        {/* لم يُنقل بعد: يفتح اللوحة الحالية بالجلسة نفسها */}
-        <a className="ctx-tab" data-ctx="leaders" href="/#leaders"><span className="dot" />تطبيق القادة</a>
+        {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة']].map(([k, l]) => (
+          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}</button>
+        ))}
         <a className="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
-      <Contacts />
+      {ctx === 'leaders' ? <Leaders canWrite={canWrite} /> : <Contacts />}
 
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
     </div>
@@ -49,7 +58,10 @@ function Dashboard({ user, onUser, onLogout }) {
 export default function App() {
   const [user, setUser] = useState(() => session.load()?.user || null);
 
-  useEffect(() => { setExpiredHandler(() => setUser(null)); }, []);
+  useEffect(() => {
+    setExpiredHandler(() => setUser(null));
+    setLeadersExpired(() => setUser(null));
+  }, []);
 
   const signedIn = (token, u) => { session.save(token, u); setUser(u); };
   const patchUser = useCallback((patch) => { session.patchUser(patch); setUser((u) => ({ ...u, ...patch })); }, []);
