@@ -588,3 +588,24 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .op-prog i { display: block; height: 100%; background: var(--org, var(--copper)); }
 @media (max-width: 860px) { .op-kpis { grid-template-columns: repeat(2, 1fr); } .op-grid { grid-template-columns: 1fr; } }
 @media print { .topbar, .foot, .op-tools, .op-hero .row, .skip-link { display: none !important; } .op-hero { color: #000; background: none !important; } .op-seats { color: #000; } }
+
+/* ── شهادة المشاركة ── */
+.cert-card { display: flex; gap: 18px; align-items: center; margin-top: 16px; border: 1px solid var(--gold); }
+.cert-card h2 { font-size: 18px; font-weight: 300; margin: 0; }
+.cert-mark { flex: none; width: 14px; height: 14px; background: var(--gold); transform: rotate(45deg); margin: 0 6px; }
+@media (max-width: 640px) { .cert-card { flex-wrap: wrap; } }
+
+/* صفحة التحقق العامة /v/<الرقم> */
+.vf { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+.vf-card { background: var(--surface); border: 1px solid var(--line); border-radius: 2px; padding: 28px; text-align: center; }
+.vf-state { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 300; margin: 6px 0 4px; }
+.vf-state i { width: 12px; height: 12px; transform: rotate(45deg); background: var(--ok); }
+.vf-state.revoked i, .vf-state.replaced i, .vf-state.invalid i, .vf-state.missing i { background: #9AA9AD; }
+.vf-name { font-size: 26px; font-weight: 300; margin: 18px 0 2px; }
+.vf-en { direction: ltr; letter-spacing: .18em; text-transform: uppercase; font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+.vf dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; text-align: start; margin: 18px 0; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; }
+.vf dt { color: var(--muted); }
+.vf dd { margin: 0; }
+.vf-search { display: flex; gap: 8px; margin-top: 18px; }
+.vf-search .input { flex: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

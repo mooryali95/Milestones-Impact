@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import Orgs from './Orgs.jsx';
 import Participants from './Participants.jsx';
+import Certificates from './Certificates.jsx';
 
 // لم تُنقل بعد: تفتح اللوحة الحالية بالجلسة نفسها
 const LEGACY = [['overview', 'نظرة عامة'], ['tracks', 'المسارات الـ27'], ['handbook', 'كتيب القائد'], ['journey', 'الرحلة والمتطلبات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والقواعد']];
@@ -30,18 +31,20 @@ export default function Leaders({ canWrite }) {
         <div className="page-header-left">
           <div className="page-eyebrow">Leaders Program</div>
           <div className="page-title">تطبيق القادة</div>
-          <div className="page-title-ar">leaders.sunkvalue.com · المشاركون والجهات</div>
+          <div className="page-title-ar">leaders.sunkvalue.com · المشاركون والجهات والشهادات</div>
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
       <nav className="la-tabs" aria-label="أقسام تطبيق القادة">
         <button className={tab === 'participants' ? 'on' : ''} aria-current={tab === 'participants' ? 'page' : undefined} onClick={() => go('participants')}>المشاركون</button>
         <button className={tab === 'orgs' ? 'on' : ''} aria-current={tab === 'orgs' ? 'page' : undefined} onClick={() => go('orgs')}>الجهات</button>
+        <button className={tab === 'certs' ? 'on' : ''} aria-current={tab === 'certs' ? 'page' : undefined} onClick={() => go('certs')}>الشهادات</button>
         {LEGACY.map(([k, l]) => <a key={k} className="la-tab-legacy" href="/#leaders" title="في اللوحة الحالية">{l} ↗</a>)}
       </nav>
       <div className="la-body">
         {tab === 'participants'
           ? <Participants orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={setPerson} />
+          : tab === 'certs' ? <Certificates canWrite={canWrite} onPerson={openPerson} />
           : <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={setOrgId} onPerson={openPerson} />}
       </div>
     </div>

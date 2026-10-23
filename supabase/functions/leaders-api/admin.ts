@@ -6,6 +6,7 @@
 import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
 import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
+import { issueOnCompletion } from './certificates.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
@@ -28,6 +29,7 @@ const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
 function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
 }
+export const writer = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); return fn(a, b); };
 
 // ── الجهات ──
 // ترتيب الحالة في القمع: سجّل، أكمل الملف، أنهى القياس، اعتُمد، أنهى البرنامج
@@ -242,7 +244,9 @@ export async function setStatus(a: Admin, b: Body) {
   if (!allowed.includes(b.status)) throw new Fail('حالة غير صالحة');
   must(await db.from('participants').update({ status: b.status }).eq('id', String(b.participant_id)));
   await audit('admin', a.email, 'participant.status', 'participants', String(b.participant_id), null, { status: b.status });
-  return { success: true };
+  // إنهاء البرنامج يُصدر الشهادة تلقائيًا (مرة واحدة)
+  const cert = b.status === 'completed' ? await issueOnCompletion(String(b.participant_id), a.email) : null;
+  return { success: true, certificate: cert };
 }
 
 // إعادة القياس: يُلغى القياس الحالي ويُفتح جديد، والمستوى المعتمد يبقى حتى يُعتمد غيره
@@ -302,9 +306,9 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   learning_models:    { table: 'learning_models', key: ['id'], sortable: true,
                         fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
-                        fields: ['title_ar', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
+                        fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
+                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
   dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
   levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },

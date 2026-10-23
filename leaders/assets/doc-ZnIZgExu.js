@@ -1,4 +1,4 @@
-const p=`<?xml version="1.0" encoding="UTF-8"?>
+const f=`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3200 1454" role="img" aria-label="Milestone Impact">
   <title>Milestone Impact</title>
   <g transform="translate(0,1454) scale(0.1,-0.1)" stroke="none">
@@ -405,21 +405,21 @@ c172 0 229 8 253 34 20 20 20 42 27 681 3 363 7 955 7 1315 2 728 5 773 65
 -10 -73 -22z"/>
   </g>
 </svg>
-`,m=p.replace(/<\?xml[^>]*>\s*/,""),n={graphite:"#0B272F",gold:"#A97A2E",goldLight:"#D9A85A",mist:"#F7F8F6",paper:"#FFFFFF",slate:"#2C4148",muted:"#6E8085",line:"#DCE2E1",faint:"#EEF1F0"},i=t=>String(t??"").replace(/[&<>"']/g,e=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[e]),r=t=>typeof t=="number"?t.toLocaleString("en-US"):i(t),g=()=>new Date().toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"});function h(t){const e=new Date,o=`${e.getFullYear()}${String(e.getMonth()+1).padStart(2,"0")}${String(e.getDate()).padStart(2,"0")}`,a=Math.random().toString(36).slice(2,6).toUpperCase();return`MI-${t}-${o}-${a}`}const d=(t=8,e=n.gold)=>`<svg class="dm" width="${t}" height="${t}" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="${e}"/></svg>`,b=`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 20 0 40 20 20 40Z' fill='none' stroke='${n.graphite}' stroke-width='.6' opacity='.07'/></svg>`)}")`,f=(t="MILESTONE IMPACT")=>`<svg class="seal" width="118" height="118" viewBox="0 0 120 120" aria-hidden="true">
+`,$=f.replace(/<\?xml[^>]*>\s*/,""),n={graphite:"#0B272F",gold:"#A97A2E",goldLight:"#D9A85A",mist:"#F7F8F6",paper:"#FFFFFF",slate:"#2C4148",muted:"#6E8085",line:"#DCE2E1",faint:"#EEF1F0"},a=t=>String(t??"").replace(/[&<>"']/g,e=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[e]),r=t=>typeof t=="number"?t.toLocaleString("en-US"):a(t),d=()=>new Date().toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"});function c(t){const e=new Date,o=`${e.getFullYear()}${String(e.getMonth()+1).padStart(2,"0")}${String(e.getDate()).padStart(2,"0")}`,i=Math.random().toString(36).slice(2,6).toUpperCase();return`MI-${t}-${o}-${i}`}const p=(t=8,e=n.gold)=>`<svg class="dm" width="${t}" height="${t}" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="${e}"/></svg>`,u=`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 20 0 40 20 20 40Z' fill='none' stroke='${n.graphite}' stroke-width='.6' opacity='.07'/></svg>`)}")`,m=(t="MILESTONE IMPACT")=>`<svg class="seal" width="118" height="118" viewBox="0 0 120 120" aria-hidden="true">
   <circle cx="60" cy="60" r="56" fill="none" stroke="${n.gold}" stroke-width=".8"/>
   <circle cx="60" cy="60" r="49" fill="none" stroke="${n.gold}" stroke-width=".5" stroke-dasharray="1.5 2.5"/>
   <circle cx="60" cy="60" r="31" fill="none" stroke="${n.gold}" stroke-width=".5"/>
   <defs><path id="sealArc" d="M60 60 m-41 0 a41 41 0 1 1 82 0 a41 41 0 1 1 -82 0"/></defs>
-  <text font-family="Noto Sans, sans-serif" font-size="6.4" letter-spacing="2.2" fill="${n.gold}"><textPath href="#sealArc" startOffset="0">${i(t)} · FROM INTENTION TO IMPACT ·</textPath></text>
+  <text font-family="Noto Sans, sans-serif" font-size="6.4" letter-spacing="2.2" fill="${n.gold}"><textPath href="#sealArc" startOffset="0">${a(t)} · FROM INTENTION TO IMPACT ·</textPath></text>
   <rect x="51" y="51" width="18" height="18" transform="rotate(45 60 60)" fill="${n.gold}"/>
-</svg>`,x=(t,e,o,a)=>`<section class="sec">
-  <header><span class="eyebrow">${i(t)}</span><h2>${i(e)}</h2>${a?`<p class="note">${i(a)}</p>`:""}</header>
+</svg>`,x=(t,e,o,i)=>`<section class="sec">
+  <header><span class="eyebrow">${a(t)}</span><h2>${a(e)}</h2>${i?`<p class="note">${a(i)}</p>`:""}</header>
   ${o}
-</section>`,y=t=>`<div class="kpis">${t.map(e=>`<div class="kpi"><b>${r(e.value)}</b><span>${i(e.label)}</span>${e.hint?`<small>${i(e.hint)}</small>`:""}</div>`).join("")}</div>`,w=t=>`<div class="chain">${t.map((e,o)=>`<div class="node${e.value?" on":""}">
-  <span class="n">${r(e.value??"")}</span>${d(12,e.value?n.gold:n.line)}<span class="l">${i(e.label)}</span>${e.en?`<span class="e">${i(e.en)}</span>`:""}
-</div>${o<t.length-1?'<i class="link"></i>':""}`).join("")}</div>`,v=(t,e,{ltr:o=!1}={})=>t.length?`<div class="bars">${t.map(a=>{const l=Math.max(0,Math.min(100,a.value/Math.max(1,e)*100));return`<div class="bar"><span class="bl"${o?' dir="ltr"':""}>${i(a.label)}</span><span class="bt"><i style="width:${l.toFixed(1)}%"></i>${d(7)}</span><b>${r(a.value)}</b></div>`}).join("")}</div>`:'<p class="muted">لا بيانات بعد.</p>',k=(t,e,o="لا بيانات")=>`<table class="tbl"><thead><tr>${t.map(a=>`<th${a.width?` style="width:${a.width}"`:""}>${i(a.label)}</th>`).join("")}</tr></thead>
-<tbody>${e.length?e.map(a=>`<tr>${a.map((l,s)=>`<td${t[s]?.ltr?' dir="ltr"':""}${t[s]?.align?` style="text-align:${t[s].align}"`:""}>${l&&typeof l=="object"&&"html"in l?l.html:i(l)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${t.length}" class="muted c">${i(o)}</td></tr>`}</tbody></table>`,z=t=>`<span class="pg"><i style="width:${Math.max(0,Math.min(100,t))}%"></i></span><span class="pgn">${r(Math.round(t))}%</span>`,M=t=>({html:t});function $(t,e){const o=t.id||h(t.kind||"DOC"),a=new Date().getFullYear(),l=t.confidential||"سري: مخصص للجهة المعنية فقط";return`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<title>${i(t.title)} · Milestone Impact</title>
+</section>`,y=t=>`<div class="kpis">${t.map(e=>`<div class="kpi"><b>${r(e.value)}</b><span>${a(e.label)}</span>${e.hint?`<small>${a(e.hint)}</small>`:""}</div>`).join("")}</div>`,w=t=>`<div class="chain">${t.map((e,o)=>`<div class="node${e.value?" on":""}">
+  <span class="n">${r(e.value??"")}</span>${p(12,e.value?n.gold:n.line)}<span class="l">${a(e.label)}</span>${e.en?`<span class="e">${a(e.en)}</span>`:""}
+</div>${o<t.length-1?'<i class="link"></i>':""}`).join("")}</div>`,v=(t,e,{ltr:o=!1}={})=>t.length?`<div class="bars">${t.map(i=>{const l=Math.max(0,Math.min(100,i.value/Math.max(1,e)*100));return`<div class="bar"><span class="bl"${o?' dir="ltr"':""}>${a(i.label)}</span><span class="bt"><i style="width:${l.toFixed(1)}%"></i>${p(7)}</span><b>${r(i.value)}</b></div>`}).join("")}</div>`:'<p class="muted">لا بيانات بعد.</p>',k=(t,e,o="لا بيانات")=>`<table class="tbl"><thead><tr>${t.map(i=>`<th${i.width?` style="width:${i.width}"`:""}>${a(i.label)}</th>`).join("")}</tr></thead>
+<tbody>${e.length?e.map(i=>`<tr>${i.map((l,s)=>`<td${t[s]?.ltr?' dir="ltr"':""}${t[s]?.align?` style="text-align:${t[s].align}"`:""}>${l&&typeof l=="object"&&"html"in l?l.html:a(l)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${t.length}" class="muted c">${a(o)}</td></tr>`}</tbody></table>`,z=t=>`<span class="pg"><i style="width:${Math.max(0,Math.min(100,t))}%"></i></span><span class="pgn">${r(Math.round(t))}%</span>`,M=t=>({html:t});function g(t,e){const o=t.id||c(t.kind||"DOC"),i=new Date().getFullYear(),l=t.confidential||"سري: مخصص للجهة المعنية فقط";return`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<title>${a(t.title)} · Milestone Impact</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
@@ -436,7 +436,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${n.gold}; background: transparent; color: ${n.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
 .toolbar button.pri { background: ${n.gold}; color: ${n.graphite}; }
-.mast { position: relative; background: ${n.mist} ${b}; border-bottom: 1px solid ${n.gold}; padding: 12mm 18mm 10mm; }
+.mast { position: relative; background: ${n.mist} ${u}; border-bottom: 1px solid ${n.gold}; padding: 12mm 18mm 10mm; }
 .mast .top { display: flex; justify-content: space-between; align-items: flex-start; direction: ltr; }
 .mast .logo svg { height: 46px; width: auto; display: block; }
 .mast .ref { text-align: right; font: 300 7.5pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${n.muted}; line-height: 2; }
@@ -499,22 +499,22 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 <div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
 <article class="sheet">
   <header class="mast">
-    <div class="top"><div class="logo">${m}</div><div class="ref">Document<b>${i(o)}</b>${i(t.kindLabel||"")}</div></div>
-    <span class="eyebrow">${i(t.eyebrow||"Milestone Impact · Report")}</span>
-    <h1>${i(t.title)}</h1>
-    ${t.subtitle?`<p class="sub">${i(t.subtitle)}</p>`:""}
-    ${t.rows?.length?`<div class="meta">${t.rows.slice(0,4).map(([s,c])=>`<div><span>${i(s)}</span><b>${i(c)}</b></div>`).join("")}</div>`:""}
+    <div class="top"><div class="logo">${$}</div><div class="ref">Document<b>${a(o)}</b>${a(t.kindLabel||"")}</div></div>
+    <span class="eyebrow">${a(t.eyebrow||"Milestone Impact · Report")}</span>
+    <h1>${a(t.title)}</h1>
+    ${t.subtitle?`<p class="sub">${a(t.subtitle)}</p>`:""}
+    ${t.rows?.length?`<div class="meta">${t.rows.slice(0,4).map(([s,b])=>`<div><span>${a(s)}</span><b>${a(b)}</b></div>`).join("")}</div>`:""}
     <p class="thesis">من النية… إلى الأثر</p>
   </header>
   ${e}
   <div class="close">
-    <p>${i(t.closing||"أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.")}</p>
-    ${f()}
+    <p>${a(t.closing||"أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.")}</p>
+    ${m()}
   </div>
   <footer class="rights">
-    <b>© ${a} Milestone Impact. جميع الحقوق محفوظة.</b>
-    هذه الوثيقة ومحتواها ملكية فكرية لـ Milestone Impact. ${i(l)}. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.
-    <span class="mono">${i(o)} · ${i(g())}</span>
+    <b>© ${i} Milestone Impact. جميع الحقوق محفوظة.</b>
+    هذه الوثيقة ومحتواها ملكية فكرية لـ Milestone Impact. ${a(l)}. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.
+    <span class="mono">${a(o)} · ${a(d())}</span>
   </footer>
 </article>
-</body></html>`}const F=(t,e)=>u(window.open("","_blank"),t,e);function u(t,e,o){return t?(t.document.open(),t.document.write($(e,o)),t.document.close(),t.document.querySelector('[data-act="print"]')?.addEventListener("click",()=>t.print()),t.document.querySelector('[data-act="close"]')?.addEventListener("click",()=>t.close()),!0):!1}export{n as C,f as SEAL,v as bars,w as chain,h as docId,$ as documentHtml,i as esc,y as kpis,F as openDocument,z as progress,M as raw,x as section,k as table,g as today,u as writeDocument};
+</body></html>`}const F=(t,e)=>h(window.open("","_blank"),t,e);function h(t,e,o){return t?(t.document.open(),t.document.write(g(e,o)),t.document.close(),t.document.querySelector('[data-act="print"]')?.addEventListener("click",()=>t.print()),t.document.querySelector('[data-act="close"]')?.addEventListener("click",()=>t.close()),!0):!1}const S=Object.freeze(Object.defineProperty({__proto__:null,C:n,SEAL:m,bars:v,chain:w,docId:c,documentHtml:g,esc:a,kpis:y,openDocument:F,progress:z,raw:M,section:x,table:k,today:d,writeDocument:h},Symbol.toStringTag,{value:"Module"}));export{n as C,f as L,k as a,v as b,w as c,c as d,a as e,S as f,y as k,z as p,M as r,x as s,d as t};

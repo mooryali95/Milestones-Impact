@@ -1233,3 +1233,34 @@ a { text-decoration: none; color: inherit; }
 .cp-preview { width: min(980px, 100%); }
 .la-chip.bad { background: #FBECEA; color: #A8322D; }
 @media (max-width: 760px) { .cp-grid, .cp-cols { grid-template-columns: 1fr; } .cp-kpis { grid-template-columns: 1fr 1fr; } }
+
+/* شعار الجهة في نموذجها */
+.of-logo { display: flex; gap: 14px; align-items: flex-start; }
+.of-logo-prev { flex: none; width: 150px; height: 80px; border: 1px dashed var(--ink-faint); border-radius: 8px; display: grid; place-items: center; padding: 8px;
+  background-color: #fff; background-image: linear-gradient(45deg, #f1eee7 25%, transparent 25%, transparent 75%, #f1eee7 75%), linear-gradient(45deg, #f1eee7 25%, transparent 25%, transparent 75%, #f1eee7 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px; }
+.of-logo-prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.of-logo-prev span { font-size: .78rem; color: var(--ink-mid); background: #fff; padding: 2px 6px; }
+.of-logo-side { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.of-logo-btn { cursor: pointer; }
+.of-logo-pick { display: inline-flex; border: 1px solid var(--ink-faint); border-radius: 7px; overflow: hidden; }
+.of-logo-pick button { border: 0; background: transparent; padding: 5px 12px; font: inherit; font-size: .78rem; cursor: pointer; }
+.of-logo-pick button.on { background: var(--petrol); color: var(--sand-cream); }
+.of-logo-report { flex-basis: 100%; margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: .78rem; }
+.of-logo-report li::before { content: '◆ '; font-size: .6rem; }
+.of-logo-report li.ok { color: #2E7D5B; } .of-logo-report li.warn { color: #9A5B00; } .of-logo-report li.bad { color: #A8322D; }
+
+/* شهادات المشاركة */
+.ce { display: grid; gap: 16px; }
+.ce-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; border: 0; padding: 0; margin: 12px 0; }
+.ce-sub { margin: 8px 0; font-weight: 500; } .ce-sub small { color: var(--ink-mid); font-weight: 400; }
+.ce-signers { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 12px; justify-items: start; }
+.ce-signer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--ink-faint); border-radius: 8px; }
+.ce-sig { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ce-sig img { height: 40px; max-width: 160px; object-fit: contain; background: #fff; border: 1px dashed var(--ink-faint); padding: 2px 6px; }
+.ce-sig label { cursor: pointer; }
+.ce-q { border: 1px solid var(--ink-faint); border-radius: 7px; padding: 6px 10px; font: inherit; font-size: .82rem; min-width: 220px; }
+.ce-serial { font-family: ui-monospace, monospace; font-size: .78rem; letter-spacing: .04em; }
+.ce-act { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.ce-reissue { display: grid; gap: 10px; min-width: min(420px, 92vw); }
+@media (max-width: 640px) { .ce-signer { grid-template-columns: 1fr; } }

@@ -233,7 +233,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
 
   return {
     participant: {
-      id: p.id, email: p.email, full_name: p.full_name, phone: p.phone, job_title: p.job_title,
+      id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
     },
@@ -260,7 +260,7 @@ export async function me(p: any) {
 
 // ── 4. الملف الشخصي ──
 const PROFILE_FIELDS: Record<string, number> = {
-  full_name: 120, job_title: 120, organization_name: 200, sector: 120, bio: 2000, linkedin_url: 300,
+  full_name: 120, name_en: 120, job_title: 120, organization_name: 200, sector: 120, bio: 2000, linkedin_url: 300,
 };
 
 export async function profileSave(p: any, b: Body) {
@@ -277,6 +277,15 @@ export async function profileSave(p: any, b: Body) {
   if ('years_experience' in f) {
     const y = Number(f.years_experience);
     patch.years_experience = Number.isFinite(y) && y >= 0 && y <= 60 ? Math.round(y) : null;
+  }
+  // بعد إصدار الشهادة يُقفل الاسم؛ التصحيح بإعادة الإصدار من الإدارة
+  if (p.name_locked_at) {
+    if (('full_name' in patch && patch.full_name !== p.full_name) || ('name_en' in patch && patch.name_en !== (p.name_en || null))) {
+      throw new Fail('اسمك مقفل بعد إصدار الشهادة. لتصحيحه تواصل مع إدارة البرنامج', 409, 'name_locked');
+    }
+  }
+  if (patch.name_en && !/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(patch.name_en)) {
+    throw new Fail('الاسم بالإنجليزية بأحرف لاتينية فقط');
   }
   if (patch.linkedin_url && !/^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(patch.linkedin_url)) {
     throw new Fail('رابط LinkedIn غير صحيح');

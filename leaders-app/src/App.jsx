@@ -6,7 +6,7 @@
 //   الملف لم يكتمل    ← الملف الشخصي
 //   القياس لم يُرسل   ← تحديد المستوى
 //   غير ذلك           ← الرحلة
-// المسار الوحيد في الرابط هو /verify القادم من بريد الدخول.
+// المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -16,6 +16,7 @@ import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
 import OrgPortal from './screens/OrgPortal.jsx';
+import Verify from './screens/Verify.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
@@ -23,7 +24,11 @@ const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status =
 // /org و/org/verify: بوابة منسق الجهة، بجلسة مستقلة عن المشارك
 const isOrgPortal = () => location.pathname === '/org' || location.pathname.startsWith('/org/');
 
+// /v/<الرقم>: التحقق العام من شهادة، بلا دخول
+const isVerify = () => location.pathname === '/v' || location.pathname.startsWith('/v/');
+
 export default function App() {
+  if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
 
