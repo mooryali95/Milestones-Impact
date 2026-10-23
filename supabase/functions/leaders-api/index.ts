@@ -10,7 +10,7 @@
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter · handbook.complete · models.list · models.get · models.save · achievements · certificate
+//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -54,6 +54,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'handbook.toc': (p) => P.handbookToc(p),
   'handbook.chapter': (p, b, _s, ctx) => P.handbookChapter(p, b, ctx),
   'handbook.complete': (p, b) => P.handbookComplete(p, b),
+  'handbook.export': (p, _b, _s, ctx) => P.handbookExport(p, ctx),
   'models.list': (p) => P.modelsList(p),
   'models.get': (p, b) => P.modelGet(p, b),
   'models.save': (p, b) => P.modelSave(p, b),

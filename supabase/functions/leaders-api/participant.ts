@@ -519,6 +519,32 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   };
 }
 
+// نسخة شخصية PDF من الكتاب: أبواب المسار نفسها المصفّاة بمستوى المشارك،
+// برقم إصدار يُطبع في العلامة المائية لكل صفحة. ثلاث نسخ يوميًا.
+const HANDBOOK_EXPORTS_PER_DAY = 3;
+export async function handbookExport(p: any, ctx: Ctx) {
+  const levels = await approvedLevels(p);
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  const { count } = await db.from('handbook_exports').select('id', { count: 'exact', head: true })
+    .eq('participant_id', p.id).gte('created_at', dayAgo);
+  if ((count ?? 0) >= HANDBOOK_EXPORTS_PER_DAY) throw new Fail('بلغت حد النسخ اليومي (3 نسخ). تتاح نسخة جديدة بعد 24 ساعة', 429, 'rate');
+  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md'));
+  const chapters = handbookModulesFor(mods ?? [], levels);
+  if (!chapters.length) throw new Fail('لا أبواب في كتابك بعد', 404);
+  const now = new Date();
+  const ref = `MI-BK-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${randomToken(8).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5).padEnd(5, 'X')}`;
+  must(await db.from('handbook_exports').insert({ ref, participant_id: p.id, chapters: chapters.length, ip: ctx.ip, user_agent: ctx.ua }));
+  await audit('participant', p.email, 'handbook.export', 'participants', p.id, null, { ref, chapters: chapters.length });
+  return {
+    success: true,
+    book: {
+      ref, issued_at: now.toISOString(), name: p.full_name, email: p.email,
+      track: trackView(await trackFor(levels), 'participant'), level: overallLevel(levels),
+      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) })),
+    },
+  };
+}
+
 // إتمام الباب: يصحح الاختبار، ويحفظ التأمل، ويمنح النقاط أول مرة فقط
 export async function handbookComplete(p: any, b: Body) {
   const levels = await approvedLevels(p);

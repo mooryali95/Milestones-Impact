@@ -12,28 +12,10 @@ import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
+import { COVER_CSS, coverHtml, parseMd as parse, writeBook } from '../../../src/lib/brand/book.js';
 
 const FONT = '"Noto Kufi Arabic", "Noto Sans Arabic", system-ui, sans-serif';
 const COLORS = { text: '#0B272F', muted: '#4A6A72', accent: '#8E6524', quote: '#12414E', rule: 'rgba(11,39,47,.12)' };
-
-// ── تحويل الـ Markdown المبسط إلى كتل ──
-function parse(md) {
-  const blocks = [];
-  let para = [];
-  const flush = () => { if (para.length) { blocks.push({ type: 'p', text: para.join(' ') }); para = []; } };
-  for (const raw of md.split('\n')) {
-    const line = raw.trim();
-    if (!line) { flush(); continue; }
-    let m;
-    if ((m = line.match(/^(#{2,3})\s+(.*)$/))) { flush(); blocks.push({ type: m[1].length === 2 ? 'h2' : 'h3', text: m[2] }); }
-    else if ((m = line.match(/^[-•]\s+(.*)$/))) { flush(); blocks.push({ type: 'li', marker: '•', text: m[1] }); }
-    else if ((m = line.match(/^(\d+)[.)]\s+(.*)$/))) { flush(); blocks.push({ type: 'li', marker: `${m[1]}.`, text: m[2] }); }
-    else if ((m = line.match(/^>\s?(.*)$/))) { flush(); blocks.push({ type: 'quote', text: m[1] }); }
-    else para.push(line);
-  }
-  flush();
-  return blocks;
-}
 
 // كلمات بوزنها: **عريض** أو عادي
 function tokens(text) {
@@ -174,6 +156,7 @@ function render(canvas, chapter, watermark, cssWidth) {
   ctx.restore();
 }
 
+const COVER = 'cover';   // الغلاف أول صفحة في القارئ، ويُفتح أولًا لمن لم يقرأ بعد
 const PART = { milestone: 'الجزء الأول', impact: 'الجزء الثاني', leadership: 'الجزء الثالث' };
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
 const pad = (n) => String(n).padStart(2, '0');
@@ -281,14 +264,14 @@ export default function Handbook({ me, onBack }) {
     if (first && r.chapters.length) {
       const last = lastRead.get();
       const resume = last && r.chapters.find((c) => c.id === last.id);
-      setCurrent((resume || r.chapters.find((c) => !c.done) || r.chapters[0]).id);
+      setCurrent(resume ? resume.id : r.chapters.some((c) => c.done) ? (r.chapters.find((c) => !c.done) || r.chapters[0]).id : COVER);
     }
   }, []);
   const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
 
   useEffect(() => {
-    if (!current || tab !== 'read') return;
+    if (!current || current === COVER || tab !== 'read') return;
     (async () => {
       setLoading(true);
       const r = await call('handbook.chapter', { id: current });
@@ -375,6 +358,15 @@ export default function Handbook({ me, onBack }) {
     if (r.gained) setToast(`+${r.gained} نقطة`);
     loadToc(false);
   };
+  // النسخة الشخصية PDF: الخادم يصدرها برقم ويسجلها، والنافذة تُفتح متزامنة مع النقرة
+  const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title }));
+  const levelTitle = toc.level ? levelOf(toc.level).title : '';
+  const exportBook = async () => {
+    const win = window.open('', '_blank');
+    const r = await call('handbook.export');
+    if (!r.success) { win?.close(); return setToast(r.message); }
+    if (!writeBook(win, r.book, parts, levelTitle)) setToast('اسمح بالنوافذ المنبثقة لفتح النسخة');
+  };
 
   return (
     <div className="page book">
@@ -405,6 +397,7 @@ export default function Handbook({ me, onBack }) {
             <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
           ))}
           <span className="spacer" />
+          <button className="link small" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">نسخة PDF شخصية</button>
           <button className="link small book-back" onClick={onBack}>رجوع للرحلة</button>
         </nav>
       </section>
@@ -415,6 +408,9 @@ export default function Handbook({ me, onBack }) {
       {tab === 'read' && (
         <div className="book-grid">
           <nav className="book-toc" aria-label="فهرس الكتاب">
+            <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
+              <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
+            </button>
             {DIMENSIONS.map((d) => {
               const items = list.filter((c) => c.dimension === d.key);
               if (!items.length) return null;
@@ -438,21 +434,28 @@ export default function Handbook({ me, onBack }) {
           </nav>
 
           <div className="book-reader" ref={wrapRef}>
-            {data && idx >= 0 && (
+            {current !== COVER && data && idx >= 0 && (
               <div className="page-head">
                 <span>{PART[data.chapter.dimension]} · {dimOf(data.chapter.dimension).title}</span>
                 <span>الباب {pad(numInPart(list[idx]))} · {idx + 1} من {list.length}</span>
               </div>
             )}
-            <div className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
+            {current === COVER && (
+              <div className={`book-page bk-cover-host${shield ? ' shield' : ''}`}>
+                <style>{COVER_CSS}</style>
+                <div dangerouslySetInnerHTML={{ __html: coverHtml({ title: toc.track?.title, name: toc.name || me.participant.full_name, level: levelTitle }) }} />
+                {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
+              </div>
+            )}
+            <div hidden={current === COVER} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
               <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتاب'} />
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
             {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
-            {data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
+            {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
             <div className="row between book-nav">
-              <button className="btn ghost sm" disabled={idx <= 0} onClick={() => go(-1)}>الباب السابق</button>
-              <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => go(1)}>الباب التالي</button>
+              <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
+              <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>
             </div>
             <p className="small muted" style={{ marginTop: 12 }}>المحتوى ملكية فكرية لـ Milestone Impact، ومرخص لك للقراءة داخل المنصة فقط. كل صفحة تحمل اسمك.</p>
           </div>
