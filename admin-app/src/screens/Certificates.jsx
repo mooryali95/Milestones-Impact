@@ -26,7 +26,7 @@ function Signer({ s, i, onChange, onRemove }) {
   };
   return (
     <div className="ce-signer">
-      <label className="of-field"><span className="of-label">اسم الموقّع {i + 1}</span><input value={s.name} onChange={(e) => onChange({ ...s, name: e.target.value })} maxLength={120} /></label>
+      <label className="of-field"><span className="of-label">اسم الموقّع</span><input value={s.name} onChange={(e) => onChange({ ...s, name: e.target.value })} maxLength={120} /></label>
       <label className="of-field"><span className="of-label">الصفة</span><input value={s.title} onChange={(e) => onChange({ ...s, title: e.target.value })} maxLength={160} placeholder="مثل: المدير التنفيذي" /></label>
       <div className="ce-sig">
         {s.image ? <img src={s.image} alt={`توقيع ${s.name}`} /> : <small>بلا صورة توقيع</small>}
@@ -76,10 +76,10 @@ function SettingsCard({ canWrite }) {
         <label className="of-field"><span className="of-label">اسم البرنامج بالإنجليزية</span><input dir="ltr" value={s.program_en} onChange={set('program_en')} maxLength={200} /></label>
         <label className="of-field"><span className="of-label">الساعات التدريبية</span><input inputMode="numeric" value={s.hours ?? ''} onChange={(e) => setS({ ...s, hours: e.target.value.replace(/\D/g, '') })} placeholder="اختياري" /></label>
       </fieldset>
-      <h4 className="ce-sub">الموقّعون <small>حتى اثنين</small></h4>
+      <h4 className="ce-sub">الموقّع <small>يظهر على كل شهادة جديدة</small></h4>
       <fieldset disabled={!canWrite} className="ce-signers">
         {signers.map((x, i) => <Signer key={i} s={x} i={i} onChange={(v) => setSigner(i, v)} onRemove={() => setS({ ...s, signatories: signers.filter((_, j) => j !== i) })} />)}
-        {signers.length < 2 && <button type="button" className="btn-sm ghost" onClick={() => setS({ ...s, signatories: [...signers, { name: '', title: '' }] })}>+ إضافة موقّع</button>}
+        {signers.length < 1 && <button type="button" className="btn-sm ghost" onClick={() => setS({ ...s, signatories: [...signers, { name: '', title: '' }] })}>+ إضافة الموقّع</button>}
       </fieldset>
       <div className="la-row">
         {canWrite && <button className="btn-sm primary" onClick={save} disabled={busy}>{busy ? 'جارٍ الحفظ…' : 'حفظ الإعدادات'}</button>}

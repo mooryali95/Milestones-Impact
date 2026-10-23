@@ -71,7 +71,7 @@ const fmtEn = (d) => new Date(d).toLocaleDateString('en-GB', { year: 'numeric', 
 // qrSvg: نص SVG لرمز QR (يولَّد خارج الدالة لأنه غير متزامن)
 export function certificateHtml(c, qrSvg, { status } = {}) {
   const co = !!c.org?.logo;
-  const signers = (c.signatories || []).slice(0, 2);
+  const signers = (c.signatories || []).slice(0, 1);
   const period = c.start && c.end ? `${fmtAr(c.start)} – ${fmtAr(c.end)}` : '';
   const periodEn = c.start && c.end ? `${new Date(c.start).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} – ${new Date(c.end).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}` : '';
   const micro = `MILESTONE IMPACT · ${c.serial} · CERTIFICATE OF PARTICIPATION · `.repeat(14);

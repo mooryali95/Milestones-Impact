@@ -60,7 +60,7 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string) {
     end: cohort?.ends_on || issuedAt,
     issued_at: issuedAt,
     org: o ? { name: o.name, name_en: o.name_en || null, logo: o.cert_cobrand && o.logo ? o.logo : null } : null,
-    signatories: (cfg.signatories || []).slice(0, 2),
+    signatories: (cfg.signatories || []).slice(0, 1),
     verify_url: verifyUrl(serial),
   };
 }
@@ -197,7 +197,7 @@ export async function settingsGet() {
 
 export async function settingsSave(a: Actor, b: Body) {
   const s = b.settings || {};
-  const signatories = (Array.isArray(s.signatories) ? s.signatories : []).slice(0, 2).map((x: any) => {
+  const signatories = (Array.isArray(s.signatories) ? s.signatories : []).slice(0, 1).map((x: any) => {
     const name = String(x?.name || '').trim().slice(0, 120);
     const title = String(x?.title || '').trim().slice(0, 160);
     const image = typeof x?.image === 'string' && x.image.startsWith('data:image/png;base64,') && x.image.length <= 300000 ? x.image : null;

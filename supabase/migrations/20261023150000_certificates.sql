@@ -30,8 +30,8 @@ create table if not exists leaders.certificate_settings (
   program_ar   text not null default 'برنامج القادة',
   program_en   text not null default 'Leaders Program',
   hours        smallint check (hours is null or hours between 1 and 2000),
-  -- [{ name, title, image? }] بحد أقصى اثنين
-  signatories  jsonb not null default '[]'::jsonb check (jsonb_typeof(signatories) = 'array' and jsonb_array_length(signatories) <= 2),
+  -- [{ name, title, image? }]: موقّع واحد
+  signatories  jsonb not null default '[]'::jsonb check (jsonb_typeof(signatories) = 'array' and jsonb_array_length(signatories) <= 1),
   updated_by   text,
   updated_at   timestamptz not null default now()
 );
