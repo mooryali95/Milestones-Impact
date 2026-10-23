@@ -68,7 +68,10 @@
     } catch { return { success: false, message: 'تعذّر الاتصال بالخادم' }; }
   }
 
-  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone', track: null, onlyUsed: false, org: '', orgView: null, orgList: null, of: { status: '', track: '', q: '' }, picked: new Set() };
+  // الفلاتر المحفوظة لقائمة المشاركين: تبقى بعد التحديث وعلى هذا الجهاز فقط
+  const SAVED = (() => { try { return JSON.parse(localStorage.getItem('mi_admin_list_filters')) || {}; } catch { return {}; } })();
+  const saveFilters = () => { try { localStorage.setItem('mi_admin_list_filters', JSON.stringify({ search: S.search, status: S.status, org: S.org })); } catch { /* */ } };
+  const S = { tab: 'overview', catalog: null, list: [], search: '', status: '', person: null, instrument: null, qDim: 'milestone', track: null, onlyUsed: false, org: '', orgView: null, orgList: null, of: { status: '', track: '', q: '' }, picked: new Set(), lp: new Set(), lTrack: '', ...SAVED };
   const root = () => document.getElementById('ctx-leaders');
 
   // ══ السياق ══
@@ -383,26 +386,70 @@
       const x = (p.placements || []).find((y) => y.dimension === d);
       return x ? `<span class="la-lvl ${x.level}${x.approved_at ? '' : ' tentative'}" title="${x.approved_at ? 'معتمد' : 'مبدئي'}">${LVL[x.level]}</span>` : '<span class="la-muted">·</span>';
     };
+    const trackKey = (p) => trackOf(Object.fromEntries((p.placements || []).map((x) => [x.dimension, x.level])));
+    const tracks = [...new Set(S.list.map(trackKey).filter(Boolean))].sort();
+    const w = canWrite();
+    const hay = (p) => [p.full_name, p.email, p.job_title, p.organization_name, trackKey(p)].join(' ').toLowerCase();
     return `
       <div class="toolbar">
-        <div class="search-wrap"><input class="search-input" id="laSearch" placeholder="بحث بالاسم أو البريد أو الجهة…" value="${esc(S.search)}"></div>
+        <div class="search-wrap"><input class="search-input" id="laSearch" placeholder="بحث في الخادم بالاسم أو البريد أو الجهة، ثم Enter" value="${esc(S.search)}"></div>
         <select class="filter-select" id="laStatus">${opts(STATUS, S.status, 'كل الحالات')}</select>
         ${orgSelect('laOrg', S.org)}
         <button class="refresh-btn" data-act="search">بحث</button>
-        ${canWrite() ? '<button class="refresh-btn" data-act="add-person">+ مشارك</button>' : ''}
+        ${S.search || S.status || S.org ? '<button class="refresh-btn" data-act="clear-filters">مسح الفلاتر</button>' : ''}
+        ${w ? '<button class="refresh-btn" data-act="add-person">+ مشارك</button>' : ''}
       </div>
-      <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>الاسم</th><th>الجهة</th>${DIMS.map((d) => `<th>${DIM_EN[d]}</th>`).join('')}<th>المسار</th><th>الحالة</th><th>التسجيل</th></tr></thead>
+      <div class="toolbar">
+        <div class="search-wrap"><input class="search-input" id="laQuick" placeholder="تصفية فورية للنتائج…" autocomplete="off"></div>
+        <select class="filter-select" id="laTrack"><option value="">كل المسارات</option>${tracks.map((k) => `<option value="${k}"${S.lTrack === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
+        <span class="la-muted" id="laCount" aria-live="polite">${S.list.length} مشارك</span>
+        <button class="refresh-btn" data-act="list-csv">تصدير Excel</button>
+      </div>
+      ${w ? `<div class="la-bulk"${S.lp.size ? '' : ' hidden'}><span><b>${S.lp.size}</b> محدد</span>${orgSelect('lpMove', '', 'نقل إلى جهة…')}<button class="btn-sm primary" data-act="list-move">نقل</button><button class="btn-sm ghost" data-act="list-unpick">إلغاء التحديد</button></div>` : ''}
+      <div class="table-wrap"><table class="data-table" id="laTable">
+        <thead><tr>${w ? '<th><input type="checkbox" data-lpick-all aria-label="تحديد الكل"></th>' : ''}<th>الاسم</th><th>الجهة</th>${DIMS.map((d) => `<th>${DIM_EN[d]}</th>`).join('')}<th>المسار</th><th>الحالة</th><th>التسجيل</th></tr></thead>
         <tbody>${S.list.length ? S.list.map((p) => `
-          <tr data-act="open" data-id="${p.id}">
+          <tr data-act="open" data-id="${p.id}" data-q="${esc(hay(p))}" data-track="${trackKey(p) || ''}"${S.lTrack && trackKey(p) !== S.lTrack ? ' hidden' : ''}>
+            ${w ? `<td data-stop><input type="checkbox" data-lpick="${p.id}"${S.lp.has(p.id) ? ' checked' : ''} aria-label="تحديد ${esc(p.full_name)}"></td>` : ''}
             <td><b>${esc(p.full_name)}</b><br><small class="la-muted" dir="ltr">${esc(p.email)}</small></td>
             <td>${(() => { const og = (S.orgList?.orgs || []).find((x) => x.id === p.organization_id); return og ? `<span class="la-orgtag" style="--org:${orgColor(og)}">${esc(og.short_name || og.name)}</span>` : esc(p.organization_name || ''); })()}<br><small class="la-muted">${esc(p.job_title || '')}</small></td>
             ${DIMS.map((d) => `<td>${lv(p, d)}</td>`).join('')}
-            <td>${(() => { const k = trackOf(Object.fromEntries((p.placements || []).map((x) => [x.dimension, x.level]))); return k ? `<code class="la-code">${k}</code>` : '<span class="la-muted">·</span>'; })()}</td>
+            <td>${trackKey(p) ? `<code class="la-code">${trackKey(p)}</code>` : '<span class="la-muted">·</span>'}</td>
             <td><span class="la-chip ${p.status === 'pending_approval' ? 'warn' : ''}">${STATUS[p.status] || p.status}</span></td>
             <td>${date(p.created_at)}</td>
-          </tr>`).join('') : '<tr><td colspan="8" class="la-empty">لا مشاركين بعد</td></tr>'}
+          </tr>`).join('') : `<tr><td colspan="9" class="la-empty">${S.search || S.status || S.org ? 'لا نتائج لهذه الفلاتر. جرّب مسحها.' : 'لا مشاركين بعد'}</td></tr>`}
         </tbody></table></div>`;
+  }
+
+  // التصفية الفورية تخفي الصفوف دون إعادة الرسم، فلا يضيع التركيز من حقل البحث
+  function quickFilter() {
+    const el = root();
+    const q = (el.querySelector('#laQuick')?.value || '').trim().toLowerCase();
+    let n = 0;
+    el.querySelectorAll('#laTable tbody tr[data-id]').forEach((tr) => {
+      const show = (!q || tr.dataset.q.includes(q)) && (!S.lTrack || tr.dataset.track === S.lTrack);
+      tr.hidden = !show;
+      if (show) n += 1;
+    });
+    const c = el.querySelector('#laCount');
+    if (c) c.textContent = n === S.list.length ? `${n} مشارك` : `${n} من ${S.list.length} مشارك`;
+  }
+
+  function listCsv() {
+    const visible = new Set([...root().querySelectorAll('#laTable tbody tr[data-id]:not([hidden])')].map((tr) => tr.dataset.id));
+    const rows = S.list.filter((p) => visible.has(p.id));
+    const head = ['الاسم', 'البريد', 'الجوال', 'المسمى', 'الجهة', ...DIMS.map((d) => DIM_EN[d]), 'المسار', 'الحالة', 'التسجيل'];
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lvlOf = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
+    const lines = [head.map(q).join(','), ...rows.map((p) => [p.full_name, p.email, p.phone, p.job_title, p.organization_name,
+      ...DIMS.map((d) => lvlOf(p, d)), trackOf(Object.fromEntries((p.placements || []).map((x) => [x.dimension, x.level]))), STATUS[p.status] || p.status, date(p.created_at)].map(q).join(','))];
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `المشاركون ${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast(`صُدّر ${rows.length} مشارك`);
   }
 
   async function viewPerson(id) {
@@ -1376,6 +1423,7 @@
     if (ctxBtn) { setCtx(ctxBtn.dataset.ctx); return; }
     const el = root();
     if (!el || el.hidden || !el.contains(e.target)) return;
+    if (e.target.closest('[data-stop]')) return;
     const t = e.target.closest('[data-act]');
     if (!t) return;
     const a = t.dataset.act;
@@ -1399,7 +1447,18 @@
     if (a === 'open') { S.tab = 'participants'; S.person = t.dataset.id; return render(); }
     if (a === 'back') { S.person = null; return render(); }
     if (a === 'filter-status') { S.tab = 'participants'; S.status = t.dataset.status; S.person = null; return render(true); }
-    if (a === 'search') { S.search = el.querySelector('#laSearch').value.trim(); S.status = el.querySelector('#laStatus').value; S.org = el.querySelector('#laOrg')?.value || ''; return render(true); }
+    if (a === 'search') { S.search = el.querySelector('#laSearch').value.trim(); S.status = el.querySelector('#laStatus').value; S.org = el.querySelector('#laOrg')?.value || ''; saveFilters(); return render(true); }
+    if (a === 'clear-filters') { S.search = ''; S.status = ''; S.org = ''; S.lTrack = ''; saveFilters(); return render(true); }
+    if (a === 'list-csv') return listCsv();
+    if (a === 'list-unpick') { S.lp = new Set(); return render(); }
+    if (a === 'list-move') {
+      const target = el.querySelector('#lpMove')?.value;
+      if (!target) return toast('اختر الجهة');
+      if (!(await miConfirm(`نقل ${S.lp.size} مشارك إلى الجهة المختارة؟`))) return;
+      const r = await L('admin.assign-org', { participant_ids: [...S.lp], organization_id: target === 'none' ? null : target });
+      toast(r.success ? 'تم النقل' : r.message);
+      if (r.success) { S.lp = new Set(); S.orgList = null; } return r.success && render(true);
+    }
     if (a === 'open-org') { S.tab = 'orgs'; S.orgView = t.dataset.id; S.of = { status: '', track: '', q: '' }; S.picked = new Set(); return render(true); }
     if (a === 'orgs-back') { S.orgView = null; S.orgData = null; return render(); }
     if (a === 'org-track') { S.of.track = S.of.track === t.dataset.key ? '' : t.dataset.key; return render(); }
@@ -1561,14 +1620,21 @@
     if (e.target.id === 'ovOrg') { S.org = e.target.value; render(); }
     if (e.target.id === 'ofStatus') { S.of.status = e.target.value; render(); }
     if (e.target.id === 'ofTrack') { S.of.track = e.target.value; render(); }
+    if (e.target.id === 'laTrack') { S.lTrack = e.target.value; quickFilter(); }
+    if (e.target.matches?.('[data-lpick]')) { e.target.checked ? S.lp.add(e.target.dataset.lpick) : S.lp.delete(e.target.dataset.lpick); render(); }
+    if (e.target.matches?.('[data-lpick-all]')) {
+      root().querySelectorAll('#laTable tr[data-id]:not([hidden]) [data-lpick]').forEach((i) => (e.target.checked ? S.lp.add(i.dataset.lpick) : S.lp.delete(i.dataset.lpick)));
+      render();
+    }
     if (e.target.matches?.('[data-pick]')) { e.target.checked ? S.picked.add(e.target.dataset.pick) : S.picked.delete(e.target.dataset.pick); render(); }
     if (e.target.matches?.('[data-pick-all]')) {
       const ids = [...root().querySelectorAll('[data-pick]')].map((i) => i.dataset.pick);
       ids.forEach((id) => (e.target.checked ? S.picked.add(id) : S.picked.delete(id))); render();
     }
   });
+  document.addEventListener('input', (e) => { if (e.target.id === 'laQuick') quickFilter(); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target.id === 'laSearch') { S.search = e.target.value.trim(); render(true); }
+    if (e.key === 'Enter' && e.target.id === 'laSearch') { S.search = e.target.value.trim(); saveFilters(); render(true); }
     if (e.key === 'Enter' && e.target.id === 'ofQ') { S.of.q = e.target.value.trim(); render(); }
   });
 
