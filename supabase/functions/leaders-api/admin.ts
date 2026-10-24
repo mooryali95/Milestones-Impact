@@ -300,7 +300,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   stage_requirements: { table: 'stage_requirements', key: ['id'], sortable: true,
                         fields: ['stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
   questions:          { table: 'questions', key: ['id'], sortable: true,
-                        fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort'] },
+                        fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort', 'competency_ar', 'chapter_key'] },
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort', 'reflection_ar', 'quiz_md'] },
   learning_models:    { table: 'learning_models', key: ['id'], sortable: true,

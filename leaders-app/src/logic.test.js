@@ -208,9 +208,9 @@ describe('evaluatePlacement', () => {
   const ev = (k, s, b, m) => evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m);
   it('weights situational judgement above self reported practice', () => {
     const r = ev(75, 25, 69);
-    expect(r.composite).toBe(51);
+    expect(r.composite).toBe(49.1);
     expect(r.level).toBe('beginner');
-    expect(r.borderline).toBe(true);   // 4 points under 55
+    expect(r.borderline).toBe(true);   // 5.9 نقاط تحت 55، ضمن الهامش 8
   });
   it('places intermediate and advanced by composite', () => {
     expect(ev(75, 50, 50).level).toBe('intermediate');
@@ -218,13 +218,17 @@ describe('evaluatePlacement', () => {
     expect(ev(100, 75, 75).level).toBe('advanced');
   });
   it('a weak tier caps the level even with a high composite', () => {
-    const r = ev(100, 100, 25);
+    const r = ev(100, 100, 50);
     expect(r.composite).toBeGreaterThan(80);
     expect(r.level).toBe('intermediate');
     expect(r.reason).toContain('الممارسة');
   });
   it('uses the admin tuned model', () => {
-    expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 50 }).level).toBe('intermediate');
+    expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 45, floor_intermediate: 25 }).level).toBe('intermediate');
+  });
+  it('keeps a weak tier above chance (25%) out of intermediate', () => {
+    expect(ev(70, 70, 35).level).toBe('beginner');
+    expect(ev(70, 70, 45).level).toBe('intermediate');
   });
   it('ignores missing tiers', () => {
     expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
@@ -248,6 +252,9 @@ import V2_SQL from '../../supabase/migrations/20261024090000_leaders_baseline_v2
 const V2 = [...V2_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', '(\w+)', '(?:[^']|'')*', (?:null|'(?:[^']|'')*'), '(\w+)', '((?:[^']|'')*)'::jsonb/g)]
   .map(([, dimension, code, tier, kind, opts]) => ({ id: code, dimension, code, tier, kind, options: JSON.parse(opts.replace(/''/g, "'")) }));
 const choices = V2.filter((q) => q.kind === 'choice');
+function mulberry(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
 const keyIndex = (q) => q.options.findIndex((o) => o.score === Math.max(...q.options.map((x) => x.score)));
 const longestIndex = (q) => q.options.reduce((b, o, k, a) => (o.label.length > a[b].label.length ? k : b), 0);
 
@@ -282,5 +289,67 @@ describe('tierPercents with "not applicable"', () => {
   });
   it('leaves the tier empty when every answer is not applicable', () => {
     expect(tierPercents(qs, { a: 2, b: 2 }).milestone.behavior).toBe(null);
+  });
+});
+
+// ── baseline-v3: مخطط الاختبار وبنك الأسئلة ──
+import V3_SQL from '../../supabase/migrations/20261024120000_leaders_item_bank_v3.sql?raw';
+
+const V3 = [...V3_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', '(\w+)', '(?:[^']|'')*', (?:null|'(?:[^']|'')*'), '(\w+)', '((?:[^']|'')*)'::jsonb, \d+, '((?:[^']|'')*)', '(\w+)'/g)]
+  .map(([, dimension, code, tier, kind, opts, competency, chapter]) => ({
+    id: code, dimension, code, tier, kind, competency, chapter, options: JSON.parse(opts.replace(/''/g, "'")),
+  }));
+// رتبة طول الإجابة الصحيحة بين البدائل: 0 الأطول، 3 الأقصر
+const lengthRank = (q, k) => [...q.options.keys()].sort((a, b) => q.options[b].label.length - q.options[a].label.length).indexOf(k);
+
+describe('baseline-v3', () => {
+  it('has 4 practice, 6 situation and 6 knowledge items per framework', () => {
+    expect(V3).toHaveLength(48);
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'behavior')).toHaveLength(4);
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'skill')).toHaveLength(6);
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'knowledge')).toHaveLength(6);
+    }
+  });
+  it('maps every item to a competency and a handbook chapter', () => {
+    for (const q of V3) {
+      expect(q.competency.length).toBeGreaterThan(3);
+      expect(q.chapter).toMatch(/^(intro|ch[1-6]|labs|close)$/);
+    }
+  });
+  it('keeps handbook term items out of the baseline', () => {
+    const terms = ['M-K1', 'M-K3', 'I-K3', 'L-K1', 'L-K3', 'L-K4'];
+    expect(V3.filter((q) => terms.includes(q.code))).toEqual([]);
+  });
+  it('spreads the key across option length ranks in every framework and tier', () => {
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      for (const t of ['skill', 'knowledge']) {
+        const ranks = [0, 0, 0, 0];
+        for (const q of V3.filter((x) => x.dimension === d && x.tier === t)) ranks[lengthRank(q, keyIndex(q))] += 1;
+        expect(Math.max(...ranks)).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+  // من يختار بالطول يصيب 2 من 6 على الأكثر في كل جانب، أي قريبًا من التخمين.
+  // ومع "دائمًا" في كل عبارات الممارسة يبقى تأسيسيًا بالمعيار المعايَر 35/50/15.
+  const byLength = (rank, likert) => Object.fromEntries(V3.map((q) => [q.id, q.kind === 'likert' ? likert
+    : [...q.options.keys()].find((k) => lengthRank(q, k) === rank)]));
+  it('places a "pick by length + always" responder at beginner', () => {
+    for (const rank of [0, 1, 2, 3]) {
+      for (const likert of [2, 4]) {
+        const pcts = tierPercents(V3, byLength(rank, likert));
+        for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], DEFAULT_MODEL).level).toBe('beginner');
+      }
+    }
+  });
+  // تخمين عشوائي مع "دائمًا": يُبقي المعيار أغلبهم في التأسيسي (المحاكاة: 94%).
+  it('keeps most random guessers who answer "always" at beginner', () => {
+    const rand = mulberry(7);
+    let up = 0, n = 0;
+    for (let i = 0; i < 600; i++) {
+      const pcts = tierPercents(V3, Object.fromEntries(V3.map((q) => [q.id, q.kind === 'likert' ? 4 : Math.floor(rand() * 4)])));
+      for (const d of ['milestone', 'impact', 'leadership']) { n += 1; if (evaluatePlacement(pcts[d], DEFAULT_MODEL).level !== 'beginner') up += 1; }
+    }
+    expect(up / n).toBeLessThan(0.1);
   });
 });

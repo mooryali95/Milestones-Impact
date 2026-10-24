@@ -62,11 +62,13 @@ export function levelFor(pcts, rules) {
 // وتعطي الممارسة (تقدير ذاتي) الأقل لأنها تميل إلى التضخم.
 // المستوى يُمنح بالمؤشر المركّب، بشرط ألا يقل أي جانب عن حدّ أدنى،
 // فلا تُخفي قوة جانب فجوة حقيقية في آخر. وتُعلَّم الحالة الحدّية للمستشار.
+// حد المتوسط الأدنى 40 فوق نسبة التخمين في أسئلة الأربعة بدائل (25%)،
+// والهامش الحدّي 8 قريب من خطأ القياس المتوقع لستة أسئلة في الجانب.
 export const DEFAULT_MODEL = {
-  w_knowledge: 30, w_skill: 45, w_behavior: 25,
+  w_knowledge: 35, w_skill: 50, w_behavior: 15,
   min_intermediate: 55, min_advanced: 80,
-  floor_intermediate: 25, floor_advanced: 50,
-  borderline: 5,
+  floor_intermediate: 40, floor_advanced: 60,
+  borderline: 8,
 };
 const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
 const LEVEL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
