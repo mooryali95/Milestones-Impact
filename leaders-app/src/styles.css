@@ -677,6 +677,33 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .models-kpis { grid-template-columns: repeat(3, 1fr); width: 100%; }
 }
 .wsheet .mtable textarea { resize: none; }
+
+/* ── الأنشطة الموثقة ── */
+.act { margin-top: 10px; padding: 12px 14px; background: #FAF8F3; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 8px; }
+.act-bar { height: 6px; border-radius: 99px; background: rgba(11, 39, 47, .08); overflow: hidden; }
+.act-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--copper)); border-radius: inherit; transition: width .5s; }
+.act-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.act-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.act-list li:first-child { border-top: 0; }
+.act-video { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; }
+.act-video > div, .act-video iframe, .act-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.act-book iframe { width: 100%; height: min(680px, 80vh); border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2ECC71; margin-inline-end: 6px; box-shadow: 0 0 0 0 rgba(46, 204, 113, .6); animation: live 1.6s infinite; }
+@keyframes live { to { box-shadow: 0 0 0 8px rgba(46, 204, 113, 0); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+.read-meter { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.read-meter.read { color: var(--ok); }
+.read-meter.skimmed { color: var(--warn); }
+.read-meter i { display: inline-block; width: 70px; height: 4px; border-radius: 99px; background: rgba(11, 39, 47, .1); overflow: hidden; }
+.read-meter i b { display: block; height: 100%; background: var(--gold); transition: width .5s; }
+
+.checkin { text-align: center; display: grid; gap: 10px; justify-items: center; padding: 36px 20px; margin-top: 24px; }
+.checkin h1 { margin: 0; font-size: 22px; }
+.checkin-mark { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; color: #fff; }
+.checkin-mark.ok { background: var(--ok); }
+.checkin-mark.bad { background: var(--bad); }
+
 /* القياس البعدي: تقدير الآن وقبل البرنامج، ومقارنة البداية بالنهاية */
 .retro-label { font-size: 13px; font-weight: 700; color: var(--slate); margin: 14px 0 8px; }
 .impact-bars { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }

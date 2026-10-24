@@ -1,0 +1,267 @@
+// ════════════════════════════════════════════════════════════════
+// الأنشطة الموثقة في بطاقة المتطلب: قراءة، فيديو، جلسات جماعية، جلسات فردية
+// ════════════════════════════════════════════════════════════════
+// لا زر «أنجزته» هنا: كل نشاط يكتمل بدليله. القراءة بوقتها الفعلي،
+// والفيديو بما شوهد منه، والجلسة الجماعية بالتوثيق الذي اختاره المشرف، والفردية بتأكيد الموجّه.
+import React, { useEffect, useRef, useState } from 'react';
+import { call } from '../api.js';
+
+const fmtDay = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtTime = (d) => new Date(d).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
+const mins = (s) => Math.max(1, Math.round((s || 0) / 60));
+
+function Bar({ value, label }) {
+  return (
+    <div className="act-bar" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <i style={{ width: `${Math.min(100, value)}%` }} />
+    </div>
+  );
+}
+
+const READ_CHIP = {
+  read: ['ok', 'قرأته'],
+  skimmed: ['warn', 'تصفّح سريع'],
+  partial: ['', 'قراءة جزئية'],
+  unread: ['', 'لم تقرأه'],
+};
+
+function Reading({ a, onHandbook }) {
+  const skimmed = a.chapters.some((c) => c.state === 'skimmed');
+  return (
+    <div className="act">
+      <div className="row between"><b className="small">قرأت {a.count} من {a.total} {a.total === 1 ? 'باب' : 'أبواب'}</b>
+        {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتاب</button>}</div>
+      <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
+      <ul className="act-list">
+        {a.chapters.map((c) => {
+          const [cls, t] = READ_CHIP[c.state];
+          return (
+            <li key={c.id}>
+              <span className="grow">{c.title}</span>
+              {c.state === 'read' && a.quiz && !c.quiz && <span className="chip warn">بقي الاختبار</span>}
+              <span className={`chip ${cls}`}>{t}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {skimmed && <p className="h">الباب الذي تصفحته سريعًا لا يُحتسب. عد إليه واقرأه بتمعن، فالتدريب يبني عليه.</p>}
+    </div>
+  );
+}
+
+// ── الفيديو: يُحتسب ما شوهد فعلًا ──
+let ytReady = null;
+function loadYouTube() {
+  if (ytReady) return ytReady;
+  ytReady = new Promise((res) => {
+    if (window.YT?.Player) return res(window.YT);
+    window.onYouTubeIframeAPIReady = () => res(window.YT);
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+  });
+  return ytReady;
+}
+
+function Player({ item, onProgress }) {
+  const a = item.activity;
+  const host = useRef(null);
+  const video = useRef(null);
+  useEffect(() => {
+    let player = null, last = null, pending = [], timer = 0, pinger = 0, alive = true;
+    const now = () => (player ? player.getCurrentTime() : video.current?.currentTime) || 0;
+    const playing = () => (player ? player.getPlayerState?.() === 1 : video.current && !video.current.paused && !video.current.ended);
+    const duration = () => (player ? player.getDuration?.() : video.current?.duration) || 0;
+    // كل ثانية: إن كان التشغيل مستمرًا والصفحة ظاهرة يُضاف المقطع منذ القراءة السابقة.
+    // القفز إلى الأمام لا يضيف شيئًا، فالمقطع يبدأ من موضع القفز.
+    timer = setInterval(() => {
+      if (!playing() || document.hidden) { last = null; return; }
+      const t = now();
+      if (last != null && t > last && t - last <= 2.5) pending.push([last, t]);
+      last = t;
+    }, 1000);
+    const flush = async () => {
+      if (!pending.length) return;
+      const ranges = pending; pending = [];
+      const r = await call('video.ping', { requirement_id: item.id, duration: duration(), ranges });
+      if (alive && r.success) onProgress(r.video);
+    };
+    pinger = setInterval(flush, 10000);
+    if (a.source?.type === 'youtube') {
+      loadYouTube().then((YT) => {
+        if (!alive || !host.current) return;
+        player = new YT.Player(host.current, { videoId: a.source.id, playerVars: { rel: 0, modestbranding: 1, playsinline: 1 } });
+      });
+    }
+    return () => { alive = false; clearInterval(timer); clearInterval(pinger); flush(); player?.destroy?.(); };
+  }, [item.id, a.source?.type, a.source?.id]);
+  if (!a.source) return <p className="h">لم يُضبط رابط الفيديو بعد.</p>;
+  return (
+    <div className="act-video">
+      {a.source.type === 'youtube'
+        ? <div ref={host} />
+        : <video ref={video} src={a.source.url} controls controlsList="nodownload" playsInline disablePictureInPicture />}
+    </div>
+  );
+}
+
+function Video({ item, open, onRefresh }) {
+  const [a, setA] = useState(item.activity);
+  const [show, setShow] = useState(false);
+  useEffect(() => setA(item.activity), [item.activity]);
+  const onProgress = (v) => {
+    setA((x) => ({ ...x, ...v }));
+    if (v.done && !a.done) onRefresh();
+  };
+  return (
+    <div className="act">
+      <div className="row between">
+        <b className="small">{a.title || 'الفيديو'} · شاهدت {a.pct}%{a.duration ? ` من ${mins(a.duration)} دقيقة` : ''}</b>
+        {open && <button className="btn sm" onClick={() => { if (show) onRefresh(); setShow(!show); }}>{show ? 'أغلق' : a.pct ? 'تابع المشاهدة' : 'شاهد'}</button>}
+      </div>
+      <Bar value={a.pct} label="نسبة المشاهدة" />
+      {!a.done && <p className="h">يكتمل حين تشاهد {a.min_pct}% منه. التقديم السريع لا يُحتسب.</p>}
+      {show && <Player item={{ ...item, activity: a }} onProgress={onProgress} />}
+    </div>
+  );
+}
+
+const MODE_CHIP = { in_person: 'حضوري', online: 'عن بعد' };
+const VERIFY_HINT = {
+  qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
+  join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
+  manual: 'يسجل المدرب حضورك في الجلسة.',
+};
+
+function Workshop({ item, open, setToast }) {
+  const a = item.activity;
+  const [busy, setBusy] = useState('');
+  const upcoming = a.sessions.filter((s) => !s.attended && new Date(s.ends_at) > new Date());
+  const join = async (s) => {
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
+    setBusy(s.id);
+    const r = await call('workshop.join', { session_id: s.id });
+    setBusy('');
+    if (!r.success) { win?.close(); return setToast(r.message); }
+    if (win) win.location.href = r.join_url; else location.href = r.join_url;
+    if (r.recorded) setToast('سُجل حضورك');
+  };
+  return (
+    <div className="act">
+      <div className="row between"><b className="small">حضرت {a.count} من {a.total}</b></div>
+      <Bar value={(a.count / a.total) * 100} label="الحضور" />
+      {a.sessions.length > 0 ? (
+        <ul className="act-list">
+          {a.sessions.map((s) => (
+            <li key={s.id}>
+              <span className="grow"><b>{s.title}</b><span className="small muted"> · {fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}{s.location ? ` · ${s.location}` : ''}</span></span>
+              <span className="chip">{MODE_CHIP[s.mode]}</span>
+              {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
+              {s.attended ? <span className="chip ok">حضرت ✓</span>
+                : new Date(s.ends_at) < new Date() ? <span className="chip bad">لم يُسجل حضور</span> : <span className="chip">قادمة</span>}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="h">ستظهر هنا مواعيد الجلسات وطريقتها حين تُجدول.</p>}
+      {upcoming.length > 0 && <p className="h">{VERIFY_HINT[a.verify] || VERIFY_HINT.qr}</p>}
+    </div>
+  );
+}
+
+const COACH_STATUS = { booked: ['', 'محجوزة'], requested: ['', 'اتصال فوري'], attended: ['ok', 'حضرت ✓'], no_show: ['bad', 'لم تحضر'] };
+
+function Coaching({ item, open, onRefresh, setToast }) {
+  const a = item.activity;
+  const [book, setBook] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const instant = async () => {
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
+    setBusy(true);
+    const r = await call('coaching.instant', { requirement_id: item.id });
+    setBusy(false);
+    if (!r.success) { win?.close(); return setToast(r.message); }
+    if (win) win.location.href = r.join_url; else location.href = r.join_url;
+    onRefresh();
+  };
+  const closeBooking = () => {
+    setBook(false);
+    // تأكيد الحجز يصل من منصة المواعيد خلال ثوانٍ
+    onRefresh();
+    setTimeout(onRefresh, 6000);
+  };
+  const soon = (s) => s.join_url && s.status !== 'attended' && s.starts_at
+    && Date.now() > new Date(s.starts_at).getTime() - 15 * 6e4 && Date.now() < new Date(s.ends_at).getTime();
+  return (
+    <div className="act">
+      <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b>
+        <span className="chip">{a.mode === 'in_person' ? 'حضوري' : a.mode === 'any' ? 'حضوري أو عن بعد' : 'عن بعد'}</span></div>
+      {a.location && <p className="h">المكان: {a.location}</p>}
+      <Bar value={(a.count / a.total) * 100} label="الجلسات" />
+      {a.sessions.length > 0 && (
+        <ul className="act-list">
+          {a.sessions.map((s) => {
+            const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : COACH_STATUS[s.status] || ['', s.status];
+            return (
+              <li key={s.id}>
+                <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
+                {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
+                <span className={`chip ${cls}`}>{t}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {open && a.can_book && (
+        <div className="actions row">
+          {a.book_url && <button className="btn sm" onClick={() => (book ? closeBooking() : setBook(true))}>{book ? 'أنهيت الحجز' : 'احجز موعدًا'}</button>}
+          {a.instant && <button className="btn sm gold" disabled={busy} onClick={instant}><span className="live-dot" aria-hidden="true" />الموجّه متاح الآن، اتصل فورًا</button>}
+        </div>
+      )}
+      {open && a.can_book && !a.book_url && !a.instant && <p className="h">يحدد الموجّه موعد الجلسة ويصلك رابطها.</p>}
+      {book && (
+        <div className="act-book">
+          <iframe src={a.book_url} title="حجز موعد" loading="lazy" />
+          <p className="small muted">لا يظهر التقويم؟ <a href={a.book_url} target="_blank" rel="noopener noreferrer">افتحه في نافذة جديدة</a>، ثم عد واضغط «أنهيت الحجز».</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Activity({ item, open, onUpdate, onHandbook, setToast }) {
+  const refresh = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
+  const a = item.activity;
+  if (!a) return null;
+  if (a.type === 'reading') return <Reading a={a} onHandbook={open ? onHandbook : null} />;
+  if (a.type === 'video') return <Video item={item} open={open} onRefresh={refresh} />;
+  if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
+  if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
+  return null;
+}
+
+// ── شاشة تسجيل الحضور بعد مسح رمز QR ──
+export function CheckIn({ token, onDone }) {
+  const [state, setState] = useState({ busy: true });
+  useEffect(() => {
+    call('workshop.checkin', { t: token }).then((r) => setState(r.success ? { ok: r } : { error: r.message }));
+  }, [token]);
+  return (
+    <div className="page narrow">
+      <section className="card checkin">
+        {state.busy && <div className="spinner" aria-label="جارٍ التسجيل" />}
+        {state.ok && <>
+          <span className="checkin-mark ok" aria-hidden="true">✓</span>
+          <h1>{state.ok.already ? 'حضورك مسجل مسبقًا' : 'سُجل حضورك'}</h1>
+          <p className="muted">{state.ok.session.title}{state.ok.session.location ? ` · ${state.ok.session.location}` : ''}</p>
+          <p className="small muted">{fmtTime(state.ok.at)}</p>
+        </>}
+        {state.error && <>
+          <span className="checkin-mark bad" aria-hidden="true">!</span>
+          <h1>لم يُسجل الحضور</h1>
+          <p className="muted">{state.error}</p>
+        </>}
+        {!state.busy && <button className="btn" onClick={onDone}>إلى رحلتي</button>}
+      </section>
+    </div>
+  );
+}

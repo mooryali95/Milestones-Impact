@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
 import {
   CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, STAGE_FIELDS, TIER,
-  evaluate, reorderIds, reqFields,
+  evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
 import { useUI } from '../ui.jsx';
@@ -76,7 +76,7 @@ export function Journey({ catalog, reload, canWrite }) {
                     </span>
                     <span className="la-row">
                       <Move {...mv} entity="stage_requirements" id={r.id} />
-                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages), values: r, onSave: save('stage_requirements', { id: r.id }), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
                   </li>
                 ))}
@@ -84,8 +84,8 @@ export function Journey({ catalog, reload, canWrite }) {
               {canWrite && (
                 <button className="la-link" onClick={() => edit({
                   title: 'متطلب جديد', fields: reqFields(stages),
-                  values: { stage_key: s.key, kind: 'check', required: true, active: true },
-                  onSave: save('stage_requirements', { sort: reqs.filter((x) => x.stage_key === s.key).length + 1 }),
+                  values: reqToForm({ stage_key: s.key, kind: 'check', required: true, active: true }),
+                  onSave: (v) => save('stage_requirements', { sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
                 })}>+ متطلب</button>
               )}
             </section>

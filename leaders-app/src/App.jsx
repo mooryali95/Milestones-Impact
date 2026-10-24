@@ -18,6 +18,7 @@ import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
 import OrgPortal from './screens/OrgPortal.jsx';
 import Verify from './screens/Verify.jsx';
+import { CheckIn } from './screens/Activities.jsx';
 import Impact from './screens/Impact.jsx';
 import Rater from './screens/Rater.jsx';
 import { JourneySkeleton } from './ui.jsx';
@@ -54,6 +55,12 @@ function Participant() {
   const [verifyError, setVerifyError] = useState('');
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
+  // رمز حضور الورشة من مسح QR: /?checkin=...
+  const [checkin, setCheckin] = useState(() => {
+    const t = new URLSearchParams(location.search).get('checkin');
+    if (t) history.replaceState(null, '', '/');
+    return t;
+  });
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -108,7 +115,8 @@ function Participant() {
 
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
-  else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError} />;
+  else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
+  else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;
   } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;

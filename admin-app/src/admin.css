@@ -1273,3 +1273,15 @@ button.la-cell:hover { border-color: var(--gold, #A97A2E); }
 /* محررات الكتاب داخل طبقة النافذة (بدل <dialog>) */
 .mid-ov > .hb-editor { background: #fff; z-index: 1; }
 .hb-editor fieldset.hb-ed-panes { border: 0; margin: 0; min-width: 0; }
+
+/* ── الأنشطة الموثقة: شاشة رمز الحضور وملخص المشارك ── */
+.la-qr { position: fixed; inset: 0; z-index: 400; background: #FDFCF8; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; }
+.la-qr h2 { font-size: clamp(1.4rem, 3vw, 2.2rem); color: var(--petrol-s, #0B272F); margin: 0; }
+.la-qr p { color: var(--ink-light); margin: 0; }
+.la-qr img { width: min(70vh, 86vw); height: auto; image-rendering: pixelated; border: 10px solid #fff; box-shadow: 0 10px 40px rgba(6, 19, 24, .12); }
+.la-qr-hint { font-size: 1.05rem; }
+.la-qr-count { font-size: 1.4rem; color: #2E7D5B; }
+.la-qr-x { position: absolute; top: 16px; inset-inline-end: 16px; font-size: 1.4rem; padding: 6px 12px; }
+.la-act { display: block; font-size: .78rem; margin-top: 2px; font-weight: 400; }
+.la-act ul { list-style: none; margin: 6px 0 0; display: grid; gap: 4px; }
+.la-table tr.off { opacity: .55; }

@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import Activity from './Activities.jsx';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -146,7 +147,7 @@ const AUTO_HINT = {
   'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
 };
 
-function Requirement({ item, open, onUpdate, onEditProfile, onImpact, setToast }) {
+function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
     setBusy(true);
@@ -168,7 +169,8 @@ function Requirement({ item, open, onUpdate, onEditProfile, onImpact, setToast }
     act({ evidence_path: up.path });
   };
 
-  const sys = item.auto || item.kind === 'meeting';
+  const verified = !!item.activity;
+  const sys = item.auto || item.kind === 'meeting' || verified;
   const canAct = open && !sys && (item.status === 'pending' || item.status === 'returned' || (item.status === 'done' && !item.needs_review));
   const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
 
@@ -184,7 +186,8 @@ function Requirement({ item, open, onUpdate, onEditProfile, onImpact, setToast }
         </div>
         {item.help_ar && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
-        {sys && item.status !== 'done' && (
+        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} setToast={setToast} />}
+        {sys && !verified && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
           </p>
@@ -285,7 +288,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
 function nextStep(journey) {
   for (const st of journey.filter((s) => s.status === 'active')) {
     const it = st.items.find((i) => i.status === 'returned')
-      || st.items.find((i) => i.status === 'pending' && !i.auto && i.kind !== 'meeting');
+      || st.items.find((i) => i.status === 'pending' && !i.auto && i.kind !== 'meeting' && i.activity?.type !== 'workshop');
     if (it) return { stage: st, item: it };
   }
   return null;
@@ -298,7 +301,7 @@ function Welcome({ firstName, onClose }) {
       <div className="grow">
         <b>أهلًا {firstName}، هكذا تعمل رحلتك</b>
         <ol className="small">
-          <li>كل مرحلة فيها قائمة تحقق. أنجز البند ثم اضغط «أنجزته» أو ارفع ملفه.</li>
+          <li>كل مرحلة فيها قائمة تحقق. بعض البنود تنجزها وتؤكدها، وبعضها يُوثَّق تلقائيًا: قراءتك للكتاب، ومشاهدتك للفيديو، وحضورك للورشة برمز QR، وجلسات التوجيه.</li>
           <li>بعض البنود يراجعها المستشار، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
           <li>كتيبك الشخصي يُفتح بعد اعتماد مستواك، ويحفظ آخر باب قرأته.</li>
         </ol>
@@ -461,7 +464,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 order += 1;
                 return (
                   <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                    onUpdate={onUpdate} onEditProfile={onEditProfile} onImpact={onImpact} setToast={setToast} />
+                    onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} setToast={setToast} />
                 );
               })}
             </div>

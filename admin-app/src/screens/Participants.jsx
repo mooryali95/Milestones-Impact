@@ -8,6 +8,7 @@ import {
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { Submission } from './Handbook.jsx';
+import { ActivitySummary } from './Activities.jsx';
 import { stars } from '../handbook.js';
 
 // الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز، بنفس مفتاح اللوحة القديمة
@@ -287,7 +288,8 @@ function Person({ id, canWrite, onBack }) {
             <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{{ done: 'مكتملة', active: 'الحالية', locked: 'مقفلة' }[s.status]}</span></div>
             <ul>{s.items.length ? s.items.map((it) => (
               <li key={it.id} className={it.status}>
-                <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small></span>
+                <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>
+                  <ActivitySummary a={it.activity} /></span>
                 <span className="la-row">
                   {it.evidence_path && <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>}
                   {canWrite && !it.auto && s.status !== 'locked' && <>
