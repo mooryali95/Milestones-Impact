@@ -19,10 +19,12 @@ export function scoreFor(question, k) {
 
 // نسبة كل مستوى إتقان في كل بُعد، من 0 إلى 100.
 // مستوى بلا أسئلة يُعدّ null، ولا يكون شرطًا في القاعدة.
+// خيار بدرجة سالبة يعني "لا ينطبق على عملي": يُستبعد سؤاله من الحساب.
 export function tierPercents(questions, answers) {
   const acc = {};
   for (const q of questions) {
     if (q.active === false) continue;
+    if (answers[q.id] != null && (scoreFor(q, answers[q.id]) ?? 0) < 0) continue;
     const d = (acc[q.dimension] ||= {});
     const t = (d[q.tier] ||= { got: 0, max: 0 });
     const w = Number(q.weight ?? 1);

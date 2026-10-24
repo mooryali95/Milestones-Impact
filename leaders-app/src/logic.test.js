@@ -241,3 +241,46 @@ describe('placementFromAnswers with the composite model', () => {
     expect(typeof m.reason).toBe('string');
   });
 });
+
+// ── القياس المبدئي baseline-v2: حراسة جودة الأسئلة ──
+import V2_SQL from '../../supabase/migrations/20261024090000_leaders_baseline_v2.sql?raw';
+
+const V2 = [...V2_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', '(\w+)', '(?:[^']|'')*', (?:null|'(?:[^']|'')*'), '(\w+)', '((?:[^']|'')*)'::jsonb/g)]
+  .map(([, dimension, code, tier, kind, opts]) => ({ id: code, dimension, code, tier, kind, options: JSON.parse(opts.replace(/''/g, "'")) }));
+const choices = V2.filter((q) => q.kind === 'choice');
+const keyIndex = (q) => q.options.findIndex((o) => o.score === Math.max(...q.options.map((x) => x.score)));
+const longestIndex = (q) => q.options.reduce((b, o, k, a) => (o.label.length > a[b].label.length ? k : b), 0);
+
+describe('baseline-v2', () => {
+  it('keeps 4 questions per tier in each framework', () => {
+    expect(V2).toHaveLength(36);
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      for (const t of ['knowledge', 'skill', 'behavior']) expect(V2.filter((q) => q.dimension === d && q.tier === t)).toHaveLength(4);
+    }
+  });
+  it('does not reveal the key by its length', () => {
+    const cued = choices.filter((q) => keyIndex(q) === longestIndex(q));
+    expect(cued.length).toBeLessThanOrEqual(6);
+  });
+  it('places a "longest option + always" responder at beginner in every framework', () => {
+    const answers = Object.fromEntries(V2.map((q) => [q.id, q.kind === 'likert' ? 4 : longestIndex(q)]));
+    const pcts = tierPercents(V2, answers);
+    for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], DEFAULT_MODEL).level).toBe('beginner');
+  });
+  it('gives every frequency item a "not applicable" option', () => {
+    for (const q of V2.filter((x) => x.kind === 'likert')) expect(q.options.at(-1).score).toBeLessThan(0);
+  });
+});
+
+describe('tierPercents with "not applicable"', () => {
+  const qs = [
+    { id: 'a', dimension: 'milestone', tier: 'behavior', options: [{ score: 0 }, { score: 4 }, { score: -1 }] },
+    { id: 'b', dimension: 'milestone', tier: 'behavior', options: [{ score: 0 }, { score: 4 }, { score: -1 }] },
+  ];
+  it('drops the question from the tier instead of scoring it zero', () => {
+    expect(tierPercents(qs, { a: 1, b: 2 }).milestone.behavior).toBe(100);
+  });
+  it('leaves the tier empty when every answer is not applicable', () => {
+    expect(tierPercents(qs, { a: 2, b: 2 }).milestone.behavior).toBe(null);
+  });
+});
