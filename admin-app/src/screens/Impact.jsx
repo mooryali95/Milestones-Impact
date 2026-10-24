@@ -126,11 +126,20 @@ function People({ list, onPerson }) {
 }
 
 export default function Impact({ orgs, onPerson, catalog, reload, canWrite }) {
+  const { toast } = useUI();
   const [org, setOrg] = useState('');
   const [r, setR] = useState(null);
   const load = useCallback(() => { setR(null); L('admin.impact', org ? { organization_id: org } : {}).then(setR); }, [org]);
   useEffect(() => { load(); }, [load]);
   const post = (catalog?.instruments || []).filter((i) => i.kind === 'post');
+
+  // تقرير الأثر النهائي بالهوية، يُحفظ PDF من نافذة الطباعة
+  const printReport = async () => {
+    const win = window.open('', '_blank');
+    const [{ writeDocument }, { impactReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
+    const { meta, body } = impactReport(r, { org: org ? orgs.find((o) => o.id === org)?.name || null : null });
+    if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض التقرير');
+  };
 
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
@@ -138,7 +147,10 @@ export default function Impact({ orgs, onPerson, catalog, reload, canWrite }) {
     <>
       <div className="la-row between la-ov-bar">
         <span className="la-muted">{org ? 'جهة واحدة' : 'كل الجهات'}</span>
-        <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
+        <div className="la-row">
+          <button className="btn-sm" onClick={printReport}>تقرير الأثر PDF</button>
+          <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
+        </div>
       </div>
       {catalog?.success && !post.some((i) => i.active) && (
         <div className="la-note">القياس البعدي غير مفعّل بعد: {post.map((i) => i.key).join('، ') || 'لا أداة'}. راجع أسئلته في «أسئلة القياس» ثم فعّله، فيظهر للمشاركين حين يصلون إلى مرحلة التقييم.</div>

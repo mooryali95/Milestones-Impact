@@ -129,4 +129,9 @@ test('الإدارة: تقرير الأثر قبل وبعد', async ({ page }) =
   await expect(page.getByText('دعمني مديري المباشر في تطبيق ما تعلمته.')).toBeVisible();
   await expect(page.getByText('تغير مؤكد').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'إعدادات الحكم بالتغير' })).toBeVisible();
+  // التقرير النهائي بالهوية: الأرقام والتنبيه وأسماء المشاركين
+  const [doc] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'تقرير الأثر PDF' }).click()]);
+  await expect(doc.getByText('تقرير أثر برنامج القادة')).toBeVisible();
+  await expect(doc.getByText(/أقل من 20/)).toBeVisible();
+  await expect(doc.getByText('سارة الأحمد')).toBeVisible();
 });

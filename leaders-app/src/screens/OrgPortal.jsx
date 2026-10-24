@@ -84,6 +84,31 @@ function Bars({ obj, label = (k) => k, total }) {
   ))}</div>;
 }
 
+// أثر الجهة: القياس المبدئي مقابل البعدي كما يحسبه الخادم، دون أي حساب هنا
+const DIM_AR = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
+const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
+function ImpactCard({ im, onReport }) {
+  if (!im) return null;
+  const c = im.counts || {};
+  return (
+    <section className="card op-impact">
+      <div className="row between"><h3>أثر البرنامج على مشاركيكم</h3>{onReport && c.paired > 0 && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
+      <p className="small muted">{c.baseline || 0} أجروا القياس المبدئي، و{c.post || 0} أجروا البعدي، و{c.paired || 0} لديهم القياسان.</p>
+      {im.caution && <div className="alert info small">{im.caution}</div>}
+      {c.paired > 0 ? (
+        <div className="op-scroll"><table>
+          <thead><tr><th>الإطار</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسن موثوق</th></tr></thead>
+          <tbody>{DIMS.map(([k, en]) => {
+            const x = im.cohort?.[k];
+            if (!x) return null;
+            return <tr key={k}><td><b>{en}</b><br /><small className="muted">{DIM_AR[k]}</small></td><td>{x.pre ?? '·'}</td><td>{x.post ?? '·'}</td><td><b>{signed(x.diff)}</b></td><td>{x.reliable_up ?? 0} من {x.n ?? 0}</td></tr>;
+          })}</tbody>
+        </table></div>
+      ) : <p className="small muted">تظهر المقارنة حين يُتم مشاركوكم القياس البعدي في نهاية البرنامج.</p>}
+    </section>
+  );
+}
+
 function Dashboard({ me, onLogout }) {
   const [d, setD] = useState(null);
   const [f, setF] = useState({ q: '', status: '', track: '' });
@@ -116,6 +141,12 @@ function Dashboard({ me, onLogout }) {
     const { meta, body } = orgReport({ ...d, participants: rows }, 'coordinator');
     if (!writeDocument(win, meta, body)) alert('اسمح بالنوافذ المنبثقة لعرض التقرير');
   };
+  const printImpact = async () => {
+    const win = window.open('', '_blank');
+    const [{ writeDocument }, { impactReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
+    const { meta, body } = impactReport(d.impact, { org: org.name, audience: 'coordinator', names: perms.scores });
+    if (!writeDocument(win, meta, body)) alert('اسمح بالنوافذ المنبثقة لعرض التقرير');
+  };
   return (
     <div className="page op" style={org.color ? { '--org': org.color } : undefined}>
       <section className="hero op-hero">
@@ -143,6 +174,8 @@ function Dashboard({ me, onLogout }) {
           {tracks.length ? <Bars obj={Object.fromEntries(tracks.map(([k, n]) => [titleOf(k), n]))} total={kpis.total} /> : <p className="small muted">لم يُعتمد مسار أحد بعد.</p>}</section>
         <section className="card"><h3>طريقة الانضمام</h3><Bars obj={d.by_via} label={(k) => VIA[k] || k} total={kpis.total} /></section>
       </div>
+
+      <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
 
       <section className="card op-table">
         <div className="row between op-tools">

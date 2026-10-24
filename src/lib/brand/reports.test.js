@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analysisReport, decisionReport, orgReport, planReport } from './reports.js';
+import { analysisReport, decisionReport, impactReport, orgReport, planReport } from './reports.js';
 import { documentHtml, docId } from './doc.js';
 
 const d = {
@@ -81,4 +81,32 @@ it('decisionReport يعرض الفئات غير الفارغة فقط ويعدّ
   expect(meta.subtitle).toBe('مشروع <أ>');
   expect(body).toContain('خدمة × شريحة');
   expect(body.match(/<section/g).length).toBe(2);
+});
+
+describe('impactReport', () => {
+  const dim = (pre, post) => ({ n: 2, pre, post, diff: post - pre, dz: 1.1, effect: 'كبير', reliable_up: 1, reliable_down: 0, level_up: 1, verdicts: { confirmed: 1, none: 1 }, rater: { n: 1, pre: 2.5, post: 3.5 } });
+  const r = {
+    counts: { participants: 3, baseline: 3, post: 2, paired: 2 },
+    cohort: { milestone: dim(45, 70), impact: dim(50, 60), leadership: dim(55, 58) },
+    transfer: [{ code: 'T-1', text: 'أطبق ما تعلمته', n: 2, agree_pct: 100, mean: 3.5 }],
+    participants: [{ full_name: 'سارة<b>', organization: 'جهة', dimensions: [{ dimension: 'milestone', composite_pre: 45, composite_post: 70, change: 25, verdict: { key: 'confirmed' } }] }],
+    caution: 'العدد 2 أقل من 20',
+  };
+  it('يعرض أرقام الخادم كما هي مع التنبيه المنهجي', () => {
+    const { meta, body } = impactReport(r);
+    expect(meta.title).toBe('تقرير أثر برنامج القادة');
+    expect(body).toContain('+25');
+    expect(body).toContain('1.1 (كبير)');
+    expect(body).toContain('العدد 2 أقل من 20');
+    expect(body).toContain('تغير مؤكد 1');
+    expect(body).toContain('أطبق ما تعلمته');
+    expect(documentHtml(meta, body)).toContain('سارة&lt;b&gt;');
+  });
+  it('أسماء المشاركين للمنسق بإذن فقط', () => {
+    expect(impactReport(r, { org: 'جهة', audience: 'coordinator' }).body).not.toContain('سارة');
+    expect(impactReport(r, { org: 'جهة', audience: 'coordinator', names: true }).body).toContain('سارة');
+  });
+  it('بلا أزواج يشرح متى تظهر المقارنة', () => {
+    expect(impactReport({ counts: { participants: 1, baseline: 1, post: 0, paired: 0 }, cohort: {} }).body).toContain('لا أحد لديه القياسان بعد');
+  });
 });
