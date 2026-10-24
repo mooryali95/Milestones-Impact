@@ -199,7 +199,7 @@ function PlacementModel({ model, reload, canWrite }) {
       <div className="la-model-grid">
         <div><h4>1. أوزان الجوانب</h4>{f('w_skill', 'المواقف', 'الأصدق تنبؤًا بالأداء')}{f('w_knowledge', 'المعرفة', 'الفهم والمفاهيم')}{f('w_behavior', 'الممارسة', 'تقدير ذاتي يميل للتضخم')}</div>
         <div><h4>2. حدود المستويات</h4>{f('min_intermediate', 'المؤشر للمتوسط من 100', 'الحد الأدنى')}{f('min_advanced', 'المؤشر للاحترافي من 100', 'الحد الأدنى')}{f('borderline', 'هامش الحالة الحدّية', 'نقاط تحت الحد')}</div>
-        <div><h4>3. الحد الأدنى لأي جانب</h4>{f('floor_intermediate', 'للمتوسط', 'نسبة الجانب الأضعف')}{f('floor_advanced', 'للاحترافي', 'نسبة الجانب الأضعف')}</div>
+        <div><h4>3. الحد الأدنى لأي جانب</h4>{f('floor_intermediate', 'للمتوسط', 'فوق نسبة التخمين 25%')}{f('floor_advanced', 'للاحترافي', 'نسبة الجانب الأضعف')}</div>
       </div>
       {canWrite && <button className="btn-sm primary" onClick={store}>حفظ المعيار</button>}
       <div className="la-calc">

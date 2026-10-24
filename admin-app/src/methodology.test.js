@@ -9,11 +9,11 @@ describe('المنهجية', () => {
 
   it('المؤشر المركّب موزون، والجانب الأضعف يمنع المستوى الأعلى', () => {
     const r = evaluate({ knowledge: 75, skill: 25, behavior: 69 }, MODEL_DEFAULT);
-    expect(r.composite).toBe(51);
+    expect(r.composite).toBe(49.1);
     expect(r.level).toBe('beginner');
     expect(evaluate({ knowledge: 90, skill: 90, behavior: 90 }, MODEL_DEFAULT).level).toBe('advanced');
     // مؤشر عالٍ لكن جانب تحت حد الاحترافي
-    expect(evaluate({ knowledge: 100, skill: 100, behavior: 40 }, MODEL_DEFAULT).level).toBe('intermediate');
+    expect(evaluate({ knowledge: 100, skill: 100, behavior: 50 }, MODEL_DEFAULT).level).toBe('intermediate');
     expect(evaluate({}, MODEL_DEFAULT)).toBeNull();
   });
 
