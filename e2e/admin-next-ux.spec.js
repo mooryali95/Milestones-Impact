@@ -69,3 +69,40 @@ test('المحرر يحمي التعديل: تأكيد قبل الإغلاق، �
   await page.getByRole('alertdialog').getByRole('button', { name: 'استعادة المسودة' }).click();
   await expect(page.getByLabel('محتوى الباب')).toHaveValue('نص معدّل لم يُحفظ');
 });
+
+test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النتيجة', async ({ page }) => {
+  await setup(page);
+  await page.keyboard.press('Control+k');
+  const box = page.getByRole('combobox', { name: 'البحث الشامل' });
+  await box.fill('ساره');
+  await expect(page.getByRole('option', { name: /سارة الأحمد/ })).toBeVisible();
+  await box.press('Enter');
+  await expect(page).toHaveURL(/#\/leaders\/participants\/p1$/);
+  await page.getByRole('button', { name: /البحث الشامل/ }).click();
+  await page.getByRole('combobox', { name: 'البحث الشامل' }).fill('كتيب');
+  await page.getByRole('combobox', { name: 'البحث الشامل' }).press('Enter');
+  await expect(page).toHaveURL(/#\/leaders\/handbook$/);
+});
+
+test('مراجعة المتطلبات دفعة واحدة من النظرة العامة', async ({ page }) => {
+  const reviewed = [];
+  await setup(page);
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.review') { reviewed.push(b); return route.fulfill({ json: { success: true } }); }
+    if (b.action === 'admin.reviews') {
+      return route.fulfill({ json: { success: true, pending_approval: [], submitted: [
+        { participant_id: 'p1', requirement_id: 'r1', completed_at: '2026-10-20', participants: { full_name: 'سارة الأحمد' }, stage_requirements: { title_ar: 'خطة التطوير' } },
+        { participant_id: 'p2', requirement_id: 'r1', completed_at: '2026-10-21', participants: { full_name: 'عمر علي' }, stage_requirements: { title_ar: 'خطة التطوير' } },
+      ] } });
+    }
+    return route.fallback();
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  await page.getByLabel('تحديد الكل').check();
+  await page.getByRole('button', { name: 'اعتماد المحدد (2)' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => reviewed.length).toBe(2);
+  expect(reviewed.map((x) => [x.participant_id, x.status])).toEqual([['p1', 'done'], ['p2', 'done']]);
+});

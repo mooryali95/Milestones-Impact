@@ -16,7 +16,7 @@ import Programs from './Programs.jsx';
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 
-const TABS = [
+export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
   ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
@@ -33,6 +33,8 @@ export default function Leaders({ canWrite, pending }) {
   const orgId = tab === 'orgs' ? route.id : null;
   const track = tab === 'tracks' ? route.id : null;
   const [orgData, setOrgData] = useState(null);
+  // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
+  useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
   const [status, setStatus] = useState('');
   const [catalog, setCatalog] = useState(null);
   const [programId, setProgramId] = useState(null);
@@ -57,7 +59,7 @@ export default function Leaders({ canWrite, pending }) {
   let body;
   if (NEEDS_CATALOG.has(tab) && !catalog) body = <Spinner />;
   else if (NEEDS_CATALOG.has(tab) && !catalog.success) body = <div className="la-err" role="alert">{catalog.message}</div>;
-  else if (tab === 'overview') body = <Overview pending={pending} orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
+  else if (tab === 'overview') body = <Overview canWrite={canWrite} pending={pending} orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={(id) => (id ? openPerson(id) : at('participants'))} initialStatus={status} />;
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;

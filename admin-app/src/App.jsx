@@ -12,6 +12,7 @@ import Contacts from './screens/Contacts.jsx';
 import Leaders from './screens/Leaders.jsx';
 import { navigate, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
+import Palette from './Palette.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
@@ -44,6 +45,7 @@ function Dashboard({ user, onUser, onLogout }) {
             <div className="dash-user-name">{user.name || user.email}</div>
             <div className="dash-user-role">{ROLE_LABELS[user.role_id || user.role] || '—'}</div>
           </div>
+          <button className="dash-search-btn" onClick={() => window.dispatchEvent(new Event('mi:search'))} aria-label="البحث الشامل (Ctrl+K)" title="البحث الشامل (Ctrl+K)">بحث <kbd>Ctrl K</kbd></button>
           <button className="dash-settings-btn" onClick={() => setSettings(true)} title="الإعدادات" aria-label="الإعدادات">⚙</button>
           <button className="dash-logout" onClick={onLogout}>خروج</button>
         </div>
@@ -58,6 +60,7 @@ function Dashboard({ user, onUser, onLogout }) {
 
       {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : <Contacts />}
 
+      <Palette />
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
     </div>
   );
