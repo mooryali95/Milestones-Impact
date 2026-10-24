@@ -67,7 +67,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
     setD(null);
     Promise.all([
       L('admin.overview', { org }), L('admin.reviews'),
-      L('admin.impact', { org }).catch(() => null),
+      L('admin.impact', org ? { organization_id: org } : {}).catch(() => null),
     ]).then(([o, r, im]) => live && setD({ o, r, im }));
     return () => { live = false; };
   }, [org]);
