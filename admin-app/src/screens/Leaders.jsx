@@ -12,11 +12,12 @@ import { Assessment, Journey, Levels } from './Methodology.jsx';
 import Handbook from './Handbook.jsx';
 import Activities from './Activities.jsx';
 import Impact from './Impact.jsx';
+import Programs from './Programs.jsx';
 import { Spinner } from '../ui.jsx';
 
 const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook', 'impact']);
@@ -29,14 +30,17 @@ export default function Leaders({ canWrite }) {
   const [status, setStatus] = useState('');
   const [track, setTrack] = useState(null);
   const [catalog, setCatalog] = useState(null);
+  const [programId, setProgramId] = useState(null);
 
   const loadOrgs = useCallback(async () => {
     const r = await L('admin.orgs');
     setOrgData(r.success ? r : { orgs: [], unassigned: {} });
   }, []);
   useEffect(() => { loadOrgs(); }, [loadOrgs]);
-  const loadCatalog = useCallback(async () => setCatalog(await L('admin.catalog')), []);
+  const loadCatalog = useCallback(async () => setCatalog(await L('admin.catalog', programId ? { program_id: programId } : {})), [programId]);
   useEffect(() => { if (NEEDS_CATALOG.has(tab) && !catalog) loadCatalog(); }, [tab, catalog, loadCatalog]);
+  // برنامج آخر في «الرحلة والمتطلبات»: يُعاد تحميل الكتالوج له
+  const pickProgram = (id) => { setProgramId(id); setCatalog(null); };
 
   const go = (t) => { setTab(t); setPerson(null); setOrgId(null); setTrack(null); setStatus(''); };
   const openPerson = (id) => { setTab('participants'); setPerson(id); window.scrollTo({ top: 0 }); };
@@ -52,7 +56,8 @@ export default function Leaders({ canWrite }) {
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => { setTrack(k); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
-  else if (tab === 'journey') body = <Journey {...meth} />;
+  else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
+  else if (tab === 'programs') body = <Programs canWrite={canWrite} onEditJourney={(id) => { pickProgram(id); setTab('journey'); }} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;

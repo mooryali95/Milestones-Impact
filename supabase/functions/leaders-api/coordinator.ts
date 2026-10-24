@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
+import { journeyDefinition } from './programs.ts';
 import {
   audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, must, randomCode, randomToken, sendMail,
 } from './core.ts';
@@ -112,8 +113,9 @@ export async function dashboardFor(c: any) {
   const d: any = await orgPayload({ id: c.organization_id });
   const ids = d.participants.map((p: any) => p.id);
 
-  const [{ count: requiredTotal }, { data: done }, levels] = await Promise.all([
-    db.from('stage_requirements').select('id', { count: 'exact', head: true }).eq('active', true).eq('required', true),
+  const [requiredTotal, { data: done }, levels] = await Promise.all([
+    // متطلبات برنامج دفعة الجهة الجارية
+    journeyDefinition({ organization_id: c.organization_id }).then((def) => def.requirements.filter((r: any) => r.required).length),
     ids.length ? db.from('participant_requirements').select('participant_id').in('participant_id', ids).eq('status', 'done') : Promise.resolve({ data: [] }),
     perms.scores && ids.length
       ? db.from('placements').select('participant_id, dimension, level').in('participant_id', ids).then((r: any) => r.data || [])

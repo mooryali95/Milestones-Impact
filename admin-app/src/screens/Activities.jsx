@@ -23,6 +23,12 @@ const SESSION_FIELDS = [
   { name: 'ends_at', label: 'تنتهي', type: 'datetime' },
   { name: 'active', label: 'مفعّلة', type: 'check' },
 ];
+// الجلسة لدفعة بعينها، أو لكل الدفعات التي تتبع برنامج المتطلب
+const sessionFields = (cohorts) => cohorts.length < 2 ? SESSION_FIELDS : [
+  { name: 'cohort_id', label: 'الدفعة', type: 'select', empty: 'كل الدفعات', options: Object.fromEntries(cohorts.map((c) => [c.id, c.name])),
+    help: 'لكل دفعة مواعيدها وقاعاتها. الجلسة العامة تظهر لكل الدفعات.' },
+  ...SESSION_FIELDS,
+];
 const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
 const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };
 const COACH_ST = { booked: ['محجوزة', ''], requested: ['اتصال فوري', 'warn'], attended: ['حضر', 'ok'], no_show: ['لم يحضر', 'bad'], cancelled: ['أُلغيت', ''] };
@@ -108,24 +114,27 @@ function Workshops({ data, reload, canWrite }) {
     <>
       {reqs.map((r) => {
         const list = data.workshops.filter((s) => s.requirement_id === r.id);
+        const cohorts = (data.cohorts || []).filter((c) => c.program_id === r.program_id);
+        const fields = sessionFields(cohorts);
+        const cohortName = (id) => cohorts.find((c) => c.id === id)?.name;
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || 1} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
-              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields: SESSION_FIELDS, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
+              <div><b>{r.title_ar}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || 1} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
                 <thead><tr><th>الجلسة</th><th>الموعد</th><th>الطريقة</th><th>الحضور</th><th /></tr></thead>
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
-                    <td>{s.title_ar}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
+                    <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
                     <td>{when(s.starts_at)}</td>
                     <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? '' : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
                       {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: SESSION_FIELDS, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>

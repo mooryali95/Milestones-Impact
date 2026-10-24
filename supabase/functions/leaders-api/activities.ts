@@ -4,10 +4,11 @@
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail } from './core.ts';
+import { requirementFor } from './programs.ts';
 import { esc, mailShell } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
-  instantAvailable, parseBooking, parseQrToken, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
+  instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount,
 } from './logic.js';
 
@@ -16,7 +17,8 @@ type Ctx = { ip: string | null; ua: string | null };
 
 // ── جمع الأدلة لرحلة المشارك ──
 // يعيد حالة كل متطلب موثق يخصه: { [requirement_id]: activity }
-export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean) {
+// cohortId: دفعة المشارك؛ يرى جلسات دفعته والجلسات العامة لكل الدفعات.
+export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean, cohortId: string | null = null) {
   const mine = reqs.filter((r) => VERIFIED_KINDS.includes(r.kind) && r.active !== false && requirementApplies(r, levels));
   if (!mine.length) return {};
   const kinds = new Set(mine.map((r) => r.kind));
@@ -28,7 +30,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
     kinds.has('reading') ? db.from('handbook_progress').select('module_id').eq('participant_id', p.id) : none,
     kinds.has('video') ? db.from('video_progress').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
-    kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
+    kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
   ]);
@@ -38,7 +40,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     reading: Object.fromEntries((reading.data || []).map((r: any) => [r.module_id, r])),
     quizzes: Object.fromEntries((quiz.data || []).map((r: any) => [r.module_id, true])),
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),
-    workshops: ws.data || [],
+    workshops: (ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId),
     attended: new Set((att.data || []).map((a: any) => a.session_id)),
     coaching: coach.data || [],
   };
@@ -64,11 +66,12 @@ export function participantItem(it: any, p: any) {
   return { ...rest, activity: act };
 }
 
-async function myRequirement(p: any, id: unknown, kind: string) {
-  const r = must(await db.from('stage_requirements').select('*').eq('id', String(id || '')).maybeSingle());
-  if (!r || !r.active || r.kind !== kind) throw new Fail('النشاط غير موجود', 404);
+// المتطلب كما يسري على المشارك: من برنامج دفعته وبتخصيصها
+async function myRequirement(p: any, id: unknown, kind: string, session?: { cohort_id?: string | null }) {
+  const { r, def } = await requirementFor(p, id, kind);
   const levels = await levelsOf(p.id);
   if (!requirementApplies(r, levels)) throw new Fail('هذا النشاط لا يخص مسارك', 403);
+  if (session?.cohort_id && session.cohort_id !== def.cohort?.id) throw new Fail('هذه الجلسة لدفعة أخرى', 403, 'cohort');
   return r;
 }
 
@@ -120,7 +123,7 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   if (!s) throw new Fail('رمز الحضور غير صالح', 400, 'qr_invalid');
   if (!(await verifyQrToken(t, s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
   if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
-  const r = await myRequirement(p, s.requirement_id, 'workshop');
+  const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
   if (!prev) {
@@ -136,7 +139,7 @@ export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
   const s = must(await db.from('workshop_sessions').select('*').eq('id', String(b.session_id || '')).maybeSingle());
   if (!s || s.mode !== 'online' || !s.join_url) throw new Fail('الجلسة غير موجودة', 404);
   if (!checkinOpen(s)) throw new Fail('رابط الجلسة يُفتح قبل موعدها بساعة', 400, 'closed');
-  const r = await myRequirement(p, s.requirement_id, 'workshop');
+  const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if (r.config?.verify === 'join') {
     must(await db.from('workshop_attendance').upsert(
       { session_id: s.id, participant_id: p.id, method: 'join', ip: ctx.ip, user_agent: ctx.ua },
@@ -213,12 +216,14 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
 // نظرة عامة: الأنشطة الموثقة، والورش وحضورها، وجلسات التوجيه
 export async function overview() {
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
-  const [reqs, ws, att, coach] = await Promise.all([
-    db.from('stage_requirements').select('id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
-    db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').order('starts_at'),
+  const [reqs, ws, att, coach, programs, cohorts] = await Promise.all([
+    db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
+    db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').order('starts_at'),
     db.from('workshop_attendance').select('session_id'),
     db.from('coaching_sessions').select('*, participants(full_name, email)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
+    db.from('programs').select('id, name').is('archived_at', null),
+    db.from('cohorts').select('id, name, program_id, status').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
@@ -227,6 +232,7 @@ export async function overview() {
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
     workshops: (ws.data || []).map((s: any) => ({ ...s, attended: counts[s.id] || 0 })),
     coaching: coach.data || [],
+    programs: programs.data || [], cohorts: cohorts.data || [],
   };
 }
 
@@ -239,6 +245,8 @@ export async function workshopSave(a: any, b: Body) {
     location_ar: mode === 'in_person' ? String(row.location_ar || '').trim().slice(0, 300) || null : null,
     join_url: mode === 'online' ? String(row.join_url || '').trim().slice(0, 500) || null : null,
     starts_at: row.starts_at, ends_at: row.ends_at, active: row.active !== false,
+    // فارغ: الجلسة لكل الدفعات
+    cohort_id: /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null,
   };
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
   if (mode === 'online' && !/^https:\/\/\S+$/.test(out.join_url || '')) throw new Fail('الجلسة عن بعد تحتاج رابط اجتماع يبدأ بـ https');
@@ -279,13 +287,20 @@ export async function workshopQr(b: Body) {
 
 // الحضور ومن يُتوقع حضوره (من ينطبق عليهم المتطلب بعد اعتماد مسارهم)
 export async function workshopAttendance(b: Body) {
-  const s = must(await db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
+  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
-  const [{ data: r }, { data: att }, { data: pl }] = await Promise.all([
+  const none = Promise.resolve({ data: [] as any[] });
+  const [{ data: r }, { data: att }, { data: pl }, { data: enr }, { data: cohorts }] = await Promise.all([
     db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
     db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
-    db.from('placements').select('participant_id, dimension, level, approved_at, participants(full_name, email, organization_name, status)'),
+    db.from('placements').select('participant_id, dimension, level, approved_at, participants(full_name, email, organization_name, organization_id, status)'),
+    s.cohort_id ? db.from('enrollments').select('participant_id, cohort_id, status, created_at') : none,
+    s.cohort_id ? db.from('cohorts').select('id, organization_id, status, is_default, starts_on, created_at') : none,
   ]);
+  // جلسة دفعة بعينها: المتوقع حضورهم مشاركو تلك الدفعة فقط
+  const inCohort = (e: any) => !s.cohort_id || pickCohort({
+    enrollments: (enr || []).filter((x: any) => x.participant_id === e.id), cohorts: cohorts || [], organizationId: e.organization_id || null,
+  }).cohort?.id === s.cohort_id;
   const by: Record<string, any> = {};
   for (const x of pl || []) {
     const e = (by[x.participant_id] ||= { id: x.participant_id, ...x.participants, levels: {}, approved: 0 });
@@ -294,7 +309,7 @@ export async function workshopAttendance(b: Body) {
   }
   const present = Object.fromEntries((att || []).map((a: any) => [a.participant_id, a]));
   const people = Object.values(by)
-    .filter((e: any) => (e.approved === 3 && !['withdrawn', 'suspended'].includes(e.status) && requirementApplies(r, e.levels)) || present[e.id])
+    .filter((e: any) => (e.approved === 3 && !['withdrawn', 'suspended'].includes(e.status) && requirementApplies(r, e.levels) && inCohort(e)) || present[e.id])
     .map((e: any) => ({ id: e.id, full_name: e.full_name, email: e.email, organization_name: e.organization_name, attendance: present[e.id] || null }))
     .sort((x: any, y: any) => String(x.full_name).localeCompare(String(y.full_name), 'ar'));
   return { success: true, session: s, requirement: { id: r.id, title_ar: r.title_ar }, people };

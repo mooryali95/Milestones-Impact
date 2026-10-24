@@ -92,7 +92,7 @@ function Competency({ profile }) {
 // اسمه ووصفه وتوجيه رحلته فقط، والتفصيل لكل إطار للإدارة.
 const points = (t) => String(t || '').split('\n').map((x) => x.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
 
-function TrackCard({ profile }) {
+function TrackCard({ profile, cohort }) {
   const t = profile.track;
   const lvl = levelOf(summaryLevel(profile));
   const focus = points(t.focus);
@@ -103,6 +103,7 @@ function TrackCard({ profile }) {
         <div className="row between">
           <span className="track-eyebrow">مسارك في البرنامج</span>
           <span className="row" style={{ gap: 6 }}>
+            {cohort?.name && <span className="chip">{cohort.name}</span>}
             {lvl.title && <span className="chip track-lvl">المستوى العام: {lvl.title}</span>}
             {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
           </span>
@@ -440,7 +441,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
             <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
             <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
           </div>
-          {profile.track?.title ? <TrackCard profile={profile} /> : <Competency profile={profile} />}
+          {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
         </>
       )}
 
