@@ -9,6 +9,7 @@ import {
 } from './core.ts';
 import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
 import { org as orgPayload } from './admin.ts';
+import { adminReport as impactReport } from './impact.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -144,8 +145,19 @@ export async function dashboardFor(c: any) {
     participants,
   };
 }
+// أثر الجهة: القياس المبدئي مقابل البعدي لمشاركيها. الأرقام المجمعة للجميع،
+// وصفوف المشاركين بأسمائهم فقط لمن مُنح صلاحية المستويات، وبلا بريد دائمًا.
+export async function impactFor(c: any) {
+  const r: any = await impactReport({ organization_id: c.organization_id });
+  const scores = coordPermissions(c.permissions).scores;
+  return {
+    counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
+    participants: scores ? r.participants.filter((p: any) => p.dimensions).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+  };
+}
 export async function dashboard(c: any) {
-  const r = await dashboardFor(c);
+  const r: any = await dashboardFor(c);
+  r.impact = await impactFor(c);
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }

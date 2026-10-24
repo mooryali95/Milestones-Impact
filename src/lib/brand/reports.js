@@ -161,3 +161,61 @@ export function decisionReport(project, buckets) {
     body,
   };
 }
+
+// تقرير الأثر النهائي: القياس المبدئي مقابل البعدي للدفعة أو لجهة واحدة.
+// r: رد admin.impact كما هو (counts, cohort, transfer, participants, caution)؛ لا يُعاد هنا أي حساب.
+// audience: 'admin' أو 'coordinator'؛ أسماء المشاركين تظهر للمنسق فقط إن مُنح صلاحية المستويات.
+const DIM_AR = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
+const DIM_EN = { milestone: 'Milestone', impact: 'Impact', leadership: 'Leadership' };
+const VERDICT = { confirmed: 'تغير مؤكد', emerging: 'مؤشرات أولية', none: 'لا دليل كافٍ', decline: 'تراجع يحتاج مراجعة' };
+const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
+export function impactReport(r, { org = null, audience = 'admin', names = audience === 'admin' } = {}) {
+  const c = r.counts || {};
+  const dims = Object.keys(DIM_AR).filter((d) => r.cohort?.[d]);
+  const cohortRows = dims.map((d) => {
+    const x = r.cohort[d];
+    return [raw(`<b style="font-weight:400">${esc(DIM_EN[d])}</b><br><small>${esc(DIM_AR[d])}</small>`), x.n ?? 0, x.pre ?? '·', x.post ?? '·',
+      raw(`<b>${esc(signed(x.diff))}</b>`), x.dz != null ? `${x.dz}${x.effect ? ` (${x.effect})` : ''}` : '·',
+      `${x.reliable_up ?? 0} من ${x.n ?? 0}`, x.level_up ?? 0, x.rater?.n ? `${x.rater.pre} ← ${x.rater.post}` : '·'];
+  });
+  const verdictLines = dims.map((d) => `${DIM_EN[d]}: ${Object.entries(VERDICT).map(([k, l]) => `${l} ${r.cohort[d].verdicts?.[k] || 0}`).join('، ')}`);
+  const people = (r.participants || []).filter((p) => p.dimensions);
+  const peopleRows = people.map((p) => [
+    raw(`<b style="font-weight:400">${esc(p.full_name)}</b>${!org && p.organization ? `<br><small>${esc(p.organization)}</small>` : ''}`),
+    ...dims.map((d) => {
+      const x = p.dimensions.find((y) => y.dimension === d);
+      return x ? raw(`${esc(x.composite_pre ?? '·')} ← ${esc(x.composite_post ?? '·')} <small>(${esc(signed(x.change))})</small><br><small>${esc(VERDICT[x.verdict?.key] || '')}</small>`) : '·';
+    }),
+  ]);
+
+  const body = [
+    section('Overview', 'ملخص القياس', kpis([
+      { value: c.participants ?? 0, label: 'مشارك' },
+      { value: c.baseline ?? 0, label: 'أجروا القياس المبدئي' },
+      { value: c.post ?? 0, label: 'أجروا القياس البعدي' },
+      { value: c.paired ?? 0, label: 'لديهم القياسان' },
+    ])),
+    ...(r.caution ? [callout('تنبيه منهجي', r.caution)] : []),
+    c.paired
+      ? section('Before and after', 'قبل وبعد لكل إطار', table(
+        [{ label: 'الإطار' }, { label: 'العدد' }, { label: 'قبل' }, { label: 'بعد' }, { label: 'الفرق' }, { label: 'حجم الأثر dz' }, { label: 'تحسن موثوق' }, { label: 'ارتقى مستوى' }, { label: 'تقدير المدير' }],
+        cohortRows), 'النسب المركبة من 100 على الجوانب المشتركة بين القياسين. التحسن الموثوق يتجاوز خطأ القياس (RCI ≥ 1.96).')
+      : section('Before and after', 'قبل وبعد لكل إطار', '<p class="muted">لا أحد لديه القياسان بعد، فتظهر المقارنة حين يُتم المشاركون القياس البعدي.</p>'),
+    ...(c.paired ? [section('Verdicts', 'الحكم بالتثليث', points(verdictLines), '«تغير مؤكد» يتطلب مصدرين على الأقل أحدهما غير ذاتي: الاختبار، أو تقدير المدير، أو دليل المشروع المعتمد.')] : []),
+    ...((r.transfer || []).length ? [section('Transfer', 'انتقال التعلم إلى العمل', table(
+      [{ label: 'البند' }, { label: 'العدد', width: '18mm' }, { label: 'موافقون', width: '22mm' }, { label: 'المتوسط من 4', width: '26mm' }],
+      r.transfer.map((t) => [t.text, t.n, `${t.agree_pct}%`, t.mean])), 'بيئة التطبيق: ضعف الدعم أو الفرص يفسّر غياب الأثر أحيانًا أكثر من جودة التدريب.')] : []),
+    ...(names && peopleRows.length ? [section('Participants', 'المشاركون', table([{ label: 'المشارك' }, ...dims.map((d) => ({ label: DIM_EN[d] }))], peopleRows), `${peopleRows.length} مشارك لديهم القياسان.`)] : []),
+  ].join('');
+
+  return {
+    meta: {
+      kind: 'IMP', kindLabel: 'Impact Report', eyebrow: 'Leaders Program · Impact Report',
+      title: org ? `تقرير أثر ${org}` : 'تقرير أثر برنامج القادة', subtitle: 'القياس المبدئي مقابل القياس البعدي',
+      rows: [['النطاق', org || 'كل الجهات'], ['المقارنات', `${c.paired ?? 0} مشارك`], ['تاريخ الإصدار', today()], ['الجمهور', audience === 'admin' ? 'إدارة البرنامج' : 'منسق الجهة']],
+      confidential: org ? `سري: مخصص لـ ${org} وإدارة البرنامج فقط` : 'سري: مخصص لإدارة البرنامج فقط',
+      closing: 'أُعدّ هذا التقرير آليًا من نتائج القياسين لحظة إصداره. الأرقام وصفية للدفعة، ولا يُعرض فرق خام دون هامش خطأ القياس.',
+    },
+    body,
+  };
+}

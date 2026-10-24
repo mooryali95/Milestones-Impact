@@ -111,7 +111,9 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
       'coord.auth-verify': b.code === '123456' ? { success: true, token: 'x'.repeat(40), coordinator: { full_name: 'منسقة' }, org: { name: 'وزارة التجربة' } } : { success: false, message: 'الرمز غير صحيح', code: 'code' },
       'coord.dashboard': { success: true, org: { name: 'وزارة التجربة', seats: 10 }, permissions: { scores: false, contact: false, export: true },
         kpis: { total: 2, joined_week: 1, active_week: 1, approved: 1, completed: 0, avg_progress: 25 }, funnel: { registered: 2, approved: 1 }, by_track: { M1I1L2: 1 }, by_via: { link: 2 },
-        participants: [{ id: 'p1', full_name: 'سارة', job_title: 'مديرة', status: 'enrolled', track: 'M1I1L2', track_title: 'مسار البداية', approved: true, progress: 40 }, { id: 'p2', full_name: 'عمر', status: 'registered', progress: 10 }] },
+        participants: [{ id: 'p1', full_name: 'سارة', job_title: 'مديرة', status: 'enrolled', track: 'M1I1L2', track_title: 'مسار البداية', approved: true, progress: 40 }, { id: 'p2', full_name: 'عمر', status: 'registered', progress: 10 }],
+        impact: { counts: { participants: 2, baseline: 2, post: 1, paired: 1 }, caution: 'العدد 1 أقل من 20', transfer: [], participants: [],
+          cohort: { milestone: { n: 1, pre: 40, post: 62, diff: 22, reliable_up: 1, verdicts: {} } } } },
       'coord.logout': { success: true },
       'coord.me': { success: true, coordinator: { full_name: 'منسقة' }, org: { name: 'وزارة التجربة' } },
     }[b.action];
@@ -126,6 +128,13 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
   await expect(page.getByRole('heading', { name: 'وزارة التجربة' })).toBeVisible();
   await expect(page.getByText('مسار البداية').first()).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'التواصل' })).toHaveCount(0);
+  // أثر الجهة: أرقام الخادم كما هي، وزر التقرير مع صلاحية التصدير
+  await expect(page.getByRole('heading', { name: 'أثر البرنامج على مشاركيكم' })).toBeVisible();
+  await expect(page.locator('.op-impact')).toContainText('+22');
+  await expect(page.locator('.op-impact')).toContainText('1 من 1');
+  const [doc] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'تقرير الأثر PDF' }).click()]);
+  await expect(doc.getByText('تقرير أثر وزارة التجربة')).toBeVisible();
+  await doc.close();
   await page.getByLabel('الترتيب').selectOption('progress');
   await expect(page.locator('.op-table tbody tr').first()).toContainText('سارة');
   await page.reload();
