@@ -37,7 +37,7 @@ test('الإدارة: سجل الشهادات وإلغاء شهادة بسبب',
     }[b.action];
     await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
   });
-  await page.goto('http://localhost:4303/next/');
+  await page.goto('http://localhost:4303/');
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
@@ -68,7 +68,7 @@ test('شهادة الجهة: يُحفظ التخصيص وحده، والفارغ
     }[b.action];
     await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
   });
-  await page.goto('http://localhost:4303/next/');
+  await page.goto('http://localhost:4303/');
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();

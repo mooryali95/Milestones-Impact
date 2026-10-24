@@ -3,16 +3,15 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 
 // ════════════════════════════════════════════════════════════════
-// لوحة الإدارة الجديدة (React) — تُبنى إلى admin/next/
+// لوحة الإدارة (React) على admin.sunkvalue.com، تُبنى إلى admin/
 // ════════════════════════════════════════════════════════════════
-// تعمل بجانب اللوحة القديمة على admin.sunkvalue.com/next/ حتى يكتمل
-// نقل كل التبويبات، ثم تحل محلها. الجلسة مشتركة بين اللوحتين لأنها
-// على النطاق نفسه (sessionStorage: mi_admin_v3).
-// المخرجات مُودعة في Git مثل تطبيق القادة.
+// mi-admin ينشر admin/ كما هو بلا خطوة بناء، فالمخرجات مُودعة في Git
+// مثل تطبيق القادة. الملفات الثابتة (_headers و_redirects والأيقونات
+// والشعار) في admin-app/public/ وتُنسخ مع كل بناء.
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
-  base: '/next/',
+  base: '/',
   plugins: [react()],
-  build: { outDir: '../admin/next', emptyOutDir: true, sourcemap: false },
+  build: { outDir: '../admin', emptyOutDir: true, sourcemap: false },
   server: { port: 5175 },
 });

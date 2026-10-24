@@ -1,8 +1,8 @@
-// لوحة الإدارة الجديدة (React) على /next/: الدخول وطلبات التواصل والإعدادات.
+// لوحة الإدارة (React): الدخول وطلبات التواصل والإعدادات.
 // الخلفية مُحاكاة بالكامل؛ كل طلب يُسجَّل للتحقق مما أُرسل.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:4303/next/';
+const BASE = 'http://localhost:4303/';
 const USER = { name: 'مدير الاختبار', email: 'a@mi.test', role_id: 'super_admin', totp_enabled: false };
 const contacts = Array.from({ length: 23 }, (_, i) => ({
   id: `c${i}`, name: i === 0 ? 'سارة الأولى' : `متواصل ${i}`, email: `p${i}@x.com`, phone: '0500000000',
@@ -54,7 +54,7 @@ test('الدخول برمز خاطئ يعرض الخطأ، والصحيح يفت
   await page.getByLabel('الرمز المكوّن من 6 أرقام').fill('123456');
   await page.getByRole('button', { name: 'تأكيد الدخول' }).click();
   await expect(page.getByText('مدير الاختبار')).toBeVisible();
-  // الجلسة نفسها التي تقرؤها اللوحة القديمة
+  // الجلسة محفوظة فتبقى بعد التحديث
   const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('mi_admin_v3')));
   expect(saved.token).toBe('t1');
   await page.reload();

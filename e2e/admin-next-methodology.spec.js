@@ -1,7 +1,7 @@
 // لوحة الإدارة الجديدة: المنهجية والمسارات ونظرة عامة (الخطوة ٤). الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:4303/next/';
+const BASE = 'http://localhost:4303/';
 const catalog = {
   success: true,
   journey_stages: [

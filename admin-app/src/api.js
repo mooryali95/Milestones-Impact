@@ -8,7 +8,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
 const ADMIN_API = `${SUPABASE_URL}/functions/v1/admin-api`;
 export const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
 
-// نفس مفتاح اللوحة القديمة ومدتها، فالدخول في إحداهما يفتح الأخرى
+// مفتاح الجلسة ومدتها (مفتاح v3 ثابت فلا تنتهي جلسات المدراء الحالية)
 const KEY = 'mi_admin_v3';
 const TTL = 8 * 60 * 60 * 1000;
 export const session = {
@@ -33,19 +33,30 @@ export const session = {
 let onExpired = () => {};
 export const setExpiredHandler = (fn) => { onExpired = fn; };
 
+// إقلاع الدالة يرد 502/503/504 مؤقتًا قبل أن يعمل الإجراء، فتُعاد المحاولة دون أن يراها المدير
+const BUSY = [502, 503, 504];
+export async function post(url, payload, fail) {
+  for (let i = 1; ; i++) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        body: JSON.stringify(payload),
+      });
+      if (BUSY.includes(r.status)) {
+        if (i < 3) { await new Promise((ok) => setTimeout(ok, 800 * i)); continue; }
+        return { success: false, message: 'الخادم مشغول لحظيًا، حدّث الصفحة بعد ثوانٍ' };
+      }
+      return await r.json();
+    } catch {
+      return { success: false, message: fail };
+    }
+  }
+}
+
 export async function call(action, body = {}) {
   const token = session.load()?.token;
-  let res;
-  try {
-    const r = await fetch(ADMIN_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: JSON.stringify({ action, ...(token ? { token } : {}), ...body }),
-    });
-    res = await r.json();
-  } catch {
-    res = { success: false, message: 'خطأ في الاتصال بالخادم' };
-  }
+  const res = await post(ADMIN_API, { action, ...(token ? { token } : {}), ...body }, 'خطأ في الاتصال بالخادم');
   if (!res.success && token && res.message?.includes('الجلسة')) { session.clear(); onExpired(); }
   return res;
 }

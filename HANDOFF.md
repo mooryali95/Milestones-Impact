@@ -10,7 +10,7 @@
 | `mi.sunkvalue.com` | `home/` | `mi-home` | صفحات ثابتة بلا بناء. تشمل `/leaders/` و`/projects/` و`/governance/` و`/assessment/` |
 | `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | منصة القادة: ناتج بناء `leaders-app/` مُودع في `leaders/`. أعد البناء والإيداع بعد أي تعديل |
 | `matrix.sunkvalue.com` | جذر المستودع (`src/`, `index.html`, `public/`) | `mi-matrix` | تطبيق React بـ Vite، يُبنى إلى `build/` |
-| لوحة الإدارة | `admin/` | `mi-admin` | صفحة واحدة `admin/index.html` |
+| `admin.sunkvalue.com` | `admin/` | `mi-admin` | لوحة React: ناتج بناء `admin-app/` مُودع في `admin/`. أعد البناء والإيداع بعد أي تعديل |
 | SSPDF | `SSPDF/` | `mi-sspdf` | تطبيق Vite مستقل |
 
 الخلفية: Supabase (المشروع `eormhcupwgwpllhrfxxg`) مع دوال حافة: `admin-api`, `send-otp`, `user-api`, `sspdf-auth`.

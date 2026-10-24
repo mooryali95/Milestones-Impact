@@ -1,7 +1,7 @@
 // منسق الجهة: نموذج الجهة، وتحكم المدير، وبوابة المنسق. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
-const ADMIN = 'http://localhost:4303/next/';
+const ADMIN = 'http://localhost:4303/';
 const PORTAL = 'http://localhost:4304/org';
 const org = { id: 'o1', name: 'وزارة التجربة', short_name: 'وت', color: '#12414E', invite_code: 'wt01', seats: 10, status: 'active', domains: [], stats: { total: 0, registered: 0, pending_approval: 0, active_week: 0 } };
 const coord = { id: 'c1', organization_id: 'o1', email: 'coord@wt.gov.sa', full_name: 'منسقة الجهة', status: 'active', permissions: { scores: false, contact: false, export: true }, weekly_report: true, last_login_at: '2026-10-20', invited_at: '2026-10-01' };

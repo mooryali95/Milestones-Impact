@@ -1,7 +1,7 @@
 // لوحة الإدارة الجديدة: استوديو كتاب القائد (الخطوة ٥). الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:4303/next/';
+const BASE = 'http://localhost:4303/';
 const ch = { id: 'h1', dimension: 'milestone', sort: 1, title_ar: 'المعلم', min_level: 'beginner', body_md: '## المفهوم\nنص للجميع\n:::min=advanced\nفقرة الاحترافي\n:::', reflection_ar: 'ما معلمك؟', quiz_md: 'س: ما المعلم؟\n- تاريخ\n* نقطة قرار\nلماذا: لأنه قرار' };
 const model = { id: 'm1', dimension: 'impact', sort: 1, title_ar: 'سجل المنافع', icon: '◆', points: 30, active: true, min_level: 'beginner', fields: [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true }] };
 const catalog = {
