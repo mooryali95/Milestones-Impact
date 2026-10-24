@@ -1,7 +1,7 @@
 // لوحة الإدارة الجديدة: تطبيق القادة (المشاركون والجهات). الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:4303/next/';
+const BASE = 'http://localhost:4303/';
 const pl = (m, i, l, ok = true) => [['milestone', m], ['impact', i], ['leadership', l]].map(([dimension, level]) => ({ dimension, level, approved_at: ok ? '2026-10-01' : null }));
 const people = [
   { id: 'p1', full_name: 'سارة الأحمد', email: 's@x.com', job_title: 'مديرة', organization_id: 'o1', status: 'pending_approval', placements: pl('beginner', 'beginner', 'intermediate', false), created_at: '2026-10-01' },

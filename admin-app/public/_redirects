@@ -1,0 +1,6 @@
+# admin.sunkvalue.com
+# الرابط القديم للوحة الجديدة يتحول إلى الجذر
+/next     /         301
+/next/*   /:splat   301
+# صفحة واحدة: كل مسار يُخدم من index.html
+/*        /index.html    200

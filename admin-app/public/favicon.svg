@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Milestone Impact">
+  <title>Milestone Impact</title>
+  <rect width="512" height="512" rx="112" fill="#0B272F"/>
+  <rect x="222" y="228" width="68" height="196" rx="34" fill="#F4EFE6"/>
+  <rect x="210" y="96" width="92" height="92" rx="8" transform="rotate(45 256 142)" fill="#C9973F"/>
+</svg>

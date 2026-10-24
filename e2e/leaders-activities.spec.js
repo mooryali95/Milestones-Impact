@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 
 const APP = 'http://localhost:4304/';
-const ADMIN = 'http://localhost:4303/next/';
+const ADMIN = 'http://localhost:4303/';
 const SHOTS = process.env.SHOTS_DIR;
 const later = (h) => new Date(Date.now() + h * 36e5).toISOString();
 

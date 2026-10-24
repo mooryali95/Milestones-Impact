@@ -1,7 +1,7 @@
 // لوحة الإدارة: البرامج ونسخها والدفعات. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://localhost:4303/next/';
+const BASE = 'http://localhost:4303/';
 const versions = [
   { id: 'v2', program_id: 'pa', number: 2, label: 'بعد مراجعة أكتوبر', created_at: '2026-10-20', created_by: 'a@x' },
   { id: 'v1', program_id: 'pa', number: 1, label: 'الإطلاق', created_at: '2026-09-01' },

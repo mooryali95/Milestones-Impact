@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
-// السياقات المنقولة تُعرض هنا، وغير المنقولة بعد تفتح اللوحة القديمة.
+// السياقات: طلبات التواصل وتطبيق القادة، ورابط خارجي لمصفوفة التأثير.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
@@ -29,7 +29,7 @@ function Dashboard({ user, onUser, onLogout }) {
         <div className="dash-header-left">
           <div className="mi-logo"><img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" /></div>
           <div className="dash-header-sep" />
-          <div className="dash-header-title">لوحة الإدارة<span className="next-badge">الإصدار الجديد</span></div>
+          <div className="dash-header-title">لوحة الإدارة</div>
         </div>
         <div className="dash-header-right">
           <div className="dash-user">

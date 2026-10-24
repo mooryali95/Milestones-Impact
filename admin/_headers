@@ -6,6 +6,12 @@
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
-# ملفات وحدة القادة بلا رقم إصدار: يتحقق المتصفح من النسخة في كل زيارة فيرى آخر تحديث فورًا
-/assets/leaders-admin.*
+# الصفحة تُفحص في كل زيارة فتظهر آخر نسخة فورًا، وملفات البناء تحمل بصمة في اسمها فتُخزَّن طويلًا
+/
   Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/assets/*.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/*.css
+  Cache-Control: public, max-age=31536000, immutable

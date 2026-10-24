@@ -2,8 +2,8 @@
 // تطبيق القادة: الاتصال بـ leaders-api والمسميات والحسابات المشتركة
 // ════════════════════════════════════════════════════════════════
 // توكن جلسة الإدارة نفسه يُرسل إلى leaders-api، فتتحقق منه في api_sessions.
-import { SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
-import { session } from './api.js';
+import { SUPABASE_URL } from '../../src/lib/api.js';
+import { post, session } from './api.js';
 
 const API = `${SUPABASE_URL}/functions/v1/leaders-api`;
 
@@ -11,16 +11,9 @@ let onExpired = () => {};
 export const setLeadersExpired = (fn) => { onExpired = fn; };
 
 export async function L(action, body = {}) {
-  try {
-    const r = await fetch(API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: JSON.stringify({ action, token: session.load()?.token, ...body }),
-    });
-    const d = await r.json();
-    if (!d.success && d.code === 'session') { session.clear(); onExpired(); }
-    return d;
-  } catch { return { success: false, message: 'تعذّر الاتصال بالخادم' }; }
+  const d = await post(API, { action, token: session.load()?.token, ...body }, 'تعذّر الاتصال بالخادم');
+  if (!d.success && d.code === 'session') { session.clear(); onExpired(); }
+  return d;
 }
 
 export const DIM = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };

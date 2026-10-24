@@ -119,7 +119,7 @@ test('الإدارة: تقرير الأثر قبل وبعد', async ({ page }) =
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
-  await page.goto('http://localhost:4303/next/');
+  await page.goto('http://localhost:4303/');
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();

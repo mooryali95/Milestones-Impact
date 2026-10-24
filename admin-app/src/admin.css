@@ -1153,9 +1153,8 @@ a { text-decoration: none; color: inherit; }
 .mid-btn.ok{background:var(--petrol,#0b3c52);color:#fff;border-color:transparent}
 .mid-btn.danger{background:#b3261e;color:#fff;border-color:transparent}
 :focus-visible{outline:2px solid var(--gold,#C79A4B);outline-offset:2px}
-.next-badge{font-size:.62rem;padding:2px 8px;border-radius:99px;background:rgba(199,154,75,.18);color:var(--gold,#C79A4B);margin-inline-start:8px}
 
-/* ── شريط السياقات (من leaders-admin.css) ── */
+/* ── شريط السياقات ── */
 .ctx-bar {
   display: flex; gap: 4px; padding: 0 32px; background: var(--petrol-mid);
   border-bottom: 1px solid rgba(199,154,75,.18); overflow-x: auto;

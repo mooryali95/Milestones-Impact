@@ -11,7 +11,7 @@ import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { stars } from '../handbook.js';
 
-// الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز، بنفس مفتاح اللوحة القديمة
+// الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز
 const SAVED_KEY = 'mi_admin_list_filters';
 const loadSaved = () => { try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || {}; } catch { return {}; } };
 const saveSaved = (f) => { try { localStorage.setItem(SAVED_KEY, JSON.stringify(f)); } catch { /* */ } };
