@@ -10,11 +10,12 @@ import Overview from './Overview.jsx';
 import Tracks from './Tracks.jsx';
 import { Assessment, Journey, Levels } from './Methodology.jsx';
 import Handbook from './Handbook.jsx';
+import Activities from './Activities.jsx';
 import { Spinner } from '../ui.jsx';
 
 const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['journey', 'الرحلة والمتطلبات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
+  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والتوجيه'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook']);
@@ -50,6 +51,7 @@ export default function Leaders({ canWrite }) {
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => { setTrack(k); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} />;
+  else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;
   else if (tab === 'levels') body = <Levels key={catalog.placement_model?.[0]?.updated_at || 'm'} {...meth} />;

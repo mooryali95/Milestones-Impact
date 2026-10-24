@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
+import { cleanConfig, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 
@@ -298,7 +298,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
                                  'mode', 'mode_note_ar', 'builds_on_ar'] },
   stage_requirements: { table: 'stage_requirements', key: ['id'], sortable: true,
-                        fields: ['stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort'] },
+                        fields: ['stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
   questions:          { table: 'questions', key: ['id'], sortable: true,
                         fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort'] },
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
@@ -554,6 +554,15 @@ export async function save(a: Admin, b: Body) {
       }
       row.domains = list;
     }
+  }
+
+  // إعداد النشاط الموثق: حقول مضبوطة بحسب النوع، مع حفظ توفر الاتصال الفوري
+  if (b.entity === 'stage_requirements' && ('config' in row || 'kind' in row)) {
+    const prev = isNew ? null : (await db.from('stage_requirements').select('kind, config').eq('id', b.row.id).maybeSingle()).data;
+    const kind = row.kind || prev?.kind;
+    try { row.config = cleanConfig(kind, 'config' in row ? row.config : prev?.config, prev?.config || {}); }
+    catch (e) { throw new Fail((e as Error).message); }
+    if (VERIFIED_KINDS.includes(kind)) row.needs_review = false;
   }
 
   if (b.entity === 'learning_models') {

@@ -11,6 +11,7 @@
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
+//             handbook.ping · video.ping · workshop.checkin · coaching.instant (الأنشطة الموثقة)
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -19,6 +20,7 @@ import * as K from './passkeys.ts';
 import * as A from './admin.ts';
 import * as C from './coordinator.ts';
 import * as Z from './certificates.ts';
+import * as V from './activities.ts';
 
 type Body = Record<string, any>;
 
@@ -60,6 +62,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'models.save': (p, b) => P.modelSave(p, b),
   'achievements': (p) => P.achievements(p),
   'certificate': (p) => Z.mine(p),
+  'handbook.ping': (p, b) => V.readingPing(p, b),
+  'video.ping': (p, b) => V.videoPing(p, b),
+  'workshop.checkin': (p, b, _s, ctx) => V.workshopCheckin(p, b, ctx),
+  'coaching.instant': (p, b) => V.coachingInstant(p, b),
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
@@ -111,6 +117,15 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.cert-preview': (_a, b) => Z.preview(b),
   'admin.cert-settings': () => Z.settingsGet(),
   'admin.cert-settings-save': (a, b) => A.writer(a, Z.settingsSave, b),
+  'admin.activities': () => V.overview(),
+  'admin.workshop-save': (a, b) => A.writer(a, V.workshopSave, b),
+  'admin.workshop-delete': (a, b) => A.writer(a, V.workshopDelete, b),
+  'admin.workshop-qr': (_a, b) => V.workshopQr(b),
+  'admin.workshop-attendance': (_a, b) => V.workshopAttendance(b),
+  'admin.workshop-mark': (a, b) => A.writer(a, V.workshopMark, b),
+  'admin.coaching-mark': (a, b) => A.writer(a, V.coachingMark, b),
+  'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
+  'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),
 };
 
 Deno.serve(async (req) => {

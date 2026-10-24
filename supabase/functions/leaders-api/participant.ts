@@ -7,7 +7,9 @@ import {
 import {
   AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle,
+  VERIFIED_KINDS, readingVerdict,
 } from './logic.js';
+import { evidenceFor, participantItem } from './activities.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -227,7 +229,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     reportIssued: (reports.data || []).length > 0,
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
-  const journey = buildJourney({ stages: stages.data || [], requirements: reqs.data || [], progress: prog, levels, state });
+  const activity = await evidenceFor(p, reqs.data || [], levels, approved);
+  const journey = buildJourney({ stages: stages.data || [], requirements: reqs.data || [], progress: prog, levels, state, activity });
   const track = trackView(await trackFor(levels), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
@@ -247,7 +250,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       })),
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
-      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => it) })),
+      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
     progress: journeyProgress(journey),
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
@@ -422,6 +425,7 @@ export async function requirementUpdate(p: any, b: Body) {
   const r = must(await db.from('stage_requirements').select('*').eq('id', String(b.requirement_id)).maybeSingle());
   if (!r || !r.active) throw new Fail('متطلب غير موجود', 404);
   if (r.kind === 'auto' || r.kind === 'meeting' || r.code in AUTO_CHECKS) throw new Fail('هذا المتطلب يُحدَّث تلقائيًا أو من المستشار');
+  if (VERIFIED_KINDS.includes(r.kind)) throw new Fail('هذا النشاط يُوثَّق بإنجازه الفعلي لا بالتأشير');
   const state = await mePayload(p);
   const stage = state.journey.find((s: any) => s.key === r.stage_key);
   if (!stage || stage.status === 'locked') throw new Fail('هذه المرحلة لم تُفتح بعد', 400, 'locked');
@@ -510,9 +514,13 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   const m = must(await db.from('handbook_modules').select('*').eq('id', String(b.id)).maybeSingle());
   if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
   await db.from('handbook_views').insert({ participant_id: p.id, module_id: m.id, ip: ctx.ip, user_agent: ctx.ua });
-  const { data: done } = await db.from('handbook_progress').select('*').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
+  const [{ data: done }, { data: rd }] = await Promise.all([
+    db.from('handbook_progress').select('*').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle(),
+    db.from('reading_progress').select('words, active_seconds, slices').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle(),
+  ]);
   return {
     success: true,
+    reading: readingVerdict(rd),
     chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) },
     // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
     quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),

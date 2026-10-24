@@ -278,6 +278,60 @@ function Ring({ value, total, size = 64 }) {
 }
 
 // مراجعة الباب: سؤال تأمل واختبار قصير، والنقاط تُمنح أول مرة
+// ── تتبع القراءة الفعلية ──
+// الباب لوحة طويلة تُقسم إلى SLICES شريحة. كل ثانية والصفحة ظاهرة والقارئ
+// نشط (تمرير أو لمس أو مفتاح خلال آخر دقيقة) تُوزع الثانية على الشرائح
+// الظاهرة في وسط الشاشة. ترسل كل 15 ثانية، والخادم يسقفها بالزمن الفعلي.
+const SLICES = 20;
+const IDLE_MS = 60_000;
+function useReadingTracker(chapterId, canvasRef, shield, onVerdict) {
+  const shieldRef = useRef(shield);
+  shieldRef.current = shield;
+  useEffect(() => {
+    if (!chapterId) return undefined;
+    let acc = new Array(SLICES).fill(0);
+    let lastActive = Date.now();
+    const poke = () => { lastActive = Date.now(); };
+    const evs = ['scroll', 'wheel', 'touchstart', 'touchmove', 'keydown', 'mousemove', 'pointerdown'];
+    evs.forEach((e) => window.addEventListener(e, poke, { passive: true }));
+    const tick = setInterval(() => {
+      const c = canvasRef.current;
+      if (!c || document.hidden || shieldRef.current || Date.now() - lastActive > IDLE_MS) return;
+      const r = c.getBoundingClientRect();
+      if (!r.height) return;
+      const top = window.innerHeight * 0.15, bottom = window.innerHeight * 0.85;
+      const from = Math.max(0, Math.floor(((top - r.top) / r.height) * SLICES));
+      const to = Math.min(SLICES - 1, Math.floor(((bottom - r.top) / r.height) * SLICES));
+      if (to < from || bottom < r.top || top > r.bottom) return;
+      for (let i = from; i <= to; i++) acc[i] += 1 / (to - from + 1);
+    }, 1000);
+    const flush = async () => {
+      const slices = acc.map((x) => Math.round(x * 10) / 10);
+      if (!slices.some((x) => x > 0)) return;
+      acc = new Array(SLICES).fill(0);
+      const res = await call('handbook.ping', { id: chapterId, slices });
+      if (res.success) onVerdict(res.reading);
+    };
+    const ping = setInterval(flush, 15000);
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, poke));
+      clearInterval(tick); clearInterval(ping);
+      flush();
+    };
+  }, [chapterId]);
+}
+
+const READ_LABEL = { read: 'قراءة مكتملة', skimmed: 'تصفّح سريع، تمهّل ليُحتسب', partial: 'قراءة جارية', unread: 'لم تبدأ القراءة' };
+function ReadMeter({ v }) {
+  if (!v) return null;
+  return (
+    <div className={`read-meter ${v.state}`} title="يُحتسب الباب في رحلتك حين تقرؤه بتمعن">
+      <span>{v.state === 'read' ? '✓ ' : ''}{READ_LABEL[v.state]}</span>
+      {v.state !== 'read' && <i><b style={{ width: `${v.pct}%` }} /></i>}
+    </div>
+  );
+}
+
 function Review({ data, onDone }) {
   const [answers, setAnswers] = useState(() => data.quiz.map(() => null));
   const [reflection, setReflection] = useState(data.done?.reflection || '');
@@ -357,8 +411,10 @@ export default function Handbook({ me, onBack }) {
   const [loading, setLoading] = useState(false);
   const [shield, setShield] = useState(false);
   const [toast, setToast] = useState('');
+  const [reading, setReading] = useState(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  useReadingTracker(tab === 'read' && data && data.chapter.id === current ? current : null, canvasRef, shield || loading, setReading);
 
   const loadToc = useCallback(async (first) => {
     const r = await call('handbook.toc');
@@ -382,6 +438,7 @@ export default function Handbook({ me, onBack }) {
       if (!r.success) return setError(r.message);
       setError('');
       setData(r);
+      setReading(r.reading || null);
       lastRead.set({ id: current, title: r.chapter.title });
       document.querySelector('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })();
@@ -550,6 +607,7 @@ export default function Handbook({ me, onBack }) {
               <div className="page-head">
                 <span>{PART[data.chapter.dimension]} · {dimOf(data.chapter.dimension).title}</span>
                 <span>الباب {pad(numInPart(list[idx]))} · {idx + 1} من {list.length}</span>
+                <ReadMeter v={reading} />
               </div>
             )}
             {current === COVER && (

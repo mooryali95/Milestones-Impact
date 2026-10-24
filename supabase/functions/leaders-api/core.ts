@@ -21,6 +21,9 @@ export const CONFIG = {
   resendKey: env('RESEND_API_KEY'),
   // سر يرسله المجدول (pg_cron) لتشغيل التذكيرات؛ بدونه لا يعمل الإجراء
   cronSecret: env('LEADERS_CRON_SECRET'),
+  // توقيع webhook منصات الحجز (دالة leaders-hooks)
+  calcomSecret: env('LEADERS_CALCOM_SECRET'),
+  calendlyKey: env('LEADERS_CALENDLY_KEY'),
   mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
   sessionDays: 30,
   codeMinutes: 15,
