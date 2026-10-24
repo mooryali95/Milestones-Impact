@@ -5,6 +5,7 @@
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
 import { audit, CONFIG, db, Fail, hash, must, randomToken, raterMail, sendMail } from './core.ts';
 import { requirePostOpen } from './participant.ts';
+import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, DIMENSIONS, effectLabel, IMPACT_DEFAULTS, isEmail, normalizeEmail, pairedStats, raterPercents,
 } from './logic.js';
@@ -94,9 +95,10 @@ async function raterData(ids: string[] | null) {
 }
 
 async function evidenceDone(ids: string[] | null) {
-  const { data: req } = await db.from('stage_requirements').select('id').eq('code', 'E-CASE').maybeSingle();
-  if (!req) return new Set<string>();
-  let q = db.from('participant_requirements').select('participant_id').eq('requirement_id', req.id).eq('status', 'done');
+  // E-CASE في كل البرامج: لكل برنامج متطلبه بالرمز نفسه
+  const { data: reqs } = await db.from('stage_requirements').select('id').eq('code', 'E-CASE');
+  if (!reqs?.length) return new Set<string>();
+  let q = db.from('participant_requirements').select('participant_id').in('requirement_id', reqs.map((r: any) => r.id)).eq('status', 'done');
   if (ids) q = q.in('participant_id', ids);
   return new Set(((must(await q) as any[]) ?? []).map((r) => r.participant_id));
 }
@@ -227,10 +229,11 @@ export async function raterSubmit(b: Body) {
   must(await db.from('raters').update({ answers, comment, status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', r.id));
   // إفادة المدير في الرحلة تكتمل بتقديره المنظم
   if (r.relation === 'manager') {
-    const { data: req } = await db.from('stage_requirements').select('id').eq('code', 'E-MGR').maybeSingle();
-    if (req) {
+    const { data: who } = await db.from('participants').select('id, organization_id').eq('id', r.participant_id).maybeSingle();
+    const reqId = who ? await requirementIdByCode(who, 'E-MGR') : null;
+    if (reqId) {
       await db.from('participant_requirements').upsert({
-        participant_id: r.participant_id, requirement_id: req.id, status: 'done',
+        participant_id: r.participant_id, requirement_id: reqId, status: 'done',
         note: 'اكتملت بتقدير المدير المباشر في المنصة', completed_at: new Date().toISOString(),
       });
     }

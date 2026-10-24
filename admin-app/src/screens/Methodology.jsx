@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كلها تقرأ من admin.catalog وتكتب عبر admin.save / admin.delete / admin.reorder.
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
 import {
   CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, STAGE_FIELDS, TIER,
@@ -31,7 +31,7 @@ function Move({ catalog, entity, id, reload, canWrite }) {
   const go = async (dir) => {
     const ids = reorderIds(catalog[entity], entity, id, dir);
     if (!ids) return;
-    const r = await L('admin.reorder', { entity, ids });
+    const r = await L('admin.reorder', { entity, ids, program_id: catalog.program_id });
     if (!r.success) return toast(r.message);
     reload();
   };
@@ -44,14 +44,31 @@ function Move({ catalog, entity, id, reload, canWrite }) {
 }
 
 // ══ الرحلة والمتطلبات ══
-export function Journey({ catalog, reload, canWrite }) {
+// برامج الرحلة: يختار المشرف أيها يحرر
+function ProgramBar({ current, onProgram }) {
+  const [list, setList] = useState(null);
+  useEffect(() => { L('admin.programs').then((r) => setList(r.success ? r.programs.filter((p) => !p.archived_at || p.id === current) : [])); }, [current]);
+  if (!list || list.length < 2) return null;
+  return (
+    <label className="la-row">
+      <span>البرنامج</span>
+      <select value={current || ''} onChange={(e) => onProgram(e.target.value)} aria-label="البرنامج">
+        {list.map((p) => <option key={p.id} value={p.id}>{p.name}{p.is_default ? ' (الافتراضي)' : ''}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
+  const pid = catalog.program_id;
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
   return (
     <>
-      <p className="la-muted">ما تحرره هنا يظهر للمشارك مباشرة في رحلته. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى.</p>
+      {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
+      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى.</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>
           <h3 className="la-phase">{phl}</h3>
@@ -61,7 +78,7 @@ export function Journey({ catalog, reload, canWrite }) {
                 <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{s.duration_label}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
                   <Move {...mv} entity="journey_stages" id={s.key} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: STAGE_FIELDS, values: s, onSave: save('journey_stages', { key: s.key }) })}>تحرير</button>}
+                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: STAGE_FIELDS, values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
                 </div>
               </div>
               {s.description_ar && <p className="la-muted">{s.description_ar}</p>}
@@ -85,7 +102,7 @@ export function Journey({ catalog, reload, canWrite }) {
                 <button className="la-link" onClick={() => edit({
                   title: 'متطلب جديد', fields: reqFields(stages),
                   values: reqToForm({ stage_key: s.key, kind: 'check', required: true, active: true }),
-                  onSave: (v) => save('stage_requirements', { sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
+                  onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
                 })}>+ متطلب</button>
               )}
             </section>

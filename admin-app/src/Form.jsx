@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // نافذة نموذج عامة: حقول نصية ورقمية وقوائم ومربعات نص
 // ════════════════════════════════════════════════════════════════
-// fields: [{ name, label, type?: text|number|select|textarea|email|check|options|datetime, options?, empty?, rows?, dir?, show?, help? }]
+// fields: [{ name, label, type?: text|number|select|textarea|email|check|options|datetime|date, options?, empty?, rows?, dir?, show?, help? }]
 // help ← نص إرشاد تحت عنوان الحقل، أو دالة تعيده بحسب القيم الحالية
 // show(قيم) ← يظهر الحقل ويُحفظ فقط حين تعيد true (حقول تتبع نوعًا مختارًا) · datetime ← تاريخ ووقت محليان يُحفظان ISO
 // check ← قيمة منطقية · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
@@ -90,7 +90,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               {f.type === 'select' ? (
                 <select {...common}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               ) : f.type === 'textarea' ? <textarea {...common} rows={f.rows || 3} />
-                : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : f.type === 'datetime' ? 'datetime-local' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
+                : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : f.type === 'datetime' ? 'datetime-local' : f.type === 'date' ? 'date' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
             </label>
           );
         })}

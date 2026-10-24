@@ -10,6 +10,7 @@ import {
   VERIFIED_KINDS, readingVerdict,
 } from './logic.js';
 import { evidenceFor, participantItem } from './activities.ts';
+import { journeyDefinition, requirementFor } from './programs.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -206,10 +207,9 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 };
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [placements, stages, reqs, progress, assessments, passkeys, cells, reports] = await Promise.all([
+  const [placements, def, progress, assessments, passkeys, cells, reports] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
-    db.from('journey_stages').select('*').eq('active', true),
-    db.from('stage_requirements').select('*').eq('active', true),
+    journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
@@ -229,8 +229,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     reportIssued: (reports.data || []).length > 0,
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
-  const activity = await evidenceFor(p, reqs.data || [], levels, approved);
-  const journey = buildJourney({ stages: stages.data || [], requirements: reqs.data || [], progress: prog, levels, state, activity });
+  const activity = await evidenceFor(p, def.requirements, levels, approved, def.cohort?.id || null);
+  const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity });
   const track = trackView(await trackFor(levels), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
@@ -252,6 +252,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
     progress: journeyProgress(journey),
+    // الدفعة: اسمها وتواريخها للمشارك، ومصدرها والبرنامج ونسخته للإدارة
+    cohort: !def.cohort || def.cohort.is_default ? null : { name: def.cohort.name, starts_on: def.cohort.starts_on, ends_on: def.cohort.ends_on },
+    ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
   };
@@ -463,8 +466,7 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
 // ── 6. متطلبات الرحلة ──
 // المشارك يُنجز ما يخصه فقط، في مرحلته الحالية أو ما قبلها.
 export async function requirementUpdate(p: any, b: Body) {
-  const r = must(await db.from('stage_requirements').select('*').eq('id', String(b.requirement_id)).maybeSingle());
-  if (!r || !r.active) throw new Fail('متطلب غير موجود', 404);
+  const { r } = await requirementFor(p, b.requirement_id).catch(() => { throw new Fail('متطلب غير موجود', 404); });
   if (r.kind === 'auto' || r.kind === 'meeting' || r.code in AUTO_CHECKS) throw new Fail('هذا المتطلب يُحدَّث تلقائيًا أو من المستشار');
   if (VERIFIED_KINDS.includes(r.kind)) throw new Fail('هذا النشاط يُوثَّق بإنجازه الفعلي لا بالتأشير');
   const state = await mePayload(p);

@@ -23,6 +23,7 @@ import * as C from './coordinator.ts';
 import * as Z from './certificates.ts';
 import * as V from './activities.ts';
 import * as I from './impact.ts';
+import * as G from './programs.ts';
 
 type Body = Record<string, any>;
 
@@ -94,7 +95,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.reset-assessment': A.resetAssessment,
   'admin.review': A.reviewRequirement,
   'admin.create-participant': A.createParticipant,
-  'admin.catalog': () => A.catalog(),
+  'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),
@@ -135,6 +136,16 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
   'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),
   'admin.impact': (_a, b) => I.adminReport(b),
+  'admin.programs': () => G.list(),
+  'admin.program': (_a, b) => G.program(b),
+  'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
+  'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
+  'admin.program-version': (a, b) => A.writer(a, G.programPublish, b),
+  'admin.program-restore': (a, b) => A.writer(a, G.programRestore, b),
+  'admin.program-compare': (_a, b) => G.programCompare(b),
+  'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
+  'admin.cohort-upgrade': (a, b) => A.writer(a, G.cohortUpgrade, b),
+  'admin.cohort-enroll': (a, b) => A.writer(a, G.cohortEnroll, b),
 };
 
 Deno.serve(async (req) => {

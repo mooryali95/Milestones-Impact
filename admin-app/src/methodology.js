@@ -24,8 +24,8 @@ export const KIND_HELP = {
   workshop: 'ورشة أو محاضرة أو لقاء جماعي. تضيف مواعيده من «الحضور والجلسات»، ولكل موعد طريقته: حضوري بمكان، أو عن بعد برابط اجتماع.',
   coaching: 'توجيه أو استشارة فردية. يحجز المشارك من رابط Cal.com أو Calendly، أو يتصل فورًا حين تكون متاحًا، وتؤكد أنت حضوره.',
 };
-const VERIFY = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
-const COACH_MODE = { online: 'عن بعد', in_person: 'حضوري', any: 'حضوري أو عن بعد حسب الحجز' };
+export const VERIFY = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
+export const COACH_MODE = { online: 'عن بعد', in_person: 'حضوري', any: 'حضوري أو عن بعد حسب الحجز' };
 // أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك
 export const VERIFIED = new Set(['reading', 'video', 'workshop', 'coaching']);
 const READ_SCOPE = { all: 'كل أبواب مسار المشارك', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
@@ -163,4 +163,60 @@ export function reorderIds(rows, entity, id, dir) {
   if (j < 0 || j >= list.length) return null;
   [list[i], list[j]] = [list[j], list[i]];
   return list.map((x) => x[key]);
+}
+
+// ══ البرامج والدفعات ══
+export const COHORT_STATUS = { planned: 'مخطط لها', open: 'التسجيل مفتوح', running: 'جارية', closed: 'مغلقة' };
+const INHERIT = 'كما في البرنامج';
+
+// حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
+  const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
+  const base = [
+    { name: 'name', label: 'اسم الدفعة' },
+    ...(isDefault ? [] : [{ name: 'organization_id', label: 'الجهة', type: 'select', empty: 'بلا جهة (أفراد)', options: Object.fromEntries(orgs.map((o) => [o.id, o.name])) }]),
+    { name: 'program_id', label: 'البرنامج', type: 'select', options: Object.fromEntries(programs.filter((p) => !p.archived_at).map((p) => [p.id, p.name])) },
+    {
+      name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: 'تتبع آخر تعديل على البرنامج', options: verN,
+      help: 'التثبيت على نسخة يحمي الدفعة الجارية من أي تعديل لاحق على البرنامج حتى ترقيها بنفسك.',
+    },
+    { name: 'starts_on', label: 'تبدأ', type: 'date' },
+    { name: 'ends_on', label: 'تنتهي', type: 'date' },
+    { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
+    { name: 'capacity', label: 'المقاعد', type: 'number' },
+    { name: 'notes_ar', label: 'ملاحظات', type: 'textarea', rows: 2 },
+  ];
+  const delivery = [];
+  for (const r of reqs.filter((x) => x.active !== false)) {
+    const t = `${r.code} · ${r.title_ar}`;
+    if (r.kind === 'workshop') {
+      delivery.push({ name: `d:${r.code}:verify`, label: `${t}: توثيق الحضور`, type: 'select', empty: `${INHERIT} (${VERIFY[r.config?.verify || 'qr']})`, options: VERIFY });
+    }
+    if (r.kind === 'coaching') {
+      delivery.push(
+        { name: `d:${r.code}:mode`, label: `${t}: طريقة الجلسة`, type: 'select', empty: `${INHERIT} (${COACH_MODE[r.config?.mode || 'online']})`, options: COACH_MODE },
+        { name: `d:${r.code}:location_ar`, label: `${t}: المكان`, show: (v) => (v[`d:${r.code}:mode`] || r.config?.mode) !== 'online' },
+        { name: `d:${r.code}:booking_url`, label: `${t}: رابط حجز مدربي هذه الدفعة`, dir: 'ltr', help: 'فارغ: رابط البرنامج' },
+        { name: `d:${r.code}:coach_email`, label: `${t}: بريد الموجّه`, type: 'email', dir: 'ltr' },
+      );
+    }
+  }
+  if (delivery.length) delivery[0] = { ...delivery[0], help: 'التنفيذ في هذه الدفعة. اتركه فارغًا ليبقى كما في البرنامج.' };
+  return [...base, ...delivery];
+}
+
+export function cohortToForm(c = {}) {
+  const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '' };
+  for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
+  delete v.delivery;
+  return v;
+}
+
+export function formToCohort(v) {
+  const out = {}, delivery = {};
+  for (const [k, x] of Object.entries(v)) {
+    const m = k.match(/^d:(.+):([a-z_]+)$/);
+    if (m) { if (x != null && x !== '') (delivery[m[1]] ||= {})[m[2]] = x; } else out[k] = x;
+  }
+  return { ...out, delivery };
 }

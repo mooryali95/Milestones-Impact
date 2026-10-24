@@ -7,6 +7,7 @@ import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail
 import { cleanConfig, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
+import { defaultProgramId } from './programs.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
@@ -357,11 +358,11 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['w_knowledge', 'w_skill', 'w_behavior', 'min_intermediate', 'min_advanced', 'floor_intermediate', 'floor_advanced', 'borderline',
                                  'rci_reliability', 'rci_sd', 'impact_min_n', 'rater_threshold'] },
   level_rules:        { table: 'level_rules', key: ['dimension', 'level'], fields: ['min_knowledge', 'min_skill', 'min_behavior'] },
-  journey_stages:     { table: 'journey_stages', key: ['key'], sortable: true,
+  journey_stages:     { table: 'journey_stages', key: ['program_id', 'key'], sortable: true,
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
                                  'mode', 'mode_note_ar', 'builds_on_ar'] },
   stage_requirements: { table: 'stage_requirements', key: ['id'], sortable: true,
-                        fields: ['stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
+                        fields: ['program_id', 'stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
   questions:          { table: 'questions', key: ['id'], sortable: true,
                         fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort', 'competency_ar', 'chapter_key',
                                  'anchor_code', 'retro', 'text_rater_ar'] },
@@ -458,14 +459,18 @@ export async function track(b: Body) {
   };
 }
 
-export async function catalog() {
+// مراحل البرنامج ومتطلباته: البرنامج المطلوب، أو الافتراضي
+const PROGRAM_SCOPED = new Set(['journey_stages', 'stage_requirements']);
+export async function catalog(b: Body = {}) {
+  const programId = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
   const names = Object.keys(ENTITIES);
   const res = await Promise.all(names.map((n) => {
     const e = ENTITIES[n];
-    const q = db.from(e.table).select('*');
+    let q = db.from(e.table).select('*');
+    if (PROGRAM_SCOPED.has(n)) q = q.eq('program_id', programId);
     return e.sortable ? q.order('sort') : q;
   }));
-  const out: Body = { success: true };
+  const out: Body = { success: true, program_id: programId };
   names.forEach((n, i) => { out[n] = res[i].data || []; });
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
   const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
@@ -581,6 +586,11 @@ export async function save(a: Admin, b: Body) {
   const row: Body = {};
   for (const f of e.fields) if (b.row && f in b.row) row[f] = b.row[f];
   const isNew = e.key.some((k) => !b.row?.[k]) && e.key[0] === 'id';
+  // المرحلة والمتطلب داخل برنامج؛ الافتراضي إن لم يُحدَّد
+  if (PROGRAM_SCOPED.has(b.entity) && (isNew || b.entity === 'journey_stages') && !b.row?.program_id) {
+    b.row = { ...b.row, program_id: await defaultProgramId() };
+    if (isNew) row.program_id = b.row.program_id;
+  }
 
   if (b.entity === 'questions') {
     if (row.options && (!Array.isArray(row.options) || row.options.length < 2
@@ -677,7 +687,13 @@ export async function reorder(a: Admin, b: Body) {
   requireWrite(a);
   const e = ENTITIES[b.entity];
   if (!e?.sortable || !Array.isArray(b.ids)) throw new Fail('ترتيب غير صالح');
-  await Promise.all(b.ids.map((id: string, i: number) => db.from(e.table).update({ sort: i + 1 }).eq(e.key[0], id)));
+  // المراحل تتكرر مفاتيحها بين البرامج، فيُرتَّب داخل برنامج واحد
+  const programId = b.entity === 'journey_stages' ? (/^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId()) : null;
+  await Promise.all(b.ids.map((id: string, i: number) => {
+    let q = db.from(e.table).update({ sort: i + 1 }).eq(e.key[programId ? 1 : 0], id);
+    if (programId) q = q.eq('program_id', programId);
+    return q;
+  }));
   await audit('admin', a.email, `${b.entity}.reorder`, b.entity, null, null, b.ids);
   return { success: true };
 }

@@ -702,6 +702,112 @@ export function cleanConfig(kind, cfg, prev = {}) {
   return {};
 }
 
+// ════════════════════════════════════════════════════════════════
+// البرامج والدفعات
+// ════════════════════════════════════════════════════════════════
+// البرنامج يحدد ماذا يمر به القائد، والدفعة تحدد كيف ومتى ولمن.
+// النسخة لقطة ثابتة من مراحل البرنامج ومتطلباته؛ الدفعة المثبتة على نسخة
+// لا تتأثر بتعديلات البرنامج حتى تُرقّى.
+
+// دفعة المشارك: تسجيله الصريح الأحدث (غير المنسحب)، ثم أحدث دفعة جارية
+// أو مفتوحة لجهته، ثم الدفعة الافتراضية المفتوحة.
+export function pickCohort({ enrollments = [], cohorts = [], organizationId = null } = {}) {
+  const byId = new Map(cohorts.map((c) => [c.id, c]));
+  const enr = enrollments.filter((e) => e.status !== 'withdrawn' && byId.has(e.cohort_id))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  if (enr.length) return { cohort: byId.get(enr[0].cohort_id), via: 'enrollment' };
+  if (organizationId) {
+    const org = cohorts.filter((c) => c.organization_id === organizationId && !c.is_default && (c.status === 'open' || c.status === 'running'))
+      .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
+    if (org.length) return { cohort: org[0], via: 'organization' };
+  }
+  const d = cohorts.find((c) => c.is_default);
+  return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
+}
+
+// ما يُخصَّص لكل دفعة من إعداد النشاط. الباقي ثابت في البرنامج.
+export const DELIVERY_FIELDS = {
+  workshop: ['verify'],
+  coaching: ['mode', 'location_ar', 'booking_url', 'instant_url', 'coach_email'],
+};
+
+// تخصيص الدفعة لمتطلب: يُدمج فوق إعداد البرنامج ويمر بالتحقق نفسه.
+// تخصيص غير صالح لا يكسر الرحلة؛ يبقى إعداد البرنامج.
+export function applyDelivery(req, override) {
+  const keys = DELIVERY_FIELDS[req?.kind];
+  if (!keys || !override || typeof override !== 'object') return req;
+  const pick = Object.fromEntries(keys.filter((k) => override[k] != null && override[k] !== '').map((k) => [k, override[k]]));
+  if (!Object.keys(pick).length) return req;
+  try {
+    return { ...req, config: cleanConfig(req.kind, { ...(req.config || {}), ...pick }, req.config || {}), delivery: pick };
+  } catch {
+    return req;
+  }
+}
+
+// تخصيصات الدفعة كما يحفظها المشرف: مفاتيح معروفة لمتطلبات موجودة، بقيم صالحة.
+export function cleanDelivery(delivery, requirements) {
+  const out = {};
+  const byCode = new Map((requirements || []).map((r) => [r.code, r]));
+  for (const [code, v] of Object.entries(delivery && typeof delivery === 'object' ? delivery : {})) {
+    const r = byCode.get(code);
+    const keys = DELIVERY_FIELDS[r?.kind];
+    if (!keys || !v || typeof v !== 'object') continue;
+    const pick = Object.fromEntries(keys.filter((k) => v[k] != null && String(v[k]).trim() !== '').map((k) => [k, typeof v[k] === 'string' ? v[k].trim() : v[k]]));
+    if (!Object.keys(pick).length) continue;
+    cleanConfig(r.kind, { ...(r.config || {}), ...pick }, r.config || {}); // يرمي برسالة واضحة إن كانت قيمة غير صالحة
+    out[code] = pick;
+  }
+  return out;
+}
+
+// تعريف الرحلة لدفعة: لقطة النسخة المثبتة أو صفوف البرنامج الحالية، ثم تخصيص الدفعة.
+export function cohortDefinition({ live, version, cohort }) {
+  const base = version?.data || live || { stages: [], requirements: [] };
+  const delivery = cohort?.delivery || {};
+  return {
+    stages: (base.stages || []).filter((s) => s.active !== false),
+    requirements: (base.requirements || []).filter((r) => r.active !== false).map((r) => applyDelivery(r, delivery[r.code])),
+  };
+}
+
+// لقطة البرنامج: المراحل والمتطلبات بمعرفاتها، بلا أعمدة التتبع.
+const SNAP_DROP = new Set(['program_id', 'created_at', 'updated_at']);
+const snapRow = (r) => Object.fromEntries(Object.entries(r).filter(([k]) => !SNAP_DROP.has(k)));
+export function programSnapshot(stages, requirements) {
+  return {
+    stages: (stages || []).map(snapRow).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)),
+    requirements: (requirements || []).map(snapRow).sort((a, b) => String(a.stage_key).localeCompare(String(b.stage_key)) || (a.sort ?? 0) - (b.sort ?? 0)),
+  };
+}
+
+// استرجاع نسخة إلى مسودة البرنامج: ما في النسخة يُكتب كما هو، وما ليس فيها
+// يُعطَّل ولا يُحذف، فلا يضيع تقدم مشارك أو دليل مرتبط به.
+export function restorePlan(snapshot, live) {
+  const snapStages = new Set((snapshot?.stages || []).map((s) => s.key));
+  const snapReqs = new Set((snapshot?.requirements || []).map((r) => r.id));
+  return {
+    stages: (snapshot?.stages || []).map((s) => ({ ...s })),
+    requirements: (snapshot?.requirements || []).map((r) => ({ ...r })),
+    disableStages: (live?.stages || []).filter((s) => !snapStages.has(s.key) && s.active !== false).map((s) => s.key),
+    disableRequirements: (live?.requirements || []).filter((r) => !snapReqs.has(r.id) && r.active !== false).map((r) => r.id),
+  };
+}
+
+// الفرق بين نسختين (أو نسخة والمسودة): ما أُضيف وما حُذف وما تغيّر من المتطلبات.
+export function programDiff(from, to) {
+  const key = (r) => r.id;
+  const a = new Map((from?.requirements || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
+  const b = new Map((to?.requirements || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
+  const fields = ['stage_key', 'title_ar', 'kind', 'required', 'dimension', 'level', 'config', 'help_ar'];
+  const same = (x, y) => fields.every((f) => JSON.stringify(x[f] ?? null) === JSON.stringify(y[f] ?? null));
+  return {
+    added: [...b.values()].filter((r) => !a.has(key(r))).map((r) => ({ code: r.code, title: r.title_ar })),
+    removed: [...a.values()].filter((r) => !b.has(key(r))).map((r) => ({ code: r.code, title: r.title_ar })),
+    changed: [...b.values()].filter((r) => a.has(key(r)) && !same(a.get(key(r)), r)).map((r) => ({ code: r.code, title: r.title_ar })),
+  };
+}
+
 // ── القياس البعدي: هل تغيّر شيء فعلًا؟ ──
 // لا يُكتفى بفرق الدرجتين، لأن أي فرق صغير قد يكون خطأ قياس. المرجع:
 //   الفرق القابل للمقارنة: المؤشر المركّب قبل وبعد بالجوانب المشتركة فقط،
