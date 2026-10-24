@@ -6,7 +6,8 @@
 //   الملف لم يكتمل    ← الملف الشخصي
 //   القياس لم يُرسل   ← تحديد المستوى
 //   غير ذلك           ← الرحلة
-// المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة.
+// المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
+// و/rate?t= لتقدير المدير أو الزميل في القياس البعدي.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -17,6 +18,8 @@ import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
 import OrgPortal from './screens/OrgPortal.jsx';
 import Verify from './screens/Verify.jsx';
+import Impact from './screens/Impact.jsx';
+import Rater from './screens/Rater.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
@@ -29,6 +32,7 @@ const isVerify = () => location.pathname === '/v' || location.pathname.startsWit
 
 export default function App() {
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
+  if (location.pathname === '/rate') return <Shell tag="تقدير الأثر"><Rater /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
 
@@ -46,7 +50,7 @@ function Shell({ tag, children }) {
 function Participant() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [view, setView] = useState('home');   // home | profile | handbook
+  const [view, setView] = useState('home');   // home | profile | handbook | impact
   const [verifyError, setVerifyError] = useState('');
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
@@ -109,7 +113,8 @@ function Participant() {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;
   } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} onBack={() => setView('home')} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} onHandbook={() => setView('handbook')} />;
+  else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => setView('home')} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} onHandbook={() => setView('handbook')} onImpact={() => setView('impact')} />;
 
   return (
     <>

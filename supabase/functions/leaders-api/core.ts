@@ -180,3 +180,11 @@ export function certificateMail(name: string, url: string) {
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">تجدها في رحلتك جاهزة للطباعة والحفظ PDF، ولها رابط تحقق عام يمكنك مشاركته أو إضافته إلى ملفك في LinkedIn.</p>
 ${mailButton(url, 'اعرض شهادتي')}`);
 }
+
+export function raterMail(rater: string | null, who: string, link: string) {
+  return shell(`طلب تقدير من ${who}`, `
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.</p>
+${mailButton(link, 'ابدأ التقدير')}
+<p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح 30 يومًا.</p>`);
+}

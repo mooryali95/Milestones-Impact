@@ -6,7 +6,7 @@ import {
 } from './core.ts';
 import {
   AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
-  seededShuffle,
+  seededShuffle, beforePercents, DEFAULT_MODEL,
 } from './logic.js';
 
 type Ctx = { ip: string | null; ua: string | null };
@@ -321,39 +321,51 @@ export async function cvAttach(p: any, b: Body) {
 // ── 5. القياس ──
 // الأسئلة تُرسل بلا درجات، والخيارات مخلوطة بترتيب ثابت لكل مشارك،
 // وكل خيار يحمل فهرسه الأصلي k الذي يُعاد عند الإجابة.
-export async function assessmentGet(p: any) {
+export async function assessmentGet(p: any, b: Body = {}) {
   if (!p.profile_completed_at) throw new Fail('أكمل ملفك الشخصي أولًا', 400, 'profile');
-  const inst = await activeInstrument('baseline');
-  if (!inst) throw new Fail('القياس غير متاح حاليًا', 503, 'no_instrument');
+  const kind = b.kind === 'post' ? 'post' : 'baseline';
+  if (kind === 'post') await requirePostOpen(p);
+  const inst = await activeInstrument(kind);
+  if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 503, 'no_instrument');
 
   let { data: a } = await db.from('assessments').select('*').eq('participant_id', p.id).eq('instrument_id', inst.id)
     .neq('status', 'void').order('started_at', { ascending: false }).limit(1).maybeSingle();
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
-    if (p.status === 'profiled' || p.status === 'registered') await db.from('participants').update({ status: 'assessing' }).eq('id', p.id);
   }
-  const qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort')
+  const qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro')
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
   const order = ['milestone', 'impact', 'leadership'];
-  // الممارسة أولًا: التقدير الذاتي قبل أن تعرض المواقف والمعرفة مفاهيم الإطار
-  const tierOrder = ['behavior', 'skill', 'knowledge'];
-  qs.sort((x: any, y: any) => order.indexOf(x.dimension) - order.indexOf(y.dimension)
+  const tierOrder = ['knowledge', 'skill', 'behavior'];
+  // بنود انتقال التعلم في القياس البعدي تأتي آخرًا، بعد الأطر الثلاثة
+  const last = (q: any) => (q.tier === 'transfer' ? 1 : 0);
+  qs.sort((x: any, y: any) => last(x) - last(y) || order.indexOf(x.dimension) - order.indexOf(y.dimension)
     || tierOrder.indexOf(x.tier) - tierOrder.indexOf(y.tier) || x.sort - y.sort);
 
   return {
     success: true,
-    assessment: { id: a.id, status: a.status, est_minutes: inst.est_minutes, intro: inst.intro_ar, title: inst.title_ar },
+    assessment: { id: a.id, kind, status: a.status, est_minutes: inst.est_minutes, intro: inst.intro_ar, title: inst.title_ar },
     questions: qs.map((q: any) => {
-      const opts = (q.options || []).map((o: any, k: number) => ({ k, label: o.label }));
+      // na يميّز "لا ينطبق" في مقياس التكرار فقط، فلا يكشف إجابة صحيحة
+      const opts = (q.options || []).map((o: any, k: number) => ({ k, label: o.label, ...(q.kind === 'likert' && Number(o.score) < 0 ? { na: true } : {}) }));
       return {
-        id: q.id, dimension: q.dimension, tier: q.tier, text: q.text_ar, help: q.help_ar, kind: q.kind,
+        id: q.id, dimension: q.dimension, tier: q.tier, text: q.text_ar, help: q.help_ar, kind: q.kind, retro: !!q.retro,
         // مقياس التكرار يبقى بترتيبه الطبيعي، والاختيارات تُخلط
         options: q.kind === 'likert' ? opts : seededShuffle(opts, p.id + q.id),
       };
     }),
     answers: Object.fromEntries(answers.map((x: any) => [x.question_id, x.value?.k])),
+    before: Object.fromEntries(answers.filter((x: any) => x.value?.before != null).map((x: any) => [x.question_id, x.value.before])),
   };
+}
+
+// القياس البعدي يُفتح حين يصل المشارك إلى مرحلة التقييم في رحلته
+export async function requirePostOpen(p: any) {
+  const st = await mePayload(p);
+  if (!st.profile?.approved) throw new Fail('يُفتح القياس البعدي بعد اعتماد مسارك', 403, 'locked');
+  const stage = st.journey.find((s: any) => s.items.some((i: any) => i.code === 'E-POST'));
+  if (stage && stage.status === 'locked') throw new Fail('يُفتح القياس البعدي حين تصل إلى مرحلة التقييم', 403, 'locked');
 }
 
 async function openAssessment(p: any, id: string) {
@@ -370,8 +382,14 @@ export async function assessmentAnswer(p: any, b: Body) {
   const k = Number(b.k);
   const score = scoreFor(q, k);
   if (!Number.isInteger(k) || score == null) throw new Fail('إجابة غير صالحة');
+  // القياس الرجعي: تقدير "قبل البرنامج" بجانب تقدير الآن، ولا يدخل في الدرجة
+  let before: number | null = null;
+  if (q.retro && b.before != null) {
+    before = Number(b.before);
+    if (!Number.isInteger(before) || scoreFor(q, before) == null) throw new Fail('إجابة غير صالحة');
+  }
   must(await db.from('assessment_answers').upsert({
-    assessment_id: a.id, question_id: q.id, value: { k }, score, answered_at: new Date().toISOString(),
+    assessment_id: a.id, question_id: q.id, value: q.retro ? { k, before } : { k }, score, answered_at: new Date().toISOString(),
   }));
   return { success: true };
 }
@@ -388,6 +406,8 @@ export async function assessmentSubmit(p: any, b: Body) {
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
+  const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
+  if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
   // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
   const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
@@ -414,6 +434,27 @@ export async function assessmentSubmit(p: any, b: Body) {
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(updated)) };
+}
+
+// القياس البعدي: النتيجة تُحفظ للمقارنة، ولا تغيّر المستوى المعتمد ولا الرحلة.
+// "لا ينطبق" في الآن يُغني عن تقدير ما قبل البرنامج.
+async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: any) {
+  const values = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value || {}]));
+  const answers = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k]));
+  const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
+  if (noBefore) throw new Fail(`بقي تقدير "قبل البرنامج" في ${noBefore} من العبارات`, 400, 'incomplete');
+  const scored = questions.filter((q: any) => q.tier !== 'transfer');
+  const result = placementFromAnswers(scored, answers, [], model || DEFAULT_MODEL);
+  const before = beforePercents(scored, values);
+  must(await db.from('assessment_results').upsert(result.map((r: any) => ({
+    assessment_id: a.id, dimension: r.dimension, level: r.level, score: r.composite ?? 0,
+    knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
+    composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason,
+    behavior_before_pct: before[r.dimension]?.behavior ?? null,
+  }))));
+  await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
+  await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);
+  return { success: true, ...(await mePayload(p)) };
 }
 
 // ── 6. متطلبات الرحلة ──

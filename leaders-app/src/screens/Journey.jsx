@@ -142,11 +142,11 @@ const AUTO_HINT = {
   'P-CV': 'يكتمل برفع سيرتك من ملفك الشخصي.',
   'A-DONE': 'يكتمل بإرسال إجابات القياس.',
   'AP-OK': 'يراجع المستشار نتيجتك ويعتمد مسارك، ويصلك بريد بذلك.',
-  'E-POST': 'يُفتح القياس البعدي في نهاية الدعم.',
+  'E-POST': 'يُفتح القياس البعدي حين تصل إلى مرحلة التقييم.',
   'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
 };
 
-function Requirement({ item, open, onUpdate, onEditProfile, setToast }) {
+function Requirement({ item, open, onUpdate, onEditProfile, onImpact, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
     setBusy(true);
@@ -188,6 +188,14 @@ function Requirement({ item, open, onUpdate, onEditProfile, setToast }) {
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
           </p>
+        )}
+        {open && item.code === 'E-POST' && (
+          <div className="actions">
+            <button className={`btn sm${item.status === 'done' ? '' : ' gold'}`} onClick={onImpact}>{item.status === 'done' ? 'اعرض ما تغيّر' : 'ابدأ القياس البعدي'}</button>
+          </div>
+        )}
+        {open && item.code === 'E-MGR' && item.status !== 'done' && (
+          <div className="actions"><button className="link small" onClick={onImpact}>ادعُ مديرك من صفحة القياس البعدي</button></div>
         )}
         {canAct && item.status !== 'done' && (
           <div className="actions">
@@ -335,7 +343,7 @@ function CertificateCard() {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -453,7 +461,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
                 order += 1;
                 return (
                   <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                    onUpdate={onUpdate} onEditProfile={onEditProfile} setToast={setToast} />
+                    onUpdate={onUpdate} onEditProfile={onEditProfile} onImpact={onImpact} setToast={setToast} />
                 );
               })}
             </div>

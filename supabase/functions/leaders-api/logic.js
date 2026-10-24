@@ -361,3 +361,166 @@ export function isoWeek(d = new Date()) {
   const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   return `${t.getUTCFullYear()}-W${String(Math.ceil(((t - y0) / 864e5 + 1) / 7)).padStart(2, '0')}`;
 }
+
+// ── القياس البعدي: هل تغيّر شيء فعلًا؟ ──
+// لا يُكتفى بفرق الدرجتين، لأن أي فرق صغير قد يكون خطأ قياس. المرجع:
+//   الفرق القابل للمقارنة: المؤشر المركّب قبل وبعد بالجوانب المشتركة فقط،
+//     فإن غاب جانب عن أحد النموذجين لا يدخل في أي منهما.
+//   مؤشر التغير الموثوق (Jacobson و Truax 1991): الفرق مقسومًا على خطأ
+//     الفرق المعياري، ولا يُعدّ التغير حقيقيًا قبل 1.96 (ثقة 95%).
+//   التغير المعياري (Marx و Cummings 2007): نسبة ما تحقق من المساحة
+//     المتاحة للتحسن، فلا يُظلم من بدأ مرتفعًا.
+//   القياس الرجعي (Howard 1980): يقدّر المشارك ممارسته قبل البرنامج بعد
+//     أن عرف المعيار، لأن تقديره الأول كثيرًا ما يكون متضخمًا (انزياح الاستجابة).
+//   التثليث: لا يُحكم بالتغير من مصدر ذاتي وحده.
+
+const r1 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 10) / 10);
+const r2 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
+
+export const IMPACT_DEFAULTS = { rci_reliability: 0.75, rci_sd: 15, min_n: 20, rater_threshold: 10 };
+
+// المؤشر المركّب بالجوانب الموجودة في القياسين معًا
+export function comparableComposite(pre, post, model = DEFAULT_MODEL) {
+  const m = { ...DEFAULT_MODEL, ...(model || {}) };
+  const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
+  const tiers = TIERS.filter((t) => pre?.[t] != null && post?.[t] != null && w[t] > 0);
+  const wsum = tiers.reduce((a, t) => a + w[t], 0);
+  if (!wsum) return { tiers, pre: null, post: null };
+  const c = (p) => r1(tiers.reduce((a, t) => a + w[t] * Number(p[t]), 0) / wsum);
+  return { tiers, pre: c(pre), post: c(post) };
+}
+
+export function normalizedChange(pre, post) {
+  if (pre == null || post == null) return null;
+  if (post > pre) return pre >= 100 ? null : r2((post - pre) / (100 - pre));
+  if (post < pre) return pre <= 0 ? null : r2((post - pre) / pre);
+  return 0;
+}
+
+export function reliableChange(pre, post, sd, reliability) {
+  if (pre == null || post == null) return { rci: null, reliable: false, direction: null, threshold: null };
+  const sem = Number(sd) * Math.sqrt(Math.max(0, 1 - Number(reliability)));
+  const sdiff = Math.SQRT2 * sem;
+  if (!(sdiff > 0)) return { rci: null, reliable: false, direction: null, threshold: null };
+  const rci = (post - pre) / sdiff;
+  const reliable = Math.abs(rci) >= 1.96;
+  return { rci: r2(rci), reliable, direction: reliable ? (rci > 0 ? 'up' : 'down') : 'flat', threshold: r1(1.96 * sdiff) };
+}
+
+// ألفا كرونباخ من مصفوفة درجات (صف لكل مشارك، عمود لكل سؤال)
+export function cronbachAlpha(rows) {
+  const data = (rows || []).filter((r) => r.every((x) => Number.isFinite(x)));
+  const k = data[0]?.length || 0;
+  if (data.length < 3 || k < 2) return null;
+  const variance = (xs) => { const m = xs.reduce((a, b) => a + b, 0) / xs.length; return xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1); };
+  const itemVar = Array.from({ length: k }, (_, j) => variance(data.map((r) => r[j]))).reduce((a, b) => a + b, 0);
+  const totalVar = variance(data.map((r) => r.reduce((a, b) => a + b, 0)));
+  if (!(totalVar > 0)) return null;
+  return r2((k / (k - 1)) * (1 - itemVar / totalVar));
+}
+
+// إحصاء الأزواج للجهة أو الدفعة: متوسط الفرق وحجم الأثر dz واختبار t
+export function pairedStats(pairs) {
+  const ok = (pairs || []).filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b));
+  const n = ok.length;
+  if (!n) return { n: 0, pre: null, post: null, diff: null, sd: null, dz: null, t: null };
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const diffs = ok.map(([a, b]) => b - a);
+  const d = mean(diffs);
+  const sd = n > 1 ? Math.sqrt(diffs.reduce((a, x) => a + (x - d) ** 2, 0) / (n - 1)) : null;
+  return {
+    n, pre: r1(mean(ok.map((p) => p[0]))), post: r1(mean(ok.map((p) => p[1]))), diff: r1(d), sd: r1(sd),
+    dz: sd > 0 ? r2(d / sd) : null, t: sd > 0 ? r2(d / (sd / Math.sqrt(n))) : null,
+  };
+}
+
+// حجم الأثر بلغة القرار (Cohen 1988)
+export function effectLabel(dz) {
+  if (dz == null) return null;
+  const a = Math.abs(dz);
+  return a >= 0.8 ? 'كبير' : a >= 0.5 ? 'متوسط' : a >= 0.2 ? 'صغير' : 'ضئيل';
+}
+
+// إجابات القياس الرجعي "قبل البرنامج" بالصيغة التي تقرؤها tierPercents
+export function beforeAnswers(questions, values) {
+  const out = {};
+  for (const q of questions) if (q.retro && values[q.id]?.before != null) out[q.id] = values[q.id].before;
+  return out;
+}
+
+// نسبة الممارسة "قبل البرنامج" لكل إطار، من العبارات التي قُدّرت فعلًا
+// (ما أُجيب عنه بـ"لا ينطبق" الآن لا تقدير قبلي له، فلا يُحسب صفرًا)
+export function beforePercents(questions, values) {
+  const qs = questions.filter((q) => q.retro && values[q.id]?.before != null);
+  return tierPercents(qs, beforeAnswers(qs, values));
+}
+
+// تقدير المقيّم (المدير غالبًا) للممارسة الآن وقبل البرنامج، نسبة من 100
+export function raterPercents(questions, answers) {
+  const acc = {};
+  for (const q of questions) {
+    const a = answers?.[q.id];
+    if (!a) continue;
+    const max = Math.max(0, ...(q.options || []).map((o) => Number(o.score) || 0));
+    const now = scoreFor(q, a.now), before = scoreFor(q, a.before);
+    if (!(max > 0) || now == null || before == null || now < 0 || before < 0) continue;
+    const d = (acc[q.dimension] ||= { now: 0, before: 0, max: 0 });
+    d.now += now; d.before += before; d.max += max;
+  }
+  const out = {};
+  for (const dim of DIMENSIONS) {
+    const d = acc[dim];
+    out[dim] = d && d.max ? { now: r1((d.now / d.max) * 100), before: r1((d.before / d.max) * 100) } : null;
+  }
+  return out;
+}
+
+// الحكم على أثر البرنامج في بُعد واحد بتثليث المصادر:
+//   الاختبار (معرفة ومواقف) بتغير موثوق، والممارسة الذاتية، وتقدير المقيّم
+//   الخارجي، ودليل الحالة المعتمد. "تغير مؤكد" يتطلب مصدرين أحدهما غير ذاتي.
+export function impactVerdict({ test, self, rater, evidence }) {
+  const sources = [
+    test === 'up' && 'test', self === 'up' && 'self', rater === 'up' && 'rater', evidence && 'evidence',
+  ].filter(Boolean);
+  const external = sources.some((s) => s !== 'self');
+  if (test === 'down' || rater === 'down') return { key: 'decline', sources, label: 'تراجع يحتاج مراجعة' };
+  if (sources.length >= 2 && external) return { key: 'confirmed', sources, label: 'تغير مؤكد' };
+  if (sources.length >= 1) return { key: 'emerging', sources, label: 'مؤشرات أولية' };
+  return { key: 'none', sources, label: 'لا دليل كافٍ على التغير' };
+}
+
+// المقارنة الكاملة لمشارك واحد في الأبعاد الثلاثة
+export function compareAssessments({ pre, post, model, impact, rater, evidence }) {
+  const cfg = { ...IMPACT_DEFAULTS, ...(impact || {}) };
+  return DIMENSIONS.map((dimension) => {
+    const a = pre?.[dimension] || {}, b = post?.[dimension] || {};
+    const cc = comparableComposite(a, b, model);
+    const rel = cfg.reliability?.[dimension] ?? cfg.rci_reliability;
+    const sd = cfg.sd?.[dimension] ?? cfg.rci_sd;
+    const rc = reliableChange(cc.pre, cc.post, sd, rel);
+    // الاختبار وحده: المعرفة والمواقف، بلا تقدير ذاتي
+    const testPre = comparableComposite({ ...a, behavior: null }, { ...b, behavior: null }, model);
+    const testRc = reliableChange(testPre.pre, testPre.post, sd, rel);
+    const selfDiff = a.behavior != null && b.behavior != null ? b.behavior - a.behavior : null;
+    const retroDiff = b.behavior_before != null && b.behavior != null ? b.behavior - b.behavior_before : null;
+    const self = (retroDiff ?? selfDiff) == null ? null : (retroDiff ?? selfDiff) >= cfg.rater_threshold ? 'up' : 'flat';
+    const r = rater?.[dimension];
+    const raterDiff = r ? r.now - r.before : null;
+    const raterDir = raterDiff == null ? null : raterDiff >= cfg.rater_threshold ? 'up' : raterDiff <= -cfg.rater_threshold ? 'down' : 'flat';
+    return {
+      dimension,
+      pre: { knowledge: a.knowledge ?? null, skill: a.skill ?? null, behavior: a.behavior ?? null, level: a.level || null },
+      post: { knowledge: b.knowledge ?? null, skill: b.skill ?? null, behavior: b.behavior ?? null, behavior_before: b.behavior_before ?? null, level: b.level || null },
+      tiers: cc.tiers, composite_pre: cc.pre, composite_post: cc.post,
+      change: cc.pre == null ? null : r1(cc.post - cc.pre),
+      normalized: normalizedChange(cc.pre, cc.post),
+      rci: rc.rci, reliable: rc.reliable, direction: rc.direction, threshold: rc.threshold,
+      test_direction: testRc.direction,
+      self_change: r1(selfDiff), retro_change: r1(retroDiff),
+      // انزياح الاستجابة: تقديره الأول لنفسه ناقص تقديره اللاحق لما كان عليه
+      response_shift: a.behavior != null && b.behavior_before != null ? r1(a.behavior - b.behavior_before) : null,
+      rater: r || null, rater_change: r1(raterDiff),
+      verdict: impactVerdict({ test: testRc.direction, self, rater: raterDir, evidence: !!evidence }),
+    };
+  });
+}
