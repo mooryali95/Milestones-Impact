@@ -8,7 +8,7 @@ import { requirementFor } from './programs.ts';
 import { esc, mailShell } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
-  instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
+  contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount,
 } from './logic.js';
 
@@ -24,7 +24,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
   const kinds = new Set(mine.map((r) => r.kind));
   const ids = mine.map((r) => r.id);
   const none = Promise.resolve({ data: [] as any[] });
-  const [mods, reading, quiz, video, ws, att, coach] = await Promise.all([
+  const [mods, reading, quiz, video, ws, att, coach, content, contentProgress] = await Promise.all([
     kinds.has('reading') && approved
       ? db.from('handbook_modules').select('id, dimension, sort, min_level, title_ar').not('body_md', 'is', null).neq('body_md', '') : none,
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
@@ -33,6 +33,9 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
+    // منهج المسار يُفتح مع الكتيب بعد اعتماد المستويات
+    kinds.has('curriculum') && approved ? db.from('content_items').select(CONTENT_COLS).eq('active', true) : none,
+    kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
   ]);
   const ev = {
     // body_md لا يُجلب هنا؛ الأبواب المصفاة غير فارغة أصلًا
@@ -43,6 +46,10 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     workshops: (ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId),
     attended: new Set((att.data || []).map((a: any) => a.session_id)),
     coaching: coach.data || [],
+    levels,
+    curriculumLocked: !approved,
+    content: content.data || [],
+    contentProgress: Object.fromEntries((contentProgress.data || []).map((r: any) => [r.item_id, r])),
   };
   return Object.fromEntries(mine.map((r) => [r.id, activityFor(r, ev)]));
 }
@@ -62,6 +69,7 @@ export function participantItem(it: any, p: any) {
     act.location = c.location_ar || null;
   }
   if (act && it.kind === 'video') { act.source = videoSource(c.url); act.title = c.title || null; }
+  if (act && it.kind === 'curriculum') act.items = act.items.map((x: any) => (x.kind === 'video' ? { ...x, url: null, source: videoSource(x.url) } : x));
   const { config: _c, ...rest } = it;
   return { ...rest, activity: act };
 }
@@ -98,6 +106,42 @@ export async function readingPing(p: any, b: Body) {
   const out = { participant_id: p.id, module_id: id, words, active_seconds: next.active_seconds, slices: next.slices, last_ping_at: now.toISOString() };
   must(await db.from('reading_progress').upsert(out));
   return { success: true, reading: readingVerdict(out) };
+}
+
+// ── منهج المسار ──
+const CONTENT_COLS = 'id, kind, title_ar, description_ar, url, minutes, dimension, min_level, only_level, track_keys, exclude_tracks, required, min_pct, sort, active';
+async function myContent(p: any, id: unknown) {
+  const levels = await levelsOf(p.id, true);
+  const item = must(await db.from('content_items').select(CONTENT_COLS).eq('id', String(id || '')).maybeSingle());
+  if (!item || !contentApplies(item, levels)) throw new Fail('هذه المادة لا تخص مسارك', 404);
+  return item;
+}
+
+// نبضة مشاهدة مقطع من المنهج، بقواعد نبضة الفيديو نفسها
+export async function contentPing(p: any, b: Body) {
+  const item = await myContent(p, b.item_id);
+  if (item.kind !== 'video') throw new Fail('هذه المادة ليست مقطعًا');
+  const { data: row } = await db.from('content_progress').select('*').eq('participant_id', p.id).eq('item_id', item.id).maybeSingle();
+  const now = new Date();
+  const next = applyVideoPing(row, b, now.getTime());
+  const st = contentState(item, next);
+  must(await db.from('content_progress').upsert({
+    participant_id: p.id, item_id: item.id, ...next, last_ping_at: now.toISOString(),
+    completed_at: row?.completed_at || (st.done ? now.toISOString() : null),
+  }));
+  return { success: true, item: { id: item.id, ...st } };
+}
+
+// فتح ملف أو رابط من المنهج: يُسجَّل ويعيد الرابط
+export async function contentOpen(p: any, b: Body) {
+  const item = await myContent(p, b.item_id);
+  if (item.kind === 'video') throw new Fail('المقطع يُشاهد داخل التطبيق');
+  const now = new Date().toISOString();
+  const { data: row } = await db.from('content_progress').select('opened_at').eq('participant_id', p.id).eq('item_id', item.id).maybeSingle();
+  if (!row?.opened_at) {
+    must(await db.from('content_progress').upsert({ participant_id: p.id, item_id: item.id, opened_at: now, completed_at: now, last_ping_at: now }));
+  }
+  return { success: true, url: item.url };
 }
 
 // ── نبضة الفيديو ──

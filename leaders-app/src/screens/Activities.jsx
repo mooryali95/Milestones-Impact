@@ -63,7 +63,8 @@ function loadYouTube() {
   return ytReady;
 }
 
-function Player({ item, onProgress }) {
+// ping: من يستقبل المقاطع المشاهدة؛ الافتراضي فيديو المتطلب
+function Player({ item, onProgress, ping }) {
   const a = item.activity;
   const host = useRef(null);
   const video = useRef(null);
@@ -83,8 +84,8 @@ function Player({ item, onProgress }) {
     const flush = async () => {
       if (!pending.length) return;
       const ranges = pending; pending = [];
-      const r = await call('video.ping', { requirement_id: item.id, duration: duration(), ranges });
-      if (alive && r.success) onProgress(r.video);
+      const r = ping ? await ping(ranges, duration()) : await call('video.ping', { requirement_id: item.id, duration: duration(), ranges });
+      if (alive && r.success) onProgress(ping ? r.item : r.video);
     };
     pinger = setInterval(flush, 10000);
     if (a.source?.type === 'youtube') {
@@ -228,6 +229,55 @@ function Coaching({ item, open, onRefresh, setToast }) {
   );
 }
 
+// ── منهج المسار: مواد البنك التي تخص مسار المشارك ──
+const CONTENT_ICON = { video: '▶', file: '📄', link: '🔗' };
+function Curriculum({ item, open, onRefresh }) {
+  const [a, setA] = useState(item.activity);
+  const [play, setPlay] = useState(null);
+  useEffect(() => setA(item.activity), [item.activity]);
+  if (a.locked) return <div className="act"><p className="h">يُفتح منهج مسارك بعد اعتماد مستواك.</p></div>;
+  if (!a.items.length) return <div className="act"><p className="h">لا مواد إضافية لمسارك في هذه المرحلة.</p></div>;
+  const patch = (id, v) => setA((x) => {
+    const items = x.items.map((i) => (i.id === id ? { ...i, ...v } : i));
+    const need = items.filter((i) => i.required);
+    return { ...x, items, count: need.filter((i) => i.done).length };
+  });
+  const opened = (i) => {
+    if (i.done) return;
+    call('content.open', { item_id: i.id }).then((r) => { if (r.success) { patch(i.id, { done: true, pct: 100, started: true }); onRefresh(); } });
+  };
+  const progress = (i) => (v) => { patch(i.id, v); if (v.done && !i.done) onRefresh(); };
+  return (
+    <div className="act">
+      <b className="small">أنجزت {a.count} من {a.total} من مواد مسارك</b>
+      <Bar value={a.total ? Math.round((a.count / a.total) * 100) : 100} label="منهج المسار" />
+      <ul className="act-list">
+        {a.items.map((i) => (
+          <li key={i.id} className="act-item">
+            <span aria-hidden="true">{i.done ? '✓' : CONTENT_ICON[i.kind]}</span>
+            <span className="grow">
+              {i.title}{!i.required && <small className="muted"> · اختياري</small>}
+              {i.minutes ? <small className="muted"> · {i.minutes} د</small> : null}
+              {i.kind === 'video' && i.started && !i.done ? <small className="muted"> · شاهدت {i.pct}%</small> : null}
+              {i.description && <small className="muted block">{i.description}</small>}
+            </span>
+            {open && (i.kind === 'video'
+              ? <button className="btn sm" onClick={() => setPlay(play === i.id ? null : i.id)}>{play === i.id ? 'أغلق' : i.done ? 'شاهد مرة أخرى' : i.started ? 'تابع' : 'شاهد'}</button>
+              : <a className="btn sm" href={i.url} target="_blank" rel="noopener noreferrer" onClick={() => opened(i)}>{i.kind === 'file' ? 'افتح الملف' : 'افتح'}</a>)}
+            {play === i.id && (
+              <div className="act-item-player">
+                <Player item={{ id: i.id, activity: { source: i.source } }} onProgress={progress(i)}
+                  ping={(ranges, duration) => call('content.ping', { item_id: i.id, ranges, duration })} />
+                {!i.done && <p className="h">يكتمل حين تشاهد {i.min_pct}% منه. التقديم السريع لا يُحتسب.</p>}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function Activity({ item, open, onUpdate, onHandbook, setToast }) {
   const refresh = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
   const a = item.activity;
@@ -235,6 +285,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, setToast })
   if (a.type === 'reading') return <Reading a={a} onHandbook={open ? onHandbook : null} />;
   if (a.type === 'video') return <Video item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
+  if (a.type === 'curriculum') return <Curriculum item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
   return null;
 }

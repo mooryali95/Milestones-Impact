@@ -714,3 +714,9 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .impact-bar b { text-align: end; }
 .rater-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .rater-list li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; flex-wrap: wrap; gap: 8px; }
+
+/* منهج المسار */
+.act-item { flex-wrap: wrap; }
+.act-item .grow { flex: 1; min-width: 0; }
+.act-item .block { display: block; }
+.act-item-player { flex-basis: 100%; display: grid; gap: 6px; }
