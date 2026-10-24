@@ -353,3 +353,32 @@ describe('baseline-v3', () => {
     expect(up / n).toBeLessThan(0.1);
   });
 });
+
+// ── post-v1: أسئلة المعرفة الموازية ──
+import POSTK_SQL from '../../supabase/migrations/20261024160000_leaders_post_knowledge.sql?raw';
+
+const POSTK = [...POSTK_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', 'knowledge', '(?:[^']|'')*', null, 'choice', '((?:[^']|'')*)'::jsonb, \d+, '((?:[^']|'')*)', '(\w+)'/g)]
+  .map(([, dimension, code, opts, competency, chapter]) => ({
+    id: code, dimension, code, tier: 'knowledge', kind: 'choice', competency, chapter, options: JSON.parse(opts.replace(/''/g, "'")),
+  }));
+
+describe('post-v1 knowledge items', () => {
+  it('parallels the baseline-v3 knowledge blueprint, item for item', () => {
+    expect(POSTK).toHaveLength(18);
+    const v3k = V3.filter((q) => q.tier === 'knowledge');
+    for (const p of POSTK) {
+      const twin = v3k.find((q) => `P-${q.code}` === p.code);
+      expect(twin).toBeTruthy();
+      expect([p.dimension, p.competency, p.chapter]).toEqual([twin.dimension, twin.competency, twin.chapter]);
+      expect(p.options.filter((o) => o.score === 4)).toHaveLength(1);
+    }
+  });
+  it('spreads the key across option length ranks and positions', () => {
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      const ranks = [0, 0, 0, 0], pos = [0, 0, 0, 0];
+      for (const q of POSTK.filter((x) => x.dimension === d)) { ranks[lengthRank(q, keyIndex(q))] += 1; pos[keyIndex(q)] += 1; }
+      expect(Math.max(...ranks)).toBeLessThanOrEqual(2);
+      expect(Math.max(...pos)).toBeLessThanOrEqual(3);
+    }
+  });
+});
