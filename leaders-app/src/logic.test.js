@@ -208,9 +208,9 @@ describe('evaluatePlacement', () => {
   const ev = (k, s, b, m) => evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m);
   it('weights situational judgement above self reported practice', () => {
     const r = ev(75, 25, 69);
-    expect(r.composite).toBe(51);
+    expect(r.composite).toBe(49.1);
     expect(r.level).toBe('beginner');
-    expect(r.borderline).toBe(true);   // 4 points under 55
+    expect(r.borderline).toBe(true);   // 5.9 نقاط تحت 55، ضمن الهامش 8
   });
   it('places intermediate and advanced by composite', () => {
     expect(ev(75, 50, 50).level).toBe('intermediate');
@@ -218,13 +218,17 @@ describe('evaluatePlacement', () => {
     expect(ev(100, 75, 75).level).toBe('advanced');
   });
   it('a weak tier caps the level even with a high composite', () => {
-    const r = ev(100, 100, 25);
+    const r = ev(100, 100, 50);
     expect(r.composite).toBeGreaterThan(80);
     expect(r.level).toBe('intermediate');
     expect(r.reason).toContain('الممارسة');
   });
   it('uses the admin tuned model', () => {
-    expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 50 }).level).toBe('intermediate');
+    expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 45, floor_intermediate: 25 }).level).toBe('intermediate');
+  });
+  it('keeps a weak tier above chance (25%) out of intermediate', () => {
+    expect(ev(70, 70, 35).level).toBe('beginner');
+    expect(ev(70, 70, 45).level).toBe('intermediate');
   });
   it('ignores missing tiers', () => {
     expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
@@ -248,6 +252,9 @@ import V2_SQL from '../../supabase/migrations/20261024090000_leaders_baseline_v2
 const V2 = [...V2_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', '(\w+)', '(?:[^']|'')*', (?:null|'(?:[^']|'')*'), '(\w+)', '((?:[^']|'')*)'::jsonb/g)]
   .map(([, dimension, code, tier, kind, opts]) => ({ id: code, dimension, code, tier, kind, options: JSON.parse(opts.replace(/''/g, "'")) }));
 const choices = V2.filter((q) => q.kind === 'choice');
+function mulberry(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
 const keyIndex = (q) => q.options.findIndex((o) => o.score === Math.max(...q.options.map((x) => x.score)));
 const longestIndex = (q) => q.options.reduce((b, o, k, a) => (o.label.length > a[b].label.length ? k : b), 0);
 
@@ -324,21 +331,25 @@ describe('baseline-v3', () => {
     }
   });
   // من يختار بالطول يصيب 2 من 6 على الأكثر في كل جانب، أي قريبًا من التخمين.
-  // ومع "دائمًا" في الممارسة يقترب من حد المتوسط بالأوزان الحالية 30/45/25،
-  // لذلك يُوصى بخفض وزن الممارسة إلى 15 حتى تثبت التجربة صدقها.
+  // ومع "دائمًا" في كل عبارات الممارسة يبقى تأسيسيًا بالمعيار المعايَر 35/50/15.
   const byLength = (rank, likert) => Object.fromEntries(V3.map((q) => [q.id, q.kind === 'likert' ? likert
     : [...q.options.keys()].find((k) => lengthRank(q, k) === rank)]));
-  it('places a "pick by length" responder at beginner under the current weights', () => {
+  it('places a "pick by length + always" responder at beginner', () => {
     for (const rank of [0, 1, 2, 3]) {
-      const pcts = tierPercents(V3, byLength(rank, 2));
-      for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], DEFAULT_MODEL).level).toBe('beginner');
+      for (const likert of [2, 4]) {
+        const pcts = tierPercents(V3, byLength(rank, likert));
+        for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], DEFAULT_MODEL).level).toBe('beginner');
+      }
     }
   });
-  it('places a "pick by length + always" responder at beginner under the recommended 35/50/15 weights', () => {
-    const model = { ...DEFAULT_MODEL, w_knowledge: 35, w_skill: 50, w_behavior: 15 };
-    for (const rank of [0, 1, 2, 3]) {
-      const pcts = tierPercents(V3, byLength(rank, 4));
-      for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], model).level).toBe('beginner');
+  // تخمين عشوائي مع "دائمًا": يُبقي المعيار أغلبهم في التأسيسي (المحاكاة: 94%).
+  it('keeps most random guessers who answer "always" at beginner', () => {
+    const rand = mulberry(7);
+    let up = 0, n = 0;
+    for (let i = 0; i < 600; i++) {
+      const pcts = tierPercents(V3, Object.fromEntries(V3.map((q) => [q.id, q.kind === 'likert' ? 4 : Math.floor(rand() * 4)])));
+      for (const d of ['milestone', 'impact', 'leadership']) { n += 1; if (evaluatePlacement(pcts[d], DEFAULT_MODEL).level !== 'beginner') up += 1; }
     }
+    expect(up / n).toBeLessThan(0.1);
   });
 });

@@ -82,7 +82,7 @@ export const shortTitle = (t) => String(t || '').replace(/^مسار\s+/, '');
 export const lines = (x) => String(x || '').split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
 
 // ── معيار التسكين المركّب ──
-export const MODEL_DEFAULT = { w_knowledge: 30, w_skill: 45, w_behavior: 25, min_intermediate: 55, min_advanced: 80, floor_intermediate: 25, floor_advanced: 50, borderline: 5 };
+export const MODEL_DEFAULT = { w_knowledge: 35, w_skill: 50, w_behavior: 15, min_intermediate: 55, min_advanced: 80, floor_intermediate: 40, floor_advanced: 60, borderline: 8 };
 export function evaluate(p, m) {
   const w = { knowledge: +m.w_knowledge, skill: +m.w_skill, behavior: +m.w_behavior };
   const tiers = ['knowledge', 'skill', 'behavior'].filter((t) => p[t] != null && p[t] !== '' && w[t] > 0);
