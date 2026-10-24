@@ -46,7 +46,7 @@ export default function Leaders({ canWrite }) {
   let body;
   if (NEEDS_CATALOG.has(tab) && !catalog) body = <Spinner />;
   else if (NEEDS_CATALOG.has(tab) && !catalog.success) body = <div className="la-err" role="alert">{catalog.message}</div>;
-  else if (tab === 'overview') body = <Overview orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} />;
+  else if (tab === 'overview') body = <Overview orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={(id) => { setTab('orgs'); setOrgId(id); }} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={setPerson} initialStatus={status} />;
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;

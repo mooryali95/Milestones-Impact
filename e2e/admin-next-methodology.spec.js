@@ -57,6 +57,30 @@ test('نظرة عامة: الأرقام وما ينتظر القرار، وال�
   await expect(page.locator('.la-md b')).toHaveText('مهم');
 });
 
+test('نظرة عامة: المستوى العام والجهات والقياس والكتاب وقياس الأثر', async ({ page }) => {
+  await setup(page);
+  const base = { success: true, total: 5, by_status: { pending_approval: 2 }, pending_reviews: 1, matrix: { milestone: { beginner: 3, intermediate: 1, advanced: 1 }, impact: { beginner: 5, intermediate: 0, advanced: 0 }, leadership: { beginner: 2, intermediate: 2, advanced: 1 } }, funnel: { registered: 5 }, tracks_used: 0, top_tracks: [] };
+  const more = {
+    new_week: 2, active_week: 3, overall: { beginner: 2, intermediate: 1, advanced: 0 },
+    top_orgs: [{ id: 'o1', name: 'سفراء', n: 4 }], orgs_count: 1, via: { link: 3, domain: 1, unassigned: 1 },
+    instruments: [{ key: 'baseline-v2', kind: 'baseline', active: true, n: 3, avg: { milestone: 62, impact: 48, leadership: 71 } }],
+    book: { readers: 3, chapters: 7, accuracy: 81, submitted: 2, to_review: 1, drafts: 1, rating: 4.5, points_avg: 120, ranks: { مستكشف: 1, ممارس: 2 } },
+  };
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.impact') return route.fulfill({ json: { success: true, counts: { participants: 5, baseline: 3, post: 2, paired: 2 }, cohort: { milestone: { n: 2, pre: 55, post: 70, diff: 15, reliable_up: 1 } } } });
+    if (b.action !== 'admin.overview') return route.fallback();
+    return route.fulfill({ json: { ...base, ...more } });
+  });
+  await tab(page, 'نظرة عامة');
+  await expect(page.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('2');
+  await expect(page.getByRole('heading', { name: 'المستوى العام' })).toBeVisible();
+  await expect(page.getByText('baseline-v2')).toBeVisible();
+  await expect(page.locator('.la-impact td.up')).toHaveText('+15');
+  await expect(page.getByRole('button', { name: 'نماذج تعليمية مُرسلة' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'سفراء' })).toBeVisible();
+});
+
 test('المسارات: اللوحة وتحرير هوية المسار', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'المسارات الـ27');
