@@ -284,3 +284,61 @@ describe('tierPercents with "not applicable"', () => {
     expect(tierPercents(qs, { a: 2, b: 2 }).milestone.behavior).toBe(null);
   });
 });
+
+// ── baseline-v3: مخطط الاختبار وبنك الأسئلة ──
+import V3_SQL from '../../supabase/migrations/20261024120000_leaders_item_bank_v3.sql?raw';
+
+const V3 = [...V3_SQL.matchAll(/select id, '(\w+)', '([\w-]+)', '(\w+)', '(?:[^']|'')*', (?:null|'(?:[^']|'')*'), '(\w+)', '((?:[^']|'')*)'::jsonb, \d+, '((?:[^']|'')*)', '(\w+)'/g)]
+  .map(([, dimension, code, tier, kind, opts, competency, chapter]) => ({
+    id: code, dimension, code, tier, kind, competency, chapter, options: JSON.parse(opts.replace(/''/g, "'")),
+  }));
+// رتبة طول الإجابة الصحيحة بين البدائل: 0 الأطول، 3 الأقصر
+const lengthRank = (q, k) => [...q.options.keys()].sort((a, b) => q.options[b].label.length - q.options[a].label.length).indexOf(k);
+
+describe('baseline-v3', () => {
+  it('has 4 practice, 6 situation and 6 knowledge items per framework', () => {
+    expect(V3).toHaveLength(48);
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'behavior')).toHaveLength(4);
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'skill')).toHaveLength(6);
+      expect(V3.filter((q) => q.dimension === d && q.tier === 'knowledge')).toHaveLength(6);
+    }
+  });
+  it('maps every item to a competency and a handbook chapter', () => {
+    for (const q of V3) {
+      expect(q.competency.length).toBeGreaterThan(3);
+      expect(q.chapter).toMatch(/^(intro|ch[1-6]|labs|close)$/);
+    }
+  });
+  it('keeps handbook term items out of the baseline', () => {
+    const terms = ['M-K1', 'M-K3', 'I-K3', 'L-K1', 'L-K3', 'L-K4'];
+    expect(V3.filter((q) => terms.includes(q.code))).toEqual([]);
+  });
+  it('spreads the key across option length ranks in every framework and tier', () => {
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      for (const t of ['skill', 'knowledge']) {
+        const ranks = [0, 0, 0, 0];
+        for (const q of V3.filter((x) => x.dimension === d && x.tier === t)) ranks[lengthRank(q, keyIndex(q))] += 1;
+        expect(Math.max(...ranks)).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+  // من يختار بالطول يصيب 2 من 6 على الأكثر في كل جانب، أي قريبًا من التخمين.
+  // ومع "دائمًا" في الممارسة يقترب من حد المتوسط بالأوزان الحالية 30/45/25،
+  // لذلك يُوصى بخفض وزن الممارسة إلى 15 حتى تثبت التجربة صدقها.
+  const byLength = (rank, likert) => Object.fromEntries(V3.map((q) => [q.id, q.kind === 'likert' ? likert
+    : [...q.options.keys()].find((k) => lengthRank(q, k) === rank)]));
+  it('places a "pick by length" responder at beginner under the current weights', () => {
+    for (const rank of [0, 1, 2, 3]) {
+      const pcts = tierPercents(V3, byLength(rank, 2));
+      for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], DEFAULT_MODEL).level).toBe('beginner');
+    }
+  });
+  it('places a "pick by length + always" responder at beginner under the recommended 35/50/15 weights', () => {
+    const model = { ...DEFAULT_MODEL, w_knowledge: 35, w_skill: 50, w_behavior: 15 };
+    for (const rank of [0, 1, 2, 3]) {
+      const pcts = tierPercents(V3, byLength(rank, 4));
+      for (const d of ['milestone', 'impact', 'leadership']) expect(evaluatePlacement(pcts[d], model).level).toBe('beginner');
+    }
+  });
+});
