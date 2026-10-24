@@ -336,7 +336,8 @@ export async function assessmentGet(p: any) {
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
   const order = ['milestone', 'impact', 'leadership'];
-  const tierOrder = ['knowledge', 'skill', 'behavior'];
+  // الممارسة أولًا: التقدير الذاتي قبل أن تعرض المواقف والمعرفة مفاهيم الإطار
+  const tierOrder = ['behavior', 'skill', 'knowledge'];
   qs.sort((x: any, y: any) => order.indexOf(x.dimension) - order.indexOf(y.dimension)
     || tierOrder.indexOf(x.tier) - tierOrder.indexOf(y.tier) || x.sort - y.sort);
 
@@ -393,7 +394,8 @@ export async function assessmentSubmit(p: any, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level,
-    score: Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
+    // الدرجة هي المؤشر المركّب نفسه حتى لا يختلف رقم التقرير عن سبب المستوى
+    score: r.composite ?? Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
     ...(r.composite !== undefined ? { composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason } : {}),
   }))));
