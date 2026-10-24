@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, parseQuiz, trackKey } from './logic.js';
+import { DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 
@@ -116,7 +116,7 @@ export async function assignOrg(a: Admin, b: Body) {
 
 // ── نظرة عامة ──
 export async function overview(b: Body = {}) {
-  const { data } = await orgFilter(db.from('participants').select('id, status'), b.org);
+  const { data } = await orgFilter(db.from('participants').select('id, status, organization_id, organization_name, org_via, created_at, last_login_at'), b.org);
   const byStatus: Record<string, number> = {};
   for (const r of data || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
   const { count: pendingReviews } = await db.from('participant_requirements')
@@ -135,9 +135,71 @@ export async function overview(b: Body = {}) {
   const { data: tracks } = await db.from('tracks').select('key, title_ar');
   const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
   const top_tracks = Object.entries(byTrack).sort((a, c) => c[1] - a[1]).slice(0, 6).map(([key, n]) => ({ key, n, title: titles[key] || null }));
+  const rows = data || [];
+  const weekAgo = Date.now() - 7 * 864e5;
+  // المستوى العام الواحد لكل مشارك اكتملت أطره الثلاثة
+  const overall: Record<string, number> = Object.fromEntries(LEVELS.map((l) => [l, 0]));
+  for (const x of Object.values(lv)) { if (Object.keys(x).length === DIMENSIONS.length) { const o = overallLevel(x); if (o) overall[o]++; } }
+  // الجهات ومصادر الانتساب
+  const orgN: Record<string, { name: string; n: number }> = {};
+  const via: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.organization_id) (orgN[r.organization_id] ||= { name: r.organization_name || '', n: 0 }).n++;
+    const v = r.organization_id ? (r.org_via || 'none') : 'unassigned';
+    via[v] = (via[v] || 0) + 1;
+  }
+  const top_orgs = Object.entries(orgN).sort((a, c) => c[1].n - a[1].n).slice(0, 6).map(([id, o]) => ({ id, ...o }));
   return {
-    success: true, total: (data || []).length, by_status: byStatus, pending_reviews: pendingReviews ?? 0, matrix,
-    funnel: funnel(data || []), top_tracks, tracks_used: Object.keys(byTrack).length,
+    success: true, total: rows.length, by_status: byStatus, pending_reviews: pendingReviews ?? 0, matrix,
+    funnel: funnel(rows), top_tracks, tracks_used: Object.keys(byTrack).length,
+    new_week: rows.filter((r: any) => Date.parse(r.created_at) > weekAgo).length,
+    active_week: rows.filter((r: any) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length,
+    overall, top_orgs, orgs_count: Object.keys(orgN).length, via,
+    ...(await overviewMore([...ids] as string[])),
+  };
+}
+
+// القياس والكتاب والنماذج لمجموعة مشاركين
+async function overviewMore(ids: string[]) {
+  const set = new Set(ids);
+  const [as, prog, subs, ledger] = await Promise.all([
+    db.from('assessments').select('id, participant_id, instruments(key, kind, title_ar, active), assessment_results(dimension, composite_pct)').eq('status', 'submitted'),
+    db.from('handbook_progress').select('participant_id, quiz_score, quiz_total'),
+    db.from('model_submissions').select('participant_id, status, rating'),
+    db.from('points_ledger').select('participant_id, points'),
+  ]);
+  const mine = (r: any) => set.has(r.participant_id);
+  // القياس: لكل أداة عدد من أنهوها ومتوسط النسبة المركبة لكل إطار
+  const inst: Record<string, any> = {};
+  for (const a of ((as.data || []) as any[]).filter(mine)) {
+    const k = a.instruments?.key || '?';
+    const x = (inst[k] ||= { key: k, kind: a.instruments?.kind, title: a.instruments?.title_ar, active: !!a.instruments?.active, n: 0, sum: {}, cnt: {} });
+    x.n++;
+    for (const r of a.assessment_results || []) if (r.composite_pct != null) { x.sum[r.dimension] = (x.sum[r.dimension] || 0) + Number(r.composite_pct); x.cnt[r.dimension] = (x.cnt[r.dimension] || 0) + 1; }
+  }
+  const instruments = Object.values(inst).map((x: any) => ({
+    key: x.key, kind: x.kind, title: x.title, active: x.active, n: x.n,
+    avg: Object.fromEntries(DIMENSIONS.map((d) => [d, x.cnt[d] ? Math.round(x.sum[d] / x.cnt[d]) : null])),
+  }));
+  // الكتاب والنماذج والنقاط
+  const p = ((prog.data || []) as any[]).filter(mine);
+  const s = ((subs.data || []) as any[]).filter(mine);
+  const rated = s.filter((x) => x.rating);
+  const pts: Record<string, number> = {};
+  for (const r of ((ledger.data || []) as any[]).filter(mine)) pts[r.participant_id] = (pts[r.participant_id] || 0) + r.points;
+  const ranks = Object.fromEntries(RANKS.map((r: any) => [r.title, 0]));
+  for (const n of Object.values(pts)) ranks[rankFor(n).title]++;
+  const totals = Object.values(pts);
+  return {
+    instruments,
+    book: {
+      readers: new Set(p.map((x) => x.participant_id)).size, chapters: p.length,
+      accuracy: p.reduce((a, x) => a + x.quiz_total, 0) ? Math.round((p.reduce((a, x) => a + x.quiz_score, 0) / p.reduce((a, x) => a + x.quiz_total, 0)) * 100) : null,
+      submitted: s.filter((x) => x.status !== 'draft').length, to_review: s.filter((x) => x.status === 'submitted').length,
+      drafts: s.filter((x) => x.status === 'draft').length,
+      rating: rated.length ? Math.round((rated.reduce((a, x) => a + x.rating, 0) / rated.length) * 10) / 10 : null,
+      points_avg: totals.length ? Math.round(totals.reduce((a, n) => a + n, 0) / totals.length) : 0, ranks,
+    },
   };
 }
 
