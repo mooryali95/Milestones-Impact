@@ -344,12 +344,12 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook }) {
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
   const closeWelcome = () => { welcomeSeen.set(true); setWelcome(false); };
   const next = nextStep(journey);
-  const reading = approved ? lastRead.get() : null;
   const goTo = (key) => {
     setExpanded((s) => new Set(s).add(key));
     setTimeout(() => document.getElementById(`stage-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
   const approved = !!profile?.approved;
+  const reading = approved ? lastRead.get() : null;
 
   useEffect(() => {
     if (!toast) return undefined;

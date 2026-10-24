@@ -14,8 +14,24 @@ import { DIMENSIONS, dimOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
 
-const FONT = '"Noto Kufi Arabic", "Noto Sans Arabic", system-ui, sans-serif';
-const COLORS = { text: '#0B272F', muted: '#4A6A72', accent: '#8E6524', quote: '#12414E', rule: 'rgba(11,39,47,.12)' };
+import logoDark from '../milestone-impact.svg';
+
+// خط القراءة نسخي كتب، والعناوين أميري، واللاتيني Cormorant
+const FONT = '"Noto Naskh Arabic", "Amiri", "Noto Kufi Arabic", serif';
+const DISPLAY = '"Amiri", "Noto Naskh Arabic", serif';
+const KUFI = '"Noto Kufi Arabic", system-ui, sans-serif';
+const LATIN = '"Cormorant Garamond", Georgia, serif';
+const COLORS = { text: '#14282E', muted: '#5B7178', accent: '#A97A2E', gold: '#B8873A', quote: '#12414E', rule: 'rgba(169,122,46,.35)', paper: '#FFFDF8' };
+const WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+const PART_EN = { milestone: 'Part I · Milestone', impact: 'Part II · Impact', leadership: 'Part III · Leadership' };
+
+// الشعار يُرسم على الصفحة، فيُحمَّل مرة واحدة
+let logoImg = null;
+const loadLogo = () => {
+  if (logoImg) return logoImg;
+  logoImg = new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = logoDark; });
+  return logoImg;
+};
 
 // كلمات بوزنها: **عريض** أو عادي
 function tokens(text) {
@@ -29,9 +45,9 @@ function tokens(text) {
   return out;
 }
 
-// يلف الكلمات في أسطر بعرض محدد، ثم يرسم كل سطر من اليمين بمقاطع متتالية
-function layoutLines(ctx, toks, width, size, weight) {
-  const font = (b) => `${b ? 700 : weight} ${size}px ${FONT}`;
+// يلف الكلمات في أسطر بعرض محدد
+function layoutLines(ctx, toks, width, size, weight, family = FONT) {
+  const font = (b) => `${b ? 700 : weight} ${size}px ${family}`;
   const lines = [];
   let line = [];
   let w = 0;
@@ -46,89 +62,171 @@ function layoutLines(ctx, toks, width, size, weight) {
   return { lines, font };
 }
 
-function drawLine(ctx, line, rightX, y, font, color) {
-  // مقاطع متصلة بنفس الوزن؛ المتصفح يتولى اتجاه النص المختلط داخل كل مقطع
-  const runs = [];
+// وحدات السطر: الكلمات العربية منفردة، والعبارات اللاتينية المتتالية وحدة واحدة حتى لا ينقلب ترتيبها
+const isLatin = (w) => /^[\x20-\x7E‐-’]+$/.test(w) && /[A-Za-z0-9]/.test(w);
+function units(line) {
+  const out = [];
   for (const t of line) {
-    const last = runs[runs.length - 1];
-    if (last && last.bold === t.bold) last.text += ' ' + t.w;
-    else runs.push({ bold: t.bold, text: t.w });
+    const last = out[out.length - 1];
+    if (last && last.bold === t.bold && last.latin && isLatin(t.w)) last.text += ' ' + t.w;
+    else out.push({ bold: t.bold, text: t.w, latin: isLatin(t.w) });
   }
-  let x = rightX;
-  for (const r of runs) {
-    ctx.font = font(r.bold);
-    ctx.fillStyle = color;
-    ctx.fillText(r.text + ' ', x, y);
-    x -= ctx.measureText(r.text + ' ').width;
-  }
+  return out;
 }
 
-function render(canvas, chapter, watermark, cssWidth) {
+// يرسم السطر من اليمين؛ ومع justify يوزع الفراغ بين الوحدات فتستوي حافتا الفقرة كالكتب المطبوعة
+function drawLine(ctx, line, rightX, y, font, color, justify) {
+  const us = units(line);
+  ctx.fillStyle = color;
+  const widths = us.map((u) => { ctx.font = font(u.bold); return ctx.measureText(u.text).width; });
+  ctx.font = font(false);
+  const space = ctx.measureText(' ').width;
+  const natural = widths.reduce((a, b) => a + b, 0) + space * (us.length - 1);
+  const gap = justify && us.length > 1 && natural < justify && natural > justify * 0.72 ? space + (justify - natural) / (us.length - 1) : space;
+  let x = rightX;
+  us.forEach((u, i) => {
+    ctx.font = font(u.bold);
+    ctx.fillText(u.text, x, y);
+    x -= widths[i] + gap;
+  });
+}
+
+// زخرفة: خط ذهبي تتوسطه معينة
+function ornament(ctx, cx, y, half) {
+  ctx.fillStyle = COLORS.rule;
+  ctx.fillRect(cx - half, y, half - 9, 1);
+  ctx.fillRect(cx + 9, y, half - 9, 1);
+  ctx.save();
+  ctx.translate(cx, y + 0.5);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = COLORS.gold;
+  ctx.fillRect(-3.5, -3.5, 7, 7);
+  ctx.restore();
+}
+
+function render(canvas, chapter, watermark, cssWidth, meta, logo) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const pad = cssWidth < 520 ? 20 : 44;
+  const narrow = cssWidth < 520;
+  const pad = narrow ? 22 : 56;
   const width = cssWidth - pad * 2;
+  const right = pad + width;
   const blocks = parse(chapter.md);
   const ctx = canvas.getContext('2d');
+  const k = narrow ? 0.94 : 1;
   const STY = {
-    h2: { size: 19, weight: 700, lh: 34, before: 26, after: 8, color: COLORS.text },
-    h3: { size: 16, weight: 700, lh: 28, before: 18, after: 4, color: COLORS.text },
-    p: { size: 15, weight: 400, lh: 29, before: 8, after: 4, color: COLORS.text },
-    li: { size: 15, weight: 400, lh: 28, before: 4, after: 2, color: COLORS.text },
-    quote: { size: 15, weight: 600, lh: 28, before: 14, after: 10, color: COLORS.quote },
+    h2: { size: 21 * k, weight: 700, lh: 38 * k, before: 30, after: 6, color: COLORS.quote, family: DISPLAY },
+    h3: { size: 17 * k, weight: 700, lh: 30 * k, before: 18, after: 2, color: COLORS.text, family: FONT },
+    p: { size: 16 * k, weight: 400, lh: 32 * k, before: 8, after: 4, color: COLORS.text, family: FONT },
+    lead: { size: 17.5 * k, weight: 400, lh: 34 * k, before: 4, after: 8, color: COLORS.quote, family: FONT },
+    li: { size: 16 * k, weight: 400, lh: 30 * k, before: 4, after: 2, color: COLORS.text, family: FONT },
+    quote: { size: 18 * k, weight: 400, lh: 34 * k, before: 22, after: 18, color: COLORS.quote, family: DISPLAY },
   };
+  const firstP = blocks.findIndex((b) => b.type === 'p');
 
-  // تمريرتان: الأولى تحسب الارتفاع، والثانية ترسم
   const pass = (draw) => {
-    let y = pad + 8;
     ctx.direction = 'rtl';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
-    // عنوان الباب
-    const title = layoutLines(ctx, tokens(chapter.title), width, 23, 700);
-    title.lines.forEach((ln) => { y += 38; if (draw) drawLine(ctx, ln, pad + width, y, title.font, COLORS.text); });
-    y += 14;
-    if (draw) { ctx.fillStyle = '#A97A2E'; ctx.fillRect(pad + width - 64, y, 64, 3); }
-    y += 10;
+    let y = pad - 14;
 
-    for (const b of blocks) {
-      const s = STY[b.type];
-      const indent = b.type === 'li' ? 22 : b.type === 'quote' ? 18 : 0;
-      const { lines, font } = layoutLines(ctx, tokens(b.text), width - indent - (b.type === 'quote' ? 12 : 0), s.size, s.weight);
+    // الترويسة الجارية: الشعار يسارًا، واسم الكتاب والجزء يمينًا
+    y += 22;
+    if (draw) {
+      ctx.font = `500 11.5px ${KUFI}`;
+      ctx.fillStyle = COLORS.muted;
+      ctx.fillText(`كتاب القائد · ${meta.part}`, right, y);
+      if (logo) { const h = 22; const w = (logo.width / logo.height) * h || 48; ctx.drawImage(logo, pad, y - h + 5, w, h); }
+      ctx.fillStyle = COLORS.rule;
+      ctx.fillRect(pad, y + 12, width, 1);
+    }
+    y += 54;
+
+    // افتتاحية الباب: رقم كبير باهت، والجزء بالإنجليزية، ثم العنوان والزخرفة
+    if (draw) {
+      ctx.save();
+      ctx.textAlign = 'left';
+      ctx.direction = 'ltr';
+      ctx.font = `700 ${narrow ? 78 : 118}px ${DISPLAY}`;
+      ctx.fillStyle = 'rgba(169,122,46,.13)';
+      ctx.fillText(meta.no, pad - 4, y + (narrow ? 44 : 70));
+      ctx.restore();
+      ctx.font = `italic 500 ${narrow ? 15 : 17}px ${LATIN}`;
+      ctx.fillStyle = COLORS.gold;
+      ctx.direction = 'ltr';
+      ctx.fillText(`${meta.partEn}  ·  Chapter ${meta.word}`, right, y);
+      ctx.direction = 'rtl';
+    }
+    y += 12;
+    const title = layoutLines(ctx, tokens(chapter.title), width - (narrow ? 70 : 140), narrow ? 25 : 31, 700, DISPLAY);
+    title.lines.forEach((ln) => { y += narrow ? 42 : 52; if (draw) drawLine(ctx, ln, right, y, title.font, COLORS.text); });
+    y += 26;
+    if (draw) ornament(ctx, right - 70, y, 70);
+    y += 22;
+
+    blocks.forEach((b, bi) => {
+      const s = bi === firstP ? STY.lead : STY[b.type];
+      const indent = b.type === 'li' ? 24 : b.type === 'quote' ? 34 : 0;
+      const w = width - indent - (b.type === 'quote' ? 22 : 0);
+      const { lines, font } = layoutLines(ctx, tokens(b.text), w, s.size, s.weight, s.family);
       y += s.before;
       const top = y;
+      if (b.type === 'h2' && draw) {
+        ctx.save(); ctx.translate(right - 4, y + s.lh - 9); ctx.rotate(Math.PI / 4); ctx.fillStyle = COLORS.gold; ctx.fillRect(-4, -4, 8, 8); ctx.restore();
+      }
+      const hIndent = b.type === 'h2' ? 18 : 0;
       lines.forEach((ln, i) => {
         y += s.lh;
-        if (!draw) return;
+        if (!draw || b.type === 'quote') return;
         if (b.type === 'li' && i === 0) {
           ctx.font = `700 ${s.size}px ${FONT}`;
           ctx.fillStyle = COLORS.accent;
-          ctx.fillText(b.marker, pad + width, y);
+          const dot = b.marker === '•' || b.marker === '◆';
+          ctx.fillText(dot ? '◆' : b.marker, right - (dot ? 4 : 0), y - (dot ? 2 : 0));
         }
-        drawLine(ctx, ln, pad + width - indent, y, font, s.color);
+        const just = (b.type === 'p' || b.type === 'li') && i < lines.length - 1 ? w : 0;
+        drawLine(ctx, ln, right - indent - hIndent, y, font, s.color, just);
       });
-      if (draw && b.type === 'quote') {
-        ctx.fillStyle = 'rgba(169,122,46,.10)';
-        ctx.fillRect(pad, top + 4, width, y - top + 10);
-        ctx.fillStyle = '#A97A2E';
-        ctx.fillRect(pad + width - 3, top + 4, 3, y - top + 10);
-        // إعادة رسم النص فوق الخلفية
-        let yy = top;
-        lines.forEach((ln) => { yy += s.lh; drawLine(ctx, ln, pad + width - indent, yy, font, s.color); });
+      if (b.type === 'quote') {
+        if (draw) {
+          ctx.fillStyle = 'rgba(169,122,46,.07)';
+          ctx.fillRect(pad, top - 6, width, y - top + 24);
+          ctx.fillStyle = COLORS.gold;
+          ctx.fillRect(right - 2, top - 6, 2, y - top + 24);
+          ctx.font = `600 64px ${LATIN}`;
+          ctx.fillStyle = 'rgba(169,122,46,.45)';
+          ctx.fillText('”', right - 8, top + 46);
+          let yy = top;
+          lines.forEach((ln) => { yy += s.lh; drawLine(ctx, ln, right - indent, yy, font, s.color); });
+        }
         y += 10;
       }
       y += s.after;
-    }
+    });
 
-    // تذييل الملكية
-    y += 34;
+    // ختام الباب وتذييل الملكية: الاسم يمينًا، ورقم الصفحة يسارًا
+    y += 30;
+    if (draw) ornament(ctx, pad + width / 2, y, 34);
+    y += 46;
     if (draw) {
       ctx.fillStyle = COLORS.rule;
-      ctx.fillRect(pad, y - 22, width, 1);
-      ctx.font = `400 12px ${FONT}`;
+      ctx.fillRect(pad, y - 20, width, 1);
+      ctx.font = `500 11.5px ${KUFI}`;
       ctx.fillStyle = COLORS.muted;
-      ctx.fillText(`© Milestone Impact. نسخة شخصية مرخصة لـ ${watermark}. يُمنع النسخ والتصوير والتداول.`, pad + width, y);
-    }
-    return y + pad;
+      ctx.fillText(`نسخة شخصية مرخصة لـ ${meta.name}`, right, y);
+      ctx.textAlign = 'left';
+      ctx.direction = 'ltr';
+      ctx.font = `italic 500 15px ${LATIN}`;
+      ctx.fillStyle = COLORS.gold;
+      ctx.font = `400 13px ${DISPLAY}`;
+      ctx.fillText(`— ${meta.folio} —`, pad, y);
+      ctx.textAlign = 'right';
+      ctx.direction = 'rtl';
+      y += 20;
+      ctx.font = `400 10.5px ${KUFI}`;
+      ctx.fillStyle = 'rgba(91,113,120,.75)';
+      ctx.fillText('© Milestone Impact. يُمنع النسخ والتصوير والتداول، وكل صفحة تحمل هوية صاحبها.', right, y);
+    } else y += 20;
+    return y + pad - 10;
   };
 
   const height = Math.ceil(pass(false));
@@ -137,16 +235,21 @@ function render(canvas, chapter, watermark, cssWidth) {
   canvas.style.width = `${cssWidth}px`;
   canvas.style.height = `${height}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = COLORS.paper;
   ctx.fillRect(0, 0, cssWidth, height);
+  // إطار داخلي رفيع كالكتب الفاخرة
+  ctx.strokeStyle = 'rgba(169,122,46,.28)';
+  ctx.lineWidth = 1;
+  const fi = narrow ? 8 : 16;
+  ctx.strokeRect(fi + 0.5, fi + 0.5, cssWidth - fi * 2 - 1, height - fi * 2 - 1);
   pass(true);
 
   // العلامة المائية فوق كل شيء
   const stamp = `${watermark} · ${new Date().toLocaleDateString('en-GB')}`;
   ctx.save();
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.06;
   ctx.fillStyle = COLORS.text;
-  ctx.font = `600 15px ${FONT}`;
+  ctx.font = `600 15px ${KUFI}`;
   ctx.textAlign = 'center';
   ctx.direction = 'rtl';
   ctx.rotate(-Math.PI / 7);
@@ -292,9 +395,19 @@ export default function Handbook({ me, onBack }) {
 
   const paint = useCallback(async () => {
     if (!data || !canvasRef.current || !wrapRef.current) return;
-    try { await document.fonts.load(`400 15px ${FONT}`); await document.fonts.load(`700 15px ${FONT}`); } catch { /* الخط الاحتياطي */ }
-    render(canvasRef.current, data.chapter, data.watermark, Math.min(wrapRef.current.clientWidth, 780));
-  }, [data]);
+    try {
+      await Promise.all([`400 16px "Noto Naskh Arabic"`, `700 16px "Noto Naskh Arabic"`, `700 30px "Amiri"`, `400 18px "Amiri"`, `italic 500 17px "Cormorant Garamond"`, `500 64px "Cormorant Garamond"`, `500 12px "Noto Kufi Arabic"`]
+        .map((f) => document.fonts.load(f)));
+    } catch { /* الخط الاحتياطي */ }
+    const logo = await loadLogo();
+    const list = toc?.chapters || [];
+    const i = list.findIndex((c) => c.id === data.chapter.id);
+    const inPart = list.filter((x) => x.dimension === data.chapter.dimension).findIndex((x) => x.id === data.chapter.id) + 1;
+    render(canvasRef.current, data.chapter, data.watermark, Math.min(wrapRef.current.clientWidth, 820), {
+      name: toc?.name || me.participant.full_name, part: `${PART[data.chapter.dimension]} · ${dimOf(data.chapter.dimension).title}`,
+      partEn: PART_EN[data.chapter.dimension], no: pad(inPart || 1), word: WORDS[(inPart || 1) - 1] || String(inPart), folio: `${i + 1} / ${list.length}`,
+    }, logo);
+  }, [data, toc, me]);
 
   useEffect(() => {
     paint();
@@ -401,7 +514,7 @@ export default function Handbook({ me, onBack }) {
         </nav>
       </section>
 
-      {tab === 'models' && <Models onPoints={onPoints} />}
+      {tab === 'models' && <Models name={toc.name || me.participant.full_name} onPoints={onPoints} />}
       {tab === 'wins' && <Wins />}
 
       {tab === 'read' && (
