@@ -15,7 +15,7 @@ import { Spinner } from '../ui.jsx';
 
 const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والتوجيه'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
+  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook']);

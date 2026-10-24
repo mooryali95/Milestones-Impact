@@ -28,7 +28,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
     kinds.has('reading') ? db.from('handbook_progress').select('module_id').eq('participant_id', p.id) : none,
     kinds.has('video') ? db.from('video_progress').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
-    kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active').in('requirement_id', ids) : none,
+    kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
   ]);
@@ -56,6 +56,8 @@ export function participantItem(it: any, p: any) {
       ? bookingUrl(c, { name: p.full_name, email: p.email, ref: `${p.id}.${it.id}` }) : null;
     act.provider = c.booking_url ? c.provider || null : null;
     act.instant = instantAvailable(c) && act.can_book;
+    act.mode = c.mode || 'online';
+    act.location = c.location_ar || null;
   }
   if (act && it.kind === 'video') { act.source = videoSource(c.url); act.title = c.title || null; }
   const { config: _c, ...rest } = it;
@@ -119,12 +121,30 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   if (!(await verifyQrToken(t, s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
   if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
   const r = await myRequirement(p, s.requirement_id, 'workshop');
+  if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
   if (!prev) {
     must(await db.from('workshop_attendance').insert({ session_id: s.id, participant_id: p.id, method: 'qr', ip: ctx.ip, user_agent: ctx.ua }));
     await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id);
   }
   return { success: true, already: !!prev, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+}
+
+// ── الانضمام إلى جلسة جماعية عن بعد ──
+// يعيد رابط الاجتماع في نافذة الجلسة فقط. إن كان التوثيق بالانضمام يُسجَّل الحضور.
+export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
+  const s = must(await db.from('workshop_sessions').select('*').eq('id', String(b.session_id || '')).maybeSingle());
+  if (!s || s.mode !== 'online' || !s.join_url) throw new Fail('الجلسة غير موجودة', 404);
+  if (!checkinOpen(s)) throw new Fail('رابط الجلسة يُفتح قبل موعدها بساعة', 400, 'closed');
+  const r = await myRequirement(p, s.requirement_id, 'workshop');
+  if (r.config?.verify === 'join') {
+    must(await db.from('workshop_attendance').upsert(
+      { session_id: s.id, participant_id: p.id, method: 'join', ip: ctx.ip, user_agent: ctx.ua },
+      { onConflict: 'session_id,participant_id', ignoreDuplicates: true },
+    ));
+  }
+  await audit('participant', p.email, 'workshop.join', 'workshop_sessions', s.id);
+  return { success: true, join_url: s.join_url, recorded: r.config?.verify === 'join' };
 }
 
 // ── الاتصال الفوري ──
@@ -195,7 +215,7 @@ export async function overview() {
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
   const [reqs, ws, att, coach] = await Promise.all([
     db.from('stage_requirements').select('id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
-    db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active').order('starts_at'),
+    db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').order('starts_at'),
     db.from('workshop_attendance').select('session_id'),
     db.from('coaching_sessions').select('*, participants(full_name, email)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
@@ -212,12 +232,16 @@ export async function overview() {
 
 export async function workshopSave(a: any, b: Body) {
   const row = b.row || {};
+  const mode = row.mode === 'online' ? 'online' : 'in_person';
   const out: Body = {
     title_ar: String(row.title_ar || '').trim().slice(0, 200),
-    location_ar: String(row.location_ar || '').trim().slice(0, 300) || null,
+    mode,
+    location_ar: mode === 'in_person' ? String(row.location_ar || '').trim().slice(0, 300) || null : null,
+    join_url: mode === 'online' ? String(row.join_url || '').trim().slice(0, 500) || null : null,
     starts_at: row.starts_at, ends_at: row.ends_at, active: row.active !== false,
   };
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
+  if (mode === 'online' && !/^https:\/\/\S+$/.test(out.join_url || '')) throw new Fail('الجلسة عن بعد تحتاج رابط اجتماع يبدأ بـ https');
   if (!(new Date(out.ends_at) > new Date(out.starts_at))) throw new Fail('وقت الانتهاء بعد وقت البدء');
   let saved: any;
   if (row.id) {
@@ -242,20 +266,20 @@ export async function workshopDelete(a: any, b: Body) {
 
 // رمز الحضور الحالي لعرضه على شاشة القاعة. يتجدد كل 30 ثانية.
 export async function workshopQr(b: Body) {
-  const s = must(await db.from('workshop_sessions').select('id, secret, title_ar, location_ar, starts_at, ends_at, active').eq('id', String(b.id || '')).maybeSingle());
+  const s = must(await db.from('workshop_sessions').select('id, secret, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
   const t = await qrToken(s.id, s.secret);
   const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', s.id);
   const left = QR_WINDOW - (Math.floor(Date.now() / 1000) % QR_WINDOW);
   return {
     success: true, url: `${CONFIG.appUrl}/?checkin=${encodeURIComponent(t)}`, refresh_in: left, open: checkinOpen(s), attended: count || 0,
-    session: { id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at },
+    session: { id: s.id, title: s.title_ar, mode: s.mode, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at },
   };
 }
 
 // الحضور ومن يُتوقع حضوره (من ينطبق عليهم المتطلب بعد اعتماد مسارهم)
 export async function workshopAttendance(b: Body) {
-  const s = must(await db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active').eq('id', String(b.id || '')).maybeSingle());
+  const s = must(await db.from('workshop_sessions').select('id, requirement_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
   const [{ data: r }, { data: att }, { data: pl }] = await Promise.all([
     db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),

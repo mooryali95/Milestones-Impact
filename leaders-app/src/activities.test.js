@@ -1,7 +1,7 @@
 // الأنشطة الموثقة: القراءة والفيديو والحضور والتوجيه وwebhook الحجز
 import { describe, expect, it } from 'vitest';
 import {
-  applyReadingPing, applyVideoPing, bookingUrl, buildJourney, checkinOpen, cleanConfig, coachingStatus, mergeRanges,
+  applyReadingPing, applyVideoPing, instantAvailable, bookingUrl, buildJourney, checkinOpen, cleanConfig, coachingStatus, mergeRanges,
   parseBooking, parseRef, qrToken, qrWindow, readingStatus, readingVerdict, verifyQrToken, verifyWebhook, videoSource,
   videoStatus, workshopStatus, READ_SLICES,
 } from '../../supabase/functions/leaders-api/logic.js';
@@ -84,6 +84,18 @@ describe('الحضور برمز QR', () => {
     expect(checkinOpen(s, Date.parse('2026-11-01T07:00:00Z'))).toBe(false);
     expect(checkinOpen({ ...s, active: false }, Date.parse('2026-11-01T10:00:00Z'))).toBe(false);
   });
+  it('رابط الجلسة عن بعد يظهر في نافذتها فقط، وطريقة التوثيق تصل للمشارك', () => {
+    const now = Date.parse('2026-11-01T09:30:00Z');
+    const s = [{ id: 'a', mode: 'online', join_url: 'https://zoom.us/j/1', starts_at: '2026-11-01T09:00:00Z', ends_at: '2026-11-01T11:00:00Z' },
+      { id: 'b', mode: 'online', join_url: 'https://zoom.us/j/2', starts_at: '2026-11-08T09:00:00Z', ends_at: '2026-11-08T11:00:00Z' },
+      { id: 'c', starts_at: '2026-11-01T09:00:00Z', ends_at: '2026-11-01T11:00:00Z' }];
+    const st = workshopStatus({ verify: 'join' }, s, new Set(), now);
+    expect(st.verify).toBe('join');
+    const by = Object.fromEntries(st.sessions.map((x) => [x.id, x]));
+    expect([by.a.can_join, by.b.can_join, by.c.can_join]).toEqual([true, false, false]);
+    expect(by.c.mode).toBe('in_person');
+    expect(st.sessions[0]).not.toHaveProperty('join_url');
+  });
   it('يكتمل بعدد الأيام المطلوبة', () => {
     const sessions = [1, 2, 3, 4].map((i) => ({ id: `s${i}`, title_ar: `يوم ${i}`, starts_at: `2026-11-0${i}T09:00:00Z` }));
     expect(workshopStatus({ sessions_required: 4 }, sessions, new Set(['s1', 's2', 's3'])).done).toBe(false);
@@ -104,6 +116,11 @@ describe('جلسات التوجيه', () => {
     expect(st.sessions).toHaveLength(2);
     expect(st.sessions[1].awaiting).toBe(true);
     expect(st.can_book).toBe(false);
+  });
+  it('لا اتصال فوري للجلسات الحضورية', () => {
+    const until = new Date(Date.now() + 6e5).toISOString();
+    expect(instantAvailable({ instant_url: 'https://meet.google.com/x', instant_until: until })).toBe(true);
+    expect(instantAvailable({ instant_url: 'https://meet.google.com/x', instant_until: until, mode: 'in_person' })).toBe(false);
   });
   it('رابط الحجز يحمل الاسم والبريد والمرجع', () => {
     const cal = new URL(bookingUrl({ booking_url: 'https://cal.com/mi/coaching' }, { name: 'سارة', email: 's@x.com', ref: 'P.R' }));
@@ -143,10 +160,14 @@ describe('جلسات التوجيه', () => {
 describe('إعداد النشاط', () => {
   it('يضبط الحقول بحسب النوع', () => {
     expect(cleanConfig('coaching', { sessions_required: '4', booking_url: 'https://cal.com/mi/x', junk: 1 }, { instant_until: 'T' }))
-      .toEqual({ sessions_required: 4, minutes: 60, booking_url: 'https://cal.com/mi/x', provider: 'calcom', instant_until: 'T' });
+      .toEqual({ sessions_required: 4, minutes: 60, mode: 'online', booking_url: 'https://cal.com/mi/x', provider: 'calcom', instant_until: 'T' });
     expect(() => cleanConfig('video', { url: 'ftp://x' })).toThrow();
     expect(cleanConfig('reading', { scope: 'bad' })).toEqual({ scope: 'all', quiz: true });
     expect(cleanConfig('check', { a: 1 })).toEqual({});
+    expect(cleanConfig('workshop', { verify: 'join' })).toEqual({ sessions_required: 1, verify: 'join' });
+    expect(cleanConfig('workshop', { verify: 'x' }).verify).toBe('qr');
+    expect(cleanConfig('coaching', { mode: 'in_person', location_ar: ' مكتب الرياض ' })).toMatchObject({ mode: 'in_person', location_ar: 'مكتب الرياض' });
+    expect(cleanConfig('coaching', { mode: 'online', location_ar: 'x' })).not.toHaveProperty('location_ar');
   });
 });
 

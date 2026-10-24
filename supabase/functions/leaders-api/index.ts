@@ -11,7 +11,7 @@
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
-//             handbook.ping · video.ping · workshop.checkin · coaching.instant (الأنشطة الموثقة)
+//             handbook.ping · video.ping · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -65,6 +65,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'handbook.ping': (p, b) => V.readingPing(p, b),
   'video.ping': (p, b) => V.videoPing(p, b),
   'workshop.checkin': (p, b, _s, ctx) => V.workshopCheckin(p, b, ctx),
+  'workshop.join': (p, b, _s, ctx) => V.workshopJoin(p, b, ctx),
   'coaching.instant': (p, b) => V.coachingInstant(p, b),
 };
 

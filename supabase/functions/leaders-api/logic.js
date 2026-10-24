@@ -495,13 +495,26 @@ export function videoSource(url) {
 }
 
 // ── الورشة الحضورية ──
-export function workshopStatus(config, sessions, attended) {
+// طرق توثيق حضور الجلسات الجماعية، يختارها المشرف لكل متطلب
+export const VERIFY_METHODS = ['qr', 'join', 'manual'];
+export const SESSION_MODES = ['in_person', 'online'];
+
+export function workshopStatus(config, sessions, attended, now = Date.now()) {
+  const verify = VERIFY_METHODS.includes(config?.verify) ? config.verify : 'qr';
   const list = (sessions || []).filter((s) => s.active !== false)
     .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
-    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar || null, starts_at: s.starts_at, ends_at: s.ends_at, attended: attended.has(s.id) }));
+    .map((s) => {
+      const mode = s.mode === 'online' ? 'online' : 'in_person';
+      const open = checkinOpen(s, now);
+      // رابط الاجتماع لا يظهر إلا في نافذة الجلسة
+      return {
+        id: s.id, title: s.title_ar, mode, location: s.location_ar || null, starts_at: s.starts_at, ends_at: s.ends_at,
+        attended: attended.has(s.id), open, can_join: mode === 'online' && open && !!s.join_url,
+      };
+    });
   const need = Math.max(1, Number(config?.sessions_required) || list.length || 1);
   const count = list.filter((s) => s.attended).length;
-  return { type: 'workshop', done: count >= need, count, total: need, sessions: list };
+  return { type: 'workshop', done: count >= need, count, total: need, verify, sessions: list };
 }
 
 // نافذة الحضور: من ساعة قبل البدء إلى نصف ساعة بعد الانتهاء
@@ -549,8 +562,9 @@ export function coachingStatus(config, sessions, now = Date.now()) {
   return { type: 'coaching', done: count >= need, count, total: need, can_book: count + open < need, sessions: list };
 }
 
+// الاتصال الفوري عن بعد فقط
 export const instantAvailable = (config, now = Date.now()) =>
-  !!(config?.instant_url && config?.instant_until && new Date(config.instant_until).getTime() > now);
+  config?.mode !== 'in_person' && !!(config?.instant_url && config?.instant_until && new Date(config.instant_until).getTime() > now);
 
 // منصة الحجز من الرابط: Calendly أو Cal.com (أو نطاق Cal.com خاص)
 export const bookingProvider = (url, explicit) =>
@@ -631,7 +645,7 @@ export function activityFor(req, ev, now = Date.now()) {
   const c = req.config || {};
   if (req.kind === 'reading') return readingStatus(c, ev.chapters || [], ev.reading || {}, ev.quizzes || {});
   if (req.kind === 'video') return videoStatus(c, ev.video?.[req.id]);
-  if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set());
+  if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set(), now);
   if (req.kind === 'coaching') return coachingStatus(c, (ev.coaching || []).filter((s) => s.requirement_id === req.id), now);
   return null;
 }
@@ -660,9 +674,15 @@ export function cleanConfig(kind, cfg, prev = {}) {
     if (!videoSource(url)) throw new Error('رابط الفيديو: رابط يوتيوب أو ملف فيديو يبدأ بـ https');
     return { url, min_pct: intIn(c.min_pct, 10, 100, 90), ...(c.title ? { title: String(c.title).slice(0, 200) } : {}) };
   }
-  if (kind === 'workshop') return { sessions_required: intIn(c.sessions_required, 1, 30, 1) };
+  if (kind === 'workshop') {
+    return { sessions_required: intIn(c.sessions_required, 1, 30, 1), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr' };
+  }
   if (kind === 'coaching') {
-    const out = { sessions_required: intIn(c.sessions_required, 1, 30, 1), minutes: intIn(c.minutes, 5, 480, 60) };
+    const out = {
+      sessions_required: intIn(c.sessions_required, 1, 30, 1), minutes: intIn(c.minutes, 5, 480, 60),
+      mode: ['online', 'in_person', 'any'].includes(c.mode) ? c.mode : 'online',
+    };
+    if (out.mode !== 'online' && String(c.location_ar || '').trim()) out.location_ar = String(c.location_ar).trim().slice(0, 300);
     if (String(c.booking_url || '').trim()) {
       out.booking_url = httpsUrl(c.booking_url);
       if (!out.booking_url) throw new Error('رابط الحجز يجب أن يبدأ بـ https');

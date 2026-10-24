@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════
-// الأنشطة الموثقة في بطاقة المتطلب: قراءة، فيديو، ورشة، توجيه
+// الأنشطة الموثقة في بطاقة المتطلب: قراءة، فيديو، جلسات جماعية، جلسات فردية
 // ════════════════════════════════════════════════════════════════
 // لا زر «أنجزته» هنا: كل نشاط يكتمل بدليله. القراءة بوقتها الفعلي،
-// والفيديو بما شوهد منه، والورشة بمسح رمز الحضور، والتوجيه بتأكيد الموجّه.
+// والفيديو بما شوهد منه، والجلسة الجماعية بالتوثيق الذي اختاره المشرف، والفردية بتأكيد الموجّه.
 import React, { useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
 
@@ -126,8 +126,26 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-function Workshop({ a }) {
+const MODE_CHIP = { in_person: 'حضوري', online: 'عن بعد' };
+const VERIFY_HINT = {
+  qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
+  join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
+  manual: 'يسجل المدرب حضورك في الجلسة.',
+};
+
+function Workshop({ item, open, setToast }) {
+  const a = item.activity;
+  const [busy, setBusy] = useState('');
   const upcoming = a.sessions.filter((s) => !s.attended && new Date(s.ends_at) > new Date());
+  const join = async (s) => {
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
+    setBusy(s.id);
+    const r = await call('workshop.join', { session_id: s.id });
+    setBusy('');
+    if (!r.success) { win?.close(); return setToast(r.message); }
+    if (win) win.location.href = r.join_url; else location.href = r.join_url;
+    if (r.recorded) setToast('سُجل حضورك');
+  };
   return (
     <div className="act">
       <div className="row between"><b className="small">حضرت {a.count} من {a.total}</b></div>
@@ -137,13 +155,15 @@ function Workshop({ a }) {
           {a.sessions.map((s) => (
             <li key={s.id}>
               <span className="grow"><b>{s.title}</b><span className="small muted"> · {fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}{s.location ? ` · ${s.location}` : ''}</span></span>
+              <span className="chip">{MODE_CHIP[s.mode]}</span>
+              {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               {s.attended ? <span className="chip ok">حضرت ✓</span>
                 : new Date(s.ends_at) < new Date() ? <span className="chip bad">لم يُسجل حضور</span> : <span className="chip">قادمة</span>}
             </li>
           ))}
         </ul>
-      ) : <p className="h">ستظهر هنا مواعيد الورشة ومكانها حين تُجدول.</p>}
-      {upcoming.length > 0 && <p className="h">في القاعة امسح رمز الحضور الذي يعرضه المدرب بكاميرا جوالك، ويُسجل حضورك فورًا.</p>}
+      ) : <p className="h">ستظهر هنا مواعيد الجلسات وطريقتها حين تُجدول.</p>}
+      {upcoming.length > 0 && <p className="h">{VERIFY_HINT[a.verify] || VERIFY_HINT.qr}</p>}
     </div>
   );
 }
@@ -173,7 +193,9 @@ function Coaching({ item, open, onRefresh, setToast }) {
     && Date.now() > new Date(s.starts_at).getTime() - 15 * 6e4 && Date.now() < new Date(s.ends_at).getTime();
   return (
     <div className="act">
-      <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b></div>
+      <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b>
+        <span className="chip">{a.mode === 'in_person' ? 'حضوري' : a.mode === 'any' ? 'حضوري أو عن بعد' : 'عن بعد'}</span></div>
+      {a.location && <p className="h">المكان: {a.location}</p>}
       <Bar value={(a.count / a.total) * 100} label="الجلسات" />
       {a.sessions.length > 0 && (
         <ul className="act-list">
@@ -212,7 +234,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, setToast })
   if (!a) return null;
   if (a.type === 'reading') return <Reading a={a} onHandbook={open ? onHandbook : null} />;
   if (a.type === 'video') return <Video item={item} open={open} onRefresh={refresh} />;
-  if (a.type === 'workshop') return <Workshop a={a} />;
+  if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
   return null;
 }

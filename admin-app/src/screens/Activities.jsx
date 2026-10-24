@@ -1,8 +1,9 @@
 // ════════════════════════════════════════════════════════════════
-// الأنشطة الموثقة: الورش الحضورية برمز QR، وجلسات التوجيه
+// الأنشطة الموثقة: الجلسات الجماعية والفردية، حضورية أو عن بعد
 // ════════════════════════════════════════════════════════════════
-// الورشة: جلسات بمواعيد، ورمز حضور يتجدد كل 30 ثانية يُعرض على شاشة القاعة،
-// وقائمة حضور للتسجيل اليدوي. التوجيه: حجوزات منصة المواعيد، وتوفر
+// الجلسات الجماعية: مواعيد حضورية أو عن بعد، وحضور يُوثَّق بالطريقة المختارة
+// للمتطلب (رمز QR يتجدد كل 30 ثانية، أو الانضمام من التطبيق، أو يدويًا).
+// الجلسات الفردية: حجوزات منصة المواعيد، وتوفر
 // الاتصال الفوري، وتأكيد الموجّه لكل جلسة (حضر أو لم يحضر).
 // إعداد كل نشاط (الرابط، العدد المطلوب) في «الرحلة والمتطلبات».
 import React, { useCallback, useEffect, useState } from 'react';
@@ -14,11 +15,16 @@ import { Spinner, useEscape, useUI } from '../ui.jsx';
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 const SESSION_FIELDS = [
   { name: 'title_ar', label: 'عنوان الجلسة (مثل: اليوم الأول، Milestone)' },
-  { name: 'location_ar', label: 'المكان (القاعة والمدينة، أو «مباشر عن بعد»)' },
+  { name: 'mode', label: 'الطريقة', type: 'select', options: { in_person: 'حضوري', online: 'عن بعد' } },
+  { name: 'location_ar', label: 'المكان (القاعة والمدينة)', show: (v) => v.mode !== 'online' },
+  { name: 'join_url', label: 'رابط الاجتماع (Zoom أو Teams أو Google Meet)', dir: 'ltr', show: (v) => v.mode === 'online',
+    help: 'يظهر للمشارك قبل الجلسة بساعة فقط.' },
   { name: 'starts_at', label: 'تبدأ', type: 'datetime' },
   { name: 'ends_at', label: 'تنتهي', type: 'datetime' },
   { name: 'active', label: 'مفعّلة', type: 'check' },
 ];
+const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
+const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };
 const COACH_ST = { booked: ['محجوزة', ''], requested: ['اتصال فوري', 'warn'], attended: ['حضر', 'ok'], no_show: ['لم يحضر', 'bad'], cancelled: ['أُلغيت', ''] };
 
 // ── شاشة رمز الحضور للقاعة ──
@@ -97,7 +103,7 @@ function Workshops({ data, reload, canWrite }) {
   const [att, setAtt] = useState(null);
   const reqs = data.requirements.filter((r) => r.kind === 'workshop');
   const save = (base) => async (row) => L('admin.workshop-save', { row: { ...base, ...row } });
-  if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «ورشة حضورية». أضفه من «الرحلة والمتطلبات».</p>;
+  if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات جماعية بمواعيد». أضفه في أي مرحلة من «الرحلة والمتطلبات».</p>;
   return (
     <>
       {reqs.map((r) => {
@@ -105,26 +111,26 @@ function Workshops({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || 1}</small></div>
-              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'جلسة جديدة', fields: SESSION_FIELDS, values: { active: true }, onSave: save({ requirement_id: r.id }) })}>+ جلسة</button>}
+              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || 1} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields: SESSION_FIELDS, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
-                <thead><tr><th>الجلسة</th><th>الموعد</th><th>المكان</th><th>الحضور</th><th /></tr></thead>
+                <thead><tr><th>الجلسة</th><th>الموعد</th><th>الطريقة</th><th>الحضور</th><th /></tr></thead>
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
                     <td>{s.title_ar}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
                     <td>{when(s.starts_at)}</td>
-                    <td>{s.location_ar || ''}</td>
+                    <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? '' : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
-                      <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير جلسة', fields: SESSION_FIELDS, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: SESSION_FIELDS, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>
               </table>
-            ) : <p className="la-muted" style={{ marginTop: 8 }}>لا جلسات بعد. أضف أيام الورشة بمواعيدها ومكانها لتظهر للمشاركين.</p>}
+            ) : <p className="la-muted" style={{ marginTop: 8 }}>لا مواعيد بعد. أضف المواعيد بطريقتها (حضوري أو عن بعد) لتظهر للمشاركين.</p>}
           </section>
         );
       })}
@@ -167,7 +173,7 @@ function Coaching({ data, reload, canWrite }) {
       onSave: (v) => L('admin.coaching-add', { ...v, requirement_id: r.id, minutes: r.config?.minutes }),
     });
   };
-  if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات توجيه». أضفه من «الرحلة والمتطلبات».</p>;
+  if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات فردية بحجز». أضفه في أي مرحلة من «الرحلة والمتطلبات».</p>;
   return (
     <>
       {reqs.map((r) => {
@@ -179,10 +185,10 @@ function Coaching({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · {c.sessions_required || 1} جلسات · {c.minutes || 60} دقيقة</small></div>
+              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · {c.sessions_required || 1} جلسات · {c.minutes || 60} دقيقة · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
               <div className="la-row">
                 {c.booking_url ? <span className="la-chip ok">الحجز عبر {c.provider === 'calendly' ? 'Calendly' : 'Cal.com'}</span> : <span className="la-chip warn">بلا رابط حجز</span>}
-                {canWrite && c.instant_url && (r.instant_open
+                {canWrite && c.instant_url && c.mode !== 'in_person' && (r.instant_open
                   ? <button className="btn-sm ghost" onClick={() => avail(r, 0)}>● متاح الآن، أغلق</button>
                   : <button className="btn-sm primary" onClick={() => avail(r, 60)}>أنا متاح لاتصال فوري (ساعة)</button>)}
                 {canWrite && <button className="la-link" onClick={() => addManual(r)}>+ جلسة يدوية</button>}
@@ -241,10 +247,10 @@ export default function Activities({ canWrite }) {
   const waiting = data.coaching.filter((s) => ['booked', 'requested'].includes(s.status) && (!s.ends_at || new Date(s.ends_at) < new Date())).length;
   return (
     <>
-      <p className="la-muted">الحضور والجلسات هنا دليل إنجاز المشارك؛ لا يكتمل بند الورشة أو التوجيه بنقرة منه. الإعداد (العدد المطلوب، روابط الحجز والاتصال) من «الرحلة والمتطلبات».</p>
+      <p className="la-muted">الحضور هنا دليل إنجاز المشارك، فلا يكتمل بند الجلسة بنقرة منه. أي مرحلة يمكن أن تضم جلسات جماعية أو فردية، حضورية أو عن بعد؛ تضيف المتطلب ونوعه وطريقة توثيقه من «الرحلة والمتطلبات»، ثم مواعيده هنا.</p>
       <nav className="la-subtabs" style={{ margin: '12px 0' }}>
-        <button className={sub === 'workshops' ? 'on' : ''} onClick={() => setSub('workshops')}>الورش الحضورية</button>
-        <button className={sub === 'coaching' ? 'on' : ''} onClick={() => setSub('coaching')}>جلسات التوجيه {waiting > 0 && <small>({waiting} بانتظار التأكيد)</small>}</button>
+        <button className={sub === 'workshops' ? 'on' : ''} onClick={() => setSub('workshops')}>الجلسات الجماعية</button>
+        <button className={sub === 'coaching' ? 'on' : ''} onClick={() => setSub('coaching')}>الجلسات الفردية {waiting > 0 && <small>({waiting} بانتظار التأكيد)</small>}</button>
       </nav>
       {sub === 'workshops' ? <Workshops data={data} reload={load} canWrite={canWrite} /> : <Coaching data={data} reload={load} canWrite={canWrite} />}
     </>

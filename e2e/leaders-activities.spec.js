@@ -17,9 +17,9 @@ const items = [
   { id: 'r2', code: 'T-VID', kind: 'video', title_ar: 'فيديو: لماذا تفشل المشاريع', required: true, status: 'pending',
     activity: { type: 'video', done: false, pct: 35, min_pct: 90, watched: 210, duration: 600, source: { type: 'file', url: 'https://example.com/v.mp4' }, title: 'لماذا تفشل المشاريع' } },
   { id: 'r3', code: 'T-ATTEND', kind: 'workshop', title_ar: 'حضور الأيام التدريبية الأربعة', required: true, status: 'pending',
-    activity: { type: 'workshop', done: false, count: 1, total: 4, sessions: [
-      { id: 'w1', title: 'اليوم الأول: Milestone', location: 'الرياض، قاعة الأثر', starts_at: later(-30), ends_at: later(-24), attended: true },
-      { id: 'w2', title: 'اليوم الثاني: Impact', location: 'الرياض، قاعة الأثر', starts_at: later(20), ends_at: later(26), attended: false },
+    activity: { type: 'workshop', done: false, count: 1, total: 4, verify: 'qr', sessions: [
+      { id: 'w1', title: 'اليوم الأول: Milestone', mode: 'in_person', location: 'الرياض، قاعة الأثر', starts_at: later(-30), ends_at: later(-24), attended: true },
+      { id: 'w2', title: 'اليوم الثاني: Impact', mode: 'online', starts_at: later(0), ends_at: later(5), attended: false, can_join: true },
     ] } },
   { id: 'r4', code: 'O-SESS', kind: 'coaching', title_ar: 'حضور أربع جلسات توجيه أسبوعية', required: true, status: 'pending',
     activity: { type: 'coaching', done: false, count: 1, total: 4, can_book: true, book_url: 'about:blank', provider: 'calcom', instant: true, sessions: [
@@ -64,6 +64,8 @@ test('الرحلة: الأنشطة الموثقة بلا زر «أنجزته»',
   await expect(page.getByText('شاهدت 35%', { exact: false })).toBeVisible();
   await expect(page.getByText('حضرت 1 من 4', { exact: true })).toBeVisible();
   await expect(page.getByText('حضرت ✓').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'انضم الآن' })).toBeVisible();
+  await expect(page.getByText('عن بعد', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'أنجزته' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'احجز موعدًا' })).toBeVisible();
   await expect(page.getByRole('button', { name: /اتصل فورًا/ })).toBeVisible();
@@ -101,7 +103,10 @@ test('الإدارة: جلسات الورشة ورمز الحضور وتأكيد
           { id: 'r3', code: 'T-ATTEND', title_ar: 'حضور الأيام التدريبية الأربعة', kind: 'workshop', config: { sessions_required: 4 } },
           { id: 'r4', code: 'O-SESS', title_ar: 'حضور أربع جلسات توجيه أسبوعية', kind: 'coaching', config: { sessions_required: 4, minutes: 60, booking_url: 'https://cal.com/mi/coaching', provider: 'calcom', instant_url: 'https://meet.google.com/abc' }, instant_open: false },
         ],
-        workshops: [{ id: '0b7b6c9e-2f3a-4d0e-9a51-1d2b3c4d5e6f', requirement_id: 'r3', title_ar: 'اليوم الأول: Milestone', location_ar: 'الرياض، قاعة الأثر', starts_at: later(0), ends_at: later(6), active: true, attended: 12 }],
+        workshops: [
+          { id: '0b7b6c9e-2f3a-4d0e-9a51-1d2b3c4d5e6f', requirement_id: 'r3', title_ar: 'اليوم الأول: Milestone', mode: 'in_person', location_ar: 'الرياض، قاعة الأثر', starts_at: later(0), ends_at: later(6), active: true, attended: 12 },
+          { id: '1b7b6c9e-2f3a-4d0e-9a51-1d2b3c4d5e6f', requirement_id: 'r3', title_ar: 'اليوم الثاني: Impact', mode: 'online', join_url: 'https://zoom.us/j/1', starts_at: later(24), ends_at: later(30), active: true, attended: 0 },
+        ],
         coaching: [
           { id: 'c1', requirement_id: 'r4', status: 'booked', kind: 'booked', starts_at: later(-3), ends_at: later(-2), participants: { full_name: 'سارة الأحمد' } },
           { id: 'c2', requirement_id: 'r4', status: 'booked', kind: 'booked', starts_at: later(30), ends_at: later(31), join_url: 'https://meet.google.com/x', participants: { full_name: 'خالد العتيبي' } },
@@ -116,15 +121,16 @@ test('الإدارة: جلسات الورشة ورمز الحضور وتأكيد
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
-  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'الحضور والتوجيه' }).click();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'الحضور والجلسات' }).click();
   await expect(page.getByText('12 حاضر')).toBeVisible();
   if (SHOTS) await page.locator('.la-body').screenshot({ path: `${SHOTS}/admin-workshops.png` });
-  await page.getByRole('button', { name: 'اعرض رمز الحضور' }).click();
+  await expect(page.getByText('عن بعد', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'اعرض رمز الحضور' }).first().click();
   await expect(page.getByRole('img', { name: 'رمز الحضور' })).toBeVisible();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/admin-qr.png` });
   await page.getByRole('button', { name: 'إغلاق' }).click();
 
-  await page.getByRole('button', { name: /جلسات التوجيه/ }).click();
+  await page.getByRole('button', { name: /الجلسات الفردية/ }).click();
   await expect(page.getByText('بانتظار تأكيدك (1)')).toBeVisible();
   if (SHOTS) await page.locator('.la-body').screenshot({ path: `${SHOTS}/admin-coaching.png` });
   await page.getByRole('button', { name: 'حضر', exact: true }).click();

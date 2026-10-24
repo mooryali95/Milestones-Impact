@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // نافذة نموذج عامة: حقول نصية ورقمية وقوائم ومربعات نص
 // ════════════════════════════════════════════════════════════════
-// fields: [{ name, label, type?: text|number|select|textarea|email|check|options|datetime, options?, empty?, rows?, dir?, show? }]
+// fields: [{ name, label, type?: text|number|select|textarea|email|check|options|datetime, options?, empty?, rows?, dir?, show?, help? }]
+// help ← نص إرشاد تحت عنوان الحقل، أو دالة تعيده بحسب القيم الحالية
 // show(قيم) ← يظهر الحقل ويُحفظ فقط حين تعيد true (حقول تتبع نوعًا مختارًا) · datetime ← تاريخ ووقت محليان يُحفظان ISO
 // check ← قيمة منطقية · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
@@ -81,9 +82,11 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               </div>
             );
           }
+          const help = typeof f.help === 'function' ? f.help(v) : f.help;
           return (
             <label key={f.name} htmlFor={id}>
               <span>{f.label}</span>
+              {help && <small className="la-muted">{help}</small>}
               {f.type === 'select' ? (
                 <select {...common}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               ) : f.type === 'textarea' ? <textarea {...common} rows={f.rows || 3} />
