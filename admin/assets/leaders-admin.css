@@ -505,3 +505,11 @@
 /* سهولة الوصول */
 :focus-visible { outline: 2px solid var(--gold, #C79A4B); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* نظرة عامة: القياس والأثر */
+.la-inst + .la-inst { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, rgba(0,0,0,.08)); }
+.la-inst .la-funnel { margin-top: 8px; }
+.la-impact td.up { color: #2E7D5B; font-weight: 700; }
+.la-impact td.down { color: #B5462F; font-weight: 700; }
+.la-impact th, .la-impact td { text-align: center; }
+.la-impact tbody th { text-align: start; }

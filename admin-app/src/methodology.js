@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 
 export const LVLS = Object.keys(LVL);
-export const TIER = { knowledge: 'معرفة', skill: 'مواقف', behavior: 'ممارسة' };
+export const TIER = { knowledge: 'معرفة', skill: 'مواقف', behavior: 'ممارسة', transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
 export const PHASE = { admission: 'القبول', qualification: 'التأهيل', impact: 'الأثر' };
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
@@ -100,10 +100,13 @@ export const Q_FIELDS = [
   { name: 'help_ar', label: 'تلميح يظهر تحته', type: 'textarea', rows: 2 },
   { name: 'options', label: 'الخيارات والدرجات (الأعلى = الأفضل)', type: 'options' },
   { name: 'weight', label: 'الوزن', type: 'number' },
+  { name: 'anchor_code', label: 'سؤال الربط في القياس المبدئي (للبعدي، مثل M-S2)', dir: 'ltr' },
+  { name: 'retro', label: 'يُسأل أيضًا: كيف كان قبل البرنامج (ممارسة في البعدي)', type: 'check' },
+  { name: 'text_rater_ar', label: 'صيغة الغائب لتقدير المدير', type: 'textarea', rows: 2 },
   { name: 'active', label: 'مفعّل', type: 'check' },
 ];
 // إصدار له نتائج: الصياغة فقط، فلا تختل درجات من أجاب
-export const Q_SAFE = Q_FIELDS.filter((f) => ['text_ar', 'help_ar'].includes(f.name));
+export const Q_SAFE = Q_FIELDS.filter((f) => ['text_ar', 'help_ar', 'text_rater_ar'].includes(f.name));
 
 export const INST_FIELDS = [
   { name: 'title_ar', label: 'العنوان' },

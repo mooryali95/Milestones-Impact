@@ -6,12 +6,13 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
 //             handbook.ping · video.ping · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
+//             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -21,6 +22,7 @@ import * as A from './admin.ts';
 import * as C from './coordinator.ts';
 import * as Z from './certificates.ts';
 import * as V from './activities.ts';
+import * as I from './impact.ts';
 
 type Body = Record<string, any>;
 
@@ -38,6 +40,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
   'cert.verify': Z.verify,
+  'rater.get': I.raterGet,
+  'rater.submit': I.raterSubmit,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
@@ -46,7 +50,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'profile.save': P.profileSave,
   'upload.url': P.uploadUrl,
   'cv.attach': P.cvAttach,
-  'assessment.get': (p) => P.assessmentGet(p),
+  'assessment.get': (p, b) => P.assessmentGet(p, b),
   'assessment.answer': P.assessmentAnswer,
   'assessment.submit': P.assessmentSubmit,
   'requirement.update': P.requirementUpdate,
@@ -67,6 +71,9 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'workshop.checkin': (p, b, _s, ctx) => V.workshopCheckin(p, b, ctx),
   'workshop.join': (p, b, _s, ctx) => V.workshopJoin(p, b, ctx),
   'coaching.instant': (p, b) => V.coachingInstant(p, b),
+  'impact.mine': (p) => I.mine(p),
+  'rater.invite': (p, b) => I.invite(p, b),
+  'rater.revoke': (p, b) => I.revoke(p, b),
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
@@ -127,6 +134,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.coaching-mark': (a, b) => A.writer(a, V.coachingMark, b),
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
   'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),
+  'admin.impact': (_a, b) => I.adminReport(b),
 };
 
 Deno.serve(async (req) => {

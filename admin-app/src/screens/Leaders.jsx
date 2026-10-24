@@ -11,14 +11,15 @@ import Tracks from './Tracks.jsx';
 import { Assessment, Journey, Levels } from './Methodology.jsx';
 import Handbook from './Handbook.jsx';
 import Activities from './Activities.jsx';
+import Impact from './Impact.jsx';
 import { Spinner } from '../ui.jsx';
 
 const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['certs', 'الشهادات'],
+  ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
-const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook']);
+const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook', 'impact']);
 
 export default function Leaders({ canWrite }) {
   const [tab, setTab] = useState('participants');
@@ -46,8 +47,9 @@ export default function Leaders({ canWrite }) {
   let body;
   if (NEEDS_CATALOG.has(tab) && !catalog) body = <Spinner />;
   else if (NEEDS_CATALOG.has(tab) && !catalog.success) body = <div className="la-err" role="alert">{catalog.message}</div>;
-  else if (tab === 'overview') body = <Overview orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} />;
+  else if (tab === 'overview') body = <Overview orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={(id) => { setTab('orgs'); setOrgId(id); }} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={setPerson} initialStatus={status} />;
+  else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => { setTrack(k); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} />;
