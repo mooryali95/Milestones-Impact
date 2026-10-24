@@ -583,14 +583,21 @@ async function myModel(p: any, id: unknown) {
 export async function modelsList(p: any) {
   const levels = await approvedLevels(p);
   const [models, subs, pts] = await Promise.all([
-    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active'),
-    db.from('model_submissions').select('model_id, status, rating, bonus, submitted_at, updated_at').eq('participant_id', p.id),
+    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields'),
+    db.from('model_submissions').select('model_id, status, rating, bonus, answers, submitted_at, updated_at').eq('participant_id', p.id),
     pointsOf(p.id),
   ]);
   const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
   return {
     success: true,
-    models: modelsFor(must(models) ?? [], levels).map((m: any) => ({ ...m, submission: by[m.id] || null })),
+    // تقدم كل نموذج: الحقول الإلزامية المكتملة من مجموعها، دون إرسال الإجابات نفسها
+    models: modelsFor(must(models) ?? [], levels).map(({ fields, ...m }: any) => {
+      const sub = by[m.id];
+      const total = (fields || []).filter((f: any) => f.required !== false).length;
+      const filled = total - missingFields(fields || [], sub?.answers || {}).length;
+      return { ...m, fields_n: (fields || []).length, progress: { filled, total },
+        submission: sub ? { status: sub.status, rating: sub.rating, bonus: sub.bonus, submitted_at: sub.submitted_at, updated_at: sub.updated_at } : null };
+    }),
     points: { total: pts.total, rank: pts.rank },
   };
 }
