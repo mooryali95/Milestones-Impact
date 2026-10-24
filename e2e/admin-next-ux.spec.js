@@ -78,7 +78,7 @@ test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النت
   await expect(page.getByRole('option', { name: /سارة الأحمد/ })).toBeVisible();
   await box.press('Enter');
   await expect(page).toHaveURL(/#\/leaders\/participants\/p1$/);
-  await page.getByRole('button', { name: /البحث الشامل/ }).click();
+  await page.getByRole('button', { name: /^بحث/ }).click();
   await page.getByRole('combobox', { name: 'البحث الشامل' }).fill('كتيب');
   await page.getByRole('combobox', { name: 'البحث الشامل' }).press('Enter');
   await expect(page).toHaveURL(/#\/leaders\/handbook$/);
