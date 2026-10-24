@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { call, fmtDate } from '../api.js';
 import { countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, STATUS_AR } from '../contacts.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { announceContacts } from '../pending.js';
 
 function Copy({ text }) {
   const { toast } = useUI();
@@ -78,6 +79,8 @@ export default function Contacts() {
     setUpdated(new Date());
   }, []);
   useEffect(() => { load(); }, [load]);
+  // عدد الجديد على شارة السياق يتبع ما في الشاشة، ومنه تغيير الحالة
+  useEffect(() => { if (rows) announceContacts(rows); }, [rows]);
 
   const all = rows || [];
   const list = useMemo(() => filterContacts(all, f), [all, f]);

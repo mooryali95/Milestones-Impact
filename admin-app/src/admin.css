@@ -1284,3 +1284,7 @@ button.la-cell:hover { border-color: var(--gold, #A97A2E); }
 .la-act { display: block; font-size: .78rem; margin-top: 2px; font-weight: 400; }
 .la-act ul { list-style: none; margin: 6px 0 0; display: grid; gap: 4px; }
 .la-table tr.off { opacity: .55; }
+
+/* أعداد ما ينتظر القرار على السياقات والتبويبات */
+.ctx-badge, .la-badge { display: inline-block; min-width: 1.5em; margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; background: #A97A2E; color: #fff; font-size: 11px; line-height: 1.6; text-align: center; font-weight: 600; }
+.la-tabs button.on .la-badge { background: #D9A85A; color: #0B272F; }

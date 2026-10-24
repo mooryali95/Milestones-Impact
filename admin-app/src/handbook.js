@@ -37,3 +37,10 @@ export function applyTool(value, s0, s1, [ins, , mode]) {
     : `${s0 && value[s0 - 1] !== '\n' ? '\n' : ''}${ins}${sel || 'اكتب الفقرة هنا'}\n:::\n`;
   return { value: value.slice(0, s0) + text + value.slice(s1), caret: s0 + text.length };
 }
+
+// ── مسودات المحررين: تُحفظ في هذا المتصفح حتى يُحفظ الباب أو النموذج ──
+// المفتاح لكل سجل (أو لكل إطار حين يكون جديدًا)، وأي خلل في التخزين لا يوقف المحرر
+export const draftKey = (entity, m, dim) => `mi_draft_${entity}_${m?.id || `new_${dim}`}`;
+export function readDraft(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } }
+export function writeDraft(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* */ } }
+export function clearDraft(key) { try { localStorage.removeItem(key); } catch { /* */ } }

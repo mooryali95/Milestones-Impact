@@ -10,6 +10,8 @@ import Login from './screens/Login.jsx';
 import Settings from './screens/Settings.jsx';
 import Contacts from './screens/Contacts.jsx';
 import Leaders from './screens/Leaders.jsx';
+import { navigate, useRoute } from './route.js';
+import { leadersTotal, usePending } from './pending.js';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
@@ -19,8 +21,14 @@ const savedCtx = () => { try { return sessionStorage.getItem(CTX_KEY) === 'leade
 
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);
-  const [ctx, setCtxState] = useState(savedCtx);
-  const setCtx = (c) => { setCtxState(c); try { sessionStorage.setItem(CTX_KEY, c); } catch { /* */ } };
+  // السياق من عنوان الصفحة، وإن خلا فآخر سياق في الجلسة
+  const route = useRoute();
+  const ctx = route.ctx || savedCtx();
+  useEffect(() => { if (!route.ctx) navigate({ ctx }, { replace: true }); }, [route.ctx, ctx]);
+  useEffect(() => { try { sessionStorage.setItem(CTX_KEY, ctx); } catch { /* */ } }, [ctx]);
+  const setCtx = (c) => navigate({ ctx: c });
+  const pending = usePending(ctx);
+  const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
   const canWrite = (user.role_id || user.role) !== 'viewer';
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
@@ -43,12 +51,12 @@ function Dashboard({ user, onUser, onLogout }) {
 
       <nav className="ctx-bar" aria-label="السياق">
         {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة']].map(([k, l]) => (
-          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}</button>
+          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
         ))}
         <a className="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
-      {ctx === 'leaders' ? <Leaders canWrite={canWrite} /> : <Contacts />}
+      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : <Contacts />}
 
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
     </div>

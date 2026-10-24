@@ -59,7 +59,7 @@ function Impact({ im, instruments }) {
   );
 }
 
-export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab }) {
+export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       <div className="la-grid2">
         <section className="la-card">
           <h3>ينتظر قرارك</h3>
-          {!waiting.length && !bk?.to_review ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
+          {!waiting.length && !bk?.to_review && !pending?.contacts ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
             <ul className="la-queue">
               {(r.pending_approval || []).map((p) => (
                 <li key={`a${p.id}`}><button className="la-link" onClick={() => onPerson(p.id)}>{p.full_name}</button><span className="la-chip warn">اعتماد المسار</span><small>{p.organization_name || ''}</small></li>
@@ -106,6 +106,9 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
               {(r.submitted || []).map((x) => (
                 <li key={`s${x.participant_id}${x.requirement_id || ''}`}><button className="la-link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button><span className="la-chip">{x.stage_requirements?.title_ar}</span><small>{date(x.completed_at)}</small></li>
               ))}
+              {pending?.contacts ? (
+                <li><a className="la-link" href="#/contacts">طلبات تواصل جديدة</a><span className="la-chip">الموقع</span><b>{pending.contacts}</b></li>
+              ) : null}
               {bk?.to_review ? (
                 <li><button className="la-link" onClick={() => onTab?.('handbook')}>نماذج تعليمية مُرسلة</button><span className="la-chip warn">تقييم</span><b>{bk.to_review}</b></li>
               ) : null}

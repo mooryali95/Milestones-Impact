@@ -8,7 +8,7 @@ import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
   FTYPE, HB_TOOLS, HB_VIEWS, QUIZ_TEMPLATE, RANK, SUB_FILTER,
-  applyTool, badQuiz, filterHandbookMd, maxPoints, nextSort, parseQuiz, splitList, stars, tiered, words,
+  applyTool, badQuiz, clearDraft, draftKey, readDraft, writeDraft, filterHandbookMd, maxPoints, nextSort, parseQuiz, splitList, stars, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
@@ -65,11 +65,40 @@ function QuizView({ qs, reflection, right = 'الصحيحة' }) {
   );
 }
 
+// حماية التعديل: مسودة تلقائية، وعرض استعادتها عند الفتح، وتأكيد قبل الإغلاق
+// دون حفظ، وتنبيه المتصفح عند مغادرة الصفحة والتعديلات قائمة
+function useGuard(key, v, setV) {
+  const { confirm } = useUI();
+  const base = useRef(JSON.stringify(v));
+  const dirty = JSON.stringify(v) !== base.current;
+  useEffect(() => {
+    const d = readDraft(key);
+    if (!d || JSON.stringify(d) === base.current) return;
+    confirm('توجد مسودة لم تُحفظ من آخر تعديل هنا. استعادتها؟', { ok: 'استعادة المسودة' }).then((ok) => (ok ? setV(d) : clearDraft(key)));
+  }, []); // eslint-disable-line
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const t = setTimeout(() => writeDraft(key, v), 600);
+    return () => clearTimeout(t);
+  }, [v, dirty, key]);
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
+  const guardClose = async (close) => {
+    if (!dirty || await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟ تبقى مسودتها في هذا المتصفح.', { danger: true, ok: 'إغلاق دون حفظ' })) close();
+  };
+  return { dirty, guardClose, done: () => clearDraft(key) };
+}
+
 // ══ محرر الباب ══
-function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
+export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const { toast, confirm } = useUI();
   const d = m?.dimension || dim;
   const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '' });
+  const guard = useGuard(draftKey('chapter', m, d), v, setV);
   const [pane, setPane] = useState('content');
   const [view, setView] = useState(m?.min_level || 'beginner');
   const [err, setErr] = useState('');
@@ -84,7 +113,7 @@ function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
     requestAnimationFrame(() => { el.focus(); el.setSelectionRange(r.caret, r.caret); });
   };
   const submit = async (btn) => {
-    if (btn === 'cancel') return onClose();
+    if (btn === 'cancel') return guard.guardClose(() => onClose());
     let r;
     if (btn === 'delete') {
       if (!(await confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`, { danger: true }))) return;
@@ -98,12 +127,13 @@ function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
       r = await L('admin.save', { entity: 'handbook_modules', row });
     }
     if (!r.success) return setErr(r.message);
+    guard.done();
     toast(btn === 'delete' ? 'حُذف الباب' : 'حُفظ الباب');
     onClose(true);
   };
 
   return (
-    <Studio label={m ? `تحرير الباب: ${m.title_ar}` : 'باب جديد'} onClose={() => onClose()} onSubmit={submit}>
+    <Studio label={m ? `تحرير الباب: ${m.title_ar}` : 'باب جديد'} onClose={() => guard.guardClose(() => onClose())} onSubmit={submit}>
       <header className="hb-ed-head">
         <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]}</small>
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
@@ -206,6 +236,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
     summary_ar: m?.summary_ar || '', when_ar: m?.when_ar || '', steps_ar: m?.steps_ar || '', source_ar: m?.source_ar || '',
     fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true }])),
   }));
+  const guard = useGuard(draftKey('model', m, d), v, setV);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const setField = (i, patch) => setV({ ...v, fields: v.fields.map((f, k) => (k === i ? { ...f, ...patch } : f)) });
@@ -217,7 +248,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
     setV({ ...v, fields: fs });
   };
   const submit = async (btn) => {
-    if (btn === 'cancel') return onClose();
+    if (btn === 'cancel') return guard.guardClose(() => onClose());
     let r;
     if (btn === 'delete') {
       if (!(await confirm(`حذف النموذج "${m.title_ar}"؟`, { danger: true }))) return;
@@ -229,13 +260,14 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
       r = await L('admin.save', { entity: 'learning_models', row });
     }
     if (!r.success) return setErr(r.message);
+    guard.done();
     toast(btn === 'delete' ? 'حُذف النموذج' : 'حُفظ النموذج');
     onClose(true);
   };
   const live = { ...v, dimension: d };
 
   return (
-    <Studio label={m ? `تحرير النموذج: ${m.title_ar}` : 'نموذج جديد'} onClose={() => onClose()} onSubmit={submit} two>
+    <Studio label={m ? `تحرير النموذج: ${m.title_ar}` : 'نموذج جديد'} onClose={() => guard.guardClose(() => onClose())} onSubmit={submit} two>
       <header className="hb-ed-head">
         <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]} · نموذج تعليمي</small>
           <input aria-label="اسم النموذج" placeholder="اسم النموذج" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
