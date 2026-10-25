@@ -9,6 +9,7 @@ import { LVLS, ROMAN, TRACK_FIELDS, lines, shortTitle, trackKey, trackLevels } f
 import Form from '../Form.jsx';
 import Md from '../Md.jsx';
 import { Spinner, useUI } from '../ui.jsx';
+import { ChapterEditor } from './Handbook.jsx';
 
 const LvlChips = ({ k }) => {
   const lv = trackLevels(k);
@@ -86,7 +87,8 @@ function Board({ tracks, onOpen }) {
   );
 }
 
-function Track({ k, canWrite, onBack, onPerson, onSaved }) {
+function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
+  const [chapter, setChapter] = useState(null);
   const { toast } = useUI();
   const [r, setR] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -142,7 +144,10 @@ function Track({ k, canWrite, onBack, onPerson, onSaved }) {
             ))}</nav>
             <div className="la-hb-body">{r.handbook.map((c) => (
               <article key={c.id} className="la-hb-ch" id={`hb-${c.id}`}>
-                <small className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]}</small>
+                <div className="la-row between">
+                  <small className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]}</small>
+                  {canWrite && <button className="btn-sm ghost" onClick={() => setChapter((catalog.handbook_modules || []).find((x) => x.id === c.id))}>تعديل الباب</button>}
+                </div>
                 <h3>{c.title}</h3>
                 <div className="la-md">{c.md ? <Md text={c.md} /> : <p className="la-muted">هذا الباب بلا محتوى بعد.</p>}</div>
               </article>
@@ -150,6 +155,7 @@ function Track({ k, canWrite, onBack, onPerson, onSaved }) {
           </div>
         ) : <p className="la-muted">لا أبواب بمحتوى لهذا المسار بعد.</p>}
       </section>
+      {chapter && <ChapterEditor m={chapter} catalog={catalog} canWrite={canWrite} onClose={(saved) => { setChapter(null); if (saved) { load(); onSaved(); } }} />}
       {editing && (
         <Form title={`مسار ${t.key}`} fields={TRACK_FIELDS} values={t}
           onSave={(row) => L('admin.save', { entity: 'tracks', row: { key: t.key, ...row } })}
@@ -161,6 +167,6 @@ function Track({ k, canWrite, onBack, onPerson, onSaved }) {
 
 export default function Tracks({ catalog, reload, canWrite, trackKey: open, onOpen, onPerson }) {
   return open
-    ? <Track k={open} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onSaved={reload} />
+    ? <Track k={open} catalog={catalog} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onSaved={reload} />
     : <Board tracks={catalog} onOpen={onOpen} />;
 }
