@@ -10,6 +10,9 @@ import Login from './screens/Login.jsx';
 import Settings from './screens/Settings.jsx';
 import Contacts from './screens/Contacts.jsx';
 import Leaders from './screens/Leaders.jsx';
+import { navigate, useRoute } from './route.js';
+import { leadersTotal, usePending } from './pending.js';
+import Palette from './Palette.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
@@ -19,8 +22,14 @@ const savedCtx = () => { try { return sessionStorage.getItem(CTX_KEY) === 'leade
 
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);
-  const [ctx, setCtxState] = useState(savedCtx);
-  const setCtx = (c) => { setCtxState(c); try { sessionStorage.setItem(CTX_KEY, c); } catch { /* */ } };
+  // السياق من عنوان الصفحة، وإن خلا فآخر سياق في الجلسة
+  const route = useRoute();
+  const ctx = route.ctx || savedCtx();
+  useEffect(() => { if (!route.ctx) navigate({ ctx }, { replace: true }); }, [route.ctx, ctx]);
+  useEffect(() => { try { sessionStorage.setItem(CTX_KEY, ctx); } catch { /* */ } }, [ctx]);
+  const setCtx = (c) => navigate({ ctx: c });
+  const pending = usePending(ctx);
+  const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
   const canWrite = (user.role_id || user.role) !== 'viewer';
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
@@ -36,6 +45,7 @@ function Dashboard({ user, onUser, onLogout }) {
             <div className="dash-user-name">{user.name || user.email}</div>
             <div className="dash-user-role">{ROLE_LABELS[user.role_id || user.role] || '—'}</div>
           </div>
+          <button className="dash-search-btn" onClick={() => window.dispatchEvent(new Event('mi:search'))} aria-keyshortcuts="Control+K" title="البحث الشامل (Ctrl+K)">بحث <kbd>Ctrl K</kbd></button>
           <button className="dash-settings-btn" onClick={() => setSettings(true)} title="الإعدادات" aria-label="الإعدادات">⚙</button>
           <button className="dash-logout" onClick={onLogout}>خروج</button>
         </div>
@@ -43,13 +53,14 @@ function Dashboard({ user, onUser, onLogout }) {
 
       <nav className="ctx-bar" aria-label="السياق">
         {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة']].map(([k, l]) => (
-          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}</button>
+          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
         ))}
         <a className="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
-      {ctx === 'leaders' ? <Leaders canWrite={canWrite} /> : <Contacts />}
+      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : <Contacts />}
 
+      <Palette />
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
     </div>
   );

@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
@@ -370,6 +370,8 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort', 'reflection_ar', 'quiz_md'] },
   learning_models:    { table: 'learning_models', key: ['id'], sortable: true,
                         fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active'] },
+  content_items:      { table: 'content_items', key: ['id'], sortable: true,
+                        fields: ['kind', 'title_ar', 'description_ar', 'url', 'minutes', 'dimension', 'min_level', 'only_level', 'track_keys', 'exclude_tracks', 'required', 'min_pct', 'sort', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
@@ -461,6 +463,21 @@ export async function track(b: Body) {
 
 // مراحل البرنامج ومتطلباته: البرنامج المطلوب، أو الافتراضي
 const PROGRAM_SCOPED = new Set(['journey_stages', 'stage_requirements']);
+// منهج مسار كما يراه صاحبه: مواد البنك التي تخصه، وأبواب الكتيب
+export async function curriculum(b: Body) {
+  const levels = trackLevels(b.track);
+  if (!levels) throw new Fail('اختر مسارًا');
+  const [items, mods] = await Promise.all([
+    db.from('content_items').select('*').eq('active', true),
+    db.from('handbook_modules').select('id, dimension, sort, min_level, title_ar').not('body_md', 'is', null).neq('body_md', ''),
+  ]);
+  return {
+    success: true, track: b.track,
+    items: curriculumFor(items.data || [], levels),
+    chapters: handbookModulesFor((mods.data || []).map((m: any) => ({ ...m, body_md: '1' })), levels).map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar })),
+  };
+}
+
 export async function catalog(b: Body = {}) {
   const programId = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
   const names = Object.keys(ENTITIES);
@@ -639,6 +656,11 @@ export async function save(a: Admin, b: Body) {
     if (VERIFIED_KINDS.includes(kind)) row.needs_review = false;
   }
 
+  if (b.entity === 'content_items') {
+    try { Object.assign(row, cleanContentItem(row, isNew)); } catch (e) { throw new Fail((e as Error).message); }
+    row.updated_at = new Date().toISOString();
+  }
+
   if (b.entity === 'learning_models') {
     if (isNew && !row.key) row.key = `m-${Date.now().toString(36)}`;
     if ('fields' in row) row.fields = cleanModelFields(row.fields);
@@ -665,6 +687,10 @@ export async function remove(a: Admin, b: Body) {
   if (b.entity === 'learning_models') {
     const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
     if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
+  }
+  if (b.entity === 'content_items') {
+    const { count } = await db.from('content_progress').select('item_id', { count: 'exact', head: true }).eq('item_id', b.id);
+    if (count) throw new Fail('لهذه المادة تقدم مشاركين؛ أوقفها بدل حذفها حتى لا يضيع', 409);
   }
   if (b.entity === 'organizations') {
     const [{ count: ps }, { count: rs }] = await Promise.all([

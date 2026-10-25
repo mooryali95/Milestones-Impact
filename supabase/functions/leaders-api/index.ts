@@ -7,11 +7,11 @@
 //
 // الإجراءات:
 //   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
-//   للمشارك:  me · logout · profile.save · upload.url · cv.attach
+//   للمشارك:  me · org.logo · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
-//             handbook.ping · video.ping · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
+//             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
@@ -47,6 +47,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
+  'org.logo': (p) => P.orgLogo(p),
   'logout': (_p, _b, sid) => P.logout(sid),
   'profile.save': P.profileSave,
   'upload.url': P.uploadUrl,
@@ -69,6 +70,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'certificate': (p) => Z.mine(p),
   'handbook.ping': (p, b) => V.readingPing(p, b),
   'video.ping': (p, b) => V.videoPing(p, b),
+  'content.ping': (p, b) => V.contentPing(p, b),
+  'content.open': (p, b) => V.contentOpen(p, b),
   'workshop.checkin': (p, b, _s, ctx) => V.workshopCheckin(p, b, ctx),
   'workshop.join': (p, b, _s, ctx) => V.workshopJoin(p, b, ctx),
   'coaching.instant': (p, b) => V.coachingInstant(p, b),
@@ -136,6 +139,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
   'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),
   'admin.impact': (_a, b) => I.adminReport(b),
+  'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),
   'admin.program': (_a, b) => G.program(b),
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),

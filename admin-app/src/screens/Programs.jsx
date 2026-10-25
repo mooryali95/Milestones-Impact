@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
 import Form from '../Form.jsx';
+import { CertOverride } from '../cert.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -28,6 +29,7 @@ export default function Programs({ canWrite, onEditJourney }) {
   const [form, setForm] = useState(null);
   const [open, setOpen] = useState(null);
   const [compare, setCompare] = useState(null);
+  const [cert, setCert] = useState(null);
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
   useEffect(() => { load(); }, [load]);
@@ -71,6 +73,14 @@ export default function Programs({ canWrite, onEditJourney }) {
     if (r.unchanged) return toast('الدفعة على أحدث نسخة');
     setCompare({ cohort: c, r: { success: true, version: r.to, diff: r.diff } });
   };
+  const editCert = async (p) => {
+    const g = await L('admin.cert-settings');
+    setCert({ p, value: p.cert || {}, base: g.success ? g.settings : {} });
+  };
+  const saveCert = async () => {
+    const r = await act('admin.program-save', { id: cert.p.id, cert: cert.value }, 'حُفظت شهادة البرنامج. تسري على ما يصدر من الآن.');
+    if (r) setCert(null);
+  };
   const editCohort = (c = {}) => {
     const pid = c.program_id || programs.find((p) => p.is_default)?.id;
     const p = programs.find((x) => x.id === pid);
@@ -104,6 +114,7 @@ export default function Programs({ canWrite, onEditJourney }) {
               <button className="btn-sm ghost" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
               {canWrite && <button className="btn-sm primary" onClick={() => saveVersion(p)}>احفظ نسخة</button>}
               <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
+              {canWrite && <button className="la-link" onClick={() => editCert(p)}>الشهادة{p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}</button>}
               {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>تكرار</button>}
               {canWrite && !p.is_default && <button className="la-link" onClick={() => archive(p)}>{p.archived_at ? 'إعادة' : 'أرشفة'}</button>}
             </div>
@@ -162,6 +173,20 @@ export default function Programs({ canWrite, onEditJourney }) {
             <div className="la-row">
               {compare.cohort && <button className="btn-sm primary" onClick={async () => { const c = compare.cohort; setCompare(null); await act('admin.cohort-upgrade', { id: c.id, confirm: true }, 'رُقّيت الدفعة'); }}>رقِّ الدفعة</button>}
               <button className="btn-sm ghost" onClick={() => setCompare(null)}>إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {cert && (
+        <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && setCert(null)}>
+          <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label={`شهادة ${cert.p.name}`}>
+            <h3>شهادة «{cert.p.name}»</h3>
+            <CertOverride cert={cert.value} onChange={(value) => setCert({ ...cert, value })} base={cert.base} what="البرنامج"
+              hint="تُبنى الشهادة مرة في الإعداد العام. اكتب هنا ما يختلف في هذا البرنامج فقط، وتضيف كل جهة شعارها وتخصيصها فوقه."
+              preview={{ program_id: cert.p.id, program_cert: cert.value }} />
+            <div className="la-row">
+              <button className="btn-sm primary" onClick={saveCert}>حفظ</button>
+              <button className="btn-sm ghost" onClick={() => setCert(null)}>إلغاء</button>
             </div>
           </div>
         </div>

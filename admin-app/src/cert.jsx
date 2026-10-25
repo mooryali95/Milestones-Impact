@@ -5,6 +5,7 @@
 // الخادم بالدالة نفسها التي تُصدر الشهادة، فلا نسخة ثانية من المنطق هنا.
 import React from 'react';
 import { L } from './leaders.js';
+import { useUI } from './ui.jsx';
 
 const STAMP = { revoked: 'ملغاة', replaced: 'مستبدلة', sample: 'نموذج' };
 
@@ -58,5 +59,53 @@ export function SignatoryChoice({ mode, onMode, value, onChange, inheritLabel, d
       </div>
       {mode === 'custom' && <SignatoryEditor value={value} onChange={onChange} disabled={disabled} />}
     </div>
+  );
+}
+
+export function Field({ label, hint, error, children, wide, group }) {
+  const Tag = group ? 'div' : 'label';
+  return (
+    <Tag className={`of-field${wide ? ' wide' : ''}${error ? ' bad' : ''}`} {...(group ? { role: 'group', 'aria-label': label.replace(' *', '') } : {})}>
+      <span className="of-label">{label}</span>
+      {children}
+      {error ? <small className="of-err" role="alert">{error}</small> : hint ? <small className="of-hint">{hint}</small> : null}
+    </Tag>
+  );
+}
+
+
+// تخصيص طبقة فوق الإعداد العام (برنامج أو جهة): يُكتب ما يختلف فقط، والفارغ يُورث.
+// base: ما يُورث منه للعرض في الخانات الفارغة. preview: جسم طلب المعاينة.
+const sigMode = (cert) => (!('signatory' in cert) ? 'inherit' : cert.signatory ? 'custom' : 'none');
+export function CertOverride({ cert, onChange, base, what, hint, preview, extra }) {
+  const { toast } = useUI();
+  const mode = sigMode(cert);
+  const setText = (k) => (e) => {
+    const v = k === 'hours' ? e.target.value.replace(/\D/g, '') : e.target.value;
+    const { [k]: _old, ...rest } = cert;
+    onChange(v ? { ...rest, [k]: k === 'hours' ? Number(v) : v } : rest);
+  };
+  const setMode = (m) => {
+    const { signatory: prev, ...rest } = cert;
+    onChange(m === 'inherit' ? rest : { ...rest, signatory: m === 'none' ? null : prev || { name: '', title: '' } });
+  };
+  const g = base || {};
+  const inherited = g.signatory ? `العام: ${g.signatory.name}` : 'العام: بلا موقّع';
+  return (
+    <>
+      <p className="of-hint">{hint}</p>
+      <div className="of-grid">
+        <Field label={`اسم البرنامج على شهادات ${what}`} hint={`فارغ = ${g.program_ar || 'العام'}`}><input value={cert.program_ar || ''} onChange={setText('program_ar')} maxLength={200} placeholder={g.program_ar} /></Field>
+        <Field label="بالإنجليزية"><input dir="ltr" value={cert.program_en || ''} onChange={setText('program_en')} maxLength={200} placeholder={g.program_en} /></Field>
+        <Field label="الساعات التدريبية" hint={g.hours ? `فارغ = ${g.hours}` : 'اختياري'}><input inputMode="numeric" value={cert.hours ?? ''} onChange={setText('hours')} placeholder={g.hours ? String(g.hours) : ''} /></Field>
+        <Field group label="الموقّع" hint="ختم Milestone يظهر دائمًا" wide>
+          <SignatoryChoice mode={mode} onMode={setMode} value={cert.signatory} onChange={(signatory) => onChange({ ...cert, signatory })} inheritLabel={inherited} />
+        </Field>
+      </div>
+      <div className="la-row">
+        <button type="button" className="btn-sm ghost" onClick={() => previewCertificate(preview, toast)}>معاينة شهادة {what}</button>
+        {extra}
+      </div>
+    </>
   );
 }

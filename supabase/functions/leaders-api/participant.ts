@@ -207,7 +207,7 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 };
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [placements, def, progress, assessments, passkeys, cells, reports] = await Promise.all([
+  const [placements, def, progress, assessments, passkeys, cells, reports, org] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
@@ -215,6 +215,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
+    p.organization_id
+      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
+      : null,
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -252,6 +255,11 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
     progress: journeyProgress(journey),
+    // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
+    // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
+    org: org && org.status === 'active'
+      ? { name: org.name, short_name: org.short_name || null, color: org.color || null, logo_v: org.has_logo ? org.updated_at : null }
+      : null,
     // الدفعة: اسمها وتواريخها للمشارك، ومصدرها والبرنامج ونسخته للإدارة
     cohort: !def.cohort || def.cohort.is_default ? null : { name: def.cohort.name, starts_on: def.cohort.starts_on, ends_on: def.cohort.ends_on },
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
@@ -262,6 +270,12 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
 
 export async function me(p: any) {
   return { success: true, ...(await mePayload(p)) };
+}
+
+export async function orgLogo(p: any) {
+  if (!p.organization_id) return { success: true, logo: null };
+  const { data } = await db.from('organizations').select('logo, status, updated_at').eq('id', p.organization_id).maybeSingle();
+  return { success: true, logo: data?.status === 'active' ? data.logo || null : null, v: data?.updated_at || null };
 }
 
 // ── 4. الملف الشخصي ──

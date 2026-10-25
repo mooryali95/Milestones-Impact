@@ -7,6 +7,7 @@ import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date } from '../leaders.js';
 import { LVLS } from '../methodology.js';
 import { Spinner } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
+import ReqQueue from './ReqQueue.jsx';
 import { OrgSelect } from './Participants.jsx';
 
 const VIA_ALL = { ...VIA, unassigned: 'بلا جهة' };
@@ -59,9 +60,10 @@ function Impact({ im, instruments }) {
   );
 }
 
-export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab }) {
+export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
+  const [n, setN] = useState(0);
   useEffect(() => {
     let live = true;
     setD(null);
@@ -70,7 +72,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       L('admin.impact', org ? { organization_id: org } : {}).catch(() => null),
     ]).then(([o, r, im]) => live && setD({ o, r, im }));
     return () => { live = false; };
-  }, [org]);
+  }, [org, n]);
 
   if (!d) return <Spinner />;
   const { o, r, im } = d;
@@ -98,14 +100,17 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       <div className="la-grid2">
         <section className="la-card">
           <h3>ينتظر قرارك</h3>
-          {!waiting.length && !bk?.to_review ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
+          {!waiting.length && !bk?.to_review && !pending?.contacts ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
             <ul className="la-queue">
               {(r.pending_approval || []).map((p) => (
                 <li key={`a${p.id}`}><button className="la-link" onClick={() => onPerson(p.id)}>{p.full_name}</button><span className="la-chip warn">اعتماد المسار</span><small>{p.organization_name || ''}</small></li>
               ))}
-              {(r.submitted || []).map((x) => (
-                <li key={`s${x.participant_id}${x.requirement_id || ''}`}><button className="la-link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button><span className="la-chip">{x.stage_requirements?.title_ar}</span><small>{date(x.completed_at)}</small></li>
-              ))}
+              {(r.submitted || []).length > 0 && (
+                <li><button className="la-link" onClick={() => document.getElementById('rq')?.scrollIntoView({ behavior: 'smooth' })}>متطلبات مرسلة للمراجعة</button><span className="la-chip">تحت</span><b>{r.submitted.length}</b></li>
+              )}
+              {pending?.contacts ? (
+                <li><a className="la-link" href="#/contacts">طلبات تواصل جديدة</a><span className="la-chip">الموقع</span><b>{pending.contacts}</b></li>
+              ) : null}
               {bk?.to_review ? (
                 <li><button className="la-link" onClick={() => onTab?.('handbook')}>نماذج تعليمية مُرسلة</button><span className="la-chip warn">تقييم</span><b>{bk.to_review}</b></li>
               ) : null}
@@ -121,6 +126,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
         </section>
       </div>
 
+      <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
       <div className="la-grid2">
         <section className="la-card">
           <h3>توزيع المستويات حسب الإطار (3×3)</h3>

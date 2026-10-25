@@ -58,6 +58,7 @@ export default function Verify() {
             <dl>
               <dt>رقم الشهادة</dt><dd className="ltr" style={{ textAlign: 'start' }}>{c.serial}</dd>
               <dt>البرنامج</dt><dd>{c.program_ar}{c.track_ar ? ` · ${c.track_ar}` : ''}</dd>
+              {c.cohort_ar && <><dt>الدفعة</dt><dd>{c.cohort_ar}</dd></>}
               {c.org?.name && <><dt>الجهة</dt><dd>{c.org.name}</dd></>}
               <dt>تاريخ الإصدار</dt><dd>{fmt(c.issued_at)}</dd>
               {r.revoked_at && <><dt>{state === 'replaced' ? 'تاريخ الاستبدال' : 'تاريخ الإلغاء'}</dt><dd>{fmt(r.revoked_at)}</dd></>}
