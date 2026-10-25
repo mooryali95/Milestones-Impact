@@ -561,10 +561,12 @@ export default function Handbook({ me, onBack }) {
             <small>{pts.rank.next ? `${pts.rank.next.left} نقطة إلى ${pts.rank.next.title}` : 'أعلى لقب في البرنامج'}</small>
           </div>
         </div>
-        <nav className="book-tabs" role="tablist">
-          {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
-          ))}
+        <nav className="book-tabs" aria-label="أقسام الكتاب">
+          <div className="book-tablist" role="tablist">
+            {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+            ))}
+          </div>
           <span className="spacer" />
           <button className="link small" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">نسخة PDF شخصية</button>
           <button className="link small book-back" onClick={onBack}>رجوع للرحلة</button>

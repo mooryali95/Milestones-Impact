@@ -405,7 +405,7 @@ c172 0 229 8 253 34 20 20 20 42 27 681 3 363 7 955 7 1315 2 728 5 773 65
 -10 -73 -22z"/>
   </g>
 </svg>
-`,$=f.replace(/<\?xml[^>]*>\s*/,""),n={graphite:"#0B272F",gold:"#A97A2E",goldLight:"#D9A85A",mist:"#F7F8F6",paper:"#FFFFFF",slate:"#2C4148",muted:"#6E8085",line:"#DCE2E1",faint:"#EEF1F0"},i=t=>String(t??"").replace(/[&<>"']/g,e=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[e]),r=t=>typeof t=="number"?t.toLocaleString("en-US"):i(t),d=()=>new Date().toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"});function c(t){const e=new Date,a=`${e.getFullYear()}${String(e.getMonth()+1).padStart(2,"0")}${String(e.getDate()).padStart(2,"0")}`,o=Math.random().toString(36).slice(2,6).toUpperCase();return`MI-${t}-${a}-${o}`}const p=(t=8,e=n.gold)=>`<svg class="dm" width="${t}" height="${t}" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="${e}"/></svg>`,u=`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 20 0 40 20 20 40Z' fill='none' stroke='${n.graphite}' stroke-width='.6' opacity='.07'/></svg>`)}")`,m=(t="MILESTONE IMPACT")=>`<svg class="seal" width="118" height="118" viewBox="0 0 120 120" aria-hidden="true">
+`,$=f.replace(/<\?xml[^>]*>\s*/,""),n={graphite:"#0B272F",gold:"#A97A2E",goldText:"#8A6424",goldLight:"#D9A85A",mist:"#F7F8F6",paper:"#FFFFFF",slate:"#2C4148",muted:"#5F7176",line:"#DCE2E1",faint:"#EEF1F0"},i=t=>String(t??"").replace(/[&<>"']/g,e=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[e]),r=t=>typeof t=="number"?t.toLocaleString("en-US"):i(t),d=()=>new Date().toLocaleDateString("ar-SA-u-ca-gregory-nu-latn",{year:"numeric",month:"long",day:"numeric"});function c(t){const e=new Date,a=`${e.getFullYear()}${String(e.getMonth()+1).padStart(2,"0")}${String(e.getDate()).padStart(2,"0")}`,o=Math.random().toString(36).slice(2,6).toUpperCase();return`MI-${t}-${a}-${o}`}const p=(t=8,e=n.gold)=>`<svg class="dm" width="${t}" height="${t}" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="${e}"/></svg>`,u=`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 20 0 40 20 20 40Z' fill='none' stroke='${n.graphite}' stroke-width='.6' opacity='.07'/></svg>`)}")`,m=(t="MILESTONE IMPACT")=>`<svg class="seal" width="118" height="118" viewBox="0 0 120 120" aria-hidden="true">
   <circle cx="60" cy="60" r="56" fill="none" stroke="${n.gold}" stroke-width=".8"/>
   <circle cx="60" cy="60" r="49" fill="none" stroke="${n.gold}" stroke-width=".5" stroke-dasharray="1.5 2.5"/>
   <circle cx="60" cy="60" r="31" fill="none" stroke="${n.gold}" stroke-width=".5"/>
@@ -435,7 +435,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${n.graphite}; }
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${n.gold}; background: transparent; color: ${n.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
-.toolbar button.pri { background: ${n.gold}; color: ${n.graphite}; }
+.toolbar button.pri { background: ${n.goldLight}; color: ${n.graphite}; }
 .mast { position: relative; background: ${n.mist} ${u}; border-bottom: 1px solid ${n.gold}; padding: 12mm 18mm 10mm; }
 .mast .top { display: flex; justify-content: space-between; align-items: flex-start; direction: ltr; }
 .mast .logo svg { height: 46px; width: auto; display: block; }
@@ -451,7 +451,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .mast .meta b { font-weight: 400; font-size: 9.5pt; }
 .thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${n.gold}; font-size: 9pt; }
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${n.gold}; opacity: .45; }
-.eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${n.gold}; }
+.eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${n.goldText}; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
