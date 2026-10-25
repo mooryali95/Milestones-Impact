@@ -21,6 +21,7 @@ const MARKERS: [string, string, string][] = [
   ['20261024190000_leaders_programs', 'programs', 'id'],
   ['20261024200000_leaders_content_bank', 'content_items', 'id'],
   ['20261025100000_leaders_program_certificate', 'organizations', 'has_logo'],
+  ['20261026090000_leaders_assessment_v4', 'raters', 'phase'],
 ];
 
 async function present(table: string, column: string, schema: any = db) {
@@ -114,15 +115,16 @@ async function all(q: (from: number, to: number) => any) {
 export async function itemReport(b: Record<string, any>) {
   const id = String(b.instrument_id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Fail('أداة القياس غير محددة');
-  const { data: questions } = await db.from('questions').select('id, code, dimension, tier, kind, text_ar, options, active').eq('instrument_id', id).eq('active', true);
-  const sessions = await all((f, t) => db.from('assessments').select('id').eq('instrument_id', id).eq('status', 'submitted').range(f, t));
+  const { data: questions } = await db.from('questions').select('id, code, dimension, tier, kind, text_ar, options, active, form').eq('instrument_id', id).eq('active', true);
+  const sessions = await all((f, t) => db.from('assessments').select('id, form').eq('instrument_id', id).eq('status', 'submitted').range(f, t));
   const ids = sessions.map((x: any) => x.id);
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 200) {
     const part = ids.slice(i, i + 200);
     rows.push(...await all((f, t) => db.from('assessment_answers').select('assessment_id, question_id, score, value').in('assessment_id', part).range(f, t)));
   }
-  const r = itemAnalysis(questions || [], rows.map((x) => ({ assessment_id: x.assessment_id, question_id: x.question_id, score: x.score, k: x.value?.k })));
+  const forms = Object.fromEntries(sessions.map((x: any) => [x.id, x.form]));
+  const r = itemAnalysis(questions || [], rows.map((x) => ({ assessment_id: x.assessment_id, question_id: x.question_id, score: x.score, k: x.value?.k })), { forms });
   return { success: true, instrument_id: id, ...r };
 }
 

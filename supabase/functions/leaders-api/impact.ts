@@ -4,10 +4,11 @@
 // المنطق الحسابي في logic.js (يُختبر في vitest)، وهنا جمع البيانات فقط.
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
 import { audit, CONFIG, db, Fail, hash, must, randomToken, raterMail, sendMail } from './core.ts';
-import { requirePostOpen } from './participant.ts';
+import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
 import { requirementIdByCode } from './programs.ts';
 import {
-  compareAssessments, DIMENSIONS, effectLabel, IMPACT_DEFAULTS, isEmail, normalizeEmail, pairedStats, raterPercents,
+  compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
+  overallChange, pairedStats, practiceEffect, raterPercents, raterProspective,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -15,9 +16,19 @@ type Body = Record<string, any>;
 const RATER_LIMIT = 3;
 const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق' };
 
+// كل الصفوف بصفحات من 1000 (حد Supabase للقراءة الواحدة)
+async function all(build: (from: number, to: number) => any) {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = must(await build(from, from + 999)) as any[] ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
 // آخر قياس مُرسل من كل نوع لكل مشارك، بنتائجه
 async function latestResults(ids: string[] | null) {
-  let q = db.from('assessments').select('id, participant_id, submitted_at, instrument_id, instruments(kind, key)').eq('status', 'submitted');
+  let q = db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key)').eq('status', 'submitted');
   if (ids) q = q.in('participant_id', ids);
   const rows = must(await q.order('submitted_at', { ascending: false }).limit(5000)) as any[] ?? [];
   const pick: Record<string, { baseline?: any; post?: any }> = {};
@@ -35,6 +46,8 @@ async function latestResults(ids: string[] | null) {
       (results[r.assessment_id] ||= {})[r.dimension] = {
         knowledge: num(r.knowledge_pct), skill: num(r.skill_pct), behavior: num(r.behavior_pct),
         behavior_before: num(r.behavior_before_pct), composite: num(r.composite_pct), level: r.level,
+        skill_anchor: num(r.skill_anchor_pct), skill_form: num(r.skill_form_pct),
+        behavior_common: num(r.behavior_common_pct), behavior_pre_common: num(r.behavior_pre_common_pct),
       };
     }
   }
@@ -42,7 +55,9 @@ async function latestResults(ids: string[] | null) {
 }
 const num = (x: unknown) => (x == null ? null : Number(x));
 
-// إعدادات الحكم: من نموذج التسكين، ثم من بيانات الدفعة إن كفى عددها
+// إعدادات الحكم: من نموذج التسكين، ثم من بيانات الدفعة إن كفى عددها:
+// ثبات طبقي موزون لكل إطار وللمؤشر الكلي (ولحكم الاختبار وحده)، ومعادلة
+// الصيغتين من القياس المبدئي، وأثر تكرار المواقف من أزواج القياسين.
 async function impactConfig() {
   const model = must(await db.from('placement_model').select('*').eq('id', 1).maybeSingle()) as any;
   const cfg: any = {
@@ -50,35 +65,81 @@ async function impactConfig() {
     rci_sd: Number(model?.rci_sd ?? IMPACT_DEFAULTS.rci_sd),
     min_n: Number(model?.impact_min_n ?? IMPACT_DEFAULTS.min_n),
     rater_threshold: Number(model?.rater_threshold ?? IMPACT_DEFAULTS.rater_threshold),
-    reliability: {}, sd: {}, source: {},
+    rci_practice: Number(model?.rci_practice ?? IMPACT_DEFAULTS.rci_practice),
+    reliability: {}, sd: {}, test_reliability: {}, test_sd: {}, practice: {}, source: {}, offsets: null,
   };
-  const { data: base } = await db.from('instruments').select('id, key').eq('kind', 'baseline').eq('active', true).maybeSingle();
-  let stats: any[] = [];
+  const { data: base } = await db.from('instruments').select('id, key').eq('kind', 'baseline').eq('active', true)
+    .order('version', { ascending: false }).limit(1).maybeSingle();
+  // ثبات منخفض جدًا لا يُستعمل: يجعل كل تغير "غير موثوق" ويخفي ضعف الأداة
+  const usable = (r: any) => r && r.n >= cfg.min_n && r.alpha != null && r.alpha > 0.3;
+  let full: any = { dims: {}, overall: null };
   if (base) {
-    const { data, error } = await db.rpc('instrument_reliability', { p_instrument: base.id });
-    if (!error) stats = data || [];
+    const [qs, sessions] = await Promise.all([
+      all((f, t) => db.from('questions').select('id, dimension, tier, options, form, active').eq('instrument_id', base.id).eq('active', true).range(f, t)),
+      all((f, t) => db.from('assessments').select('id, form').eq('instrument_id', base.id).eq('status', 'submitted').range(f, t)),
+    ]);
+    const rows: any[] = [];
+    for (let i = 0; i < sessions.length; i += 200) {
+      const part = sessions.slice(i, i + 200).map((x: any) => x.id);
+      rows.push(...await all((f, t) => db.from('assessment_answers').select('assessment_id, question_id, score').in('assessment_id', part).range(f, t)));
+    }
+    const forms = Object.fromEntries(sessions.map((x: any) => [x.id, x.form]));
+    full = compositeReliability(qs, rows, { forms, model }) as any;
+    const test: any = compositeReliability(qs, rows, { forms, model, tiers: ['knowledge', 'skill'] });
+    for (const d of DIMENSIONS) {
+      if (usable(full.dims[d])) { cfg.reliability[d] = Math.min(0.95, full.dims[d].alpha); cfg.sd[d] = full.dims[d].sd; }
+      if (usable(test.dims[d])) { cfg.test_reliability[d] = Math.min(0.95, test.dims[d].alpha); cfg.test_sd[d] = test.dims[d].sd; }
+    }
+    if (usable(full.overall)) { cfg.overall_reliability = Math.min(0.97, full.overall.alpha); cfg.overall_sd = full.overall.sd; }
+    if (usable(test.overall)) { cfg.overall_test_reliability = Math.min(0.97, test.overall.alpha); cfg.overall_test_sd = test.overall.sd; }
+    // معادلة الصيغتين: متوسط كل صيغة في المبدئي
+    if (sessions.some((x: any) => x.form)) {
+      const res: any[] = [];
+      for (let i = 0; i < sessions.length; i += 200) {
+        const part = sessions.slice(i, i + 200).map((x: any) => x.id);
+        res.push(...await all((f, t) => db.from('assessment_results').select('assessment_id, dimension, knowledge_pct, skill_pct').in('assessment_id', part).range(f, t)));
+      }
+      const by: Record<string, any> = {};
+      for (const r of res) ((by[r.assessment_id] ||= { form: forms[r.assessment_id], dims: {} }).dims[r.dimension] = { knowledge: num(r.knowledge_pct), skill: num(r.skill_pct) });
+      cfg.offsets = formOffsets(Object.values(by), { minN: cfg.min_n });
+    }
   }
   for (const d of DIMENSIONS) {
-    const s = stats.find((x: any) => x.dimension === d);
-    const enough = s && Number(s.n) >= cfg.min_n;
-    // ثبات منخفض جدًا لا يُستعمل: يجعل كل تغير "غير موثوق" ويخفي ضعف الأداة
-    if (enough && s.alpha != null && Number(s.alpha) > 0.3) cfg.reliability[d] = Math.min(0.95, Number(s.alpha));
-    if (enough && s.sd != null && Number(s.sd) > 0) cfg.sd[d] = Number(s.sd);
-    cfg.source[d] = { n: s ? Number(s.n) : 0, alpha: s?.alpha != null ? Number(s.alpha) : null, sd: s?.sd != null ? Number(s.sd) : null, from_data: !!enough };
+    const s = full.dims[d];
+    cfg.source[d] = { n: s?.n || 0, alpha: s?.alpha ?? null, sd: s?.sd ?? null, from_data: !!cfg.reliability[d] };
+  }
+  cfg.source.overall = { n: full.overall?.n || 0, alpha: full.overall?.alpha ?? null, from_data: cfg.overall_reliability != null };
+  // أثر التكرار من كل أزواج القياسين التي فيها مواقف مشتركة وموازية
+  const { pick, results } = await latestResults(null);
+  for (const d of DIMENSIONS) {
+    const pairs = Object.values(pick).filter((x) => x.baseline && x.post).map((x) => ({
+      pre: { anchor: results[x.baseline.id]?.[d]?.skill_anchor, form: results[x.baseline.id]?.[d]?.skill_form },
+      post: { anchor: results[x.post.id]?.[d]?.skill_anchor, form: results[x.post.id]?.[d]?.skill_form },
+    }));
+    const pe = practiceEffect(pairs);
+    cfg.source[d].practice_n = pe.n;
+    if (pe.n >= cfg.min_n && pe.points != null) cfg.practice[d] = pe.points;
   }
   return { model, cfg, baseline: base };
 }
 
+// تقدير المقيّمين لكل مشارك. من قدّر قبل البرنامج وبعده يُقارن تقديراه
+// (قياس قبلي وبعدي حقيقي)، وإلا يُستعمل تقديره الرجعي "قبل البرنامج".
 async function raterData(ids: string[] | null) {
-  let q = db.from('raters').select('participant_id, instrument_id, relation, answers, status').eq('status', 'submitted');
+  let q = db.from('raters').select('participant_id, instrument_id, relation, answers, status, email, phase').eq('status', 'submitted');
   if (ids) q = q.in('participant_id', ids);
   const rows = must(await q) as any[] ?? [];
   const insts = [...new Set(rows.map((r) => r.instrument_id))];
-  const qs = insts.length ? (must(await db.from('questions').select('id, dimension, options, tier').in('instrument_id', insts)) as any[] ?? []) : [];
+  const qs = insts.length ? (must(await db.from('questions').select('id, code, anchor_code, dimension, options, tier, instrument_id')
+    .in('instrument_id', insts).eq('tier', 'behavior')) as any[] ?? []) : [];
+  const qsOf = (id: string) => qs.filter((x: any) => x.instrument_id === id);
   const by: Record<string, any> = {};
-  for (const r of rows) {
-    const mine = qs.filter((x: any) => x.tier === 'behavior');
-    (by[r.participant_id] ||= []).push({ relation: r.relation, pcts: raterPercents(mine, r.answers || {}) });
+  for (const r of rows.filter((x) => x.phase !== 'pre')) {
+    const pre = rows.find((x) => x.phase === 'pre' && x.participant_id === r.participant_id && x.email === r.email);
+    const pcts = pre
+      ? raterProspective(qsOf(pre.instrument_id), pre.answers || {}, qsOf(r.instrument_id), r.answers || {})
+      : raterPercents(qsOf(r.instrument_id), r.answers || {});
+    (by[r.participant_id] ||= []).push({ relation: r.relation, pcts });
   }
   // متوسط المقيّمين لكل إطار، ويُقدَّم المدير إن وُجد
   const out: Record<string, any> = {};
@@ -88,7 +149,7 @@ async function raterData(ids: string[] | null) {
       const vals = use.map((x) => x.pcts[d]).filter(Boolean);
       if (!vals.length) return [d, null];
       const avg = (k: 'now' | 'before') => Math.round(vals.reduce((a, v) => a + v[k], 0) / vals.length * 10) / 10;
-      return [d, { now: avg('now'), before: avg('before'), n: vals.length }];
+      return [d, { now: avg('now'), before: avg('before'), n: vals.length, prospective: vals.every((v) => v.prospective) }];
     }));
   }
   return out;
@@ -111,13 +172,17 @@ export async function compareFor(ids: string[] | null) {
   const out: Record<string, any> = {};
   for (const [pid, x] of Object.entries(pick)) {
     if (!x.baseline || !x.post) { out[pid] = { pid, baseline_at: x.baseline?.submitted_at || null, post_at: x.post?.submitted_at || null, dimensions: null }; continue; }
+    // معادلة الصيغتين قبل المقارنة: كل نتيجة بصيغتها
+    const dimensions = compareAssessments({
+      pre: equate(results[x.baseline.id] || {}, x.baseline.form, cfg.offsets),
+      post: equate(results[x.post.id] || {}, x.post.form, cfg.offsets),
+      model, impact: cfg, rater: raters[pid] || null, evidence: evidence.has(pid),
+    });
     out[pid] = {
       pid, baseline_at: x.baseline.submitted_at, post_at: x.post.submitted_at,
       baseline_key: x.baseline.instruments?.key, post_key: x.post.instruments?.key,
-      dimensions: compareAssessments({
-        pre: results[x.baseline.id] || {}, post: results[x.post.id] || {}, model, impact: cfg,
-        rater: raters[pid] || null, evidence: evidence.has(pid),
-      }),
+      forms: x.baseline.form || x.post.form ? [x.baseline.form, x.post.form] : null,
+      dimensions, overall: overallChange(dimensions, cfg, evidence.has(pid)),
     };
   }
   return { rows: out, cfg };
@@ -132,7 +197,8 @@ export function participantSummary(row: any) {
   const beh = row.dimensions.filter((d: any) => d.post.behavior != null && d.post.behavior_before != null);
   const bavg = (k: string) => beh.length ? Math.round(beh.reduce((a: number, d: any) => a + d.post[k], 0) / beh.length * 10) / 10 : null;
   return {
-    before: avg('composite_pre'), after: avg('composite_post'),
+    before: row.overall?.composite_pre ?? avg('composite_pre'), after: row.overall?.composite_post ?? avg('composite_post'),
+    reliable: row.overall?.direction ?? null,
     reliable_up: dims.filter((d: any) => d.direction === 'up').length,
     practice_then: bavg('behavior_before'), practice_now: bavg('behavior'),
     at: row.post_at,
@@ -141,40 +207,66 @@ export function participantSummary(row: any) {
 
 // ── المشارك: ملخصه بعد القياس البعدي، ودعوة مقيّميه ──
 export async function mine(p: any) {
-  const { rows } = await compareFor([p.id]);
-  const raters = must(await db.from('raters').select('id, email, full_name, relation, status, invited_at, submitted_at')
-    .eq('participant_id', p.id).neq('status', 'revoked').order('invited_at')) ?? [];
-  return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT };
+  const [{ rows }, raters, pre] = await Promise.all([
+    compareFor([p.id]),
+    db.from('raters').select('id, email, full_name, relation, status, invited_at, submitted_at, phase')
+      .eq('participant_id', p.id).neq('status', 'revoked').order('invited_at').then((r: any) => must(r) ?? []),
+    preRating(p),
+  ]);
+  return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT, pre_available: !!pre.ok };
 }
 
-async function postInstrument() {
-  const { data } = await db.from('instruments').select('id').eq('kind', 'post').eq('active', true)
-    .order('version', { ascending: false }).limit(1).maybeSingle();
+async function postInstrument(p: any) {
+  const data = await postInstrumentFor(p.id);
   if (!data) throw new Fail('القياس البعدي لم يُفعَّل بعد', 503, 'no_instrument');
   return data;
+}
+
+// تقدير المدير قبل البرنامج: بعد القياس المبدئي وقبل البعدي، وبأداة فيها
+// صيغة الغائب لعبارات الممارسة (baseline-v4 فما بعد).
+async function preRating(p: any) {
+  const base = await lastBaseline(p.id);
+  if (!base) return { ok: false, reason: 'أرسل قياسك المبدئي أولًا' };
+  const { count: posts } = await db.from('assessments').select('id, instruments!inner(kind)', { count: 'exact', head: true })
+    .eq('participant_id', p.id).eq('status', 'submitted').eq('instruments.kind', 'post');
+  if (posts) return { ok: false, reason: 'أرسلت قياسك البعدي، فتقدير ما قبل البرنامج لم يعد ممكنًا' };
+  const { count } = await db.from('questions').select('id', { count: 'exact', head: true })
+    .eq('instrument_id', base.instrument_id).eq('tier', 'behavior').eq('active', true).not('text_rater_ar', 'is', null);
+  if (!count) return { ok: false, reason: 'نسخة قياسك المبدئي لا تدعم تقدير المدير قبل البرنامج' };
+  return { ok: true, instrument_id: base.instrument_id };
 }
 
 export async function invite(p: any, b: Body) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد غير صحيح');
   if (email === normalizeEmail(p.email)) throw new Fail('ادعُ مديرك أو زميلك، لا بريدك');
-  const relation = ['manager', 'peer', 'report'].includes(b.relation) ? b.relation : 'manager';
+  const phase = b.phase === 'pre' ? 'pre' : 'post';
+  // قبل البرنامج: المدير المباشر وحده، فهو من يُعاد تقديره بعد البرنامج
+  const relation = phase === 'pre' ? 'manager' : ['manager', 'peer', 'report'].includes(b.relation) ? b.relation : 'manager';
   const name = String(b.full_name || '').trim().slice(0, 120) || null;
-  await requirePostOpen(p);
-  const inst = await postInstrument();
-  const existing = must(await db.from('raters').select('id, email, status').eq('participant_id', p.id).neq('status', 'revoked')) as any[] ?? [];
-  if (!existing.some((r: any) => r.email === email) && existing.length >= RATER_LIMIT) throw new Fail(`الحد ${RATER_LIMIT} مقيّمين`);
+  let instrumentId: string;
+  if (phase === 'pre') {
+    const pre = await preRating(p);
+    if (!pre.ok) throw new Fail(pre.reason as string);
+    instrumentId = pre.instrument_id as string;
+  } else {
+    await requirePostOpen(p);
+    instrumentId = (await postInstrument(p)).id;
+  }
+  const limit = phase === 'pre' ? 1 : RATER_LIMIT;
+  const existing = must(await db.from('raters').select('id, email, status').eq('participant_id', p.id).eq('phase', phase).neq('status', 'revoked')) as any[] ?? [];
+  if (!existing.some((r: any) => r.email === email) && existing.length >= limit) throw new Fail(limit === 1 ? 'دعوت مديرك من قبل' : `الحد ${limit} مقيّمين`);
   const token = randomToken();
-  const row = { participant_id: p.id, instrument_id: inst.id, email, full_name: name, relation, token_hash: await hash(token),
+  const row = { participant_id: p.id, instrument_id: instrumentId, email, full_name: name, relation, phase, token_hash: await hash(token),
     status: 'invited', invited_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 864e5).toISOString() };
-  const { data: prev } = await db.from('raters').select('id, status, invited_at').eq('participant_id', p.id).eq('email', email).maybeSingle();
+  const { data: prev } = await db.from('raters').select('id, status, invited_at').eq('participant_id', p.id).eq('email', email).eq('phase', phase).maybeSingle();
   if (prev?.status === 'submitted') throw new Fail('أرسل هذا المقيّم تقديره من قبل');
   if (prev && Date.now() - new Date(prev.invited_at).getTime() < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
   if (prev) must(await db.from('raters').update(row).eq('id', prev.id));
   else must(await db.from('raters').insert(row));
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
-  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link));
-  await audit('participant', p.id, 'rater.invite', 'raters', null, null, { email, relation });
+  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase));
+  await audit('participant', p.id, 'rater.invite', 'raters', null, null, { email, relation, phase });
   return mine(p);
 }
 
@@ -204,7 +296,7 @@ export async function raterGet(b: Body) {
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
   const qs = await raterQuestions(r.instrument_id);
   return {
-    success: true, done: r.status === 'submitted',
+    success: true, done: r.status === 'submitted', phase: r.phase || 'post',
     participant: r.participants?.full_name || null, relation: RELATION_AR[r.relation] || null, rater: r.full_name,
     questions: qs.map((q) => ({
       id: q.id, dimension: q.dimension, text: q.text_rater_ar || q.text_ar,
@@ -218,17 +310,19 @@ export async function raterSubmit(b: Body) {
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
   const qs = await raterQuestions(r.instrument_id);
   const input = b.answers || {};
-  const answers: Record<string, { now: number; before: number }> = {};
+  // قبل البرنامج: تقدير الآن وحده
+  const pre = r.phase === 'pre';
+  const answers: Record<string, { now: number; before?: number }> = {};
   for (const q of qs) {
     const a = input[q.id];
     const ok = (k: unknown) => Number.isInteger(k) && (k as number) >= 0 && (k as number) < (q.options || []).length;
-    if (!a || !ok(a.now) || !ok(a.before)) throw new Fail('أكمل التقديرين لكل عبارة', 400, 'incomplete');
-    answers[q.id] = { now: a.now, before: a.before };
+    if (!a || !ok(a.now) || (!pre && !ok(a.before))) throw new Fail(pre ? 'أكمل التقدير لكل عبارة' : 'أكمل التقديرين لكل عبارة', 400, 'incomplete');
+    answers[q.id] = pre ? { now: a.now } : { now: a.now, before: a.before };
   }
   const comment = b.comment ? String(b.comment).trim().slice(0, 2000) || null : null;
   must(await db.from('raters').update({ answers, comment, status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', r.id));
-  // إفادة المدير في الرحلة تكتمل بتقديره المنظم
-  if (r.relation === 'manager') {
+  // إفادة المدير في الرحلة تكتمل بتقديره المنظم بعد البرنامج
+  if (r.relation === 'manager' && !pre) {
     const { data: who } = await db.from('participants').select('id, organization_id').eq('id', r.participant_id).maybeSingle();
     const reqId = who ? await requirementIdByCode(who, 'E-MGR') : null;
     if (reqId) {
@@ -257,7 +351,7 @@ export async function adminReport(b: Body) {
     id: p.id, full_name: p.full_name, email: p.email, organization: p.organizations?.name || null, status: p.status,
     baseline_at: rows[p.id]?.baseline_at || null, post_at: rows[p.id]?.post_at || null,
     raters_invited: rCount(p.id, 'invited') + rCount(p.id, 'submitted'), raters_done: rCount(p.id, 'submitted'),
-    dimensions: rows[p.id]?.dimensions || null,
+    dimensions: rows[p.id]?.dimensions || null, overall: rows[p.id]?.overall || null, forms: rows[p.id]?.forms || null,
   }));
   const paired = list.filter((x) => x.dimensions);
   const cohort = Object.fromEntries(DIMENSIONS.map((d) => {
@@ -275,11 +369,21 @@ export async function adminReport(b: Body) {
       response_shift: avg(dims.map((y: any) => y.response_shift)),
     }];
   }));
+  // الحكم الفردي الرسمي على المؤشر الكلي، وإحصاؤه للدفعة
+  const whole = paired.filter((x) => x.overall);
+  const overallVerdicts: Record<string, number> = {};
+  for (const x of whole) overallVerdicts[x.overall.verdict.key] = (overallVerdicts[x.overall.verdict.key] || 0) + 1;
+  const ps = pairedStats(whole.map((x) => [x.overall.composite_pre, x.overall.composite_post]));
+  const overall = {
+    ...ps, effect: effectLabel(ps.dz), verdicts: overallVerdicts,
+    reliable_up: whole.filter((x) => x.overall.direction === 'up').length,
+    reliable_down: whole.filter((x) => x.overall.direction === 'down').length,
+  };
   const transfer = await transferStats(paired.map((x) => x.id));
   return {
     success: true,
     counts: { participants: list.length, baseline: list.filter((x) => x.baseline_at).length, post: list.filter((x) => x.post_at).length, paired: paired.length },
-    cohort, transfer, config: cfg, participants: list,
+    cohort, overall, transfer, config: cfg, participants: list,
     // تنبيه منهجي يظهر فوق الأرقام حين تكون الدفعة صغيرة
     caution: paired.length < cfg.min_n
       ? `العدد ${paired.length} أقل من ${cfg.min_n}: الأرقام وصفية لهذه الدفعة ولا تُعمَّم، والثبات المستعمل افتراضي.`

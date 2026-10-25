@@ -20,27 +20,64 @@ export function scoreFor(question, k) {
 // نسبة كل مستوى إتقان في كل بُعد، من 0 إلى 100.
 // مستوى بلا أسئلة يُعدّ null، ولا يكون شرطًا في القاعدة.
 // خيار بدرجة سالبة يعني "لا ينطبق على عملي": يُستبعد سؤاله من الحساب.
-export function tierPercents(questions, answers) {
+// minBehavior: أقل عدد من عبارات الممارسة المجابة فعلًا، وما دونه لا نسبة له،
+// حتى لا تُبنى الممارسة على عبارة واحدة بعد "لا ينطبق" في البقية.
+export function tierPercents(questions, answers, { minBehavior = 0 } = {}) {
   const acc = {};
   for (const q of questions) {
     if (q.active === false) continue;
     if (answers[q.id] != null && (scoreFor(q, answers[q.id]) ?? 0) < 0) continue;
     const d = (acc[q.dimension] ||= {});
-    const t = (d[q.tier] ||= { got: 0, max: 0 });
+    const t = (d[q.tier] ||= { got: 0, max: 0, n: 0 });
     const w = Number(q.weight ?? 1);
     t.max += maxScore(q) * w;
     const a = answers[q.id];
-    if (a != null) t.got += (scoreFor(q, a) || 0) * w;
+    if (a != null) { t.got += (scoreFor(q, a) || 0) * w; t.n += 1; }
   }
   const out = {};
   for (const dim of DIMENSIONS) {
     out[dim] = {};
     for (const tier of TIERS) {
       const t = acc[dim]?.[tier];
-      out[dim][tier] = t && t.max > 0 ? Math.round((t.got / t.max) * 10000) / 100 : null;
+      const few = tier === 'behavior' && t && t.n < minBehavior;
+      out[dim][tier] = t && t.max > 0 && !few ? Math.round((t.got / t.max) * 10000) / 100 : null;
     }
   }
   return out;
+}
+
+// ── الصيغتان المتوازيتان A وB ──
+// سؤال بلا form مشترك بين الصيغتين. صيغة المبدئي ثابتة لكل مشارك (نصف
+// الدفعة تقريبًا لكل صيغة)، والبعدي الصيغة الأخرى (توزيع متقاطع).
+export const FORMS = ['A', 'B'];
+export function formFor(seed, previous = null) {
+  if (previous === 'A') return 'B';
+  if (previous === 'B') return 'A';
+  let h = 0;
+  for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h % 2 ? 'B' : 'A';
+}
+export const usesForms = (questions) => (questions || []).some((q) => q.form);
+export const forForm = (questions, form) => (questions || []).filter((q) => !q.form || q.form === form);
+
+// المواقف المشتركة والخاصة بالصيغة كلٌّ على حدة، لتقدير أثر تكرار الأسئلة
+export function skillSplit(questions, answers) {
+  const skill = questions.filter((q) => q.tier === 'skill');
+  const anchor = tierPercents(skill.filter((q) => !q.form), answers);
+  const own = tierPercents(skill.filter((q) => q.form), answers);
+  return Object.fromEntries(DIMENSIONS.map((d) => [d, { anchor: anchor[d].skill, form: own[d].skill }]));
+}
+
+// الممارسة على العبارات المجابة (دون "لا ينطبق") في القياسين معًا، بمطابقة
+// الرمز، فلا يقارن الفرق بين مجموعتين مختلفتين من العبارات.
+export function commonBehavior(preQs, preAnswers, postQs, postAnswers, { minBehavior = 0 } = {}) {
+  const valid = (q, k) => k != null && (scoreFor(q, k) ?? -1) >= 0;
+  const pre = new Map(preQs.filter((q) => q.tier === 'behavior' && valid(q, preAnswers[q.id])).map((q) => [q.code, q]));
+  const pairs = postQs.filter((q) => q.tier === 'behavior' && valid(q, postAnswers[q.id]) && pre.has(q.anchor_code || q.code));
+  const preSet = pairs.map((q) => pre.get(q.anchor_code || q.code));
+  const a = tierPercents(preSet, preAnswers, { minBehavior });
+  const b = tierPercents(pairs, postAnswers, { minBehavior });
+  return Object.fromEntries(DIMENSIONS.map((d) => [d, { pre: a[d].behavior, post: b[d].behavior }]));
 }
 
 // المستوى في بُعد واحد: أعلى مستوى تتحقق كل شروطه.
@@ -69,6 +106,7 @@ export const DEFAULT_MODEL = {
   min_intermediate: 55, min_advanced: 80,
   floor_intermediate: 40, floor_advanced: 60,
   borderline: 8,
+  min_behavior_items: 3,
 };
 const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
 const LEVEL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
@@ -104,7 +142,8 @@ export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
 }
 
 export function placementFromAnswers(questions, answers, rules, model = null) {
-  const pcts = tierPercents(questions, answers);
+  const minBehavior = model ? Number(model.min_behavior_items ?? DEFAULT_MODEL.min_behavior_items) : 0;
+  const pcts = tierPercents(questions, answers, { minBehavior });
   return DIMENSIONS.map((dimension) => {
     if (model) return { dimension, ...pcts[dimension], ...evaluatePlacement(pcts[dimension], model) };
     return { dimension, ...pcts[dimension], level: levelFor(pcts[dimension], rules.filter((r) => r.dimension === dimension)) };
@@ -928,7 +967,10 @@ export function programDiff(from, to) {
 const r1 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 10) / 10);
 const r2 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
 
-export const IMPACT_DEFAULTS = { rci_reliability: 0.75, rci_sd: 15, min_n: 20, rater_threshold: 10 };
+export const IMPACT_DEFAULTS = { rci_reliability: 0.75, rci_sd: 15, min_n: 50, rater_threshold: 15, rci_practice: 0 };
+
+// ثبات أداة أطول بعدد k من أمثالها (Spearman و Brown)
+export const spearmanBrown = (r, k) => (r == null ? null : r2((k * r) / (1 + (k - 1) * r)));
 
 // المؤشر المركّب بالجوانب الموجودة في القياسين معًا
 export function comparableComposite(pre, post, model = DEFAULT_MODEL) {
@@ -948,14 +990,133 @@ export function normalizedChange(pre, post) {
   return 0;
 }
 
-export function reliableChange(pre, post, sd, reliability) {
+// practice: ما يُتوقع أن يكسبه المشارك من تكرار الأسئلة وحده، يُطرح من
+// الفرق قبل القسمة (Chelune وزملاؤه 1993).
+export function reliableChange(pre, post, sd, reliability, practice = 0) {
   if (pre == null || post == null) return { rci: null, reliable: false, direction: null, threshold: null };
   const sem = Number(sd) * Math.sqrt(Math.max(0, 1 - Number(reliability)));
   const sdiff = Math.SQRT2 * sem;
   if (!(sdiff > 0)) return { rci: null, reliable: false, direction: null, threshold: null };
-  const rci = (post - pre) / sdiff;
+  const p = Number(practice) || 0;
+  const rci = (post - pre - p) / sdiff;
   const reliable = Math.abs(rci) >= 1.96;
-  return { rci: r2(rci), reliable, direction: reliable ? (rci > 0 ? 'up' : 'down') : 'flat', threshold: r1(1.96 * sdiff) };
+  return { rci: r2(rci), reliable, direction: reliable ? (rci > 0 ? 'up' : 'down') : 'flat', threshold: r1(1.96 * sdiff + p) };
+}
+
+// ثبات المؤشر المركّب الموزون لكل إطار وللمؤشر الكلي: ألفا طبقي
+// (Cronbach و Schönemann و McKie 1965)، كل جانب طبقة بوزنه في المؤشر.
+// يُحسب لكل صيغة على من أجاب كل أسئلتها في الجانب دون "لا ينطبق"، ثم
+// يُجمع بين الصيغتين بوزن العدد. tiers: الجوانب الداخلة في المؤشر
+// (الثلاثة، أو المعرفة والمواقف لحكم الاختبار وحده).
+// rows: [{ assessment_id, question_id, score }]، forms: { assessment_id: 'A' | 'B' }
+export function compositeReliability(questions, rows, { forms = {}, model = DEFAULT_MODEL, tiers = TIERS } = {}) {
+  const m = { ...DEFAULT_MODEL, ...(model || {}) };
+  const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
+  const use = tiers.filter((t) => w[t] > 0);
+  const W = use.reduce((a, t) => a + w[t], 0);
+  const byQ = new Map(questions.filter((q) => q.active !== false).map((q) => [q.id, q]));
+  const people = new Map();
+  for (const r of rows) {
+    const q = byQ.get(r.question_id);
+    if (!q || r.score == null || Number(r.score) < 0) continue;
+    if (!people.has(r.assessment_id)) people.set(r.assessment_id, new Map());
+    people.get(r.assessment_id).set(q.id, Number(r.score));
+  }
+  const groups = new Map();
+  for (const aid of people.keys()) {
+    const g = forms[aid] || '';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(aid);
+  }
+  // لكل إطار وجانب: ألفا وتباين النسبة، مجموعَين بين الصيغ
+  const strata = {};
+  const pctOf = {};   // aid -> dim -> tier -> نسبة على أسئلة صيغته كاملة
+  for (const d of DIMENSIONS) {
+    for (const t of use) {
+      let nA = 0, sA = 0, nV = 0, sV = 0;
+      for (const [g, aids] of groups) {
+        const items = questions.filter((q) => byQ.has(q.id) && q.dimension === d && q.tier === t && (!q.form || q.form === g));
+        if (!items.length) continue;
+        const max = items.reduce((a, q) => a + (maxScore(q) || 1), 0);
+        const complete = aids.filter((aid) => items.every((q) => people.get(aid).has(q.id)));
+        const mat = complete.map((aid) => items.map((q) => people.get(aid).get(q.id)));
+        const pcts = mat.map((row) => (row.reduce((a, b) => a + b, 0) / max) * 100);
+        complete.forEach((aid, i) => { (((pctOf[aid] ||= {})[d] ||= {})[t] = pcts[i]); });
+        const alpha = items.length > 1 ? cronbachAlpha(mat) : null;
+        if (alpha != null) { nA += complete.length; sA += alpha * complete.length; }
+        if (pcts.length > 1) { nV += pcts.length - 1; sV += variance(pcts) * (pcts.length - 1); }
+      }
+      (strata[d] ||= {})[t] = { alpha: nA ? sA / nA : null, v: nV ? sV / nV : null };
+    }
+  }
+  const composite = (aid, d) => {
+    const p = pctOf[aid]?.[d];
+    if (!p || !use.every((t) => p[t] != null)) return null;
+    return use.reduce((a, t) => a + w[t] * p[t], 0) / W;
+  };
+  const strat = (cells, comps) => {
+    const vC = comps.length > 2 ? variance(comps) : 0;
+    if (!(vC > 0) || cells.some((c) => c.s.alpha == null || c.s.v == null)) return { n: comps.length, alpha: null, sd: comps.length > 2 ? r2(Math.sqrt(vC)) : null };
+    const err = cells.reduce((a, c) => a + c.k * c.k * c.s.v * (1 - c.s.alpha), 0);
+    return { n: comps.length, alpha: r2(Math.max(0, 1 - err / vC)), sd: r2(Math.sqrt(vC)) };
+  };
+  const out = { dims: {}, overall: null };
+  const aids = [...people.keys()];
+  for (const d of DIMENSIONS) {
+    const comps = aids.map((aid) => composite(aid, d)).filter((x) => x != null);
+    out.dims[d] = strat(use.map((t) => ({ k: w[t] / W, s: strata[d][t] })), comps);
+  }
+  const overall = aids.map((aid) => {
+    const cs = DIMENSIONS.map((d) => composite(aid, d));
+    return cs.every((x) => x != null) ? cs.reduce((a, b) => a + b, 0) / DIMENSIONS.length : null;
+  }).filter((x) => x != null);
+  out.overall = strat(DIMENSIONS.flatMap((d) => use.map((t) => ({ k: w[t] / W / DIMENSIONS.length, s: strata[d][t] }))), overall);
+  return out;
+}
+
+// معادلة المتوسط بين الصيغتين (Kolen و Brennan): في القياس المبدئي وُزّعت
+// الصيغتان على المشاركين توزيعًا متوازنًا، ففرق متوسطيهما فرق صعوبة لا فرق
+// قدرة. لكل صيغة وإطار وجانب: كم تزيد عن متوسط الصيغتين (يُطرح من الدرجة).
+// results: [{ form, dims: { dimension: { knowledge, skill } } }]
+export function formOffsets(results, { minN = IMPACT_DEFAULTS.min_n } = {}) {
+  const by = Object.fromEntries(FORMS.map((f) => [f, (results || []).filter((r) => r.form === f)]));
+  if (FORMS.some((f) => by[f].length < minN)) return null;
+  const out = Object.fromEntries(FORMS.map((f) => [f, {}]));
+  for (const d of DIMENSIONS) {
+    for (const t of ['knowledge', 'skill']) {
+      const means = Object.fromEntries(FORMS.map((f) => {
+        const xs = by[f].map((r) => r.dims?.[d]?.[t]).filter((x) => x != null).map(Number);
+        return [f, xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null];
+      }));
+      if (FORMS.some((f) => means[f] == null)) continue;
+      const mid = FORMS.reduce((a, f) => a + means[f], 0) / FORMS.length;
+      for (const f of FORMS) ((out[f][d] ||= {})[t] = r1(means[f] - mid));
+    }
+  }
+  return out;
+}
+
+// تطبيق المعادلة على نتيجة قياس بصيغته
+export function equate(result, form, offsets) {
+  if (!result || !form || !offsets?.[form]) return result;
+  const out = {};
+  for (const [d, r] of Object.entries(result)) {
+    const o = offsets[form][d] || {};
+    const fix = (x, k) => (x == null ? x : r1(Math.min(100, Math.max(0, x - (o[k] || 0)))));
+    out[d] = { ...r, knowledge: fix(r.knowledge, 'knowledge'), skill: fix(r.skill, 'skill') };
+  }
+  return out;
+}
+
+// أثر التكرار على جانب المواقف بنقاط النسبة: ما زاده كسب المواقف المشتركة
+// (المكررة) على كسب الموازية (الجديدة على المشارك)، مضروبًا في حصة المشترك
+// من المواقف. pairs: [{ pre: { anchor, form }, post: { anchor, form } }]
+export function practiceEffect(pairs, { anchorShare = 0.5 } = {}) {
+  const xs = (pairs || []).filter((p) => [p.pre?.anchor, p.pre?.form, p.post?.anchor, p.post?.form].every((x) => x != null))
+    .map((p) => (p.post.anchor - p.pre.anchor) - (p.post.form - p.pre.form));
+  if (!xs.length) return { n: 0, points: null };
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+  return { n: xs.length, points: r1(Math.max(0, mean * anchorShare)) };
 }
 
 // ألفا كرونباخ من مصفوفة درجات (صف لكل مشارك، عمود لكل سؤال)
@@ -1001,9 +1162,9 @@ export function beforeAnswers(questions, values) {
 
 // نسبة الممارسة "قبل البرنامج" لكل إطار، من العبارات التي قُدّرت فعلًا
 // (ما أُجيب عنه بـ"لا ينطبق" الآن لا تقدير قبلي له، فلا يُحسب صفرًا)
-export function beforePercents(questions, values) {
+export function beforePercents(questions, values, opts = {}) {
   const qs = questions.filter((q) => q.retro && values[q.id]?.before != null);
-  return tierPercents(qs, beforeAnswers(qs, values));
+  return tierPercents(qs, beforeAnswers(qs, values), opts);
 }
 
 // تقدير المقيّم (المدير غالبًا) للممارسة الآن وقبل البرنامج، نسبة من 100
@@ -1026,14 +1187,51 @@ export function raterPercents(questions, answers) {
   return out;
 }
 
+// تقدير المقيّم الآن فقط (دعوة ما قبل البرنامج)، نسبة من 100 لكل إطار
+export function raterNowPercents(questions, answers) {
+  const out = {};
+  for (const dim of DIMENSIONS) {
+    let got = 0, max = 0;
+    for (const q of questions.filter((x) => x.dimension === dim)) {
+      const k = answers?.[q.id]?.now;
+      const s = k == null ? null : scoreFor(q, k);
+      if (s == null || s < 0) continue;
+      got += s; max += maxScore(q);
+    }
+    out[dim] = max ? r1((got / max) * 100) : null;
+  }
+  return out;
+}
+
+// تقدير المقيّم نفسه قبل البرنامج وبعده: قياس قبلي وبعدي حقيقي لا رجعي.
+// يُطابق بالرمز، وعلى العبارات التي حكم عليها في المرتين فقط.
+export function raterProspective(preQs, preAnswers, postQs, postAnswers) {
+  const ok = (q, a) => a?.now != null && (scoreFor(q, a.now) ?? -1) >= 0;
+  const before = new Map(preQs.filter((q) => ok(q, preAnswers?.[q.id])).map((q) => [q.code, q]));
+  const out = {};
+  for (const dim of DIMENSIONS) {
+    let b = 0, n = 0, max = 0;
+    for (const q of postQs.filter((x) => x.dimension === dim && ok(x, postAnswers?.[x.id]))) {
+      const p = before.get(q.anchor_code || q.code);
+      if (!p) continue;
+      b += scoreFor(p, preAnswers[p.id].now); n += scoreFor(q, postAnswers[q.id].now); max += maxScore(q);
+    }
+    out[dim] = max ? { now: r1((n / max) * 100), before: r1((b / max) * 100), prospective: true } : null;
+  }
+  return out;
+}
+
 // الحكم على أثر البرنامج في بُعد واحد بتثليث المصادر:
 //   الاختبار (معرفة ومواقف) بتغير موثوق، والممارسة الذاتية، وتقدير المقيّم
-//   الخارجي، ودليل الحالة المعتمد. "تغير مؤكد" يتطلب مصدرين أحدهما غير ذاتي.
-export function impactVerdict({ test, self, rater, evidence }) {
+//   الخارجي، ودليل الحالة المعتمد. "تغير مؤكد" يتطلب مصدرين أحدهما غير ذاتي
+//   وغير رجعي: الاختبار، أو الدليل، أو مدير قدّر قبل البرنامج وبعده. تقدير
+//   المدير "قبل" بعد انتهاء البرنامج ذاكرة رجعية (Ross 1989)، فيُحسب مصدرًا
+//   ولا يكفي للتأكيد مع التقدير الذاتي الرجعي وحدهما.
+export function impactVerdict({ test, self, rater, raterProspective = false, evidence }) {
   const sources = [
     test === 'up' && 'test', self === 'up' && 'self', rater === 'up' && 'rater', evidence && 'evidence',
   ].filter(Boolean);
-  const external = sources.some((s) => s !== 'self');
+  const external = sources.some((s) => s === 'test' || s === 'evidence' || (s === 'rater' && raterProspective));
   if (test === 'down' || rater === 'down') return { key: 'decline', sources, label: 'تراجع يحتاج مراجعة' };
   if (sources.length >= 2 && external) return { key: 'confirmed', sources, label: 'تغير مؤكد' };
   if (sources.length >= 1) return { key: 'emerging', sources, label: 'مؤشرات أولية' };
@@ -1041,6 +1239,14 @@ export function impactVerdict({ test, self, rater, evidence }) {
 }
 
 // المقارنة الكاملة لمشارك واحد في الأبعاد الثلاثة
+// نقاط أثر التكرار على مؤشر من الجوانب tiers: نقاط المواقف بوزنها فيه
+function practiceOn(tiers, points, model) {
+  const m = { ...DEFAULT_MODEL, ...(model || {}) };
+  const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
+  const W = tiers.reduce((a, t) => a + w[t], 0);
+  return W && tiers.includes('skill') ? (Number(points) || 0) * w.skill / W : 0;
+}
+
 export function compareAssessments({ pre, post, model, impact, rater, evidence }) {
   const cfg = { ...IMPACT_DEFAULTS, ...(impact || {}) };
   return DIMENSIONS.map((dimension) => {
@@ -1048,11 +1254,16 @@ export function compareAssessments({ pre, post, model, impact, rater, evidence }
     const cc = comparableComposite(a, b, model);
     const rel = cfg.reliability?.[dimension] ?? cfg.rci_reliability;
     const sd = cfg.sd?.[dimension] ?? cfg.rci_sd;
-    const rc = reliableChange(cc.pre, cc.post, sd, rel);
-    // الاختبار وحده: المعرفة والمواقف، بلا تقدير ذاتي
+    const points = cfg.practice?.[dimension] ?? cfg.rci_practice;
+    const practice = practiceOn(cc.tiers, points, model);
+    const rc = reliableChange(cc.pre, cc.post, sd, rel, practice);
+    // الاختبار وحده: المعرفة والمواقف، بلا تقدير ذاتي، بثباته وانحرافه إن عُرفا
     const testPre = comparableComposite({ ...a, behavior: null }, { ...b, behavior: null }, model);
-    const testRc = reliableChange(testPre.pre, testPre.post, sd, rel);
-    const selfDiff = a.behavior != null && b.behavior != null ? b.behavior - a.behavior : null;
+    const testPractice = practiceOn(testPre.tiers, points, model);
+    const testRc = reliableChange(testPre.pre, testPre.post, cfg.test_sd?.[dimension] ?? sd, cfg.test_reliability?.[dimension] ?? rel, testPractice);
+    // الفرق الذاتي على العبارات المجابة في القياسين معًا إن حُسبت
+    const commonDiff = b.behavior_common != null && b.behavior_pre_common != null ? b.behavior_common - b.behavior_pre_common : null;
+    const selfDiff = commonDiff ?? (a.behavior != null && b.behavior != null ? b.behavior - a.behavior : null);
     const retroDiff = b.behavior_before != null && b.behavior != null ? b.behavior - b.behavior_before : null;
     const self = (retroDiff ?? selfDiff) == null ? null : (retroDiff ?? selfDiff) >= cfg.rater_threshold ? 'up' : 'flat';
     const r = rater?.[dimension];
@@ -1065,15 +1276,49 @@ export function compareAssessments({ pre, post, model, impact, rater, evidence }
       tiers: cc.tiers, composite_pre: cc.pre, composite_post: cc.post,
       change: cc.pre == null ? null : r1(cc.post - cc.pre),
       normalized: normalizedChange(cc.pre, cc.post),
-      rci: rc.rci, reliable: rc.reliable, direction: rc.direction, threshold: rc.threshold,
+      rci: rc.rci, reliable: rc.reliable, direction: rc.direction, threshold: rc.threshold, practice: r1(practice),
+      test_pre: testPre.pre, test_post: testPre.post, test_practice: testPractice,
       test_direction: testRc.direction,
       self_change: r1(selfDiff), retro_change: r1(retroDiff),
       // انزياح الاستجابة: تقديره الأول لنفسه ناقص تقديره اللاحق لما كان عليه
       response_shift: a.behavior != null && b.behavior_before != null ? r1(a.behavior - b.behavior_before) : null,
       rater: r || null, rater_change: r1(raterDiff),
-      verdict: impactVerdict({ test: testRc.direction, self, rater: raterDir, evidence: !!evidence }),
+      verdict: impactVerdict({ test: testRc.direction, self, rater: raterDir, raterProspective: !!r?.prospective, evidence: !!evidence }),
     };
   });
+}
+
+// الحكم الفردي الرسمي على المؤشر الكلي للأطر الثلاثة: 48 سؤالًا بدل 16،
+// فخطأ القياس أصغر بكثير. الأطر منفردة تُعرض للفرد وصفًا، ويُحكم بها
+// إحصائيًا على مستوى الدفعة. cfg.overall_reliability وcfg.overall_sd من بيانات
+// الدفعة، وإلا Spearman و Brown من ثبات الإطار الافتراضي.
+export function overallChange(dims, impact = {}, evidence = false) {
+  const cfg = { ...IMPACT_DEFAULTS, ...(impact || {}) };
+  const full = (dims || []).filter((d) => d.composite_pre != null && d.composite_post != null);
+  if (full.length !== DIMENSIONS.length) return null;
+  const mean = (xs) => r1(xs.reduce((a, b) => a + b, 0) / xs.length);
+  const rel = cfg.overall_reliability ?? spearmanBrown(Number(cfg.rci_reliability), DIMENSIONS.length);
+  const sd = cfg.overall_sd ?? cfg.rci_sd;
+  const pre = mean(full.map((d) => d.composite_pre)), post = mean(full.map((d) => d.composite_post));
+  const rc = reliableChange(pre, post, sd, rel, mean(full.map((d) => d.practice || 0)));
+  const tests = full.filter((d) => d.test_pre != null && d.test_post != null);
+  const testRc = tests.length === DIMENSIONS.length
+    ? reliableChange(mean(tests.map((d) => d.test_pre)), mean(tests.map((d) => d.test_post)),
+      cfg.overall_test_sd ?? sd, cfg.overall_test_reliability ?? rel, mean(tests.map((d) => d.test_practice || 0)))
+    : { direction: null };
+  const selfs = full.map((d) => d.retro_change ?? d.self_change).filter((x) => x != null);
+  const self = selfs.length ? (mean(selfs) >= cfg.rater_threshold ? 'up' : 'flat') : null;
+  const raters = full.filter((d) => d.rater);
+  const raterDiff = raters.length ? mean(raters.map((d) => d.rater.now - d.rater.before)) : null;
+  const rater = raterDiff == null ? null : raterDiff >= cfg.rater_threshold ? 'up' : raterDiff <= -cfg.rater_threshold ? 'down' : 'flat';
+  return {
+    composite_pre: pre, composite_post: post, change: r1(post - pre), normalized: normalizedChange(pre, post),
+    rci: rc.rci, reliable: rc.reliable, direction: rc.direction, threshold: rc.threshold,
+    test_direction: testRc.direction, rater_change: raterDiff,
+    verdict: impactVerdict({
+      test: testRc.direction, self, rater, raterProspective: raters.length > 0 && raters.every((d) => d.rater.prospective), evidence: !!evidence,
+    }),
+  };
 }
 
 // ── طبقات الشهادة ──
@@ -1107,7 +1352,9 @@ function pearson(xs, ys) {
 }
 const round2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
 
-export function itemAnalysis(questions, rows, { minN = 10 } = {}) {
+// forms: { assessment_id: 'A' | 'B' } حين تكون للأداة صيغتان، فيُحسب الثبات
+// لكل صيغة على أسئلتها ثم يُجمع بوزن العدد.
+export function itemAnalysis(questions, rows, { minN = 10, forms = {} } = {}) {
   const byQ = new Map(questions.map((q) => [q.id, q]));
   const answers = new Map();   // assessment -> Map(question -> score)
   const picks = new Map();     // question -> counts per k
@@ -1149,16 +1396,21 @@ export function itemAnalysis(questions, rows, { minN = 10 } = {}) {
       }
       items.push({ id: q.id, code: q.code || null, dimension: d, tier: q.tier || null, text: q.text_ar || q.text || '', n, p: round2(p), discrimination: round2(disc), options, flags });
     }
-    // الثبات على من أجاب عن كل أسئلة البعد
-    const complete = [...answers.values()].filter((a) => qs.every((q) => a.has(q.id)));
-    const k = qs.length;
-    let alpha = null;
-    if (k > 1 && complete.length >= 3) {
-      const itemVar = qs.reduce((s, q) => s + variance(complete.map((a) => a.get(q.id))), 0);
-      const totalVar = variance(complete.map((a) => qs.reduce((s, q) => s + a.get(q.id), 0)));
-      alpha = totalVar ? (k / (k - 1)) * (1 - itemVar / totalVar) : null;
+    // الثبات على من أجاب عن كل أسئلة البعد في صيغته
+    let complete = 0, wsum = 0, wn = 0;
+    for (const g of new Set([...answers.keys()].map((aid) => forms[aid] || ''))) {
+      const gq = qs.filter((q) => !q.form || q.form === g);
+      const people = [...answers.entries()].filter(([aid, a]) => (forms[aid] || '') === g && gq.every((q) => a.has(q.id))).map(([, a]) => a);
+      complete += people.length;
+      const k = gq.length;
+      if (k > 1 && people.length >= 3) {
+        const itemVar = gq.reduce((s, q) => s + variance(people.map((a) => a.get(q.id))), 0);
+        const totalVar = variance(people.map((a) => gq.reduce((s, q) => s + a.get(q.id), 0)));
+        if (totalVar) { wsum += (k / (k - 1)) * (1 - itemVar / totalVar) * people.length; wn += people.length; }
+      }
     }
-    dimensions.push({ dimension: d, items: k, complete: complete.length, alpha: round2(alpha) });
+    const alpha = wn ? wsum / wn : null;
+    dimensions.push({ dimension: d, items: qs.length, complete, alpha: round2(alpha) });
   }
   // الفصل بين الأطر: ارتباط نسب الدرجات بين كل إطارين عبر المشاركين.
   // المصحح يقسم على جذر ثبات الإطارين؛ 0.85 فأعلى يعني أنهما يقيسان

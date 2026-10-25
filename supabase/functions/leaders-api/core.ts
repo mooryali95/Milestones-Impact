@@ -201,10 +201,14 @@ export function certificateMail(name: string, url: string) {
 ${mailButton(url, 'اعرض شهادتي')}`);
 }
 
-export function raterMail(rater: string | null, who: string, link: string) {
+// phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة
+export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' = 'post') {
+  const pre = phase === 'pre';
   return shell(`طلب تقدير من ${who}`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${pre
+    ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
+    : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.'}</p>
 ${mailButton(link, 'ابدأ التقدير')}
 <p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح 30 يومًا.</p>`);
 }

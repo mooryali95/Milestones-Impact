@@ -79,7 +79,8 @@ describe('impactVerdict', () => {
     expect(impactVerdict({ self: 'up', test: 'flat' }).key).toBe('emerging');
   });
   it('confirms with two sources including an external one', () => {
-    expect(impactVerdict({ self: 'up', rater: 'up' }).key).toBe('confirmed');
+    expect(impactVerdict({ self: 'up', rater: 'up', raterProspective: true }).key).toBe('confirmed');
+    expect(impactVerdict({ self: 'up', rater: 'up' }).key).toBe('emerging');
     expect(impactVerdict({ test: 'up', evidence: true }).key).toBe('confirmed');
   });
   it('flags a reliable decline for review', () => {

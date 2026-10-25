@@ -29,27 +29,30 @@ function Bars({ label, before, after, beforeLabel, afterLabel }) {
 }
 
 function Invite({ data, onChange }) {
-  const [f, setF] = useState({ email: '', full_name: '', relation: data.raters.some((r) => r.relation === 'manager') ? 'peer' : 'manager' });
+  const raters = data.raters.filter((r) => r.phase !== 'pre');
+  const preManager = data.raters.find((r) => r.phase === 'pre' && r.status === 'submitted');
+  const [f, setF] = useState({ email: preManager?.email || '', full_name: preManager?.full_name || '', relation: raters.some((r) => r.relation === 'manager') ? 'peer' : 'manager' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const send = async (e) => {
     e.preventDefault();
     setBusy(true); setError('');
-    const res = await call('rater.invite', f);
+    const res = await call('rater.invite', { ...f, phase: 'post' });
     setBusy(false);
     if (res.success) { onChange(res); setF({ email: '', full_name: '', relation: 'peer' }); } else setError(res.message);
   };
   const revoke = async (id) => { const res = await call('rater.revoke', { id }); if (res.success) onChange(res); };
-  const full = data.raters.length >= data.limit;
+  const full = raters.length >= data.limit;
   return (
     <div className="card stack">
       <div>
         <h2 style={{ fontSize: 18 }}>ادعُ مديرك ليقدّر التغير</h2>
         <p className="small muted">يصله رابط بعبارات الممارسة نفسها بصيغة الغائب، ويقدّر لكل منها: الآن وقبل البرنامج. خمس دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. تقدير المدير يُكمل بند «إفادة المدير المباشر» في رحلتك.</p>
+        {preManager && <p className="small muted">ادعُ المدير نفسه الذي قدّرك قبل البرنامج ({preManager.full_name || preManager.email})، فمقارنة تقديريه هي أقوى دليل على التغير.</p>}
       </div>
-      {data.raters.length > 0 && (
+      {raters.length > 0 && (
         <ul className="rater-list">
-          {data.raters.map((r) => (
+          {raters.map((r) => (
             <li key={r.id} className="row between">
               <span><b>{r.full_name || r.email}</b> <span className="small muted">{RELATIONS.find((x) => x.key === r.relation)?.title}</span></span>
               <span className="row small">

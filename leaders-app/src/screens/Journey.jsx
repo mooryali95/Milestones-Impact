@@ -347,6 +347,45 @@ function CertificateCard() {
   );
 }
 
+// دعوة المدير المباشر قبل البرنامج: تقديره الآن هو خط الأساس الذي يُقارن به
+// تقديره بعد البرنامج، وهو أقوى من سؤاله لاحقًا عن "قبل" بالتذكر.
+function PreManager() {
+  const [data, setData] = useState(null);
+  const [f, setF] = useState({ email: '', full_name: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { call('impact.mine').then((r) => setData(r.success ? r : null)); }, []);
+  if (!data?.pre_available) return null;
+  const pre = data.raters.find((r) => r.phase === 'pre');
+  if (pre?.status === 'submitted') return null;
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true); setMsg('');
+    const res = await call('rater.invite', { ...f, phase: 'pre' });
+    setBusy(false);
+    if (res.success) setData(res); else setMsg(res.message || 'تعذر إرسال الدعوة');
+  };
+  return (
+    <div className="banner mist">
+      <span className="ico">👥</span>
+      <div className="grow stack" style={{ gap: 8 }}>
+        <b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
+        {pre
+          ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
+          : (
+            <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
+              <p className="small" style={{ flexBasis: '100%' }}>خمس دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. مقارنة تقديره اليوم بتقديره بعد البرنامج أقوى دليل على أثرك.</p>
+              <input className="input" placeholder="اسمه" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <input className="input ltr" type="email" required placeholder="بريده" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
+              {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
+            </form>
+          )}
+      </div>
+    </div>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
@@ -411,6 +450,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </div>
       )}
+      {participant.status !== 'completed' && <PreManager />}
       {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
 
       {(next || reading) && (
