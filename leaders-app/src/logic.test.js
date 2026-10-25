@@ -1,4 +1,5 @@
 // منطق دالة leaders-api الصافي: احتساب المستوى وبناء الرحلة
+import { describe, expect, it } from 'vitest';
 import {
   buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
   requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL,

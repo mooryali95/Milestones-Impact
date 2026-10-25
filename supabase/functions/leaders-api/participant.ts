@@ -6,7 +6,7 @@ import {
 } from './core.ts';
 import {
   AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
-  seededShuffle, beforePercents, DEFAULT_MODEL,
+  seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict,
 } from './logic.js';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -205,6 +205,26 @@ async function activeInstrument(kind = 'baseline') {
   return data;
 }
 
+// آخر قياس مبدئي أرسله المشارك، بأداته وصيغته
+export async function lastBaseline(participantId: string) {
+  const { data } = await db.from('assessments').select('id, form, instrument_id, instruments!inner(key, kind)')
+    .eq('participant_id', participantId).eq('status', 'submitted').eq('instruments.kind', 'baseline')
+    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
+  return data as any;
+}
+
+// الأداة البعدية التي تقابل قياس المشارك المبدئي (pairs_with)، فمن بدأ على
+// v3 يُختم بـ post-v1 ومن بدأ على v4 بـ post-v2. وإلا أحدث أداة بعدية مفعّلة.
+export async function postInstrumentFor(participantId: string) {
+  const [{ data: posts }, base] = await Promise.all([
+    db.from('instruments').select('*').eq('kind', 'post').eq('active', true).order('version', { ascending: false }),
+    lastBaseline(participantId),
+  ]);
+  const list = posts || [];
+  const key = base?.instruments?.key;
+  return list.find((i: any) => key && i.pairs_with === key) || list.find((i: any) => !i.pairs_with) || list[0] || null;
+}
+
 // audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.
 // audience 'admin': التفصيل الكامل لكل بُعد.
 // هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
@@ -360,7 +380,7 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!p.profile_completed_at) throw new Fail('أكمل ملفك الشخصي أولًا', 400, 'profile');
   const kind = b.kind === 'post' ? 'post' : 'baseline';
   if (kind === 'post') await requirePostOpen(p);
-  const inst = await activeInstrument(kind);
+  const inst = kind === 'post' ? await postInstrumentFor(p.id) : await activeInstrument(kind);
   if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 503, 'no_instrument');
 
   let { data: a } = await db.from('assessments').select('*').eq('participant_id', p.id).eq('instrument_id', inst.id)
@@ -368,11 +388,23 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
   }
-  const qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro')
+  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form')
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
+  // أداة بصيغتين: المبدئي صيغة ثابتة للمشارك، والبعدي الصيغة الأخرى
+  if (usesForms(qs)) {
+    if (!a.form) {
+      const prev = kind === 'post' ? (await lastBaseline(p.id))?.form : null;
+      a.form = formFor(p.id, prev);
+      must(await db.from('assessments').update({ form: a.form }).eq('id', a.id));
+    }
+    qs = forForm(qs, a.form);
+  }
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
   const order = ['milestone', 'impact', 'leadership'];
-  const tierOrder = ['knowledge', 'skill', 'behavior'];
+  // الممارسة أولًا ثم المواقف ثم المعرفة: يقدّر المشارك ممارسته قبل أن تلمّح
+  // أسئلة المعرفة والمواقف إلى ما يُنتظر منه، وتأتي المعرفة بعد المواقف
+  // فلا تدله على إجاباتها.
+  const tierOrder = ['behavior', 'skill', 'knowledge'];
   // بنود انتقال التعلم في القياس البعدي تأتي آخرًا، بعد الأطر الثلاثة
   const last = (q: any) => (q.tier === 'transfer' ? 1 : 0);
   qs.sort((x: any, y: any) => last(x) - last(y) || order.indexOf(x.dimension) - order.indexOf(y.dimension)
@@ -413,7 +445,7 @@ async function openAssessment(p: any, id: string) {
 export async function assessmentAnswer(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
   const q = must(await db.from('questions').select('*').eq('id', String(b.question_id)).eq('instrument_id', a.instrument_id).maybeSingle());
-  if (!q) throw new Fail('سؤال غير صالح');
+  if (!q || (q.form && a.form && q.form !== a.form)) throw new Fail('سؤال غير صالح');
   const k = Number(b.k);
   const score = scoreFor(q, k);
   if (!Number.isInteger(k) || score == null) throw new Fail('إجابة غير صالحة');
@@ -437,7 +469,7 @@ export async function assessmentSubmit(p: any, b: Body) {
     db.from('level_rules').select('*'),
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
-  const questions = qs.data || [];
+  const questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
@@ -446,9 +478,11 @@ export async function assessmentSubmit(p: any, b: Body) {
 
   // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
   const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
+  const split = skillSplit(questions, answers);
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level,
+    skill_anchor_pct: split[r.dimension]?.anchor ?? null, skill_form_pct: split[r.dimension]?.form ?? null,
     // الدرجة هي المؤشر المركّب نفسه حتى لا يختلف رقم التقرير عن سبب المستوى
     score: r.composite ?? Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
@@ -479,13 +513,29 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
   const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
   if (noBefore) throw new Fail(`بقي تقدير "قبل البرنامج" في ${noBefore} من العبارات`, 400, 'incomplete');
   const scored = questions.filter((q: any) => q.tier !== 'transfer');
-  const result = placementFromAnswers(scored, answers, [], model || DEFAULT_MODEL);
-  const before = beforePercents(scored, values);
+  const m = model || DEFAULT_MODEL;
+  const result = placementFromAnswers(scored, answers, [], m);
+  const minBehavior = Number(m.min_behavior_items ?? DEFAULT_MODEL.min_behavior_items);
+  const before: any = beforePercents(scored, values, { minBehavior });
+  const split = skillSplit(scored, answers);
+  // الممارسة على العبارات المجابة في القياسين معًا
+  let common: Record<string, any> = {};
+  const base = await lastBaseline(p.id);
+  if (base) {
+    const [bq, ba] = await Promise.all([
+      db.from('questions').select('id, code, dimension, tier, options').eq('instrument_id', base.instrument_id).eq('tier', 'behavior'),
+      db.from('assessment_answers').select('question_id, value').eq('assessment_id', base.id),
+    ]);
+    const preAnswers = Object.fromEntries((ba.data || []).map((x: any) => [x.question_id, x.value?.k]));
+    common = commonBehavior(bq.data || [], preAnswers, scored, answers, { minBehavior });
+  }
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level, score: r.composite ?? 0,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
     composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason,
     behavior_before_pct: before[r.dimension]?.behavior ?? null,
+    skill_anchor_pct: split[r.dimension]?.anchor ?? null, skill_form_pct: split[r.dimension]?.form ?? null,
+    behavior_common_pct: common[r.dimension]?.post ?? null, behavior_pre_common_pct: common[r.dimension]?.pre ?? null,
   }))));
   await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
   await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);
