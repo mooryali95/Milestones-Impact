@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { call } from '../api.js';
 import { attribution } from '../attribution.js';
+import Captcha from '../Captcha.jsx';
 
 const RESEND_SECONDS = 45;
 
@@ -19,6 +20,7 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [wait, setWait] = useState(0);
   const codeRef = useRef(null);
   const [org, setOrg] = useState(null);
+  const [captchaKey, setCaptchaKey] = useState(null);
   const [via] = useState(attribution);
 
   // اسم الجهة يظهر إن جاء الزائر برابطها أو من موقعها
@@ -34,13 +36,16 @@ export default function SignIn({ onSignedIn, initialError }) {
   }, [wait]);
   useEffect(() => { if (step === 'code') codeRef.current?.focus(); }, [step]);
 
-  const start = async (e) => {
+  const start = async (e, captcha) => {
     e?.preventDefault();
     setBusy(true); setError('');
     const res = await call('auth.start', {
-      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, ...via,
+      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, ...via, captcha,
     });
     setBusy(false);
+    // الخادم يطلب التحقق البشري: تظهر الأداة، وتعيد الطلب وحدها حين تكتمل
+    if (res.code === 'captcha') { setCaptchaKey(res.site_key || ''); return setError(res.site_key ? '' : res.message); }
+    setCaptchaKey(null);
     if (!res.success) return setError(res.message);
     if (res.needs_name) return setStep('name');
     setStep('code'); setCode(''); setWait(RESEND_SECONDS);
@@ -73,6 +78,13 @@ export default function SignIn({ onSignedIn, initialError }) {
     if (res.success) onSignedIn(res);
     else setError(res.message);
   };
+
+  const captchaBox = captchaKey ? (
+    <div className="stack">
+      <p className="small muted">تحقق سريع قبل إرسال الرمز.</p>
+      <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />
+    </div>
+  ) : null;
 
   return (
     <div className="auth-wrap">
@@ -146,6 +158,7 @@ export default function SignIn({ onSignedIn, initialError }) {
             <p className="muted small">لم يصل؟ تفقّد مجلد الرسائل غير المرغوبة.</p>
           </div>
         )}
+        {captchaBox}
       </div>
     </div>
   );

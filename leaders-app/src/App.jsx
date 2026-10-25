@@ -161,7 +161,7 @@ function Participant() {
           <span className="tag">رحلة القادة</span>
           <span className="spacer" />
           {install && <button className="link small" onClick={doInstall}>ثبّت التطبيق</button>}
-          {me && <span className="who">{me.participant.full_name}</span>}
+          {me && <button className="link small who" title="ملفي وأجهزتي" onClick={() => setView('profile')}>{me.participant.full_name}</button>}
           {me && <button className="link small" onClick={logout}>خروج</button>}
         </div>
       </header>

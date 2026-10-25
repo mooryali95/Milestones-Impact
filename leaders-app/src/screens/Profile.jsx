@@ -1,8 +1,49 @@
 // ════════════════════════════════════════════════════════════════
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { call, uploadFile } from '../api.js';
+
+const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
+const deviceOf = (ua = '') => {
+  const os = /iPhone|iPad/.test(ua) ? 'iPhone أو iPad' : /Android/.test(ua) ? 'Android' : /Mac OS/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'جهاز';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br ? `${br} على ${os}` : os;
+};
+const when = (t) => (t ? new Date(t).toLocaleDateString('ar-SA-u-nu-latn', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
+
+// أجهزتك: الجلسات السارية، وإنهاء أي جهاز غير هذا
+function Devices() {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { call('sessions.list').then((r) => setList(r.success ? r.sessions : [])); }, []);
+  const revoke = async (id) => {
+    setBusy(true);
+    const r = await call('sessions.revoke', id ? { id } : {});
+    setBusy(false);
+    if (r.success) setList(r.sessions);
+  };
+  if (!list) return null;
+  const others = list.filter((x) => !x.current);
+  return (
+    <section className="card stack devices">
+      <div className="row between">
+        <h2>أجهزتك</h2>
+        {others.length > 0 && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => revoke()}>اخرج من الأجهزة الأخرى</button>}
+      </div>
+      <p className="small muted">الأجهزة التي دخلت منها خلال آخر أسبوعين. إن رأيت جهازًا لا تعرفه فأنهِ جلسته.</p>
+      <ul className="device-list">
+        {list.map((x) => (
+          <li key={x.id}>
+            <div><b>{deviceOf(x.user_agent || '')}</b>{x.current && <span className="chip ok">هذا الجهاز</span>}
+              <br /><small className="muted">{METHOD[x.method] || x.method} · آخر نشاط {when(x.last_seen_at || x.created_at)}</small></div>
+            {!x.current && <button type="button" className="link small" disabled={busy} onClick={() => revoke(x.id)}>إنهاء</button>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years_experience'];
 
@@ -109,6 +150,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
+      {!onboarding && <Devices />}
     </div>
   );
 }
