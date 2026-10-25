@@ -48,7 +48,7 @@ function Cohort({ r }) {
     <section className="la-card">
       <h3>الدفعة: قبل وبعد لكل إطار</h3>
       {r.caution && <div className="la-note">{r.caution}</div>}
-      <table className="la-table">
+      <table className="la-table" tabIndex={0} aria-label="قبل وبعد لكل إطار">
         <thead><tr><th>الإطار</th><th>العدد</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>حجم الأثر dz</th><th>تحسن موثوق</th><th>تراجع موثوق</th><th>ارتقى مستوى</th><th>تقدير المدير قبل ← بعد</th></tr></thead>
         <tbody>{DIMS.map((d) => {
           const c = r.cohort[d];
@@ -83,7 +83,7 @@ function Transfer({ rows }) {
   return (
     <section className="la-card">
       <h3>انتقال التعلم إلى العمل</h3>
-      <table className="la-table">
+      <table className="la-table" tabIndex={0} aria-label="انتقال التعلم إلى العمل">
         <thead><tr><th>البند</th><th>العدد</th><th>موافقون</th><th>المتوسط من 4</th></tr></thead>
         <tbody>{rows.map((t) => <tr key={t.code}><td>{t.text}</td><td>{t.n}</td><td>{t.agree_pct}%</td><td>{t.mean}</td></tr>)}</tbody>
       </table>
@@ -98,7 +98,7 @@ function People({ list, onPerson }) {
   return (
     <section className="la-card">
       <h3>المشاركون</h3>
-      <table className="la-table">
+      <table className="la-table" tabIndex={0} aria-label="أثر كل مشارك">
         <thead><tr><th>المشارك</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المقيّمون</th></tr></thead>
         <tbody>{rows.map((p) => (
           <tr key={p.id} className="la-click" onClick={() => onPerson(p.id)}>

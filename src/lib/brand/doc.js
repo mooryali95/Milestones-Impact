@@ -12,8 +12,8 @@ import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 const LOGO = LOGO_SRC.replace(/<\?xml[^>]*>\s*/, '');
 
 export const C = {
-  graphite: '#0B272F', gold: '#A97A2E', goldLight: '#D9A85A', mist: '#F7F8F6',
-  paper: '#FFFFFF', slate: '#2C4148', muted: '#6E8085', line: '#DCE2E1', faint: '#EEF1F0',
+  graphite: '#0B272F', gold: '#A97A2E', goldText: '#8A6424', goldLight: '#D9A85A', mist: '#F7F8F6',
+  paper: '#FFFFFF', slate: '#2C4148', muted: '#5F7176', line: '#DCE2E1', faint: '#EEF1F0',
 };
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -97,7 +97,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
-.toolbar button.pri { background: ${C.gold}; color: ${C.graphite}; }
+.toolbar button.pri { background: ${C.goldLight}; color: ${C.graphite}; }
 .mast { position: relative; background: ${C.mist} ${LATTICE}; border-bottom: 1px solid ${C.gold}; padding: 12mm 18mm 10mm; }
 .mast .top { display: flex; justify-content: space-between; align-items: flex-start; direction: ltr; }
 .mast .logo svg { height: 46px; width: auto; display: block; }
@@ -113,7 +113,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .mast .meta b { font-weight: 400; font-size: 9.5pt; }
 .thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.gold}; font-size: 9pt; }
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${C.gold}; opacity: .45; }
-.eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.gold}; }
+.eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.goldText}; }
 .sec { margin-top: 9mm; break-inside: auto; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
