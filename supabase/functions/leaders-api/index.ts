@@ -24,6 +24,7 @@ import * as Z from './certificates.ts';
 import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
+import * as S from './system.ts';
 
 type Body = Record<string, any>;
 
@@ -31,10 +32,10 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
   'org.info': (b) => P.orgInfo(b),
-  // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها في التشغيلة نفسها
+  // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, coordinator_reports: await C.weeklyReports() };
+    return { ...r, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,
@@ -90,6 +91,10 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
+  'admin.health': () => S.health(),
+  'admin.visits': (_a, b) => S.visits(b),
+  'admin.trends': () => S.trends(),
+  'admin.item-analysis': (_a, b) => S.itemReport(b),
   'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => A.participant(b),

@@ -60,6 +60,21 @@ function Impact({ im, instruments }) {
   );
 }
 
+// حالة النظام: ترحيلات لم تُشغَّل، وأسرار ناقصة، واقتراب البريد من سقفه اليومي
+function Health({ h }) {
+  if (!h?.success) return null;
+  const near = h.mail.today >= h.mail.cap * 0.8;
+  if (!h.missing_migrations.length && !h.missing_secrets.length && !near) return null;
+  return (
+    <div className="la-note la-health" role="status">
+      <b>حالة النظام</b>
+      {h.missing_migrations.length > 0 && <p>ترحيلات لم تُشغَّل بعد في SQL Editor: {h.missing_migrations.map((f) => <code key={f}>{f}.sql</code>)}</p>}
+      {h.missing_secrets.length > 0 && <p>أسرار ناقصة في دالة leaders-api: {h.missing_secrets.map((k) => <code key={k}>{k}</code>)}</p>}
+      {near && <p>رسائل الرموز اليوم {h.mail.today} من {h.mail.cap}. عند السقف يتوقف إرسال الرموز حتى الغد، ويبقى الدخول بمفتاح المرور.</p>}
+    </div>
+  );
+}
+
 export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
@@ -70,12 +85,13 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
     Promise.all([
       L('admin.overview', { org }), L('admin.reviews'),
       L('admin.impact', org ? { organization_id: org } : {}).catch(() => null),
-    ]).then(([o, r, im]) => live && setD({ o, r, im }));
+      L('admin.health').catch(() => null),
+    ]).then(([o, r, im, h]) => live && setD({ o, r, im, h }));
     return () => { live = false; };
   }, [org, n]);
 
   if (!d) return <Spinner />;
-  const { o, r, im } = d;
+  const { o, r, im, h } = d;
   if (!o.success) return <div className="la-err" role="alert">{o.message}</div>;
   const st = (k) => o.by_status[k] || 0;
   const max = Math.max(1, ...DIMS.flatMap((x) => LVLS.map((l) => o.matrix[x][l])));
@@ -86,6 +102,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
 
   return (
     <>
+      <Health h={h} />
       {o.mfa_required && (
         <div className="la-note" role="alert">
           دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.

@@ -5,6 +5,7 @@
 // والفيديو بما شوهد منه، والجلسة الجماعية بالتوثيق الذي اختاره المشرف، والفردية بتأكيد الموجّه.
 import React, { useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
+import { downloadIcs } from '../ics.js';
 
 const fmtDay = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 const fmtTime = (d) => new Date(d).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
@@ -157,6 +158,7 @@ function Workshop({ item, open, setToast }) {
             <li key={s.id}>
               <span className="grow"><b>{s.title}</b><span className="small muted"> · {fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}{s.location ? ` · ${s.location}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
+              {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               {s.attended ? <span className="chip ok">حضرت ✓</span>
                 : new Date(s.ends_at) < new Date() ? <span className="chip bad">لم يُسجل حضور</span> : <span className="chip">قادمة</span>}
@@ -167,6 +169,14 @@ function Workshop({ item, open, setToast }) {
       {upcoming.length > 0 && <p className="h">{VERIFY_HINT[a.verify] || VERIFY_HINT.qr}</p>}
     </div>
   );
+}
+
+// زر «أضف إلى تقويمي» لجلسة لم تبدأ بعد
+const ROUTE = 'https://leaders.sunkvalue.com/';
+function AddToCalendar({ id, title, start, end, location, url }) {
+  if (!start || new Date(start) < new Date()) return null;
+  const ev = { uid: id, title, start, end, location, url: url || ROUTE, description: `برنامج القادة من Milestone Impact. تفاصيل الجلسة ورابط الانضمام في رحلتك: ${ROUTE}` };
+  return <button type="button" className="link small" onClick={() => downloadIcs(ev, 'milestone-impact-session.ics')}>أضف إلى تقويمي</button>;
 }
 
 const COACH_STATUS = { booked: ['', 'محجوزة'], requested: ['', 'اتصال فوري'], attended: ['ok', 'حضرت ✓'], no_show: ['bad', 'لم تحضر'] };
@@ -206,6 +216,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
               <li key={s.id}>
                 <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
                 {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
+                {s.status === 'booked' && <AddToCalendar id={s.id} title="جلسة توجيه: برنامج القادة" start={s.starts_at} end={s.ends_at} location={a.location} url={s.join_url} />}
                 <span className={`chip ${cls}`}>{t}</span>
               </li>
             );

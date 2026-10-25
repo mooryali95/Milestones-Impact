@@ -10,6 +10,7 @@ import {
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
+import ItemQuality from './ItemQuality.jsx';
 import { useUI } from '../ui.jsx';
 
 const save = (entity, base) => (row) => L('admin.save', { entity, row: { ...base, ...row } });
@@ -121,6 +122,7 @@ export function Assessment({ catalog, reload, canWrite }) {
   const insts = [...catalog.instruments].sort((a, b) => (a.kind + b.version).localeCompare(b.kind + a.version));
   const [instId, setInstId] = useState(() => (insts.find((i) => i.active && i.kind === 'baseline') || insts[0])?.id);
   const [dim, setDim] = useState('milestone');
+  const [quality, setQuality] = useState(false);
   const inst = insts.find((i) => i.id === instId) || insts[0];
   if (!inst) return <p className="la-muted">لا أدوات قياس.</p>;
   const locked = catalog.locked_instruments.includes(inst.id);
@@ -150,7 +152,9 @@ export function Assessment({ catalog, reload, canWrite }) {
           <button className="btn-sm ghost" onClick={clone}>إصدار جديد</button>
           {!inst.active && <button className="btn-sm primary" onClick={activate}>تفعيل هذا الإصدار</button>}
         </>}
+        <button className="btn-sm ghost" aria-pressed={quality} onClick={() => setQuality(!quality)}>جودة الأسئلة</button>
       </div>
+      {quality && <ItemQuality instrumentId={inst.id} />}
       {locked && <div className="la-note">لهذا الإصدار نتائج سابقة، فيُسمح بتعديل الصياغة والترتيب فقط. لتغيير الخيارات أو الدرجات أو إضافة أسئلة أنشئ إصدارًا جديدًا ثم فعّله؛ النتائج القديمة تبقى سليمة.</div>}
       <nav className="la-subtabs" aria-label="الأطر">
         {DIMS.map((d) => <button key={d} className={dim === d ? 'on' : ''} aria-current={dim === d ? 'true' : undefined} onClick={() => setDim(d)}>{DIM_EN[d]} <small>{count(d)}</small></button>)}

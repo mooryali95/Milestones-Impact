@@ -26,6 +26,8 @@ export const CONFIG = {
   calendlyKey: env('LEADERS_CALENDLY_KEY'),
   mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
   // التحقق البشري (Cloudflare Turnstile) قبل إرسال أي رمز: يعمل حين يُضبط السر
+  // تقرير الصحة الأسبوعي يصل إلى هذا البريد (المالك)
+  alertEmail: env('LEADERS_ALERT_EMAIL'),
   turnstileSecret: env('LEADERS_TURNSTILE_SECRET'),
   turnstileSite: env('LEADERS_TURNSTILE_SITE_KEY'),
   // سقف يومي لرسائل الرموز من هذه الدالة، فيبقى من حصة البريد ما يكفي للإدارة
@@ -142,6 +144,15 @@ ${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
 }
 
 // تذكير أسبوعي لمن غاب عن رحلته وما زالت لديه خطوات مفتوحة
+export function healthMail(rows: [string, string][], issues: string[]) {
+  const table = rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#5F7176">${esc(k)}</td><td style="padding:6px 0;font-weight:600" align="left">${esc(v)}</td></tr>`).join('');
+  const list = issues.length
+    ? `<p style="font-size:15px;margin:18px 0 6px;font-weight:600">ما يحتاج تدخلك</p><ul style="margin:0;padding-inline-start:20px;line-height:1.9">${issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
+    : '<p style="font-size:15px;margin:18px 0 0">لا شيء يحتاج تدخلك هذا الأسبوع.</p>';
+  return mailShell('تقرير الأسبوع: برنامج القادة', `<table role="presentation" width="100%" style="font-size:14px">${table}</table>${list}
+${mailButton('https://admin.sunkvalue.com/#/leaders/overview', 'افتح لوحة الإدارة')}`, { eyebrow: 'LEADERS PROGRAM', footnote: 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
+}
+
 export function reminderMail(name: string, open: number) {
   return shell('رحلتك بانتظارك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>

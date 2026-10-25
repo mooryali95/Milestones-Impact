@@ -10,6 +10,7 @@ import Login from './screens/Login.jsx';
 import Settings from './screens/Settings.jsx';
 import Contacts from './screens/Contacts.jsx';
 import Leaders from './screens/Leaders.jsx';
+import Visits from './screens/Visits.jsx';
 import { navigate, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';
@@ -18,7 +19,7 @@ const LOGO = '/assets/milestone-impact-inverted.svg';
 
 // السياق يُحفظ للجلسة، فالتحديث يعيدك حيث كنت
 const CTX_KEY = 'mi_admin_next_ctx';
-const savedCtx = () => { try { return sessionStorage.getItem(CTX_KEY) === 'leaders' ? 'leaders' : 'contacts'; } catch { return 'contacts'; } };
+const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return c === 'leaders' || c === 'visits' ? c : 'contacts'; } catch { return 'contacts'; } };
 
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);
@@ -52,13 +53,13 @@ function Dashboard({ user, onUser, onLogout }) {
       </header>
 
       <nav className="ctx-bar" aria-label="السياق">
-        {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة']].map(([k, l]) => (
+        {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة'], ['visits', 'زيارات الموقع']].map(([k, l]) => (
           <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
         ))}
         <a className="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
-      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : <Contacts />}
+      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
 
       <Palette />
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
