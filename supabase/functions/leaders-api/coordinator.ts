@@ -5,19 +5,18 @@
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyDefinition } from './programs.ts';
 import {
-  audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, must, randomCode, randomToken, sendMail,
+  audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
 import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
-import { org as orgPayload } from './admin.ts';
+import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
-type Admin = { email: string; role: string };
+type Admin = import('./admin.ts').Admin;
 
 const SENT = { success: true, sent: true };   // رد واحد سواء كان البريد منسقًا أم لا
-const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
-const requireWrite = (a: Admin) => { if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden'); };
+
 
 async function coordinatorByEmail(email: string) {
   const { data } = await db.from('org_coordinators').select('*, organizations(id, name, status)').eq('email', email).maybeSingle();
@@ -29,6 +28,8 @@ const usable = (c: any) => c && c.status !== 'suspended' && c.organizations?.sta
 export async function authStart(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
+  // الحارس قبل البحث عن المنسق: الرد واحد لكل بريد، مسجلًا كان أو لا
+  await mailGuard(b, ctx);
   const c = await coordinatorByEmail(email);
   if (!usable(c)) return SENT;
 

@@ -25,7 +25,13 @@ export const CONFIG = {
   calcomSecret: env('LEADERS_CALCOM_SECRET'),
   calendlyKey: env('LEADERS_CALENDLY_KEY'),
   mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
-  sessionDays: 30,
+  // التحقق البشري (Cloudflare Turnstile) قبل إرسال أي رمز: يعمل حين يُضبط السر
+  turnstileSecret: env('LEADERS_TURNSTILE_SECRET'),
+  turnstileSite: env('LEADERS_TURNSTILE_SITE_KEY'),
+  // سقف يومي لرسائل الرموز من هذه الدالة، فيبقى من حصة البريد ما يكفي للإدارة
+  mailDailyCap: Number(env('LEADERS_MAIL_DAILY_CAP', '80')) || 80,
+  // الجلسة تتجدد بالاستعمال، وتنتهي بعد أسبوعين من آخر نشاط
+  sessionDays: 14,
   codeMinutes: 15,
 };
 
@@ -41,14 +47,14 @@ export const BUCKET = 'leaders-private';
 
 // ── الردود ──
 const cors = (origin: string | null) => ({
-  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins, ['http://localhost:5174']).includes(origin) ? origin : CONFIG.origins[0],
+  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins).includes(origin) ? origin : CONFIG.origins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Vary': 'Origin',
 });
 
 export class Fail extends Error {
-  constructor(message: string, public status = 400, public code = 'bad_request') { super(message); }
+  constructor(message: string, public status = 400, public code = 'bad_request', public extra: Record<string, unknown> = {}) { super(message); }
 }
 
 export function reply(req: Request, body: unknown, status = 200) {
@@ -190,4 +196,48 @@ export function raterMail(rater: string | null, who: string, link: string) {
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.</p>
 ${mailButton(link, 'ابدأ التقدير')}
 <p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح 30 يومًا.</p>`);
+}
+
+// ── حارس رسائل الرموز ──
+// قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام
+// يحمي حصة البريد من الاستنزاف، ثم التحقق البشري إن كان مفعّلًا.
+const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges'];
+async function challengeCount(since: string, ip?: string | null) {
+  let n = 0;
+  for (const t of CHALLENGE_TABLES) {
+    let q = db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', since);
+    if (ip) q = q.eq('ip', ip);
+    const { count } = await q;
+    n += count ?? 0;
+  }
+  return n;
+}
+
+async function turnstileOk(token: unknown, ip: string | null) {
+  if (typeof token !== 'string' || token.length < 10 || token.length > 4096) return false;
+  const form = new FormData();
+  form.append('secret', CONFIG.turnstileSecret);
+  form.append('response', token);
+  if (ip) form.append('remoteip', ip);
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    return !!(await r.json())?.success;
+  } catch { return false; }
+}
+
+export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }) {
+  const hourAgo = new Date(Date.now() - 36e5).toISOString();
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  // الحد يتسع لدفعة تسجّل معًا من شبكة واحدة (قاعة ورشة)، ولا يكفي جهازًا واحدًا لاستنزاف السقف العام
+  if (ctx.ip) {
+    if (await challengeCount(hourAgo, ctx.ip) >= 30) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
+    if (await challengeCount(dayAgo, ctx.ip) >= 60) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+  }
+  if (await challengeCount(dayAgo) >= CONFIG.mailDailyCap) {
+    console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
+    throw new Fail('بلغت الرسائل حدها اليومي. ادخل بمفتاح المرور، أو حاول بعد ساعات', 429, 'mail_cap');
+  }
+  if (CONFIG.turnstileSecret && !(await turnstileOk(b.captcha, ctx.ip))) {
+    throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });
+  }
 }

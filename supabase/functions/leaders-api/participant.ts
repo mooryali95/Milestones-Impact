@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
+  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
   AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
@@ -33,7 +33,11 @@ export async function participantFromToken(token: unknown) {
   if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const p = must(await db.from('participants').select('*').eq('id', s.participant_id).single());
   if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
-  db.from('auth_sessions').update({ last_seen_at: new Date().toISOString() }).eq('id', s.id).then(() => {});
+  // الاستعمال يجدد المدة: تنتهي الجلسة بعد sessionDays من آخر نشاط لا من الدخول
+  const now = Date.now();
+  const touch: Record<string, string> = { last_seen_at: new Date(now).toISOString() };
+  if (new Date(s.expires_at).getTime() - now < (CONFIG.sessionDays - 1) * 864e5) touch.expires_at = new Date(now + CONFIG.sessionDays * 864e5).toISOString();
+  db.from('auth_sessions').update(touch).eq('id', s.id).then(() => {});
   return { participant: p, sessionId: s.id as string };
 }
 
@@ -101,11 +105,6 @@ export async function authStart(b: Body, ctx: Ctx) {
   const { count: perEmail } = await db.from('email_challenges').select('id', { count: 'exact', head: true })
     .eq('email', email).gte('created_at', hourAgo);
   if ((perEmail ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
-  if (ctx.ip) {
-    const { count: perIp } = await db.from('email_challenges').select('id', { count: 'exact', head: true })
-      .eq('ip', ctx.ip).gte('created_at', hourAgo);
-    if ((perIp ?? 0) >= 30) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
-  }
 
   const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
   let pending: Body | null = null;
@@ -122,6 +121,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     };
   }
 
+  await mailGuard(b, ctx);
   const code = randomCode();
   const link = randomToken(24);
   must(await db.from('email_challenges').insert({
@@ -181,6 +181,21 @@ export async function authVerify(b: Body, ctx: Ctx) {
 export async function logout(sessionId: string) {
   await db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId);
   return { success: true };
+}
+
+// أجهزة المشارك: الجلسات السارية، وإنهاء غير الحالية
+export async function sessionsList(p: any, sessionId: string) {
+  const { data } = await db.from('auth_sessions').select('id, method, user_agent, created_at, last_seen_at')
+    .eq('participant_id', p.id).is('revoked_at', null).gt('expires_at', new Date().toISOString())
+    .order('last_seen_at', { ascending: false, nullsFirst: false }).limit(20);
+  return { success: true, sessions: (data || []).map((x) => ({ ...x, current: x.id === sessionId })) };
+}
+
+export async function sessionsRevoke(p: any, b: Body, sessionId: string) {
+  let q = db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null).neq('id', sessionId);
+  if (b.id) q = q.eq('id', String(b.id));
+  must(await q);
+  return sessionsList(p, sessionId);
 }
 
 // ── 3. حالة المشارك كاملة ──

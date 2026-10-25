@@ -10,7 +10,7 @@ import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
 
 type Body = Record<string, any>;
-export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
+export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
 
 async function sha256hex(s: string) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -23,12 +23,16 @@ export async function adminFromToken(token: unknown): Promise<Admin> {
     .eq('token_hash', await sha256hex(token)).eq('kind', 'admin').limit(1);
   const s = data?.[0];
   if (!s || new Date(s.expires_at).getTime() < Date.now()) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  return { email: String(s.meta?.email || ''), role: s.meta?.role };
+  return { email: String(s.meta?.email || ''), role: s.meta?.role, method: s.meta?.method };
 }
 
 const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
-function requireWrite(a: Admin) {
+// رمز البريد وحده عامل واحد: من دخل به يقرأ، ولا يعدّل بيانات المشاركين
+// حتى يدخل بمفتاح المرور أو تطبيق المصادقة
+export const needsSecondFactor = (a: Admin) => canWrite(a) && a.method === 'email';
+export function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
+  if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب الدخول بمفتاح المرور أو تطبيق المصادقة. فعّل أحدهما من الإعدادات ثم ادخل به', 403, 'mfa_required');
 }
 export const writer = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); return fn(a, b); };
 

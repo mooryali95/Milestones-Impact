@@ -7,6 +7,7 @@ import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton } from '../ui.jsx';
+import Captcha from '../Captcha.jsx';
 
 const STATUS = {
   registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
@@ -27,11 +28,14 @@ function SignIn({ onIn, initialError }) {
   const ref = useRef(null);
   useEffect(() => { if (step === 'code') ref.current?.focus(); }, [step]);
 
-  const start = async (e) => {
-    e.preventDefault();
+  const [captchaKey, setCaptchaKey] = useState(null);
+  const start = async (e, captcha) => {
+    e?.preventDefault();
     setBusy(true); setError('');
-    const r = await coordCall('coord.auth-start', { email });
+    const r = await coordCall('coord.auth-start', { email, captcha });
     setBusy(false);
+    if (r.code === 'captcha') { setCaptchaKey(r.site_key || ''); return setError(r.site_key ? '' : r.message); }
+    setCaptchaKey(null);
     if (!r.success) return setError(r.message);
     setStep('code');
   };
@@ -56,6 +60,7 @@ function SignIn({ onIn, initialError }) {
               <input className="input ltr" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.sa" />
             </label>
             {error && <div className="alert err">{error}</div>}
+            {captchaKey && <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
           </form>
         ) : (

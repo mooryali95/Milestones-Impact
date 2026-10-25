@@ -7,7 +7,7 @@
 //
 // الإجراءات:
 //   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
-//   للمشارك:  me · org.logo · logout · profile.save · upload.url · cv.attach
+//   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
@@ -49,6 +49,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
   'logout': (_p, _b, sid) => P.logout(sid),
+  'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
+  'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
   'profile.save': P.profileSave,
   'upload.url': P.uploadUrl,
   'cv.attach': P.cvAttach,
@@ -88,7 +90,7 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
-  'admin.overview': (_a, b) => A.overview(b),
+  'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => A.participant(b),
   'admin.reviews': () => A.reviews(),
@@ -175,7 +177,7 @@ Deno.serve(async (req) => {
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
-    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code }, e.status);
+    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
     console.error('leaders-api:', e);
     return reply(req, { success: false, message: 'خطأ داخلي، حاول بعد قليل', code: 'internal' }, 500);
   }

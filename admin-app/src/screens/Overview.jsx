@@ -86,6 +86,11 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
 
   return (
     <>
+      {o.mfa_required && (
+        <div className="la-note" role="alert">
+          دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.
+        </div>
+      )}
       <div className="la-row between la-ov-bar">
         <span className="la-muted">{org ? 'تعرض الأرقام لجهة واحدة' : 'كل الجهات'}</span>
         <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
