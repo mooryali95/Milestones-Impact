@@ -13,15 +13,16 @@ import Handbook from './Handbook.jsx';
 import Activities from './Activities.jsx';
 import Impact from './Impact.jsx';
 import Programs from './Programs.jsx';
+import ContentBank from './ContentBank.jsx';
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
-const NEEDS_CATALOG = new Set(['tracks', 'journey', 'assessment', 'levels', 'handbook', 'impact']);
+const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
@@ -66,6 +67,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
   else if (tab === 'programs') body = <Programs canWrite={canWrite} onEditJourney={(id) => { pickProgram(id); at('journey'); }} />;
+  else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;

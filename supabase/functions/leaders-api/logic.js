@@ -219,6 +219,12 @@ export function trackKey(levels) {
   return m && i && l ? `M${m}I${i}L${l}` : null;
 }
 
+// العكس: مفتاح المسار إلى مستوياته (M1I2L3 ← تأسيسي، متوسط، احترافي)
+export function trackLevels(key) {
+  const m = String(key || '').match(/^M([1-3])I([1-3])L([1-3])$/);
+  return m ? Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(m[i + 1]) - 1]])) : null;
+}
+
 export function handbookModulesFor(modules, levels) {
   return modules
     .filter((m) => levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && (m.body_md || '').trim())
@@ -371,7 +377,7 @@ export function isoWeek(d = new Date()) {
 // ════════════════════════════════════════════════════════════════
 // المتطلب من هذه الأنواع لا يكتمل بنقرة؛ يحسمه دليل يجمعه النظام.
 // تجاوز يدوي من المستشار (participant_requirements.status = done) يبقى ممكنًا.
-export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching'];
+export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum'];
 
 // ── القراءة ──
 // الباب يُقسم إلى READ_SLICES شريحة متساوية الارتفاع. القراءة الفعلية:
@@ -647,6 +653,11 @@ export function activityFor(req, ev, now = Date.now()) {
   if (req.kind === 'video') return videoStatus(c, ev.video?.[req.id]);
   if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set(), now);
   if (req.kind === 'coaching') return coachingStatus(c, (ev.coaching || []).filter((s) => s.requirement_id === req.id), now);
+  if (req.kind === 'curriculum') {
+    // يُفتح المنهج مع الكتيب بعد اعتماد المستويات
+    if (ev.curriculumLocked) return { type: 'curriculum', done: false, locked: true, count: 0, total: 0, items: [] };
+    return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
+  }
   return null;
 }
 
@@ -677,6 +688,10 @@ export function cleanConfig(kind, cfg, prev = {}) {
   if (kind === 'workshop') {
     return { sessions_required: intIn(c.sessions_required, 1, 30, 1), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr' };
   }
+  if (kind === 'curriculum') {
+    // منهج المسار كله، أو مواد بُعد واحد (لتوزيعه على مراحل)
+    return DIMENSIONS.includes(c.dimension) ? { dimension: c.dimension } : {};
+  }
   if (kind === 'coaching') {
     const out = {
       sessions_required: intIn(c.sessions_required, 1, 30, 1), minutes: intIn(c.minutes, 5, 480, 60),
@@ -700,6 +715,84 @@ export function cleanConfig(kind, cfg, prev = {}) {
     return out;
   }
   return {};
+}
+
+// ── منهج المسار: بنك المحتوى ──
+// المادة تخص المشارك بوسمها: للجميع، أو لبُعد من مستوى فأعلى، أو لمستوى
+// واحد. الاستثناء بالمسار يتقدم على الوسم: مسارات بعينها فقط، أو استبعاد.
+export const CONTENT_KINDS = ['video', 'file', 'link'];
+export function contentApplies(item, levels, track = trackKey(levels)) {
+  if (!item || item.active === false) return false;
+  if (track && (item.exclude_tracks || []).includes(track)) return false;
+  if ((item.track_keys || []).length) return !!track && item.track_keys.includes(track);
+  if (!item.dimension) return true;
+  const lv = levels?.[item.dimension];
+  if (!(lv in RANK)) return false;
+  if (item.only_level) return lv === item.only_level;
+  if (item.min_level) return RANK[lv] >= RANK[item.min_level];
+  return true;
+}
+
+// مادة البنك كما يحفظها المشرف: رابط https، ووسم جمهور متسق، ومسارات صحيحة
+const TRACK_RE = /^M[1-3]I[1-3]L[1-3]$/;
+export function cleanContentItem(row, isNew = false) {
+  const out = { ...row };
+  if (isNew || 'kind' in row) { if (!CONTENT_KINDS.includes(row.kind)) throw new Error('نوع المادة: فيديو أو ملف أو رابط'); }
+  if (isNew || 'title_ar' in row) { out.title_ar = String(row.title_ar || '').trim().slice(0, 200); if (!out.title_ar) throw new Error('عنوان المادة مطلوب'); }
+  if (isNew || 'url' in row) {
+    out.url = String(row.url || '').trim();
+    if (!/^https:\/\/\S+$/.test(out.url)) throw new Error('الرابط يجب أن يبدأ بـ https');
+    if (row.kind === 'video' && !videoSource(out.url)) throw new Error('رابط الفيديو: يوتيوب أو ملف فيديو مباشر');
+  }
+  if ('dimension' in row) out.dimension = DIMENSIONS.includes(row.dimension) ? row.dimension : null;
+  for (const k of ['min_level', 'only_level']) if (k in row) out[k] = LEVELS.includes(row[k]) ? row[k] : null;
+  if (!out.dimension && ('dimension' in row)) { out.min_level = null; out.only_level = null; }
+  // الحقلان متبادلان: تحديد أحدهما يلغي الآخر
+  if (out.min_level && !('only_level' in row)) out.only_level = null;
+  else if (out.only_level && !('min_level' in row)) out.min_level = null;
+  else if (out.min_level && out.only_level) out.min_level = null;
+  for (const k of ['track_keys', 'exclude_tracks']) {
+    if (!(k in row)) continue;
+    const raw = Array.isArray(row[k]) ? row[k] : String(row[k] || '').split(/[\s,،]+/);
+    const list = [...new Set(raw.map((x) => String(x || '').trim().toUpperCase()).filter(Boolean))];
+    const bad = list.find((x) => !TRACK_RE.test(x));
+    if (bad) throw new Error(`مفتاح مسار غير صحيح: ${bad} (مثل M1I2L3)`);
+    out[k] = list;
+  }
+  if ('min_pct' in row) out.min_pct = Math.min(100, Math.max(10, Math.round(Number(row.min_pct)) || 90));
+  if ('minutes' in row) out.minutes = row.minutes == null || row.minutes === '' ? null : Math.min(600, Math.max(0, Math.round(Number(row.minutes)) || 0));
+  return out;
+}
+
+// منهج المسار مرتبًا: العام أولًا ثم الأبعاد بترتيبها، وداخل كل منها بترتيب البنك
+export function curriculumFor(items, levels, dimension = null) {
+  const track = trackKey(levels);
+  const order = (i) => (i.dimension ? DIMENSIONS.indexOf(i.dimension) + 1 : 0);
+  return (items || [])
+    .filter((i) => contentApplies(i, levels, track) && (!dimension || i.dimension === dimension))
+    .sort((a, b) => order(a) - order(b) || (a.sort ?? 0) - (b.sort ?? 0));
+}
+
+export function contentState(item, row) {
+  if (item.kind === 'video') {
+    const pct = row?.duration > 0 ? Math.min(100, Math.round((Number(row.watched_seconds) / Number(row.duration)) * 100)) : 0;
+    return { pct, done: pct >= (item.min_pct || 90), started: pct > 0 };
+  }
+  return { pct: row?.opened_at ? 100 : 0, done: !!row?.opened_at, started: !!row?.opened_at };
+}
+
+export function curriculumStatus(config, items, levels, progress) {
+  const list = curriculumFor(items, levels, config?.dimension || null).map((i) => {
+    const st = contentState(i, progress?.[i.id]);
+    return {
+      id: i.id, kind: i.kind, title: i.title_ar, description: i.description_ar || null, minutes: i.minutes ?? null,
+      dimension: i.dimension || null, required: i.required !== false, url: i.url, min_pct: i.kind === 'video' ? i.min_pct || 90 : null,
+      ...st,
+    };
+  });
+  const need = list.filter((x) => x.required);
+  const count = need.filter((x) => x.done).length;
+  return { type: 'curriculum', done: count === need.length, count, total: need.length, items: list };
 }
 
 // ════════════════════════════════════════════════════════════════
