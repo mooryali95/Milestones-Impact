@@ -1063,3 +1063,18 @@ export function compareAssessments({ pre, post, model, impact, rater, evidence }
     };
   });
 }
+
+// ── طبقات الشهادة ──
+// العام، ثم البرنامج، ثم الجهة. الأخص يغلب فيما خصّصه فقط، والغائب يُورث.
+// signatory: null صريحة تعني «بلا موقّع»، وغيابها يعني الوراثة.
+export function certProfile(global, ...layers) {
+  return layers.reduce((acc, l) => {
+    const o = l || {};
+    return {
+      program_ar: o.program_ar || acc.program_ar,
+      program_en: o.program_en || acc.program_en,
+      hours: o.hours ?? acc.hours,
+      signatory: 'signatory' in o ? o.signatory : acc.signatory,
+    };
+  }, { program_ar: global.program_ar, program_en: global.program_en, hours: global.hours ?? null, signatory: global.signatory ?? null });
+}

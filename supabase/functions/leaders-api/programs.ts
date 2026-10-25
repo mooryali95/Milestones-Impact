@@ -7,6 +7,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { cleanDelivery, cohortDefinition, pickCohort, programDiff, programSnapshot, restorePlan } from './logic.js';
 import type { Admin } from './admin.ts';
+import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
@@ -127,8 +128,10 @@ export async function programSave(a: Admin, b: Body) {
     const patch: Body = { updated_at: new Date().toISOString() };
     if (name) patch.name = name;
     if (description_ar !== undefined) patch.description_ar = description_ar;
+    // شهادة البرنامج: ما يختلف عن الإعداد العام فقط
+    if (b.cert && typeof b.cert === 'object') patch.cert = cleanProfile(b.cert, true);
     const row = must(await db.from('programs').update(patch).eq('id', b.id).select('*').single());
-    await audit('admin', a.email, 'program.save', 'programs', row.id, null, patch);
+    await audit('admin', a.email, 'program.save', 'programs', row.id, null, { ...patch, ...(patch.cert?.signatory ? { cert: { ...patch.cert, signatory: patch.cert.signatory.name } } : {}) });
     return { success: true, program: row };
   }
   if (!name) throw new Fail('اسم البرنامج مطلوب');
@@ -140,7 +143,8 @@ export async function programSave(a: Admin, b: Body) {
   } else {
     source = await liveRows(isUuid(b.from) ? String(b.from) : await defaultProgramId());
   }
-  const pr = must(await db.from('programs').insert({ name, description_ar: description_ar ?? null, created_by: a.email }).select('*').single());
+  const base = isUuid(b.from) ? (await db.from('programs').select('cert').eq('id', b.from).maybeSingle()).data : null;
+  const pr = must(await db.from('programs').insert({ name, description_ar: description_ar ?? null, cert: base?.cert || {}, created_by: a.email }).select('*').single());
   const strip = ({ program_id: _p, created_at: _c, updated_at: _u, ...r }: any) => r;
   if (source.stages.length) must(await db.from('journey_stages').insert(source.stages.map((s) => ({ ...strip(s), program_id: pr.id }))));
   if (source.requirements.length) {

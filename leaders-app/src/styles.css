@@ -59,6 +59,13 @@ p { margin: 0; }
   padding-inline-start: 12px; letter-spacing: .02em;
 }
 .topbar .spacer { flex: 1; }
+.topbar { border-bottom: 3px solid var(--org, transparent); }
+.org-mark {
+  display: inline-flex; align-items: center; height: 34px; padding: 3px 10px; border-radius: 8px;
+  background: #fff; color: var(--org, var(--graphite)); font-size: 13px; max-width: 160px;
+}
+.topbar .org-mark img { height: 28px; max-width: 140px; object-fit: contain; }
+.org-mark b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar .who { font-size: 13px; opacity: .85; }
 .topbar button.link { color: var(--mist); }
 
