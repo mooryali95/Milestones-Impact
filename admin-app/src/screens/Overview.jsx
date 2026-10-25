@@ -75,6 +75,26 @@ function Health({ h }) {
   );
 }
 
+// جاهزية الإطلاق: تختفي حين تكتمل البنود كلها
+function Readiness({ items, onTab }) {
+  const todo = (items || []).filter((x) => !x.ok);
+  if (!todo.length) return null;
+  return (
+    <section className="la-card la-ready" aria-label="جاهزية الإطلاق">
+      <div className="la-row between"><h3>جاهزية الإطلاق</h3><span className="la-muted">{items.length - todo.length} من {items.length}</span></div>
+      <ul>
+        {items.map((x) => (
+          <li key={x.key} className={x.ok ? 'ok' : ''}>
+            <span aria-hidden="true">{x.ok ? '✓' : '○'}</span>
+            <span>{x.label}</span>
+            {!x.ok && onTab && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
@@ -103,6 +123,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
   return (
     <>
       <Health h={h} />
+      {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
       {o.mfa_required && (
         <div className="la-note" role="alert">
           دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.

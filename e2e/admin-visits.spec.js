@@ -74,3 +74,19 @@ test('اتجاه البرنامج: هذا الأسبوع مقارنة بالما
   await expect(card.locator('.stat-card').nth(2)).toContainText('-1 عن الماضي');
   await expect(card.getByRole('table').locator('tbody tr').first()).toContainText('2026-10-25');
 });
+
+test('جاهزية الإطلاق: البنود الناقصة تنقل إلى تبويب ضبطها، وتختفي حين تكتمل', async ({ page }) => {
+  await setup(page, {
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
+    'admin.health': { success: true, missing_migrations: [], missing_secrets: [], mail: { today: 0, cap: 80 }, readiness: [
+      { key: 'baseline', ok: true, where: 'assessment', label: 'القياس القبلي المفعّل baseline-v3' },
+      { key: 'certificate', ok: false, where: 'certs', label: 'الشهادة بلا موقّع' },
+    ] },
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  const card = page.getByRole('region', { name: 'جاهزية الإطلاق' });
+  await expect(card).toContainText('1 من 2');
+  await card.getByRole('button', { name: 'اضبطه' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/certs/);
+});
