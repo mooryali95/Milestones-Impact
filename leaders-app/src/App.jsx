@@ -23,6 +23,32 @@ import Impact from './screens/Impact.jsx';
 import Rater from './screens/Rater.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
+// هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
+const LOGO_KEY = 'mi_leaders_org_logo';
+function OrgMark({ org }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    if (!org?.logo_v) { setSrc(null); return; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(LOGO_KEY) || 'null');
+      if (saved?.v === org.logo_v) { setSrc(saved.logo); return; }
+    } catch { /* التخزين غير متاح: نجلبه */ }
+    let live = true;
+    call('org.logo').then((r) => {
+      if (!live || !r.success || !r.logo) return;
+      setSrc(r.logo);
+      try { localStorage.setItem(LOGO_KEY, JSON.stringify({ v: org.logo_v, logo: r.logo })); } catch { /* يكفي العرض */ }
+    });
+    return () => { live = false; };
+  }, [org?.logo_v]);
+  if (!org) return null;
+  return (
+    <span className="org-mark" title={org.name}>
+      {src ? <img src={src} alt={org.name} /> : <b>{org.short_name || org.name}</b>}
+    </span>
+  );
+}
+
 const stageDone = (me, key) => me?.journey?.find((s) => s.key === key)?.status === 'done';
 
 // /org و/org/verify: بوابة منسق الجهة، بجلسة مستقلة عن المشارك
@@ -109,6 +135,7 @@ function Participant() {
   const logout = async () => {
     await call('logout');
     session.clear();
+    try { localStorage.removeItem(LOGO_KEY); } catch { /* لا شيء محفوظ */ }
     setMe(null);
     setView('home');
   };
@@ -127,9 +154,10 @@ function Participant() {
   return (
     <>
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
-      <header className="topbar">
+      <header className="topbar" style={me?.org?.color ? { '--org': me.org.color } : undefined}>
         <div className="topbar-in">
           <img src={logo} alt="Milestone Impact" />
+          {me?.org && <OrgMark org={me.org} />}
           <span className="tag">رحلة القادة</span>
           <span className="spacer" />
           {install && <button className="link small" onClick={doInstall}>ثبّت التطبيق</button>}

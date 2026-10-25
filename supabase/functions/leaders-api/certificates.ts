@@ -6,7 +6,8 @@
 // الحاكمة بسرّ الخادم، فلا تمر شهادة عُدّلت لقطتها في القاعدة دون أن يظهر
 // ذلك عند التحقق. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
 import { audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
-import { trackKey } from './logic.js';
+import { certProfile, trackKey } from './logic.js';
+import { cohortOf, defaultProgramId } from './programs.ts';
 
 type Body = Record<string, any>;
 type Actor = { email: string };
@@ -22,7 +23,8 @@ function newSerial(at = new Date()) {
 }
 
 // الحقول الحاكمة فقط: تغيير أيّها يُبطل التوقيع
-const signed = (s: any) => [s.serial, s.name_ar, s.name_en || '', s.program_ar, s.track_ar || '', s.hours || '', s.issued_at, s.org?.name || ''].join('|');
+// الدفعة أُضيفت لاحقًا: تدخل التوقيع حين توجد فقط، فتبقى الشهادات السابقة صحيحة
+const signed = (s: any) => [s.serial, s.name_ar, s.name_en || '', s.program_ar, s.track_ar || '', s.hours || '', s.issued_at, s.org?.name || '', ...(s.cohort_ar ? [s.cohort_ar] : [])].join('|');
 
 async function hmac(text: string) {
   const key = await crypto.subtle.importKey('raw', enc.encode(`cert:${CONFIG.pepper}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -31,8 +33,9 @@ async function hmac(text: string) {
 }
 
 // ── مصدر واحد لما يظهر على الشهادة ──
-// الإعداد العام (certificate_settings) ثم تخصيص الجهة (organizations.cert) فوقه.
-// profileFor هي الدالة الوحيدة التي تحل الاثنين؛ الإصدار والمعاينة يمرّان بها.
+// الإعداد العام (certificate_settings)، ثم تخصيص البرنامج (programs.cert)، ثم تخصيص
+// الجهة (organizations.cert) فوقهما. profileFor هي الدالة الوحيدة التي تحل الطبقات؛
+// الإصدار والمعاينة يمرّان بها.
 const DEFAULTS = { enabled: true, program_ar: 'برنامج القادة', program_en: 'Leaders Program', hours: null, signatory: null };
 type Signatory = { name: string; title: string; image?: string };
 type Profile = { program_ar: string; program_en: string; hours: number | null; signatory: Signatory | null };
@@ -69,22 +72,16 @@ export function cleanProfile(s: Body, partial = false) {
   return out;
 }
 
-export function profileFor(global: Body, orgCert: Body | null | undefined): Profile {
-  const o = orgCert || {};
-  return {
-    program_ar: o.program_ar || global.program_ar,
-    program_en: o.program_en || global.program_en,
-    hours: o.hours ?? global.hours ?? null,
-    signatory: 'signatory' in o ? o.signatory : global.signatory ?? null,
-  };
-}
+export const profileFor = (global: Body, ...layers: (Body | null | undefined)[]): Profile => certProfile(global, ...layers);
 
 const ORG_FIELDS = 'id, name, name_en, logo, cert_cobrand, cert';
 const orgRow = async (id: string | null | undefined) =>
   id ? (await db.from('organizations').select(ORG_FIELDS).eq('id', id).maybeSingle()).data : null;
+const programCert = async (id: string | null | undefined) =>
+  id ? ((await db.from('programs').select('cert').eq('id', id).maybeSingle()).data?.cert || {}) : {};
 
 // اللقطة: كل ما يظهر على الشهادة، من مصدر واحد
-function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name_en: string | null; track: any; start: string; end: string; org: any; profile: Profile }) {
+function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name_en: string | null; track: any; start: string; end: string; org: any; profile: Profile; cohort?: string | null }) {
   const { profile: pr, org: o } = x;
   return {
     serial: x.serial,
@@ -97,6 +94,7 @@ function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name
     hours: pr.hours,
     start: x.start,
     end: x.end,
+    cohort_ar: x.cohort || null,
     issued_at: x.issuedAt,
     org: o ? { id: o.id, name: o.name, name_en: o.name_en || null, logo: o.cert_cobrand && o.logo ? o.logo : null } : null,
     signatories: pr.signatory ? [pr.signatory] : [],
@@ -104,20 +102,24 @@ function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name
   };
 }
 
+// الدفعة كما تحددها رحلة المشارك (تسجيله، أو دفعة جهته، أو المفتوحة)، وبرنامجها
 async function buildSnapshot(p: any, serial: string, issuedAt: string) {
-  const [cfg, pl, org, enr] = await Promise.all([
+  const [cfg, pl, org, { cohort }] = await Promise.all([
     settings(),
     db.from('placements').select('dimension, level').eq('participant_id', p.id),
     orgRow(p.organization_id),
-    db.from('enrollments').select('cohorts(starts_on, ends_on)').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1),
+    cohortOf(p),
   ]);
   const key = trackKey(Object.fromEntries((pl.data || []).map((x: any) => [x.dimension, x.level])));
-  const track = key ? (await db.from('tracks').select('title_ar, title_en').eq('key', key).maybeSingle()).data : null;
-  const cohort = (enr.data?.[0] as any)?.cohorts;
+  const [track, prCert] = await Promise.all([
+    key ? db.from('tracks').select('title_ar, title_en').eq('key', key).maybeSingle().then((r: any) => r.data) : null,
+    programCert(cohort?.program_id || await defaultProgramId()),
+  ]);
   return snapshotOf({
     serial, issuedAt, name_ar: p.full_name, name_en: p.name_en || null, track,
     start: cohort?.starts_on || p.created_at, end: cohort?.ends_on || issuedAt,
-    org, profile: profileFor(cfg, org?.cert),
+    cohort: cohort && !cohort.is_default ? cohort.name : null,
+    org, profile: profileFor(cfg, prCert, org?.cert),
   });
 }
 
@@ -273,25 +275,30 @@ export async function reissueOrg(a: Actor, b: Body) {
   return { success: true, count };
 }
 
-// معاينة بالمصدر نفسه الذي يُصدر منه: إعداد عام أو جهة، باسم تجريبي
+// معاينة بالمصدر نفسه الذي يُصدر منه: إعداد عام أو برنامج أو جهة، باسم تجريبي.
+// program_cert مسودة البرنامج، وcert مسودة الجهة؛ الغائب يُقرأ من المحفوظ
 export async function preview(b: Body) {
-  const [cfg, org] = await Promise.all([settings(), orgRow(b.organization_id)]);
+  const [cfg, org, saved] = await Promise.all([settings(), orgRow(b.organization_id), programCert(b.program_id || await defaultProgramId())]);
   const draft = b.settings ? { ...cfg, ...cleanProfile(b.settings) } : cfg;
   const cert = b.cert ? cleanProfile(b.cert, true) : org?.cert;
+  const prCert = b.program_cert ? cleanProfile(b.program_cert, true) : saved;
   const now = new Date().toISOString();
   return {
     success: true,
     certificate: snapshotOf({
       serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
       track: { title_ar: 'مسار التوازن القيادي', title_en: 'Balanced Leadership Track' }, start: now, end: now,
-      org, profile: profileFor(draft, cert),
+      org, profile: profileFor(draft, prCert, cert),
     }),
   };
 }
 
 export async function settingsGet() {
-  const { count } = await db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}');
-  return { success: true, settings: await settings(), customized_orgs: count ?? 0 };
+  const [orgs, progs] = await Promise.all([
+    db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
+    db.from('programs').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
+  ]);
+  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0 };
 }
 
 export async function settingsSave(a: Actor, b: Body) {

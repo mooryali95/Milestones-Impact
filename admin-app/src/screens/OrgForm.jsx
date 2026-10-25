@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { domainsOf, inviteUrl, L, orgColor } from '../leaders.js';
 import { useEscape, useUI } from '../ui.jsx';
-import { previewCertificate, SignatoryChoice } from '../cert.jsx';
+import { CertOverride, Field } from '../cert.jsx';
 
 export const SWATCHES = ['#12414E', '#0B272F', '#A97A2E', '#2E7D5B', '#1F5FA8', '#7A3E9D', '#A8322D', '#B26B00', '#4A6A72', '#00897B'];
 const HEX = /^#[0-9A-Fa-f]{6}$/;
@@ -32,17 +32,6 @@ export function validateOrg(v, coord) {
 
 // حقل بعنصر إدخال واحد يُلفّ بـ label فيُربط اسمه به تلقائيًا؛
 // والمجموعات (ألوان، نطاقات، عدّاد، مفتاح) تُعلَّم بـ group فتأخذ role=group
-function Field({ label, hint, error, children, wide, group }) {
-  const Tag = group ? 'div' : 'label';
-  return (
-    <Tag className={`of-field${wide ? ' wide' : ''}${error ? ' bad' : ''}`} {...(group ? { role: 'group', 'aria-label': label.replace(' *', '') } : {})}>
-      <span className="of-label">{label}</span>
-      {children}
-      {error ? <small className="of-err" role="alert">{error}</small> : hint ? <small className="of-hint">{hint}</small> : null}
-    </Tag>
-  );
-}
-
 // شعار الجهة للشهادة: يُفرَّغ ويُفحص في المتصفح، ويُختار بين الأصلي والأحادي
 function LogoField({ value, onChange }) {
   const [res, setRes] = useState(null);
@@ -81,43 +70,19 @@ function LogoField({ value, onChange }) {
 
 // شهادة الجهة: يُكتب ما يختلف عن الإعداد العام فقط، والفارغ يُورث منه.
 // المحفوظ في organizations.cert هو التخصيص وحده، فلا تتكرر قيم العام.
-const sigMode = (cert) => (!('signatory' in cert) ? 'inherit' : cert.signatory ? 'custom' : 'none');
 function OrgCertificate({ org, cert, onChange, global, canReissue }) {
   const { toast, prompt } = useUI();
-  const mode = sigMode(cert);
-  const setText = (k) => (e) => {
-    const v = k === 'hours' ? e.target.value.replace(/\D/g, '') : e.target.value;
-    const { [k]: _old, ...rest } = cert;
-    onChange(v ? { ...rest, [k]: k === 'hours' ? Number(v) : v } : rest);
-  };
-  const setMode = (m) => {
-    const { signatory: prev, ...rest } = cert;
-    onChange(m === 'inherit' ? rest : { ...rest, signatory: m === 'none' ? null : prev || { name: '', title: '' } });
-  };
   const reissueAll = async () => {
     const reason = await prompt(`إعادة إصدار كل الشهادات السارية لمشاركي ${org.name} بالإعداد المحفوظ؟ تبقى الأرقام القديمة في صفحة التحقق مشيرة إلى الجديدة، ويصل كل مشارك بريد. اكتب السبب:`, 'تحديث إعداد شهادة الجهة', { ok: 'إعادة الإصدار' });
     if (!reason?.trim()) return;
     const r = await L('admin.certificate-reissue-org', { organization_id: org.id, reason });
     toast(r.success ? (r.count ? `أُعيد إصدار ${r.count} شهادة` : 'لا شهادات سارية لهذه الجهة') : r.message);
   };
-  const g = global || {};
-  const inherited = g.signatory ? `العام: ${g.signatory.name}` : 'العام: بلا موقّع';
   return (
-    <>
-      <p className="of-hint">ما تتركه فارغًا يُؤخذ من الإعداد العام، فيصدر كل مشاركي الجهة بنموذج واحد.</p>
-      <div className="of-grid">
-        <Field label="اسم البرنامج على شهادات الجهة" hint={`فارغ = ${g.program_ar || 'العام'}`}><input value={cert.program_ar || ''} onChange={setText('program_ar')} maxLength={200} placeholder={g.program_ar} /></Field>
-        <Field label="بالإنجليزية"><input dir="ltr" value={cert.program_en || ''} onChange={setText('program_en')} maxLength={200} placeholder={g.program_en} /></Field>
-        <Field label="الساعات التدريبية" hint={g.hours ? `فارغ = ${g.hours}` : 'اختياري'}><input inputMode="numeric" value={cert.hours ?? ''} onChange={setText('hours')} placeholder={g.hours ? String(g.hours) : ''} /></Field>
-        <Field group label="الموقّع" hint="ختم Milestone يظهر دائمًا" wide>
-          <SignatoryChoice mode={mode} onMode={setMode} value={cert.signatory} onChange={(signatory) => onChange({ ...cert, signatory })} inheritLabel={inherited} />
-        </Field>
-      </div>
-      <div className="la-row">
-        <button type="button" className="btn-sm ghost" onClick={() => previewCertificate({ organization_id: org?.id, cert }, toast)}>معاينة شهادة الجهة</button>
-        {canReissue && <button type="button" className="btn-sm ghost" onClick={reissueAll}>إعادة إصدار شهادات الجهة…</button>}
-      </div>
-    </>
+    <CertOverride cert={cert} onChange={onChange} base={global} what="الجهة"
+      hint="ما تتركه فارغًا يُؤخذ من البرنامج ثم الإعداد العام، فيصدر كل مشاركي الجهة بنموذج واحد."
+      preview={{ organization_id: org?.id, cert }}
+      extra={canReissue && <button type="button" className="btn-sm ghost" onClick={reissueAll}>إعادة إصدار شهادات الجهة…</button>} />
   );
 }
 

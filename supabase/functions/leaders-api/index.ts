@@ -7,7 +7,7 @@
 //
 // الإجراءات:
 //   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
-//   للمشارك:  me · logout · profile.save · upload.url · cv.attach
+//   للمشارك:  me · org.logo · logout · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
@@ -47,6 +47,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
+  'org.logo': (p) => P.orgLogo(p),
   'logout': (_p, _b, sid) => P.logout(sid),
   'profile.save': P.profileSave,
   'upload.url': P.uploadUrl,
