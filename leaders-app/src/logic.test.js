@@ -175,6 +175,14 @@ describe('handbook', () => {
     expect(filterHandbookMd(md, 'beginner')).toBe('عام\nتأسيسي فقط\nختام');
     expect(filterHandbookMd(md, 'advanced')).toBe('عام\nمتوسط فأعلى\nختام');
   });
+  it('يحذف كتل النطاق بحسب نطاق المشارك، ويُظهرها لمن لم يحدده', () => {
+    const md = 'عام\n:::scope=program\nبرنامج\n:::\n:::min=advanced scope=portfolio\nمحفظة متقدم\n:::\nختام';
+    expect(filterHandbookMd(md, 'advanced', 'project')).toBe('عام\nختام');
+    expect(filterHandbookMd(md, 'advanced', 'program')).toBe('عام\nبرنامج\nختام');
+    expect(filterHandbookMd(md, 'intermediate', 'portfolio')).toBe('عام\nبرنامج\nختام');
+    expect(filterHandbookMd(md, 'advanced', 'portfolio')).toBe('عام\nبرنامج\nمحفظة متقدم\nختام');
+    expect(filterHandbookMd(md, 'advanced', null)).toBe('عام\nبرنامج\nمحفظة متقدم\nختام');
+  });
 });
 
 describe('overallLevel', () => {

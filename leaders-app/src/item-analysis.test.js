@@ -55,4 +55,25 @@ describe('weeklySeries', () => {
     expect(s.at(-1)).toEqual({ week: '2026-10-25', joined: 1, assessed: 1, approved: 0, active: 2 });
     expect(s[1].joined).toBe(1);
   });
+  it('يكشف تداخل إطارين يسيران معًا ويفصل المستقلين', () => {
+    const q3 = [
+      { id: 'm1', dimension: 'milestone', kind: 'mcq', options: opt(0, 1) }, { id: 'm2', dimension: 'milestone', kind: 'mcq', options: opt(0, 1) },
+      { id: 'l1', dimension: 'leadership', kind: 'mcq', options: opt(0, 1) }, { id: 'l2', dimension: 'leadership', kind: 'mcq', options: opt(0, 1) },
+      { id: 'i1', dimension: 'impact', kind: 'mcq', options: opt(0, 1) }, { id: 'i2', dimension: 'impact', kind: 'mcq', options: opt(0, 1) },
+    ];
+    // القيادة نسخة من المعالم، والأثر مستقل عنهما
+    const ms = [[1, 1], [1, 0], [0, 0], [1, 1], [0, 1], [0, 0], [1, 1], [0, 0], [1, 0], [0, 0], [1, 1], [0, 1]];
+    const im = [[1, 0], [0, 0], [1, 1], [0, 1], [1, 1], [0, 0], [0, 0], [1, 1], [1, 1], [0, 1], [1, 0], [0, 0]];
+    const r3 = ms.flatMap((m, i) => [
+      ...['m1', 'm2'].map((id, j) => ({ assessment_id: `p${i}`, question_id: id, score: m[j] })),
+      ...['l1', 'l2'].map((id, j) => ({ assessment_id: `p${i}`, question_id: id, score: m[j] })),
+      ...['i1', 'i2'].map((id, j) => ({ assessment_id: `p${i}`, question_id: id, score: im[i][j] })),
+    ]);
+    const r = itemAnalysis(q3, r3, { minN: 10 });
+    const pair = (a, b) => r.correlations.find((c) => [c.a, c.b].sort().join() === [a, b].sort().join());
+    expect(pair('milestone', 'leadership').r).toBe(1);
+    expect(pair('milestone', 'leadership').overlap).toBe(true);
+    expect(pair('milestone', 'impact').overlap).toBe(false);
+    expect(pair('milestone', 'impact').n).toBe(12);
+  });
 });

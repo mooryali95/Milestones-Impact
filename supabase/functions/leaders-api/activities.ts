@@ -99,7 +99,7 @@ export async function readingPing(p: any, b: Body) {
   if (!row) {
     const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md').eq('id', id).maybeSingle());
     if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
-    words = wordCount(filterHandbookMd(m.body_md, levels[m.dimension]));
+    words = wordCount(filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope));
   }
   const now = new Date();
   const next = applyReadingPing(row, b, now.getTime());
