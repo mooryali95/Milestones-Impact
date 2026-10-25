@@ -12,7 +12,7 @@ export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النما�
 export const SUB_FILTER = [['submitted', 'بانتظار تقييمك'], ['reviewed', 'قُيّمت'], ['returned', 'أُعيدت للتطوير'], ['', 'الكل']];
 export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير';
 
-export const words = (md) => (String(md || '').replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length;
+export const words = (md) => (String(md || '').replace(/^:::.*$/gm, '').match(/\S+/g) || []).length;
 export const tiered = (md) => /^:::(min|only)=/m.test(md || '');
 export const stars = (n) => '★★★★★'.slice(0, n || 0) + '☆☆☆☆☆'.slice(0, 5 - (n || 0));
 export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection : 0);
@@ -25,6 +25,7 @@ export const splitList = (v) => String(v).split(/[,،]/).map((x) => x.trim()).fi
 export const HB_TOOLS = [
   ['## ', 'عنوان', 'line'], ['### ', 'عنوان فرعي', 'line'], ['- ', 'بند', 'line'], ['1. ', 'ترقيم', 'line'], ['**', 'غامق', 'wrap'], ['> ', 'خلاصة', 'line'],
   [':::min=intermediate\n', 'فقرة للمتوسط فأعلى', 'block'], [':::min=advanced\n', 'فقرة للاحترافي', 'block'], [':::only=beginner\n', 'فقرة للتأسيسي فقط', 'block'],
+  [':::scope=program\n', 'فقرة لقادة البرامج والمحافظ', 'block'], [':::scope=portfolio\n', 'فقرة لقادة المحافظ', 'block'],
 ];
 // يعيد النص الجديد وموضع المؤشر بعد تطبيق الأداة على التحديد [s0, s1]
 export function applyTool(value, s0, s1, [ins, , mode]) {

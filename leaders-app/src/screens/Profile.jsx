@@ -52,7 +52,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const [f, setF] = useState({
     full_name: p.full_name || '', name_en: p.name_en || '', phone: p.phone || '', job_title: p.job_title || '',
     organization_name: p.organization_name || '', sector: p.sector || '',
-    years_experience: p.years_experience ?? '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
+    years_experience: p.years_experience ?? '', work_scope: p.work_scope || '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
   });
   const [hasCv, setHasCv] = useState(p.has_cv);
   const [cvName, setCvName] = useState('');
@@ -124,6 +124,13 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
           <label className="field"><span>سنوات الخبرة</span>
             <input className="input" required type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
+          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد أمثلة الكتاب وتمارينه)</em></span>
+            <select className="input" value={f.work_scope} onChange={set('work_scope')}>
+              <option value="">لم أحدد بعد</option>
+              <option value="project">مشروع أو أكثر</option>
+              <option value="program">برنامج من مشاريع مترابطة</option>
+              <option value="portfolio">محفظة مشاريع وبرامج</option>
+            </select></label>
         </div>
 
         <label className="field"><span>رابط LinkedIn <em>(اختياري)</em></span>

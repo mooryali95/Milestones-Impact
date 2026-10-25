@@ -40,6 +40,18 @@ export default function ItemQuality({ instrumentId }) {
           return <div key={x.dimension} className="stat-card"><div className="stat-label">ثبات {DIM_EN[x.dimension] || x.dimension}</div><div className="stat-value">{x.alpha ?? '·'}</div><div className={`stat-sub iq-${c}`}>{l} · {x.complete} أجابوا كل أسئلته</div></div>;
         })}
       </div>
+      {d.correlations?.length > 0 && (
+        <div className="iq-sep">
+          <h4>الفصل بين الأطر</h4>
+          <table className="la-table" aria-label="الارتباط بين الأطر">
+            <thead><tr><th>الإطاران</th><th>المشاركون</th><th>الارتباط</th><th>بعد تصحيح الثبات</th><th>الحكم</th></tr></thead>
+            <tbody>{d.correlations.map((c) => (
+              <tr key={c.a + c.b}><td>{DIM_EN[c.a] || c.a} و {DIM_EN[c.b] || c.b}</td><td>{c.n}</td><td>{c.r ?? '·'}</td><td>{c.corrected ?? '·'}</td>
+                <td>{c.overlap ? <span className="la-chip warn" title="الإطاران يقيسان قدرة متقاربة، فلا تفرّق المسارات بينهما فعلًا">تداخل</span> : c.r == null ? '·' : 'منفصلان'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
       {items.length ? (
         <table className="la-table" tabIndex={0} aria-label="جودة الأسئلة">
           <thead><tr><th>السؤال</th><th>المجيبون</th><th>الصعوبة</th><th>التمييز</th><th>ما يُراجع</th></tr></thead>
@@ -53,7 +65,7 @@ export default function ItemQuality({ instrumentId }) {
           ))}</tbody>
         </table>
       ) : <p className="la-muted">{only ? 'لا أسئلة تحتاج مراجعة الآن.' : 'لا إجابات بعد.'}</p>}
-      <p className="la-muted small">الصعوبة متوسط الدرجة من أعلاها. التمييز ارتباط السؤال ببقية أسئلة إطاره، والمقبول 0.2 فأعلى. الثبات ألفا كرونباخ، والجيد 0.7 فأعلى.</p>
+      <p className="la-muted small">الصعوبة متوسط الدرجة من أعلاها. التمييز ارتباط السؤال ببقية أسئلة إطاره، والمقبول 0.2 فأعلى. الثبات ألفا كرونباخ، والجيد 0.7 فأعلى. والتداخل بين إطارين ارتباط 0.7 فأعلى، أو 0.85 فأعلى بعد تصحيح الثبات.</p>
     </section>
   );
 }
