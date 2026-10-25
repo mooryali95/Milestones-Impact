@@ -10,7 +10,7 @@ export const TIER = { knowledge: 'معرفة', skill: 'مواقف', behavior: '�
 export const PHASE = { admission: 'القبول', qualification: 'التأهيل', impact: 'الأثر' };
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
-  reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز',
+  reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز', curriculum: 'منهج المسار',
 };
 // ما يعنيه كل نوع، يظهر تحت اختيار النوع
 export const KIND_HELP = {
@@ -22,12 +22,13 @@ export const KIND_HELP = {
   reading: 'يُقاس وقت القراءة الفعلي لكل باب، فيُميَّز القارئ من المتصفح، مع اختبار الباب إن شئت.',
   video: 'يُحتسب ما شوهد فعلًا من يوتيوب أو ملف mp4، والتقديم السريع لا يُحتسب.',
   workshop: 'ورشة أو محاضرة أو لقاء جماعي. تضيف مواعيده من «الحضور والجلسات»، ولكل موعد طريقته: حضوري بمكان، أو عن بعد برابط اجتماع.',
+  curriculum: 'مقاطع وملفات وروابط من «بنك المحتوى» يختار النظام منها ما يخص مسار كل مشارك بحسب وسومها. يكتمل بمشاهدة المقاطع وفتح الملفات فعلًا.',
   coaching: 'توجيه أو استشارة فردية. يحجز المشارك من رابط Cal.com أو Calendly، أو يتصل فورًا حين تكون متاحًا، وتؤكد أنت حضوره.',
 };
 export const VERIFY = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
 export const COACH_MODE = { online: 'عن بعد', in_person: 'حضوري', any: 'حضوري أو عن بعد حسب الحجز' };
 // أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك
-export const VERIFIED = new Set(['reading', 'video', 'workshop', 'coaching']);
+export const VERIFIED = new Set(['reading', 'video', 'workshop', 'coaching', 'curriculum']);
 const READ_SCOPE = { all: 'كل أبواب مسار المشارك', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
 export const MODE = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
 export const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
@@ -58,7 +59,8 @@ export const reqFields = (stages) => [
   { name: 'level', label: 'وبمستوى', type: 'select', options: LVL, empty: 'كل المستويات' },
   // إعداد النشاط الموثق بحسب نوعه (يُجمع في config عند الحفظ)
   { name: 'cfg_scope', label: 'الأبواب المطلوبة', type: 'select', options: READ_SCOPE, show: (v) => v.kind === 'reading' },
-  { name: 'cfg_dimension', label: 'الإطار', type: 'select', options: DIM, show: (v) => v.kind === 'reading' && v.cfg_scope === 'dimension' },
+  { name: 'cfg_dimension', label: 'الإطار', type: 'select', options: DIM, empty: 'كل الأطر', show: (v) => (v.kind === 'reading' && v.cfg_scope === 'dimension') || v.kind === 'curriculum',
+    help: (v) => (v.kind === 'curriculum' ? 'مواد إطار واحد لتوزيع المنهج على المراحل، أو كل المنهج في نشاط واحد.' : null) },
   { name: 'cfg_quiz', label: 'يشترط اجتياز أسئلة كل باب', type: 'check', show: (v) => v.kind === 'reading' },
   { name: 'cfg_url', label: 'رابط الفيديو (يوتيوب أو ملف mp4 يبدأ بـ https)', dir: 'ltr', show: (v) => v.kind === 'video' },
   { name: 'cfg_title', label: 'عنوان الفيديو كما يراه المشارك', show: (v) => v.kind === 'video' },
@@ -151,7 +153,7 @@ export function evaluate(p, m) {
 
 // ── إعادة الترتيب ──
 // يعيد ترتيب المعرّفات بعد تبديل العنصر مع جاره داخل مجموعته، أو null إن كان على الطرف
-const GROUP = { stage_requirements: 'stage_key', questions: 'instrument_id', handbook_modules: 'dimension', learning_models: 'dimension' };
+const GROUP = { stage_requirements: 'stage_key', questions: 'instrument_id', handbook_modules: 'dimension', learning_models: 'dimension', content_items: 'dimension' };
 export function reorderIds(rows, entity, id, dir) {
   const key = entity === 'journey_stages' ? 'key' : 'id';
   const me = rows.find((x) => x[key] === id);
@@ -219,4 +221,32 @@ export function formToCohort(v) {
     if (m) { if (x != null && x !== '') (delivery[m[1]] ||= {})[m[2]] = x; } else out[k] = x;
   }
   return { ...out, delivery };
+}
+
+// ══ بنك المحتوى ══
+export const CONTENT_KIND = { video: 'فيديو', file: 'ملف (PDF أو عرض)', link: 'رابط' };
+export const CONTENT_FIELDS = [
+  { name: 'kind', label: 'النوع', type: 'select', options: CONTENT_KIND },
+  { name: 'title_ar', label: 'العنوان' },
+  { name: 'description_ar', label: 'وصف قصير يظهر للمشارك', type: 'textarea', rows: 2 },
+  { name: 'url', label: 'الرابط (https)', dir: 'ltr', help: (v) => (v.kind === 'video' ? 'يوتيوب أو ملف mp4 مباشر. تُحتسب المشاهدة الفعلية فقط.' : 'يُحتسب حين يفتحه المشارك من التطبيق.') },
+  { name: 'minutes', label: 'المدة التقريبية بالدقائق', type: 'number' },
+  { name: 'dimension', label: 'لمن', type: 'select', empty: 'للجميع', options: DIM, help: 'الوسم يحدد المسارات التي تظهر لها المادة تلقائيًا.' },
+  { name: 'min_level', label: 'من مستوى', type: 'select', empty: 'كل المستويات', options: { beginner: 'تأسيسي فأعلى', intermediate: 'متوسط فأعلى', advanced: 'احترافي' }, show: (v) => !!v.dimension && !v.only_level },
+  { name: 'only_level', label: 'أو لمستوى واحد فقط', type: 'select', empty: 'لا', options: LVL, show: (v) => !!v.dimension && !v.min_level },
+  { name: 'track_keys', label: 'لمسارات بعينها فقط (اختياري)', dir: 'ltr', help: 'مفاتيح مثل M1I2L3 مفصولة بفواصل. تتقدم على الوسم.' },
+  { name: 'exclude_tracks', label: 'استبعاد مسارات (اختياري)', dir: 'ltr' },
+  { name: 'min_pct', label: 'نسبة المشاهدة المطلوبة %', type: 'number', show: (v) => v.kind === 'video' },
+  { name: 'required', label: 'إلزامية', type: 'check' },
+  { name: 'active', label: 'مفعّلة', type: 'check' },
+];
+export const contentToForm = (c) => ({ ...c, track_keys: (c.track_keys || []).join(', '), exclude_tracks: (c.exclude_tracks || []).join(', ') });
+// وصف الجمهور بكلمات
+export function audienceLabel(c) {
+  const parts = [];
+  if ((c.track_keys || []).length) parts.push(`مسارات: ${c.track_keys.join('، ')}`);
+  else if (!c.dimension) parts.push('للجميع');
+  else parts.push(`${DIM[c.dimension]}${c.only_level ? ` · ${LVL[c.only_level]} فقط` : c.min_level ? ` · ${LVL[c.min_level]} فأعلى` : ''}`);
+  if ((c.exclude_tracks || []).length) parts.push(`عدا ${c.exclude_tracks.join('، ')}`);
+  return parts.join(' · ');
 }
