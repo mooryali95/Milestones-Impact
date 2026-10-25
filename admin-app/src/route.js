@@ -1,11 +1,11 @@
 // ════════════════════════════════════════════════════════════════
 // المسار في عنوان الصفحة: لكل شاشة رابط، والتحديث وزر الرجوع يعملان
 // ════════════════════════════════════════════════════════════════
-// #/contacts · #/leaders/<tab>[/<id>] — المعرّف مشارك أو جهة أو مسار بحسب التبويب.
+// #/contacts · #/visits · #/leaders/<tab>[/<id>] — المعرّف مشارك أو جهة أو مسار بحسب التبويب.
 // نستعمل الـhash لأن اللوحة تُخدم من مجلد ثابت (/next/) بلا إعادة توجيه على الخادم.
 import { useEffect, useState } from 'react';
 
-export const CTXS = ['contacts', 'leaders'];
+export const CTXS = ['contacts', 'leaders', 'visits'];
 
 export function parseRoute(hash) {
   const [ctx, tab, ...rest] = String(hash || '').replace(/^#\/?/, '').split('/').map((x) => decodeURIComponent(x));

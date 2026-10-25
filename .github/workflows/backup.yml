@@ -1,0 +1,51 @@
+name: Nightly database backup
+
+# The Supabase free plan has no daily backups. This dumps the `leaders` and
+# `public` schemas every night, encrypts the dump, and keeps it as a private
+# workflow artifact for 30 days. It does nothing until both repository
+# secrets exist:
+#   SUPABASE_DB_URL     the "Session pooler" connection string (Database settings)
+#   BACKUP_PASSPHRASE   any long passphrase; keep a copy outside GitHub
+# Restore: gpg -d leaders-YYYY-MM-DD.dump.gpg > db.dump && pg_restore -d "$URL" --clean db.dump
+# Uploaded files (CVs, evidence) live in Storage and are not in the dump.
+
+on:
+  schedule:
+    - cron: '30 0 * * *'   # 03:30 Riyadh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Skip without secrets
+        id: gate
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$PASSPHRASE" ]; then
+            echo "::notice::SUPABASE_DB_URL or BACKUP_PASSPHRASE is not set; no backup taken."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Dump and encrypt
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          name="leaders-$(date -u +%F).dump"
+          # pg_dump must be at least the server's major version
+          docker run --rm -e DB_URL postgres:17 sh -c 'pg_dump "$DB_URL" --schema=leaders --schema=public --no-owner --no-privileges -Fc' > "$name"
+          test -s "$name"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" --symmetric --cipher-algo AES256 -o "$name.gpg" "$name"
+          rm "$name"
+          echo "FILE=$name.gpg" >> "$GITHUB_ENV"
+          ls -l "$name.gpg"
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          name: ${{ env.FILE }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          if-no-files-found: error

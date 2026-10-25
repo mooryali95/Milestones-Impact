@@ -1078,3 +1078,96 @@ export function certProfile(global, ...layers) {
     };
   }, { program_ar: global.program_ar, program_en: global.program_en, hours: global.hours ?? null, signatory: global.signatory ?? null });
 }
+
+// ── جودة أسئلة القياس من الإجابات الحقيقية ──
+// لكل سؤال: عدد المجيبين، والصعوبة p (متوسط الدرجة من أعلاها)، والتمييز
+// (ارتباط السؤال ببقية أسئلة بُعده)، وتوزيع الخيارات. ولكل بُعد: الثبات
+// (ألفا كرونباخ) على المجيبين عن كل أسئلته. الأعلام تدل على ما يُراجع.
+// rows: [{ assessment_id, question_id, score, k }]
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+const variance = (xs) => { const m = mean(xs); return xs.length > 1 ? xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1) : 0; };
+function pearson(xs, ys) {
+  if (xs.length < 3) return null;
+  const mx = mean(xs), my = mean(ys);
+  let sxy = 0, sx = 0, sy = 0;
+  for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sx += (xs[i] - mx) ** 2; sy += (ys[i] - my) ** 2; }
+  return sx && sy ? sxy / Math.sqrt(sx * sy) : null;
+}
+const round2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
+
+export function itemAnalysis(questions, rows, { minN = 10 } = {}) {
+  const byQ = new Map(questions.map((q) => [q.id, q]));
+  const answers = new Map();   // assessment -> Map(question -> score)
+  const picks = new Map();     // question -> counts per k
+  for (const r of rows) {
+    const q = byQ.get(r.question_id);
+    if (!q || r.score == null || Number(r.score) < 0) continue;
+    if (!answers.has(r.assessment_id)) answers.set(r.assessment_id, new Map());
+    answers.get(r.assessment_id).set(q.id, Number(r.score));
+    if (Number.isInteger(r.k)) {
+      const c = picks.get(q.id) || {};
+      c[r.k] = (c[r.k] || 0) + 1;
+      picks.set(q.id, c);
+    }
+  }
+  const dims = [...new Set(questions.map((q) => q.dimension))];
+  const items = [];
+  const dimensions = [];
+  for (const d of dims) {
+    const qs = questions.filter((q) => q.dimension === d);
+    for (const q of qs) {
+      const max = maxScore(q) || 1;
+      const xs = [], rest = [];
+      for (const a of answers.values()) {
+        if (!a.has(q.id)) continue;
+        xs.push(a.get(q.id));
+        rest.push(qs.reduce((s, o) => s + (o.id !== q.id && a.has(o.id) ? a.get(o.id) / (maxScore(o) || 1) : 0), 0));
+      }
+      const n = xs.length;
+      const p = n ? mean(xs) / max : null;
+      const disc = pearson(xs, rest);
+      const counts = picks.get(q.id) || {};
+      const options = (q.options || []).map((o, k) => ({ k, label: o.label, score: Number(o.score) || 0, share: n ? round2((counts[k] || 0) / n) : 0 }));
+      const flags = [];
+      if (n >= minN) {
+        if (p > 0.9) flags.push('easy');
+        if (p < 0.2) flags.push('hard');
+        if (disc != null && disc < 0.2) flags.push('low_discrimination');
+        if (q.kind !== 'likert' && options.some((o) => o.score < max && o.share < 0.05)) flags.push('dead_option');
+      }
+      items.push({ id: q.id, code: q.code || null, dimension: d, tier: q.tier || null, text: q.text_ar || q.text || '', n, p: round2(p), discrimination: round2(disc), options, flags });
+    }
+    // الثبات على من أجاب عن كل أسئلة البعد
+    const complete = [...answers.values()].filter((a) => qs.every((q) => a.has(q.id)));
+    const k = qs.length;
+    let alpha = null;
+    if (k > 1 && complete.length >= 3) {
+      const itemVar = qs.reduce((s, q) => s + variance(complete.map((a) => a.get(q.id))), 0);
+      const totalVar = variance(complete.map((a) => qs.reduce((s, q) => s + a.get(q.id), 0)));
+      alpha = totalVar ? (k / (k - 1)) * (1 - itemVar / totalVar) : null;
+    }
+    dimensions.push({ dimension: d, items: k, complete: complete.length, alpha: round2(alpha) });
+  }
+  return { respondents: answers.size, dimensions, items };
+}
+
+// ── الاتجاه الأسبوعي للمالك ──
+// أسابيع تبدأ الأحد (أسبوع العمل في السعودية)، آخرها الأسبوع الجاري.
+// events: { joined: [iso], assessed: [iso], approved: [iso], active: [[iso, participantId]] }
+export function weekStart(d) {
+  const x = new Date(d);
+  x.setUTCHours(0, 0, 0, 0);
+  x.setUTCDate(x.getUTCDate() - x.getUTCDay());
+  return x.toISOString().slice(0, 10);
+}
+export function weeklySeries(events, { weeks = 12, now = Date.now() } = {}) {
+  const starts = [];
+  const first = new Date(weekStart(now));
+  for (let i = weeks - 1; i >= 0; i--) starts.push(new Date(first.getTime() - i * 7 * 864e5).toISOString().slice(0, 10));
+  const rows = new Map(starts.map((w) => [w, { week: w, joined: 0, assessed: 0, approved: 0, active: new Set() }]));
+  for (const k of ['joined', 'assessed', 'approved']) {
+    for (const t of events[k] || []) { const r = t && rows.get(weekStart(t)); if (r) r[k] += 1; }
+  }
+  for (const [t, id] of events.active || []) { const r = t && rows.get(weekStart(t)); if (r) r.active.add(id); }
+  return [...rows.values()].map((r) => ({ ...r, active: r.active.size }));
+}

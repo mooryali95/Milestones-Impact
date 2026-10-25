@@ -5,6 +5,7 @@ describe('المسار في عنوان الصفحة', () => {
   it('يقرأ السياق والتبويب والمعرّف', () => {
     expect(parseRoute('#/leaders/tracks/M1I1L2')).toEqual({ ctx: 'leaders', tab: 'tracks', id: 'M1I1L2' });
     expect(parseRoute('#/contacts')).toEqual({ ctx: 'contacts', tab: null, id: null });
+    expect(parseRoute('#/visits')).toEqual({ ctx: 'visits', tab: null, id: null });
     expect(parseRoute('#leaders')).toEqual({ ctx: 'leaders', tab: null, id: null });
   });
 
