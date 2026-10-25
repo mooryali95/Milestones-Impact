@@ -47,10 +47,34 @@ export async function health() {
   };
   return {
     success: true,
+    readiness: await readiness().catch(() => []),
     missing_migrations: migrations.filter((m) => !m.ok).map((m) => m.file),
     missing_secrets: Object.entries(secrets).filter(([, ok]) => !ok).map(([k]) => k),
     mail: { today: mail, cap: CONFIG.mailDailyCap },
   };
+}
+
+// جاهزية الإطلاق: إعدادات تُضبط من اللوحة قبل أول دفعة، كل بند بمكان ضبطه
+async function readiness() {
+  const [{ data: ins }, { data: cert }, { count: programs }] = await Promise.all([
+    db.from('instruments').select('key, kind, active, version, created_at'),
+    db.from('certificate_settings').select('*').eq('id', 1).maybeSingle(),
+    db.from('programs').select('id', { count: 'exact', head: true }).eq('is_default', true),
+  ]);
+  const list = (ins || []) as any[];
+  const newest = (kind: string) => list.filter((x) => x.kind === kind).sort((a, b) => (b.version ?? 0) - (a.version ?? 0) || String(b.created_at).localeCompare(String(a.created_at)))[0];
+  const active = (kind: string) => list.find((x) => x.kind === kind && x.active);
+  const base = active('baseline'), latest = newest('baseline');
+  const c: any = cert || {};
+  return [
+    { key: 'baseline', ok: !!base && base.key === latest?.key, where: 'assessment',
+      label: base ? (base.key === latest?.key ? `القياس القبلي المفعّل ${base.key}` : `المفعّل ${base.key} وأحدث نسخة ${latest.key}`) : 'لا قياس قبلي مفعّل' },
+    { key: 'post', ok: !!active('post'), where: 'assessment',
+      label: active('post') ? `القياس البعدي المفعّل ${active('post').key}` : 'القياس البعدي غير مفعّل، فلا يُقاس الأثر في نهاية البرنامج' },
+    { key: 'program', ok: (programs ?? 0) > 0, where: 'programs', label: programs ? 'برنامج افتراضي محدد' : 'لا برنامج افتراضي، فالدفعات الجديدة بلا قالب' },
+    { key: 'certificate', ok: c.enabled !== false && !!c.signatory?.name && !!c.hours, where: 'certs',
+      label: c.enabled === false ? 'الشهادات معطلة' : !c.signatory?.name ? 'الشهادة بلا موقّع' : !c.hours ? 'الشهادة بلا عدد ساعات' : 'الشهادة مكتملة الإعداد' },
+  ];
 }
 
 // زيارات الموقع: آخر days يومًا (7 إلى 90)، وموقع واحد أو الكل
