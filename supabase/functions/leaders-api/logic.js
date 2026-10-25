@@ -231,17 +231,29 @@ export function handbookModulesFor(modules, levels) {
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
 }
 
-// كتل المستوى داخل الباب:
+// نطاق العمل: المستوى يقيس الإتقان، والنطاق يحدد أين يمارسه المشارك.
+export const SCOPES = ['project', 'program', 'portfolio'];
+const SCOPE_RANK = { project: 0, program: 1, portfolio: 2 };
+
+// كتل المستوى والنطاق داخل الباب:
 //   :::min=intermediate … :::  لمن مستواه متوسط فأعلى
 //   :::only=beginner   … :::  لمستوى واحد فقط
-// تُحذف على الخادم قبل الإرسال، فلا يصل للمشارك ما لا يخص مستواه.
-export function filterHandbookMd(md, level) {
+//   :::scope=program   … :::  لمن يقود برامج فأعلى (ومن لم يحدد نطاقه)
+//   :::min=advanced scope=portfolio … :::  الشرطان معًا
+// تُحذف على الخادم قبل الإرسال، فلا يصل للمشارك ما لا يخص مستواه ونطاقه.
+const BLOCK_RE = /^:::((?:\s*(?:min|only)=(?:beginner|intermediate|advanced)|\s*scope=(?:project|program|portfolio))+)\s*$/;
+export function filterHandbookMd(md, level, scope = null) {
   const out = [];
   let keep = true;
   for (const line of String(md || '').split('\n')) {
-    const open = line.trim().match(/^:::(min|only)=(beginner|intermediate|advanced)$/);
+    const open = line.trim().match(BLOCK_RE);
     if (open) {
-      keep = open[1] === 'min' ? RANK[level] >= RANK[open[2]] : level === open[2];
+      keep = open[1].trim().split(/\s+/).every((t) => {
+        const [k, v] = t.split('=');
+        if (k === 'min') return RANK[level] >= RANK[v];
+        if (k === 'only') return level === v;
+        return !(scope in SCOPE_RANK) || SCOPE_RANK[scope] >= SCOPE_RANK[v];
+      });
       continue;
     }
     if (line.trim() === ':::') { keep = true; continue; }
@@ -1148,7 +1160,31 @@ export function itemAnalysis(questions, rows, { minN = 10 } = {}) {
     }
     dimensions.push({ dimension: d, items: k, complete: complete.length, alpha: round2(alpha) });
   }
-  return { respondents: answers.size, dimensions, items };
+  // الفصل بين الأطر: ارتباط نسب الدرجات بين كل إطارين عبر المشاركين.
+  // المصحح يقسم على جذر ثبات الإطارين؛ 0.85 فأعلى يعني أنهما يقيسان
+  // قدرة واحدة تقريبًا، فلا تفرّق المسارات الـ27 بينهما فعلًا.
+  const ratio = (a, d) => {
+    let s = 0, m = 0;
+    for (const q of questions) if (q.dimension === d && a.has(q.id)) { s += a.get(q.id); m += maxScore(q) || 1; }
+    return m ? s / m : null;
+  };
+  const alphaOf = Object.fromEntries(dimensions.map((x) => [x.dimension, x.alpha]));
+  const correlations = [];
+  for (let i = 0; i < dims.length; i++) {
+    for (let j = i + 1; j < dims.length; j++) {
+      const xs = [], ys = [];
+      for (const a of answers.values()) {
+        const x = ratio(a, dims[i]), y = ratio(a, dims[j]);
+        if (x != null && y != null) { xs.push(x); ys.push(y); }
+      }
+      const r = pearson(xs, ys);
+      const rel = alphaOf[dims[i]] > 0 && alphaOf[dims[j]] > 0 ? Math.sqrt(alphaOf[dims[i]] * alphaOf[dims[j]]) : null;
+      const corrected = r != null && rel ? Math.min(1, r / rel) : null;
+      const overlap = xs.length >= minN && ((corrected != null && corrected >= 0.85) || (r != null && r >= 0.7));
+      correlations.push({ a: dims[i], b: dims[j], n: xs.length, r: round2(r), corrected: round2(corrected), overlap });
+    }
+  }
+  return { respondents: answers.size, dimensions, items, correlations };
 }
 
 // ── الاتجاه الأسبوعي للمالك ──

@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL,
   VERIFIED_KINDS, readingVerdict,
 } from './logic.js';
@@ -255,7 +255,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   return {
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
-      organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience,
+      organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
@@ -308,6 +308,9 @@ export async function profileSave(p: any, b: Body) {
     const phone = f.phone ? normalizePhone(f.phone) : null;
     if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
     patch.phone = phone;
+  }
+  if ('work_scope' in f) {
+    patch.work_scope = SCOPES.includes(f.work_scope) ? f.work_scope : null;
   }
   if ('years_experience' in f) {
     const y = Number(f.years_experience);
@@ -593,7 +596,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   return {
     success: true,
     reading: readingVerdict(rd),
-    chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) },
+    chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
     // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
     quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
@@ -626,7 +629,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
     book: {
       // الكتاب عام: لا شيء من بيانات المسار إلا رمزه
       ref, issued_at: now.toISOString(), name: p.full_name, email: p.email, code: trackKey(levels),
-      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]), reflection: m.reflection_ar || '' })),
+      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope), reflection: m.reflection_ar || '' })),
       tools: modelsFor(models.data || [], levels).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
     },
   };
