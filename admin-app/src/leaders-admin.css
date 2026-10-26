@@ -533,3 +533,6 @@
 .la-ready li > span:nth-child(2) { flex: 1; }
 .la-ready li.ok { color: var(--ink-light); }
 .la-ready li.ok > span:first-child { color: #276B4E; }
+/* الكتاب الأصلي الكامل: الفقرات المقيدة بمستوى أو نطاق موسومة بمن يقرؤها */
+.hb-tier { position: relative; margin: 18px 0 14px; padding: 16px 16px 6px; border: 1px dashed var(--gold); border-radius: 8px; background: rgba(199,154,75,.06); }
+.hb-tier-l { position: absolute; top: -11px; inset-inline-start: 12px; padding: 1px 8px; border-radius: 4px; background: var(--gold); color: #0B272F; font-size: .72rem; font-weight: 700; }

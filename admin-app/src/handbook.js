@@ -3,12 +3,12 @@
 // ════════════════════════════════════════════════════════════════
 // صيغة الاختبار وحذف كتل المستوى ونقاط الباب تأتي من logic.js على الخادم
 // نفسه، فما تراه الإدارة في المعاينة هو ما يصل المشارك حرفيًا.
-import { filterHandbookMd, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
+import { filterHandbookMd, handbookModulesFor, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
 
 export { filterHandbookMd, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
-export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'كما يراه المشارك'], ['reviews', 'التقييم']];
+export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'الكتاب الأصلي والكتب الـ27'], ['reviews', 'التقييم']];
 export const SUB_FILTER = [['submitted', 'بانتظار تقييمك'], ['reviewed', 'قُيّمت'], ['returned', 'أُعيدت للتطوير'], ['', 'الكل']];
 export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير';
 
@@ -20,6 +20,29 @@ export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCoun
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;
 export const nextSort = (rows, dim) => Math.max(0, ...rows.filter((x) => x.dimension === dim).map((x) => x.sort || 0)) + 1;
 export const splitList = (v) => String(v).split(/[,،]/).map((x) => x.trim()).filter(Boolean);
+
+// ── الكتاب الأصلي الكامل: مصدر الكتب الـ27 ──
+// كل الأبواب والنماذج بكل كتلها، وكل كتلة موسومة بمن يقرؤها، فيرى المحرر
+// الأصل كاملًا وما يصل كل مسار منه. يُبنى من بيانات اللوحة بلا طلب للخادم.
+export const MASTER = 'MASTER';
+const TIER = {
+  min: { beginner: 'لكل المستويات', intermediate: 'للمتوسط فأعلى', advanced: 'للاحترافي' },
+  only: { beginner: 'للتأسيسي فقط', intermediate: 'للمتوسط فقط', advanced: 'للاحترافي فقط' },
+  scope: { project: 'لكل النطاقات', program: 'لقادة البرامج والمحافظ', portfolio: 'لقادة المحافظ' },
+};
+export const tierLabel = (spec) => String(spec).trim().split(/\s+/)
+  .map((t) => { const [k, v] = t.split('='); return TIER[k]?.[v] || t; }).join(' · ');
+const ALL = { milestone: 'advanced', impact: 'advanced', leadership: 'advanced' };
+export function masterBook(modules, models) {
+  return {
+    success: true, master: true, levels: ALL,
+    chapters: handbookModulesFor(modules || [], ALL).map((m) => ({
+      id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
+      md: m.body_md, reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+    })),
+    models: modelsFor(models || [], ALL),
+  };
+}
 
 // أدوات المحرر: [ما يُدرج، التسمية، النمط] · line يُدرج أول السطر · wrap يحيط التحديد · block كتلة مستوى
 export const HB_TOOLS = [
