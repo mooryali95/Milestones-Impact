@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════
--- تطبيق القادة: مختبر القائد (المرحلة الأولى)
+-- تطبيق القادة: مختبر القائد (المرحلة الأولى)، قسم مستقل يُفتح لجهة أو لشخص
 -- ════════════════════════════════════════════════════════════════
 -- آمن لإعادة التشغيل، ولا يطمس تعديلات الإدارة على المحتوى.
 -- مولّد من scripts/lab/phase1.mjs بالأمر: node scripts/lab/build.mjs
@@ -7,6 +7,9 @@
 --   • lab_items: أدوات العمل ومواقف المحاكاة، كل منها مواصفة خطوات (spec)
 --     تُصحح على الخادم، ومربوطة بباب في الكتاب (dimension + chapter_key)
 --   • lab_attempts: محاولات المشاركين خطوة خطوة، ومسار القرارات ونتيجتها
+--   • lab_grants: فتح المختبر (كله أو أداة منه) لجهة أو لشخص، بمدة اختيارية.
+--     الأداة granted تظهر لمن فُتحت له فقط، والأداة all تظهر أيضًا لكل معتمد
+--     بلغ حدها الأدنى من المستوى. المحتوى يبدأ granted: لا يظهر لأحد حتى تفتحه الإدارة
 --   • مصدران جديدان للنقاط: lab عند الإتقان (70%) و lab_bonus عند التميز (90%)
 
 create table if not exists leaders.lab_items (
@@ -23,6 +26,7 @@ create table if not exists leaders.lab_items (
   summary_ar  text check (char_length(summary_ar) <= 1000),
   spec        jsonb not null,
   active      boolean not null default true,
+  audience    text not null default 'granted' check (audience in ('granted', 'all')),
   updated_at  timestamptz not null default now()
 );
 
@@ -41,9 +45,25 @@ create table if not exists leaders.lab_attempts (
 );
 create index if not exists lab_attempts_participant_idx on leaders.lab_attempts (participant_id, item_id);
 
+create table if not exists leaders.lab_grants (
+  id              uuid primary key default gen_random_uuid(),
+  organization_id uuid references leaders.organizations(id) on delete cascade,
+  participant_id  uuid references leaders.participants(id) on delete cascade,
+  item_id         uuid references leaders.lab_items(id) on delete cascade,
+  expires_at      timestamptz,
+  created_by      text,
+  created_at      timestamptz not null default now(),
+  check ((organization_id is null) <> (participant_id is null))
+);
+create unique index if not exists lab_grants_target_idx on leaders.lab_grants
+  (coalesce(organization_id, participant_id), coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+create index if not exists lab_grants_org_idx on leaders.lab_grants (organization_id);
+create index if not exists lab_grants_participant_idx on leaders.lab_grants (participant_id);
+
 alter table leaders.lab_items    enable row level security;
 alter table leaders.lab_attempts enable row level security;
-grant all on leaders.lab_items, leaders.lab_attempts to service_role;
+alter table leaders.lab_grants   enable row level security;
+grant all on leaders.lab_items, leaders.lab_attempts, leaders.lab_grants to service_role;
 
 alter table leaders.points_ledger drop constraint if exists points_ledger_source_check;
 alter table leaders.points_ledger add constraint points_ledger_source_check

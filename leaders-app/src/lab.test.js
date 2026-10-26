@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
 import {
-  computeSchedule, gradeStep, labAward, meterState, nextIndex, practicePct, publicSpec, validateLab, MASTERY,
+  computeSchedule, gradeStep, labAward, labVisible, meterState, nextIndex, practicePct, publicSpec, validateLab, MASTERY,
 } from '../../supabase/functions/leaders-api/lab.js';
 import { ITEMS } from '../../scripts/lab/phase1.mjs';
 
@@ -77,6 +77,30 @@ describe('التصحيح', () => {
     const st = { type: 'allocate', total: 100, items: [{ id: 'a' }, { id: 'b' }], ideal: { a: 60, b: 40 } };
     expect(gradeStep(st, { a: 60, b: 30 }).score).toBe(0);
     expect(gradeStep(st, { a: 50, b: 50 }).score).toBeCloseTo(0.9);
+  });
+});
+
+describe('من يرى المختبر', () => {
+  const items = [
+    { id: 'i1', dimension: 'impact', min_level: 'beginner', audience: 'granted', sort: 1 },
+    { id: 'i2', dimension: 'milestone', min_level: 'advanced', audience: 'all', sort: 1 },
+    { id: 'i3', dimension: 'leadership', min_level: 'beginner', audience: 'all', sort: 1, active: false },
+  ];
+  const ids = (who) => labVisible(items, who).map((x) => x.id);
+  it('لا شيء دون منح، والمفتوحة للجميع تتبع المستوى المعتمد', () => {
+    expect(ids({ participantId: 'p' })).toEqual([]);
+    expect(ids({ participantId: 'p', levels: { milestone: 'intermediate' } })).toEqual([]);
+    expect(ids({ participantId: 'p', levels: { milestone: 'advanced' } })).toEqual(['i2']);
+  });
+  it('منح الجهة يفتح المختبر كله لمشاركيها دون اعتماد مسار، والموقوفة لا تظهر', () => {
+    const grants = [{ organization_id: 'o', item_id: null }];
+    expect(ids({ participantId: 'p', organizationId: 'o', grants })).toEqual(['i2', 'i1']);
+    expect(ids({ participantId: 'p', organizationId: 'x', grants })).toEqual([]);
+  });
+  it('منح الشخص لأداة واحدة، والمنتهي لا يُحتسب', () => {
+    expect(ids({ participantId: 'p', grants: [{ participant_id: 'p', item_id: 'i1' }] })).toEqual(['i1']);
+    expect(ids({ participantId: 'q', grants: [{ participant_id: 'p', item_id: 'i1' }] })).toEqual([]);
+    expect(ids({ participantId: 'p', grants: [{ participant_id: 'p', item_id: 'i1', expires_at: '2020-01-01T00:00:00Z' }] })).toEqual([]);
   });
 });
 

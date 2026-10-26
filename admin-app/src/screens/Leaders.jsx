@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// سياق تطبيق القادة: المنهجية والكتاب والمشاركون والجهات والشهادات
+// سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
@@ -10,6 +10,7 @@ import Overview from './Overview.jsx';
 import Tracks from './Tracks.jsx';
 import { Assessment, Journey, Levels } from './Methodology.jsx';
 import Handbook from './Handbook.jsx';
+import Lab from './Lab.jsx';
 import Activities from './Activities.jsx';
 import Impact from './Impact.jsx';
 import Programs from './Programs.jsx';
@@ -19,7 +20,7 @@ import { navigate, useRoute } from '../route.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
-  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['lab', 'مختبر القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
@@ -70,6 +71,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
+  else if (tab === 'lab') body = <Lab canWrite={canWrite} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;
   else if (tab === 'levels') body = <Levels key={catalog.placement_model?.[0]?.updated_at || 'm'} {...meth} />;
   else body = <Orgs data={orgData} reload={loadOrgs} canWrite={canWrite} orgId={orgId} onOpen={(id) => (id ? openOrg(id) : at('orgs'))} onPerson={openPerson} />;

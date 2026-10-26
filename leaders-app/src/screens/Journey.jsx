@@ -8,6 +8,7 @@ import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/brow
 import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import Activity from './Activities.jsx';
+import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -386,7 +387,7 @@ function PreManager() {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -525,6 +526,19 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
           : <span className="chip">🔒 مقفل</span>}
       </div>
+
+      {lab?.length > 0 && (
+        <>
+          <div className="section-title"><h2>مختبر القائد</h2></div>
+          <div className="card row between">
+            <div>
+              <b>أدوات عمل ومواقف محاكاة</b>
+              <p className="small muted">تطبّق ما تتعلمه على حالات عملية، وتتخذ قرارات وترى أثرها. أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
+            </div>
+            <button className="btn gold sm" onClick={onLab}>افتح المختبر</button>
+          </div>
+        </>
+      )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>

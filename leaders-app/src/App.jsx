@@ -16,6 +16,7 @@ import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 import Handbook from './screens/Handbook.jsx';
+import LabScreen from './screens/Lab.jsx';
 import OrgPortal from './screens/OrgPortal.jsx';
 import Verify from './screens/Verify.jsx';
 import { CheckIn } from './screens/Activities.jsx';
@@ -77,7 +78,9 @@ function Shell({ tag, children }) {
 function Participant() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [view, setView] = useState('home');   // home | profile | handbook | impact
+  const [view, setView] = useState('home');   // home | profile | handbook | impact | lab
+  const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
+  const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
@@ -132,6 +135,16 @@ function Participant() {
     })();
   }, [accept]);
 
+  // المختبر قسم مستقل: يظهر مدخله متى فُتح للمشارك أو لجهته شيء منه
+  const meId = me?.participant?.id;
+  const loadLab = useCallback(async () => {
+    const r = await call('lab.list');
+    setLab(r.success ? { items: r.items, points: r.points } : null);
+  }, []);
+  useEffect(() => { if (meId) loadLab(); else setLab(null); }, [meId, loadLab]);
+  const openLab = (id = null) => { setLabOpen(id); setView('lab'); window.scrollTo({ top: 0 }); };
+  const hasLab = !!lab?.items?.length;
+
   const logout = async () => {
     await call('logout');
     session.clear();
@@ -147,9 +160,10 @@ function Participant() {
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); setView('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => setView('home')} />;
   } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
-  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} onBack={() => setView('home')} />;
+  else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); setView('home'); }} />;
+  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => setView('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => setView('home')} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} onHandbook={() => setView('handbook')} onImpact={() => setView('impact')} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => setView('profile')} onHandbook={() => setView('handbook')} onImpact={() => setView('impact')} lab={lab?.items} onLab={() => openLab()} />;
 
   return (
     <>
@@ -161,6 +175,7 @@ function Participant() {
           <span className="tag">رحلة القادة</span>
           <span className="spacer" />
           {install && <button className="link small" onClick={doInstall}>ثبّت التطبيق</button>}
+          {hasLab && <button className="link small" onClick={() => openLab()}>المختبر</button>}
           {me && <button className="link small who" title="ملفي وأجهزتي" onClick={() => setView('profile')}>{me.participant.full_name}</button>}
           {me && <button className="link small" onClick={logout}>خروج</button>}
         </div>

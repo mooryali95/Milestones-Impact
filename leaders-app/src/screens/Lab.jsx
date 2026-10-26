@@ -1,9 +1,10 @@
 // ════════════════════════════════════════════════════════════════
-// مختبر القائد: أدوات العمل ومواقف المحاكاة داخل كتاب القائد
+// مختبر القائد: قسم مستقل في المنصة، فيه أدوات العمل ومواقف المحاكاة
 // ════════════════════════════════════════════════════════════════
 // الخادم يرسل الخطوات بلا حلولها، ويصحح كل خطوة عند إرسالها ويحدد
 // التالية (قد يتفرع الموقف بحسب القرار). كل التفاعل بالنقر لا بالسحب،
-// فيعمل باللمس على الجوال، ولا يتعارض مع حماية صفحات الكتاب.
+// فيعمل باللمس على الجوال. يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
+// باب في الكتاب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
 import React, { useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
@@ -522,7 +523,27 @@ export function Lab({ items, open, onOpen, onPoints, reload }) {
           </section>
         );
       })}
-      {!items.length && <div className="alert info">لا أدوات في مسارك بعد.</div>}
+      {!items.length && <div className="alert info">لم يُفتح لك شيء من المختبر بعد.</div>}
+    </div>
+  );
+}
+
+// القسم المستقل: صفحة المختبر من الرحلة أو من الشريط العلوي
+export default function LabScreen({ items, points, open, onOpen, reload, onBack }) {
+  const [toast, setToast] = useState('');
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(''), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+  return (
+    <div className="page lab-page stack">
+      <div className="row between">
+        <button className="link small" onClick={onBack}>→ رحلتي</button>
+        {points && <span className="chip gold">{points.total} نقطة · {points.rank.title}</span>}
+      </div>
+      <Lab items={items} open={open} onOpen={onOpen} reload={reload} onPoints={(r) => { if (r.gained) setToast(`+${r.gained} نقطة`); }} />
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }

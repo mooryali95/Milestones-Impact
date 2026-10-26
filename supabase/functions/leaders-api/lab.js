@@ -23,6 +23,28 @@ export const MASTERY = 70;
 export const EXCELLENCE = 90;
 export const EXCELLENCE_SHARE = 0.25;
 
+// ── من يرى المختبر ──
+// المختبر قسم مستقل تفتحه الإدارة لجهة أو لشخص، للمختبر كله أو لأداة بعينها،
+// ولمدة مفتوحة أو حتى تاريخ. الأداة "للجميع" تظهر أيضًا لكل من اعتُمد مستواه
+// في إطارها إن بلغ حدها الأدنى. المنح يتجاوز شرط المستوى واعتماد المسار.
+export const AUDIENCES = { granted: 'لمن تُفتح لهم فقط', all: 'لكل المعتمدين بحسب المستوى' };
+const LEVEL_RANK = { beginner: 1, intermediate: 2, advanced: 3 };
+const DIM_ORDER = ['milestone', 'impact', 'leadership'];
+
+export const grantLive = (g, now = Date.now()) => !g.expires_at || Date.parse(g.expires_at) > now;
+
+/** @param {any[]} items @param {{ levels?: Record<string, string> | null, participantId?: string, organizationId?: string | null, grants?: any[], now?: number }} who */
+export function labVisible(items, { levels = null, participantId, organizationId = null, grants = [], now = Date.now() }) {
+  const mine = grants.filter((g) => grantLive(g, now)
+    && ((g.participant_id && g.participant_id === participantId) || (g.organization_id && g.organization_id === organizationId)));
+  const whole = mine.some((g) => !g.item_id);
+  const ids = new Set(mine.map((g) => g.item_id).filter(Boolean));
+  const byLevel = (it) => it.audience === 'all' && !!levels?.[it.dimension] && LEVEL_RANK[levels[it.dimension]] >= LEVEL_RANK[it.min_level || 'beginner'];
+  return items
+    .filter((it) => it.active !== false && (whole || ids.has(it.id) || byLevel(it)))
+    .sort((a, b) => DIM_ORDER.indexOf(a.dimension) - DIM_ORDER.indexOf(b.dimension) || (a.sort || 0) - (b.sort || 0));
+}
+
 const str = (v, n = 2000) => String(v ?? '').trim().slice(0, n);
 const clamp01 = (x) => Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));

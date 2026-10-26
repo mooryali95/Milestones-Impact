@@ -5,20 +5,35 @@
 // ويحدد التالية (قد تتفرع بحسب القرار)، ولا تُرسل الإجابات الصحيحة قبل
 // الإجابة. أول محاولة مكتملة قياس ابتدائي، وأفضل محاولة تُعتمد للنقاط:
 // نقاط الأداة عند الإتقان (70%) ومكافأة عند التميز (90%)، مرة واحدة لكل منهما.
+// المختبر قسم مستقل: يراه من فتحته له الإدارة أو لجهته (lab_grants)، ومن
+// اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
 import { db, Fail, must } from './core.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
-import { modelsFor, seededShuffle } from './logic.js';
-import { gradeStep, labAward, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
+import { seededShuffle } from './logic.js';
+import type { Admin } from './admin.ts';
+import { AUDIENCES, gradeStep, grantLive, labAward, labVisible, MASTERY, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
 
 type Body = Record<string, any>;
 
 const STARTS_PER_DAY = 40;
 const ANSWER_MAX = 20000;
 
+const ITEM_COLS = 'id, key, kind, dimension, chapter_key, min_level, sort, title_ar, summary_ar, minutes, points, active, audience, spec';
+
+// أدوات المختبر التي يراها المشارك الآن
+async function visibleItems(p: any) {
+  const levels = await approvedLevels(p).catch(() => null);
+  const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
+  const [items, grants] = await Promise.all([
+    db.from('lab_items').select(ITEM_COLS),
+    db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
+  ]);
+  return labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [] });
+}
+
 async function myItem(p: any, id: unknown) {
-  const levels = await approvedLevels(p);
-  const it = must(await db.from('lab_items').select('*').eq('id', String(id || '')).maybeSingle());
-  if (!it || !modelsFor([it], levels).length) throw new Fail('هذه الأداة لا تخص مسارك', 404);
+  const it = (await visibleItems(p)).find((x: any) => x.id === String(id || ''));
+  if (!it) throw new Fail('هذه الأداة غير متاحة لك', 404);
   return it;
 }
 
@@ -42,24 +57,16 @@ const meta = (it: any) => ({
   title: it.title_ar, summary: it.summary_ar || '', minutes: it.minutes, points: it.points, steps: (it.spec?.steps || []).length,
 });
 
-// بطاقات المختبر لمسار المشارك، وتُستعمل أيضًا تحت كل باب في الكتاب
-export async function itemsFor(p: any, levels: Record<string, string>, where: { dimension?: string; chapter_key?: string } = {}) {
-  let q = db.from('lab_items').select('id, key, kind, dimension, chapter_key, min_level, sort, title_ar, summary_ar, minutes, points, active, spec');
-  if (where.dimension) q = q.eq('dimension', where.dimension);
-  if (where.chapter_key) q = q.eq('chapter_key', where.chapter_key);
-  const [items, att] = await Promise.all([
-    q,
-    db.from('lab_attempts').select('id, item_id, pct, started_at, finished_at').eq('participant_id', p.id),
-  ]);
-  const mine = modelsFor(must(items) ?? [], levels);
-  const sum = summarize(att.data || []);
-  return mine.map((it: any) => ({ ...meta(it), progress: sum[it.id] || { attempts: 0, first: null, best: null, open: null, last_at: null } }));
-}
-
+// قسم المختبر، وبطاقات "طبّق ما قرأت" تحت كل باب في الكتاب
 export async function list(p: any) {
-  const levels = await approvedLevels(p);
-  const [items, pts] = await Promise.all([itemsFor(p, levels), pointsOf(p.id)]);
-  return { success: true, items, points: { total: pts.total, rank: pts.rank } };
+  const [items, att, pts] = await Promise.all([
+    visibleItems(p),
+    db.from('lab_attempts').select('id, item_id, pct, started_at, finished_at').eq('participant_id', p.id),
+    pointsOf(p.id),
+  ]);
+  const sum = summarize(att.data || []);
+  const empty = { attempts: 0, first: null, best: null, open: null, last_at: null };
+  return { success: true, items: items.map((it: any) => ({ ...meta(it), progress: sum[it.id] || empty })), points: { total: pts.total, rank: pts.rank } };
 }
 
 // حالة المحاولة كما يراها المشارك: ما أجاب عنه بنتائجه، والخطوة الحالية، والمؤشرات
@@ -129,4 +136,91 @@ export async function answer(p: any, b: Body) {
     finish.points = { total: pts.total, rank: pts.rank };
   }
   return { success: true, step: i, result, next, meters, finish };
+}
+
+// ════════════════════════════════════════════════════════════════
+// الإدارة: من يرى المختبر، وكيف يؤدي المشاركون فيه
+// ════════════════════════════════════════════════════════════════
+const uuid = (v: unknown) => (/^[0-9a-f-]{36}$/i.test(String(v || '')) ? String(v) : null);
+
+export async function adminOverview() {
+  const [items, grants, att, orgs] = await Promise.all([
+    db.from('lab_items').select('id, key, kind, dimension, chapter_key, min_level, sort, title_ar, minutes, points, active, audience').order('sort'),
+    db.from('lab_grants').select('id, organization_id, participant_id, item_id, expires_at, created_by, created_at, participants(full_name, email, organization_id)').order('created_at', { ascending: false }),
+    db.from('lab_attempts').select('item_id, participant_id, pct, finished_at').not('finished_at', 'is', null),
+    db.from('organizations').select('id, name, short_name, status').order('name'),
+  ]);
+  // لكل أداة: من جرّبها، وكم محاولة، ومتوسط أفضل نتيجة، ومن أتقن
+  const best: Record<string, Record<string, number>> = {};
+  const tries: Record<string, number> = {};
+  for (const a of must(att) ?? []) {
+    tries[a.item_id] = (tries[a.item_id] || 0) + 1;
+    const m = best[a.item_id] ||= {};
+    m[a.participant_id] = Math.max(m[a.participant_id] ?? 0, a.pct ?? 0);
+  }
+  const now = Date.now();
+  return {
+    success: true,
+    audiences: AUDIENCES,
+    mastery: MASTERY,
+    items: (must(items) ?? []).map((it: any) => {
+      const b = Object.values(best[it.id] || {});
+      return { ...it, stats: { people: b.length, attempts: tries[it.id] || 0, avg_best: b.length ? Math.round(b.reduce((x, y) => x + y, 0) / b.length) : null, mastered: b.filter((x) => x >= MASTERY).length } };
+    }),
+    grants: (must(grants) ?? []).map((g: any) => ({ ...g, live: grantLive(g, now) })),
+    orgs: must(orgs) ?? [],
+  };
+}
+
+// تفعيل الأداة أو إيقافها، ولمن تظهر
+export async function adminItem(_a: Admin, b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('الأداة غير محددة');
+  const patch: Body = { updated_at: new Date().toISOString() };
+  if ('active' in b) patch.active = !!b.active;
+  if ('audience' in b) {
+    if (!(b.audience in AUDIENCES)) throw new Fail('الجمهور غير صحيح');
+    patch.audience = b.audience;
+  }
+  const r = must(await db.from('lab_items').update(patch).eq('id', id).select('id'));
+  if (!r?.length) throw new Fail('الأداة غير موجودة', 404);
+  return { success: true };
+}
+
+// فتح المختبر لجهة أو لشخص (بالبريد)، كله أو أداة منه، ولمدة اختيارية.
+// تكرار المنح نفسه يجدد مدته بدل أن يضيف سطرًا ثانيًا.
+export async function adminGrant(a: Admin, b: Body) {
+  let organization_id = uuid(b.organization_id);
+  let participant_id: string | null = null;
+  if (!organization_id) {
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!email) throw new Fail('اختر جهة أو اكتب بريد المشارك');
+    const p = must(await db.from('participants').select('id').eq('email', email).maybeSingle());
+    if (!p) throw new Fail('لا مشارك بهذا البريد');
+    participant_id = p.id;
+  }
+  const item_id = b.item_id ? uuid(b.item_id) : null;
+  if (b.item_id && !item_id) throw new Fail('الأداة غير محددة');
+  let expires_at: string | null = null;
+  if (b.expires_at) {
+    // تاريخ بلا وقت: ينتهي المنح بنهاية ذلك اليوم بتوقيت الرياض
+    const raw = String(b.expires_at);
+    const t = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T23:59:59+03:00` : raw);
+    if (Number.isNaN(t) || t < Date.now()) throw new Fail('تاريخ الانتهاء يجب أن يكون في المستقبل');
+    expires_at = new Date(t).toISOString();
+  }
+  let q = db.from('lab_grants').select('id');
+  q = organization_id ? q.eq('organization_id', organization_id) : q.eq('participant_id', participant_id);
+  q = item_id ? q.eq('item_id', item_id) : q.is('item_id', null);
+  const old = must(await q.maybeSingle());
+  if (old) must(await db.from('lab_grants').update({ expires_at, created_by: a.email, created_at: new Date().toISOString() }).eq('id', old.id));
+  else must(await db.from('lab_grants').insert({ organization_id, participant_id, item_id, expires_at, created_by: a.email }));
+  return { success: true, renewed: !!old };
+}
+
+export async function adminRevoke(_a: Admin, b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('المنح غير محدد');
+  must(await db.from('lab_grants').delete().eq('id', id));
+  return { success: true };
 }
