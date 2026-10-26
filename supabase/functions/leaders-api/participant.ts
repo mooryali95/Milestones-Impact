@@ -5,7 +5,7 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict,
 } from './logic.js';
@@ -647,8 +647,8 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     success: true,
     reading: readingVerdict(rd),
     chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
-    // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
-    quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),
+    // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
+    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
@@ -690,7 +690,8 @@ export async function handbookComplete(p: any, b: Body) {
   const levels = await approvedLevels(p);
   const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md, quiz_md, title_ar').eq('id', String(b.id)).maybeSingle());
   if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
-  const quiz = parseQuiz(m.quiz_md);
+  // بالترتيب نفسه الذي عُرض به، فرقم الإجابة ورقم الصحيحة في النتيجة من القائمة المعروضة
+  const quiz = shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id);
   const g = gradeQuiz(quiz, b.answers);
   if (quiz.length && (!Array.isArray(b.answers) || b.answers.length < quiz.length || b.answers.some((x: any) => x === null || x === undefined))) {
     throw new Fail('أجب عن كل الأسئلة أولًا');

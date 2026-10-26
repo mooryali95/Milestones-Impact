@@ -3,9 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // صيغة الاختبار وحذف كتل المستوى ونقاط الباب تأتي من logic.js على الخادم
 // نفسه، فما تراه الإدارة في المعاينة هو ما يصل المشارك حرفيًا.
-import { filterHandbookMd, handbookModulesFor, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
+import { filterHandbookMd, handbookModulesFor, lintHandbookMd, lintQuiz, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
 
-export { filterHandbookMd, parseQuiz };
+export { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
 export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'الكتاب الأصلي والكتب الـ27'], ['reviews', 'التقييم']];
@@ -18,6 +18,22 @@ export const stars = (n) => '★★★★★'.slice(0, n || 0) + '☆☆☆☆�
 export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection : 0);
 // أسئلة كُتبت لكن لن تظهر: بلا خيار صحيح أو بأقل من خيارين
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;
+// كل ملاحظات الباب: كتله واختباره معًا، والخطأ أولًا
+export const chapterLint = (m) => [...lintHandbookMd(m.body_md, m.min_level), ...lintQuiz(m.quiz_md)]
+  .sort((a, b) => (a.level === 'error' ? 0 : 1) - (b.level === 'error' ? 0 : 1));
+// مختبرات الباب: تظهر للمشارك أسفل الباب بمطابقة الإطار ومفتاح الباب
+export const chapterLabs = (catalog, m) => (catalog.lab_links || []).filter((l) => m && l.dimension === m.dimension && l.chapter_key === m.chapter_key);
+// ما يترتب على حذف الباب، يُعرض قبل التأكيد. الخادم يرفض حذف باب له قراء
+export function deleteNotice(catalog, m) {
+  const done = catalog.book_stats?.chapters?.[m.id]?.done || 0;
+  if (done) return { blocked: true, text: `أتمّ هذا الباب ${done} مشارك، وحذفه يمحو تقدمهم ونقاطهم. حرّر محتواه بدل حذفه.` };
+  const labs = chapterLabs(catalog, m);
+  return {
+    blocked: false,
+    text: `حذف الباب "${m.title_ar}" نهائيًا من الكتب الـ27؟${labs.length ? ` يرتبط به ${labs.length} من المختبرات (${labs.map((l) => l.title_ar).join('، ')})، ولن تظهر بعده أسفل أي باب حتى تُربط بباب آخر.` : ''}`,
+  };
+}
+export const SCOPE_VIEW = [['project', 'مشروع'], ['program', 'برنامج'], ['portfolio', 'محفظة']];
 export const nextSort = (rows, dim) => Math.max(0, ...rows.filter((x) => x.dimension === dim).map((x) => x.sort || 0)) + 1;
 export const splitList = (v) => String(v).split(/[,،]/).map((x) => x.trim()).filter(Boolean);
 
@@ -37,7 +53,7 @@ export function masterBook(modules, models) {
   return {
     success: true, master: true, levels: ALL,
     chapters: handbookModulesFor(modules || [], ALL).map((m) => ({
-      id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
+      id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, min_level: m.min_level,
       md: m.body_md, reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
     })),
     models: modelsFor(models || [], ALL),

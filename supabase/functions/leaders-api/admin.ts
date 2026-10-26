@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
@@ -483,17 +483,22 @@ export async function curriculum(b: Body) {
 export async function catalog(b: Body = {}) {
   const programId = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
   const names = Object.keys(ENTITIES);
-  const res = await Promise.all(names.map((n) => {
+  // بنود الأسئلة تتراكم مع كل إصدار، فتُقرأ بصفحات كي لا تقف عند حد الألف
+  const res = await Promise.all(names.map((n) => all((f, t) => {
     const e = ENTITIES[n];
     let q = db.from(e.table).select('*');
     if (PROGRAM_SCOPED.has(n)) q = q.eq('program_id', programId);
-    return e.sortable ? q.order('sort') : q;
-  }));
+    if (e.sortable) q = q.order('sort');
+    return e.key.reduce((x: any, k: string) => x.order(k), q).range(f, t);
+  })));
   const out: Body = { success: true, program_id: programId };
-  names.forEach((n, i) => { out[n] = res[i].data || []; });
+  names.forEach((n, i) => { out[n] = res[i]; });
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
-  const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
-  out.locked_instruments = [...new Set((used || []).map((u: any) => u.instrument_id))];
+  const used = await all((f, t) => db.from('assessments').select('instrument_id').eq('status', 'submitted').order('id').range(f, t));
+  out.locked_instruments = [...new Set(used.map((u: any) => u.instrument_id))];
+  // مختبرات كل باب: يراها المحرر ويُنبَّه بها قبل حذف الباب
+  const { data: labs } = await db.from('lab_items').select('key, dimension, chapter_key, title_ar, min_level, active').order('sort');
+  out.lab_links = labs || [];
   out.track_stats = await trackStats();
   out.book_stats = await bookStats();
   return out;
@@ -502,30 +507,31 @@ export async function catalog(b: Body = {}) {
 // ── الكتاب والنماذج: التتبع والتقييم ──
 // لكل باب: كم أتمّه ومتوسط نتيجة اختباره. لكل نموذج: المسودات والمسلّم والمقيّم ومتوسط التقييم.
 async function bookStats() {
-  const [{ data: prog }, { data: subs }, { data: pts }] = await Promise.all([
-    db.from('handbook_progress').select('module_id, quiz_score, quiz_total'),
-    db.from('model_submissions').select('model_id, status, rating'),
-    db.from('points_ledger').select('participant_id, points'),
+  // سجلات التقدم والنقاط تتجاوز الألف بسرعة (مشارك × 27 بابًا)، فتُقرأ كلها بصفحات
+  const [prog, subs, pts] = await Promise.all([
+    all((f, t) => db.from('handbook_progress').select('module_id, quiz_score, quiz_total').order('participant_id').order('module_id').range(f, t)),
+    all((f, t) => db.from('model_submissions').select('model_id, status, rating').order('id').range(f, t)),
+    all((f, t) => db.from('points_ledger').select('participant_id, points').order('id').range(f, t)),
   ]);
   const chapters: Record<string, { done: number; score: number; total: number }> = {};
-  for (const r of prog || []) {
+  for (const r of prog) {
     const c = (chapters[r.module_id] ||= { done: 0, score: 0, total: 0 });
     c.done++; c.score += r.quiz_score; c.total += r.quiz_total;
   }
   const models: Record<string, { draft: number; submitted: number; reviewed: number; returned: number; rated: number; rating: number }> = {};
-  for (const r of subs || []) {
+  for (const r of subs) {
     const m = (models[r.model_id] ||= { draft: 0, submitted: 0, reviewed: 0, returned: 0, rated: 0, rating: 0 });
     m[r.status as 'draft']++;
     if (r.rating) { m.rated++; m.rating += r.rating; }
   }
   const per: Record<string, number> = {};
-  for (const r of pts || []) per[r.participant_id] = (per[r.participant_id] || 0) + r.points;
+  for (const r of pts) per[r.participant_id] = (per[r.participant_id] || 0) + r.points;
   const totals = Object.values(per);
   return {
     chapters, models,
     readers: totals.length,
     points: { participants: totals.length, total: totals.reduce((a, n) => a + n, 0), avg: totals.length ? Math.round(totals.reduce((a, n) => a + n, 0) / totals.length) : 0 },
-    to_review: (subs || []).filter((r: any) => r.status === 'submitted').length,
+    to_review: subs.filter((r: any) => r.status === 'submitted').length,
   };
 }
 
@@ -534,16 +540,22 @@ export async function bookPreview(b: Body) {
   const key = String(b.track || '');
   if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
   const levels = Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(key[i * 2 + 1]) - 1]]));
-  const [t, mods, models] = await Promise.all([
+  // النطاق يغيّر الكتاب كالمستوى: بلا نطاق تُعرض كتل البرامج والمحافظ كلها كما يراها من لم يحدد نطاقه
+  const scope = SCOPES.includes(String(b.scope)) ? String(b.scope) : null;
+  const [t, mods, models, labs] = await Promise.all([
     db.from('tracks').select('*').eq('key', key).maybeSingle(),
     db.from('handbook_modules').select('*'),
     db.from('learning_models').select('*'),
+    db.from('lab_items').select('key, dimension, chapter_key, title_ar, min_level, active').eq('active', true).order('sort'),
   ]);
   return {
-    success: true, track: t.data || { key }, levels,
+    success: true, track: t.data || { key }, levels, scope,
     chapters: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
       id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
-      md: filterHandbookMd(m.body_md, levels[m.dimension]), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+      md: filterHandbookMd(m.body_md, levels[m.dimension], scope), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+      // مختبرات الباب التي تصل هذا المسار، كما تظهر للمشارك أسفل الباب
+      labs: (labs.data || []).filter((l: any) => l.dimension === m.dimension && l.chapter_key === m.chapter_key
+        && LEVELS.indexOf(levels[l.dimension]) >= LEVELS.indexOf(l.min_level)).map((l: any) => ({ key: l.key, title: l.title_ar })),
     })),
     models: modelsFor(models.data || [], levels),
   };
@@ -623,6 +635,13 @@ export async function save(a: Admin, b: Body) {
     }
   }
 
+  // كتلة لم تُغلق أو وسم غير معروف يغيّر ما يصل كل مسار، فلا يُحفظ
+  if (b.entity === 'handbook_modules' && 'body_md' in row) {
+    const level = row.min_level || (isNew ? 'beginner' : (await db.from('handbook_modules').select('min_level').eq('id', b.row.id).single()).data?.min_level);
+    const bad = lintHandbookMd(row.body_md, level).filter((x: any) => x.level === 'error');
+    if (bad.length) throw new Fail(`السطر ${bad[0].line}: ${bad[0].msg}`, 400, 'blocks');
+  }
+
   if (b.entity === 'organizations') {
     if ('invite_code' in row || isNew) {
       const code = String(row.invite_code || '').trim().toLowerCase() || crypto.randomUUID().slice(0, 8);
@@ -689,6 +708,11 @@ export async function remove(a: Admin, b: Body) {
   if (b.entity === 'learning_models') {
     const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
     if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
+  }
+  if (b.entity === 'handbook_modules') {
+    // حذف الباب يمحو تقدم قرائه ونتائج اختبارهم (cascade)، فلا يُحذف باب له قراء
+    const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('module_id', b.id);
+    if (count) throw new Fail(`أتمّ هذا الباب ${count} مشارك، وحذفه يمحو تقدمهم ونقاطهم. حرّر محتواه بدل حذفه`, 409, 'in_use');
   }
   if (b.entity === 'content_items') {
     const { count } = await db.from('content_progress').select('item_id', { count: 'exact', head: true }).eq('item_id', b.id);
