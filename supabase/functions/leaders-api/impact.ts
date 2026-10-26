@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المنطق الحسابي في logic.js (يُختبر في vitest)، وهنا جمع البيانات فقط.
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
-import { audit, CONFIG, db, Fail, hash, must, randomToken, raterMail, sendMail } from './core.ts';
+import { all, allFor, audit, CONFIG, db, Fail, hash, must, randomToken, raterMail, sendMail } from './core.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
 import { requirementIdByCode } from './programs.ts';
 import {
@@ -16,21 +16,10 @@ type Body = Record<string, any>;
 const RATER_LIMIT = 3;
 const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق' };
 
-// كل الصفوف بصفحات من 1000 (حد Supabase للقراءة الواحدة)
-async function all(build: (from: number, to: number) => any) {
-  const out: any[] = [];
-  for (let from = 0; ; from += 1000) {
-    const rows = must(await build(from, from + 999)) as any[] ?? [];
-    out.push(...rows);
-    if (rows.length < 1000) return out;
-  }
-}
-
 // آخر قياس مُرسل من كل نوع لكل مشارك، بنتائجه
 async function latestResults(ids: string[] | null) {
-  let q = db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key)').eq('status', 'submitted');
-  if (ids) q = q.in('participant_id', ids);
-  const rows = must(await q.order('submitted_at', { ascending: false }).limit(5000)) as any[] ?? [];
+  const rows = await allFor(ids, () => db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key)')
+    .eq('status', 'submitted').order('submitted_at', { ascending: false }).order('id'));
   const pick: Record<string, { baseline?: any; post?: any }> = {};
   for (const a of rows) {
     const kind = a.instruments?.kind;
@@ -126,9 +115,7 @@ async function impactConfig() {
 // تقدير المقيّمين لكل مشارك. من قدّر قبل البرنامج وبعده يُقارن تقديراه
 // (قياس قبلي وبعدي حقيقي)، وإلا يُستعمل تقديره الرجعي "قبل البرنامج".
 async function raterData(ids: string[] | null) {
-  let q = db.from('raters').select('participant_id, instrument_id, relation, answers, status, email, phase').eq('status', 'submitted');
-  if (ids) q = q.in('participant_id', ids);
-  const rows = must(await q) as any[] ?? [];
+  const rows = await allFor(ids, () => db.from('raters').select('participant_id, instrument_id, relation, answers, status, email, phase').eq('status', 'submitted').order('id'));
   const insts = [...new Set(rows.map((r) => r.instrument_id))];
   const qs = insts.length ? (must(await db.from('questions').select('id, code, anchor_code, dimension, options, tier, instrument_id')
     .in('instrument_id', insts).eq('tier', 'behavior')) as any[] ?? []) : [];
@@ -159,9 +146,8 @@ async function evidenceDone(ids: string[] | null) {
   // E-CASE في كل البرامج: لكل برنامج متطلبه بالرمز نفسه
   const { data: reqs } = await db.from('stage_requirements').select('id').eq('code', 'E-CASE');
   if (!reqs?.length) return new Set<string>();
-  let q = db.from('participant_requirements').select('participant_id').in('requirement_id', reqs.map((r: any) => r.id)).eq('status', 'done');
-  if (ids) q = q.in('participant_id', ids);
-  return new Set(((must(await q) as any[]) ?? []).map((r) => r.participant_id));
+  const rows = await allFor(ids, () => db.from('participant_requirements').select('participant_id').in('requirement_id', reqs.map((r: any) => r.id)).eq('status', 'done'));
+  return new Set(rows.map((r) => r.participant_id));
 }
 
 // المقارنة لعدد من المشاركين (أو للجميع إن كان ids فارغًا)
@@ -338,13 +324,16 @@ export async function raterSubmit(b: Body) {
 
 // ── الإدارة: تقرير الأثر للدفعة أو للجهة ──
 export async function adminReport(b: Body) {
-  let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)');
-  if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
-  if (b.participant_id) q = q.eq('id', String(b.participant_id));
-  const people = must(await q.limit(2000)) as any[] ?? [];
-  const ids = people.map((p) => p.id);
-  const { rows, cfg } = await compareFor(ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-  const raters = must(await db.from('raters').select('participant_id, status').in('participant_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])) as any[] ?? [];
+  const people = await all((f, t) => {
+    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)');
+    if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
+    if (b.participant_id) q = q.eq('id', String(b.participant_id));
+    return q.order('id').range(f, t);
+  });
+  // بلا تصفية يُقرأ الكل مباشرة، فلا تُمرَّر آلاف المعرّفات في الروابط
+  const scoped = b.organization_id || b.participant_id ? people.map((p) => p.id) : null;
+  const { rows, cfg } = await compareFor(scoped);
+  const raters = scoped && !scoped.length ? [] : await allFor(scoped, () => db.from('raters').select('participant_id, status').order('id'));
   const rCount = (pid: string, s: string) => raters.filter((r: any) => r.participant_id === pid && r.status === s).length;
 
   const list = people.map((p) => ({

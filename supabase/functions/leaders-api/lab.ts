@@ -7,7 +7,7 @@
 // نقاط الأداة عند الإتقان (70%) ومكافأة عند التميز (90%)، مرة واحدة لكل منهما.
 // المختبر قسم مستقل: يراه من فتحته له الإدارة أو لجهته (lab_grants)، ومن
 // اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
-import { db, Fail, must } from './core.ts';
+import { all, audit, db, Fail, must } from './core.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
 import { seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
@@ -147,13 +147,13 @@ export async function adminOverview() {
   const [items, grants, att, orgs] = await Promise.all([
     db.from('lab_items').select('id, key, kind, dimension, chapter_key, min_level, sort, title_ar, minutes, points, active, audience').order('sort'),
     db.from('lab_grants').select('id, organization_id, participant_id, item_id, expires_at, created_by, created_at, participants(full_name, email, organization_id)').order('created_at', { ascending: false }),
-    db.from('lab_attempts').select('item_id, participant_id, pct, finished_at').not('finished_at', 'is', null),
+    all((f, t) => db.from('lab_attempts').select('item_id, participant_id, pct').not('finished_at', 'is', null).order('id').range(f, t)),
     db.from('organizations').select('id, name, short_name, status').order('name'),
   ]);
   // لكل أداة: من جرّبها، وكم محاولة، ومتوسط أفضل نتيجة، ومن أتقن
   const best: Record<string, Record<string, number>> = {};
   const tries: Record<string, number> = {};
-  for (const a of must(att) ?? []) {
+  for (const a of att) {
     tries[a.item_id] = (tries[a.item_id] || 0) + 1;
     const m = best[a.item_id] ||= {};
     m[a.participant_id] = Math.max(m[a.participant_id] ?? 0, a.pct ?? 0);
@@ -173,7 +173,7 @@ export async function adminOverview() {
 }
 
 // تفعيل الأداة أو إيقافها، ولمن تظهر
-export async function adminItem(_a: Admin, b: Body) {
+export async function adminItem(a: Admin, b: Body) {
   const id = uuid(b.id);
   if (!id) throw new Fail('الأداة غير محددة');
   const patch: Body = { updated_at: new Date().toISOString() };
@@ -184,6 +184,7 @@ export async function adminItem(_a: Admin, b: Body) {
   }
   const r = must(await db.from('lab_items').update(patch).eq('id', id).select('id'));
   if (!r?.length) throw new Fail('الأداة غير موجودة', 404);
+  await audit('admin', a.email, 'lab.item', 'lab_items', id, null, patch);
   return { success: true };
 }
 
@@ -213,14 +214,17 @@ export async function adminGrant(a: Admin, b: Body) {
   q = organization_id ? q.eq('organization_id', organization_id) : q.eq('participant_id', participant_id);
   q = item_id ? q.eq('item_id', item_id) : q.is('item_id', null);
   const old = must(await q.maybeSingle());
+  if (organization_id && !must(await db.from('organizations').select('id').eq('id', organization_id).maybeSingle())) throw new Fail('الجهة غير موجودة', 404);
   if (old) must(await db.from('lab_grants').update({ expires_at, created_by: a.email, created_at: new Date().toISOString() }).eq('id', old.id));
   else must(await db.from('lab_grants').insert({ organization_id, participant_id, item_id, expires_at, created_by: a.email }));
+  await audit('admin', a.email, 'lab.grant', 'lab_grants', old?.id ?? null, null, { organization_id, participant_id, item_id, expires_at });
   return { success: true, renewed: !!old };
 }
 
-export async function adminRevoke(_a: Admin, b: Body) {
+export async function adminRevoke(a: Admin, b: Body) {
   const id = uuid(b.id);
   if (!id) throw new Fail('المنح غير محدد');
-  must(await db.from('lab_grants').delete().eq('id', id));
+  const gone = must(await db.from('lab_grants').delete().eq('id', id).select('organization_id, participant_id, item_id, expires_at'));
+  if (gone?.length) await audit('admin', a.email, 'lab.revoke', 'lab_grants', id, gone[0], null);
   return { success: true };
 }

@@ -4,7 +4,7 @@
 // الترحيلات تُشغَّل يدويًا، فلا سجل لما طُبّق منها. الفحص هنا يسأل القاعدة
 // عن أثر كل ترحيل (جدول أو عمود أنشأه)، فيظهر في اللوحة ما لم يُشغَّل بعد،
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
-import { CONFIG, db, Fail, healthMail, publicDb, sendMail } from './core.ts';
+import { all, CONFIG, db, Fail, healthMail, publicDb, sendMail } from './core.ts';
 import { itemAnalysis, weeklySeries } from './logic.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
@@ -102,16 +102,6 @@ export async function visits(b: Record<string, any> = {}) {
 }
 
 // جودة أسئلة أداة قياس من إجابات القياسات المرسلة (للإدارة)
-async function all(q: (from: number, to: number) => any) {
-  const out: any[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await q(from, from + 999);
-    if (error) throw new Fail('تعذّر قراءة الإجابات', 500);
-    out.push(...(data || []));
-    if (!data || data.length < 1000) return out;
-  }
-}
-
 export async function itemReport(b: Record<string, any>) {
   const id = String(b.instrument_id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Fail('أداة القياس غير محددة');
