@@ -7,8 +7,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
-  FTYPE, HB_TOOLS, HB_VIEWS, QUIZ_TEMPLATE, RANK, SUB_FILTER,
-  applyTool, badQuiz, clearDraft, draftKey, readDraft, writeDraft, filterHandbookMd, maxPoints, nextSort, parseQuiz, splitList, stars, tiered, words,
+  FTYPE, HB_TOOLS, HB_VIEWS, MASTER, QUIZ_TEMPLATE, RANK, SUB_FILTER,
+  applyTool, badQuiz, clearDraft, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
@@ -446,25 +446,47 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
   });
 }
 
+// المعاينة: الكتاب الأصلي الكامل (الافتراضي) أو أي من الكتب الـ27 كما يصل مساره
 function Preview({ catalog, canWrite, open }) {
   const tracks = catalog.tracks || [];
-  const [track, setTrack] = useState(tracks[0]?.key || 'M1I1L1');
-  const [r, setR] = useState(null);
+  const [track, setTrack] = useState(MASTER);
+  const [fetched, setFetched] = useState(null);
   const [cur, setCur] = useState({});
-  useEffect(() => { setR(null); setCur({}); L('admin.book-preview', { track }).then(setR); }, [track]);
+  const master = track === MASTER;
+  useEffect(() => { setCur({}); if (master) return; setFetched(null); L('admin.book-preview', { track }).then(setFetched); }, [track]);
+  const r = master ? masterBook(catalog.handbook_modules, catalog.learning_models) : fetched;
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
   const chs = r.chapters;
   const model = cur.model && r.models.find((m) => m.id === cur.model);
-  const ch = !model && (chs.find((c) => c.id === cur.ch) || chs[0]);
-  const editCh = () => open({ kind: 'chapter', m: (catalog.handbook_modules || []).find((x) => x.id === ch.id) });
+  const ch = !model && !cur.all && (chs.find((c) => c.id === cur.ch) || chs[0]);
+  const editCh = (c) => open({ kind: 'chapter', m: (catalog.handbook_modules || []).find((x) => x.id === c.id) });
   const editModel = () => open({ kind: 'model', m: (catalog.learning_models || []).find((x) => x.id === model.id) });
+  const page = (c) => (
+    <React.Fragment key={c.id}>
+      <div className="pv-acts"><span className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]} · من {LVL[c.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
+      <article className="hb-page"><h3 className="hb-page-t">{c.title}</h3><div className="la-md"><Md text={c.md} tierLabel={master ? tierLabel : undefined} /></div></article>
+      <section className="pv-review">
+        <h4>مراجعة الباب كما يراها المشارك</h4>
+        {!c.reflection && <p className="hb-warn">لا سؤال تأمل لهذا الباب.</p>}
+        <QuizView qs={c.quiz} reflection={c.reflection} right="الإجابة الصحيحة" />
+        {!c.quiz.length && <p className="hb-warn">لا اختبار لهذا الباب بعد.</p>}
+        <p className="la-muted">أقصى نقاط هذا الباب: {maxPoints(c.quiz.length, !!c.reflection)}</p>
+      </section>
+    </React.Fragment>
+  );
   return (
     <>
       <div className="pv-bar">
-        <label>المسار <select value={track} onChange={(e) => setTrack(e.target.value)}>{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</select></label>
-        <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>
+        <label>الكتاب <select value={track} onChange={(e) => setTrack(e.target.value)}>
+          <option value={MASTER}>الكتاب الأصلي الكامل</option>
+          <optgroup label="الكتب الـ27 بحسب المسار">{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</optgroup>
+        </select></label>
+        {master
+          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ27: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
+          : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>}
         <span className="la-muted">{chs.length} بابًا · {r.models.length} نماذج · الإجابات الصحيحة ظاهرة لك فقط</span>
+        {master && <button className={`btn-sm ${cur.all ? '' : 'ghost'}`} onClick={() => setCur(cur.all ? {} : { all: true })}>{cur.all ? 'باب باب' : 'الكتاب متصلًا'}</button>}
       </div>
       <div className="pv">
         <nav className="pv-toc" aria-label="فهرس المعاينة">
@@ -482,17 +504,7 @@ function Preview({ catalog, canWrite, open }) {
           {model ? <>
             <div className="pv-acts">{canWrite && <button className="btn-sm ghost" onClick={editModel}>تحرير النموذج</button>}</div>
             <article className="hb-page mp"><ModelGuide m={model} /><ModelSteps m={model} /><ModelForm m={model} /></article>
-          </> : ch ? <>
-            <div className="pv-acts"><span className="la-muted">{DIM_EN[ch.dimension]} · {DIM[ch.dimension]} · من {LVL[ch.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={editCh}>تحرير الباب واختباره</button>}</div>
-            <article className="hb-page"><h3 className="hb-page-t">{ch.title}</h3><div className="la-md"><Md text={ch.md} /></div></article>
-            <section className="pv-review">
-              <h4>مراجعة الباب كما يراها المشارك</h4>
-              {!ch.reflection && <p className="hb-warn">لا سؤال تأمل لهذا الباب.</p>}
-              <QuizView qs={ch.quiz} reflection={ch.reflection} right="الإجابة الصحيحة" />
-              {!ch.quiz.length && <p className="hb-warn">لا اختبار لهذا الباب بعد.</p>}
-              <p className="la-muted">أقصى نقاط هذا الباب: {maxPoints(ch.quiz.length, !!ch.reflection)}</p>
-            </section>
-          </> : <p className="la-muted">لا أبواب لهذا المسار.</p>}
+          </> : cur.all ? chs.map(page) : ch ? page(ch) : <p className="la-muted">لا أبواب لهذا المسار.</p>}
         </div>
       </div>
     </>
