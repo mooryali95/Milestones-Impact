@@ -10,7 +10,7 @@
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
+//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
@@ -25,6 +25,7 @@ import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
 import * as S from './system.ts';
+import * as L from './lab.ts';
 
 type Body = Record<string, any>;
 
@@ -69,6 +70,9 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'models.list': (p) => P.modelsList(p),
   'models.get': (p, b) => P.modelGet(p, b),
   'models.save': (p, b) => P.modelSave(p, b),
+  'lab.list': (p) => L.list(p),
+  'lab.start': (p, b) => L.start(p, b),
+  'lab.answer': (p, b) => L.answer(p, b),
   'achievements': (p) => P.achievements(p),
   'certificate': (p) => Z.mine(p),
   'handbook.ping': (p, b) => V.readingPing(p, b),

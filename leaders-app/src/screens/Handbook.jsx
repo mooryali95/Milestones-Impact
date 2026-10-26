@@ -12,6 +12,8 @@ import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
+import { ChapterLab, Lab } from './Lab.jsx';
+import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
 
 import logoDark from '../milestone-impact.svg';
@@ -412,6 +414,8 @@ export default function Handbook({ me, onBack }) {
   const [shield, setShield] = useState(false);
   const [toast, setToast] = useState('');
   const [reading, setReading] = useState(null);
+  const [lab, setLab] = useState(null);
+  const [labOpen, setLabOpen] = useState(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   useReadingTracker(tab === 'read' && data && data.chapter.id === current ? current : null, canvasRef, shield || loading, setReading);
@@ -428,6 +432,12 @@ export default function Handbook({ me, onBack }) {
   }, []);
   const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
+  // أدوات المختبر: لتبويبه ولبطاقات "طبّق ما قرأت" تحت كل باب
+  const loadLab = useCallback(async () => {
+    const r = await call('lab.list');
+    if (r.success) setLab(r.items);
+  }, []);
+  useEffect(() => { loadLab(); }, [loadLab]);
 
   useEffect(() => {
     if (!current || current === COVER || tab !== 'read') return;
@@ -528,6 +538,9 @@ export default function Handbook({ me, onBack }) {
     if (r.gained) setToast(`+${r.gained} نقطة`);
     loadToc(false);
   };
+  const openLab = (id) => { setLabOpen(id); setTab('lab'); };
+  const labMastered = (lab || []).filter((it) => it.progress.best >= MASTERY).length;
+  const chapterLab = data && (lab || []).filter((it) => it.dimension === data.chapter.dimension && it.chapter_key === data.chapter.chapter_key);
   // النسخة الشخصية PDF: الخادم يصدرها برقم ويسجلها، والنافذة تُفتح متزامنة مع النقرة
   const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short }));
   const exportBook = async () => {
@@ -563,8 +576,8 @@ export default function Handbook({ me, onBack }) {
         </div>
         <nav className="book-tabs" aria-label="أقسام الكتاب">
           <div className="book-tablist" role="tablist">
-            {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
-              <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+            {[['read', 'الكتاب'], ['lab', `المختبر${lab?.length ? ` · ${labMastered}/${lab.length}` : ''}`], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); if (k === 'lab') setLabOpen(null); }}>{l}</button>
             ))}
           </div>
           <span className="spacer" />
@@ -573,6 +586,7 @@ export default function Handbook({ me, onBack }) {
         </nav>
       </section>
 
+      {tab === 'lab' && <Lab items={lab} open={labOpen} onOpen={setLabOpen} onPoints={onPoints} reload={loadLab} />}
       {tab === 'models' && <Models name={toc.name || me.participant.full_name} onPoints={onPoints} />}
       {tab === 'wins' && <Wins />}
 
@@ -625,6 +639,7 @@ export default function Handbook({ me, onBack }) {
             </div>
             {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
+            {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={openLab} />}
             <div className="row between book-nav">
               <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
               <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>
