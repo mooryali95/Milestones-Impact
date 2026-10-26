@@ -5,7 +5,7 @@
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyDefinition } from './programs.ts';
 import {
-  audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
+  allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
 import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
@@ -115,16 +115,15 @@ export async function dashboardFor(c: any) {
   const d: any = await orgPayload({ id: c.organization_id });
   const ids = d.participants.map((p: any) => p.id);
 
-  const [requiredTotal, { data: done }, levels] = await Promise.all([
+  // متطلبات المنجزة لكل المشاركين تتجاوز حد القراءة الواحدة بسرعة، فتُقرأ بصفحات ودفعات
+  const [requiredTotal, done, levels] = await Promise.all([
     // متطلبات برنامج دفعة الجهة الجارية
     journeyDefinition({ organization_id: c.organization_id }).then((def) => def.requirements.filter((r: any) => r.required).length),
-    ids.length ? db.from('participant_requirements').select('participant_id').in('participant_id', ids).eq('status', 'done') : Promise.resolve({ data: [] }),
-    perms.scores && ids.length
-      ? db.from('placements').select('participant_id, dimension, level').in('participant_id', ids).then((r: any) => r.data || [])
-      : Promise.resolve([]),
+    allFor(ids, () => db.from('participant_requirements').select('participant_id').eq('status', 'done').order('participant_id').order('requirement_id')),
+    perms.scores ? allFor(ids, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension')) : Promise.resolve([]),
   ]);
   const doneBy: Record<string, number> = {};
-  for (const r of done || []) doneBy[r.participant_id] = (doneBy[r.participant_id] || 0) + 1;
+  for (const r of done) doneBy[r.participant_id] = (doneBy[r.participant_id] || 0) + 1;
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
 

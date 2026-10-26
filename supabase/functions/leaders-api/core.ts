@@ -106,6 +106,29 @@ export function must<T>(res: { data: T; error: unknown }, msg = 'تعذّر تن
   return res.data;
 }
 
+// كل الصفوف بصفحات من 1000: القراءة الواحدة تُقطع عند حد Supabase (max rows) دون خطأ،
+// فالإحصاءات المجمّعة تُقرأ بهذه دائمًا. build يبني الاستعلام من جديد لكل صفحة.
+export async function all(build: (from: number, to: number) => any, msg?: string) {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = must(await build(from, from + 999), msg) as any[] ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
+// صفوف مجموعة مشاركين، بدفعات من 150 معرّفًا كي لا يتجاوز الرابط حده.
+// ids = null تعني الكل بلا تصفية، وهو أخف من تمرير كل المعرّفات.
+export async function allFor(ids: string[] | null, make: () => any, col = 'participant_id') {
+  if (!ids) return all((f, t) => make().range(f, t));
+  const out: any[] = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    const part = ids.slice(i, i + 150);
+    out.push(...await all((f, t) => make().in(col, part).range(f, t)));
+  }
+  return out;
+}
+
 export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coordinator', actor: string | null, action: string,
   entity: string, entityId: string | null, before: unknown = null, after: unknown = null) {
   await db.from('audit_log').insert({ actor_type: actorType, actor, action, entity, entity_id: entityId, before, after });
