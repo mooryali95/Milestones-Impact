@@ -12,6 +12,7 @@ import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { Models, Wins } from './Models.jsx';
+import { ChapterLab } from './Lab.jsx';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
 
 import logoDark from '../milestone-impact.svg';
@@ -402,7 +403,7 @@ function Review({ data, onDone }) {
   );
 }
 
-export default function Handbook({ me, onBack }) {
+export default function Handbook({ me, lab, onLab, onBack }) {
   const [toc, setToc] = useState(null);
   const [tab, setTab] = useState('read');
   const [error, setError] = useState('');
@@ -528,6 +529,7 @@ export default function Handbook({ me, onBack }) {
     if (r.gained) setToast(`+${r.gained} نقطة`);
     loadToc(false);
   };
+  const chapterLab = data && (lab || []).filter((it) => it.dimension === data.chapter.dimension && it.chapter_key === data.chapter.chapter_key);
   // النسخة الشخصية PDF: الخادم يصدرها برقم ويسجلها، والنافذة تُفتح متزامنة مع النقرة
   const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short }));
   const exportBook = async () => {
@@ -625,6 +627,7 @@ export default function Handbook({ me, onBack }) {
             </div>
             {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
+            {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={onLab} />}
             <div className="row between book-nav">
               <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
               <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>

@@ -16,7 +16,7 @@ const STATUS = {
 };
 const RANKS = ['مستكشف', 'ممارس', 'متمكّن', 'قائد أثر', 'سفير الأثر'];
 const RANK_AT = [0, 75, 200, 400, 650];
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 

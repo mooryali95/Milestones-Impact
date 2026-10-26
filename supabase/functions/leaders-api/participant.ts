@@ -580,7 +580,7 @@ export async function passkeyDismiss(p: any) {
 // لوحة (canvas) بعلامة مائية باسم المشارك، فلا نص قابل للنسخ في الصفحة.
 const HANDBOOK_VIEWS_PER_HOUR = 120;
 
-async function approvedLevels(p: any) {
+export async function approvedLevels(p: any) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
   if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح الكتيب بعد اعتماد مسارك', 403, 'locked');
   return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
@@ -595,7 +595,7 @@ export async function pointsOf(participantId: string) {
 }
 
 // يمنح النقاط مرة واحدة لكل إنجاز (قيد فريد على المصدر والمرجع)
-async function award(participantId: string, source: string, refId: string, points: number, note: string) {
+export async function award(participantId: string, source: string, refId: string, points: number, note: string) {
   if (!points) return 0;
   const { error } = await db.from('points_ledger').insert({ participant_id: participantId, source, ref_id: refId, points, note });
   return error ? 0 : points;
@@ -646,7 +646,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   return {
     success: true,
     reading: readingVerdict(rd),
-    chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
+    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
     // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
     quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
