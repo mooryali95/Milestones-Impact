@@ -420,7 +420,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   let order = 0;
 
   return (
-    <div className="page">
+    <div className="page wide">
       <section className="hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
@@ -436,7 +436,6 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
               return <div key={ph.key} className={state}><i />{ph.title}</div>;
             })}
           </div>
-          <div className="row"><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={onEditProfile}>ملفي الشخصي</button></div>
         </div>
         <Ring value={me.progress} />
       </section>
@@ -454,91 +453,95 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {participant.status !== 'completed' && <PreManager />}
       {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
 
-      {(next || reading) && (
-        <div className="next-grid">
-          {next && (
-            <div className="next-card">
-              <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
-              <b>{next.item.title_ar}</b>
-              <span className="small muted">{next.stage.title_ar}</span>
-              <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
-            </div>
-          )}
-          {reading && (
-            <div className="next-card">
-              <span className="k">تابع القراءة</span>
-              <b>{reading.title}</b>
-              <span className="small muted">كتيبك الشخصي</span>
-              <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
-            </div>
-          )}
-        </div>
-      )}
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
-      {profile && (
-        <>
+      {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
+          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}
+      <div className="j-layout">
+        <aside className="j-side" aria-label="ما تفعله الآن">
+          {(next || reading) && (
+            <div className="next-grid j-next">
+              {next && (
+                <div className="next-card">
+                  <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
+                  <b>{next.item.title_ar}</b>
+                  <span className="small muted">{next.stage.title_ar}</span>
+                  <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
+                </div>
+              )}
+              {reading && (
+                <div className="next-card">
+                  <span className="k">تابع القراءة</span>
+                  <b>{reading.title}</b>
+                  <span className="small muted">كتيبك الشخصي</span>
+                  <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="j-tools">
+            <div className="tool-card">
+              <span className="k">كتيبك الشخصي</span>
+              <b>كتيب مصمم على مستواك</b>
+              <p className="small muted">{approved
+                ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
+                : 'يُفتح بعد اعتماد مستواك.'}</p>
+              <div className="row">{approved
+                ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
+                : <span className="chip">🔒 مقفل</span>}</div>
+            </div>
+            {lab?.length > 0 && (
+              <div className="tool-card">
+                <span className="k">مختبر القائد</span>
+                <b>أدوات عمل ومواقف محاكاة</b>
+                <p className="small muted">تطبّق ما تتعلمه على حالات عملية، وتتخذ قرارات وترى أثرها. أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
+                <div className="row"><button className="btn gold sm" onClick={onLab}>افتح المختبر</button></div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="j-main">
+          {profile && (
+            <>
+              <div className="section-title">
+                <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
+                <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
+              </div>
+              {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
+            </>
+          )}
+
           <div className="section-title">
-            <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
-            <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
-          </div>
-          {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
-        </>
-      )}
-
-      <div className="section-title">
-        <h2>مراحل الرحلة</h2>
-        <span className="small muted">{me.progress}% من الرحلة</span>
-      </div>
-      {PHASES.map((ph, pi) => {
-        const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
-        if (!stages.length) return null;
-        const doneHere = stages.filter((s) => s.status === 'done').length;
-        return (
-          <div className="phase" key={ph.key}>
-            <div className="phase-head">
-              <span className="phase-no">{pi + 1}</span>
-              <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
-              <span className="small muted">{doneHere} من {stages.length}</span>
-            </div>
-            <div className="timeline">
-              {stages.map((s) => {
-                order += 1;
-                return (
-                  <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                    onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} setToast={setToast} />
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-
-      <div className="section-title"><h2>كتيبك الشخصي</h2></div>
-      <div className="card row between">
-        <div>
-          <b>كتيب مصمم على مستواك</b>
-          <p className="small muted">{approved
-            ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
-            : 'يُفتح بعد اعتماد مستواك.'}</p>
+            <h2>مراحل الرحلة</h2>
+            <span className="small muted">{me.progress}% من الرحلة</span>
         </div>
-        {approved
-          ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
-          : <span className="chip">🔒 مقفل</span>}
-      </div>
-
-      {lab?.length > 0 && (
-        <>
-          <div className="section-title"><h2>مختبر القائد</h2></div>
-          <div className="card row between">
-            <div>
-              <b>أدوات عمل ومواقف محاكاة</b>
-              <p className="small muted">تطبّق ما تتعلمه على حالات عملية، وتتخذ قرارات وترى أثرها. أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
+        {PHASES.map((ph, pi) => {
+          const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+          if (!stages.length) return null;
+          const doneHere = stages.filter((s) => s.status === 'done').length;
+          return (
+            <div className="phase" key={ph.key}>
+              <div className="phase-head">
+                <span className="phase-no">{pi + 1}</span>
+                <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
+                <span className="small muted">{doneHere} من {stages.length}</span>
+              </div>
+              <div className="timeline">
+                {stages.map((s) => {
+                  order += 1;
+                  return (
+                    <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                      onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} setToast={setToast} />
+                  );
+                })}
+              </div>
             </div>
-            <button className="btn gold sm" onClick={onLab}>افتح المختبر</button>
-          </div>
-        </>
-      )}
+          );
+        })}
+
+        </div>
+      </div>
 
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
