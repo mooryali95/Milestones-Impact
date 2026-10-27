@@ -301,6 +301,86 @@ export function filterHandbookMd(md, level, scope = null) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// فحص كتل الباب قبل الحفظ: الخطأ يغيّر ما يصل المشارك فيُمنع الحفظ،
+// والتنبيه لا يغيّره لكنه يدل على سهو. level مستوى الباب نفسه (min_level).
+export function lintHandbookMd(md, level = 'beginner') {
+  const out = [];
+  let open = null;
+  let body = 0;
+  const lines = String(md || '').split('\n');
+  const close = (n) => {
+    if (open && !body) out.push({ line: open.line, level: 'warn', msg: 'كتلة فارغة لا محتوى فيها' });
+    open = null;
+  };
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    const n = i + 1;
+    if (!line.startsWith(':::')) { if (open && line) body++; return; }
+    if (line === ':::') {
+      if (!open) out.push({ line: n, level: 'warn', msg: 'إغلاق ::: بلا كتلة مفتوحة قبله' });
+      close(n);
+      return;
+    }
+    const m = line.match(BLOCK_RE);
+    if (!m) { out.push({ line: n, level: 'error', msg: `وسم غير معروف "${line}": الصيغ المعتمدة min= و only= و scope=` }); return; }
+    if (open) out.push({ line: n, level: 'error', msg: `كتلة تبدأ قبل إغلاق كتلة السطر ${open.line}: أضف ::: قبلها، فالكتل لا تتداخل` });
+    const tags = m[1].trim().split(/\s+/);
+    const min = tags.find((t) => t.startsWith('min='))?.slice(4);
+    const only = tags.find((t) => t.startsWith('only='))?.slice(5);
+    if (min && only) out.push({ line: n, level: 'error', msg: 'لا يجتمع min= و only= في وسم واحد' });
+    if (min && RANK[min] <= RANK[level] && !tags.some((t) => t.startsWith('scope=')))
+      out.push({ line: n, level: 'warn', msg: `الوسم min=${min} لا يحجب شيئًا: الباب نفسه لا يظهر إلا من هذا المستوى` });
+    if (only && RANK[only] < RANK[level]) out.push({ line: n, level: 'error', msg: `الوسم only=${only} لا يصل أحدًا: الباب يبدأ من مستوى أعلى` });
+    if (tags.includes('scope=project')) out.push({ line: n, level: 'warn', msg: 'scope=project يصل كل النطاقات، فلا حاجة إليه' });
+    open = { line: n };
+    body = 0;
+  });
+  if (open) {
+    out.push({ line: open.line, level: 'error', msg: 'كتلة لم تُغلق بـ ::: فيختفي كل ما بعدها حتى آخر الباب عمن لا تخصه' });
+  }
+  return out;
+}
+
+// فحص جودة الاختبار: ما يمنع ظهور السؤال خطأ، وما يجعله سهل التخمين تنبيه
+export function lintQuiz(md) {
+  const out = [];
+  let cur = null;
+  const done = () => {
+    if (!cur) return;
+    const { n, opts, stars, why } = cur;
+    if (opts.length < 2 || !stars) out.push({ q: n, level: 'error', msg: 'لن يظهر للمشارك: يحتاج خيارين على الأقل وخيارًا صحيحًا يبدأ بـ *' });
+    else {
+      if (stars > 1) out.push({ q: n, level: 'error', msg: 'أكثر من خيار موسوم بـ *، والمعتمد آخرها فقط' });
+      if (new Set(opts.map((o) => o.t)).size < opts.length) out.push({ q: n, level: 'error', msg: 'خياران بالنص نفسه' });
+      if (opts.length < 3) out.push({ q: n, level: 'warn', msg: 'خياران فقط: نصف المشاركين يصيبون بالتخمين' });
+      const right = opts.filter((o) => o.ok).pop().t.length;
+      const other = Math.max(...opts.filter((o) => !o.ok).map((o) => o.t.length));
+      if (opts.length >= 3 && right > other * 1.3) out.push({ q: n, level: 'warn', msg: 'الخيار الصحيح أطول الخيارات بوضوح، فيُعرف بطوله لا بفهمه' });
+      if (!why) out.push({ q: n, level: 'warn', msg: 'بلا "لماذا:"، فلا يتعلم المشارك من خطئه' });
+    }
+    cur = null;
+  };
+  let n = 0;
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trim();
+    let m;
+    if (/^س\s*[:：]/.test(line)) { done(); cur = { n: ++n, opts: [], stars: 0, why: '' }; }
+    else if (cur && (m = line.match(/^([-*])\s+(.+)$/))) { cur.opts.push({ t: m[2].trim(), ok: m[1] === '*' }); if (m[1] === '*') cur.stars++; }
+    else if (cur && /^لماذا\s*[:：]\s*\S/.test(line)) cur.why = line;
+  }
+  done();
+  return out;
+}
+
+// خلط خيارات الاختبار بترتيب ثابت لكل مشارك وباب، فلا يدل موضع الخيار
+// على صحته. الخادم يعرض ويصحح بالترتيب نفسه، فالإجابة رقم في القائمة المعروضة.
+export function shuffleQuiz(quiz, seed) {
+  return quiz.map((q, i) => {
+    const order = seededShuffle(q.options.map((_, k) => k), `${seed}:${i}`);
+    return { ...q, options: order.map((k) => q.options[k]), answer: order.indexOf(q.answer) };
+  });
+}
+
 // ── الكتاب التفاعلي: الاختبارات والنقاط ──
 // صيغة الاختبار في quiz_md:
 //   س: نص السؤال
