@@ -4,6 +4,7 @@
 // الثوابت وحقول النماذج وحاسبة التسكين وإعادة الترتيب، مفصولة عن الشاشات
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
+import { VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 
 export const LVLS = Object.keys(LVL);
 export const TIER = { knowledge: 'معرفة', skill: 'مواقف', behavior: 'ممارسة', transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
@@ -11,6 +12,7 @@ export const PHASE = { admission: 'القبول', qualification: 'التأهيل
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
   reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز', curriculum: 'منهج المسار',
+  model: 'نموذج تعليمي', capstone: 'مشروع التخرج',
 };
 // ما يعنيه كل نوع، يظهر تحت اختيار النوع
 export const KIND_HELP = {
@@ -24,11 +26,14 @@ export const KIND_HELP = {
   workshop: 'ورشة أو محاضرة أو لقاء جماعي. تضيف مواعيده من «الحضور والجلسات»، ولكل موعد طريقته: حضوري بمكان، أو عن بعد برابط اجتماع.',
   curriculum: 'مقاطع وملفات وروابط من «بنك المحتوى» يختار النظام منها ما يخص مسار كل مشارك بحسب وسومها. يكتمل بمشاهدة المقاطع وفتح الملفات فعلًا.',
   coaching: 'توجيه أو استشارة فردية. يحجز المشارك من رابط Cal.com أو Calendly، أو يتصل فورًا حين تكون متاحًا، وتؤكد أنت حضوره.',
+  model: 'نموذج من «كتيب القائد» يبنيه المشارك في المنصة، فيكتمل المتطلب بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
+  capstone: 'وثيقة المبادرة كاملة: يكتمل حين تعتمدها بالمعيار ويؤيدها راعيها. تراجعها من «مشاريع التخرج».',
 };
 export const VERIFY = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
 export const COACH_MODE = { online: 'عن بعد', in_person: 'حضوري', any: 'حضوري أو عن بعد حسب الحجز' };
-// أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك
-export const VERIFIED = new Set(['reading', 'video', 'workshop', 'coaching', 'curriculum']);
+// أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك: القائمة نفسها التي يحتسب بها الخادم
+export const VERIFIED = new Set(VERIFIED_KINDS);
+const ACCEPT = { reviewed: 'حين يقيّمه المستشار', submitted: 'بمجرد تسليمه' };
 const READ_SCOPE = { all: 'كل أبواب مسار المشارك', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
 export const MODE = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
 export const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
@@ -49,7 +54,7 @@ export const STAGE_FIELDS = [
   { name: 'active', label: 'ظاهرة للمشاركين', type: 'check' },
 ];
 
-export const reqFields = (stages) => [
+export const reqFields = (stages, models = []) => [
   { name: 'code', label: 'الرمز (فريد، مثل T-ATTEND)', dir: 'ltr' },
   { name: 'title_ar', label: 'نص المتطلب' },
   { name: 'help_ar', label: 'توضيح للمشارك', type: 'textarea', rows: 2 },
@@ -73,13 +78,16 @@ export const reqFields = (stages) => [
   { name: 'cfg_booking_url', label: 'رابط الحجز (Cal.com أو Calendly)', dir: 'ltr', show: (v) => v.kind === 'coaching' },
   { name: 'cfg_instant_url', label: 'رابط غرفة الاتصال الفوري (Google Meet أو Zoom الثابت)', dir: 'ltr', show: (v) => v.kind === 'coaching' && v.cfg_mode !== 'in_person' },
   { name: 'cfg_coach_email', label: 'بريد الموجّه لتنبيه الاتصال الفوري', type: 'email', dir: 'ltr', show: (v) => v.kind === 'coaching' },
+  { name: 'cfg_model_key', label: 'النموذج التعليمي', type: 'select', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'model',
+    help: () => 'يراه المشارك بمستواه ونطاق عمله. إن لم يكن النموذج متاحًا له حُسب المتطلب منجزًا، فلا يُطالب بما لا يخصه.' },
+  { name: 'cfg_accept', label: 'يكتمل', type: 'select', options: ACCEPT, show: (v) => v.kind === 'model' },
   { name: 'required', label: 'إلزامي لإكمال المرحلة', type: 'check' },
   { name: 'needs_review', label: 'يعتمده المستشار بعد الإنجاز', type: 'check', show: (v) => !VERIFIED.has(v.kind) },
   { name: 'active', label: 'مفعّل', type: 'check' },
 ];
 
 // المتطلب ← قيم النموذج: حقول config تُفرد بأسماء cfg_*
-const CFG_DEFAULTS = { scope: 'all', quiz: true, min_pct: 90, sessions_required: 1, minutes: 60, verify: 'qr', mode: 'online' };
+const CFG_DEFAULTS = { accept: 'reviewed', scope: 'all', quiz: true, min_pct: 90, sessions_required: 1, minutes: 60, verify: 'qr', mode: 'online' };
 export function reqToForm(r) {
   const c = { ...CFG_DEFAULTS, ...(r.config || {}) };
   return { ...r, ...Object.fromEntries(Object.entries(c).map(([k, x]) => [`cfg_${k}`, x])) };

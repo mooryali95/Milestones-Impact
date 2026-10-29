@@ -371,7 +371,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort', 'reflection_ar', 'quiz_md'] },
   learning_models:    { table: 'learning_models', key: ['id'], sortable: true,
-                        fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active'] },
+                        fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active', 'capstone_sort', 'scopes'] },
   content_items:      { table: 'content_items', key: ['id'], sortable: true,
                         fields: ['kind', 'title_ar', 'description_ar', 'url', 'minutes', 'dimension', 'min_level', 'only_level', 'track_keys', 'exclude_tracks', 'required', 'min_pct', 'sort', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
@@ -404,7 +404,16 @@ function cleanModelFields(input: unknown) {
       out.columns = (Array.isArray(f.columns) ? f.columns : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 10);
       if (!out.columns.length) throw new Fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
       out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+      // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
+      const im = f.import && typeof f.import === 'object' ? f.import : null;
+      if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
     }
+    // التعمق داخل النموذج نفسه: حقل من مستوى أعلى، أو لنطاقات بعينها
+    if (LEVELS.includes(f?.min_level) && f.min_level !== 'beginner') out.min_level = f.min_level;
+    const scopes = (Array.isArray(f?.scopes) ? f.scopes : []).filter((x: string) => SCOPES.includes(x));
+    if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
+    // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
+    if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
     return out;
   });
 }
@@ -557,7 +566,8 @@ export async function bookPreview(b: Body) {
       labs: (labs.data || []).filter((l: any) => l.dimension === m.dimension && l.chapter_key === m.chapter_key
         && LEVELS.indexOf(levels[l.dimension]) >= LEVELS.indexOf(l.min_level)).map((l: any) => ({ key: l.key, title: l.title_ar })),
     })),
-    models: modelsFor(models.data || [], levels),
+    // بلا نطاق تُعرض نماذج النطاقات كلها، كما تُعرض كتلها في الكتاب
+    models: scope ? modelsFor(models.data || [], levels, scope) : modelsFor((models.data || []).map((m: any) => ({ ...m, scopes: [] })), levels),
   };
 }
 
@@ -685,6 +695,14 @@ export async function save(a: Admin, b: Body) {
   if (b.entity === 'learning_models') {
     if (isNew && !row.key) row.key = `m-${Date.now().toString(36)}`;
     if ('fields' in row) row.fields = cleanModelFields(row.fields);
+    if ('capstone_sort' in row) {
+      const n = row.capstone_sort === '' || row.capstone_sort == null ? null : Math.round(Number(row.capstone_sort));
+      row.capstone_sort = n != null && Number.isFinite(n) && n >= 1 && n <= 999 ? n : null;
+    }
+    if ('scopes' in row) {
+      const sc = [...new Set((Array.isArray(row.scopes) ? row.scopes : []).filter((x: string) => SCOPES.includes(x)))];
+      row.scopes = sc.length === SCOPES.length ? [] : sc;
+    }
     if (isNew && !String(row.title_ar || '').trim()) throw new Fail('اسم النموذج مطلوب');
     row.updated_at = new Date().toISOString();
   }

@@ -22,6 +22,8 @@ import Verify from './screens/Verify.jsx';
 import { CheckIn } from './screens/Activities.jsx';
 import Impact from './screens/Impact.jsx';
 import Rater from './screens/Rater.jsx';
+import Sponsor from './screens/Sponsor.jsx';
+import Capstone from './screens/Capstone.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
@@ -58,6 +60,7 @@ const ICONS = {
   home: 'M3 11.5 12 4l9 7.5M5.5 10v9.5h4.5v-6h4v6h4.5V10',
   handbook: 'M4 5.5C6.5 4.2 9.5 4.2 12 5.5v14c-2.5-1.3-5.5-1.3-8 0v-14ZM12 5.5c2.5-1.3 5.5-1.3 8 0v14c-2.5-1.3-5.5-1.3-8 0',
   lab: 'M9.5 3.5h5M10.5 3.5v5.5L5 18.5A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2L13.5 9V3.5M7.5 14.5h9',
+  capstone: 'M5 3.5h10l4 4v13H5v-17ZM15 3.5v4h4M8.5 12h7M8.5 15.5h7M8.5 8.5h3',
   impact: 'M4 19.5h16M6.5 16V12M11 16V8.5M15.5 16v-5M20 5.5l-5 4-3.5-2.5L6 10.5',
   profile: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20.5c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5',
 };
@@ -90,6 +93,7 @@ const isVerify = () => location.pathname === '/v' || location.pathname.startsWit
 export default function App() {
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
   if (location.pathname === '/rate') return <Shell tag="تقدير الأثر"><Rater /></Shell>;
+  if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة"><Sponsor /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
 
@@ -194,6 +198,7 @@ function Participant() {
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
     approved && { key: 'handbook', label: 'كتابي' },
+    approved && { key: 'capstone', label: 'مشروعي' },
     hasLab && { key: 'lab', label: 'المختبر' },
     approved && stageOpen(me, 'impact') && { key: 'impact', label: 'أثري' },
     { key: 'profile', label: 'ملفي' },
@@ -210,8 +215,9 @@ function Participant() {
   } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
+  else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} lab={lab?.items} onLab={() => openLab()} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} lab={lab?.items} onLab={() => openLab()} />;
 
   return (
     <>

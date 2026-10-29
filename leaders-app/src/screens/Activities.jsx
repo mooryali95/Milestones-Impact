@@ -289,7 +289,24 @@ function Curriculum({ item, open, onRefresh }) {
   );
 }
 
-export default function Activity({ item, open, onUpdate, onHandbook, setToast }) {
+// متطلب «نموذج» أو «مشروع التخرج»: العمل نفسه في وثيقة المبادرة، والرحلة تعرض حالته
+const MODEL_STATUS = { draft: 'قيد العمل', submitted: 'مسلّم للمستشار', returned: 'أُعيد للتطوير', reviewed: 'قيّمه المستشار' };
+const CAP_STATUS = { draft: 'قيد البناء', submitted: 'عند المستشار', returned: 'أُعيد للتحسين', accepted: 'بانتظار تأييد الراعي', approved: 'معتمد' };
+function ModelLink({ a, onCapstone }) {
+  if (a.na) return <p className="h">لا يخص مستواك أو نطاق عملك، فيُحتسب لك.</p>;
+  if (a.locked) return <p className="h">يُفتح بعد اعتماد مسارك.</p>;
+  const label = a.type === 'capstone'
+    ? `${CAP_STATUS[a.status || 'draft']}${a.readiness != null ? ` · الجاهزية ${a.readiness}%` : ''}`
+    : `${a.title ? `«${a.title}» · ` : ''}${MODEL_STATUS[a.status] || 'لم يبدأ'}${!a.done && a.status === 'submitted' && a.accept === 'reviewed' ? ' · يكتمل بتقييم المستشار' : ''}`;
+  return (
+    <div className="act-model row between">
+      <span className="h">{label}</span>
+      {onCapstone && !a.done && <button className="btn sm" onClick={onCapstone}>{a.type === 'capstone' ? 'افتح وثيقة مبادرتك' : 'افتح في مشروعي'}</button>}
+    </div>
+  );
+}
+
+export default function Activity({ item, open, onUpdate, onHandbook, onCapstone, setToast }) {
   const refresh = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
   const a = item.activity;
   if (!a) return null;
@@ -298,6 +315,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, setToast })
   if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
   if (a.type === 'curriculum') return <Curriculum item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
+  if (a.type === 'model' || a.type === 'capstone') return <ModelLink a={a} onCapstone={open ? onCapstone : null} />;
   return null;
 }
 

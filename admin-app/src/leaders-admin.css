@@ -546,3 +546,35 @@
 /* الكتاب الأصلي الكامل: الفقرات المقيدة بمستوى أو نطاق موسومة بمن يقرؤها */
 .hb-tier { position: relative; margin: 18px 0 14px; padding: 16px 16px 6px; border: 1px dashed var(--gold); border-radius: 8px; background: rgba(199,154,75,.06); }
 .hb-tier-l { position: absolute; top: -11px; inset-inline-start: 12px; padding: 1px 8px; border-radius: 4px; background: var(--gold); color: #0B272F; font-size: .72rem; font-weight: 700; }
+
+/* ── النموذج فصلًا في وثيقة المبادرة، وتعمّق الحقول ── */
+.me-cap { display: grid; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+.me-cap > label { max-width: 260px; }
+.me-scopes { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: .8rem; }
+.me-scopes label { display: inline-flex !important; gap: 4px; align-items: center; font-weight: 500 !important; }
+.fb-more { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .78rem; }
+.fb-more select { max-width: 100%; }
+.fb-more > label { display: inline-flex; gap: 4px; align-items: center; }
+
+/* ── مشاريع التخرج ── */
+.cps { display: grid; gap: 16px; }
+.cps-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.cps-head h2 { margin: 4px 0 8px; font-size: 1.25rem; }
+.cps-filter button { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: .78rem; }
+.cps-filter button.on { background: var(--petrol); color: var(--sand-cream); border-color: var(--petrol); }
+.cps-secs, .cps-checks { margin: 0 0 14px; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .86rem; }
+.cps-secs li small, .cps-checks li small { display: block; color: var(--ink-mid); font-size: .76rem; }
+.cps-secs li.ok > span::after, .cps-checks li.ok::marker { color: #2E7D5B; }
+.cps-checks li.no { color: #9A3B2E; }
+.cps-checks li.ok { color: #2E7D5B; }
+.cps-big { font-size: 2.2rem; font-weight: 700; margin: 6px 0; }
+.cps-big small { font-size: .9rem; font-weight: 500; color: var(--ink-mid); }
+.cps-review fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 14px; }
+.cps-crit { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.cps-anchors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+@media (max-width: 760px) { .cps-anchors { grid-template-columns: 1fr 1fr; } }
+.cps-anchors button { text-align: start; display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; font-size: .76rem; line-height: 1.5; background: var(--sand-light); }
+.cps-anchors button b { font-size: .95rem; }
+.cps-anchors button.on { border-color: var(--petrol); background: var(--petrol); color: var(--sand-cream); }
+.cps-crit textarea, .cps-note textarea, .cps-note input { width: 100%; }
+.cps-note { display: grid; gap: 4px; font-size: .82rem; font-weight: 600; }
