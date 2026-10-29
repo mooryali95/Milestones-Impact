@@ -94,14 +94,14 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                     </span>
                     <span className="la-row">
                       <Move {...mv} entity="stage_requirements" id={r.id} />
-                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages, catalog.learning_models || []), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
                   </li>
                 ))}
               </ul>
               {canWrite && (
                 <button className="la-link" onClick={() => edit({
-                  title: 'متطلب جديد', fields: reqFields(stages),
+                  title: 'متطلب جديد', fields: reqFields(stages, catalog.learning_models || []),
                   values: reqToForm({ stage_key: s.key, kind: 'check', required: true, active: true }),
                   onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
                 })}>+ متطلب</button>

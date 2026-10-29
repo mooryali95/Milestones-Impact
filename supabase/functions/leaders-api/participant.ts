@@ -7,8 +7,9 @@ import {
 import {
   AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
-  VERIFIED_KINDS, readingVerdict,
+  VERIFIED_KINDS, readingVerdict, fieldsFor,
 } from './logic.js';
+import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
 
@@ -275,7 +276,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   return {
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
-      organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
+      organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
@@ -329,8 +330,14 @@ export async function profileSave(p: any, b: Body) {
     if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
     patch.phone = phone;
   }
+  // الجهة المرتبطة مصدر اسمها: لا يُكتب اسم ثانٍ بجانبها
+  if (p.organization_id) delete patch.organization_name;
   if ('work_scope' in f) {
     patch.work_scope = SCOPES.includes(f.work_scope) ? f.work_scope : null;
+    // النطاق يحدد فصول وثيقة المبادرة، فلا يتغير وهي عند المراجعة أو معتمدة
+    if (patch.work_scope !== (p.work_scope || null) && CAPSTONE_LOCKED.includes(await capstoneStatus(p.id))) {
+      throw new Fail('نطاق عملك مثبت في وثيقة مبادرتك المسلّمة، ولا يتغير حتى تعود إليك', 409, 'scope_locked');
+    }
   }
   if ('years_experience' in f) {
     const y = Number(f.years_experience);
@@ -606,13 +613,13 @@ export async function handbookToc(p: any) {
   const [mods, prog, models, subs, pts] = await Promise.all([
     db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md, quiz_md'),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, completed_at').eq('participant_id', p.id),
-    db.from('learning_models').select('id, dimension, sort, min_level, active, points'),
+    db.from('learning_models').select('id, dimension, sort, min_level, active, points, scopes'),
     db.from('model_submissions').select('model_id, status').eq('participant_id', p.id),
     pointsOf(p.id),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
-  const mine = modelsFor(models.data || [], levels);
+  const mine = modelsFor(models.data || [], levels, p.work_scope);
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
     success: true,
@@ -680,7 +687,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
       // الكتاب عام: لا شيء من بيانات المسار إلا رمزه
       ref, issued_at: now.toISOString(), name: p.full_name, email: p.email, code: trackKey(levels),
       chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope), reflection: m.reflection_ar || '' })),
-      tools: modelsFor(models.data || [], levels).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
+      tools: modelsFor(models.data || [], levels, p.work_scope).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
     },
   };
 }
@@ -710,14 +717,29 @@ export async function handbookComplete(p: any, b: Body) {
 async function myModel(p: any, id: unknown) {
   const levels = await approvedLevels(p);
   const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
-  if (!m || !modelsFor([m], levels).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
-  return m;
+  if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
+  // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
+  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope) };
+}
+
+// اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
+export async function initiativeFor(participantId: string) {
+  const { data } = await db.from('model_submissions').select('answers, learning_models!inner(key)')
+    .eq('participant_id', participantId).eq('learning_models.key', CHARTER_KEY).maybeSingle();
+  return initiativeOf((data as any)?.answers);
+}
+
+// فصول الوثيقة تُقفل ما دامت الوثيقة عند المستشار أو الراعي أو معتمدة
+export const CAPSTONE_LOCKED = ['submitted', 'accepted', 'approved'];
+export async function capstoneStatus(participantId: string) {
+  const { data } = await db.from('capstones').select('status').eq('participant_id', participantId).maybeSingle();
+  return (data as any)?.status || 'draft';
 }
 
 export async function modelsList(p: any) {
   const levels = await approvedLevels(p);
   const [models, subs, pts] = await Promise.all([
-    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields'),
+    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields, scopes, capstone_sort'),
     db.from('model_submissions').select('model_id, status, rating, bonus, answers, submitted_at, updated_at').eq('participant_id', p.id),
     pointsOf(p.id),
   ]);
@@ -725,29 +747,63 @@ export async function modelsList(p: any) {
   return {
     success: true,
     // تقدم كل نموذج: الحقول الإلزامية المكتملة من مجموعها، دون إرسال الإجابات نفسها
-    models: modelsFor(must(models) ?? [], levels).map(({ fields, ...m }: any) => {
+    models: modelsFor(must(models) ?? [], levels, p.work_scope).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
+      const fields = fieldsFor(all, levels[m.dimension], p.work_scope);
       const sub = by[m.id];
-      const total = (fields || []).filter((f: any) => f.required !== false).length;
-      const filled = total - missingFields(fields || [], sub?.answers || {}).length;
-      return { ...m, fields_n: (fields || []).length, progress: { filled, total },
+      const total = fields.filter((f: any) => f.required !== false).length;
+      const filled = total - missingFields(fields, sub?.answers || {}).length;
+      return { ...m, capstone: capstone_sort != null, fields_n: fields.length, progress: { filled, total },
         submission: sub ? { status: sub.status, rating: sub.rating, bonus: sub.bonus, submitted_at: sub.submitted_at, updated_at: sub.updated_at } : null };
     }),
     points: { total: pts.total, rank: pts.rank },
   };
 }
 
+// الجداول المستوردة: صفوف المصدر بأعمدة هذا الجدول، ليستوردها المشارك بنقرة
+async function importsFor(p: any, fields: any[]) {
+  const want = fields.filter((f: any) => f.type === 'table' && f.import?.model);
+  if (!want.length) return {};
+  const keys = [...new Set(want.map((f: any) => f.import.model))];
+  const { data } = await db.from('model_submissions').select('answers, learning_models!inner(key, title_ar, fields)')
+    .eq('participant_id', p.id).in('learning_models.key', keys);
+  const src = Object.fromEntries((data || []).map((r: any) => [r.learning_models.key, r]));
+  const out: Record<string, any> = {};
+  for (const f of want) {
+    const s = src[f.import.model];
+    const sf = (s?.learning_models?.fields || []).find((x: any) => x.key === f.import.field);
+    out[f.key] = { model: f.import.model, title: s?.learning_models?.title_ar || null,
+      rows: s && sf ? importRows(f.columns, sf.columns, s.answers?.[f.import.field]) : [] };
+  }
+  return out;
+}
+
 export async function modelGet(p: any, b: Body) {
   const m = await myModel(p, b.id);
-  const { data: sub } = await db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
-  return { success: true, model: m, submission: sub || null };
+  const [{ data: sub }, initiative, status] = await Promise.all([
+    db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle(),
+    initiativeFor(p.id),
+    m.capstone_sort != null ? capstoneStatus(p.id) : null,
+  ]);
+  const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
+  return {
+    success: true, model: m, submission, initiative,
+    imports: await importsFor(p, m.fields),
+    capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
+  };
 }
 
 // حفظ مسودة أو تسليم نهائي؛ التسليم يمنح نقاط النموذج مرة واحدة
 export async function modelSave(p: any, b: Body) {
   const m = await myModel(p, b.id);
-  const answers = cleanAnswers(m.fields, b.answers);
-  const { data: prev } = await db.from('model_submissions').select('id, status').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
+  const [{ data: prev }, initiative, status] = await Promise.all([
+    db.from('model_submissions').select('id, status').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle(),
+    m.key === CHARTER_KEY ? null : initiativeFor(p.id),
+    m.capstone_sort != null ? capstoneStatus(p.id) : null,
+  ]);
   if (prev?.status === 'reviewed') throw new Fail('قُيّم هذا النموذج ولا يمكن تعديله');
+  if (CAPSTONE_LOCKED.includes(status as string)) throw new Fail('هذا فصل في وثيقة مبادرتك، وهي عند المراجعة أو معتمدة فلا يُعدَّل الآن', 409, 'capstone_locked');
+  // الحقل المربوط باسم المبادرة لا يُكتب هنا: يأتي من بطاقة المبادرة دائمًا
+  const answers = bindAnswers(m.fields, cleanAnswers(m.fields, b.answers), initiative);
   const submit = !!b.submit;
   if (submit) {
     const missing = missingFields(m.fields, answers);

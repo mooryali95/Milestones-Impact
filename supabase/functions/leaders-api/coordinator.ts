@@ -10,6 +10,7 @@ import {
 import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
+import { orgList as initiativesFor } from './capstone.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -158,6 +159,8 @@ export async function impactFor(c: any) {
 export async function dashboard(c: any) {
   const r: any = await dashboardFor(c);
   r.impact = await impactFor(c);
+  // محفظة مبادرات الدفعة: مشاريع التخرج لمشاركي الجهة
+  r.initiatives = await initiativesFor(c.organization_id);
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }

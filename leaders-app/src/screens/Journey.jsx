@@ -149,7 +149,7 @@ const AUTO_HINT = {
   'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
 };
 
-function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, setToast }) {
+function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
     setBusy(true);
@@ -188,7 +188,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         </div>
         {item.help_ar && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
-        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} setToast={setToast} />}
+        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
         {sys && !verified && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
@@ -387,7 +387,7 @@ function PreManager() {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, lab, onLab }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -532,7 +532,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                   order += 1;
                   return (
                     <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                      onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} setToast={setToast} />
+                      onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} setToast={setToast} />
                   );
                 })}
               </div>

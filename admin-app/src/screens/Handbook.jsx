@@ -274,8 +274,18 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
   const [v, setV] = useState(() => ({
     title_ar: m?.title_ar || '', icon: m?.icon || '◆', points: m?.points ?? 30, active: m?.active !== false, min_level: m?.min_level || 'beginner',
     summary_ar: m?.summary_ar || '', when_ar: m?.when_ar || '', steps_ar: m?.steps_ar || '', source_ar: m?.source_ar || '',
-    fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true }])),
+    capstone_sort: m?.capstone_sort ?? '', scopes: m?.scopes || [],
+    fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true, bind: 'initiative' }])),
   }));
+  // جداول النماذج الأخرى: مصدر يستورد منه هذا النموذج صفوفه بدل إعادة كتابتها
+  const sources = (catalog.learning_models || []).filter((x) => x.id !== m?.id && (x.fields || []).some((f) => f.type === 'table'));
+  // نطاق واحد على الأقل يبقى مختارًا، والثلاثة معًا تعني «للجميع» فتُحفظ فارغة
+  const toggle = (list, k) => {
+    const all = SCOPE_VIEW.map(([x]) => x);
+    const cur = list.length ? list : all;
+    const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+    return !next.length ? cur : next.length === all.length ? [] : next;
+  };
   const guard = useGuard(draftKey('model', m, d), v, setV);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
@@ -325,6 +335,13 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
             <label>النقاط عند التسليم<input type="number" min="0" max="500" value={v.points} onChange={set('points')} /></label>
             <label className="me-check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /> ظاهر للمشاركين</label>
           </div>
+          <div className="me-cap">
+            <label>ترتيبه فصلًا في وثيقة المبادرة<input type="number" min="1" max="999" placeholder="فارغ: ليس فصلًا" value={v.capstone_sort} onChange={set('capstone_sort')} /></label>
+            <div className="me-scopes" role="group" aria-label="نطاقات العمل التي يظهر لها"><small>يظهر لنطاق</small>
+              {SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!v.scopes.length || v.scopes.includes(k)}
+                onChange={() => setV({ ...v, scopes: toggle(v.scopes, k) })} /> {l}</label>)}</div>
+            <small className="la-muted">النموذج نفسه فصل في وثيقة المبادرة ومتطلب في الرحلة، فما يكتبه المشارك مرة يظهر في كل مكان.</small>
+          </div>
           <label>الوصف المختصر<textarea rows={2} value={v.summary_ar} onChange={set('summary_ar')} /></label>
           <label>متى يستخدمه<textarea rows={2} value={v.when_ar} onChange={set('when_ar')} /></label>
           <label>الخطوات (سطر لكل خطوة)<textarea rows={4} value={v.steps_ar} onChange={set('steps_ar')} /></label>
@@ -344,6 +361,17 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                   <input aria-label={`أقل عدد صفوف للحقل ${i + 1}`} type="number" min="1" max="30" value={f.min_rows || 1} onChange={(e) => setField(i, { min_rows: Number(e.target.value) || 1 })} />
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
+                <div className="fb-more">
+                  <select aria-label={`مستوى الحقل ${i + 1}`} value={f.min_level || 'beginner'} onChange={(e) => setField(i, { min_level: e.target.value })}>
+                    {LVLS.map((l) => <option key={l} value={l}>{l === 'beginner' ? 'لكل المستويات' : `من مستوى ${LVL[l]}`}</option>)}</select>
+                  <span className="me-scopes" role="group" aria-label={`نطاقات الحقل ${i + 1}`}>{SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!(f.scopes || []).length || f.scopes.includes(k)}
+                    onChange={() => setField(i, { scopes: toggle(f.scopes || [], k) })} /> {l}</label>)}</span>
+                  {f.type === 'text' && <label><input type="checkbox" checked={f.bind === 'initiative'} onChange={(e) => setField(i, { bind: e.target.checked ? 'initiative' : undefined })} /> يأخذ اسم المبادرة من بطاقتها</label>}
+                  {f.type === 'table' && <select aria-label={`استيراد الحقل ${i + 1}`} value={f.import ? `${f.import.model}|${f.import.field}` : ''}
+                    onChange={(e) => { const [model, field] = e.target.value.split('|'); setField(i, { import: model ? { model, field } : undefined }); }}>
+                    <option value="">بلا استيراد</option>
+                    {sources.flatMap((x) => x.fields.filter((t) => t.type === 'table').map((t) => <option key={`${x.key}|${t.key}`} value={`${x.key}|${t.key}`}>يستورد من {x.title_ar}: {t.label}</option>))}</select>}
+                </div>
                 <span className="fb-acts">
                   <button type="button" aria-label={`رفع الحقل ${i + 1}`} onClick={() => moveField(i, -1)}>▲</button>
                   <button type="button" aria-label={`خفض الحقل ${i + 1}`} onClick={() => moveField(i, 1)}>▼</button>

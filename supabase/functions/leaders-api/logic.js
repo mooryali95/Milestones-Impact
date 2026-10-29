@@ -430,10 +430,20 @@ export function rankFor(points) {
 }
 
 // النماذج التعليمية المتاحة بمستوى المشارك في كل بُعد
-export function modelsFor(models, levels) {
+// scope: نطاق عمل المشارك (participants.work_scope). النموذج المخصص لنطاقات
+// بعينها (scopes) لا يظهر لغيرها، ومن لم يحدد نطاقه يُعامل معاملة المشروع.
+const scopeOk = (scopes, scope) => !(scopes || []).length || scopes.includes(scope || 'project');
+export function modelsFor(models, levels, scope = null) {
   return models
-    .filter((m) => m.active !== false && levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level])
+    .filter((m) => m.active !== false && levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && scopeOk(m.scopes, scope))
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
+}
+
+// حقول النموذج كما تخص المشارك: الحقل قد يُطلب من مستوى أعلى (min_level)
+// أو لنطاقات بعينها (scopes)، فيتعمق النموذج نفسه مع المستوى والنطاق دون
+// نسخ نموذج لكل حالة. level: مستوى المشارك في بُعد النموذج.
+export function fieldsFor(fields, level, scope = null) {
+  return (fields || []).filter((f) => (!f.min_level || RANK[level] >= RANK[f.min_level]) && scopeOk(f.scopes, scope));
 }
 
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
@@ -508,7 +518,7 @@ export function isoWeek(d = new Date()) {
 // ════════════════════════════════════════════════════════════════
 // المتطلب من هذه الأنواع لا يكتمل بنقرة؛ يحسمه دليل يجمعه النظام.
 // تجاوز يدوي من المستشار (participant_requirements.status = done) يبقى ممكنًا.
-export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum'];
+export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum', 'model', 'capstone'];
 
 // ── القراءة ──
 // الباب يُقسم إلى READ_SLICES شريحة متساوية الارتفاع. القراءة الفعلية:
@@ -789,7 +799,21 @@ export function activityFor(req, ev, now = Date.now()) {
     if (ev.curriculumLocked) return { type: 'curriculum', done: false, locked: true, count: 0, total: 0, items: [] };
     return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
   }
+  if (req.kind === 'model') return ev.modelsLocked ? { type: 'model', done: false, locked: true, model_key: c.model_key || null } : modelStatus(c, ev.models || {});
+  if (req.kind === 'capstone') return { type: 'capstone', done: ev.capstone?.status === 'approved', status: ev.capstone?.status || null, readiness: ev.capstone?.readiness ?? null };
   return null;
+}
+
+// متطلب «نموذج» في الرحلة: لا رفع ملفات ولا نسخة ثانية من العمل. يكتمل من
+// تسليم المشارك للنموذج نفسه في مكتبة النماذج، أو من تقييم المستشار له.
+// models: نماذج المشارك المتاحة له بمفاتيحها؛ الغائب عنها لا يخص مستواه أو
+// نطاقه، فلا يحبس مرحلته.
+export function modelStatus(c, models) {
+  if (!(c.model_key in models)) return { type: 'model', done: true, na: true, model_key: c.model_key || null };
+  const s = models[c.model_key] || null;
+  const st = s?.status || null;
+  const done = c.accept === 'submitted' ? st === 'submitted' || st === 'reviewed' : st === 'reviewed';
+  return { type: 'model', done, model_key: c.model_key || null, model_id: s?.model_id || null, title: s?.title || null, status: st, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
 }
 
 // إعداد النشاط كما يحفظه المستشار: حقول معروفة بقيم مضبوطة فقط.
@@ -823,6 +847,12 @@ export function cleanConfig(kind, cfg, prev = {}) {
     // منهج المسار كله، أو مواد بُعد واحد (لتوزيعه على مراحل)
     return DIMENSIONS.includes(c.dimension) ? { dimension: c.dimension } : {};
   }
+  if (kind === 'model') {
+    const key = String(c.model_key || '').trim();
+    if (!/^[a-z0-9-]{2,60}$/.test(key)) throw new Error('اختر النموذج التعليمي الذي يكتمل به المتطلب');
+    return { model_key: key, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
+  }
+  if (kind === 'capstone') return {};
   if (kind === 'coaching') {
     const out = {
       sessions_required: intIn(c.sessions_required, 1, 30, 1), minutes: intIn(c.minutes, 5, 480, 60),
