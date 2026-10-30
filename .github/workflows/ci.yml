@@ -45,6 +45,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # أنواع دالة leaders-api: صفر أخطاء، فأي خطأ جديد يُكتشف قبل النشر
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Typecheck leaders-api
+        run: deno check supabase/functions/leaders-api/index.ts
+
       - name: Test
         run: npm test
 
