@@ -84,6 +84,11 @@ describe('مصدر واحد لكل معلومة', () => {
       expect(readFileSync(join(ROOT, css), 'utf8'), css).not.toMatch(/#[0-9a-fA-F]{6}\b/);
     }
     const { BRAND } = await import('../../shared/js/brand.js');
+    // ألوان البريد نسخة من ألوان الهوية (دوال الحافة لا تستورد من خارجها)، فكل قيمة فيها لون هوية
+    const mail = readFileSync(join(ROOT, 'supabase/functions/_shared/mail.ts'), 'utf8');
+    const palette = new Set(Object.values(BRAND).map((v) => v.toUpperCase()));
+    for (const h of mail.match(/#[0-9a-fA-F]{6}\b/g)) expect(palette.has(h.toUpperCase()), `mail.ts ${h}`).toBe(true);
+    expect(mail, 'لا اسم قديم في تذييل البريد').not.toMatch(/مَ?عل?َ?م/);
     const generated = readFileSync(join(ROOT, 'shared/css/brand.css'), 'utf8');
     for (const [k, v] of Object.entries(BRAND)) expect(generated, k).toContain(`--brand-${k}: ${v};`);
   });
