@@ -1077,3 +1077,15 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .org-see-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .org-see-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 8px 12px; border-inline-start: 2px solid var(--brand-copper); background: var(--brand-cream-pale); border-radius: 4px; }
 .org-see-list small { color: var(--muted); }
+
+/* انضم كخبير (/expert) */
+.xp .eyebrow { margin: 0; font-size: 11px; letter-spacing: .3em; color: var(--accent); }
+.xp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.xp-pick { border: 0; padding: 0; margin: 0; }
+.xp-pick legend { font-weight: 600; margin-bottom: 8px; }
+.xp-pick > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.xp-opt { position: relative; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--surface); }
+.xp-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.xp-opt small { color: var(--muted); font-size: 12px; }
+.xp-opt.on { border-color: var(--graphite); box-shadow: inset 0 0 0 1px var(--graphite); background: var(--brand-cream-pale); }
+.xp-opt:focus-within { outline: 2px solid var(--copper); outline-offset: 2px; }

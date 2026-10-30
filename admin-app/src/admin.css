@@ -1383,3 +1383,23 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .cp-add-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .cp-tpl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 10px; }
 @media (max-width: 640px) { .cp-tpl { grid-template-columns: 1fr; } }
+
+/* ── الخبراء ── */
+.ex { display: grid; gap: 16px; }
+.ex-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.ex-cover-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: .78rem; color: var(--brand-ink-mid); }
+.ex-cover-list b { margin-inline-end: 4px; color: var(--brand-graphite); font-size: 1rem; }
+.ex-form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ex-form h4 { margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--brand-line); }
+.ex-form h4:first-child { border-top: 0; padding-top: 0; }
+.ex-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.ex-toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ex-tg { position: relative; display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--brand-line); border-radius: 999px; font-size: .82rem; cursor: pointer; background: var(--brand-white); }
+.ex-tg input { position: absolute; opacity: 0; pointer-events: none; }
+.ex-tg.on { border-color: var(--brand-graphite); background: var(--brand-graphite); color: var(--brand-paper); }
+.ex-tg:focus-within { outline: 2px solid var(--brand-copper); outline-offset: 2px; }
+.ex-profile { display: grid; gap: 14px; }
+.ex-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ex-head h3 { margin: 0 0 4px; }
+.ex-side { display: grid; gap: 10px; justify-items: end; }
+@media (max-width: 640px) { .ex-side { justify-items: start; } }

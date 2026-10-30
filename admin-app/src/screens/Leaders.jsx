@@ -16,20 +16,21 @@ import Impact from './Impact.jsx';
 import Capstones from './Capstones.jsx';
 import Programs from './Programs.jsx';
 import ContentBank from './ContentBank.jsx';
+import Experts from './Experts.jsx';
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
 // الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
 const TAB_GROUPS = [
-  ['اليومي', ['overview', 'participants', 'capstones', 'activities']],
+  ['اليومي', ['overview', 'participants', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels']],
   ['النتائج', ['impact', 'certs']],
@@ -45,6 +46,7 @@ export default function Leaders({ canWrite, pending }) {
   const orgId = tab === 'orgs' ? route.id : null;
   const track = tab === 'tracks' ? route.id : null;
   const capId = tab === 'capstones' ? route.id : null;
+  const expertId = tab === 'experts' ? route.id : null;
   const [orgData, setOrgData] = useState(null);
   // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
   useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
@@ -75,6 +77,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'overview') body = <Overview canWrite={canWrite} pending={pending} orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={(id) => (id ? openPerson(id) : at('participants'))} initialStatus={status} />;
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} />;
+  else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
