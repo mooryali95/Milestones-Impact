@@ -242,18 +242,14 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   project: t.project_ar || null, journey: t.journey_ar || null,
 };
 
-export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [placements, def, progress, assessments, passkeys, cells, reports, org] = await Promise.all([
+// الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
+export async function journeyFor(p: any) {
+  const [placements, def, progress, assessments, reports] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
-    db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
-    db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
-    p.organization_id
-      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
-      : null,
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -270,6 +266,18 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   const activity = await evidenceFor(p, def.requirements, levels, approved, def.cohort?.id || null);
   const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity });
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey) };
+}
+
+export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
+  const [{ pl, levels, approved, def, journey, progress }, passkeys, cells, org] = await Promise.all([
+    journeyFor(p),
+    db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
+    db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
+    p.organization_id
+      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
+      : null,
+  ]);
   const track = trackView(await trackFor(levels), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
@@ -290,7 +298,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
-    progress: journeyProgress(journey),
+    progress,
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'

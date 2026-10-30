@@ -9,11 +9,7 @@ import { LEVELS } from '../labels.js';
 import { JourneySkeleton } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 
-const STATUS = {
-  registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
-  placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
-};
-const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
+import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
@@ -90,7 +86,6 @@ function Bars({ obj, label = (k) => k, total }) {
 }
 
 // أثر الجهة: القياس المبدئي مقابل البعدي كما يحسبه الخادم، دون أي حساب هنا
-const DIM_AR = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
 
 // محفظة مبادرات الدفعة: مشاريع تخرج مشاركي الجهة. الوثيقة كاملة بعد اعتمادها
 const SCOPE_AR = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };

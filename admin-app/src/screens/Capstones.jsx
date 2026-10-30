@@ -7,6 +7,7 @@
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
+import { PRIORITY_WEIGHT } from '../../../supabase/functions/leaders-api/capstone.js';
 import { useUI, Spinner } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 
@@ -46,11 +47,11 @@ function Review({ d, canWrite, onSaved }) {
   };
   return (
     <section className="la-card cps-review">
-      <h3>تقييمك بالمعيار <small className="la-muted">· أبعاد {DIM[d.priority] || 'الإطار الأولوي'} وزنها مضاعف</small></h3>
+      <h3>تقييمك بالمعيار <small className="la-muted">· أبعاد {DIM[d.priority] || 'الإطار الأولوي'} وزنها ×{PRIORITY_WEIGHT}</small></h3>
       <fieldset disabled={!canWrite || !!busy}>
         {d.rubric.map((r) => (
           <div key={r.key} className="cps-crit">
-            <div className="la-row between"><b>{r.title}</b>{r.dimension === d.priority && <span className="la-chip warn">وزن مضاعف</span>}</div>
+            <div className="la-row between"><b>{r.title}</b>{r.dimension === d.priority && <span className="la-chip warn">الوزن ×{PRIORITY_WEIGHT}</span>}</div>
             <div className="cps-anchors" role="radiogroup" aria-label={r.title}>
               {r.anchors.map((a, i) => (
                 <button key={i} type="button" role="radio" aria-checked={scores[r.key] === i + 1} className={scores[r.key] === i + 1 ? 'on' : ''}

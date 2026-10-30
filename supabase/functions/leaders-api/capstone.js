@@ -21,11 +21,13 @@ export const STATUS_TITLES = {
   accepted: 'بانتظار تأييد الراعي', approved: 'معتمد',
 };
 // الوثيقة لا تُسلَّم قبل اكتمال فصولها وبلوغ الجاهزية هذا الحد
+// نقاط اعتماد الوثيقة: تُمنح مرة عند الاعتماد، وتعرضها الواجهة من هنا
+export const APPROVAL_POINTS = 100;
 export const READY_MIN = 80;
 // تحسين واحد بعد ملاحظات المستشار، ثم يُعتمد أو يُعاد بقرار مسبب
 export const MAX_REVISIONS = 1;
 
-// ── معيار التقييم: ستة أبعاد من 1 إلى 4 ──
+// ── معيار التقييم: أبعاد RUBRIC، كل منها من 1 إلى RUBRIC_MAX ──
 // dimension: الإطار الذي يقيسه البعد؛ أبعاد الإطار الأولوي في مسار المشارك
 // تُضاعف أوزانها، فيُقيَّم كل مسار بعدسته دون 27 معيارًا.
 export const RUBRIC = [
@@ -45,12 +47,13 @@ export const RUBRIC = [
 export const RUBRIC_MAX = 4;
 
 // درجة المعيار من 100: كل بعد وزنه 1، وأبعاد الإطار الأولوي وزنها 2
+export const PRIORITY_WEIGHT = 2;
 export function rubricScore(scores, priority = null) {
   let got = 0, max = 0;
   for (const r of RUBRIC) {
     const s = Math.round(Number(scores?.[r.key]));
     if (!(s >= 1 && s <= RUBRIC_MAX)) return null;
-    const w = r.dimension === priority ? 2 : 1;
+    const w = r.dimension === priority ? PRIORITY_WEIGHT : 1;
     got += w * s; max += w * RUBRIC_MAX;
   }
   return Math.round((got / max) * 1000) / 10;

@@ -4,6 +4,8 @@
 // بلا اعتماد على قاعدة البيانات ولا على Deno، حتى يُختبر في vitest
 // (leaders-app/src/logic.test.js) ويُستورد كما هو في دالة الحافة.
 
+import { LEVEL_AR, TIER_AR } from './labels.js';
+
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
 export const TIERS = ['knowledge', 'skill', 'behavior'];
@@ -108,8 +110,6 @@ export const DEFAULT_MODEL = {
   borderline: 8,
   min_behavior_items: 3,
 };
-const TIER_AR = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
-const LEVEL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
 
 export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
   const m = { ...DEFAULT_MODEL, ...(model || {}) };
@@ -496,12 +496,6 @@ export function coordParticipant(p, perms) {
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }
   if (perms.scores) out.levels = p.levels || null;
   return out;
-}
-
-// نسبة الإنجاز: البنود المنجزة من المتطلبات الإلزامية النشطة
-export function progressPct(doneCount, requiredTotal) {
-  if (!requiredTotal) return 0;
-  return Math.min(100, Math.round((doneCount / requiredTotal) * 100));
 }
 
 // مفتاح أسبوع ISO لمنع إرسال التقرير الأسبوعي مرتين

@@ -20,17 +20,11 @@ export async function L(action, body = {}) {
   return d;
 }
 
-export const DIM = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
-export const DIM_EN = { milestone: 'Milestone', impact: 'Impact', leadership: 'Leadership' };
-export const LVL = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
-export const STATUS = {
-  registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
-  placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
-};
-export const REQ = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد' };
+import { DIM_AR as DIM, DIM_SHORT as DIM_EN, FUNNEL, LEVEL_AR as LVL, PARTICIPANT_STATUS as STATUS, REQ_STATUS as REQ } from '../../supabase/functions/leaders-api/labels.js';
+
+export { DIM, DIM_EN, FUNNEL, LVL, STATUS, REQ };
 export const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'نقل يدوي', none: 'غير محدد' };
 export const SUB_ST = { submitted: ['بانتظار تقييمك', 'warn'], reviewed: ['قُيّم', 'ok'], returned: ['أُعيد للتطوير', ''], draft: ['مسودة', ''] };
-export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
 export const DIMS = Object.keys(DIM);
 const LVLS = Object.keys(LVL);
 

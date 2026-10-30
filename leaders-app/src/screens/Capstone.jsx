@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
+import { LEADER_WEIGHTS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 
 const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: 'قيّمه المستشار', c: 'ok' }
   : s.status === 'submitted' ? { t: 'مسلّم', c: 'gold' }
@@ -186,7 +187,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
 
           <details className="card cp-rubric">
             <summary>كيف تُقيَّم الوثيقة</summary>
-            <p className="muted small">ستة أبعاد من 1 إلى 4. أبعاد الإطار الأولوي في مسارك وزنها مضاعف{d.track?.priority ? ` (${dimOf(d.track.priority).short})` : ''}. الدرجة تدخل تقرير القائد بوزن 30%، ولا تظهر في الشهادة.</p>
+            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. أبعاد الإطار الأولوي في مسارك وزنها ×{PRIORITY_WEIGHT}{d.track?.priority ? ` (${dimOf(d.track.priority).short})` : ''}. الدرجة تدخل تقرير القائد بوزن {LEADER_WEIGHTS.capstone}%، ولا تظهر في الشهادة.</p>
             <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}</b><small>{r.anchors[3]}</small></li>)}</ul>
           </details>
         </aside>

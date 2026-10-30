@@ -13,14 +13,12 @@ import { award, CAPSTONE_LOCKED, initiativeFor, mePayload } from './participant.
 import { cohortOf } from './programs.ts';
 import { isEmail, normalizeEmail, overallLevel, trackKey } from './logic.js';
 import {
-  bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
-  modelFields, READY_MIN, readiness, RUBRIC, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES,
-} from './capstone.js';
+  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
+  modelFields, READY_MIN, readiness, RUBRIC, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES } from './capstone.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
 
-const APPROVAL_POINTS = 100;
 const SPONSOR_DAYS = 21;
 const MODEL_COLS = 'id, key, dimension, sort, min_level, active, scopes, capstone_sort, title_ar, icon, summary_ar, points, fields';
 

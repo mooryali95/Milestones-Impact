@@ -3,11 +3,11 @@
 // ════════════════════════════════════════════════════════════════
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
-import { journeyDefinition } from './programs.ts';
+import { journeyFor } from './participant.ts';
 import {
   allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
-import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
+import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -116,20 +116,21 @@ export async function dashboardFor(c: any) {
   const d: any = await orgPayload({ id: c.organization_id });
   const ids = d.participants.map((p: any) => p.id);
 
-  // متطلبات المنجزة لكل المشاركين تتجاوز حد القراءة الواحدة بسرعة، فتُقرأ بصفحات ودفعات
-  const [requiredTotal, done, levels] = await Promise.all([
-    // متطلبات برنامج دفعة الجهة الجارية
-    journeyDefinition({ organization_id: c.organization_id }).then((def) => def.requirements.filter((r: any) => r.required).length),
-    allFor(ids, () => db.from('participant_requirements').select('participant_id').eq('status', 'done').order('participant_id').order('requirement_id')),
+  // نسبة التقدم بالحساب نفسه الذي يراه المشارك في رحلته (journeyFor)، لا بعدّ منفصل
+  const [rows, levels] = await Promise.all([
+    allFor(ids, () => db.from('participants').select('*').order('id'), 'id'),
     perms.scores ? allFor(ids, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension')) : Promise.resolve([]),
   ]);
-  const doneBy: Record<string, number> = {};
-  for (const r of done) doneBy[r.participant_id] = (doneBy[r.participant_id] || 0) + 1;
+  const progressBy: Record<string, number> = {};
+  const queue = [...(rows as any[])];
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) progressBy[r.id] = (await journeyFor(r)).progress;
+  }));
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
 
   const participants = d.participants.map((p: any) => coordParticipant(
-    { ...p, progress: progressPct(doneBy[p.id] || 0, requiredTotal ?? 0), levels: levelsBy[p.id] || null }, perms));
+    { ...p, progress: progressBy[p.id] ?? 0, levels: levelsBy[p.id] || null }, perms));
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = participants.length ? Math.round(participants.reduce((a: number, p: any) => a + p.progress, 0) / participants.length) : 0;
   return {

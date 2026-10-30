@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
+import { POINTS } from '../../../supabase/functions/leaders-api/logic.js';
 import { Models, Wins } from './Models.jsx';
 import { ChapterLab } from './Lab.jsx';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
@@ -340,7 +341,7 @@ function Review({ data, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const ready = answers.every((x) => x !== null);
-  const potential = 10 + data.quiz.length * 5 + 5;
+  const potential = POINTS.chapter + data.quiz.length * POINTS.perCorrect + (data.reflection ? POINTS.reflection : 0);
 
   const submit = async () => {
     setBusy(true); setError('');
@@ -365,7 +366,7 @@ function Review({ data, onDone }) {
           <span className="reflect-q"><b>سؤال للتأمل</b>{data.reflection}</span>
           <textarea className="input" rows={3} value={reflection} onChange={(e) => setReflection(e.target.value)}
             placeholder="اكتب تأملك على عملك الحقيقي. سطران يكفيان." />
-          <small className="muted">التأمل الصادق يمنحك 5 نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
+          <small className="muted">التأمل الصادق يمنحك {POINTS.reflection} نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
         </label>
       )}
 
