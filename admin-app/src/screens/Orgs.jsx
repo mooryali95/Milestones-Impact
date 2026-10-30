@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
+import FilterBar, { useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts } from '../filters.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
@@ -35,12 +37,27 @@ function useCopy() {
   };
 }
 
+const ORG_PRESETS = [
+  { key: 'waiting', label: 'لديها ما ينتظر اعتمادك', test: (o) => o.stats.pending_approval > 0 },
+  { key: 'quiet', label: 'بلا نشاط هذا الأسبوع', test: (o) => o.stats.total > 0 && !o.stats.active_week },
+  { key: 'full', label: 'اكتملت مقاعدها', test: (o) => o.seats && o.stats.total >= o.seats },
+  { key: 'empty', label: 'بلا مشاركين', test: (o) => !o.stats.total },
+  { key: 'off', label: 'موقوفة', test: (o) => o.status === 'inactive' },
+];
+
 function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const { toast } = useUI();
   const copy = useCopy();
   const list = data.orgs || [];
   const un = data.unassigned || {};
   const [typedTo, setTypedTo] = useState({});
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'sector', 'state']);
+  const fields = useMemo(() => [
+    { key: 'sector', label: 'القطاعات', get: (o) => o.sector || '', options: [...new Set(list.map((o) => o.sector).filter(Boolean))].sort().map((x) => [x, x]) },
+    { key: 'state', label: 'الحالات', get: (o) => (o.status === 'inactive' ? 'inactive' : 'active'), options: [['active', 'نشطة'], ['inactive', 'موقوفة']] },
+  ], [list]);
+  const shown = useMemo(() => applyFilters(list, { fields, presets: ORG_PRESETS, text: (o) => [o.name, o.short_name, o.sector, o.contact_name, o.contact_email, ...domainsOf(o)].join(' ') }, f), [list, f, fields]);
+  const counts = useMemo(() => presetCounts(list, ORG_PRESETS), [list]);
   const total = list.reduce((a, o) => a + o.stats.total, 0) + (un.total || 0);
   const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
   const filled = list.reduce((a, o) => a + (o.seats ? o.stats.total : 0), 0);
@@ -63,8 +80,10 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
         <p className="la-muted">يُنسب المشارك لجهته تلقائيًا إن جاء برابطها أو من موقعها، ويبقى الانتساب محفوظًا 30 يومًا حتى يسجّل.</p>
         {canWrite && <button className="btn-sm primary" onClick={onAdd}>+ جهة جديدة</button>}
       </div>
+      <FilterBar scope="orgs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={ORG_PRESETS} counts={counts}
+        shown={shown.length} total={list.length} noun="جهة" placeholder="ابحث باسم الجهة أو القطاع أو النطاق أو جهة التواصل" />
       <div className="la-orgs">
-        {list.map((o) => (
+        {shown.map((o) => (
           <article key={o.id} className={`la-org${o.status === 'inactive' ? ' off' : ''}`} style={{ '--org': orgColor(o) }}>
             <header onClick={() => onOpen(o.id)} style={{ cursor: 'pointer' }}>
               <span className="la-org-mark">{(o.short_name || o.name).slice(0, 2)}</span>
