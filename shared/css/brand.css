@@ -1,0 +1,57 @@
+/* ══════════════════════════════════════════════════════════════
+   ألوان الهوية: متغيرات CSS مولَّدة من shared/js/brand.js، لا تُحرَّر يدويًا
+   ══════════════════════════════════════════════════════════════
+   node scripts/brand/build-css.mjs يعيد توليده. يستورده تطبيق القادة ولوحة الإدارة،
+   ولا يُكتب لون هوية بقيمته في ملف آخر (يفحصه leaders-app/src/single-source.test.js). */
+:root {
+  --brand-ink: #061318;
+  --brand-ink-deep: #0A1820;
+  --brand-ink-soft: #1F3340;
+  --brand-ink-text: #14282E;
+  --brand-ink-mid: #4A5A66;
+  --brand-ink-blue: #33464B;
+  --brand-graphite: #0B272F;
+  --brand-slate: #12414E;
+  --brand-gold: #A97A2E;
+  --brand-gold-mid: #94702E;
+  --brand-gold-warm: #B8873A;
+  --brand-gold-deep: #8A6424;
+  --brand-gold-accent: #8E6524;
+  --brand-gold-dark: #8A6A2A;
+  --brand-copper: #C79A4B;
+  --brand-gold-light: #D9A85A;
+  --brand-gold-pale: #EBD9B4;
+  --brand-mist: #EAF0F0;
+  --brand-mist-dark: #A9BFC3;
+  --brand-sand: #EFE7D8;
+  --brand-sand-light: #F7F2E5;
+  --brand-sand-soft: #F4EFE4;
+  --brand-sand-paper: #FBF8EF;
+  --brand-cream: #F6EEDC;
+  --brand-cream-light: #FBF6EC;
+  --brand-cream-pale: #FBF8F1;
+  --brand-cream-warm: #FBF4E6;
+  --brand-cream-hover: #F7F1E6;
+  --brand-cream-neutral: #FAF8F3;
+  --brand-cream-faint: #FBFAF7;
+  --brand-paper: #FFFDF8;
+  --brand-off-white: #FDFCF8;
+  --brand-bg: #F4F1EA;
+  --brand-bg-alt: #F1EEE7;
+  --brand-white: #FFFFFF;
+  --brand-muted: #4A6A72;
+  --brand-muted-mid: #5B7178;
+  --brand-muted-cool: #5E6E78;
+  --brand-muted-light: #62717B;
+  --brand-muted-soft: #6B7C80;
+  --brand-muted-pale: #6E8085;
+  --brand-muted-faint: #8A9AA0;
+  --brand-muted-ghost: #9AA9AD;
+  --brand-line: #E5E1D6;
+  --brand-line-soft: #EEE8DC;
+  --brand-line-strong: #CFC8B8;
+  --brand-line-cool: #DCE2E1;
+  --brand-line-faint: #C8D0D6;
+  --brand-clay: #9A7060;
+  --brand-umber: #6B4E3D;
+}

@@ -132,7 +132,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                     <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
                       <td data-label="الاسم"><b>{p.full_name}</b><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
-                      <td data-label="الجهة">{og ? <span className="la-orgtag" style={{ '--org': og.color || '#A97A2E' }}>{og.short_name || og.name}</span> : p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
+                      <td data-label="الجهة">{og ? <span className="la-orgtag" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span> : p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
                       <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>

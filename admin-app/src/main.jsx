@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import './admin.css';
 import './leaders-admin.css';

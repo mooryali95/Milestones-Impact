@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import { captureAttribution } from './attribution.js';
+import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import './styles.css';
 

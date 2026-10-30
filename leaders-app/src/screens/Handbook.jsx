@@ -8,6 +8,7 @@
 //   • لا طباعة ولا قائمة سياق ولا سحب، وتُحجب الصفحة حين تفقد التركيز
 //     (أغلب أدوات التصوير تسرق التركيز) أو عند مفاتيح التصوير والطباعة
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { BRAND } from '../../../shared/js/brand.js';
 import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
@@ -23,7 +24,7 @@ const FONT = '"Noto Naskh Arabic", "Amiri", "Noto Kufi Arabic", serif';
 const DISPLAY = '"Amiri", "Noto Naskh Arabic", serif';
 const KUFI = '"Noto Kufi Arabic", system-ui, sans-serif';
 const LATIN = '"Cormorant Garamond", Georgia, serif';
-const COLORS = { text: '#14282E', muted: '#5B7178', accent: '#A97A2E', gold: '#B8873A', quote: '#12414E', rule: 'rgba(169,122,46,.35)', paper: '#FFFDF8' };
+const COLORS = { text: BRAND['ink-text'], muted: BRAND['muted-mid'], accent: BRAND.gold, gold: BRAND['gold-warm'], quote: BRAND.slate, rule: 'rgba(169,122,46,.35)', paper: BRAND.paper };
 const WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
 const PART_EN = { milestone: 'Part I · Milestone', impact: 'Part II · Impact', leadership: 'Part III · Leadership' };
 

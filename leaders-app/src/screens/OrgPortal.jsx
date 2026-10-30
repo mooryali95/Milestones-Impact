@@ -191,9 +191,9 @@ function Dashboard({ me, onLogout }) {
           <h1>{org.name}</h1>
           <p className="muted">أهلًا {me.coordinator.full_name || ''}. هذه لوحة مشاركي جهتك في برنامج القادة، وتتحدث مع كل نشاط.</p>
           <div className="row">
-            {perms.export && <><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={exportXlsx}>تصدير Excel</button>
-              <button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={printReport}>تقرير الجهة</button></>}
-            <button className="link small" style={{ color: '#EAF0F0' }} onClick={onLogout}>خروج</button>
+            {perms.export && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
+              <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
+            <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
         </div>
         <div className="op-seats"><b>{kpis.total}</b><small>{org.seats ? `من ${org.seats} مقعد` : 'مشارك'}</small></div>

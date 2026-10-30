@@ -76,6 +76,17 @@ describe('مصدر واحد لكل معلومة', () => {
       expect(readFileSync(join(ROOT, css), 'utf8'), css).not.toMatch(STATUS_HEX);
     }
   });
+  it('ألوان الهوية تُعرَّف في shared/js/brand.js وحده، وbrand.css مولَّد منه', async () => {
+    // OrgForm: ألوان تختارها الجهة · GoogleButton: ألوان شعار Google الرسمية
+    const allow = ['admin-app/src/screens/OrgForm.jsx', 'leaders-app/src/GoogleButton.jsx'];
+    expect(offenders(/#[0-9a-fA-F]{6}\b/, allow).filter((p) => /^(admin-app|leaders-app)\//.test(p))).toEqual([]);
+    for (const css of ['admin-app/src/admin.css', 'admin-app/src/leaders-admin.css', 'leaders-app/src/styles.css']) {
+      expect(readFileSync(join(ROOT, css), 'utf8'), css).not.toMatch(/#[0-9a-fA-F]{6}\b/);
+    }
+    const { BRAND } = await import('../../shared/js/brand.js');
+    const generated = readFileSync(join(ROOT, 'shared/css/brand.css'), 'utf8');
+    for (const [k, v] of Object.entries(BRAND)) expect(generated, k).toContain(`--brand-${k}: ${v};`);
+  });
   it('المصطلحات المعتمدة: لا «الكوتشينغ» ولا «مجتمع الأقران» في الكود', () => {
     expect(offenders(/الكوتشينغ|الكوتشنغ|مجتمع الأقران/)).toEqual([]);
   });

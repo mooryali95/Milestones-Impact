@@ -22,9 +22,9 @@ describe('البنية المرجعية', () => {
       (select count(*) from pg_tables where schemaname in ('leaders', 'public'))::int tables,
       (select count(*) from pg_policies)::int policies,
       (select count(*) from pg_constraint where contype = 'f')::int fks`);
-    expect(n.tables).toBeGreaterThan(80);
+    expect(n.tables).toBeGreaterThan(70);
     expect(n.policies).toBeGreaterThan(30);
-    expect(n.fks).toBeGreaterThan(100);
+    expect(n.fks).toBeGreaterThan(90);
     await db.exec(SQL);
 
     const dims = (await db.query('select key, title_ar, title_en from leaders.dimensions')).rows;

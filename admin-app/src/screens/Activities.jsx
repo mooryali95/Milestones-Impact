@@ -7,6 +7,7 @@
 // الاتصال الفوري، وتأكيد الموجّه لكل جلسة (حضر أو لم يحضر).
 // إعداد كل نشاط (الرابط، العدد المطلوب) في «الرحلة والمتطلبات».
 import React, { useCallback, useEffect, useState } from 'react';
+import { BRAND } from '../../../shared/js/brand.js';
 import QRCode from 'qrcode';
 import { L } from '../leaders.js';
 import Form from '../Form.jsx';
@@ -47,7 +48,7 @@ function QrScreen({ id, onClose }) {
       const r = await L('admin.workshop-qr', { id });
       if (!alive) return;
       setD(r);
-      if (r.success) setImg(await QRCode.toDataURL(r.url, { width: 640, margin: 1, color: { dark: '#061318', light: '#FFFFFF' } }));
+      if (r.success) setImg(await QRCode.toDataURL(r.url, { width: 640, margin: 1, color: { dark: BRAND.ink, light: BRAND.white } }));
       t = setTimeout(load, ((r.refresh_in || 10) + 0.5) * 1000);
     };
     load();

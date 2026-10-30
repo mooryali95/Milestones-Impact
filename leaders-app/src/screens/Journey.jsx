@@ -28,8 +28,8 @@ function Ring({ value }) {
     <div className="ring" aria-label={`نسبة التقدم ${value}%`}>
       <svg width="104" height="104" viewBox="0 0 104 104">
         <circle cx="52" cy="52" r={r} fill="none" stroke="rgba(234,240,240,.15)" strokeWidth="8" />
-        <circle cx="52" cy="52" r={r} fill="none" stroke="#C79A4B" strokeWidth="8" strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} style={{ transition: 'stroke-dashoffset .6s' }} />
+        <circle cx="52" cy="52" r={r} fill="none" strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - value / 100)} style={{ stroke: 'var(--brand-copper)', transition: 'stroke-dashoffset .6s' }} />
       </svg>
       <b>{value}%</b>
     </div>
