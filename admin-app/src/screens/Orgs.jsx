@@ -84,7 +84,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
             </div>
           </article>
         ))}
-        <article className="la-org none" style={{ '--org': '#8A9AA0' }}>
+        <article className="la-org none" style={{ '--org': 'var(--brand-muted-faint)' }}>
           <header onClick={() => onOpen('none')} style={{ cursor: 'pointer' }}><span className="la-org-mark">؟</span><div><b>بدون جهة</b><small>سجّلوا دون رابط جهة</small></div></header>
           <Seats n={un.total || 0} />
           {(un.typed || []).length ? (

@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // توكن جلسة الإدارة نفسه يُرسل إلى leaders-api، فتتحقق منه في api_sessions.
 import { SUPABASE_URL } from '../../src/lib/api.js';
+import { BRAND } from '../../shared/js/brand.js';
 import { post, session } from './api.js';
 
 const API = `${SUPABASE_URL}/functions/v1/leaders-api`;
@@ -41,7 +42,7 @@ export const date = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-grego
 export const APP_URL = SITES.leaders;
 export const inviteUrl = (o, c) => `${APP_URL}/j/${encodeURIComponent(o.invite_code || '')}${c ? `/${encodeURIComponent(c)}` : ''}`;
 export const validCampaign = (c) => /^[a-z0-9_-]{1,40}$/.test(c);
-export const orgColor = (o) => o?.color || '#A97A2E';
+export const orgColor = (o) => o?.color || BRAND.gold;
 export const domainsOf = (o) => (Array.isArray(o?.domains) ? o.domains : []);
 
 // تصدير CSV بترميز يفتحه Excel بالعربية

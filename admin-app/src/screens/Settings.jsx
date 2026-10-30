@@ -2,6 +2,7 @@
 // الإعدادات: الملف، تطبيق المصادقة، مفاتيح المرور، الجلسات، المستخدمون
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useState } from 'react';
+import { BRAND } from '../../../shared/js/brand.js';
 import { call, fmtDate, ROLE_LABELS, session } from '../api.js';
 import { passkeyCancelled, passkeyCreate, passkeySupported } from '../passkey.js';
 import { useEscape, useUI } from '../ui.jsx';
@@ -14,7 +15,7 @@ function Qr({ uri }) {
   const [src, setSrc] = useState('');
   useEffect(() => {
     let live = true;
-    QRCode.toDataURL(uri, { width: 160, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#061318', light: '#FDFCF8' } })
+    QRCode.toDataURL(uri, { width: 160, margin: 1, errorCorrectionLevel: 'M', color: { dark: BRAND.ink, light: BRAND['off-white'] } })
       .then((u) => { if (live) setSrc(u); }).catch(() => {});
     return () => { live = false; };
   }, [uri]);
