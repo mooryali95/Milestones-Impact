@@ -481,10 +481,9 @@ export async function assessmentAnswer(p: any, b: Body) {
 
 export async function assessmentSubmit(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
-  const [qs, ans, rules, model] = await Promise.all([
+  const [qs, ans, model] = await Promise.all([
     db.from('questions').select('*').eq('instrument_id', a.instrument_id).eq('active', true),
     db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id),
-    db.from('level_rules').select('*'),
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
   const questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
@@ -494,8 +493,8 @@ export async function assessmentSubmit(p: any, b: Body) {
   const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
-  // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
-  const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
+  // المعيار المركّب وحده، من جدوله أو من قيمه الافتراضية في logic.js
+  const result = placementFromAnswers(questions, answers, [], model.data || DEFAULT_MODEL);
   const split = skillSplit(questions, answers);
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({

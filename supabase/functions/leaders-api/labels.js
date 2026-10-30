@@ -47,3 +47,14 @@ export const COACH_STATUS_ADMIN = { ...COACH_STATUS, attended: 'حضر', no_show
 // حالة قراءة الباب كما يقيسها الخادم من وقت القراءة وتمريرها
 export const READ_STATUS = { read: 'قرأته', skimmed: 'تصفّح سريع', partial: 'قراءة جزئية', unread: 'لم تقرأه' };
 export const READ_STATUS_ADMIN = { ...READ_STATUS, read: 'قرأ', unread: 'لم يقرأ' };
+
+// ── المصطلحات المعتمدة: اسم واحد لكل مفهوم في الواجهات والمحتوى ──
+// المستشار يقيّم ويعتمد، والموجّه يرافق جلسات التوجيه، والمدرب يقود أيام التدريب، والخبير يقدّم الاستشارة.
+// الصيغ المرفوضة يمنعها leaders-app/src/single-source.test.js في الكود.
+export const TERMS = {
+  coaching: 'التوجيه',            // لا «الكوتشينغ»
+  community: 'مجتمع الممارسة',    // لا «مجتمع الأقران»
+  handbook: 'كتيب القائد',
+  capstone: 'وثيقة المبادرة (مشروع التخرج)',
+  framework: 'الإطار',            // milestone وimpact وleadership
+};

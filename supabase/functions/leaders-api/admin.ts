@@ -359,7 +359,6 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   placement_model:    { table: 'placement_model', key: ['id'],
                         fields: ['w_knowledge', 'w_skill', 'w_behavior', 'min_intermediate', 'min_advanced', 'floor_intermediate', 'floor_advanced', 'borderline',
                                  'rci_reliability', 'rci_sd', 'impact_min_n', 'rater_threshold', 'min_behavior_items', 'rci_practice'] },
-  level_rules:        { table: 'level_rules', key: ['dimension', 'level'], fields: ['min_knowledge', 'min_skill', 'min_behavior'] },
   journey_stages:     { table: 'journey_stages', key: ['program_id', 'key'], sortable: true,
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
                                  'mode', 'mode_note_ar', 'builds_on_ar'] },
@@ -379,8 +378,6 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   organizations:      { table: 'organizations', key: ['id'],
                         fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
-  dimensions:         { table: 'dimensions', key: ['key'], fields: ['title_ar', 'title_en'] },
-  levels:             { table: 'levels', key: ['key'], fields: ['title_ar', 'title_en'] },
 };
 
 // حقول النموذج التعليمي: قائمة مضبوطة الأنواع، بمفاتيح ثابتة لا تتغير بتغيير العنوان
