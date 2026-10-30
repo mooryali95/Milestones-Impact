@@ -7,7 +7,7 @@ import { journeyFor } from './participant.ts';
 import {
   allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
-import { coordParticipant, coordPermissions, isEmail, MIN_COHORT, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
+import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -23,7 +23,7 @@ async function coordinatorByEmail(email: string) {
   const { data } = await db.from('org_coordinators').select('*, organizations(id, name, status)').eq('email', email).maybeSingle();
   return data;
 }
-const usable = (c: any) => c && c.status !== 'suspended' && c.organizations?.status !== 'inactive';
+const usable = (c: any) => viewerActive(c);
 
 // ── 1. الدخول بالبريد ──
 export async function authStart(b: Body, ctx: Ctx) {
@@ -100,7 +100,7 @@ export async function fromToken(token: unknown) {
 }
 
 const mePayload = (c: any) => ({
-  coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions), weekly_report: c.weekly_report },
+  coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
   org: { name: c.organizations.name },
 });
 export const me = async (c: any) => ({ success: true, ...mePayload(c) });
@@ -129,18 +129,19 @@ export async function dashboardFor(c: any) {
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
 
-  const participants = d.participants.map((p: any) => coordParticipant(
-    { ...p, progress: progressBy[p.id] ?? 0, levels: levelsBy[p.id] || null }, perms));
+  // الأرقام المجمّعة من كل مشاركي الجهة، والصفوف الفردية تمر عبر الصلاحيات (بلا «القائمة» لا صف واحد)
+  const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, levels: levelsBy[p.id] || null }));
+  const participants = full.map((p: any) => coordParticipant(p, perms)).filter(Boolean);
   const weekAgo = Date.now() - 7 * 864e5;
-  const avg = participants.length ? Math.round(participants.reduce((a: number, p: any) => a + p.progress, 0) / participants.length) : 0;
+  const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
   return {
     success: true,
     org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector },
     permissions: perms,
     funnel: d.funnel, by_track: d.by_track, by_via: d.by_via,
     kpis: {
-      total: participants.length,
-      joined_week: participants.filter((p: any) => Date.parse(p.created_at) > weekAgo).length,
+      total: full.length,
+      joined_week: full.filter((p: any) => Date.parse(p.created_at) > weekAgo).length,
       // عدد مجمّع من الصفوف الأصلية: يظهر ولو لم تُمنح صلاحية النشاط الفردي
       active_week: (rows as any[]).filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
       approved: d.funnel.approved, completed: d.funnel.completed, avg_progress: avg,
@@ -164,21 +165,32 @@ export async function dashboard(c: any) {
   const r: any = await dashboardFor(c);
   r.impact = await impactFor(c);
   // محفظة مبادرات الدفعة: المعتمدة وحدها، فالمسودة عمل المشارك قبل أن يكتمل
-  r.initiatives = (await initiativesFor(c.organization_id)).filter((x: any) => x.status === 'approved');
+  // والأسماء فيها لمن يرى قائمة المشاركين فقط
+  const list = coordPermissions(c.permissions).list;
+  r.initiatives = (await initiativesFor(c.organization_id)).filter((x: any) => x.status === 'approved')
+    .map((x: any) => (list ? x : { ...x, participant_id: null, full_name: null }));
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }
 
 // ── 4. تحكم المدير ──
-async function coordinatorOf(orgId: string) {
-  const { data } = await db.from('org_coordinators').select('*').eq('organization_id', orgId).maybeSingle();
-  return data;
+// مطّلع بعينه (id) من الجهة، أو الأول فيها (جهة التواصل في بطاقة الجهة) حين لا يُحدَّد
+async function coordinatorOf(orgId: string, id?: unknown) {
+  let q = db.from('org_coordinators').select('*').eq('organization_id', orgId);
+  q = id ? q.eq('id', String(id)) : q.order('created_at').limit(1);
+  const { data } = await q;
+  return (data || [])[0] || null;
+}
+async function viewersOf(orgId: string) {
+  const { data } = await db.from('org_coordinators').select('*').eq('organization_id', orgId).order('created_at');
+  return (data || []).map((c: any) => ({ ...c, permissions: coordPermissions(c.permissions), template: c.template || templateOf(c.permissions), live: viewerActive(c) }));
 }
 
 // حالة المنسق وجلساته ونشاطه الأخير
 export async function adminGet(_a: Admin, b: Body) {
-  const c = await coordinatorOf(String(b.organization_id || ''));
-  if (!c) return { success: true, coordinator: null };
+  const orgId = String(b.organization_id || '');
+  const [c, coordinators] = await Promise.all([coordinatorOf(orgId, b.id), viewersOf(orgId)]);
+  if (!c) return { success: true, coordinator: null, coordinators };
   const [{ data: sessions }, { data: log }] = await Promise.all([
     db.from('coordinator_sessions').select('id, method, ip, user_agent, created_at, last_seen_at, expires_at, revoked_at')
       .eq('coordinator_id', c.id).order('created_at', { ascending: false }).limit(10),
@@ -188,7 +200,8 @@ export async function adminGet(_a: Admin, b: Body) {
   const now = Date.now();
   return {
     success: true,
-    coordinator: { ...c, permissions: coordPermissions(c.permissions) },
+    coordinator: { ...c, permissions: coordPermissions(c.permissions), template: c.template || templateOf(c.permissions) },
+    coordinators,
     sessions: (sessions || []).map((s: any) => ({ ...s, active: !s.revoked_at && Date.parse(s.expires_at) > now })),
     activity: log || [],
   };
@@ -204,13 +217,22 @@ export async function adminSave(a: Admin, b: Body) {
   if (!isEmail(email)) throw new Fail('بريد المنسق غير صحيح');
   const phone = b.phone ? normalizePhone(b.phone) : null;
   if (b.phone && !phone) throw new Fail('جوال المنسق غير صحيح');
-  const { data: other } = await db.from('org_coordinators').select('organization_id, organizations(name)').eq('email', email).neq('organization_id', orgId).maybeSingle();
-  if (other) throw new Fail(`هذا البريد منسق لجهة ${(other.organizations as any)?.name || 'أخرى'}`, 409);
+  // جديد صراحة (new)، أو مطّلع بعينه (id)، أو الأول في الجهة (توافق مع بطاقة الجهة)
+  const before = b.new ? null : await coordinatorOf(orgId, b.id);
+  if (b.id && !before) throw new Fail('المطّلع غير موجود في هذه الجهة', 404);
+  // البريد لمطّلع واحد: الدخول برمز البريد يحدد صاحبه
+  const { data: others } = await db.from('org_coordinators').select('id, organization_id, organizations(name)').eq('email', email);
+  const other = (others || []).find((x: any) => x.id !== before?.id);
+  if (other) throw new Fail(other.organization_id === orgId ? 'هذا البريد مطّلع في هذه الجهة بالفعل' : `هذا البريد مطّلع لجهة ${(other.organizations as any)?.name || 'أخرى'}`, 409);
 
-  const before = await coordinatorOf(orgId);
+  const template = ['executive', 'program', 'hr'].includes(b.template) ? b.template : null;
+  const permissions = coordPermissions(b.permissions ?? (template ? (COORD_TEMPLATES as any)[template] : before?.permissions));
+  const expires = b.expires_at ? new Date(String(b.expires_at)) : null;
+  if (expires && (Number.isNaN(+expires) || +expires < Date.now())) throw new Fail('تاريخ انتهاء الاطلاع يجب أن يكون في المستقبل');
   const row = {
     organization_id: orgId, email, full_name: String(b.full_name || '').trim().slice(0, 120) || null, phone,
-    permissions: coordPermissions(b.permissions), weekly_report: b.weekly_report !== false, updated_at: new Date().toISOString(),
+    permissions, template: templateOf(permissions), expires_at: 'expires_at' in b ? (expires ? expires.toISOString() : null) : before?.expires_at ?? null,
+    weekly_report: b.weekly_report !== false, updated_at: new Date().toISOString(),
   };
   const emailChanged = !before || before.email !== email;
   let saved;
@@ -221,8 +243,9 @@ export async function adminSave(a: Admin, b: Body) {
   } else {
     saved = must(await db.from('org_coordinators').insert({ ...row, created_by: a.email }).select('*').single());
   }
-  // بيانات المنسق تبقى متزامنة مع بطاقة الجهة
-  await db.from('organizations').update({ contact_name: row.full_name, contact_email: email, contact_phone: phone }).eq('id', orgId);
+  // جهة التواصل في بطاقة الجهة هي أول مطّلع فيها
+  const first = await coordinatorOf(orgId);
+  if (first?.id === saved.id) await db.from('organizations').update({ contact_name: row.full_name, contact_email: email, contact_phone: phone }).eq('id', orgId);
   await audit('admin', a.email, before ? 'coordinator.update' : 'coordinator.create', 'org_coordinators', saved.id, before, saved);
   let invited = false;
   if (emailChanged && saved.status !== 'suspended' && b.send_invite !== false) invited = await sendInvite(saved, o.name);
@@ -237,8 +260,8 @@ async function sendInvite(c: any, orgName: string) {
 
 export async function adminInvite(a: Admin, b: Body) {
   requireWrite(a);
-  const c = await coordinatorOf(String(b.organization_id || ''));
-  if (!c) throw new Fail('لا يوجد منسق لهذه الجهة', 404);
+  const c = await coordinatorOf(String(b.organization_id || ''), b.id);
+  if (!c) throw new Fail('لا يوجد مطّلع بهذا التحديد في الجهة', 404);
   if (c.status === 'suspended') throw new Fail('فعّل الحساب أولًا ثم أعد إرسال الدعوة');
   const { data: o } = await db.from('organizations').select('name').eq('id', c.organization_id).single();
   await sendInvite(c, o?.name || '');
@@ -252,8 +275,8 @@ async function revokeAll(coordinatorId: string) {
 
 export async function adminSetStatus(a: Admin, b: Body) {
   requireWrite(a);
-  const c = await coordinatorOf(String(b.organization_id || ''));
-  if (!c) throw new Fail('لا يوجد منسق لهذه الجهة', 404);
+  const c = await coordinatorOf(String(b.organization_id || ''), b.id);
+  if (!c) throw new Fail('لا يوجد مطّلع بهذا التحديد في الجهة', 404);
   const suspend = b.suspended === true;
   await db.from('org_coordinators').update({
     status: suspend ? 'suspended' : (c.last_login_at ? 'active' : 'invited'), updated_at: new Date().toISOString(),
@@ -265,8 +288,8 @@ export async function adminSetStatus(a: Admin, b: Body) {
 
 export async function adminRevokeSessions(a: Admin, b: Body) {
   requireWrite(a);
-  const c = await coordinatorOf(String(b.organization_id || ''));
-  if (!c) throw new Fail('لا يوجد منسق لهذه الجهة', 404);
+  const c = await coordinatorOf(String(b.organization_id || ''), b.id);
+  if (!c) throw new Fail('لا يوجد مطّلع بهذا التحديد في الجهة', 404);
   await revokeAll(c.id);
   await audit('admin', a.email, 'coordinator.revoke-sessions', 'org_coordinators', c.id);
   return { success: true };
@@ -274,7 +297,7 @@ export async function adminRevokeSessions(a: Admin, b: Body) {
 
 export async function adminRemove(a: Admin, b: Body) {
   requireWrite(a);
-  const c = await coordinatorOf(String(b.organization_id || ''));
+  const c = await coordinatorOf(String(b.organization_id || ''), b.id);
   if (!c) return { success: true };
   await audit('admin', a.email, 'coordinator.remove', 'org_coordinators', c.id, c, null);
   must(await db.from('org_coordinators').delete().eq('id', c.id));
@@ -283,8 +306,8 @@ export async function adminRemove(a: Admin, b: Body) {
 
 // المعاينة بعين المنسق: نفس البيانات التي يراها تمامًا، بصلاحياته الحالية
 export async function adminPreview(_a: Admin, b: Body) {
-  const c = await coordinatorOf(String(b.organization_id || ''));
-  if (!c) throw new Fail('لا يوجد منسق لهذه الجهة', 404);
+  const c = await coordinatorOf(String(b.organization_id || ''), b.id);
+  if (!c) throw new Fail('لا يوجد مطّلع بهذا التحديد في الجهة', 404);
   return dashboardFor(c);
 }
 

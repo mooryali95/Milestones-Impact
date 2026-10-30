@@ -7,8 +7,7 @@ import {
 import {
   AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
-  VERIFIED_KINDS, readingVerdict, fieldsFor,
-} from './logic.js';
+  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
@@ -343,6 +342,14 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
 
 export async function me(p: any) {
   return { success: true, ...(await mePayload(p)) };
+}
+
+// ماذا ترى جهتك: صلاحيات المطّلعين النافذين من جهة المشارك مجتمعة، بلا أسمائهم
+export async function orgVisibilityFor(p: any) {
+  if (!p.organization_id) return { success: true, org: null };
+  const { data } = await db.from('org_coordinators').select('status, expires_at, permissions, organizations(name, status)').eq('organization_id', p.organization_id);
+  const org = (data || [])[0]?.organizations as any;
+  return { success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []) };
 }
 
 export async function orgLogo(p: any) {

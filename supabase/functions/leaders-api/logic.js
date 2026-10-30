@@ -482,10 +482,29 @@ export function cleanAnswers(fields, answers) {
 
 // ── منسق الجهة ──
 // صلاحيات العرض الافتراضية: بلا درجات ولا وسائل تواصل، والتصدير مسموح
-export const COORD_DEFAULTS = { scores: false, contact: false, activity: false, export: true };
+export const COORD_DEFAULTS = { list: true, scores: false, contact: false, activity: false, export: true };
 export function coordPermissions(p) {
   const x = p && typeof p === 'object' ? p : {};
-  return { scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false };
+  return { list: x.list !== false, scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false };
+}
+// قوالب المطّلعين: نقطة بداية تُضبط بعدها كل صلاحية وحدها (القالب «مخصّص» حين تختلف عنه)
+export const COORD_TEMPLATES = {
+  executive: { list: false, scores: false, contact: false, activity: false, export: false },
+  program: { list: true, scores: false, contact: false, activity: true, export: true },
+  hr: { list: true, scores: false, contact: true, activity: false, export: true },
+};
+export function templateOf(perms) {
+  const p = coordPermissions(perms);
+  return Object.keys(COORD_TEMPLATES).find((k) => Object.entries(COORD_TEMPLATES[k]).every(([x, v]) => p[x] === v)) || 'custom';
+}
+// المطّلع نافذ ما لم يُوقف أو تنتهِ مدته أو تتوقف جهته
+export const viewerActive = (c, now = Date.now()) => !!c && c.status !== 'suspended' && (!c.expires_at || Date.parse(c.expires_at) > now)
+  && c.organizations?.status !== 'inactive';
+// ما يعرفه المشارك عن اطلاع جهته: اتحاد صلاحيات المطّلعين النافذين، وعددهم
+export function orgVisibility(viewers, now = Date.now()) {
+  const live = (viewers || []).filter((c) => viewerActive(c, now));
+  const any = (k) => live.some((c) => coordPermissions(c.permissions)[k]);
+  return { viewers: live.length, list: any('list'), activity: any('activity'), contact: any('contact'), scores: any('scores'), export: any('export') };
 }
 // أقل عدد تُعرض له أرقام مجمّعة عن مشاركين: دونه يكشف المتوسط درجة الفرد
 export const MIN_COHORT = 5;
@@ -493,6 +512,7 @@ export const MIN_COHORT = 5;
 // ما يراه المنسق من المشارك: الاسم والمسمى والمسار والمرحلة ونسبة الإنجاز دائمًا،
 // والنشاط (آخر دخول) والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
 export function coordParticipant(p, perms) {
+  if (!perms.list) return null;   // راعٍ تنفيذي: أرقام مجمّعة فقط، بلا أسماء
   const out = {
     id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status,
     track: p.track || null, track_title: p.track_title || null, approved: !!p.approved,

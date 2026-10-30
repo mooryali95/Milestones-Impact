@@ -1,6 +1,6 @@
 // ما يراه منسق الجهة: يخرج من الخادم ما تسمح به صلاحياته فقط
 import { describe, it, expect } from 'vitest';
-import { coordParticipant, coordPermissions, isoWeek } from '../../supabase/functions/leaders-api/logic.js';
+import { coordParticipant, coordPermissions, COORD_TEMPLATES, isoWeek, orgVisibility, templateOf, viewerActive } from '../../supabase/functions/leaders-api/logic.js';
 
 const p = {
   id: 'p1', full_name: 'سارة', job_title: 'مديرة', status: 'enrolled', track: 'M1I1L2', track_title: 'مسار', approved: true,
@@ -10,8 +10,8 @@ const p = {
 
 describe('coordPermissions', () => {
   it('الافتراضي: بلا درجات ولا تواصل ولا نشاط، والتصدير مسموح', () => {
-    expect(coordPermissions(null)).toEqual({ scores: false, contact: false, activity: false, export: true });
-    expect(coordPermissions({ scores: 'yes', activity: 1, export: false })).toEqual({ scores: false, contact: false, activity: false, export: false });
+    expect(coordPermissions(null)).toEqual({ list: true, scores: false, contact: false, activity: false, export: true });
+    expect(coordPermissions({ scores: 'yes', activity: 1, export: false })).toEqual({ list: true, scores: false, contact: false, activity: false, export: false });
   });
 });
 
@@ -54,4 +54,32 @@ it('لوحة الجهة: المبادرات المعتمدة وحدها، ولا
   expect(src).toMatch(/initiativesFor\(c\.organization_id\)\)\.filter\(\(x: any\) => x\.status === 'approved'\)/);
   expect(src).toMatch(/paired \?\? 0\) < MIN_COHORT\) return \{[^}]*cohort: null/);
   expect(MIN_COHORT).toBeGreaterThanOrEqual(5);
+});
+
+describe('المطّلعون المتعددون', () => {
+  it('بلا «القائمة» لا يخرج صف واحد عن أي مشارك', () => {
+    expect(coordParticipant(p, coordPermissions(COORD_TEMPLATES.executive))).toBeNull();
+  });
+  it('القالب يُستنتج من الصلاحيات، وأي تعديل يجعله مخصّصًا', () => {
+    for (const k of Object.keys(COORD_TEMPLATES)) expect(templateOf(COORD_TEMPLATES[k])).toBe(k);
+    expect(templateOf({ ...COORD_TEMPLATES.program, scores: true })).toBe('custom');
+  });
+  it('المطّلع غير نافذ إن أُوقف أو انتهت مدته أو توقفت جهته', () => {
+    const now = Date.parse('2026-10-30T00:00:00Z');
+    expect(viewerActive({ status: 'active' }, now)).toBe(true);
+    expect(viewerActive({ status: 'suspended' }, now)).toBe(false);
+    expect(viewerActive({ status: 'active', expires_at: '2026-10-29T00:00:00Z' }, now)).toBe(false);
+    expect(viewerActive({ status: 'active', organizations: { status: 'inactive' } }, now)).toBe(false);
+  });
+  it('ما يراه المشارك: اتحاد صلاحيات النافذين وحدهم', () => {
+    const now = Date.parse('2026-10-30T00:00:00Z');
+    const v = orgVisibility([
+      { status: 'active', permissions: COORD_TEMPLATES.executive },
+      { status: 'active', permissions: COORD_TEMPLATES.hr },
+      { status: 'suspended', permissions: { list: true, scores: true } },
+      { status: 'active', expires_at: '2026-01-01T00:00:00Z', permissions: { list: true, activity: true } },
+    ], now);
+    expect(v).toEqual({ viewers: 2, list: true, activity: false, contact: true, scores: false, export: true });
+    expect(orgVisibility([], now).viewers).toBe(0);
+  });
 });

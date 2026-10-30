@@ -55,6 +55,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
+  'org.visibility': (p) => P.orgVisibilityFor(p),
   'logout': (_p, _b, sid) => P.logout(sid),
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
   'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),

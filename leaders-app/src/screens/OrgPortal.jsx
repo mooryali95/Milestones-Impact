@@ -110,12 +110,12 @@ function Initiatives({ list }) {
       <div className="op-scroll"><table>
         <thead><tr><th>المبادرة</th><th>القائد</th><th>النوع</th><th>الحالة</th><th>التكلفة</th><th /></tr></thead>
         <tbody>{list.map((x) => (
-          <tr key={x.participant_id}>
+          <tr key={x.participant_id || x.initiative}>
             <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
-            <td>{x.full_name}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
+            <td>{x.full_name || <span className="muted">·</span>}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
             <td>{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
             <td>{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
-            <td>{x.status === 'approved' && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
+            <td>{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
           </tr>
         ))}</tbody>
       </table></div>
@@ -191,7 +191,7 @@ function Dashboard({ me, onLogout }) {
           <h1>{org.name}</h1>
           <p className="muted">أهلًا {me.coordinator.full_name || ''}. هذه لوحة مشاركي جهتك في برنامج القادة، وتتحدث مع كل نشاط.</p>
           <div className="row">
-            {perms.export && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
+            {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
@@ -214,7 +214,7 @@ function Dashboard({ me, onLogout }) {
       <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
       <Initiatives list={d.initiatives || []} />
 
-      <section className="card op-table">
+      {perms.list === false ? <section className="card"><h3>المشاركون</h3><p className="muted">صلاحيتك أرقام مجمّعة عن مشاركي جهتك، بلا أسماء ولا صفوف فردية.</p></section> : <section className="card op-table">
         <div className="row between op-tools">
           <h3>المشاركون</h3>
           <div className="row">
@@ -246,7 +246,7 @@ function Dashboard({ me, onLogout }) {
             </tr>
           )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
         </table></div>
-      </section>
+      </section>}
       <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط.</p>
     </div>
   );
