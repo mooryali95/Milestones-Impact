@@ -73,7 +73,8 @@ test('نظرة عامة: المستوى العام والجهات والقياس
     return route.fulfill({ json: { ...base, ...more } });
   });
   await tab(page, 'نظرة عامة');
-  await expect(page.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('2');
+  // البطاقة تعدّ من قائمة «ينتظر قرارك» نفسها (لا متطلبات مرسلة في البيانات) مع النماذج المنتظرة: 0 + 1
+  await expect(page.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('1');
   await expect(page.getByRole('heading', { name: 'المستوى العام' })).toBeVisible();
   await expect(page.getByText('baseline-v2')).toBeVisible();
   await expect(page.locator('.la-impact td.up')).toHaveText('+15');

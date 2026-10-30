@@ -571,8 +571,8 @@ export default function Handbook({ me, lab, onLab, onBack }) {
             ))}
           </div>
           <span className="spacer" />
-          <button className="link small" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">نسخة PDF شخصية</button>
-          <button className="link small book-back" onClick={onBack}>رجوع للرحلة</button>
+          <button className="link small book-act" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">⤓ نسخة PDF شخصية</button>
+          <button className="link small book-act book-back" onClick={onBack}>← رجوع للرحلة</button>
         </nav>
       </section>
 

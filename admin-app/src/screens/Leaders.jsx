@@ -27,6 +27,14 @@ export const TABS = [
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
+// الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
+const TAB_GROUPS = [
+  ['اليومي', ['overview', 'participants', 'capstones', 'activities']],
+  ['المحتوى', ['journey', 'handbook', 'lab', 'assessment', 'content']],
+  ['البرامج', ['programs', 'orgs', 'tracks', 'levels']],
+  ['النتائج', ['impact', 'certs']],
+];
+const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
@@ -90,11 +98,16 @@ export default function Leaders({ canWrite, pending }) {
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
-      <nav className="la-tabs" aria-label="أقسام تطبيق القادة">
-        {TABS.map(([k, l]) => {
-          const n = k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0;
-          return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{l}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}</button>;
-        })}
+      <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
+        {TAB_GROUPS.map(([g, keys]) => (
+          <div key={g} className="la-tab-group" role="group" aria-label={g}>
+            <span className="la-tab-group-label">{g}</span>
+            {keys.map((k) => {
+              const n = k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0;
+              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}</button>;
+            })}
+          </div>
+        ))}
       </nav>
       <div className="la-body">{body}</div>
     </div>

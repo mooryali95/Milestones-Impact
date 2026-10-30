@@ -183,6 +183,7 @@ const COACH_TONE = { attended: 'ok', no_show: 'bad' };
 function Coaching({ item, open, onRefresh, setToast }) {
   const a = item.activity;
   const [book, setBook] = useState(false);
+  const [framed, setFramed] = useState(false);
   const [busy, setBusy] = useState(false);
   const instant = async () => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
@@ -231,8 +232,11 @@ function Coaching({ item, open, onRefresh, setToast }) {
       {open && a.can_book && !a.book_url && !a.instant && <p className="h">يحدد الموجّه موعد الجلسة ويصلك رابطها.</p>}
       {book && (
         <div className="act-book">
-          <iframe src={a.book_url} title="حجز موعد" loading="lazy" />
           <p className="small muted">لا يظهر التقويم؟ <a href={a.book_url} target="_blank" rel="noopener noreferrer">افتحه في نافذة جديدة</a>، ثم عد واضغط «أنهيت الحجز».</p>
+          <div className={`act-frame${framed ? ' ready' : ''}`}>
+            {!framed && <div className="act-frame-wait" role="status"><span className="spinner" aria-hidden="true" /> جارٍ تحميل التقويم…</div>}
+            <iframe src={a.book_url} title="حجز موعد" loading="lazy" onLoad={() => setFramed(true)} />
+          </div>
         </div>
       )}
     </div>
