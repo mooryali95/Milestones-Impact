@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
 import { call, uploadFile } from '../api.js';
+import { VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
 const deviceOf = (ua = '') => {
@@ -11,6 +12,25 @@ const deviceOf = (ua = '') => {
   return br ? `${br} على ${os}` : os;
 };
 const when = (t) => (t ? new Date(t).toLocaleDateString('ar-SA-u-nu-latn', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
+
+// ماذا ترى جهتك: الشفافية قبل الاطلاع. ما لا يُذكر هنا لا يخرج من الخادم لجهتك
+function OrgVisibility() {
+  const [d, setD] = useState(null);
+  useEffect(() => { call('org.visibility').then(setD); }, []);
+  if (!d?.success || !d.org) return null;
+  const v = d.visibility || {};
+  const open = Object.entries(VIEWER_PERM_AR).filter(([k]) => v[k]);
+  return (
+    <section className="card stack org-see" aria-labelledby="org-see-h">
+      <h3 id="org-see-h">ماذا ترى جهتك</h3>
+      {!v.viewers ? <p className="muted">لا أحد من {d.org} يطّلع على رحلتك الآن.</p> : <>
+        <p className="muted">{v.viewers === 1 ? 'مطّلع واحد' : `${v.viewers} مطّلعين`} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
+        {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{h}</small></li>)}</ul>}
+      </>}
+      <p className="small muted">لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.</p>
+    </section>
+  );
+}
 
 // أجهزتك: الجلسات السارية، وإنهاء أي جهاز غير هذا
 function Devices() {
@@ -157,6 +177,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
+      {!onboarding && <OrgVisibility />}
       {!onboarding && <Devices />}
     </div>
   );

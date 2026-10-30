@@ -1072,3 +1072,8 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 body.entering main { animation: mi-enter .45s ease-out both; }
 @keyframes mi-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .enter-ring, body.entering main, .enter-screen { animation: none; } .gbtn-face { transition: none; } }
+
+/* ماذا ترى جهتك (الملف الشخصي) */
+.org-see-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.org-see-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 8px 12px; border-inline-start: 2px solid var(--brand-copper); background: var(--brand-cream-pale); border-radius: 4px; }
+.org-see-list small { color: var(--muted); }

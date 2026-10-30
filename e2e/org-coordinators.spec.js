@@ -91,9 +91,9 @@ test('لوحة المنسق في الجهة: الصلاحيات والإيقاف
   });
   await page.getByRole('button', { name: 'لوحة الجهة' }).click();
   await expect(page.getByText('coord@wt.gov.sa')).toBeVisible();
-  await page.locator('.cp-perm', { hasText: 'بريد المشاركين' }).click();
+  await page.locator('.cp-perm', { hasText: 'التواصل' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.coordinator-save')?.permissions).toMatchObject({ contact: true, scores: false });
-  await page.getByRole('button', { name: 'معاينة بعين المنسق' }).click();
+  await page.getByRole('button', { name: 'شاهد كما يراها' }).click();
   await expect(page.getByRole('dialog', { name: 'معاينة بعين المنسق' }).getByText('سارة')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'إيقاف الحساب' }).click();
