@@ -68,4 +68,12 @@ describe('مصدر واحد لكل معلومة', () => {
     const js = (p) => /\.(jsx?|ts)$/.test(p);
     expect(offenders(/https:\/\/(leaders|admin|mi|matrix)\.sunkvalue\.com/, ['supabase/functions/_shared/sites.js']).filter(js)).toEqual([]);
   });
+  it('ألوان الحالات تُعرَّف في shared/css/status.css وحده', () => {
+    const STATUS_HEX = /#(A8322D|B4442F|A82828|B3261E|B42828|2E7D5B|276B4E|3C8D5A|B26B00|FBECEA|E7F3ED|FDF1DE)\b/i;
+    // ألوان هوية الجهات (OrgForm) بيانات تختارها الجهة، لا ألوان حالات
+    expect(offenders(STATUS_HEX, ['admin-app/src/screens/OrgForm.jsx']).filter((p) => /^(admin-app|leaders-app)\//.test(p))).toEqual([]);
+    for (const css of ['admin-app/src/admin.css', 'admin-app/src/leaders-admin.css', 'leaders-app/src/styles.css']) {
+      expect(readFileSync(join(ROOT, css), 'utf8'), css).not.toMatch(STATUS_HEX);
+    }
+  });
 });
