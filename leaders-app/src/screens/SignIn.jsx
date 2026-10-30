@@ -6,7 +6,8 @@ import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/br
 import { call } from '../api.js';
 import { attribution } from '../attribution.js';
 import Captcha from '../Captcha.jsx';
-import GoogleButton from '../GoogleButton.jsx';
+import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
+import logo from '../milestone-impact-inverted.svg';
 
 const RESEND_SECONDS = 45;
 
@@ -23,6 +24,8 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [org, setOrg] = useState(null);
   const [captchaKey, setCaptchaKey] = useState(null);
   const [via] = useState(attribution);
+  // شاشة الانتقال: تظهر فور اكتمال الدخول من جهة المستخدم، وتبقى حتى تُفتح رحلته
+  const [entering, setEntering] = useState(null);
 
   // اسم الجهة يظهر إن جاء الزائر برابطها أو من موقعها
   useEffect(() => {
@@ -53,11 +56,11 @@ export default function SignIn({ onSignedIn, initialError }) {
   };
 
   const verify = async (value) => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setEntering({ name: name.split(' ')[0] || '' });
     const res = await call('auth.verify', { email, code: value });
     setBusy(false);
-    if (res.success) onSignedIn(res);
-    else { setError(res.message); setCode(''); }
+    if (res.success) return onSignedIn(res);
+    setEntering(null); setError(res.message); setCode('');
   };
 
   const onCode = (v) => {
@@ -73,19 +76,18 @@ export default function SignIn({ onSignedIn, initialError }) {
     let response;
     try { response = await startAuthentication({ optionsJSON: opt.options }); }
     catch { return setError('لم يكتمل الدخول بمفتاح المرور. جرّب مرة أخرى أو ادخل بالبريد.'); }
-    setBusy(true);
+    setBusy(true); setEntering({ name: '' });
     const res = await call('passkey.auth-verify', { response });
     setBusy(false);
-    if (res.success) onSignedIn(res);
-    else setError(res.message);
+    if (res.success) return onSignedIn(res);
+    setEntering(null); setError(res.message);
   };
 
   const google = async (credential) => {
-    setBusy(true); setError('');
+    setError(''); setEntering({ name: firstNameOf(credential) });
     const res = await call('auth.google', { credential, ...via });
-    setBusy(false);
-    if (res.success) onSignedIn(res);
-    else setError(res.message);
+    if (res.success) return onSignedIn(res);
+    setEntering(null); setError(res.message);
   };
 
   const captchaBox = captchaKey ? (
@@ -97,6 +99,13 @@ export default function SignIn({ onSignedIn, initialError }) {
 
   return (
     <div className="auth-wrap">
+      {entering && (
+        <div className="enter-screen" role="status" aria-live="polite">
+          <img src={logo} alt="Milestone Impact" className="enter-logo" />
+          <span className="enter-ring" aria-hidden="true" />
+          <p>{entering.name ? `أهلًا ${entering.name}، نجهّز رحلتك…` : 'نجهّز رحلتك…'}</p>
+        </div>
+      )}
       <div className="auth card stack">
         {org && (
           <div className="org-ribbon" style={org.color ? { '--org': org.color } : undefined}>
@@ -109,8 +118,10 @@ export default function SignIn({ onSignedIn, initialError }) {
             <div>
               <p className="eyebrow">برنامج إدارة المشروعات للقادة</p>
               <h1>ابدأ رحلتك القيادية</h1>
-              <p className="muted">أدخل بريدك، وسنرسل لك رابطًا ورمزًا للدخول. لا كلمات مرور.</p>
+              <p className="muted">ادخل بحسابك في Google بضغطة، أو ببريدك ونرسل لك رمزًا. لا كلمات مرور.</p>
             </div>
+            <GoogleButton onCredential={google} disabled={busy || !!entering} />
+            <div className="divider">أو بالبريد</div>
             <label className="field">
               <span>البريد الإلكتروني</span>
               <input className="input ltr" type="email" inputMode="email" autoComplete="username webauthn" required
@@ -118,8 +129,6 @@ export default function SignIn({ onSignedIn, initialError }) {
             </label>
             {error && <div className="alert err">{error}</div>}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'متابعة'}</button>
-            <div className="divider">أو</div>
-            <GoogleButton onCredential={google} disabled={busy} />
             {browserSupportsWebAuthn() && (
               <button type="button" className="btn ghost block" onClick={passkey} disabled={busy}>الدخول بمفتاح المرور</button>
             )}

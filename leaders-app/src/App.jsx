@@ -146,6 +146,8 @@ function Participant() {
   const accept = useCallback((res) => {
     if (res?.token) session.set(res.token);
     if (res?.participant) setMe(res);
+    // بعد الدخول تظهر الرحلة بتلاشٍ ناعم بدل القفزة من شاشة الانتقال
+    if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
   }, []);
 
   useEffect(() => {
