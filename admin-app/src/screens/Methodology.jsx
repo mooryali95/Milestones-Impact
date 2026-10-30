@@ -262,15 +262,6 @@ export function Levels({ catalog, reload, canWrite }) {
   const { toast } = useUI();
   const [edit, editor] = useEditor(reload);
   const cell = (d, l) => catalog.grid_cells.find((c) => c.dimension === d && c.level === l) || {};
-  const rule = (d, l) => catalog.level_rules.find((r) => r.dimension === d && r.level === l) || {};
-  const [rules, setRules] = useState({});
-  const ruleVal = (d, l, k) => rules[`${d}|${l}|${k}`] ?? rule(d, l)[k] ?? 0;
-  const saveRule = async (d, l) => {
-    const row = { dimension: d, level: l, ...Object.fromEntries(['min_knowledge', 'min_skill', 'min_behavior'].map((k) => [k, Number(ruleVal(d, l, k))])) };
-    const r = await L('admin.save', { entity: 'level_rules', row });
-    toast(r.success ? 'حُفظت القاعدة' : r.message); if (r.success) reload();
-  };
-  const hasModel = catalog.placement_model?.length > 0;
   return (
     <>
       <section className="la-card">
@@ -292,27 +283,8 @@ export function Levels({ catalog, reload, canWrite }) {
           ))}
         </div>
       </section>
-      {hasModel ? <PlacementModel model={catalog.placement_model[0]} reload={reload} canWrite={canWrite} /> : (
-        <section className="la-card">
-          <div className="la-note">معيار التسكين المركّب غير مفعّل بعد (الترحيل leaders-008-placement-model). حتى ذلك الحين تعمل القواعد التالية.</div>
-          <h3>قواعد تحديد المستوى</h3>
-          <p className="la-muted">يُمنح المشارك أعلى مستوى تتحقق كل شروطه في البُعد. النسب من 0 إلى 100 لكل نوع من الأسئلة.</p>
-          <table className="la-table">
-            <thead><tr><th>البُعد</th><th>المستوى</th><th>معرفة (حد أدنى)</th><th>مواقف (حد أدنى)</th><th>ممارسة (حد أدنى)</th><th /></tr></thead>
-            <tbody>{DIMS.flatMap((d) => LVLS.map((l) => (
-              <tr key={`${d}${l}`}>
-                <td>{DIM_EN[d]}</td><td>{LVL[l]}</td>
-                {['min_knowledge', 'min_skill', 'min_behavior'].map((k) => (
-                  <td key={k}>{canWrite
-                    ? <input type="number" min="0" max="100" aria-label={`${DIM_EN[d]} ${LVL[l]} ${k}`} value={ruleVal(d, l, k)} onChange={(e) => setRules({ ...rules, [`${d}|${l}|${k}`]: e.target.value })} />
-                    : ruleVal(d, l, k)}</td>
-                ))}
-                <td>{canWrite && <button className="la-link" onClick={() => saveRule(d, l)}>حفظ</button>}</td>
-              </tr>
-            )))}</tbody>
-          </table>
-        </section>
-      )}
+      {/* معيار التسكين المركّب وحده؛ قواعد level_rules القديمة أُزيلت (الترحيل 20261030140000) */}
+      <PlacementModel model={catalog.placement_model?.[0] || { id: 1, ...MODEL_DEFAULT }} reload={reload} canWrite={canWrite} />
       {editor}
     </>
   );

@@ -2777,7 +2777,7 @@ on conflict do nothing;
 
 insert into leaders.levels (key, title_ar, title_en, sort) values
   ('advanced', 'احترافي', 'Professional', 3),
-  ('beginner', 'تأسيسي', 'Beginner', 1),
+  ('beginner', 'تأسيسي', 'Foundation', 1),
   ('intermediate', 'متوسط', 'Intermediate', 2)
 on conflict do nothing;
 
