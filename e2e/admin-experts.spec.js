@@ -17,7 +17,8 @@ async function admin(page) {
       'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
       'admin.participants': { success: true, participants: [] },
       'admin.experts': { success: true, experts },
-      'admin.expert': { success: true, expert: experts.find((e) => e.id === b.id), activity: [{ action: 'expert.apply', actor: 'k@x.com', created_at: '2026-10-28' }] },
+      'admin.expert': { success: true, expert: experts.find((e) => e.id === b.id), activity: [{ action: 'expert.apply', actor: 'k@x.com', created_at: '2026-10-28' }],
+        service: { sessions: 4, attended: 3, no_show: 1, upcoming: 0, participants: 2, hours: 2.5, cost: 750, reviews: { requirements: 1, models: 3, capstones: 1 }, recent: [{ id: 'c1', status: 'attended', starts_at: '2026-10-20', participants: { full_name: 'سارة' } }] } },
       'admin.expert-set-status': { success: true },
       'admin.expert-save': { success: true, expert: { ...experts[0], id: 'e3' }, invited: true },
     }[b.action];
@@ -46,6 +47,8 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
   await page.getByRole('button', { name: 'مسح الكل' }).click();
   await page.getByText('خالد العتيبي').click();
   await expect(page.getByRole('heading', { name: 'خالد العتيبي' })).toBeVisible();
+  await expect(page.locator('.ex-service')).toContainText('2.5');
+  await expect(page.locator('.ex-service')).toContainText('750 ريال');
   if (SHOT) await page.locator('.ex-profile').screenshot({ path: `${SHOT}/expert.png` });
   await page.getByRole('button', { name: 'اعتماد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-set-status')).toMatchObject({ id: 'e2', status: 'active' });
