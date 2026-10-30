@@ -3,14 +3,14 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
 
 type Body = Record<string, any>;
-export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer' };
+export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
 
 async function sha256hex(s: string) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -23,12 +23,16 @@ export async function adminFromToken(token: unknown): Promise<Admin> {
     .eq('token_hash', await sha256hex(token)).eq('kind', 'admin').limit(1);
   const s = data?.[0];
   if (!s || new Date(s.expires_at).getTime() < Date.now()) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  return { email: String(s.meta?.email || ''), role: s.meta?.role };
+  return { email: String(s.meta?.email || ''), role: s.meta?.role, method: s.meta?.method };
 }
 
 const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
-function requireWrite(a: Admin) {
+// رمز البريد وحده عامل واحد: من دخل به يقرأ، ولا يعدّل بيانات المشاركين
+// حتى يدخل بمفتاح المرور أو تطبيق المصادقة
+export const needsSecondFactor = (a: Admin) => canWrite(a) && a.method === 'email';
+export function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
+  if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب الدخول بمفتاح المرور أو تطبيق المصادقة. فعّل أحدهما من الإعدادات ثم ادخل به', 403, 'mfa_required');
 }
 export const writer = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); return fn(a, b); };
 
@@ -51,7 +55,7 @@ const orgFilter = (q: any, org: unknown) => (org === 'none' ? q.is('organization
 export async function orgs() {
   const [{ data: list }, { data: ps }] = await Promise.all([
     db.from('organizations').select('*').order('created_at'),
-    db.from('participants').select('id, status, organization_id, organization_name, last_login_at'),
+    all((f, t) => db.from('participants').select('id, status, organization_id, organization_name, last_login_at').order('id').range(f, t)).then((data) => ({ data })),
   ]);
   const weekAgo = Date.now() - 7 * 864e5;
   const stats = (rows: any[]) => ({ ...funnel(rows), total: rows.length, active_week: rows.filter((r) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length });
@@ -71,9 +75,9 @@ export async function org(b: Body) {
   const id = String(b.id || '');
   const o = id === 'none' ? { id: 'none', name: 'بدون جهة' } : must(await db.from('organizations').select('*').eq('id', id).maybeSingle());
   if (!o) throw new Fail('الجهة غير موجودة', 404);
-  const rows = must(await orgFilter(db.from('participants')
+  const rows = await all((f, t) => orgFilter(db.from('participants')
     .select('id, full_name, email, phone, job_title, organization_name, status, source, org_via, campaign, referrer_host, created_at, last_login_at, placements(dimension, level, approved_at)'), id)
-    .order('created_at', { ascending: false }).limit(2000)) as any[] ?? [];
+    .order('created_at', { ascending: false }).order('id').range(f, t));
   const { data: tracks } = await db.from('tracks').select('key, title_ar');
   const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
   const participants = rows.map((p: any) => {
@@ -117,14 +121,15 @@ export async function assignOrg(a: Admin, b: Body) {
 
 // ── نظرة عامة ──
 export async function overview(b: Body = {}) {
-  const { data } = await orgFilter(db.from('participants').select('id, status, organization_id, organization_name, org_via, created_at, last_login_at'), b.org);
+  const data = await all((f, t) => orgFilter(db.from('participants').select('id, status, organization_id, organization_name, org_via, created_at, last_login_at'), b.org).order('id').range(f, t));
   const byStatus: Record<string, number> = {};
   for (const r of data || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
   const { count: pendingReviews } = await db.from('participant_requirements')
     .select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted');
   const ids = new Set((data || []).map((r: any) => r.id));
-  const { data: gridAll } = await db.from('placements').select('participant_id, dimension, level');
-  const grid = (gridAll || []).filter((p: any) => ids.has(p.participant_id));
+  // مع تصفية الجهة تُقرأ صفوف مشاركيها فقط، وبدونها الكل
+  const scope = b.org ? [...ids] as string[] : null;
+  const grid = await allFor(scope, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension'));
   const matrix: Record<string, Record<string, number>> = {};
   for (const d of DIMENSIONS) matrix[d] = Object.fromEntries(LEVELS.map((l) => [l, 0]));
   for (const p of grid) matrix[p.dimension][p.level]++;
@@ -156,23 +161,22 @@ export async function overview(b: Body = {}) {
     new_week: rows.filter((r: any) => Date.parse(r.created_at) > weekAgo).length,
     active_week: rows.filter((r: any) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length,
     overall, top_orgs, orgs_count: Object.keys(orgN).length, via,
-    ...(await overviewMore([...ids] as string[])),
+    ...(await overviewMore(scope)),
   };
 }
 
 // القياس والكتاب والنماذج لمجموعة مشاركين
-async function overviewMore(ids: string[]) {
-  const set = new Set(ids);
-  const [as, prog, subs, ledger] = await Promise.all([
-    db.from('assessments').select('id, participant_id, instruments(key, kind, title_ar, active), assessment_results(dimension, composite_pct)').eq('status', 'submitted'),
-    db.from('handbook_progress').select('participant_id, quiz_score, quiz_total'),
-    db.from('model_submissions').select('participant_id, status, rating'),
-    db.from('points_ledger').select('participant_id, points'),
+// ids = null: كل المشاركين. القراءة بصفحات، فلا تقف الأرقام عند أول 1000 صف
+async function overviewMore(ids: string[] | null) {
+  const [as, p, s, ledger] = await Promise.all([
+    allFor(ids, () => db.from('assessments').select('id, participant_id, instruments(key, kind, title_ar, active), assessment_results(dimension, composite_pct)').eq('status', 'submitted').order('id')),
+    allFor(ids, () => db.from('handbook_progress').select('participant_id, quiz_score, quiz_total').order('participant_id').order('module_id')),
+    allFor(ids, () => db.from('model_submissions').select('participant_id, status, rating').order('id')),
+    allFor(ids, () => db.from('points_ledger').select('participant_id, points').order('id')),
   ]);
-  const mine = (r: any) => set.has(r.participant_id);
   // القياس: لكل أداة عدد من أنهوها ومتوسط النسبة المركبة لكل إطار
   const inst: Record<string, any> = {};
-  for (const a of ((as.data || []) as any[]).filter(mine)) {
+  for (const a of as) {
     const k = a.instruments?.key || '?';
     const x = (inst[k] ||= { key: k, kind: a.instruments?.kind, title: a.instruments?.title_ar, active: !!a.instruments?.active, n: 0, sum: {}, cnt: {} });
     x.n++;
@@ -183,11 +187,9 @@ async function overviewMore(ids: string[]) {
     avg: Object.fromEntries(DIMENSIONS.map((d) => [d, x.cnt[d] ? Math.round(x.sum[d] / x.cnt[d]) : null])),
   }));
   // الكتاب والنماذج والنقاط
-  const p = ((prog.data || []) as any[]).filter(mine);
-  const s = ((subs.data || []) as any[]).filter(mine);
   const rated = s.filter((x) => x.rating);
   const pts: Record<string, number> = {};
-  for (const r of ((ledger.data || []) as any[]).filter(mine)) pts[r.participant_id] = (pts[r.participant_id] || 0) + r.points;
+  for (const r of ledger) pts[r.participant_id] = (pts[r.participant_id] || 0) + r.points;
   const ranks = Object.fromEntries(RANKS.map((r: any) => [r.title, 0]));
   for (const n of Object.values(pts)) ranks[rankFor(n).title]++;
   const totals = Object.values(pts);
@@ -356,7 +358,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   grid_cells:         { table: 'grid_cells', key: ['dimension', 'level'], fields: ['description_ar', 'path_title_ar'] },
   placement_model:    { table: 'placement_model', key: ['id'],
                         fields: ['w_knowledge', 'w_skill', 'w_behavior', 'min_intermediate', 'min_advanced', 'floor_intermediate', 'floor_advanced', 'borderline',
-                                 'rci_reliability', 'rci_sd', 'impact_min_n', 'rater_threshold'] },
+                                 'rci_reliability', 'rci_sd', 'impact_min_n', 'rater_threshold', 'min_behavior_items', 'rci_practice'] },
   level_rules:        { table: 'level_rules', key: ['dimension', 'level'], fields: ['min_knowledge', 'min_skill', 'min_behavior'] },
   journey_stages:     { table: 'journey_stages', key: ['program_id', 'key'], sortable: true,
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
@@ -365,11 +367,11 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                         fields: ['program_id', 'stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
   questions:          { table: 'questions', key: ['id'], sortable: true,
                         fields: ['instrument_id', 'dimension', 'code', 'tier', 'text_ar', 'help_ar', 'kind', 'options', 'weight', 'active', 'sort', 'competency_ar', 'chapter_key',
-                                 'anchor_code', 'retro', 'text_rater_ar'] },
+                                 'anchor_code', 'retro', 'text_rater_ar', 'form'] },
   handbook_modules:   { table: 'handbook_modules', key: ['id'], sortable: true,
                         fields: ['dimension', 'chapter_key', 'title_ar', 'min_level', 'body_md', 'sort', 'reflection_ar', 'quiz_md'] },
   learning_models:    { table: 'learning_models', key: ['id'], sortable: true,
-                        fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active'] },
+                        fields: ['dimension', 'key', 'sort', 'title_ar', 'icon', 'summary_ar', 'when_ar', 'steps_ar', 'source_ar', 'min_level', 'points', 'fields', 'active', 'capstone_sort', 'scopes'] },
   content_items:      { table: 'content_items', key: ['id'], sortable: true,
                         fields: ['kind', 'title_ar', 'description_ar', 'url', 'minutes', 'dimension', 'min_level', 'only_level', 'track_keys', 'exclude_tracks', 'required', 'min_pct', 'sort', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
@@ -402,7 +404,16 @@ function cleanModelFields(input: unknown) {
       out.columns = (Array.isArray(f.columns) ? f.columns : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 10);
       if (!out.columns.length) throw new Fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
       out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+      // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
+      const im = f.import && typeof f.import === 'object' ? f.import : null;
+      if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
     }
+    // التعمق داخل النموذج نفسه: حقل من مستوى أعلى، أو لنطاقات بعينها
+    if (LEVELS.includes(f?.min_level) && f.min_level !== 'beginner') out.min_level = f.min_level;
+    const scopes = (Array.isArray(f?.scopes) ? f.scopes : []).filter((x: string) => SCOPES.includes(x));
+    if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
+    // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
+    if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
     return out;
   });
 }
@@ -481,17 +492,22 @@ export async function curriculum(b: Body) {
 export async function catalog(b: Body = {}) {
   const programId = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
   const names = Object.keys(ENTITIES);
-  const res = await Promise.all(names.map((n) => {
+  // بنود الأسئلة تتراكم مع كل إصدار، فتُقرأ بصفحات كي لا تقف عند حد الألف
+  const res = await Promise.all(names.map((n) => all((f, t) => {
     const e = ENTITIES[n];
     let q = db.from(e.table).select('*');
     if (PROGRAM_SCOPED.has(n)) q = q.eq('program_id', programId);
-    return e.sortable ? q.order('sort') : q;
-  }));
+    if (e.sortable) q = q.order('sort');
+    return e.key.reduce((x: any, k: string) => x.order(k), q).range(f, t);
+  })));
   const out: Body = { success: true, program_id: programId };
-  names.forEach((n, i) => { out[n] = res[i].data || []; });
+  names.forEach((n, i) => { out[n] = res[i]; });
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
-  const { data: used } = await db.from('assessments').select('instrument_id').eq('status', 'submitted');
-  out.locked_instruments = [...new Set((used || []).map((u: any) => u.instrument_id))];
+  const used = await all((f, t) => db.from('assessments').select('instrument_id').eq('status', 'submitted').order('id').range(f, t));
+  out.locked_instruments = [...new Set(used.map((u: any) => u.instrument_id))];
+  // مختبرات كل باب: يراها المحرر ويُنبَّه بها قبل حذف الباب
+  const { data: labs } = await db.from('lab_items').select('key, dimension, chapter_key, title_ar, min_level, active').order('sort');
+  out.lab_links = labs || [];
   out.track_stats = await trackStats();
   out.book_stats = await bookStats();
   return out;
@@ -500,30 +516,31 @@ export async function catalog(b: Body = {}) {
 // ── الكتاب والنماذج: التتبع والتقييم ──
 // لكل باب: كم أتمّه ومتوسط نتيجة اختباره. لكل نموذج: المسودات والمسلّم والمقيّم ومتوسط التقييم.
 async function bookStats() {
-  const [{ data: prog }, { data: subs }, { data: pts }] = await Promise.all([
-    db.from('handbook_progress').select('module_id, quiz_score, quiz_total'),
-    db.from('model_submissions').select('model_id, status, rating'),
-    db.from('points_ledger').select('participant_id, points'),
+  // سجلات التقدم والنقاط تتجاوز الألف بسرعة (مشارك × 27 بابًا)، فتُقرأ كلها بصفحات
+  const [prog, subs, pts] = await Promise.all([
+    all((f, t) => db.from('handbook_progress').select('module_id, quiz_score, quiz_total').order('participant_id').order('module_id').range(f, t)),
+    all((f, t) => db.from('model_submissions').select('model_id, status, rating').order('id').range(f, t)),
+    all((f, t) => db.from('points_ledger').select('participant_id, points').order('id').range(f, t)),
   ]);
   const chapters: Record<string, { done: number; score: number; total: number }> = {};
-  for (const r of prog || []) {
+  for (const r of prog) {
     const c = (chapters[r.module_id] ||= { done: 0, score: 0, total: 0 });
     c.done++; c.score += r.quiz_score; c.total += r.quiz_total;
   }
   const models: Record<string, { draft: number; submitted: number; reviewed: number; returned: number; rated: number; rating: number }> = {};
-  for (const r of subs || []) {
+  for (const r of subs) {
     const m = (models[r.model_id] ||= { draft: 0, submitted: 0, reviewed: 0, returned: 0, rated: 0, rating: 0 });
     m[r.status as 'draft']++;
     if (r.rating) { m.rated++; m.rating += r.rating; }
   }
   const per: Record<string, number> = {};
-  for (const r of pts || []) per[r.participant_id] = (per[r.participant_id] || 0) + r.points;
+  for (const r of pts) per[r.participant_id] = (per[r.participant_id] || 0) + r.points;
   const totals = Object.values(per);
   return {
     chapters, models,
     readers: totals.length,
     points: { participants: totals.length, total: totals.reduce((a, n) => a + n, 0), avg: totals.length ? Math.round(totals.reduce((a, n) => a + n, 0) / totals.length) : 0 },
-    to_review: (subs || []).filter((r: any) => r.status === 'submitted').length,
+    to_review: subs.filter((r: any) => r.status === 'submitted').length,
   };
 }
 
@@ -532,18 +549,25 @@ export async function bookPreview(b: Body) {
   const key = String(b.track || '');
   if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
   const levels = Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(key[i * 2 + 1]) - 1]]));
-  const [t, mods, models] = await Promise.all([
+  // النطاق يغيّر الكتاب كالمستوى: بلا نطاق تُعرض كتل البرامج والمحافظ كلها كما يراها من لم يحدد نطاقه
+  const scope = SCOPES.includes(String(b.scope)) ? String(b.scope) : null;
+  const [t, mods, models, labs] = await Promise.all([
     db.from('tracks').select('*').eq('key', key).maybeSingle(),
     db.from('handbook_modules').select('*'),
     db.from('learning_models').select('*'),
+    db.from('lab_items').select('key, dimension, chapter_key, title_ar, min_level, active').eq('active', true).order('sort'),
   ]);
   return {
-    success: true, track: t.data || { key }, levels,
+    success: true, track: t.data || { key }, levels, scope,
     chapters: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
       id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
-      md: filterHandbookMd(m.body_md, levels[m.dimension]), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+      md: filterHandbookMd(m.body_md, levels[m.dimension], scope), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+      // مختبرات الباب التي تصل هذا المسار، كما تظهر للمشارك أسفل الباب
+      labs: (labs.data || []).filter((l: any) => l.dimension === m.dimension && l.chapter_key === m.chapter_key
+        && LEVELS.indexOf(levels[l.dimension]) >= LEVELS.indexOf(l.min_level)).map((l: any) => ({ key: l.key, title: l.title_ar })),
     })),
-    models: modelsFor(models.data || [], levels),
+    // بلا نطاق تُعرض نماذج النطاقات كلها، كما تُعرض كتلها في الكتاب
+    models: scope ? modelsFor(models.data || [], levels, scope) : modelsFor((models.data || []).map((m: any) => ({ ...m, scopes: [] })), levels),
   };
 }
 
@@ -621,6 +645,30 @@ export async function save(a: Admin, b: Body) {
     }
   }
 
+  // رقم جلسات أو مدة مكتوب نصًا في وصف الرحلة يتباعد عن إعداد النشاط؛ يُكتب برمز يُملأ من مصدره
+  if (b.entity === 'journey_stages' || b.entity === 'stage_requirements') {
+    const TEXT = ['title_ar', 'duration_label', 'description_ar', 'activities_ar', 'outcome_ar', 'mode_note_ar', 'builds_on_ar', 'help_ar'].filter((f) => f in row);
+    for (const f of TEXT) {
+      const why = hardcodedFacts(row[f]);
+      if (why) throw new Fail(why, 400, 'hardcoded');
+    }
+    if (TEXT.some((f) => String(row[f] || '').includes('{'))) {
+      const pid = b.row?.program_id || row.program_id
+        || (!isNew && b.entity === 'stage_requirements' ? (await db.from('stage_requirements').select('program_id').eq('id', b.row.id).maybeSingle()).data?.program_id : null)
+        || await defaultProgramId();
+      const codes = [...((await db.from('stage_requirements').select('code').eq('program_id', pid)).data || []), ...(row.code ? [{ code: row.code }] : [])];
+      const unknown = TEXT.flatMap((f) => unknownTokens(row[f], codes));
+      if (unknown.length) throw new Fail(`الرمز يشير إلى نشاط غير موجود: ${[...new Set(unknown)].join('، ')}`, 400, 'token');
+    }
+  }
+
+  // كتلة لم تُغلق أو وسم غير معروف يغيّر ما يصل كل مسار، فلا يُحفظ
+  if (b.entity === 'handbook_modules' && 'body_md' in row) {
+    const level = row.min_level || (isNew ? 'beginner' : (await db.from('handbook_modules').select('min_level').eq('id', b.row.id).single()).data?.min_level);
+    const bad = lintHandbookMd(row.body_md, level).filter((x: any) => x.level === 'error');
+    if (bad.length) throw new Fail(`السطر ${bad[0].line}: ${bad[0].msg}`, 400, 'blocks');
+  }
+
   if (b.entity === 'organizations') {
     if ('invite_code' in row || isNew) {
       const code = String(row.invite_code || '').trim().toLowerCase() || crypto.randomUUID().slice(0, 8);
@@ -664,6 +712,14 @@ export async function save(a: Admin, b: Body) {
   if (b.entity === 'learning_models') {
     if (isNew && !row.key) row.key = `m-${Date.now().toString(36)}`;
     if ('fields' in row) row.fields = cleanModelFields(row.fields);
+    if ('capstone_sort' in row) {
+      const n = row.capstone_sort === '' || row.capstone_sort == null ? null : Math.round(Number(row.capstone_sort));
+      row.capstone_sort = n != null && Number.isFinite(n) && n >= 1 && n <= 999 ? n : null;
+    }
+    if ('scopes' in row) {
+      const sc = [...new Set((Array.isArray(row.scopes) ? row.scopes : []).filter((x: string) => SCOPES.includes(x)))];
+      row.scopes = sc.length === SCOPES.length ? [] : sc;
+    }
     if (isNew && !String(row.title_ar || '').trim()) throw new Fail('اسم النموذج مطلوب');
     row.updated_at = new Date().toISOString();
   }
@@ -687,6 +743,11 @@ export async function remove(a: Admin, b: Body) {
   if (b.entity === 'learning_models') {
     const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
     if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
+  }
+  if (b.entity === 'handbook_modules') {
+    // حذف الباب يمحو تقدم قرائه ونتائج اختبارهم (cascade)، فلا يُحذف باب له قراء
+    const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('module_id', b.id);
+    if (count) throw new Fail(`أتمّ هذا الباب ${count} مشارك، وحذفه يمحو تقدمهم ونقاطهم. حرّر محتواه بدل حذفه`, 409, 'in_use');
   }
   if (b.entity === 'content_items') {
     const { count } = await db.from('content_progress').select('item_id', { count: 'exact', head: true }).eq('item_id', b.id);

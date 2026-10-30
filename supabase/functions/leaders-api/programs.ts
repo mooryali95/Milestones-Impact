@@ -5,7 +5,8 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanDelivery, cohortDefinition, pickCohort, programDiff, programSnapshot, restorePlan } from './logic.js';
+import { cleanDelivery, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { READY_MIN } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 
@@ -59,8 +60,11 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
       def.requirements = def.requirements.map((r: any) => until.get(r.id) ? { ...r, config: { ...r.config, instant_until: until.get(r.id) } } : r);
     }
   }
+  // نصوص المراحل تُملأ رموزها من إعدادات المتطلبات، فلا يُكتب رقم في وصف
+  const inst = (await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle()).data;
+  const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
-    ...def, via, program_id: programId,
+    ...rendered, via, program_id: programId,
     cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on } : null,
     version: version ? { id: version.id, number: version.number, label: version.label } : null,
   };

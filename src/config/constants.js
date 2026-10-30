@@ -8,6 +8,9 @@ export const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com';
 // ألوان الهوية الرسمية — معايَرة على حزمة الهوية (07_WEB/mi-patterns.css).
 // تُستعمل في الأنماط المضمّنة داخل JS حيث لا تصل متغيرات CSS.
 // المصدر الوحيد للحقيقة هو shared/css/mi-tokens.css؛ هذه نسخة حرفية منه.
+// وسيلة التواصل العامة الوحيدة: البريد. لا رقم هاتف منشور.
+export const CONTACT = { email: "mi@sunkvalue.com" };
+
 export const BRAND = {
   // الأسماء الرسمية
   graphite: "#0B272F",  // الأرضية الأساسية

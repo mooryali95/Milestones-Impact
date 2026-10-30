@@ -1,6 +1,7 @@
 import React from "react";
 import Wordmark from "./components/Wordmark";
 import MILogo from "./MILogo";
+import { SITES } from '../supabase/functions/_shared/sites.js';
 
 export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
   return (
@@ -100,13 +101,13 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 
       {/* ══ TOP NAV — العودة للبراند الأم ══ */}
       <nav className="lp-topnav">
-        <a className="lp-topnav-brand" href="https://mi.sunkvalue.com">
+        <a className="lp-topnav-brand" href={SITES.mi}>
           <MILogo size={24} color="#C4A24E"/>
           <span>Milestone Impact</span>
         </a>
         <div className="lp-topnav-links">
-          <a className="lp-topnav-home" href="https://leaders.sunkvalue.com">للقادة ←</a>
-          <a className="lp-topnav-home" href="https://mi.sunkvalue.com">المنظومة الأم ←</a>
+          <a className="lp-topnav-home" href={SITES.leaders}>للقادة ←</a>
+          <a className="lp-topnav-home" href={SITES.mi}>المنظومة الأم ←</a>
         </div>
       </nav>
 

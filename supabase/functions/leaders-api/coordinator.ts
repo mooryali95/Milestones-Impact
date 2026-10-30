@@ -3,21 +3,21 @@
 // ════════════════════════════════════════════════════════════════
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
-import { journeyDefinition } from './programs.ts';
+import { journeyFor } from './participant.ts';
 import {
-  audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, must, randomCode, randomToken, sendMail,
+  allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
-import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone, progressPct } from './logic.js';
-import { org as orgPayload } from './admin.ts';
+import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
+import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
+import { orgList as initiativesFor } from './capstone.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
-type Admin = { email: string; role: string };
+type Admin = import('./admin.ts').Admin;
 
 const SENT = { success: true, sent: true };   // رد واحد سواء كان البريد منسقًا أم لا
-const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
-const requireWrite = (a: Admin) => { if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden'); };
+
 
 async function coordinatorByEmail(email: string) {
   const { data } = await db.from('org_coordinators').select('*, organizations(id, name, status)').eq('email', email).maybeSingle();
@@ -29,6 +29,8 @@ const usable = (c: any) => c && c.status !== 'suspended' && c.organizations?.sta
 export async function authStart(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
+  // الحارس قبل البحث عن المنسق: الرد واحد لكل بريد، مسجلًا كان أو لا
+  await mailGuard(b, ctx);
   const c = await coordinatorByEmail(email);
   if (!usable(c)) return SENT;
 
@@ -114,21 +116,21 @@ export async function dashboardFor(c: any) {
   const d: any = await orgPayload({ id: c.organization_id });
   const ids = d.participants.map((p: any) => p.id);
 
-  const [requiredTotal, { data: done }, levels] = await Promise.all([
-    // متطلبات برنامج دفعة الجهة الجارية
-    journeyDefinition({ organization_id: c.organization_id }).then((def) => def.requirements.filter((r: any) => r.required).length),
-    ids.length ? db.from('participant_requirements').select('participant_id').in('participant_id', ids).eq('status', 'done') : Promise.resolve({ data: [] }),
-    perms.scores && ids.length
-      ? db.from('placements').select('participant_id, dimension, level').in('participant_id', ids).then((r: any) => r.data || [])
-      : Promise.resolve([]),
+  // نسبة التقدم بالحساب نفسه الذي يراه المشارك في رحلته (journeyFor)، لا بعدّ منفصل
+  const [rows, levels] = await Promise.all([
+    allFor(ids, () => db.from('participants').select('*').order('id'), 'id'),
+    perms.scores ? allFor(ids, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension')) : Promise.resolve([]),
   ]);
-  const doneBy: Record<string, number> = {};
-  for (const r of done || []) doneBy[r.participant_id] = (doneBy[r.participant_id] || 0) + 1;
+  const progressBy: Record<string, number> = {};
+  const queue = [...(rows as any[])];
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) progressBy[r.id] = (await journeyFor(r)).progress;
+  }));
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
 
   const participants = d.participants.map((p: any) => coordParticipant(
-    { ...p, progress: progressPct(doneBy[p.id] || 0, requiredTotal ?? 0), levels: levelsBy[p.id] || null }, perms));
+    { ...p, progress: progressBy[p.id] ?? 0, levels: levelsBy[p.id] || null }, perms));
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = participants.length ? Math.round(participants.reduce((a: number, p: any) => a + p.progress, 0) / participants.length) : 0;
   return {
@@ -158,6 +160,8 @@ export async function impactFor(c: any) {
 export async function dashboard(c: any) {
   const r: any = await dashboardFor(c);
   r.impact = await impactFor(c);
+  // محفظة مبادرات الدفعة: مشاريع التخرج لمشاركي الجهة
+  r.initiatives = await initiativesFor(c.organization_id);
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }

@@ -1,6 +1,6 @@
 // ما يراه منسق الجهة: يخرج من الخادم ما تسمح به صلاحياته فقط
 import { describe, it, expect } from 'vitest';
-import { coordParticipant, coordPermissions, isoWeek, progressPct } from '../../supabase/functions/leaders-api/logic.js';
+import { coordParticipant, coordPermissions, isoWeek } from '../../supabase/functions/leaders-api/logic.js';
 
 const p = {
   id: 'p1', full_name: 'سارة', job_title: 'مديرة', status: 'enrolled', track: 'M1I1L2', track_title: 'مسار', approved: true,
@@ -29,11 +29,6 @@ describe('coordParticipant', () => {
   });
 });
 
-it('progressPct', () => {
-  expect(progressPct(3, 12)).toBe(25);
-  expect(progressPct(5, 0)).toBe(0);
-  expect(progressPct(20, 10)).toBe(100);
-});
 
 it('isoWeek يعطي الأسبوع نفسه لأيام الأسبوع الواحد', () => {
   expect(isoWeek(new Date('2026-10-19T08:00:00Z'))).toBe(isoWeek(new Date('2026-10-25T20:00:00Z')));

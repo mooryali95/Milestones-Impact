@@ -9,6 +9,7 @@ import { Spinner } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { OrgSelect } from './Participants.jsx';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 const VIA_ALL = { ...VIA, unassigned: 'بلا جهة' };
 const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
@@ -60,6 +61,41 @@ function Impact({ im, instruments }) {
   );
 }
 
+// حالة النظام: ترحيلات لم تُشغَّل، وأسرار ناقصة، واقتراب البريد من سقفه اليومي
+function Health({ h }) {
+  if (!h?.success) return null;
+  const near = h.mail.today >= h.mail.cap * 0.8;
+  if (!h.missing_migrations.length && !h.missing_secrets.length && !near) return null;
+  return (
+    <div className="la-note la-health" role="status">
+      <b>حالة النظام</b>
+      {h.missing_migrations.length > 0 && <p>ترحيلات لم تُشغَّل بعد في SQL Editor: {h.missing_migrations.map((f) => <code key={f}>{f}.sql</code>)}</p>}
+      {h.missing_secrets.length > 0 && <p>أسرار ناقصة في دالة leaders-api: {h.missing_secrets.map((k) => <code key={k}>{k}</code>)}</p>}
+      {near && <p>رسائل الرموز اليوم {h.mail.today} من {h.mail.cap}. عند السقف يتوقف إرسال الرموز حتى الغد، ويبقى الدخول بمفتاح المرور.</p>}
+    </div>
+  );
+}
+
+// جاهزية الإطلاق: تختفي حين تكتمل البنود كلها
+function Readiness({ items, onTab }) {
+  const todo = (items || []).filter((x) => !x.ok);
+  if (!todo.length) return null;
+  return (
+    <section className="la-card la-ready" aria-label="جاهزية الإطلاق">
+      <div className="la-row between"><h3>جاهزية الإطلاق</h3><span className="la-muted">{items.length - todo.length} من {items.length}</span></div>
+      <ul>
+        {items.map((x) => (
+          <li key={x.key} className={x.ok ? 'ok' : ''}>
+            <span aria-hidden="true">{x.ok ? '✓' : '○'}</span>
+            <span>{x.label}</span>
+            {!x.ok && onTab && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
@@ -70,12 +106,13 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
     Promise.all([
       L('admin.overview', { org }), L('admin.reviews'),
       L('admin.impact', org ? { organization_id: org } : {}).catch(() => null),
-    ]).then(([o, r, im]) => live && setD({ o, r, im }));
+      L('admin.health').catch(() => null),
+    ]).then(([o, r, im, h]) => live && setD({ o, r, im, h }));
     return () => { live = false; };
   }, [org, n]);
 
   if (!d) return <Spinner />;
-  const { o, r, im } = d;
+  const { o, r, im, h } = d;
   if (!o.success) return <div className="la-err" role="alert">{o.message}</div>;
   const st = (k) => o.by_status[k] || 0;
   const max = Math.max(1, ...DIMS.flatMap((x) => LVLS.map((l) => o.matrix[x][l])));
@@ -86,13 +123,20 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
 
   return (
     <>
+      <Health h={h} />
+      {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
+      {o.mfa_required && (
+        <div className="la-note" role="alert">
+          دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.
+        </div>
+      )}
       <div className="la-row between la-ov-bar">
         <span className="la-muted">{org ? 'تعرض الأرقام لجهة واحدة' : 'كل الجهات'}</span>
         <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
       </div>
       <div className="stats-grid">
         <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
-        <div className="stat-card"><div className="stat-label">بانتظار الاعتماد</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
+        <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
         <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{o.pending_reviews + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${o.pending_reviews} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
         <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>
       </div>
@@ -136,10 +180,10 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
               <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (o.matrix[x][l] / max).toFixed(2) }}><b>{o.matrix[x][l]}</b></td>)}</tr>
             ))}</tbody>
           </table>
-          <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من 27 مسارًا.</p>
+          <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من {TRACK_COUNT} مسارًا.</p>
         </section>
         <section className="la-card">
-          <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من 27 مسارًا مشغولة</span></div>
+          <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من {TRACK_COUNT} مسارًا مشغولة</span></div>
           {(o.top_tracks || []).length ? (
             <ul className="la-queue">{o.top_tracks.map((t) => (
               <li key={t.key}><button className="la-link" onClick={() => onTrack(t.key)}><code className="la-code">{t.key}</code> {t.title || ''}</button><b>{t.n}</b></li>

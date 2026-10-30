@@ -1,5 +1,6 @@
 // الأنشطة الموثقة: القراءة والفيديو والورشة والتوجيه في رحلة المشارك، وتسجيل
 // الحضور برمز QR، وشاشة الحضور والتوجيه في لوحة الإدارة. الخلفية مُحاكاة.
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const APP = 'http://localhost:4304/';
@@ -63,12 +64,18 @@ test('الرحلة: الأنشطة الموثقة بلا زر «أنجزته»',
   await expect(page.getByText('بقي الاختبار')).toHaveCount(0);
   await expect(page.getByText('شاهدت 35%', { exact: false })).toBeVisible();
   await expect(page.getByText('حضرت 1 من 4', { exact: true })).toBeVisible();
-  await expect(page.getByText('حضرت ✓').first()).toBeVisible();
+  await expect(page.getByText('حضرت', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'انضم الآن' })).toBeVisible();
   await expect(page.getByText('عن بعد', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'أنجزته' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'احجز موعدًا' })).toBeVisible();
   await expect(page.getByRole('button', { name: /اتصل فورًا/ })).toBeVisible();
+  // جلسة التوجيه المحجوزة تُضاف إلى التقويم بملف ics فيه موعدها ورابطها
+  const [ics] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'أضف إلى تقويمي' }).click()]);
+  const body = readFileSync(await ics.path(), 'utf8');
+  expect(body).toContain('BEGIN:VEVENT');
+  expect(body).toContain('URL:https://meet.google.com/x');
+  expect(body).toContain('TRIGGER:-PT1H');
   if (SHOTS) await page.locator('.stage.active').screenshot({ path: `${SHOTS}/journey-activities.png` });
   await page.getByRole('button', { name: 'احجز موعدًا' }).click();
   await expect(page.locator('.act-book iframe')).toBeVisible();

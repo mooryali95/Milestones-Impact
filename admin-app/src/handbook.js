@@ -3,28 +3,69 @@
 // ════════════════════════════════════════════════════════════════
 // صيغة الاختبار وحذف كتل المستوى ونقاط الباب تأتي من logic.js على الخادم
 // نفسه، فما تراه الإدارة في المعاينة هو ما يصل المشارك حرفيًا.
-import { filterHandbookMd, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
+import { filterHandbookMd, handbookModulesFor, lintHandbookMd, lintQuiz, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
+import { SUBMISSION_STATUS_ADMIN, TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
-export { filterHandbookMd, parseQuiz };
+export { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
-export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'كما يراه المشارك'], ['reviews', 'التقييم']];
-export const SUB_FILTER = [['submitted', 'بانتظار تقييمك'], ['reviewed', 'قُيّمت'], ['returned', 'أُعيدت للتطوير'], ['', 'الكل']];
+export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', `الكتاب الأصلي والكتب الـ${TRACK_COUNT}`], ['reviews', 'التقييم']];
+export const SUB_FILTER = [...['submitted', 'reviewed', 'returned'].map((k) => [k, SUBMISSION_STATUS_ADMIN[k]]), ['', 'الكل']];
 export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير';
 
-export const words = (md) => (String(md || '').replace(/:::[a-z=]*/g, '').match(/\S+/g) || []).length;
+export const words = (md) => (String(md || '').replace(/^:::.*$/gm, '').match(/\S+/g) || []).length;
 export const tiered = (md) => /^:::(min|only)=/m.test(md || '');
 export const stars = (n) => '★★★★★'.slice(0, n || 0) + '☆☆☆☆☆'.slice(0, 5 - (n || 0));
 export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection : 0);
 // أسئلة كُتبت لكن لن تظهر: بلا خيار صحيح أو بأقل من خيارين
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;
+// كل ملاحظات الباب: كتله واختباره معًا، والخطأ أولًا
+export const chapterLint = (m) => [...lintHandbookMd(m.body_md, m.min_level), ...lintQuiz(m.quiz_md)]
+  .sort((a, b) => (a.level === 'error' ? 0 : 1) - (b.level === 'error' ? 0 : 1));
+// مختبرات الباب: تظهر للمشارك أسفل الباب بمطابقة الإطار ومفتاح الباب
+export const chapterLabs = (catalog, m) => (catalog.lab_links || []).filter((l) => m && l.dimension === m.dimension && l.chapter_key === m.chapter_key);
+// ما يترتب على حذف الباب، يُعرض قبل التأكيد. الخادم يرفض حذف باب له قراء
+export function deleteNotice(catalog, m) {
+  const done = catalog.book_stats?.chapters?.[m.id]?.done || 0;
+  if (done) return { blocked: true, text: `أتمّ هذا الباب ${done} مشارك، وحذفه يمحو تقدمهم ونقاطهم. حرّر محتواه بدل حذفه.` };
+  const labs = chapterLabs(catalog, m);
+  return {
+    blocked: false,
+    text: `حذف الباب "${m.title_ar}" نهائيًا من الكتب الـ${TRACK_COUNT}؟${labs.length ? ` يرتبط به ${labs.length} من المختبرات (${labs.map((l) => l.title_ar).join('، ')})، ولن تظهر بعده أسفل أي باب حتى تُربط بباب آخر.` : ''}`,
+  };
+}
+export const SCOPE_VIEW = [['project', 'مشروع'], ['program', 'برنامج'], ['portfolio', 'محفظة']];
 export const nextSort = (rows, dim) => Math.max(0, ...rows.filter((x) => x.dimension === dim).map((x) => x.sort || 0)) + 1;
 export const splitList = (v) => String(v).split(/[,،]/).map((x) => x.trim()).filter(Boolean);
+
+// ── الكتاب الأصلي الكامل: مصدر الكتب الـ27 ──
+// كل الأبواب والنماذج بكل كتلها، وكل كتلة موسومة بمن يقرؤها، فيرى المحرر
+// الأصل كاملًا وما يصل كل مسار منه. يُبنى من بيانات اللوحة بلا طلب للخادم.
+export const MASTER = 'MASTER';
+const TIER = {
+  min: { beginner: 'لكل المستويات', intermediate: 'للمتوسط فأعلى', advanced: 'للاحترافي' },
+  only: { beginner: 'للتأسيسي فقط', intermediate: 'للمتوسط فقط', advanced: 'للاحترافي فقط' },
+  scope: { project: 'لكل النطاقات', program: 'لقادة البرامج والمحافظ', portfolio: 'لقادة المحافظ' },
+};
+export const tierLabel = (spec) => String(spec).trim().split(/\s+/)
+  .map((t) => { const [k, v] = t.split('='); return TIER[k]?.[v] || t; }).join(' · ');
+const ALL = { milestone: 'advanced', impact: 'advanced', leadership: 'advanced' };
+export function masterBook(modules, models) {
+  return {
+    success: true, master: true, levels: ALL,
+    chapters: handbookModulesFor(modules || [], ALL).map((m) => ({
+      id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, min_level: m.min_level,
+      md: m.body_md, reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+    })),
+    models: modelsFor(models || [], ALL),
+  };
+}
 
 // أدوات المحرر: [ما يُدرج، التسمية، النمط] · line يُدرج أول السطر · wrap يحيط التحديد · block كتلة مستوى
 export const HB_TOOLS = [
   ['## ', 'عنوان', 'line'], ['### ', 'عنوان فرعي', 'line'], ['- ', 'بند', 'line'], ['1. ', 'ترقيم', 'line'], ['**', 'غامق', 'wrap'], ['> ', 'خلاصة', 'line'],
   [':::min=intermediate\n', 'فقرة للمتوسط فأعلى', 'block'], [':::min=advanced\n', 'فقرة للاحترافي', 'block'], [':::only=beginner\n', 'فقرة للتأسيسي فقط', 'block'],
+  [':::scope=program\n', 'فقرة لقادة البرامج والمحافظ', 'block'], [':::scope=portfolio\n', 'فقرة لقادة المحافظ', 'block'],
 ];
 // يعيد النص الجديد وموضع المؤشر بعد تطبيق الأداة على التحديد [s0, s1]
 export function applyTool(value, s0, s1, [ins, , mode]) {

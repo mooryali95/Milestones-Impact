@@ -1,8 +1,49 @@
 // ════════════════════════════════════════════════════════════════
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { call, uploadFile } from '../api.js';
+
+const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
+const deviceOf = (ua = '') => {
+  const os = /iPhone|iPad/.test(ua) ? 'iPhone أو iPad' : /Android/.test(ua) ? 'Android' : /Mac OS/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'جهاز';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br ? `${br} على ${os}` : os;
+};
+const when = (t) => (t ? new Date(t).toLocaleDateString('ar-SA-u-nu-latn', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
+
+// أجهزتك: الجلسات السارية، وإنهاء أي جهاز غير هذا
+function Devices() {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { call('sessions.list').then((r) => setList(r.success ? r.sessions : [])); }, []);
+  const revoke = async (id) => {
+    setBusy(true);
+    const r = await call('sessions.revoke', id ? { id } : {});
+    setBusy(false);
+    if (r.success) setList(r.sessions);
+  };
+  if (!list) return null;
+  const others = list.filter((x) => !x.current);
+  return (
+    <section className="card stack devices">
+      <div className="row between">
+        <h2>أجهزتك</h2>
+        {others.length > 0 && <button type="button" className="btn ghost sm" disabled={busy} onClick={() => revoke()}>اخرج من الأجهزة الأخرى</button>}
+      </div>
+      <p className="small muted">الأجهزة التي دخلت منها خلال آخر أسبوعين. إن رأيت جهازًا لا تعرفه فأنهِ جلسته.</p>
+      <ul className="device-list">
+        {list.map((x) => (
+          <li key={x.id}>
+            <div><b>{deviceOf(x.user_agent || '')}</b>{x.current && <span className="chip ok">هذا الجهاز</span>}
+              <br /><small className="muted">{METHOD[x.method] || x.method} · آخر نشاط {when(x.last_seen_at || x.created_at)}</small></div>
+            {!x.current && <button type="button" className="link small" disabled={busy} onClick={() => revoke(x.id)}>إنهاء</button>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years_experience'];
 
@@ -11,7 +52,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const [f, setF] = useState({
     full_name: p.full_name || '', name_en: p.name_en || '', phone: p.phone || '', job_title: p.job_title || '',
     organization_name: p.organization_name || '', sector: p.sector || '',
-    years_experience: p.years_experience ?? '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
+    years_experience: p.years_experience ?? '', work_scope: p.work_scope || '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
   });
   const [hasCv, setHasCv] = useState(p.has_cv);
   const [cvName, setCvName] = useState('');
@@ -83,6 +124,13 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
           <label className="field"><span>سنوات الخبرة</span>
             <input className="input" required type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
+          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد أمثلة الكتاب وتمارينه)</em></span>
+            <select className="input" value={f.work_scope} onChange={set('work_scope')}>
+              <option value="">لم أحدد بعد</option>
+              <option value="project">مشروع أو أكثر</option>
+              <option value="program">برنامج من مشاريع مترابطة</option>
+              <option value="portfolio">محفظة مشاريع وبرامج</option>
+            </select></label>
         </div>
 
         <label className="field"><span>رابط LinkedIn <em>(اختياري)</em></span>
@@ -109,6 +157,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
+      {!onboarding && <Devices />}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { esc, mailShell } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
-  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount,
+  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -24,7 +24,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
   const kinds = new Set(mine.map((r) => r.kind));
   const ids = mine.map((r) => r.id);
   const none = Promise.resolve({ data: [] as any[] });
-  const [mods, reading, quiz, video, ws, att, coach, content, contentProgress] = await Promise.all([
+  const [mods, reading, quiz, video, ws, att, coach, content, contentProgress, lm, subs, cap] = await Promise.all([
     kinds.has('reading') && approved
       ? db.from('handbook_modules').select('id, dimension, sort, min_level, title_ar').not('body_md', 'is', null).neq('body_md', '') : none,
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
@@ -36,7 +36,12 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     // منهج المسار يُفتح مع الكتيب بعد اعتماد المستويات
     kinds.has('curriculum') && approved ? db.from('content_items').select(CONTENT_COLS).eq('active', true) : none,
     kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
+    // متطلب «نموذج»: حالة تسليم النموذج نفسه في مكتبة النماذج، لا ملف مرفوع
+    kinds.has('model') && approved ? db.from('learning_models').select('id, key, dimension, sort, min_level, active, scopes, title_ar') : none,
+    kinds.has('model') && approved ? db.from('model_submissions').select('model_id, status').eq('participant_id', p.id) : none,
+    kinds.has('capstone') ? db.from('capstones').select('status, readiness').eq('participant_id', p.id).maybeSingle().then((r: any) => ({ data: r.data ? [r.data] : [] })) : none,
   ]);
+  const subBy = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s.status]));
   const ev = {
     // body_md لا يُجلب هنا؛ الأبواب المصفاة غير فارغة أصلًا
     chapters: handbookModulesFor((mods.data || []).map((m: any) => ({ ...m, body_md: '1' })), levels),
@@ -50,6 +55,10 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     curriculumLocked: !approved,
     content: content.data || [],
     contentProgress: Object.fromEntries((contentProgress.data || []).map((r: any) => [r.item_id, r])),
+    modelsLocked: !approved,
+    models: Object.fromEntries(modelsFor(lm.data || [], levels, p.work_scope)
+      .map((m: any) => [m.key, { model_id: m.id, title: m.title_ar, status: subBy[m.id] || null }])),
+    capstone: cap.data?.[0] || null,
   };
   return Object.fromEntries(mine.map((r) => [r.id, activityFor(r, ev)]));
 }
@@ -99,7 +108,7 @@ export async function readingPing(p: any, b: Body) {
   if (!row) {
     const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md').eq('id', id).maybeSingle());
     if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
-    words = wordCount(filterHandbookMd(m.body_md, levels[m.dimension]));
+    words = wordCount(filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope));
   }
   const now = new Date();
   const next = applyReadingPing(row, b, now.getTime());

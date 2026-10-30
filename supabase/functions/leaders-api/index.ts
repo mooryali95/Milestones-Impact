@@ -6,14 +6,15 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
-//   للمشارك:  me · org.logo · logout · profile.save · upload.url · cv.attach
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · auth.start · auth.verify · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · achievements · certificate
+//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
-//   للمنسق:   coord.me · coord.dashboard · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
+//             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
+//   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
@@ -24,6 +25,9 @@ import * as Z from './certificates.ts';
 import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
+import * as S from './system.ts';
+import * as L from './lab.ts';
+import * as X from './capstone.ts';
 
 type Body = Record<string, any>;
 
@@ -31,10 +35,10 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
   'org.info': (b) => P.orgInfo(b),
-  // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها في التشغيلة نفسها
+  // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, coordinator_reports: await C.weeklyReports() };
+    return { ...r, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,
@@ -43,12 +47,16 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'cert.verify': Z.verify,
   'rater.get': I.raterGet,
   'rater.submit': I.raterSubmit,
+  'sponsor.get': X.sponsorGet,
+  'sponsor.submit': X.sponsorSubmit,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
   'logout': (_p, _b, sid) => P.logout(sid),
+  'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
+  'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
   'profile.save': P.profileSave,
   'upload.url': P.uploadUrl,
   'cv.attach': P.cvAttach,
@@ -66,6 +74,9 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'models.list': (p) => P.modelsList(p),
   'models.get': (p, b) => P.modelGet(p, b),
   'models.save': (p, b) => P.modelSave(p, b),
+  'lab.list': (p) => L.list(p),
+  'lab.start': (p, b) => L.start(p, b),
+  'lab.answer': (p, b) => L.answer(p, b),
   'achievements': (p) => P.achievements(p),
   'certificate': (p) => Z.mine(p),
   'handbook.ping': (p, b) => V.readingPing(p, b),
@@ -78,17 +89,26 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'impact.mine': (p) => I.mine(p),
   'rater.invite': (p, b) => I.invite(p, b),
   'rater.revoke': (p, b) => I.revoke(p, b),
+  'capstone.get': (p) => X.get(p),
+  'capstone.summary': (p, b) => X.saveSummary(p, b),
+  'capstone.submit': (p) => X.submit(p),
+  'capstone.doc': (p) => X.doc(p),
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'coord.me': (c) => C.me(c),
   'coord.dashboard': (c) => C.dashboard(c),
+  'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b),
   'coord.logout': (_c, _b, sid) => C.logout(sid),
 };
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
-  'admin.overview': (_a, b) => A.overview(b),
+  'admin.health': () => S.health(),
+  'admin.visits': (_a, b) => S.visits(b),
+  'admin.trends': () => S.trends(),
+  'admin.item-analysis': (_a, b) => S.itemReport(b),
+  'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => A.participant(b),
   'admin.reviews': () => A.reviews(),
@@ -120,6 +140,10 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.reorder': A.reorder,
   'admin.clone-instrument': A.cloneInstrument,
   'admin.activate-instrument': A.activateInstrument,
+  'admin.lab': () => L.adminOverview(),
+  'admin.lab-item': (a, b) => A.writer(a, L.adminItem, b),
+  'admin.lab-grant': (a, b) => A.writer(a, L.adminGrant, b),
+  'admin.lab-revoke': (a, b) => A.writer(a, L.adminRevoke, b),
   'admin.certificates': (_a, b) => Z.list(b),
   'admin.certificate': (_a, b) => Z.get(b),
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
@@ -150,6 +174,10 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.cohort-upgrade': (a, b) => A.writer(a, G.cohortUpgrade, b),
   'admin.cohort-enroll': (a, b) => A.writer(a, G.cohortEnroll, b),
+  'admin.capstones': (_a, b) => X.adminList(b),
+  'admin.capstone': (_a, b) => X.adminGet(b),
+  'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
+  'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
 };
 
 Deno.serve(async (req) => {
@@ -175,7 +203,7 @@ Deno.serve(async (req) => {
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
-    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code }, e.status);
+    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
     console.error('leaders-api:', e);
     return reply(req, { success: false, message: 'خطأ داخلي، حاول بعد قليل', code: 'internal' }, 500);
   }

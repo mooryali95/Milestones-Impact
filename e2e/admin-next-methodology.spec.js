@@ -126,3 +126,15 @@ test('المستويات: حاسبة التسكين وحفظ المعيار', as
   await page.getByRole('button', { name: 'حفظ المعيار' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'placement_model', row: { id: 1, min_advanced: 80 } });
 });
+
+test('دخول برمز البريد وحده: تنبيه بأن الجلسة للعرض حتى يُفعَّل عامل ثانٍ', async ({ page }) => {
+  await setup(page);
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.overview') return route.fallback();
+    await route.fulfill({ json: { success: true, total: 0, by_status: {}, pending_reviews: 0, mfa_required: true, matrix: { milestone: { beginner: 0, intermediate: 0, advanced: 0 }, impact: { beginner: 0, intermediate: 0, advanced: 0 }, leadership: { beginner: 0, intermediate: 0, advanced: 0 } } } });
+  });
+  await tab(page, 'نظرة عامة');
+  await expect(page.getByRole('alert').filter({ hasText: 'للعرض فقط في هذه الجلسة' })).toBeVisible();
+});
+

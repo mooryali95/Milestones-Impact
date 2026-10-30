@@ -11,7 +11,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call, lastRead } from '../api.js';
 import { BookSkeleton } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
+import { POINTS } from '../../../supabase/functions/leaders-api/logic.js';
 import { Models, Wins } from './Models.jsx';
+import { ChapterLab } from './Lab.jsx';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
 
 import logoDark from '../milestone-impact.svg';
@@ -339,7 +341,7 @@ function Review({ data, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const ready = answers.every((x) => x !== null);
-  const potential = 10 + data.quiz.length * 5 + 5;
+  const potential = POINTS.chapter + data.quiz.length * POINTS.perCorrect + (data.reflection ? POINTS.reflection : 0);
 
   const submit = async () => {
     setBusy(true); setError('');
@@ -364,7 +366,7 @@ function Review({ data, onDone }) {
           <span className="reflect-q"><b>سؤال للتأمل</b>{data.reflection}</span>
           <textarea className="input" rows={3} value={reflection} onChange={(e) => setReflection(e.target.value)}
             placeholder="اكتب تأملك على عملك الحقيقي. سطران يكفيان." />
-          <small className="muted">التأمل الصادق يمنحك 5 نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
+          <small className="muted">التأمل الصادق يمنحك {POINTS.reflection} نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
         </label>
       )}
 
@@ -402,7 +404,7 @@ function Review({ data, onDone }) {
   );
 }
 
-export default function Handbook({ me, onBack }) {
+export default function Handbook({ me, lab, onLab, onBack }) {
   const [toc, setToc] = useState(null);
   const [tab, setTab] = useState('read');
   const [error, setError] = useState('');
@@ -528,6 +530,7 @@ export default function Handbook({ me, onBack }) {
     if (r.gained) setToast(`+${r.gained} نقطة`);
     loadToc(false);
   };
+  const chapterLab = data && (lab || []).filter((it) => it.dimension === data.chapter.dimension && it.chapter_key === data.chapter.chapter_key);
   // النسخة الشخصية PDF: الخادم يصدرها برقم ويسجلها، والنافذة تُفتح متزامنة مع النقرة
   const parts = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short }));
   const exportBook = async () => {
@@ -561,10 +564,12 @@ export default function Handbook({ me, onBack }) {
             <small>{pts.rank.next ? `${pts.rank.next.left} نقطة إلى ${pts.rank.next.title}` : 'أعلى لقب في البرنامج'}</small>
           </div>
         </div>
-        <nav className="book-tabs" role="tablist">
-          {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
-          ))}
+        <nav className="book-tabs" aria-label="أقسام الكتاب">
+          <div className="book-tablist" role="tablist">
+            {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+            ))}
+          </div>
           <span className="spacer" />
           <button className="link small" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">نسخة PDF شخصية</button>
           <button className="link small book-back" onClick={onBack}>رجوع للرحلة</button>
@@ -623,6 +628,7 @@ export default function Handbook({ me, onBack }) {
             </div>
             {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
+            {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={onLab} />}
             <div className="row between book-nav">
               <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
               <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>

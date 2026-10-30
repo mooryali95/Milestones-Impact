@@ -1,38 +1,24 @@
 // ════════════════════════════════════════════════════════════════
 // الإعدادات: الملف، تطبيق المصادقة، مفاتيح المرور، الجلسات، المستخدمون
 // ════════════════════════════════════════════════════════════════
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { call, fmtDate, ROLE_LABELS, session } from '../api.js';
 import { passkeyCancelled, passkeyCreate, passkeySupported } from '../passkey.js';
 import { useEscape, useUI } from '../ui.jsx';
+import QRCode from 'qrcode';
 
 const METHOD = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة', email: 'رمز البريد' };
 
-// مكتبة QR تُحمّل عند الحاجة فقط، بنسخة مثبتة وبصمة SRI
-function loadQrLib() {
-  if (window.QRCode) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const sc = document.createElement('script');
-    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-    sc.integrity = 'sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU';
-    sc.crossOrigin = 'anonymous';
-    sc.onload = resolve; sc.onerror = reject;
-    document.head.appendChild(sc);
-  });
-}
-
+// رمز QR يُولَّد محليًا من حزمة qrcode، فلا يُحمَّل سكربت من خارج اللوحة
 function Qr({ uri }) {
-  const box = useRef(null);
+  const [src, setSrc] = useState('');
   useEffect(() => {
     let live = true;
-    loadQrLib().then(() => {
-      if (!live || !box.current) return;
-      box.current.innerHTML = '';
-      new window.QRCode(box.current, { text: uri, width: 160, height: 160, colorDark: '#061318', colorLight: '#FDFCF8', correctLevel: window.QRCode.CorrectLevel.M });
-    }).catch(() => {});
+    QRCode.toDataURL(uri, { width: 160, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#061318', light: '#FDFCF8' } })
+      .then((u) => { if (live) setSrc(u); }).catch(() => {});
     return () => { live = false; };
   }, [uri]);
-  return <div ref={box} />;
+  return src ? <img src={src} width="160" height="160" alt="رمز QR لتطبيق المصادقة" /> : null;
 }
 
 function Totp({ user, onUser }) {
@@ -279,7 +265,7 @@ function Users({ me }) {
                         {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                       </select>
                     </td>
-                    <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? '#4A7A3A' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : '—'}</span></td>
+                    <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? 'var(--st-ok)' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : '—'}</span></td>
                     <td>{u.is_owner ? '🔒' : (
                       <button className={`toggle-btn ${u.is_active ? 'on' : 'off'}`} role="switch" aria-checked={!!u.is_active} aria-label={`تفعيل ${u.name}`}
                         onClick={async () => { if (await update(u.id, 'is_active', !u.is_active)) load(); }} />

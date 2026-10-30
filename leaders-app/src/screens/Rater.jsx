@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // صفحة مفتوحة بلا حساب، يصلها المدير أو الزميل من بريد الدعوة. لكل عبارة
 // تقديران: الآن وقبل البرنامج، و"لا أستطيع الحكم" إن لم يرَ الموقف.
+// دعوة ما قبل البرنامج (phase pre) تقدير واحد: الأشهر الثلاثة الأخيرة.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf } from '../labels.js';
@@ -32,8 +33,9 @@ export default function Rater() {
     );
   }
 
+  const pre = data.phase === 'pre';
   const set = (id, k, v) => setAnswers((a) => ({ ...a, [id]: { ...a[id], [k]: v } }));
-  const left = data.questions.filter((q) => answers[q.id]?.now == null || answers[q.id]?.before == null).length;
+  const left = data.questions.filter((q) => answers[q.id]?.now == null || (!pre && answers[q.id]?.before == null)).length;
   const submit = async () => {
     setBusy(true); setError('');
     const res = await call('rater.submit', { t, answers, comment });
@@ -54,18 +56,20 @@ export default function Rater() {
   return (
     <div className="page narrow stack">
       <div className="card stack">
-        <p className="eyebrow">تقدير تغير الممارسة</p>
-        <h1 style={{ fontSize: 22 }}>{data.rater ? `أهلًا ${data.rater}، ` : ''}كيف تغيّرت ممارسة {data.participant}؟</h1>
-        <p className="muted">بصفتك {data.relation || 'مقيّمًا'}، قدّر لكل عبارة مرتين: كيف يمارسها الآن، وكيف كان يمارسها قبل البرنامج. اعتمد على ما رأيته فعلًا، واختر «لا أستطيع الحكم» إن لم تشهد الموقف. لا يظهر تقديرك له منفردًا.</p>
+        <p className="eyebrow">{pre ? 'تقدير الممارسة قبل البرنامج' : 'تقدير تغير الممارسة'}</p>
+        <h1 style={{ fontSize: 22 }}>{data.rater ? `أهلًا ${data.rater}، ` : ''}{pre ? `كيف يمارس ${data.participant} عمله اليوم؟` : `كيف تغيّرت ممارسة ${data.participant}؟`}</h1>
+        <p className="muted">{pre
+          ? `بصفتك ${data.relation || 'مقيّمًا'}، قدّر كل عبارة كما رأيته في الأشهر الثلاثة الأخيرة. سنطلب منك التقدير نفسه بعد البرنامج لنقارن بين المرتين. اعتمد على ما رأيته فعلًا، واختر «لا أستطيع الحكم» إن لم تشهد الموقف. لا يظهر تقديرك له منفردًا.`
+          : `بصفتك ${data.relation || 'مقيّمًا'}، قدّر لكل عبارة مرتين: كيف يمارسها الآن، وكيف كان يمارسها قبل البرنامج. اعتمد على ما رأيته فعلًا، واختر «لا أستطيع الحكم» إن لم تشهد الموقف. لا يظهر تقديرك له منفردًا.`}</p>
       </div>
       {data.questions.map((q, i) => (
         <div key={q.id} className="card stack">
           <div className="row small"><span className="chip dark">{dimOf(q.dimension).title}</span><span className="muted">{i + 1} من {data.questions.length}</span></div>
           <p className="q-text">{q.text}</p>
-          <p className="retro-label">الآن</p>
+          <p className="retro-label">{pre ? 'في الأشهر الثلاثة الأخيرة' : 'الآن'}</p>
           {scale(q, 'now')}
-          <p className="retro-label">قبل البرنامج</p>
-          {scale(q, 'before')}
+          {!pre && <p className="retro-label">قبل البرنامج</p>}
+          {!pre && scale(q, 'before')}
         </div>
       ))}
       <div className="card stack">

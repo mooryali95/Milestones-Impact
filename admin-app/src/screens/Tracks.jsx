@@ -10,6 +10,7 @@ import Form from '../Form.jsx';
 import Md from '../Md.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 import { ChapterEditor } from './Handbook.jsx';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 const LvlChips = ({ k }) => {
   const lv = trackLevels(k);
@@ -45,7 +46,7 @@ function Board({ tracks, onOpen }) {
             <p>كل مسار تركيبة فريدة من مستويات الأطر الثلاثة، له هويته وكتيبه ورحلته. افتح أي مسار لترى مشاركيه وكتيبه كاملًا.</p></div>
         </div>
         <div className="tx-kpis">
-          <div><b>{used}<small>/27</small></b><span>مسار به مشاركون</span></div>
+          <div><b>{used}<small>/{TRACK_COUNT}</small></b><span>مسار به مشاركون</span></div>
           <div><b>{sum('total')}</b><span>مشارك مسكّن</span></div>
           <div><b>{sum('active')}</b><span>مفعّل</span></div>
           <div className={sum('pending') ? 'warn' : ''}><b>{sum('pending')}</b><span>بانتظار اعتمادك</span></div>

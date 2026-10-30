@@ -11,6 +11,8 @@ import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { stars } from '../handbook.js';
 
+const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
+
 // الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز
 const SAVED_KEY = 'mi_admin_list_filters';
 const loadSaved = () => { try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || {}; } catch { return {}; } };
@@ -223,6 +225,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>الجهة</dt><dd>{p.organization_name}</dd>
             <dt>القطاع</dt><dd>{p.sector}</dd>
             <dt>الخبرة</dt><dd>{p.years_experience != null ? `${p.years_experience} سنة` : ''}</dd>
+            <dt>النطاق</dt><dd>{SCOPE[p.work_scope] || 'لم يحدد'}</dd>
             <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
             <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>

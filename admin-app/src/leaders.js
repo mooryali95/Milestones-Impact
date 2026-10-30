@@ -20,17 +20,12 @@ export async function L(action, body = {}) {
   return d;
 }
 
-export const DIM = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
-export const DIM_EN = { milestone: 'Milestone', impact: 'Impact', leadership: 'Leadership' };
-export const LVL = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
-export const STATUS = {
-  registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
-  placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
-};
-export const REQ = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد' };
+import { DIM_AR as DIM, DIM_SHORT as DIM_EN, FUNNEL, LEVEL_AR as LVL, PARTICIPANT_STATUS as STATUS, REQ_STATUS as REQ, SUBMISSION_STATUS_ADMIN } from '../../supabase/functions/leaders-api/labels.js';
+import { SITES } from '../../supabase/functions/_shared/sites.js';
+
+export { DIM, DIM_EN, FUNNEL, LVL, STATUS, REQ };
 export const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'نقل يدوي', none: 'غير محدد' };
-export const SUB_ST = { submitted: ['بانتظار تقييمك', 'warn'], reviewed: ['قُيّم', 'ok'], returned: ['أُعيد للتطوير', ''], draft: ['مسودة', ''] };
-export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
+export const SUB_ST = Object.fromEntries(Object.entries({ submitted: 'warn', reviewed: 'ok', returned: '', draft: '' }).map(([k, tone]) => [k, [SUBMISSION_STATUS_ADMIN[k], tone]]));
 export const DIMS = Object.keys(DIM);
 const LVLS = Object.keys(LVL);
 
@@ -43,7 +38,7 @@ export const trackOfPlacements = (pl) => trackOf(Object.fromEntries((pl || []).m
 
 export const date = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 
-export const APP_URL = 'https://leaders.sunkvalue.com';
+export const APP_URL = SITES.leaders;
 export const inviteUrl = (o, c) => `${APP_URL}/j/${encodeURIComponent(o.invite_code || '')}${c ? `/${encodeURIComponent(c)}` : ''}`;
 export const validCampaign = (c) => /^[a-z0-9_-]{1,40}$/.test(c);
 export const orgColor = (o) => o?.color || '#A97A2E';

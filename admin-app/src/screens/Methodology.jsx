@@ -5,11 +5,14 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
+import { journeyCoherence, renderJourneyText } from '../../../supabase/functions/leaders-api/logic.js';
+import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import {
-  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, STAGE_FIELDS, TIER,
+  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
+import ItemQuality from './ItemQuality.jsx';
 import { useUI } from '../ui.jsx';
 
 const save = (entity, base) => (row) => L('admin.save', { entity, row: { ...base, ...row } });
@@ -59,15 +62,29 @@ function ProgramBar({ current, onProgram }) {
   );
 }
 
+// فحص الاتساق: هل تتسع كل مرحلة لجلساتها، وهل لكل رمز في النصوص مصدر
+function Coherence({ stages, reqs }) {
+  const issues = journeyCoherence(stages, reqs);
+  if (!issues.length) return <p className="la-chip ok" role="status">الرحلة متسقة: كل رقم في النصوص من إعداد نشاطه، وكل مرحلة تتسع لجلساتها</p>;
+  return (
+    <section className="la-card" role="alert" aria-label="اتساق الرحلة">
+      <h3>اتساق الرحلة <small className="la-muted">· {issues.length} ملاحظة</small></h3>
+      <ul className="la-reqs">{issues.map((x, i) => <li key={i}><span className={`la-chip ${x.level === 'error' ? 'bad' : 'warn'}`}>{x.level === 'error' ? 'خطأ' : 'تنبيه'}</span> {x.msg}</li>)}</ul>
+    </section>
+  );
+}
+
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
   const pid = catalog.program_id;
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
+  const shown = (t, s) => renderJourneyText(t, { reqs, durationDays: s?.duration_days, readyMin: READY_MIN });
   return (
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
+      <Coherence stages={stages} reqs={reqs} />
       <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى.</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>
@@ -75,32 +92,32 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
           {stages.filter((s) => s.phase === ph).map((s) => (
             <section key={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>
               <div className="la-row between">
-                <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{s.duration_label}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
+                <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
                   <Move {...mv} entity="journey_stages" id={s.key} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: STAGE_FIELDS, values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
+                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs), values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
                 </div>
               </div>
-              {s.description_ar && <p className="la-muted">{s.description_ar}</p>}
+              {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
               <ul className="la-reqs">
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
                   <li key={r.id} className={r.active ? '' : 'off'}>
                     <span>
-                      <code>{r.code}</code> {r.title_ar} <small className="la-chip">{KIND[r.kind]}</small>
+                      <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small>
                       {r.dimension && <small className="la-chip">{DIM_EN[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
                       {!r.required && <small className="la-chip">اختياري</small>}
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}
                     </span>
                     <span className="la-row">
                       <Move {...mv} entity="stage_requirements" id={r.id} />
-                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages, catalog.learning_models || []), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
                   </li>
                 ))}
               </ul>
               {canWrite && (
                 <button className="la-link" onClick={() => edit({
-                  title: 'متطلب جديد', fields: reqFields(stages),
+                  title: 'متطلب جديد', fields: reqFields(stages, catalog.learning_models || []),
                   values: reqToForm({ stage_key: s.key, kind: 'check', required: true, active: true }),
                   onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
                 })}>+ متطلب</button>
@@ -121,6 +138,7 @@ export function Assessment({ catalog, reload, canWrite }) {
   const insts = [...catalog.instruments].sort((a, b) => (a.kind + b.version).localeCompare(b.kind + a.version));
   const [instId, setInstId] = useState(() => (insts.find((i) => i.active && i.kind === 'baseline') || insts[0])?.id);
   const [dim, setDim] = useState('milestone');
+  const [quality, setQuality] = useState(false);
   const inst = insts.find((i) => i.id === instId) || insts[0];
   if (!inst) return <p className="la-muted">لا أدوات قياس.</p>;
   const locked = catalog.locked_instruments.includes(inst.id);
@@ -150,7 +168,9 @@ export function Assessment({ catalog, reload, canWrite }) {
           <button className="btn-sm ghost" onClick={clone}>إصدار جديد</button>
           {!inst.active && <button className="btn-sm primary" onClick={activate}>تفعيل هذا الإصدار</button>}
         </>}
+        <button className="btn-sm ghost" aria-pressed={quality} onClick={() => setQuality(!quality)}>جودة الأسئلة</button>
       </div>
+      {quality && <ItemQuality instrumentId={inst.id} />}
       {locked && <div className="la-note">لهذا الإصدار نتائج سابقة، فيُسمح بتعديل الصياغة والترتيب فقط. لتغيير الخيارات أو الدرجات أو إضافة أسئلة أنشئ إصدارًا جديدًا ثم فعّله؛ النتائج القديمة تبقى سليمة.</div>}
       <nav className="la-subtabs" aria-label="الأطر">
         {DIMS.map((d) => <button key={d} className={dim === d ? 'on' : ''} aria-current={dim === d ? 'true' : undefined} onClick={() => setDim(d)}>{DIM_EN[d]} <small>{count(d)}</small></button>)}

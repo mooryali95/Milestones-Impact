@@ -1,0 +1,52 @@
+name: Deploy leaders-api
+
+# Deploys the leaders-api edge function from main, replacing the manual
+# paste of the bundle into the Supabase dashboard. It does nothing until
+# the repository secret SUPABASE_ACCESS_TOKEN exists (Supabase account,
+# Access Tokens). SQL migrations stay manual: the live database has no
+# migration history, so `supabase db push` would try to re-run them all.
+
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/functions/leaders-api/**', 'supabase/functions/_shared/**']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-leaders-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: eormhcupwgwpllhrfxxg
+    steps:
+      - name: Skip without a token
+        id: gate
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::notice::SUPABASE_ACCESS_TOKEN is not set; paste the bundle by hand as before."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+      - uses: supabase/setup-cli@v1
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          version: latest
+      - name: Deploy
+        if: steps.gate.outputs.skip != 'true'
+        run: supabase functions deploy leaders-api --project-ref "$PROJECT_REF"
+      - name: Verify the live function answers
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS \
+            -H 'Origin: https://admin.sunkvalue.com' -H 'Access-Control-Request-Method: POST' \
+            "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
+          echo "OPTIONS -> $code"
+          test "$code" = "200"

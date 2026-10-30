@@ -2,7 +2,8 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { deliver, esc, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
+import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
+import { SITES } from '../_shared/sites.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -11,21 +12,29 @@ export const CONFIG = {
   serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
   // ملح الهاش للرموز والتوكنات. سر مستقل حتى لا يكفي تسريب القاعدة وحده.
   pepper: env('LEADERS_TOKEN_PEPPER'),
-  appUrl: env('LEADERS_APP_URL', 'https://leaders.sunkvalue.com'),
+  appUrl: env('LEADERS_APP_URL', SITES.leaders),
   coordinatorDays: 14,
   rpId: env('LEADERS_RP_ID', 'leaders.sunkvalue.com'),
   rpName: 'Milestone Impact',
-  origins: env('LEADERS_ORIGINS', 'https://leaders.sunkvalue.com').split(',').map((s) => s.trim()),
+  origins: env('LEADERS_ORIGINS', SITES.leaders).split(',').map((s) => s.trim()),
   // لوحة الإدارة تنادي نفس الدالة؛ مسموحة في CORS فقط وليست أصلًا لمفاتيح المرور
-  adminOrigins: env('LEADERS_ADMIN_ORIGINS', 'https://admin.sunkvalue.com').split(',').map((s) => s.trim()),
+  adminOrigins: env('LEADERS_ADMIN_ORIGINS', SITES.admin).split(',').map((s) => s.trim()),
   resendKey: env('RESEND_API_KEY'),
   // سر يرسله المجدول (pg_cron) لتشغيل التذكيرات؛ بدونه لا يعمل الإجراء
   cronSecret: env('LEADERS_CRON_SECRET'),
   // توقيع webhook منصات الحجز (دالة leaders-hooks)
   calcomSecret: env('LEADERS_CALCOM_SECRET'),
   calendlyKey: env('LEADERS_CALENDLY_KEY'),
-  mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
-  sessionDays: 30,
+  mailFrom: env('LEADERS_MAIL_FROM', MAIL_FROM_DEFAULT),
+  // التحقق البشري (Cloudflare Turnstile) قبل إرسال أي رمز: يعمل حين يُضبط السر
+  // تقرير الصحة الأسبوعي يصل إلى هذا البريد (المالك)
+  alertEmail: env('LEADERS_ALERT_EMAIL'),
+  turnstileSecret: env('LEADERS_TURNSTILE_SECRET'),
+  turnstileSite: env('LEADERS_TURNSTILE_SITE_KEY'),
+  // سقف يومي لرسائل الرموز من هذه الدالة، فيبقى من حصة البريد ما يكفي للإدارة
+  mailDailyCap: Number(env('LEADERS_MAIL_DAILY_CAP', '80')) || 80,
+  // الجلسة تتجدد بالاستعمال، وتنتهي بعد أسبوعين من آخر نشاط
+  sessionDays: 14,
   codeMinutes: 15,
 };
 
@@ -41,14 +50,14 @@ export const BUCKET = 'leaders-private';
 
 // ── الردود ──
 const cors = (origin: string | null) => ({
-  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins, ['http://localhost:5174']).includes(origin) ? origin : CONFIG.origins[0],
+  'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins).includes(origin) ? origin : CONFIG.origins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Vary': 'Origin',
 });
 
 export class Fail extends Error {
-  constructor(message: string, public status = 400, public code = 'bad_request') { super(message); }
+  constructor(message: string, public status = 400, public code = 'bad_request', public extra: Record<string, unknown> = {}) { super(message); }
 }
 
 export function reply(req: Request, body: unknown, status = 200) {
@@ -98,6 +107,29 @@ export function must<T>(res: { data: T; error: unknown }, msg = 'تعذّر تن
   return res.data;
 }
 
+// كل الصفوف بصفحات من 1000: القراءة الواحدة تُقطع عند حد Supabase (max rows) دون خطأ،
+// فالإحصاءات المجمّعة تُقرأ بهذه دائمًا. build يبني الاستعلام من جديد لكل صفحة.
+export async function all(build: (from: number, to: number) => any, msg?: string) {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const rows = must(await build(from, from + 999), msg) as any[] ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+}
+
+// صفوف مجموعة مشاركين، بدفعات من 150 معرّفًا كي لا يتجاوز الرابط حده.
+// ids = null تعني الكل بلا تصفية، وهو أخف من تمرير كل المعرّفات.
+export async function allFor(ids: string[] | null, make: () => any, col = 'participant_id') {
+  if (!ids) return all((f, t) => make().range(f, t));
+  const out: any[] = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    const part = ids.slice(i, i + 150);
+    out.push(...await all((f, t) => make().in(col, part).range(f, t)));
+  }
+  return out;
+}
+
 export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coordinator', actor: string | null, action: string,
   entity: string, entityId: string | null, before: unknown = null, after: unknown = null) {
   await db.from('audit_log').insert({ actor_type: actorType, actor, action, entity, entity_id: entityId, before, after });
@@ -136,6 +168,15 @@ ${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
 }
 
 // تذكير أسبوعي لمن غاب عن رحلته وما زالت لديه خطوات مفتوحة
+export function healthMail(rows: [string, string][], issues: string[]) {
+  const table = rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#5F7176">${esc(k)}</td><td style="padding:6px 0;font-weight:600" align="left">${esc(v)}</td></tr>`).join('');
+  const list = issues.length
+    ? `<p style="font-size:15px;margin:18px 0 6px;font-weight:600">ما يحتاج تدخلك</p><ul style="margin:0;padding-inline-start:20px;line-height:1.9">${issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
+    : '<p style="font-size:15px;margin:18px 0 0">لا شيء يحتاج تدخلك هذا الأسبوع.</p>';
+  return mailShell('تقرير الأسبوع: برنامج القادة', `<table role="presentation" width="100%" style="font-size:14px">${table}</table>${list}
+${mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة')}`, { eyebrow: 'LEADERS PROGRAM', footnote: 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
+}
+
 export function reminderMail(name: string, open: number) {
   return shell('رحلتك بانتظارك', `
 <p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>
@@ -184,10 +225,58 @@ export function certificateMail(name: string, url: string) {
 ${mailButton(url, 'اعرض شهادتي')}`);
 }
 
-export function raterMail(rater: string | null, who: string, link: string) {
+// phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة
+export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' = 'post') {
+  const pre = phase === 'pre';
   return shell(`طلب تقدير من ${who}`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}</p>
+<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${pre
+    ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
+    : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.'}</p>
 ${mailButton(link, 'ابدأ التقدير')}
 <p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح 30 يومًا.</p>`);
+}
+
+// ── حارس رسائل الرموز ──
+// قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام
+// يحمي حصة البريد من الاستنزاف، ثم التحقق البشري إن كان مفعّلًا.
+const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges'];
+async function challengeCount(since: string, ip?: string | null) {
+  let n = 0;
+  for (const t of CHALLENGE_TABLES) {
+    let q = db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', since);
+    if (ip) q = q.eq('ip', ip);
+    const { count } = await q;
+    n += count ?? 0;
+  }
+  return n;
+}
+
+async function turnstileOk(token: unknown, ip: string | null) {
+  if (typeof token !== 'string' || token.length < 10 || token.length > 4096) return false;
+  const form = new FormData();
+  form.append('secret', CONFIG.turnstileSecret);
+  form.append('response', token);
+  if (ip) form.append('remoteip', ip);
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    return !!(await r.json())?.success;
+  } catch { return false; }
+}
+
+export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }) {
+  const hourAgo = new Date(Date.now() - 36e5).toISOString();
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  // الحد يتسع لدفعة تسجّل معًا من شبكة واحدة (قاعة ورشة)، ولا يكفي جهازًا واحدًا لاستنزاف السقف العام
+  if (ctx.ip) {
+    if (await challengeCount(hourAgo, ctx.ip) >= 30) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
+    if (await challengeCount(dayAgo, ctx.ip) >= 60) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+  }
+  if (await challengeCount(dayAgo) >= CONFIG.mailDailyCap) {
+    console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
+    throw new Fail('بلغت الرسائل حدها اليومي. ادخل بمفتاح المرور، أو حاول بعد ساعات', 429, 'mail_cap');
+  }
+  if (CONFIG.turnstileSecret && !(await turnstileOk(b.captcha, ctx.ip))) {
+    throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });
+  }
 }

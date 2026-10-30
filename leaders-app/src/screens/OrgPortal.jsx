@@ -7,12 +7,9 @@ import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton } from '../ui.jsx';
+import Captcha from '../Captcha.jsx';
 
-const STATUS = {
-  registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
-  placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
-};
-const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
+import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
@@ -27,11 +24,14 @@ function SignIn({ onIn, initialError }) {
   const ref = useRef(null);
   useEffect(() => { if (step === 'code') ref.current?.focus(); }, [step]);
 
-  const start = async (e) => {
-    e.preventDefault();
+  const [captchaKey, setCaptchaKey] = useState(null);
+  const start = async (e, captcha) => {
+    e?.preventDefault();
     setBusy(true); setError('');
-    const r = await coordCall('coord.auth-start', { email });
+    const r = await coordCall('coord.auth-start', { email, captcha });
     setBusy(false);
+    if (r.code === 'captcha') { setCaptchaKey(r.site_key || ''); return setError(r.site_key ? '' : r.message); }
+    setCaptchaKey(null);
     if (!r.success) return setError(r.message);
     setStep('code');
   };
@@ -56,6 +56,7 @@ function SignIn({ onIn, initialError }) {
               <input className="input ltr" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.sa" />
             </label>
             {error && <div className="alert err">{error}</div>}
+            {captchaKey && <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
           </form>
         ) : (
@@ -85,7 +86,42 @@ function Bars({ obj, label = (k) => k, total }) {
 }
 
 // أثر الجهة: القياس المبدئي مقابل البعدي كما يحسبه الخادم، دون أي حساب هنا
-const DIM_AR = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
+
+// محفظة مبادرات الدفعة: مشاريع تخرج مشاركي الجهة. الوثيقة كاملة بعد اعتمادها
+const SCOPE_AR = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
+function Initiatives({ list }) {
+  const [msg, setMsg] = useState('');
+  if (!list.length) return null;
+  const approved = list.filter((x) => x.status === 'approved');
+  const cost = approved.reduce((a, x) => a + (x.cost || 0), 0);
+  const open = async (x) => {
+    const win = window.open('', '_blank');
+    const r = await coordCall('coord.capstone', { participant_id: x.participant_id });
+    if (!r.success) { win?.close(); return setMsg(r.message); }
+    const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
+    const { meta, body } = capstoneReport(r.doc);
+    if (!writeDocument(win, meta, body)) setMsg('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+  };
+  return (
+    <section className="card op-table">
+      <h3>محفظة مبادرات الجهة</h3>
+      <p className="small muted">مشاريع تخرج مشاركيكم: مبادرات حقيقية في جهتكم. {approved.length} معتمدة{cost ? ` بتكلفة تقديرية ${Math.round(cost).toLocaleString('en-US')} ريال` : ''}.</p>
+      {msg && <div className="alert err">{msg}</div>}
+      <div className="op-scroll"><table>
+        <thead><tr><th>المبادرة</th><th>القائد</th><th>النوع</th><th>الحالة</th><th>التكلفة</th><th /></tr></thead>
+        <tbody>{list.map((x) => (
+          <tr key={x.participant_id}>
+            <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
+            <td>{x.full_name}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
+            <td>{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
+            <td>{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
+            <td>{x.status === 'approved' && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    </section>
+  );
+}
 const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
 function ImpactCard({ im, onReport }) {
   if (!im) return null;
@@ -176,6 +212,7 @@ function Dashboard({ me, onLogout }) {
       </div>
 
       <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
+      <Initiatives list={d.initiatives || []} />
 
       <section className="card op-table">
         <div className="row between op-tools">

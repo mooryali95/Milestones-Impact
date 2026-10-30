@@ -5,6 +5,7 @@
 // والفيديو بما شوهد منه، والجلسة الجماعية بالتوثيق الذي اختاره المشرف، والفردية بتأكيد الموجّه.
 import React, { useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
+import { downloadIcs } from '../ics.js';
 
 const fmtDay = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 const fmtTime = (d) => new Date(d).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
@@ -127,7 +128,10 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-const MODE_CHIP = { in_person: 'حضوري', online: 'عن بعد' };
+import { COACH_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
+import { SITES } from '../../../supabase/functions/_shared/sites.js';
+const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
   join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
@@ -157,6 +161,7 @@ function Workshop({ item, open, setToast }) {
             <li key={s.id}>
               <span className="grow"><b>{s.title}</b><span className="small muted"> · {fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}{s.location ? ` · ${s.location}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
+              {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               {s.attended ? <span className="chip ok">حضرت ✓</span>
                 : new Date(s.ends_at) < new Date() ? <span className="chip bad">لم يُسجل حضور</span> : <span className="chip">قادمة</span>}
@@ -169,7 +174,15 @@ function Workshop({ item, open, setToast }) {
   );
 }
 
-const COACH_STATUS = { booked: ['', 'محجوزة'], requested: ['', 'اتصال فوري'], attended: ['ok', 'حضرت ✓'], no_show: ['bad', 'لم تحضر'] };
+// زر «أضف إلى تقويمي» لجلسة لم تبدأ بعد
+const ROUTE = `${SITES.leaders}/`;
+function AddToCalendar({ id, title, start, end, location, url }) {
+  if (!start || new Date(start) < new Date()) return null;
+  const ev = { uid: id, title, start, end, location, url: url || ROUTE, description: `برنامج القادة من Milestone Impact. تفاصيل الجلسة ورابط الانضمام في رحلتك: ${ROUTE}` };
+  return <button type="button" className="link small" onClick={() => downloadIcs(ev, 'milestone-impact-session.ics')}>أضف إلى تقويمي</button>;
+}
+
+const COACH_TONE = { attended: 'ok', no_show: 'bad' };
 
 function Coaching({ item, open, onRefresh, setToast }) {
   const a = item.activity;
@@ -195,17 +208,18 @@ function Coaching({ item, open, onRefresh, setToast }) {
   return (
     <div className="act">
       <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b>
-        <span className="chip">{a.mode === 'in_person' ? 'حضوري' : a.mode === 'any' ? 'حضوري أو عن بعد' : 'عن بعد'}</span></div>
+        <span className="chip">{SESSION_MODE_AR[a.mode] || SESSION_MODE_AR.online}</span></div>
       {a.location && <p className="h">المكان: {a.location}</p>}
       <Bar value={(a.count / a.total) * 100} label="الجلسات" />
       {a.sessions.length > 0 && (
         <ul className="act-list">
           {a.sessions.map((s) => {
-            const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : COACH_STATUS[s.status] || ['', s.status];
+            const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : [COACH_TONE[s.status] || '', COACH_STATUS[s.status] || s.status];
             return (
               <li key={s.id}>
                 <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
                 {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
+                {s.status === 'booked' && <AddToCalendar id={s.id} title="جلسة توجيه: برنامج القادة" start={s.starts_at} end={s.ends_at} location={a.location} url={s.join_url} />}
                 <span className={`chip ${cls}`}>{t}</span>
               </li>
             );
@@ -278,7 +292,24 @@ function Curriculum({ item, open, onRefresh }) {
   );
 }
 
-export default function Activity({ item, open, onUpdate, onHandbook, setToast }) {
+// متطلب «نموذج» أو «مشروع التخرج»: العمل نفسه في وثيقة المبادرة، والرحلة تعرض حالته
+const MODEL_STATUS = SUBMISSION_STATUS;
+const CAP_STATUS = STATUS_TITLES;
+function ModelLink({ a, onCapstone }) {
+  if (a.na) return <p className="h">لا يخص مستواك أو نطاق عملك، فيُحتسب لك.</p>;
+  if (a.locked) return <p className="h">يُفتح بعد اعتماد مسارك.</p>;
+  const label = a.type === 'capstone'
+    ? `${CAP_STATUS[a.status || 'draft']}${a.readiness != null ? ` · الجاهزية ${a.readiness}%` : ''}`
+    : `${a.title ? `«${a.title}» · ` : ''}${MODEL_STATUS[a.status] || 'لم يبدأ'}${!a.done && a.status === 'submitted' && a.accept === 'reviewed' ? ' · يكتمل بتقييم المستشار' : ''}`;
+  return (
+    <div className="act-model row between">
+      <span className="h">{label}</span>
+      {onCapstone && !a.done && <button className="btn sm" onClick={onCapstone}>{a.type === 'capstone' ? 'افتح وثيقة مبادرتك' : 'افتح في مشروعي'}</button>}
+    </div>
+  );
+}
+
+export default function Activity({ item, open, onUpdate, onHandbook, onCapstone, setToast }) {
   const refresh = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
   const a = item.activity;
   if (!a) return null;
@@ -287,6 +318,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, setToast })
   if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
   if (a.type === 'curriculum') return <Curriculum item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
+  if (a.type === 'model' || a.type === 'capstone') return <ModelLink a={a} onCapstone={open ? onCapstone : null} />;
   return null;
 }
 

@@ -8,6 +8,7 @@ import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/brow
 import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import Activity from './Activities.jsx';
+import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -148,7 +149,7 @@ const AUTO_HINT = {
   'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
 };
 
-function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, setToast }) {
+function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
     setBusy(true);
@@ -187,7 +188,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         </div>
         {item.help_ar && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
-        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} setToast={setToast} />}
+        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
         {sys && !verified && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
@@ -347,7 +348,46 @@ function CertificateCard() {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact }) {
+// دعوة المدير المباشر قبل البرنامج: تقديره الآن هو خط الأساس الذي يُقارن به
+// تقديره بعد البرنامج، وهو أقوى من سؤاله لاحقًا عن "قبل" بالتذكر.
+function PreManager() {
+  const [data, setData] = useState(null);
+  const [f, setF] = useState({ email: '', full_name: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => { call('impact.mine').then((r) => setData(r.success ? r : null)); }, []);
+  if (!data?.pre_available) return null;
+  const pre = data.raters.find((r) => r.phase === 'pre');
+  if (pre?.status === 'submitted') return null;
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true); setMsg('');
+    const res = await call('rater.invite', { ...f, phase: 'pre' });
+    setBusy(false);
+    if (res.success) setData(res); else setMsg(res.message || 'تعذر إرسال الدعوة');
+  };
+  return (
+    <div className="banner mist">
+      <span className="ico">👥</span>
+      <div className="grow stack" style={{ gap: 8 }}>
+        <b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
+        {pre
+          ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
+          : (
+            <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
+              <p className="small" style={{ flexBasis: '100%' }}>خمس دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. مقارنة تقديره اليوم بتقديره بعد البرنامج أقوى دليل على أثرك.</p>
+              <input className="input" placeholder="اسمه" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <input className="input ltr" type="email" required placeholder="بريده" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
+              {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
+            </form>
+          )}
+      </div>
+    </div>
+  );
+}
+
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -380,7 +420,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   let order = 0;
 
   return (
-    <div className="page">
+    <div className="page wide">
       <section className="hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
@@ -396,7 +436,6 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
               return <div key={ph.key} className={state}><i />{ph.title}</div>;
             })}
           </div>
-          <div className="row"><button className="btn ghost sm" style={{ color: '#EAF0F0' }} onClick={onEditProfile}>ملفي الشخصي</button></div>
         </div>
         <Ring value={me.progress} />
       </section>
@@ -411,79 +450,97 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </div>
       )}
+      {participant.status !== 'completed' && <PreManager />}
       {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
 
-      {(next || reading) && (
-        <div className="next-grid">
-          {next && (
-            <div className="next-card">
-              <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
-              <b>{next.item.title_ar}</b>
-              <span className="small muted">{next.stage.title_ar}</span>
-              <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
-            </div>
-          )}
-          {reading && (
-            <div className="next-card">
-              <span className="k">تابع القراءة</span>
-              <b>{reading.title}</b>
-              <span className="small muted">كتيبك الشخصي</span>
-              <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
-            </div>
-          )}
-        </div>
-      )}
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
-      {profile && (
-        <>
+      {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
+          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}
+      <div className="j-layout">
+        <aside className="j-side" aria-label="ما تفعله الآن">
+          {(next || reading) && (
+            <div className="next-grid j-next">
+              {next && (
+                <div className="next-card">
+                  <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
+                  <b>{next.item.title_ar}</b>
+                  <span className="small muted">{next.stage.title_ar}</span>
+                  <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
+                </div>
+              )}
+              {reading && (
+                <div className="next-card">
+                  <span className="k">تابع القراءة</span>
+                  <b>{reading.title}</b>
+                  <span className="small muted">كتيبك الشخصي</span>
+                  <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="j-tools">
+            <div className="tool-card">
+              <span className="k">كتيبك الشخصي</span>
+              <b>كتيب مصمم على مستواك</b>
+              <p className="small muted">{approved
+                ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
+                : 'يُفتح بعد اعتماد مستواك.'}</p>
+              <div className="row">{approved
+                ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
+                : <span className="chip">🔒 مقفل</span>}</div>
+            </div>
+            {lab?.length > 0 && (
+              <div className="tool-card">
+                <span className="k">مختبر القائد</span>
+                <b>أدوات عمل ومواقف محاكاة</b>
+                <p className="small muted">تطبّق ما تتعلمه على حالات عملية، وتتخذ قرارات وترى أثرها. أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
+                <div className="row"><button className="btn gold sm" onClick={onLab}>افتح المختبر</button></div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="j-main">
+          {profile && (
+            <>
+              <div className="section-title">
+                <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
+                <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
+              </div>
+              {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
+            </>
+          )}
+
           <div className="section-title">
-            <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
-            <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
-          </div>
-          {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
-        </>
-      )}
-
-      <div className="section-title">
-        <h2>مراحل الرحلة</h2>
-        <span className="small muted">{me.progress}% من الرحلة</span>
-      </div>
-      {PHASES.map((ph, pi) => {
-        const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
-        if (!stages.length) return null;
-        const doneHere = stages.filter((s) => s.status === 'done').length;
-        return (
-          <div className="phase" key={ph.key}>
-            <div className="phase-head">
-              <span className="phase-no">{pi + 1}</span>
-              <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
-              <span className="small muted">{doneHere} من {stages.length}</span>
-            </div>
-            <div className="timeline">
-              {stages.map((s) => {
-                order += 1;
-                return (
-                  <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                    onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} setToast={setToast} />
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-
-      <div className="section-title"><h2>كتيبك الشخصي</h2></div>
-      <div className="card row between">
-        <div>
-          <b>كتيب مصمم على مستواك</b>
-          <p className="small muted">{approved
-            ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
-            : 'يُفتح بعد اعتماد مستواك.'}</p>
+            <h2>مراحل الرحلة</h2>
+            <span className="small muted">{me.progress}% من الرحلة</span>
         </div>
-        {approved
-          ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
-          : <span className="chip">🔒 مقفل</span>}
+        {PHASES.map((ph, pi) => {
+          const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+          if (!stages.length) return null;
+          const doneHere = stages.filter((s) => s.status === 'done').length;
+          return (
+            <div className="phase" key={ph.key}>
+              <div className="phase-head">
+                <span className="phase-no">{pi + 1}</span>
+                <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
+                <span className="small muted">{doneHere} من {stages.length}</span>
+              </div>
+              <div className="timeline">
+                {stages.map((s) => {
+                  order += 1;
+                  return (
+                    <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                      onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} setToast={setToast} />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        </div>
       </div>
 
       {toast && <div className="toast" role="status">{toast}</div>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyTool, badQuiz, HB_TOOLS, maxPoints, nextSort, splitList, tiered, words } from './handbook.js';
+import { applyTool, badQuiz, filterHandbookMd, HB_TOOLS, masterBook, maxPoints, nextSort, splitList, tierLabel, tiered, words } from './handbook.js';
 
 const tool = (label) => HB_TOOLS.find((t) => t[1] === label);
 
@@ -26,5 +26,28 @@ describe('استوديو الكتاب', () => {
     expect(nextSort([{ dimension: 'impact', sort: 4 }, { dimension: 'milestone', sort: 9 }], 'impact')).toBe(5);
     expect(nextSort([], 'impact')).toBe(1);
     expect(splitList('أ، ب ,ج,')).toEqual(['أ', 'ب', 'ج']);
+  });
+
+  it('الكتاب الأصلي الكامل: كل الأبواب بكتلها كاملة، والكتب الـ27 مشتقة منه', () => {
+    const body = 'أساس\n:::min=advanced scope=program\nللاحترافي في البرامج\n:::\nختام';
+    const mods = [
+      { id: 2, dimension: 'leadership', sort: 1, min_level: 'beginner', title_ar: 'ق', body_md: 'نص', quiz_md: 'س: ؟\n- أ\n* ب' },
+      { id: 1, dimension: 'milestone', sort: 2, min_level: 'advanced', title_ar: 'م', body_md: body, reflection_ar: 'تأمل' },
+      { id: 3, dimension: 'impact', sort: 1, min_level: 'beginner', title_ar: 'فارغ', body_md: '' },
+    ];
+    const book = masterBook(mods, [{ id: 9, dimension: 'impact', sort: 1, min_level: 'advanced', active: true }, { id: 8, dimension: 'impact', sort: 2, min_level: 'beginner', active: false }]);
+    expect(book.chapters.map((c) => c.id)).toEqual([1, 2]);
+    expect(book.chapters[0].md).toBe(body);
+    expect(book.chapters[0].reflection).toBe('تأمل');
+    expect(book.chapters[1].quiz).toHaveLength(1);
+    expect(book.models.map((m) => m.id)).toEqual([9]);
+    expect(filterHandbookMd(body, 'intermediate', 'program')).toBe('أساس\nختام');
+    expect(filterHandbookMd(body, 'advanced', 'portfolio')).toContain('للاحترافي في البرامج');
+  });
+
+  it('وسوم الكتل بلغة المحرر', () => {
+    expect(tierLabel('min=advanced scope=program')).toBe('للاحترافي · لقادة البرامج والمحافظ');
+    expect(tierLabel(' only=beginner ')).toBe('للتأسيسي فقط');
+    expect(tierLabel('min=intermediate')).toBe('للمتوسط فأعلى');
   });
 });

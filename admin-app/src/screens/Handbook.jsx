@@ -7,11 +7,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
-  FTYPE, HB_TOOLS, HB_VIEWS, QUIZ_TEMPLATE, RANK, SUB_FILTER,
-  applyTool, badQuiz, clearDraft, draftKey, readDraft, writeDraft, filterHandbookMd, maxPoints, nextSort, parseQuiz, splitList, stars, tiered, words,
+  FTYPE, HB_TOOLS, HB_VIEWS, MASTER, QUIZ_TEMPLATE, RANK, SCOPE_VIEW, SUB_FILTER,
+  applyTool, badQuiz, chapterLabs, chapterLint, clearDraft, deleteNotice, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ROM = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -93,6 +94,17 @@ function useGuard(key, v, setV) {
   return { dirty, guardClose, done: () => clearDraft(key) };
 }
 
+// ملاحظات الباب أسفل المحرر: الخطأ يمنع الحفظ، والتنبيه يدل على سهو، والنقر ينقل إلى موضعه
+function LintBar({ items, onPick }) {
+  if (!items.length) return null;
+  return (
+    <ul className="hb-lint" aria-label="ملاحظات على الباب">{items.map((x, i) => (
+      <li key={i} className={x.level}><button type="button" onClick={() => onPick(x)}>
+        <b>{x.level === 'error' ? 'خطأ' : 'تنبيه'} · {x.line ? `السطر ${x.line}` : `السؤال ${x.q}`}</b> {x.msg}</button></li>
+    ))}</ul>
+  );
+}
+
 // ══ محرر الباب ══
 export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const { toast, confirm } = useUI();
@@ -101,10 +113,31 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const guard = useGuard(draftKey('chapter', m, d), v, setV);
   const [pane, setPane] = useState('content');
   const [view, setView] = useState(m?.min_level || 'beginner');
+  const [scope, setScope] = useState('project');
   const [err, setErr] = useState('');
   const ta = useRef(null);
+  const qa = useRef(null);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const qs = parseQuiz(v.quiz_md);
+  const bodyLint = lintHandbookMd(v.body_md, v.min_level);
+  const quizLint = lintQuiz(v.quiz_md);
+  const scoped = /^:::.*scope=/m.test(v.body_md);
+  const labs = chapterLabs(catalog, m);
+  // ينقل المؤشر إلى السطر أو السؤال ويمرر إليه
+  const pick = (x) => {
+    const isLine = !!x.line;
+    setPane(isLine ? 'content' : 'review');
+    requestAnimationFrame(() => {
+      const el = isLine ? ta.current : qa.current;
+      if (!el) return;
+      const lines = el.value.split('\n');
+      const at = isLine ? x.line - 1 : lines.findIndex((l, k) => /^س\s*[:：]/.test(l.trim()) && lines.slice(0, k + 1).filter((y) => /^س\s*[:：]/.test(y.trim())).length === x.q);
+      const pos = lines.slice(0, Math.max(0, at)).reduce((a, l) => a + l.length + 1, 0);
+      el.focus();
+      el.setSelectionRange(pos, pos + (lines[at] || '').length);
+      el.scrollTop = Math.max(0, (at - 3) * (parseFloat(getComputedStyle(el).lineHeight) || 28));
+    });
+  };
 
   const tool = (t) => {
     const el = ta.current;
@@ -116,10 +149,14 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
     if (btn === 'cancel') return guard.guardClose(() => onClose());
     let r;
     if (btn === 'delete') {
-      if (!(await confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`, { danger: true }))) return;
+      const n = deleteNotice(catalog, m);
+      if (n.blocked) return setErr(n.text);
+      if (!(await confirm(n.text, { danger: true }))) return;
       r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
     } else {
       if (!v.title_ar.trim()) return setErr('عنوان الباب مطلوب');
+      const blockErr = bodyLint.find((x) => x.level === 'error');
+      if (blockErr) { pick(blockErr); return setErr(`لا يُحفظ الباب وفيه خطأ في الكتل: السطر ${blockErr.line}، ${blockErr.msg}`); }
       const bad = badQuiz(v.quiz_md);
       if (bad > 0 && !(await confirm(`${bad} من الأسئلة بلا خيار صحيح (*) أو بأقل من خيارين، ولن تظهر للمشارك. احفظ على أي حال؟`))) return;
       const row = { title_ar: v.title_ar.trim(), min_level: v.min_level, body_md: v.body_md, reflection_ar: v.reflection_ar.trim() || null, quiz_md: v.quiz_md.trim() || null };
@@ -135,7 +172,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   return (
     <Studio label={m ? `تحرير الباب: ${m.title_ar}` : 'باب جديد'} onClose={() => guard.guardClose(() => onClose())} onSubmit={submit}>
       <header className="hb-ed-head">
-        <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]}</small>
+        <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]}{labs.length > 0 && <span className="hb-ed-labs"> · مختبرات أسفل الباب: {labs.map((l) => l.title_ar).join('، ')}</span>}</small>
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه</small><LevelSeg value={v.min_level} onChange={(l) => setV({ ...v, min_level: l })} disabled={!canWrite} /></div>
         <div className="hb-ed-btns">
@@ -145,8 +182,8 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
         </div>
       </header>
       <nav className="hb-ed-tabs">
-        <button type="button" className={pane === 'content' ? 'on' : ''} onClick={() => setPane('content')}>المحتوى</button>
-        <button type="button" className={pane === 'review' ? 'on' : ''} onClick={() => setPane('review')}>التأمل والاختبار {qs.length > 0 && <i>({qs.length})</i>}</button>
+        <button type="button" className={pane === 'content' ? 'on' : ''} onClick={() => setPane('content')}>المحتوى {bodyLint.length > 0 && <i className="hb-warn">· {bodyLint.length} ملاحظة</i>}</button>
+        <button type="button" className={pane === 'review' ? 'on' : ''} onClick={() => setPane('review')}>التأمل والاختبار {qs.length > 0 && <i>({qs.length})</i>} {quizLint.length > 0 && <i className="hb-warn">· {quizLint.length} ملاحظة</i>}</button>
       </nav>
       {pane === 'content' ? (
         <div className="hb-ed-pane" data-p="content">
@@ -158,11 +195,12 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
             <div className="hb-ed-out">
               <div className="hb-ed-cap">كما يقرؤه المشارك
                 <span className="hb-seg sm">{LVLS.map((l) => <button key={l} type="button" className={view === l ? 'on' : ''} onClick={() => setView(l)}>{LVL[l]}</button>)}</span>
-                <span className="hb-ed-wc">{words(v.body_md)} كلمة</span></div>
+                {scoped && <span className="hb-seg sm" aria-label="نطاق العمل">{SCOPE_VIEW.map(([k, l]) => <button key={k} type="button" className={scope === k ? 'on' : ''} onClick={() => setScope(k)}>{l}</button>)}</span>}
+                <span className="hb-ed-wc">{words(filterHandbookMd(v.body_md, view, scope))} كلمة لهذا القارئ</span></div>
               <article className="hb-page"><h3 className="hb-page-t">{v.title_ar || 'عنوان الباب'}</h3>
                 <div className="la-md">{RANK[view] < RANK[v.min_level]
                   ? <p className="la-muted">هذا الباب لا يظهر لمستوى {LVL[view]}؛ يبدأ من {LVL[v.min_level]}.</p>
-                  : filterHandbookMd(v.body_md, view) ? <Md text={filterHandbookMd(v.body_md, view)} /> : <p className="la-muted">لا محتوى بعد.</p>}</div>
+                  : filterHandbookMd(v.body_md, view, scope) ? <Md text={filterHandbookMd(v.body_md, view, scope)} /> : <p className="la-muted">لا محتوى بعد.</p>}</div>
               </article>
             </div>
           </div>
@@ -174,18 +212,21 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
               <label>سؤال التأمل<textarea rows={2} readOnly={!canWrite} value={v.reflection_ar} onChange={set('reflection_ar')} placeholder="سؤال يربط الباب بعمل المشارك الحقيقي" /></label>
               <div className="qz-head"><b>الاختبار القصير</b>{canWrite && <button type="button" className="btn-sm ghost" onClick={() => setV({ ...v, quiz_md: `${v.quiz_md.trim() ? `${v.quiz_md.trim()}\n\n` : ''}${QUIZ_TEMPLATE}` })}>+ سؤال</button>}</div>
               <small className="la-muted">س: السؤال · ثم الخيارات، كل خيار يبدأ بـ - والخيار الصحيح بـ * · ثم لماذا: شرح يظهر بعد الإجابة.</small>
-              <textarea className="qz-md" aria-label="أسئلة الاختبار" spellCheck={false} readOnly={!canWrite} value={v.quiz_md} onChange={set('quiz_md')} />
+              <textarea ref={qa} className="qz-md" aria-label="أسئلة الاختبار" spellCheck={false} readOnly={!canWrite} value={v.quiz_md} onChange={set('quiz_md')} />
             </div>
             <div className="hb-ed-out"><div className="hb-ed-cap">كما يراه المشارك بعد الباب</div>
               <article className="hb-page qz-out">
                 <QuizView qs={qs} reflection={v.reflection_ar.trim()} />
                 {!qs.length && <p className="la-muted">اكتب أول سؤال بالصيغة الموضحة، أو اضغط + سؤال.</p>}
-                <p className="la-muted">أقصى نقاط الباب: {maxPoints(qs.length, !!v.reflection_ar.trim())}</p>
+                <p className="la-muted">أقصى نقاط الباب: {maxPoints(qs.length, !!v.reflection_ar.trim())} · تُخلط الخيارات لكل مشارك، فلا يدل موضع الخيار على صحته</p>
               </article></div>
           </div>
         </div>
       )}
-      {err && <div className="la-err" role="alert">{err}</div>}
+      <div className="hb-ed-foot">
+        <LintBar items={pane === 'content' ? bodyLint : quizLint} onPick={pick} />
+        {err && <div className="la-err" role="alert">{err}</div>}
+      </div>
     </Studio>
   );
 }
@@ -234,8 +275,18 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
   const [v, setV] = useState(() => ({
     title_ar: m?.title_ar || '', icon: m?.icon || '◆', points: m?.points ?? 30, active: m?.active !== false, min_level: m?.min_level || 'beginner',
     summary_ar: m?.summary_ar || '', when_ar: m?.when_ar || '', steps_ar: m?.steps_ar || '', source_ar: m?.source_ar || '',
-    fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true }])),
+    capstone_sort: m?.capstone_sort ?? '', scopes: m?.scopes || [],
+    fields: JSON.parse(JSON.stringify(m?.fields || [{ key: 'project', label: 'اسم المشروع', type: 'text', required: true, bind: 'initiative' }])),
   }));
+  // جداول النماذج الأخرى: مصدر يستورد منه هذا النموذج صفوفه بدل إعادة كتابتها
+  const sources = (catalog.learning_models || []).filter((x) => x.id !== m?.id && (x.fields || []).some((f) => f.type === 'table'));
+  // نطاق واحد على الأقل يبقى مختارًا، والثلاثة معًا تعني «للجميع» فتُحفظ فارغة
+  const toggle = (list, k) => {
+    const all = SCOPE_VIEW.map(([x]) => x);
+    const cur = list.length ? list : all;
+    const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+    return !next.length ? cur : next.length === all.length ? [] : next;
+  };
   const guard = useGuard(draftKey('model', m, d), v, setV);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
@@ -285,6 +336,13 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
             <label>النقاط عند التسليم<input type="number" min="0" max="500" value={v.points} onChange={set('points')} /></label>
             <label className="me-check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /> ظاهر للمشاركين</label>
           </div>
+          <div className="me-cap">
+            <label>ترتيبه فصلًا في وثيقة المبادرة<input type="number" min="1" max="999" placeholder="فارغ: ليس فصلًا" value={v.capstone_sort} onChange={set('capstone_sort')} /></label>
+            <div className="me-scopes" role="group" aria-label="نطاقات العمل التي يظهر لها"><small>يظهر لنطاق</small>
+              {SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!v.scopes.length || v.scopes.includes(k)}
+                onChange={() => setV({ ...v, scopes: toggle(v.scopes, k) })} /> {l}</label>)}</div>
+            <small className="la-muted">النموذج نفسه فصل في وثيقة المبادرة ومتطلب في الرحلة، فما يكتبه المشارك مرة يظهر في كل مكان.</small>
+          </div>
           <label>الوصف المختصر<textarea rows={2} value={v.summary_ar} onChange={set('summary_ar')} /></label>
           <label>متى يستخدمه<textarea rows={2} value={v.when_ar} onChange={set('when_ar')} /></label>
           <label>الخطوات (سطر لكل خطوة)<textarea rows={4} value={v.steps_ar} onChange={set('steps_ar')} /></label>
@@ -304,6 +362,17 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                   <input aria-label={`أقل عدد صفوف للحقل ${i + 1}`} type="number" min="1" max="30" value={f.min_rows || 1} onChange={(e) => setField(i, { min_rows: Number(e.target.value) || 1 })} />
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
+                <div className="fb-more">
+                  <select aria-label={`مستوى الحقل ${i + 1}`} value={f.min_level || 'beginner'} onChange={(e) => setField(i, { min_level: e.target.value })}>
+                    {LVLS.map((l) => <option key={l} value={l}>{l === 'beginner' ? 'لكل المستويات' : `من مستوى ${LVL[l]}`}</option>)}</select>
+                  <span className="me-scopes" role="group" aria-label={`نطاقات الحقل ${i + 1}`}>{SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!(f.scopes || []).length || f.scopes.includes(k)}
+                    onChange={() => setField(i, { scopes: toggle(f.scopes || [], k) })} /> {l}</label>)}</span>
+                  {f.type === 'text' && <label><input type="checkbox" checked={f.bind === 'initiative'} onChange={(e) => setField(i, { bind: e.target.checked ? 'initiative' : undefined })} /> يأخذ اسم المبادرة من بطاقتها</label>}
+                  {f.type === 'table' && <select aria-label={`استيراد الحقل ${i + 1}`} value={f.import ? `${f.import.model}|${f.import.field}` : ''}
+                    onChange={(e) => { const [model, field] = e.target.value.split('|'); setField(i, { import: model ? { model, field } : undefined }); }}>
+                    <option value="">بلا استيراد</option>
+                    {sources.flatMap((x) => x.fields.filter((t) => t.type === 'table').map((t) => <option key={`${x.key}|${t.key}`} value={`${x.key}|${t.key}`}>يستورد من {x.title_ar}: {t.label}</option>))}</select>}
+                </div>
                 <span className="fb-acts">
                   <button type="button" aria-label={`رفع الحقل ${i + 1}`} onClick={() => moveField(i, -1)}>▲</button>
                   <button type="button" aria-label={`خفض الحقل ${i + 1}`} onClick={() => moveField(i, 1)}>▼</button>
@@ -377,7 +446,9 @@ function Chapters({ catalog, reload, canWrite, open }) {
   const mods = catalog.handbook_modules || [];
   const cs = (id) => catalog.book_stats?.chapters?.[id] || {};
   const remove = async (m) => {
-    if (!(await confirm(`حذف الباب "${m.title_ar}" نهائيًا من كل الكتيبات؟`, { danger: true }))) return;
+    const n = deleteNotice(catalog, m);
+    if (n.blocked) return toast(n.text);
+    if (!(await confirm(n.text, { danger: true }))) return;
     const r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
     toast(r.success ? 'حُذف الباب' : r.message); if (r.success) reload();
   };
@@ -392,6 +463,9 @@ function Chapters({ catalog, reload, canWrite, open }) {
           const n = words(m.body_md);
           const q = parseQuiz(m.quiz_md).length;
           const s = cs(m.id);
+          const lint = chapterLint(m);
+          const errs = lint.filter((x) => x.level === 'error').length;
+          const labs = chapterLabs(catalog, m).length;
           return (
             <li key={m.id} className={`hb-ch${n ? '' : ' empty'}`}>
               <span className="hb-num">{pad(i + 1)}</span>
@@ -400,6 +474,8 @@ function Chapters({ catalog, reload, canWrite, open }) {
                 <span className="hb-meta"><span className={`la-lvl ${m.min_level}`}>من {LVL[m.min_level]}</span>
                   <span>{n ? `${n.toLocaleString('ar')} كلمة` : 'بلا محتوى بعد'}</span>{tiered(m.body_md) && <span>فقرات مخصصة لكل مستوى</span>}
                   <span className={q ? '' : 'hb-warn'}>{q ? `اختبار ${q} أسئلة` : 'بلا اختبار'}</span>
+                  {labs > 0 && <span>{labs} مختبر</span>}
+                  {lint.length > 0 && <span className="hb-warn">{errs ? `${errs} خطأ · ` : ''}{lint.length - errs ? `${lint.length - errs} تنبيه` : ''}</span>}
                   {s.done > 0 && <span className="hb-stat">أتمّه {s.done} · متوسط {Math.round((s.score / Math.max(1, s.total)) * 100)}%</span>}</span>
               </button>
               <span className="hb-acts"><Move rows={mods} entity="handbook_modules" id={m.id} reload={reload} canWrite={canWrite} />
@@ -446,25 +522,55 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
   });
 }
 
+// المعاينة: الكتاب الأصلي الكامل (الافتراضي) أو أي من الكتب الـ27 كما يصل مساره
 function Preview({ catalog, canWrite, open }) {
   const tracks = catalog.tracks || [];
-  const [track, setTrack] = useState(tracks[0]?.key || 'M1I1L1');
-  const [r, setR] = useState(null);
+  const [track, setTrack] = useState(MASTER);
+  const [scope, setScope] = useState('');
+  const [fetched, setFetched] = useState(null);
   const [cur, setCur] = useState({});
-  useEffect(() => { setR(null); setCur({}); L('admin.book-preview', { track }).then(setR); }, [track]);
+  const master = track === MASTER;
+  useEffect(() => { if (master) return; setFetched(null); L('admin.book-preview', { track, scope: scope || undefined }).then(setFetched); }, [track, scope]);
+  useEffect(() => setCur({}), [track]);
+  const labsOf = (c) => c.labs || chapterLabs(catalog, c).map((l) => ({ key: l.key, title: `${l.title_ar}${l.min_level !== 'beginner' ? ` (من ${LVL[l.min_level]})` : ''}` }));
+  const r = master ? masterBook(catalog.handbook_modules, catalog.learning_models) : fetched;
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
   const chs = r.chapters;
   const model = cur.model && r.models.find((m) => m.id === cur.model);
-  const ch = !model && (chs.find((c) => c.id === cur.ch) || chs[0]);
-  const editCh = () => open({ kind: 'chapter', m: (catalog.handbook_modules || []).find((x) => x.id === ch.id) });
+  const ch = !model && !cur.all && (chs.find((c) => c.id === cur.ch) || chs[0]);
+  const editCh = (c) => open({ kind: 'chapter', m: (catalog.handbook_modules || []).find((x) => x.id === c.id) });
   const editModel = () => open({ kind: 'model', m: (catalog.learning_models || []).find((x) => x.id === model.id) });
+  const page = (c) => (
+    <React.Fragment key={c.id}>
+      <div className="pv-acts"><span className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]} · من {LVL[c.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
+      <article className="hb-page"><h3 className="hb-page-t">{c.title}</h3><div className="la-md"><Md text={c.md} tierLabel={master ? tierLabel : undefined} /></div></article>
+      <section className="pv-review">
+        {labsOf(c).length > 0 && <p className="pv-labs"><b>المختبرات أسفل هذا الباب:</b> {labsOf(c).map((l) => l.title).join('، ')}</p>}
+        <h4>مراجعة الباب كما يراها المشارك</h4>
+        {!c.reflection && <p className="hb-warn">لا سؤال تأمل لهذا الباب.</p>}
+        <QuizView qs={c.quiz} reflection={c.reflection} right="الإجابة الصحيحة" />
+        {!c.quiz.length && <p className="hb-warn">لا اختبار لهذا الباب بعد.</p>}
+        <p className="la-muted">أقصى نقاط هذا الباب: {maxPoints(c.quiz.length, !!c.reflection)}</p>
+      </section>
+    </React.Fragment>
+  );
   return (
     <>
       <div className="pv-bar">
-        <label>المسار <select value={track} onChange={(e) => setTrack(e.target.value)}>{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</select></label>
-        <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>
+        <label>الكتاب <select value={track} onChange={(e) => setTrack(e.target.value)}>
+          <option value={MASTER}>الكتاب الأصلي الكامل</option>
+          <optgroup label={`الكتب الـ${TRACK_COUNT} بحسب المسار`}>{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</optgroup>
+        </select></label>
+        {!master && <label>نطاق العمل <select value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="">لم يحدده المشارك (يرى كل النطاقات)</option>
+          {SCOPE_VIEW.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select></label>}
+        {master
+          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ{TRACK_COUNT}: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
+          : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>}
         <span className="la-muted">{chs.length} بابًا · {r.models.length} نماذج · الإجابات الصحيحة ظاهرة لك فقط</span>
+        {master && <button className={`btn-sm ${cur.all ? '' : 'ghost'}`} onClick={() => setCur(cur.all ? {} : { all: true })}>{cur.all ? 'باب باب' : 'الكتاب متصلًا'}</button>}
       </div>
       <div className="pv">
         <nav className="pv-toc" aria-label="فهرس المعاينة">
@@ -482,17 +588,7 @@ function Preview({ catalog, canWrite, open }) {
           {model ? <>
             <div className="pv-acts">{canWrite && <button className="btn-sm ghost" onClick={editModel}>تحرير النموذج</button>}</div>
             <article className="hb-page mp"><ModelGuide m={model} /><ModelSteps m={model} /><ModelForm m={model} /></article>
-          </> : ch ? <>
-            <div className="pv-acts"><span className="la-muted">{DIM_EN[ch.dimension]} · {DIM[ch.dimension]} · من {LVL[ch.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={editCh}>تحرير الباب واختباره</button>}</div>
-            <article className="hb-page"><h3 className="hb-page-t">{ch.title}</h3><div className="la-md"><Md text={ch.md} /></div></article>
-            <section className="pv-review">
-              <h4>مراجعة الباب كما يراها المشارك</h4>
-              {!ch.reflection && <p className="hb-warn">لا سؤال تأمل لهذا الباب.</p>}
-              <QuizView qs={ch.quiz} reflection={ch.reflection} right="الإجابة الصحيحة" />
-              {!ch.quiz.length && <p className="hb-warn">لا اختبار لهذا الباب بعد.</p>}
-              <p className="la-muted">أقصى نقاط هذا الباب: {maxPoints(ch.quiz.length, !!ch.reflection)}</p>
-            </section>
-          </> : <p className="la-muted">لا أبواب لهذا المسار.</p>}
+          </> : cur.all ? chs.map(page) : ch ? page(ch) : <p className="la-muted">لا أبواب لهذا المسار.</p>}
         </div>
       </div>
     </>

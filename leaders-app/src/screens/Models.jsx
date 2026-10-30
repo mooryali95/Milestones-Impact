@@ -5,22 +5,32 @@
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
+import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
 const STATUS = {
-  draft: { t: 'مسودة', c: 'warn' },
-  submitted: { t: 'بانتظار تقييم المستشار', c: 'gold' },
-  returned: { t: 'أُعيد إليك للتطوير', c: 'bad' },
-  reviewed: { t: 'قُيّم', c: 'ok' },
+  draft: { t: SUBMISSION_STATUS.draft, c: 'warn' },
+  submitted: { t: SUBMISSION_STATUS.submitted, c: 'gold' },
+  returned: { t: SUBMISSION_STATUS.returned, c: 'bad' },
+  reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
 };
-const RANKS = ['مستكشف', 'ممارس', 'متمكّن', 'قائد أثر', 'سفير الأثر'];
-const RANK_AT = [0, 75, 200, 400, 650];
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد مشروع التخرج' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
-function Field({ f, value, onChange, locked }) {
+function Field({ f, value, onChange, locked, initiative, imp }) {
+  // حقل اسم المشروع مصدره بطاقة المبادرة: يُعرض ولا يُكتب هنا
+  if (f.bind === 'initiative') {
+    return (
+      <div className="mf-bound">
+        <input className="input" disabled value={initiative || value || ''} placeholder="يظهر هنا اسم المبادرة من بطاقتها" />
+        {!initiative && <small className="muted">اكتب اسم المبادرة في «بطاقة المبادرة» فيظهر هنا وفي كل نماذجك.</small>}
+      </div>
+    );
+  }
   if (f.type === 'select') {
     return (
       <div className="seg-opts">
@@ -51,7 +61,12 @@ function Field({ f, value, onChange, locked }) {
             ))}
           </tbody>
         </table>
-        {!locked && <button type="button" className="link small" onClick={() => onChange([...rows, cols.map(() => '')])}>+ صف</button>}
+        {!locked && (
+          <div className="row mt-acts">
+            <button type="button" className="link small" onClick={() => onChange([...rows, cols.map(() => '')])}>+ صف</button>
+            {imp && <ImportRows imp={imp} rows={rows} onChange={onChange} />}
+          </div>
+        )}
       </div>
     );
   }
@@ -59,12 +74,23 @@ function Field({ f, value, onChange, locked }) {
   return <input className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
 }
 
-// هل اكتمل الحقل؟ نفس قاعدة الخادم قبل التسليم
-const filledOf = (f, v) => (f.type === 'table'
-  ? (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim()).length >= (f.min_rows || 1)
-  : !!String(v ?? '').trim());
+// استيراد صفوف من جدول نموذج آخر (مصدرها الوحيد)، لقطة يعدّلها المشارك بعدها
+function ImportRows({ imp, rows, onChange }) {
+  const n = imp.rows?.length || 0;
+  const has = rows.some((r) => r.some((c) => String(c || '').trim()));
+  if (!n) return <small className="muted">يُستورد من «{imp.title || 'النموذج المصدر'}» حين تملؤه.</small>;
+  const go = () => {
+    if (has && !window.confirm(`يستبدل الاستيراد الصفوف الحالية بـ ${n} صفًا من «${imp.title}». متابعة؟`)) return;
+    onChange(imp.rows.map((r) => [...r]));
+  };
+  return <button type="button" className="link small" onClick={go}>⇣ استورد {n} صفًا من «{imp.title}»</button>;
+}
+
+// هل اكتمل الحقل؟ قاعدة الخادم نفسها (fieldFilled). الحقل الاختياري لا يُحسب ناقصًا،
+// وحقل اسم المبادرة يكتمل من بطاقة المبادرة كما يملؤه الخادم عند التسليم (bindAnswers)
+const filledOf = (f, v, initiative) => f.required === false || (f.bind === 'initiative' && !!initiative) || fieldFilled(f, v);
 const codeOf = (m) => `${(DIMENSIONS.find((x) => x.key === m.dimension)?.short || 'M')[0]}-${String(m.sort || 1).padStart(2, '0')}`;
-// معايير يقيّم بها المستشار كل نموذج
+// علامات النموذج الجيد: إرشاد للمشارك، والمستشار يقيّم بالنجوم والملاحظات
 const RUBRIC = [
   ['الاكتمال', 'كل حقل مملوء بما يكفي ليُفهم دون شرح شفهي.'],
   ['التحديد', 'أرقام وتواريخ وأسماء أدوار، لا عبارات عامة.'],
@@ -73,7 +99,7 @@ const RUBRIC = [
 ];
 const STEPS = ['افهم النموذج', 'طبّقه على مشروعك', 'سلّمه للمستشار', 'التقييم والملاحظات'];
 
-function ModelView({ id, name, onBack, onPoints }) {
+export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج' }) {
   const [d, setD] = useState(null);
   const [answers, setAnswers] = useState({});
   const [busy, setBusy] = useState('');
@@ -91,7 +117,9 @@ function ModelView({ id, name, onBack, onPoints }) {
   }, [id]);
 
   const s = d?.submission;
-  const auto = d && (!s || s.status === 'draft' || s.status === 'returned');
+  // فصل في وثيقة مسلّمة أو معتمدة: يُقرأ ولا يُعدَّل حتى تعود الوثيقة
+  const capLocked = !!d?.capstone?.locked;
+  const auto = d && !capLocked && (!s || s.status === 'draft' || s.status === 'returned');
   // حفظ تلقائي للمسودة بعد ثوانٍ من آخر تعديل
   useEffect(() => {
     if (!dirty || !auto) return undefined;
@@ -104,10 +132,11 @@ function ModelView({ id, name, onBack, onPoints }) {
 
   if (!d) return msg ? <div className="alert err">{msg.err}</div> : <div className="center-load"><div className="spinner" /></div>;
   const m = d.model;
-  const locked = s?.status === 'reviewed';
+  const locked = s?.status === 'reviewed' || capLocked;
+  const initiative = d.initiative;
   const dim = DIMENSIONS.find((x) => x.key === m.dimension);
   const req = m.fields.filter((f) => f.required !== false);
-  const filled = req.filter((f) => filledOf(f, answers[f.key])).length;
+  const filled = req.filter((f) => filledOf(f, answers[f.key], initiative)).length;
   const pct = req.length ? Math.round((filled / req.length) * 100) : 100;
   const step = !s || s.status === 'draft' ? (filled ? 1 : 0) : s.status === 'returned' ? 1 : s.status === 'submitted' ? 2 : 3;
 
@@ -125,7 +154,8 @@ function ModelView({ id, name, onBack, onPoints }) {
 
   return (
     <div className="model">
-      <button className="link small" onClick={onBack}>→ مكتبة النماذج</button>
+      <button className="link small" onClick={onBack}>→ {backLabel}</button>
+      {d.capstone && <p className="alert info small">هذا فصل في وثيقة مبادرتك (مشروع التخرج){capLocked ? '، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.' : '. ما تكتبه هنا يظهر في الوثيقة كما هو.'}</p>}
       <ol className="mstepper">
         {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
       </ol>
@@ -148,7 +178,8 @@ function ModelView({ id, name, onBack, onPoints }) {
             {m.source_ar && <p className="model-src">{m.source_ar}</p>}
           </section>
           <section>
-            <span className="mg-cap">معايير التقييم</span>
+            <span className="mg-cap">علامات النموذج الجيد</span>
+            <p className="muted small">يقيّم المستشار تسليمك بالنجوم وملاحظات مكتوبة، وهذه ما يبحث عنه.</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
           {s && s.status !== 'draft' && (
@@ -167,11 +198,11 @@ function ModelView({ id, name, onBack, onPoints }) {
             <dl><dt>القائد</dt><dd>{name}</dd><dt>التاريخ</dt><dd>{new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
           </header>
           {m.fields.map((f, i) => {
-            const ok = filledOf(f, answers[f.key]);
+            const ok = filledOf(f, answers[f.key], initiative);
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label><span className="mf-n">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{f.hint}</small>}</span></label>
-                <Field f={f} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} />
+                <Field f={f} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
               </div>
             );
           })}
@@ -181,7 +212,7 @@ function ModelView({ id, name, onBack, onPoints }) {
             <div className="ws-prog">
               <span><b>{filled}</b> من {req.length} حقول مكتملة</span>
               <span className="bar"><i style={{ width: `${pct}%` }} /></span>
-              <small>{locked ? 'نموذج مقيّم ومغلق' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
+              <small>{capLocked ? 'فصل في وثيقة مسلّمة' : locked ? 'نموذج مقيّم ومغلق' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
             </div>
             {!locked && (
               <div className="row model-acts">
@@ -252,6 +283,7 @@ export function Models({ name, onPoints }) {
                       <span className="chip gold">{m.points} نقطة</span>
                     </span>
                     <b>{m.title_ar}</b>
+                    {m.capstone && <span className="mcard-cap">فصل في مشروع التخرج</span>}
                     <span className="mcard-sum">{m.summary_ar}</span>
                     <span className="mcard-prog"><span className="bar"><i style={{ width: `${m.submission && m.submission.status !== 'draft' && m.submission.status !== 'returned' ? 100 : p}%` }} /></span><small>{m.fields_n || pr.total} حقول · من {levelOf(m.min_level).title}</small></span>
                     <span className="mcard-foot">
@@ -280,14 +312,14 @@ export function Wins() {
       <section className="wins-ladder">
         <h2>سلّم الألقاب</h2>
         <ol>
-          {RANKS.map((t, i) => (
+          {RANKS.map(({ title: t, min }, i) => (
             <li key={t} className={i < d.rank.index ? 'past' : i === d.rank.index ? 'now' : ''}>
               <span className="wl-dot">{i < d.rank.index ? '✓' : i + 1}</span>
-              <b>{t}</b><small>{RANK_AT[i]} نقطة</small>
+              <b>{t}</b><small>{min} نقطة</small>
             </li>
           ))}
         </ol>
-        <p className="muted small">النقاط من إتمام الأبواب واختباراتها (10 للباب، و5 لكل إجابة صحيحة، و5 للتأمل)، ومن تسليم النماذج التعليمية، ومن نقاط التميّز التي يمنحها مستشارك.</p>
+        <p className="muted small">النقاط من إتمام الأبواب واختباراتها ({POINTS.chapter} للباب، و{POINTS.perCorrect} لكل إجابة صحيحة، و{POINTS.reflection} للتأمل)، ومن تسليم النماذج التعليمية، وإتقان أدوات المختبر، واعتماد مشروع التخرج ({APPROVAL_POINTS} نقطة)، ومن نقاط التميّز التي يمنحها مستشارك.</p>
       </section>
       <section className="wins-log">
         <h2>سجل نقاطك <span className="muted">{d.total} نقطة</span></h2>

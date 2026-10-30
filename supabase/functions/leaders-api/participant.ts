@@ -2,13 +2,14 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, must, randomCode, randomToken, sendMail, signInMail, storage,
+  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
-  seededShuffle, beforePercents, DEFAULT_MODEL,
-  VERIFIED_KINDS, readingVerdict,
+  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
+  VERIFIED_KINDS, readingVerdict, fieldsFor,
 } from './logic.js';
+import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
 
@@ -33,7 +34,11 @@ export async function participantFromToken(token: unknown) {
   if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const p = must(await db.from('participants').select('*').eq('id', s.participant_id).single());
   if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
-  db.from('auth_sessions').update({ last_seen_at: new Date().toISOString() }).eq('id', s.id).then(() => {});
+  // الاستعمال يجدد المدة: تنتهي الجلسة بعد sessionDays من آخر نشاط لا من الدخول
+  const now = Date.now();
+  const touch: Record<string, string> = { last_seen_at: new Date(now).toISOString() };
+  if (new Date(s.expires_at).getTime() - now < (CONFIG.sessionDays - 1) * 864e5) touch.expires_at = new Date(now + CONFIG.sessionDays * 864e5).toISOString();
+  db.from('auth_sessions').update(touch).eq('id', s.id).then(() => {});
   return { participant: p, sessionId: s.id as string };
 }
 
@@ -101,11 +106,6 @@ export async function authStart(b: Body, ctx: Ctx) {
   const { count: perEmail } = await db.from('email_challenges').select('id', { count: 'exact', head: true })
     .eq('email', email).gte('created_at', hourAgo);
   if ((perEmail ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
-  if (ctx.ip) {
-    const { count: perIp } = await db.from('email_challenges').select('id', { count: 'exact', head: true })
-      .eq('ip', ctx.ip).gte('created_at', hourAgo);
-    if ((perIp ?? 0) >= 30) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
-  }
 
   const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
   let pending: Body | null = null;
@@ -122,6 +122,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     };
   }
 
+  await mailGuard(b, ctx);
   const code = randomCode();
   const link = randomToken(24);
   must(await db.from('email_challenges').insert({
@@ -183,11 +184,46 @@ export async function logout(sessionId: string) {
   return { success: true };
 }
 
+// أجهزة المشارك: الجلسات السارية، وإنهاء غير الحالية
+export async function sessionsList(p: any, sessionId: string) {
+  const { data } = await db.from('auth_sessions').select('id, method, user_agent, created_at, last_seen_at')
+    .eq('participant_id', p.id).is('revoked_at', null).gt('expires_at', new Date().toISOString())
+    .order('last_seen_at', { ascending: false, nullsFirst: false }).limit(20);
+  return { success: true, sessions: (data || []).map((x) => ({ ...x, current: x.id === sessionId })) };
+}
+
+export async function sessionsRevoke(p: any, b: Body, sessionId: string) {
+  let q = db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null).neq('id', sessionId);
+  if (b.id) q = q.eq('id', String(b.id));
+  must(await q);
+  return sessionsList(p, sessionId);
+}
+
 // ── 3. حالة المشارك كاملة ──
 async function activeInstrument(kind = 'baseline') {
   const { data } = await db.from('instruments').select('*').eq('kind', kind).eq('active', true)
     .order('version', { ascending: false }).limit(1).maybeSingle();
   return data;
+}
+
+// آخر قياس مبدئي أرسله المشارك، بأداته وصيغته
+export async function lastBaseline(participantId: string) {
+  const { data } = await db.from('assessments').select('id, form, instrument_id, instruments!inner(key, kind)')
+    .eq('participant_id', participantId).eq('status', 'submitted').eq('instruments.kind', 'baseline')
+    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
+  return data as any;
+}
+
+// الأداة البعدية التي تقابل قياس المشارك المبدئي (pairs_with)، فمن بدأ على
+// v3 يُختم بـ post-v1 ومن بدأ على v4 بـ post-v2. وإلا أحدث أداة بعدية مفعّلة.
+export async function postInstrumentFor(participantId: string) {
+  const [{ data: posts }, base] = await Promise.all([
+    db.from('instruments').select('*').eq('kind', 'post').eq('active', true).order('version', { ascending: false }),
+    lastBaseline(participantId),
+  ]);
+  const list = posts || [];
+  const key = base?.instruments?.key;
+  return list.find((i: any) => key && i.pairs_with === key) || list.find((i: any) => !i.pairs_with) || list[0] || null;
 }
 
 // audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.
@@ -206,18 +242,14 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   project: t.project_ar || null, journey: t.journey_ar || null,
 };
 
-export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [placements, def, progress, assessments, passkeys, cells, reports, org] = await Promise.all([
+// الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
+export async function journeyFor(p: any) {
+  const [placements, def, progress, assessments, reports] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
-    db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
-    db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
-    p.organization_id
-      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
-      : null,
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -234,13 +266,25 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   const activity = await evidenceFor(p, def.requirements, levels, approved, def.cohort?.id || null);
   const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity });
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey) };
+}
+
+export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
+  const [{ pl, levels, approved, def, journey, progress }, passkeys, cells, org] = await Promise.all([
+    journeyFor(p),
+    db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
+    db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
+    p.organization_id
+      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
+      : null,
+  ]);
   const track = trackView(await trackFor(levels), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
-      organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience,
+      organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
@@ -254,7 +298,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
-    progress: journeyProgress(journey),
+    progress,
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'
@@ -293,6 +337,15 @@ export async function profileSave(p: any, b: Body) {
     const phone = f.phone ? normalizePhone(f.phone) : null;
     if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
     patch.phone = phone;
+  }
+  // الجهة المرتبطة مصدر اسمها: لا يُكتب اسم ثانٍ بجانبها
+  if (p.organization_id) delete patch.organization_name;
+  if ('work_scope' in f) {
+    patch.work_scope = SCOPES.includes(f.work_scope) ? f.work_scope : null;
+    // النطاق يحدد فصول وثيقة المبادرة، فلا يتغير وهي عند المراجعة أو معتمدة
+    if (patch.work_scope !== (p.work_scope || null) && CAPSTONE_LOCKED.includes(await capstoneStatus(p.id))) {
+      throw new Fail('نطاق عملك مثبت في وثيقة مبادرتك المسلّمة، ولا يتغير حتى تعود إليك', 409, 'scope_locked');
+    }
   }
   if ('years_experience' in f) {
     const y = Number(f.years_experience);
@@ -345,7 +398,7 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!p.profile_completed_at) throw new Fail('أكمل ملفك الشخصي أولًا', 400, 'profile');
   const kind = b.kind === 'post' ? 'post' : 'baseline';
   if (kind === 'post') await requirePostOpen(p);
-  const inst = await activeInstrument(kind);
+  const inst = kind === 'post' ? await postInstrumentFor(p.id) : await activeInstrument(kind);
   if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 503, 'no_instrument');
 
   let { data: a } = await db.from('assessments').select('*').eq('participant_id', p.id).eq('instrument_id', inst.id)
@@ -353,11 +406,23 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
   }
-  const qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro')
+  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form')
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
+  // أداة بصيغتين: المبدئي صيغة ثابتة للمشارك، والبعدي الصيغة الأخرى
+  if (usesForms(qs)) {
+    if (!a.form) {
+      const prev = kind === 'post' ? (await lastBaseline(p.id))?.form : null;
+      a.form = formFor(p.id, prev);
+      must(await db.from('assessments').update({ form: a.form }).eq('id', a.id));
+    }
+    qs = forForm(qs, a.form);
+  }
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
   const order = ['milestone', 'impact', 'leadership'];
-  const tierOrder = ['knowledge', 'skill', 'behavior'];
+  // الممارسة أولًا ثم المواقف ثم المعرفة: يقدّر المشارك ممارسته قبل أن تلمّح
+  // أسئلة المعرفة والمواقف إلى ما يُنتظر منه، وتأتي المعرفة بعد المواقف
+  // فلا تدله على إجاباتها.
+  const tierOrder = ['behavior', 'skill', 'knowledge'];
   // بنود انتقال التعلم في القياس البعدي تأتي آخرًا، بعد الأطر الثلاثة
   const last = (q: any) => (q.tier === 'transfer' ? 1 : 0);
   qs.sort((x: any, y: any) => last(x) - last(y) || order.indexOf(x.dimension) - order.indexOf(y.dimension)
@@ -398,7 +463,7 @@ async function openAssessment(p: any, id: string) {
 export async function assessmentAnswer(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
   const q = must(await db.from('questions').select('*').eq('id', String(b.question_id)).eq('instrument_id', a.instrument_id).maybeSingle());
-  if (!q) throw new Fail('سؤال غير صالح');
+  if (!q || (q.form && a.form && q.form !== a.form)) throw new Fail('سؤال غير صالح');
   const k = Number(b.k);
   const score = scoreFor(q, k);
   if (!Number.isInteger(k) || score == null) throw new Fail('إجابة غير صالحة');
@@ -422,7 +487,7 @@ export async function assessmentSubmit(p: any, b: Body) {
     db.from('level_rules').select('*'),
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
-  const questions = qs.data || [];
+  const questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
@@ -431,9 +496,11 @@ export async function assessmentSubmit(p: any, b: Body) {
 
   // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
   const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
+  const split = skillSplit(questions, answers);
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level,
+    skill_anchor_pct: split[r.dimension]?.anchor ?? null, skill_form_pct: split[r.dimension]?.form ?? null,
     // الدرجة هي المؤشر المركّب نفسه حتى لا يختلف رقم التقرير عن سبب المستوى
     score: r.composite ?? Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
@@ -464,13 +531,29 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
   const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
   if (noBefore) throw new Fail(`بقي تقدير "قبل البرنامج" في ${noBefore} من العبارات`, 400, 'incomplete');
   const scored = questions.filter((q: any) => q.tier !== 'transfer');
-  const result = placementFromAnswers(scored, answers, [], model || DEFAULT_MODEL);
-  const before = beforePercents(scored, values);
+  const m = model || DEFAULT_MODEL;
+  const result = placementFromAnswers(scored, answers, [], m);
+  const minBehavior = Number(m.min_behavior_items ?? DEFAULT_MODEL.min_behavior_items);
+  const before: any = beforePercents(scored, values, { minBehavior });
+  const split = skillSplit(scored, answers);
+  // الممارسة على العبارات المجابة في القياسين معًا
+  let common: Record<string, any> = {};
+  const base = await lastBaseline(p.id);
+  if (base) {
+    const [bq, ba] = await Promise.all([
+      db.from('questions').select('id, code, dimension, tier, options').eq('instrument_id', base.instrument_id).eq('tier', 'behavior'),
+      db.from('assessment_answers').select('question_id, value').eq('assessment_id', base.id),
+    ]);
+    const preAnswers = Object.fromEntries((ba.data || []).map((x: any) => [x.question_id, x.value?.k]));
+    common = commonBehavior(bq.data || [], preAnswers, scored, answers, { minBehavior });
+  }
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
     assessment_id: a.id, dimension: r.dimension, level: r.level, score: r.composite ?? 0,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
     composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason,
     behavior_before_pct: before[r.dimension]?.behavior ?? null,
+    skill_anchor_pct: split[r.dimension]?.anchor ?? null, skill_form_pct: split[r.dimension]?.form ?? null,
+    behavior_common_pct: common[r.dimension]?.post ?? null, behavior_pre_common_pct: common[r.dimension]?.pre ?? null,
   }))));
   await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
   await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);
@@ -512,7 +595,7 @@ export async function passkeyDismiss(p: any) {
 // لوحة (canvas) بعلامة مائية باسم المشارك، فلا نص قابل للنسخ في الصفحة.
 const HANDBOOK_VIEWS_PER_HOUR = 120;
 
-async function approvedLevels(p: any) {
+export async function approvedLevels(p: any) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
   if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح الكتيب بعد اعتماد مسارك', 403, 'locked');
   return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
@@ -527,7 +610,7 @@ export async function pointsOf(participantId: string) {
 }
 
 // يمنح النقاط مرة واحدة لكل إنجاز (قيد فريد على المصدر والمرجع)
-async function award(participantId: string, source: string, refId: string, points: number, note: string) {
+export async function award(participantId: string, source: string, refId: string, points: number, note: string) {
   if (!points) return 0;
   const { error } = await db.from('points_ledger').insert({ participant_id: participantId, source, ref_id: refId, points, note });
   return error ? 0 : points;
@@ -538,13 +621,13 @@ export async function handbookToc(p: any) {
   const [mods, prog, models, subs, pts] = await Promise.all([
     db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md, quiz_md'),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, completed_at').eq('participant_id', p.id),
-    db.from('learning_models').select('id, dimension, sort, min_level, active, points'),
+    db.from('learning_models').select('id, dimension, sort, min_level, active, points, scopes'),
     db.from('model_submissions').select('model_id, status').eq('participant_id', p.id),
     pointsOf(p.id),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
-  const mine = modelsFor(models.data || [], levels);
+  const mine = modelsFor(models.data || [], levels, p.work_scope);
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
     success: true,
@@ -578,9 +661,9 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   return {
     success: true,
     reading: readingVerdict(rd),
-    chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]) },
-    // الأسئلة بلا الإجابات الصحيحة؛ التصحيح على الخادم فقط
-    quiz: parseQuiz(m.quiz_md).map((q) => ({ q: q.q, options: q.options })),
+    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
+    // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
+    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
@@ -611,8 +694,8 @@ export async function handbookExport(p: any, ctx: Ctx) {
     book: {
       // الكتاب عام: لا شيء من بيانات المسار إلا رمزه
       ref, issued_at: now.toISOString(), name: p.full_name, email: p.email, code: trackKey(levels),
-      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension]), reflection: m.reflection_ar || '' })),
-      tools: modelsFor(models.data || [], levels).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
+      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope), reflection: m.reflection_ar || '' })),
+      tools: modelsFor(models.data || [], levels, p.work_scope).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
     },
   };
 }
@@ -622,7 +705,8 @@ export async function handbookComplete(p: any, b: Body) {
   const levels = await approvedLevels(p);
   const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md, quiz_md, title_ar').eq('id', String(b.id)).maybeSingle());
   if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
-  const quiz = parseQuiz(m.quiz_md);
+  // بالترتيب نفسه الذي عُرض به، فرقم الإجابة ورقم الصحيحة في النتيجة من القائمة المعروضة
+  const quiz = shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id);
   const g = gradeQuiz(quiz, b.answers);
   if (quiz.length && (!Array.isArray(b.answers) || b.answers.length < quiz.length || b.answers.some((x: any) => x === null || x === undefined))) {
     throw new Fail('أجب عن كل الأسئلة أولًا');
@@ -641,14 +725,29 @@ export async function handbookComplete(p: any, b: Body) {
 async function myModel(p: any, id: unknown) {
   const levels = await approvedLevels(p);
   const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
-  if (!m || !modelsFor([m], levels).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
-  return m;
+  if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
+  // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
+  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope) };
+}
+
+// اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
+export async function initiativeFor(participantId: string) {
+  const { data } = await db.from('model_submissions').select('answers, learning_models!inner(key)')
+    .eq('participant_id', participantId).eq('learning_models.key', CHARTER_KEY).maybeSingle();
+  return initiativeOf((data as any)?.answers);
+}
+
+// فصول الوثيقة تُقفل ما دامت الوثيقة عند المستشار أو الراعي أو معتمدة
+export const CAPSTONE_LOCKED = ['submitted', 'accepted', 'approved'];
+export async function capstoneStatus(participantId: string) {
+  const { data } = await db.from('capstones').select('status').eq('participant_id', participantId).maybeSingle();
+  return (data as any)?.status || 'draft';
 }
 
 export async function modelsList(p: any) {
   const levels = await approvedLevels(p);
   const [models, subs, pts] = await Promise.all([
-    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields'),
+    db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields, scopes, capstone_sort'),
     db.from('model_submissions').select('model_id, status, rating, bonus, answers, submitted_at, updated_at').eq('participant_id', p.id),
     pointsOf(p.id),
   ]);
@@ -656,29 +755,63 @@ export async function modelsList(p: any) {
   return {
     success: true,
     // تقدم كل نموذج: الحقول الإلزامية المكتملة من مجموعها، دون إرسال الإجابات نفسها
-    models: modelsFor(must(models) ?? [], levels).map(({ fields, ...m }: any) => {
+    models: modelsFor(must(models) ?? [], levels, p.work_scope).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
+      const fields = fieldsFor(all, levels[m.dimension], p.work_scope);
       const sub = by[m.id];
-      const total = (fields || []).filter((f: any) => f.required !== false).length;
-      const filled = total - missingFields(fields || [], sub?.answers || {}).length;
-      return { ...m, fields_n: (fields || []).length, progress: { filled, total },
+      const total = fields.filter((f: any) => f.required !== false).length;
+      const filled = total - missingFields(fields, sub?.answers || {}).length;
+      return { ...m, capstone: capstone_sort != null, fields_n: fields.length, progress: { filled, total },
         submission: sub ? { status: sub.status, rating: sub.rating, bonus: sub.bonus, submitted_at: sub.submitted_at, updated_at: sub.updated_at } : null };
     }),
     points: { total: pts.total, rank: pts.rank },
   };
 }
 
+// الجداول المستوردة: صفوف المصدر بأعمدة هذا الجدول، ليستوردها المشارك بنقرة
+async function importsFor(p: any, fields: any[]) {
+  const want = fields.filter((f: any) => f.type === 'table' && f.import?.model);
+  if (!want.length) return {};
+  const keys = [...new Set(want.map((f: any) => f.import.model))];
+  const { data } = await db.from('model_submissions').select('answers, learning_models!inner(key, title_ar, fields)')
+    .eq('participant_id', p.id).in('learning_models.key', keys);
+  const src = Object.fromEntries((data || []).map((r: any) => [r.learning_models.key, r]));
+  const out: Record<string, any> = {};
+  for (const f of want) {
+    const s = src[f.import.model];
+    const sf = (s?.learning_models?.fields || []).find((x: any) => x.key === f.import.field);
+    out[f.key] = { model: f.import.model, title: s?.learning_models?.title_ar || null,
+      rows: s && sf ? importRows(f.columns, sf.columns, s.answers?.[f.import.field]) : [] };
+  }
+  return out;
+}
+
 export async function modelGet(p: any, b: Body) {
   const m = await myModel(p, b.id);
-  const { data: sub } = await db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
-  return { success: true, model: m, submission: sub || null };
+  const [{ data: sub }, initiative, status] = await Promise.all([
+    db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle(),
+    initiativeFor(p.id),
+    m.capstone_sort != null ? capstoneStatus(p.id) : null,
+  ]);
+  const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
+  return {
+    success: true, model: m, submission, initiative,
+    imports: await importsFor(p, m.fields),
+    capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
+  };
 }
 
 // حفظ مسودة أو تسليم نهائي؛ التسليم يمنح نقاط النموذج مرة واحدة
 export async function modelSave(p: any, b: Body) {
   const m = await myModel(p, b.id);
-  const answers = cleanAnswers(m.fields, b.answers);
-  const { data: prev } = await db.from('model_submissions').select('id, status').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle();
+  const [{ data: prev }, initiative, status] = await Promise.all([
+    db.from('model_submissions').select('id, status').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle(),
+    m.key === CHARTER_KEY ? null : initiativeFor(p.id),
+    m.capstone_sort != null ? capstoneStatus(p.id) : null,
+  ]);
   if (prev?.status === 'reviewed') throw new Fail('قُيّم هذا النموذج ولا يمكن تعديله');
+  if (CAPSTONE_LOCKED.includes(status as string)) throw new Fail('هذا فصل في وثيقة مبادرتك، وهي عند المراجعة أو معتمدة فلا يُعدَّل الآن', 409, 'capstone_locked');
+  // الحقل المربوط باسم المبادرة لا يُكتب هنا: يأتي من بطاقة المبادرة دائمًا
+  const answers = bindAnswers(m.fields, cleanAnswers(m.fields, b.answers), initiative);
   const submit = !!b.submit;
   if (submit) {
     const missing = missingFields(m.fields, answers);

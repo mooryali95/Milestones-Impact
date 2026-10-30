@@ -144,7 +144,7 @@ export default function Contacts() {
           <tbody>
             {!rows ? <tr className="loading-row"><td colSpan={7}><Spinner /></td></tr>
               : error ? (
-                <tr className="loading-row"><td colSpan={7} style={{ color: '#B42828' }}>
+                <tr className="loading-row"><td colSpan={7} style={{ color: 'var(--st-bad)' }}>
                   خطأ في تحميل البيانات: {error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button>
                 </td></tr>
               ) : !list.length ? (

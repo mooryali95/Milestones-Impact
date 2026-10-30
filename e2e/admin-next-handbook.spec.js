@@ -43,9 +43,11 @@ test('الأبواب: معاينة بحسب المستوى، وأداة المح
   await expect(ed.locator('.la-md')).not.toContainText('فقرة الاحترافي');
   await ed.getByRole('button', { name: 'احترافي', exact: true }).click();
   await expect(ed.locator('.la-md')).toContainText('فقرة الاحترافي');
-  await ed.getByLabel('محتوى الباب').press('Control+End');
+  // الخلاصة على سطر نصي (على سطر ::: تكسر الكتلة فيمنع المحرر الحفظ، وهذا مقصود)
+  const body = ed.getByLabel('محتوى الباب');
+  await body.evaluate((t) => { const i = t.value.indexOf('نص للجميع'); t.focus(); t.setSelectionRange(i, i); });
   await ed.getByRole('button', { name: 'خلاصة' }).click();
-  await expect(ed.getByLabel('محتوى الباب')).toHaveValue(/\n> :::$/);
+  await expect(body).toHaveValue(/\n> نص للجميع\n/);
   await ed.getByRole('button', { name: /التأمل والاختبار/ }).click();
   await expect(ed.getByText('أقصى نقاط الباب: 20')).toBeVisible();
   await ed.getByRole('button', { name: '+ سؤال' }).click();
@@ -83,7 +85,7 @@ test('النماذج: إضافة حقل جدول ومعاينته، ثم الح�
 test('المعاينة كمشارك، والتقييم بالنجوم والملاحظات', async ({ page }) => {
   const calls = await setup(page);
   const views = page.getByRole('navigation', { name: 'أقسام الكتاب' });
-  await views.getByRole('button', { name: 'كما يراه المشارك' }).click();
+  await views.getByRole('button', { name: /الكتاب الأصلي/ }).click();
   await expect(page.getByText('الإجابة الصحيحة')).toBeVisible();
   await expect(page.getByText('أقصى نقاط هذا الباب: 20')).toBeVisible();
   await views.getByRole('button', { name: /التقييم/ }).click();

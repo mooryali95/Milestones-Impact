@@ -4,13 +4,12 @@
 // دوال صافية تعيد { meta, body }؛ يفتحها openDocument أو تُختبر وحدها.
 import { bars, callout, chain, esc, kpis, points, progress, raw, section, table, today } from './doc.js';
 
-export const STATUS = {
-  registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
-  placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
-};
-const FUNNEL = [['registered', 'سجّل', 'Joined'], ['profiled', 'أكمل الملف', 'Profiled'], ['assessed', 'أنهى القياس', 'Assessed'], ['approved', 'اعتُمد مساره', 'Placed'], ['completed', 'أنهى البرنامج', 'Completed']];
+import { PARTICIPANT_STATUS as STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+export { STATUS };
+const FUNNEL_EN = { registered: 'Joined', profiled: 'Profiled', assessed: 'Assessed', approved: 'Placed', completed: 'Completed' };
+const FUNNEL = BASE_FUNNEL.map(([k, t]) => [k, t, FUNNEL_EN[k]]);
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
-const LVL = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
+import { DIM_AR, DIM_SHORT as DIM_EN, FUNNEL as BASE_FUNNEL, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '·');
 
 // تقرير الجهة. audience: 'admin' (كامل بمصادر الانضمام) أو 'coordinator' (بصلاحياته فقط)
@@ -165,8 +164,6 @@ export function decisionReport(project, buckets) {
 // تقرير الأثر النهائي: القياس المبدئي مقابل البعدي للدفعة أو لجهة واحدة.
 // r: رد admin.impact كما هو (counts, cohort, transfer, participants, caution)؛ لا يُعاد هنا أي حساب.
 // audience: 'admin' أو 'coordinator'؛ أسماء المشاركين تظهر للمنسق فقط إن مُنح صلاحية المستويات.
-const DIM_AR = { milestone: 'إدارة المشروعات', impact: 'تحويل المشروع إلى أثر', leadership: 'تمكين القائد' };
-const DIM_EN = { milestone: 'Milestone', impact: 'Impact', leadership: 'Leadership' };
 const VERDICT = { confirmed: 'تغير مؤكد', emerging: 'مؤشرات أولية', none: 'لا دليل كافٍ', decline: 'تراجع يحتاج مراجعة' };
 const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
 export function impactReport(r, { org = null, audience = 'admin', names = audience === 'admin' } = {}) {
