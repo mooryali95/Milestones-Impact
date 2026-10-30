@@ -1,16 +1,8 @@
-// أسماء الأبعاد والمستويات كما في جداول leaders.dimensions وleaders.levels
-export const DIMENSIONS = [
-  { key: 'milestone', short: 'Milestone', title: 'إدارة المشروعات' },
-  { key: 'impact', short: 'Impact', title: 'تحويل المشروع إلى أثر' },
-  { key: 'leadership', short: 'Leadership', title: 'تمكين القائد من قيادة التنفيذ' },
-];
+import { DIMENSIONS, LEVELS, MODE_AR, PHASE_AR, TIER_AR, REQ_STATUS } from '../../supabase/functions/leaders-api/labels.js';
+
+export { DIMENSIONS, LEVELS, REQ_STATUS };
 export const dimOf = (k) => DIMENSIONS.find((d) => d.key === k) || { key: k, short: k, title: k };
 
-export const LEVELS = [
-  { key: 'beginner', title: 'تأسيسي', step: 1 },
-  { key: 'intermediate', title: 'متوسط', step: 2 },
-  { key: 'advanced', title: 'احترافي', step: 3 },
-];
 // وصف المستوى الملخص الذي يراه المشارك (التفصيل لكل بُعد للإدارة فقط)
 export const LEVEL_SUMMARY = {
   beginner: 'تبني أساسك: لغة مشتركة وأدوات عملية تربط التنفيذ بالأثر والقيادة.',
@@ -20,25 +12,19 @@ export const LEVEL_SUMMARY = {
 
 export const levelOf = (k) => LEVELS.find((l) => l.key === k) || { key: k, title: k, step: 0 };
 
-export const TIERS = { knowledge: 'المعرفة', skill: 'المواقف', behavior: 'الممارسة' };
+export const TIERS = TIER_AR;
 
 export const PHASES = [
-  { key: 'admission', title: 'القبول', hint: 'نتعرّف عليك ونحدد نقطة انطلاقك' },
-  { key: 'qualification', title: 'التأهيل', hint: 'تدريب وتطبيق على عملك الحقيقي' },
-  { key: 'impact', title: 'الأثر', hint: 'دعم حتى الاستقلال ثم قياس ما تغيّر' },
+  { key: 'admission', title: PHASE_AR.admission, hint: 'نتعرّف عليك ونحدد نقطة انطلاقك' },
+  { key: 'qualification', title: PHASE_AR.qualification, hint: 'تدريب وتطبيق على عملك الحقيقي' },
+  { key: 'impact', title: PHASE_AR.impact, hint: 'دعم حتى الاستقلال ثم قياس ما تغيّر' },
 ];
 
 // طريقة تنفيذ المرحلة كما تظهر للمشارك
 export const MODES = {
-  in_person: { title: 'حضوري', icon: '◉' },
-  online: { title: 'عن بعد', icon: '◎' },
-  hybrid: { title: 'مدمج', icon: '◐' },
-  self: { title: 'ذاتي عبر المنصة', icon: '○' },
+  in_person: { title: MODE_AR.in_person, icon: '◉' },
+  online: { title: MODE_AR.online, icon: '◎' },
+  hybrid: { title: MODE_AR.hybrid, icon: '◐' },
+  self: { title: MODE_AR.self, icon: '○' },
 };
 
-export const REQ_STATUS = {
-  pending: 'لم يُنجز',
-  submitted: 'بانتظار المراجعة',
-  done: 'منجز',
-  returned: 'أُعيد للتعديل',
-};

@@ -1,5 +1,5 @@
 import React from "react";
-import { BRAND } from "../config/constants";
+import { BRAND, CONTACT } from "../config/constants";
 
 // ════════════════════════════════════════════════════════════════
 // FOOTER — تذييل التواصل وحقوق النشر
@@ -9,9 +9,7 @@ import { BRAND } from "../config/constants";
 const Footer = () => (
   <div className="app-footer">
     <p style={{ marginBottom: "0.3rem" }}>
-      للتواصل: <a href="tel:0532134539" style={{ color: BRAND.color, textDecoration: "none" }}>0532134539</a>
-      {" | "}
-      <a href="mailto:omar@sunkvalue.com" style={{ color: BRAND.color, textDecoration: "none" }}>omar@sunkvalue.com</a>
+      للتواصل: <a href={`mailto:${CONTACT.email}`} style={{ color: BRAND.color, textDecoration: "none" }}>{CONTACT.email}</a>
     </p>
     <p>© {new Date().getFullYear()} Milestone Impact. جميع الحقوق محفوظة.</p>
   </div>

@@ -62,7 +62,6 @@ shared/     ← الهوية والأنماط المشتركة وسكربت ال
 ---
 
 ## للتواصل
-- 📞 0532134539
-- ✉ omar@sunkvalue.com
+- ✉ mi@sunkvalue.com
 
 © 2026 Milestone Impact — جميع الحقوق محفوظة

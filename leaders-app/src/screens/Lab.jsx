@@ -8,10 +8,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
-import { computeSchedule, KINDS, LINK_LABEL, LINK_TYPES, MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import { computeSchedule, EXCELLENCE, KINDS, LINK_LABEL, LINK_TYPES, MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
 const pctOf = (s) => Math.round((Number(s) || 0) * 100);
-const tone = (p) => (p >= 90 ? 'ok' : p >= MASTERY ? 'gold' : p >= 40 ? 'warn' : 'bad');
+const tone = (p) => (p >= EXCELLENCE ? 'ok' : p >= MASTERY ? 'gold' : p >= 40 ? 'warn' : 'bad');
 const labelOf = (list, id) => (list || []).find((x) => x.id === id)?.label || id;
 
 // ── لوحة مؤشرات الموقف ──
@@ -442,7 +442,7 @@ function Runner({ id, onExit, onPoints }) {
 
       {phase === 'done' && finish && (
         <div className="lab-card lab-done">
-          <div className={`lab-score ${tone(finish.pct)}`}><b>{finish.pct}%</b><small>{finish.pct >= 90 ? 'تميّز' : finish.pct >= MASTERY ? 'إتقان' : 'دون عتبة الإتقان'}</small></div>
+          <div className={`lab-score ${tone(finish.pct)}`}><b>{finish.pct}%</b><small>{finish.pct >= EXCELLENCE ? 'تميّز' : finish.pct >= MASTERY ? 'إتقان' : 'دون عتبة الإتقان'}</small></div>
           {finish.gained > 0 && <p className="chip gold">+{finish.gained} نقطة</p>}
           {finish.first && <p className="small muted">هذه محاولتك الأولى، وتُحفظ قياسًا ابتدائيًا يُقارن به تقدمك.</p>}
           {finish.pct < MASTERY && <p className="small">تُمنح نقاط الأداة عند {MASTERY}%. أعد المحاولة بعد مراجعة الباب.</p>}

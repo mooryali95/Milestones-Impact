@@ -9,7 +9,8 @@ import { L, DIM, LVL } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 
-const KIND = { tool: 'أداة عمل', scenario: 'موقف محاكاة' };
+import { KINDS } from '../../../supabase/functions/leaders-api/lab.js';
+const KIND = KINDS;
 const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 function Grants({ data, reload, canWrite }) {

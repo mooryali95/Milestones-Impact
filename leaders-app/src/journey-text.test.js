@@ -1,0 +1,44 @@
+// نصوص الرحلة تُولَّد من الإعدادات وتطابق ما كان مكتوبًا يدويًا حرفيًا
+import { describe, expect, it } from 'vitest';
+import { durationAr, hardcodedFacts, renderJourney, renderJourneyText, sessionsAr } from '../../supabase/functions/leaders-api/logic.js';
+
+const reqs = [
+  { code: 'O-SESS', config: { sessions_required: 4, minutes: 60 } }, { code: 'C-MEET', config: { sessions_required: 1, minutes: 90 } },
+  { code: 'L-SESS', config: { sessions_required: 3, minutes: 60 } }, { code: 'S-CHECK', config: { sessions_required: 3, minutes: 45 } },
+  { code: 'AP-INT', config: { sessions_required: 1, minutes: 20 } }, { code: 'T-ATTEND', config: { sessions_required: 4 } },
+  { code: 'E-PRES', config: { minutes: 20 } },
+];
+const r = (t, extra = {}) => renderJourneyText(t, { reqs, readyMin: 80, assessmentMinutes: 12, ...extra });
+
+describe('نصوص الرحلة من مصدرها', () => {
+  it('تطابق النص القديم حرفيًا', () => {
+    expect(r('{sessions:O-SESS} توجيه أسبوعية مدة كل منها {minutes:O-SESS}')).toBe('أربع جلسات توجيه أسبوعية مدة كل منها 60 دقيقة');
+    expect(r('{sessions:L-SESS} فردية مدة كل منها {minutes:L-SESS}')).toBe('ثلاث جلسات فردية مدة كل منها 60 دقيقة');
+    expect(r('جلسة متابعة شهرية مدتها {minutes:S-CHECK} ({sessions:S-CHECK})')).toBe('جلسة متابعة شهرية مدتها 45 دقيقة (ثلاث جلسات)');
+    expect(r('جلسة استشارية مدتها {minutes:C-MEET}')).toBe('جلسة استشارية مدتها 90 دقيقة');
+    expect(r('{days:T-ATTEND} تدريبية')).toBe('أربعة أيام تدريبية');
+    expect(r('عرض مشروعك أمام لجنة التقييم في {minutes:E-PRES}')).toBe('عرض مشروعك أمام لجنة التقييم في 20 دقيقة');
+    expect(r('جاهزيتها {ready_min}%')).toBe('جاهزيتها 80%');
+    expect(r('{assessment_minutes}')).toBe('12 دقيقة');
+    expect([28, 14, 90, 7, 3].map(durationAr)).toEqual(['4 أسابيع', 'أسبوعان', '3 أشهر', 'أسبوع', '3 أيام']);
+  });
+  it('تتبع الإعداد حين يتغير', () => {
+    const changed = reqs.map((x) => (x.code === 'O-SESS' ? { ...x, config: { sessions_required: 3, minutes: 45 } } : x));
+    expect(renderJourneyText('{sessions:O-SESS} مدة كل منها {minutes:O-SESS}', { reqs: changed })).toBe('ثلاث جلسات مدة كل منها 45 دقيقة');
+    expect([1, 2, 11].map(sessionsAr)).toEqual(['جلسة واحدة', 'جلستان', '11 جلسة']);
+  });
+  it('رمز لمتطلب غير موجود يبقى ظاهرًا ولا يُخترع رقم', () => {
+    expect(r('{sessions:X-NONE}')).toBe('{sessions:X-NONE}');
+  });
+  it('renderJourney يملأ المراحل والمتطلبات', () => {
+    const def = renderJourney({ stages: [{ key: 'ojt', duration_days: 28, duration_label: '{duration}', activities_ar: '{sessions:O-SESS}' }], requirements: [{ ...reqs[0], title_ar: 'حضور {sessions:O-SESS}' }] });
+    expect(def.stages[0]).toMatchObject({ duration_label: '4 أسابيع', activities_ar: 'أربع جلسات' });
+    expect(def.requirements[0].title_ar).toBe('حضور أربع جلسات');
+  });
+  it('حارس الحفظ يرفض الرقم الصريح ويقبل الرمز', () => {
+    expect(hardcodedFacts('أربع جلسات توجيه مدة كل منها 60 دقيقة')).toBeTruthy();
+    expect(hardcodedFacts('4 أسابيع')).toBeTruthy();
+    expect(hardcodedFacts('{sessions:O-SESS} مدة كل منها {minutes:O-SESS}')).toBeNull();
+    expect(hardcodedFacts('قبل الجلسة بثلاثة أيام، وخطة بثلاثة أهداف')).toBeNull();
+  });
+});

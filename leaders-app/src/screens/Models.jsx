@@ -5,6 +5,8 @@
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
 
@@ -14,9 +16,7 @@ const STATUS = {
   returned: { t: 'أُعيد إليك للتطوير', c: 'bad' },
   reviewed: { t: 'قُيّم', c: 'ok' },
 };
-const RANKS = ['مستكشف', 'ممارس', 'متمكّن', 'قائد أثر', 'سفير الأثر'];
-const RANK_AT = [0, 75, 200, 400, 650];
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد مشروع التخرج' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
@@ -85,12 +85,11 @@ function ImportRows({ imp, rows, onChange }) {
   return <button type="button" className="link small" onClick={go}>⇣ استورد {n} صفًا من «{imp.title}»</button>;
 }
 
-// هل اكتمل الحقل؟ نفس قاعدة الخادم قبل التسليم
-const filledOf = (f, v, initiative) => (f.bind === 'initiative' ? !!(initiative || String(v ?? '').trim()) : f.type === 'table'
-  ? (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim()).length >= (f.min_rows || 1)
-  : !!String(v ?? '').trim());
+// هل اكتمل الحقل؟ قاعدة الخادم نفسها (fieldFilled). الحقل الاختياري لا يُحسب ناقصًا،
+// وحقل اسم المبادرة يكتمل من بطاقة المبادرة كما يملؤه الخادم عند التسليم (bindAnswers)
+const filledOf = (f, v, initiative) => f.required === false || (f.bind === 'initiative' && !!initiative) || fieldFilled(f, v);
 const codeOf = (m) => `${(DIMENSIONS.find((x) => x.key === m.dimension)?.short || 'M')[0]}-${String(m.sort || 1).padStart(2, '0')}`;
-// معايير يقيّم بها المستشار كل نموذج
+// علامات النموذج الجيد: إرشاد للمشارك، والمستشار يقيّم بالنجوم والملاحظات
 const RUBRIC = [
   ['الاكتمال', 'كل حقل مملوء بما يكفي ليُفهم دون شرح شفهي.'],
   ['التحديد', 'أرقام وتواريخ وأسماء أدوار، لا عبارات عامة.'],
@@ -178,7 +177,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             {m.source_ar && <p className="model-src">{m.source_ar}</p>}
           </section>
           <section>
-            <span className="mg-cap">معايير التقييم</span>
+            <span className="mg-cap">علامات النموذج الجيد</span>
+            <p className="muted small">يقيّم المستشار تسليمك بالنجوم وملاحظات مكتوبة، وهذه ما يبحث عنه.</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
           {s && s.status !== 'draft' && (
@@ -311,14 +311,14 @@ export function Wins() {
       <section className="wins-ladder">
         <h2>سلّم الألقاب</h2>
         <ol>
-          {RANKS.map((t, i) => (
+          {RANKS.map(({ title: t, min }, i) => (
             <li key={t} className={i < d.rank.index ? 'past' : i === d.rank.index ? 'now' : ''}>
               <span className="wl-dot">{i < d.rank.index ? '✓' : i + 1}</span>
-              <b>{t}</b><small>{RANK_AT[i]} نقطة</small>
+              <b>{t}</b><small>{min} نقطة</small>
             </li>
           ))}
         </ol>
-        <p className="muted small">النقاط من إتمام الأبواب واختباراتها (10 للباب، و5 لكل إجابة صحيحة، و5 للتأمل)، ومن تسليم النماذج التعليمية، ومن نقاط التميّز التي يمنحها مستشارك.</p>
+        <p className="muted small">النقاط من إتمام الأبواب واختباراتها ({POINTS.chapter} للباب، و{POINTS.perCorrect} لكل إجابة صحيحة، و{POINTS.reflection} للتأمل)، ومن تسليم النماذج التعليمية، وإتقان أدوات المختبر، واعتماد مشروع التخرج ({APPROVAL_POINTS} نقطة)، ومن نقاط التميّز التي يمنحها مستشارك.</p>
       </section>
       <section className="wins-log">
         <h2>سجل نقاطك <span className="muted">{d.total} نقطة</span></h2>

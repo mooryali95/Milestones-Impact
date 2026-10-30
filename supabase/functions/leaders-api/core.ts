@@ -2,7 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { deliver, esc, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
+import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -24,7 +24,7 @@ export const CONFIG = {
   // توقيع webhook منصات الحجز (دالة leaders-hooks)
   calcomSecret: env('LEADERS_CALCOM_SECRET'),
   calendlyKey: env('LEADERS_CALENDLY_KEY'),
-  mailFrom: env('LEADERS_MAIL_FROM', 'Milestone Impact <milestoneimpact@basserh.com>'),
+  mailFrom: env('LEADERS_MAIL_FROM', MAIL_FROM_DEFAULT),
   // التحقق البشري (Cloudflare Turnstile) قبل إرسال أي رمز: يعمل حين يُضبط السر
   // تقرير الصحة الأسبوعي يصل إلى هذا البريد (المالك)
   alertEmail: env('LEADERS_ALERT_EMAIL'),

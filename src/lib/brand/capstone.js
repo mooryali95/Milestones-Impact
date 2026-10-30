@@ -6,11 +6,11 @@
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
 import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
-import { parseDate, parseNumber, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { parseDate, parseNumber, PRIORITY_WEIGHT, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 
-const LVL = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
-const DIM_EN = { milestone: 'Milestone · Execution', impact: 'Impact · Value', leadership: 'Leadership · People' };
-const DIM_AR = { milestone: 'المعلم', impact: 'الأثر', leadership: 'القيادة' };
+import { DIMENSIONS, DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+
+const DIM_EN = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.en]));
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
 const money = (n) => (n == null ? '·' : `${Math.round(n).toLocaleString('en-US')} ريال`);
 const filled = (r) => Array.isArray(r) && r.some((c) => String(c || '').trim());
@@ -202,13 +202,13 @@ export function capstoneReport(doc) {
   if (doc.review) {
     const r = doc.review;
     const rows = (doc.rubric || []).map((x) => [
-      raw(`${esc(x.title)}${x.dimension === r.priority ? ' <span class="tag gold">وزن مضاعف</span>' : ''}`),
+      raw(`${esc(x.title)}${x.dimension === r.priority ? ` <span class="tag gold">الوزن ×${PRIORITY_WEIGHT}</span>` : ''}`),
       `${r.scores?.[x.key] ?? '·'} من ${RUBRIC_MAX}`, r.notes?.[x.key] || '',
     ]);
     body += section('Advisor review', 'تقييم المستشار', `
       <p class="cp-score"><b>${esc(r.score ?? '·')}</b><span>من 100</span></p>
       ${table([{ label: 'البعد' }, { label: 'الدرجة', width: '18mm' }, { label: 'الملاحظة' }], rows)}
-      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, 'معيار من ستة أبعاد، وأبعاد الإطار الأولوي في مسار القائد وزنها مضاعف.');
+      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار الأولوي في مسار القائد وزنها ×${PRIORITY_WEIGHT}.`);
   }
 
   if (approved) {
