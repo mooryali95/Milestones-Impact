@@ -6,6 +6,7 @@
 import React from 'react';
 import { L } from './leaders.js';
 import { useUI } from './ui.jsx';
+import { BRAND } from '../../shared/js/brand.js';
 
 const STAMP = { revoked: 'ملغاة', replaced: 'مستبدلة', sample: 'نموذج' };
 
@@ -13,10 +14,20 @@ const STAMP = { revoked: 'ملغاة', replaced: 'مستبدلة', sample: 'نم
 export async function openCertificate(load, status) {
   const win = window.open('', '_blank');
   if (!win) return alert('اسمح بالنوافذ المنبثقة لعرض الشهادة');
-  const snapshot = await load();
-  if (!snapshot) return win.close();
-  const { writeCertificate } = await import('../../src/lib/brand/certificate.js');
-  await writeCertificate(win, snapshot, { status: STAMP[status] });
+  win.document.write(`<p dir="rtl" style="font:16px system-ui;padding:40px;color:${BRAND['ink-blue']}">جارٍ تجهيز الشهادة…</p>`);
+  try {
+    const snapshot = await load();
+    if (!snapshot) return win.close();
+    const { writeCertificate } = await import('../../src/lib/brand/certificate.js');
+    await writeCertificate(win, snapshot, { status: STAMP[status] });
+  } catch (e) {
+    // لا صفحة فارغة: السبب يظهر في النافذة نفسها
+    win.document.body.innerHTML = '';
+    const msg = win.document.createElement('p');
+    msg.dir = 'rtl'; msg.style.cssText = `font:16px system-ui;padding:40px;color:${BRAND.umber}`;
+    msg.textContent = `تعذّر عرض الشهادة: ${e?.message || e}`;
+    win.document.body.appendChild(msg);
+  }
 }
 
 // معاينة نموذج: الإعداد العام (settings) أو جهة (organization_id) مع مسودتها (cert)
@@ -25,6 +36,42 @@ export const previewCertificate = (body, onError) => openCertificate(async () =>
   if (!r.success) { onError?.(r.message); return null; }
   return r.certificate;
 }, 'sample');
+
+// معاينة حية داخل الصفحة: الشهادة نفسها في إطار معزول، تتحدث بعد توقف قصير عن الكتابة.
+// لا نافذة منبثقة: لا يحجبها المتصفح، ويظهر سبب الفشل مكانها بدل صفحة فارغة.
+export function CertPreview({ body, label = 'معاينة الشهادة' }) {
+  const [html, setHtml] = React.useState(null);
+  const [err, setErr] = React.useState('');
+  const key = JSON.stringify(body);
+  React.useEffect(() => {
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await L('admin.cert-preview', body);
+        if (!live) return;
+        if (!r.success) { setErr(r.message || 'تعذّرت المعاينة'); return; }
+        const { certificateHtml, qrSvgFor } = await import('../../src/lib/brand/certificate.js');
+        const doc = certificateHtml(r.certificate, await qrSvgFor(r.certificate.verify_url), { status: STAMP.sample });
+        // شريط أزرار الشهادة للنافذة المستقلة؛ داخل الإطار يُخفى
+        if (live) { setErr(''); setHtml(doc.replace('</style>', '.toolbar{display:none}body{padding:0}</style>')); }
+      } catch (e) { if (live) setErr(`تعذّرت المعاينة: ${e.message || e}`); }
+    }, 500);
+    return () => { live = false; clearTimeout(t); };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <figure className="ce-preview" aria-label={label}>
+      <div className="ce-frame">
+        {err ? <div className="la-err" role="alert">{err}</div>
+          : html ? <iframe title={label} srcDoc={html} sandbox="" />
+          : <div className="ce-wait">جارٍ تجهيز المعاينة…</div>}
+      </div>
+      <figcaption className="la-row between">
+        <small className="la-muted">نموذج يتحدث مع كل تعديل، قبل الحفظ</small>
+        <button type="button" className="btn-sm ghost" disabled={!html} onClick={() => previewCertificate(body)}>فتح بالحجم الكامل</button>
+      </figcaption>
+    </figure>
+  );
+}
 
 // الموقّع: اسم وصفة وصورة توقيع اختيارية. الختم يظهر دائمًا.
 export function SignatoryEditor({ value, onChange, disabled }) {

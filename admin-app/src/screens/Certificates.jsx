@@ -3,10 +3,12 @@
 // ════════════════════════════════════════════════════════════════
 // الإصدار تلقائي عند «أنهى البرنامج». من هنا: ضبط ما يظهر على الشهادات
 // الجديدة، ومعاينتها، وإلغاء شهادة، أو إعادة إصدارها لتصحيح الاسم.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
-import { openCertificate, previewCertificate, SignatoryChoice } from '../cert.jsx';
+import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
+import FilterBar, { useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts } from '../filters.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
 const ST = { valid: ['سارية', 'ok'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
@@ -38,10 +40,16 @@ function SettingsCard({ canWrite }) {
   };
   return (
     <section className="la-card ce-settings">
-      <div className="la-row between"><h3>إعدادات الشهادة العامة</h3>
+      <div className="la-row between"><div><h3>نموذج الشهادة العام</h3><small className="la-muted">يسري على كل الشهادات الجديدة، وما تخصّصه جهة يعلوه لمشاركيها</small></div>
         <label className="of-switch"><input type="checkbox" checked={s.enabled} disabled={!canWrite} onChange={(e) => setS({ ...s, enabled: e.target.checked })} />
           <span>{s.enabled ? 'الإصدار التلقائي مفعّل' : 'الإصدار التلقائي متوقف'}</span></label></div>
-      <p className="la-muted">تُصدر الشهادة حين تصير حالة المشارك «أنهى البرنامج»، ويُقفل اسمه. هذا الإعداد للجميع، ولكل جهة أن تخصّص ما يختلف من نموذجها{extra ? ` (${extra} جهة مخصّصة الآن)` : ''}. التعديل يسري على الشهادات الجديدة ولا يغيّر ما صدر.</p>
+      <div className="ce-split">
+      <div className="ce-form">
+      <ol className="ce-how">
+        <li>تُصدر تلقائيًا حين تصير حالة المشارك «أنهى البرنامج»، ويُقفل اسمه.</li>
+        <li>التعديل هنا يسري على الشهادات الجديدة، ولا يغيّر ما صدر.</li>
+        <li>لكل جهة أن تخصّص ما يختلف من نموذجها{extra ? ` (${extra} جهة مخصّصة الآن)` : ''}.</li>
+      </ol>
       <fieldset disabled={!canWrite} className="ce-grid">
         <label className="of-field"><span className="of-label">اسم البرنامج</span><input value={s.program_ar} onChange={set('program_ar')} maxLength={200} /></label>
         <label className="of-field"><span className="of-label">اسم البرنامج بالإنجليزية</span><input dir="ltr" value={s.program_en} onChange={set('program_en')} maxLength={200} /></label>
@@ -52,7 +60,9 @@ function SettingsCard({ canWrite }) {
       <SignatoryChoice mode={mode} onMode={setMode} value={s.signatory} onChange={(signatory) => setS({ ...s, signatory })} disabled={!canWrite} />
       <div className="la-row">
         {canWrite && <button className="btn-sm primary" onClick={save} disabled={busy}>{busy ? 'جارٍ الحفظ…' : 'حفظ الإعدادات'}</button>}
-        <button className="btn-sm ghost" onClick={() => previewCertificate({ settings: draft() }, toast)}>معاينة نموذج</button>
+      </div>
+      </div>
+      <CertPreview body={{ settings: draft() }} label="معاينة نموذج الشهادة" />
       </div>
     </section>
   );
@@ -92,11 +102,9 @@ function Reissue({ c, onClose, onDone }) {
 export default function Certificates({ canWrite, onPerson, orgs = [] }) {
   const { toast, prompt } = useUI();
   const [d, setD] = useState(null);
-  const [filter, setFilter] = useState('');
-  const [q, setQ] = useState('');
-  const [org, setOrg] = useState('');
   const [reissue, setReissue] = useState(null);
-  const load = useCallback(async () => setD(await L('admin.certificates', { ...(filter ? { status: filter } : {}), ...(org ? { organization_id: org } : {}) })), [filter, org]);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'org', 'issued']);
+  const load = useCallback(async () => setD(await L('admin.certificates', {})), []);
   useEffect(() => { load(); }, [load]);
 
   const open = (c) => openCertificate(async () => {
@@ -113,25 +121,29 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
   };
   const copy = (c) => { navigator.clipboard?.writeText(`${SITES.leaders}/v/${c.serial}`); toast('نُسخ رابط التحقق'); };
 
-  const s = q.trim().toLowerCase();
-  const rows = (d?.certificates || []).filter((c) => !s || [c.serial, c.name_ar, c.name_en, c.org_name].join(' ').toLowerCase().includes(s));
+  const all = d?.certificates || [];
+  const fields = useMemo(() => [
+    { key: 'org', label: 'الجهات', get: (c) => c.organization_id || orgs.find((o) => o.name === c.org_name)?.id || 'none', options: [...orgs.map((o) => [o.id, o.name]), ['none', 'بدون جهة']] },
+    { key: 'issued', label: 'الإصدار', all: 'أي تاريخ إصدار', type: 'period', get: (c) => c.issued_at },
+  ], [orgs]);
+  const presets = useMemo(() => Object.entries(ST).map(([k, [l]]) => ({ key: k, label: l, test: (c) => c.status === k })), []);
+  const rows = useMemo(() => applyFilters(all, { fields, presets, text: (c) => [c.serial, c.name_ar, c.name_en, c.org_name].join(' ') }, f), [all, f, fields, presets]);
+  const counts = useMemo(() => presetCounts(all, presets), [all, presets]);
   return (
     <div className="ce">
+      <div className="stats-grid ce-kpis">
+        <div className="stat-card"><div className="stat-label">الشهادات الصادرة</div><div className="stat-value">{d?.success ? all.length : '·'}</div><div className="stat-sub">منذ بدء البرنامج</div></div>
+        <div className="stat-card"><div className="stat-label">سارية</div><div className="stat-value s-replied">{counts.valid ?? '·'}</div><div className="stat-sub">صالحة للتحقق</div></div>
+        <div className="stat-card"><div className="stat-label">ملغاة أو مستبدلة</div><div className="stat-value">{d?.success ? (counts.revoked || 0) + (counts.replaced || 0) : '·'}</div><div className="stat-sub">بسبب مسجّل</div></div>
+        <div className="stat-card"><div className="stat-label">عمليات التحقق</div><div className="stat-value">{d?.success ? d.checks : '·'}</div><div className="stat-sub">من صفحة التحقق العامة</div></div>
+      </div>
       <SettingsCard canWrite={canWrite} />
       <section className="la-card">
-        <div className="la-row between">
-          <h3>الشهادات الصادرة {d?.success && <small className="la-muted">· {d.certificates.length} · {d.checks} عملية تحقق</small>}</h3>
-          <div className="la-row">
-            <input className="ce-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم أو الرقم أو الجهة" aria-label="بحث في الشهادات" />
-            <select value={org} onChange={(e) => setOrg(e.target.value)} aria-label="الجهة">
-              <option value="">كل الجهات</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-            <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="الحالة">
-              <option value="">كل الحالات</option><option value="valid">سارية</option><option value="revoked">ملغاة</option><option value="replaced">مستبدلة</option>
-            </select>
-          </div>
-        </div>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !rows.length ? <p className="la-muted">لا شهادات بعد. تصدر تلقائيًا حين تغيّر حالة مشارك إلى «أنهى البرنامج».</p> : (
+        <h3>سجل الشهادات</h3>
+        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا حين تغيّر حالة مشارك إلى «أنهى البرنامج»، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>
+        <FilterBar scope="certs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={presets} counts={counts}
+          shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة" />
+        {!rows.length ? <p className="la-muted">لا نتائج لهذه الفلاتر.</p> : (
           <div className="table-wrap"><table className="data-table">
             <thead><tr><th>الرقم</th><th>الاسم</th><th>الجهة</th><th>الإصدار</th><th>الحالة</th><th /></tr></thead>
             <tbody>{rows.map((c) => {
@@ -155,7 +167,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
               );
             })}</tbody>
           </table></div>
-        )}
+        )}</>}
       </section>
       {reissue && <Reissue c={reissue} onClose={() => setReissue(null)} onDone={(serial) => { setReissue(null); toast(`صدرت الشهادة ${serial || ''}`); load(); }} />}
     </div>
