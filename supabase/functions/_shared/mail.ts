@@ -1,4 +1,3 @@
-import { SITES } from './sites.js';
 // ════════════════════════════════════════════════════════════════
 // قالب البريد الموحّد لكل دوال الحافة بهوية Milestone Impact (الوضع الفاتح)
 // ════════════════════════════════════════════════════════════════
@@ -8,7 +7,6 @@ import { SITES } from './sites.js';
 // جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
 // كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML.
 
-const LOGO_URL = `${SITES.mi}/assets/brand/png/milestone-impact-400w.png`;
 export const MAIL = { graphite: '#0B272F', gold: '#A97A2E', mist: '#F7F8F6', line: '#DCE2E1', slate: '#2C4148', muted: '#6E8085' };
 const FONT = `'Noto Kufi Arabic',Tahoma,Arial,sans-serif`;
 const LATIN = `Arial,sans-serif`;
@@ -48,7 +46,8 @@ export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IM
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MAIL.mist}"><tr><td align="center" style="padding:36px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${MAIL.line};border-radius:2px">
 <tr><td style="padding:30px 36px 0" align="left" dir="ltr">
-  <img src="${LOGO_URL}" width="132" alt="Milestone Impact" style="display:block;width:132px;height:auto;border:0;font-family:${LATIN};font-size:18px;color:${MAIL.graphite}">
+  <!-- الشعار نصًا بخط الهوية وألوانها: يظهر دائمًا، ولو حجب البريد الصور الخارجية (كما يفعل Outlook وHotmail افتراضيًا) -->
+  <div style="font-family:${LATIN};font-size:21px;line-height:1;color:${MAIL.graphite};letter-spacing:.3px;white-space:nowrap"><span style="color:${MAIL.gold};font-size:15px;vertical-align:2px">&#9670;</span>&nbsp;<b style="font-weight:600">Milestone</b> <span style="font-weight:300">Impact</span></div>
 </td></tr>
 <tr><td style="padding:22px 36px 0"><div style="height:1px;line-height:1px;font-size:0;background:${MAIL.gold}">&nbsp;</div></td></tr>
 <tr><td style="padding:26px 36px 8px">
@@ -70,15 +69,36 @@ export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IM
 
 // ── الإرسال عبر Resend ──
 // يعيد true عند القبول؛ وكل دالة تقرر ماذا تفعل بالفشل (ترمي أو تتجاهل)
-export const MAIL_FROM_DEFAULT = 'Milestone Impact <milestoneimpact@basserh.com>';
+// المرسل من نطاق العلامة نفسها (mail.sunkvalue.com موثّق في Resend بـ SPF وDKIM وDMARC)، والردود إلى بريد التواصل العام
+export const MAIL_FROM_DEFAULT = 'Milestone Impact <no-reply@mail.sunkvalue.com>';
+export const MAIL_REPLY_TO = 'mi@sunkvalue.com';
+// احتياط: إن رفض Resend النطاق الجديد (مفتاح مقيّد بالنطاق القديم مثلًا) لا تضيع الرسالة
+const MAIL_FROM_FALLBACK = 'Milestone Impact <milestoneimpact@basserh.com>';
+
+// نسخة نصية من القالب: فلاتر البريد تثق بالرسالة التي تحمل الصيغتين، وبعض البرامج تعرض النص وحده
+export function plainText(html: string) {
+  return html
+    .replace(/<(style|head)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href, label) => `${label.replace(/<[^>]+>/g, '').trim()}: ${href}`)
+    .replace(/<br\s*\/?>|<\/(p|div|tr|h1|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&#9670;/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+
 export async function deliver(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT } = {}) {
   if (!key) { console.error('RESEND_API_KEY missing; mail to', to, 'not sent'); return false; }
+  const send = (sender: string) => fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: sender, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO }),
+  });
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    });
+    let res = await send(from);
+    if (!res.ok && (res.status === 403 || res.status === 422) && from !== MAIL_FROM_FALLBACK) {
+      console.error('mail sender rejected, retrying with fallback', res.status, await res.text());
+      res = await send(MAIL_FROM_FALLBACK);
+    }
     if (!res.ok) { console.error('mail failed', res.status, await res.text()); return false; }
     return true;
   } catch (e) { console.error('mail failed', e); return false; }
