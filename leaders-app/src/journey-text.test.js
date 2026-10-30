@@ -59,3 +59,23 @@ describe('اتساق الرحلة', () => {
     expect(journeyCoherence([{ ...stage, activities_ar: '{minutes:X-1}' }], [])[0].level).toBe('error');
   });
 });
+
+import { programHours } from '../../supabase/functions/leaders-api/logic.js';
+describe('ساعات البرنامج من أنشطته', () => {
+  const reqs = [
+    { code: 'T-ATTEND', kind: 'workshop', required: true, config: { sessions_required: 4, minutes: 360 } },
+    { code: 'O-SESS', kind: 'coaching', required: true, config: { sessions_required: 4, minutes: 60 } },
+    { code: 'E-PRES', kind: 'meeting', required: true, config: { minutes: 20 } },
+    { code: 'L-360I', kind: 'check', required: true, config: {} },
+    { code: 'X-OPT', kind: 'coaching', required: false, config: { sessions_required: 2, minutes: 60 } },
+    { code: 'AP-INT', kind: 'coaching', required: true, config: { sessions_required: 1 } },
+  ];
+  it('يجمع الحضوري المطلوب، ولا يخمّن مدة غير مكتوبة', () => {
+    expect(programHours(reqs)).toEqual({ hours: 28, minutes: 4 * 360 + 4 * 60 + 20, missing: ['AP-INT'] });
+  });
+  it('يحترم أنشطة مستوى المشارك', () => {
+    const lvl = [{ code: 'L-ADV', kind: 'coaching', required: true, dimension: 'leadership', level: 'advanced', config: { sessions_required: 3, minutes: 60 } }];
+    expect(programHours(lvl, { leadership: 'beginner' }).hours).toBe(0);
+    expect(programHours(lvl, { leadership: 'advanced' }).hours).toBe(3);
+  });
+});

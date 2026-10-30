@@ -76,4 +76,7 @@ describe('مصدر واحد لكل معلومة', () => {
       expect(readFileSync(join(ROOT, css), 'utf8'), css).not.toMatch(STATUS_HEX);
     }
   });
+  it('المصطلحات المعتمدة: لا «الكوتشينغ» ولا «مجتمع الأقران» في الكود', () => {
+    expect(offenders(/الكوتشينغ|الكوتشنغ|مجتمع الأقران/)).toEqual([]);
+  });
 });

@@ -121,6 +121,8 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
   const placed = Object.values(o.overall || {}).reduce((a, n) => a + n, 0);
   const baseline = (o.instruments || []).filter((x) => x.kind === 'baseline').sort((a, c) => Number(c.active) - Number(a.active));
 
+  // عدد المتطلبات المنتظرة من قائمة «ينتظر قرارك» نفسها، فلا تختلف البطاقة عن القائمة تحتها
+  const reqN = r?.submitted ? r.submitted.length : (o.pending_reviews || 0);
   return (
     <>
       <Health h={h} />
@@ -137,7 +139,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       <div className="stats-grid">
         <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
         <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
-        <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{o.pending_reviews + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${o.pending_reviews} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
+        <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{reqN + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${reqN} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
         <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>
       </div>
 

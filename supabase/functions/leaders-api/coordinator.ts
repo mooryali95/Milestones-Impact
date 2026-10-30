@@ -202,7 +202,7 @@ export async function adminSave(a: Admin, b: Body) {
   const phone = b.phone ? normalizePhone(b.phone) : null;
   if (b.phone && !phone) throw new Fail('جوال المنسق غير صحيح');
   const { data: other } = await db.from('org_coordinators').select('organization_id, organizations(name)').eq('email', email).neq('organization_id', orgId).maybeSingle();
-  if (other) throw new Fail(`هذا البريد منسق لجهة ${other.organizations?.name || 'أخرى'}`, 409);
+  if (other) throw new Fail(`هذا البريد منسق لجهة ${(other.organizations as any)?.name || 'أخرى'}`, 409);
 
   const before = await coordinatorOf(orgId);
   const row = {

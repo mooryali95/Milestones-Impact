@@ -27,9 +27,11 @@ describe('البنية المرجعية', () => {
     expect(n.fks).toBeGreaterThan(100);
     await db.exec(SQL);
 
-    const dims = (await db.query('select key, title_ar from leaders.dimensions')).rows;
-    const lvls = (await db.query('select key, title_ar from leaders.levels')).rows;
+    const dims = (await db.query('select key, title_ar, title_en from leaders.dimensions')).rows;
+    const lvls = (await db.query('select key, title_ar, title_en from leaders.levels')).rows;
     for (const d of DIMENSIONS) expect(dims.find((x) => x.key === d.key)?.title_ar, d.key).toBe(d.title);
     for (const l of LEVELS) expect(lvls.find((x) => x.key === l.key)?.title_ar, l.key).toBe(l.title);
+    for (const l of LEVELS) expect(lvls.find((x) => x.key === l.key)?.title_en, l.key).toBe(l.en);
+    for (const d of DIMENSIONS) expect(dims.find((x) => x.key === d.key)?.title_en, d.key).toBe(d.short);
   }, 60000);
 });

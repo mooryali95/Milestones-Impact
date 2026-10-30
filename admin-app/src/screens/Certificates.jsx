@@ -17,11 +17,12 @@ function SettingsCard({ canWrite }) {
   const [s, setS] = useState(null);
   const [mode, setMode] = useState('none');
   const [extra, setExtra] = useState(0);
+  const [auto, setAuto] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     L('admin.cert-settings').then((r) => {
       if (!r.success) return setS({ error: r.message });
-      setS(r.settings); setMode(r.settings.signatory ? 'custom' : 'none'); setExtra(r.customized_orgs || 0);
+      setS(r.settings); setMode(r.settings.signatory ? 'custom' : 'none'); setExtra(r.customized_orgs || 0); setAuto(r.computed_hours || null);
     });
   }, []);
   if (!s) return <section className="la-card"><h3>إعدادات الشهادة</h3><Spinner /></section>;
@@ -44,7 +45,8 @@ function SettingsCard({ canWrite }) {
       <fieldset disabled={!canWrite} className="ce-grid">
         <label className="of-field"><span className="of-label">اسم البرنامج</span><input value={s.program_ar} onChange={set('program_ar')} maxLength={200} /></label>
         <label className="of-field"><span className="of-label">اسم البرنامج بالإنجليزية</span><input dir="ltr" value={s.program_en} onChange={set('program_en')} maxLength={200} /></label>
-        <label className="of-field"><span className="of-label">الساعات التدريبية</span><input inputMode="numeric" value={s.hours ?? ''} onChange={(e) => setS({ ...s, hours: e.target.value.replace(/\D/g, '') })} placeholder="اختياري" /></label>
+        <label className="of-field"><span className="of-label">الساعات التدريبية</span><input inputMode="numeric" value={s.hours ?? ''} onChange={(e) => setS({ ...s, hours: e.target.value.replace(/\D/g, '') })} placeholder={auto?.hours && !auto.missing?.length ? `تلقائيًا: ${auto.hours}` : 'اختياري'} />
+          <small className="la-muted">{auto?.missing?.length ? `لا تُحسب الساعات تلقائيًا حتى تُكتب مدة هذه الأنشطة: ${auto.missing.join('، ')}. حتى ذلك تبقى فارغة على الشهادة ما لم تكتبها هنا.` : auto?.hours ? `فارغ = ${auto.hours} ساعة محسوبة من جلسات البرنامج وأيامه، وتتبعها إن تغيرت.` : 'فارغ = تُحسب من مدد الجلسات والأيام في أنشطة البرنامج.'}</small></label>
       </fieldset>
       <h4 className="ce-sub">الموقّع <small>بجانب ختم Milestone الثابت</small></h4>
       <SignatoryChoice mode={mode} onMode={setMode} value={s.signatory} onChange={(signatory) => setS({ ...s, signatory })} disabled={!canWrite} />

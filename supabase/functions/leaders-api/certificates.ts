@@ -6,8 +6,8 @@
 // الحاكمة بسرّ الخادم، فلا تمر شهادة عُدّلت لقطتها في القاعدة دون أن يظهر
 // ذلك عند التحقق. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
 import { audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
-import { certProfile, trackKey } from './logic.js';
-import { cohortOf, defaultProgramId } from './programs.ts';
+import { certProfile, programHours, trackKey } from './logic.js';
+import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
 
 type Body = Record<string, any>;
 type Actor = { email: string };
@@ -110,16 +110,25 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string) {
     orgRow(p.organization_id),
     cohortOf(p),
   ]);
-  const key = trackKey(Object.fromEntries((pl.data || []).map((x: any) => [x.dimension, x.level])));
-  const [track, prCert] = await Promise.all([
+  const levels = Object.fromEntries((pl.data || []).map((x: any) => [x.dimension, x.level]));
+  const key = trackKey(levels);
+  const [track, prCert, def] = await Promise.all([
     key ? db.from('tracks').select('title_ar, title_en').eq('key', key).maybeSingle().then((r: any) => r.data) : null,
     programCert(cohort?.program_id || await defaultProgramId()),
+    journeyDefinition(p),
   ]);
+  // الساعات المكتوبة في الإعداد تتقدم؛ وإلا فمن أنشطة رحلة المشارك نفسها
+  const profile = profileFor(cfg, prCert, org?.cert);
+  // ولا تُكتب ناقصة: نشاط بلا مدة يعني أن الحساب غير مكتمل، فتُترك فارغة كما كانت
+  if (profile.hours == null) {
+    const h = programHours(def.requirements, levels);
+    if (!h.missing.length && h.hours) profile.hours = h.hours;
+  }
   return snapshotOf({
     serial, issuedAt, name_ar: p.full_name, name_en: p.name_en || null, track,
     start: cohort?.starts_on || p.created_at, end: cohort?.ends_on || issuedAt,
     cohort: cohort && !cohort.is_default ? cohort.name : null,
-    org, profile: profileFor(cfg, prCert, org?.cert),
+    org, profile,
   });
 }
 
@@ -298,13 +307,15 @@ export async function settingsGet() {
     db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
     db.from('programs').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
   ]);
-  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0 };
+  // ما ستكتبه الشهادة إن تُرك حقل الساعات فارغًا: من أنشطة البرنامج الافتراضي
+  const def = await journeyDefinition({});
+  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0, computed_hours: programHours(def.requirements) };
 }
 
 export async function settingsSave(a: Actor, b: Body) {
   const s = b.settings || {};
   const row = { id: 1, enabled: s.enabled !== false, ...cleanProfile({ program_ar: '', program_en: '', hours: null, signatory: null, ...s }), updated_by: a.email, updated_at: new Date().toISOString() };
   must(await db.from('certificate_settings').upsert(row));
-  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatory: row.signatory?.name || null });
+  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatory: (row as any).signatory?.name || null });
   return { success: true, settings: row };
 }

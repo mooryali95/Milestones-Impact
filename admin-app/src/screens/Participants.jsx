@@ -52,6 +52,13 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     setList(r.participants || []);
   }, [srv]);
   useEffect(() => { load(); saveSaved(srv); }, [load, srv]);
+  // حقل بحث واحد: يصفّي ما ظهر فورًا، ويبحث في الخادم بعد توقف قصير عن الكتابة
+  useEffect(() => {
+    const q = draft.trim();
+    if (q === srv.search || (q && q.length < 2)) return undefined;
+    const t = setTimeout(() => setSrv((s) => ({ ...s, search: q })), 500);
+    return () => clearTimeout(t);
+  }, [draft, srv.search]);
 
   const all = list || [];
   const shown = useMemo(() => filterPeople(all, quick), [all, quick]);
@@ -86,17 +93,15 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   return (
     <>
       <form className="toolbar" onSubmit={(e) => { e.preventDefault(); setSrv({ ...srv, search: draft.trim() }); }}>
-        <div className="search-wrap"><input className="search-input" aria-label="بحث في الخادم" placeholder="بحث بالاسم أو البريد أو الجهة، ثم Enter" value={draft} onChange={(e) => setDraft(e.target.value)} /></div>
+        <div className="search-wrap"><input className="search-input" type="search" aria-label="بحث وتصفية" placeholder="ابحث بالاسم أو البريد أو الجهة" value={draft} onChange={(e) => { setDraft(e.target.value); setQuick((x) => ({ ...x, q: e.target.value })); }} /></div>
         <select className="filter-select" aria-label="الحالة" value={srv.status} onChange={(e) => setSrv({ ...srv, status: e.target.value })}>
           <option value="">كل الحالات</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <OrgSelect orgs={orgs} value={srv.org} onChange={(org) => setSrv({ ...srv, org })} />
-        <button className="refresh-btn" type="submit">بحث</button>
-        {filtered && <button className="refresh-btn" type="button" onClick={() => { setDraft(''); setSrv({ search: '', status: '', org: '' }); }}>مسح الفلاتر</button>}
+        {filtered && <button className="refresh-btn" type="button" onClick={() => { setDraft(''); setQuick((x) => ({ ...x, q: '' })); setSrv({ search: '', status: '', org: '' }); }}>مسح الفلاتر</button>}
         {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
       </form>
       <div className="toolbar">
-        <div className="search-wrap"><input className="search-input" aria-label="تصفية فورية" placeholder="تصفية فورية للنتائج…" value={quick.q} onChange={(e) => setQuick({ ...quick, q: e.target.value })} /></div>
         <select className="filter-select" aria-label="المسار" value={quick.track} onChange={(e) => setQuick({ ...quick, track: e.target.value })}>
           <option value="">كل المسارات</option>{tracks.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
@@ -111,7 +116,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
-      <div className="table-wrap"><table className="data-table">
+      <div className="table-wrap"><table className="data-table la-cards">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
           <th>الاسم</th><th>الجهة</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المسار</th><th>الحالة</th><th>التسجيل</th>
@@ -126,12 +131,12 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   return (
                     <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
-                      <td><b>{p.full_name}</b><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
-                      <td>{og ? <span className="la-orgtag" style={{ '--org': og.color || '#A97A2E' }}>{og.short_name || og.name}</span> : p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
-                      {DIMS.map((d) => <td key={d}><Lvl p={p} d={d} /></td>)}
-                      <td>{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
-                      <td><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>
-                      <td>{date(p.created_at)}</td>
+                      <td data-label="الاسم"><b>{p.full_name}</b><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
+                      <td data-label="الجهة">{og ? <span className="la-orgtag" style={{ '--org': og.color || '#A97A2E' }}>{og.short_name || og.name}</span> : p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
+                      {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
+                      <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
+                      <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>
+                      <td data-label="التسجيل">{date(p.created_at)}</td>
                     </tr>
                   );
                 })}

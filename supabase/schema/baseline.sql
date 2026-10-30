@@ -86,7 +86,7 @@ create table if not exists leaders.auth_sessions (
   last_seen_at timestamp with time zone default now() not null,
   expires_at timestamp with time zone not null,
   revoked_at timestamp with time zone,
-  constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text]))),
+  constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text]))),
   constraint auth_sessions_pkey PRIMARY KEY (id),
   constraint auth_sessions_token_hash_key UNIQUE (token_hash)
 );
@@ -1346,11 +1346,15 @@ create table if not exists public.webauthn_challenges (
 );
 
 do $$ begin
+  alter table leaders.assessment_answers add constraint assessment_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES leaders.questions(id);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.assessment_answers add constraint assessment_answers_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.assessment_answers add constraint assessment_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES leaders.questions(id);
+  alter table leaders.assessment_results add constraint assessment_results_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1359,10 +1363,6 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.assessment_results add constraint assessment_results_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  alter table leaders.assessment_results add constraint assessment_results_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1390,15 +1390,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.coaching_sessions add constraint coaching_sessions_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.coaching_sessions add constraint coaching_sessions_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.cohorts add constraint cohorts_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE RESTRICT;
+  alter table leaders.coaching_sessions add constraint coaching_sessions_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohorts add constraint cohorts_program_version_id_fkey FOREIGN KEY (program_version_id) REFERENCES leaders.program_versions(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1406,7 +1406,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.cohorts add constraint cohorts_program_version_id_fkey FOREIGN KEY (program_version_id) REFERENCES leaders.program_versions(id) ON DELETE SET NULL;
+  alter table leaders.cohorts add constraint cohorts_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE RESTRICT;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1426,11 +1426,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.enrollments add constraint enrollments_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE RESTRICT;
+  alter table leaders.enrollments add constraint enrollments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.enrollments add constraint enrollments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.enrollments add constraint enrollments_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE RESTRICT;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1446,11 +1446,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.handbook_modules add constraint handbook_modules_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
+  alter table leaders.handbook_modules add constraint handbook_modules_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.handbook_modules add constraint handbook_modules_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+  alter table leaders.handbook_modules add constraint handbook_modules_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1474,11 +1474,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.lab_attempts add constraint lab_attempts_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.lab_items(id) ON DELETE CASCADE;
+  alter table leaders.lab_attempts add constraint lab_attempts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.lab_attempts add constraint lab_attempts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.lab_attempts add constraint lab_attempts_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.lab_items(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1486,15 +1486,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.lab_grants add constraint lab_grants_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.lab_grants add constraint lab_grants_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.lab_items(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.lab_items add constraint lab_items_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+  alter table leaders.lab_grants add constraint lab_grants_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1502,11 +1498,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.learning_models add constraint learning_models_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+  alter table leaders.lab_items add constraint lab_items_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.learning_models add constraint learning_models_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.learning_models add constraint learning_models_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1534,11 +1534,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.participant_requirements add constraint participant_requirements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.participant_requirements add constraint participant_requirements_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.participant_requirements add constraint participant_requirements_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+  alter table leaders.participant_requirements add constraint participant_requirements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1562,7 +1562,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.placements add constraint placements_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+  alter table leaders.placements add constraint placements_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1570,11 +1570,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.placements add constraint placements_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE SET NULL;
+  alter table leaders.placements add constraint placements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.placements add constraint placements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
+  alter table leaders.placements add constraint placements_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1594,11 +1594,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.raters add constraint raters_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.raters add constraint raters_instrument_id_fkey FOREIGN KEY (instrument_id) REFERENCES leaders.instruments(id);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.raters add constraint raters_instrument_id_fkey FOREIGN KEY (instrument_id) REFERENCES leaders.instruments(id);
+  alter table leaders.raters add constraint raters_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1618,19 +1618,19 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.stage_requirements add constraint stage_requirements_stage_fk FOREIGN KEY (program_id, stage_key) REFERENCES leaders.journey_stages(program_id, key) ON UPDATE CASCADE ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  alter table leaders.stage_requirements add constraint stage_requirements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.stage_requirements add constraint stage_requirements_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.stage_requirements add constraint stage_requirements_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.stage_requirements add constraint stage_requirements_stage_fk FOREIGN KEY (program_id, stage_key) REFERENCES leaders.journey_stages(program_id, key) ON UPDATE CASCADE ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.stage_requirements add constraint stage_requirements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1642,15 +1642,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.tracks add constraint tracks_milestone_level_fkey FOREIGN KEY (milestone_level) REFERENCES leaders.levels(key);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.tracks add constraint tracks_priority_dimension_fkey FOREIGN KEY (priority_dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.tracks add constraint tracks_leadership_level_fkey FOREIGN KEY (leadership_level) REFERENCES leaders.levels(key);
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  alter table leaders.tracks add constraint tracks_milestone_level_fkey FOREIGN KEY (milestone_level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1670,19 +1670,19 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.workshop_attendance add constraint workshop_attendance_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.workshop_attendance add constraint workshop_attendance_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.workshop_sessions add constraint workshop_sessions_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+  alter table leaders.workshop_attendance add constraint workshop_attendance_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.workshop_sessions add constraint workshop_sessions_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.workshop_sessions add constraint workshop_sessions_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1706,19 +1706,19 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_links add constraint planner_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table public.planner_links add constraint planner_links_owner_fkey FOREIGN KEY (owner) REFERENCES auth.users(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_master_links add constraint planner_master_links_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+  alter table public.planner_links add constraint planner_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table public.planner_master_links add constraint planner_master_links_master_id_fkey FOREIGN KEY (master_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.planner_master_links add constraint planner_master_links_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -2777,7 +2777,7 @@ on conflict do nothing;
 
 insert into leaders.levels (key, title_ar, title_en, sort) values
   ('advanced', 'احترافي', 'Professional', 3),
-  ('beginner', 'تأسيسي', 'Beginner', 1),
+  ('beginner', 'تأسيسي', 'Foundation', 1),
   ('intermediate', 'متوسط', 'Intermediate', 2)
 on conflict do nothing;
 

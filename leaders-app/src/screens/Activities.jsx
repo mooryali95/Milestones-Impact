@@ -19,12 +19,8 @@ function Bar({ value, label }) {
   );
 }
 
-const READ_CHIP = {
-  read: ['ok', 'قرأته'],
-  skimmed: ['warn', 'تصفّح سريع'],
-  partial: ['', 'قراءة جزئية'],
-  unread: ['', 'لم تقرأه'],
-};
+const READ_TONE = { read: 'ok', skimmed: 'warn' };
+const READ_CHIP = Object.fromEntries(Object.entries(READ_STATUS).map(([k, t]) => [k, [READ_TONE[k] || '', t]]));
 
 function Reading({ a, onHandbook }) {
   const skimmed = a.chapters.some((c) => c.state === 'skimmed');
@@ -128,7 +124,7 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { COACH_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;
@@ -187,6 +183,7 @@ const COACH_TONE = { attended: 'ok', no_show: 'bad' };
 function Coaching({ item, open, onRefresh, setToast }) {
   const a = item.activity;
   const [book, setBook] = useState(false);
+  const [framed, setFramed] = useState(false);
   const [busy, setBusy] = useState(false);
   const instant = async () => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
@@ -235,8 +232,11 @@ function Coaching({ item, open, onRefresh, setToast }) {
       {open && a.can_book && !a.book_url && !a.instant && <p className="h">يحدد الموجّه موعد الجلسة ويصلك رابطها.</p>}
       {book && (
         <div className="act-book">
-          <iframe src={a.book_url} title="حجز موعد" loading="lazy" />
           <p className="small muted">لا يظهر التقويم؟ <a href={a.book_url} target="_blank" rel="noopener noreferrer">افتحه في نافذة جديدة</a>، ثم عد واضغط «أنهيت الحجز».</p>
+          <div className={`act-frame${framed ? ' ready' : ''}`}>
+            {!framed && <div className="act-frame-wait" role="status"><span className="spinner" aria-hidden="true" /> جارٍ تحميل التقويم…</div>}
+            <iframe src={a.book_url} title="حجز موعد" loading="lazy" onLoad={() => setFramed(true)} />
+          </div>
         </div>
       )}
     </div>

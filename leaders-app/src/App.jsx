@@ -73,8 +73,9 @@ function Nav({ items, view, onGo, className }) {
   return (
     <nav className={className} aria-label="أقسام المنصة">
       {items.map((it) => (
-        <button key={it.key} type="button" className="nav-item" aria-current={view === it.key ? 'page' : undefined} onClick={() => onGo(it.key)}>
-          <Icon name={it.key} /><span>{it.label}</span>
+        <button key={it.key} type="button" className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
+          disabled={it.locked} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined} onClick={() => onGo(it.key)}>
+          <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true">🔒</i>}</span>
         </button>
       ))}
     </nav>
@@ -145,6 +146,8 @@ function Participant() {
   const accept = useCallback((res) => {
     if (res?.token) session.set(res.token);
     if (res?.participant) setMe(res);
+    // بعد الدخول تظهر الرحلة بتلاشٍ ناعم بدل القفزة من شاشة الانتقال
+    if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
   }, []);
 
   useEffect(() => {
@@ -197,10 +200,11 @@ function Participant() {
   const approved = !!me?.profile?.approved;
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
-    approved && { key: 'handbook', label: 'كتابي' },
-    approved && { key: 'capstone', label: 'مشروعي' },
+    // ما لم يُفتح بعد يظهر مقفلًا بسبب فتحه، فيعرف المشارك ما ينتظره ولا يظن المنصة أصغر مما هي
+    { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مستواك' }) },
+    { key: 'capstone', label: 'مشروعي', ...(!approved && { locked: 'يُفتح بعد اعتماد مستواك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
-    approved && stageOpen(me, 'impact') && { key: 'impact', label: 'أثري' },
+    { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
     { key: 'profile', label: 'ملفي' },
   ].filter(Boolean) : [];
   const navView = view === 'lab' && !hasLab ? 'home' : view;

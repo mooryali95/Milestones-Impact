@@ -48,9 +48,9 @@ test('قائمة المشاركين: تصفية فورية ومسار، وحفظ
   const calls = await setup(page);
   await expect(page.locator('.data-table tbody tr')).toHaveCount(2);
   await expect(page.getByText('وت', { exact: true })).toBeVisible();
-  await page.getByLabel('تصفية فورية').fill('omar');
+  await page.getByLabel('بحث وتصفية').fill('omar');
   await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
-  await page.getByLabel('تصفية فورية').fill('');
+  await page.getByLabel('بحث وتصفية').fill('');
   await page.getByLabel('المسار').selectOption('M1I1L2');
   await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
   await page.getByLabel('الحالة').selectOption('enrolled');

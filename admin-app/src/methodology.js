@@ -81,7 +81,7 @@ export const reqFields = (stages, models = []) => [
   { name: 'cfg_verify', label: 'توثيق الحضور', type: 'select', options: VERIFY, show: (v) => v.kind === 'workshop' },
   { name: 'cfg_mode', label: 'طريقة الجلسة', type: 'select', options: COACH_MODE, show: (v) => v.kind === 'coaching' },
   { name: 'cfg_location_ar', label: 'المكان للجلسات الحضورية', show: (v) => v.kind === 'coaching' && v.cfg_mode !== 'online' },
-  { name: 'cfg_minutes', label: 'مدة الجلسة بالدقائق', type: 'number', show: (v) => v.kind === 'coaching' },
+  { name: 'cfg_minutes', label: 'مدة الجلسة بالدقائق (منها تُحسب ساعات الشهادة)', type: 'number', show: (v) => v.kind === 'coaching' || v.kind === 'workshop' || v.kind === 'meeting' },
   { name: 'cfg_booking_url', label: 'رابط الحجز (Cal.com أو Calendly)', dir: 'ltr', show: (v) => v.kind === 'coaching' },
   { name: 'cfg_instant_url', label: 'رابط غرفة الاتصال الفوري (Google Meet أو Zoom الثابت)', dir: 'ltr', show: (v) => v.kind === 'coaching' && v.cfg_mode !== 'in_person' },
   { name: 'cfg_coach_email', label: 'بريد الموجّه لتنبيه الاتصال الفوري', type: 'email', dir: 'ltr', show: (v) => v.kind === 'coaching' },
@@ -141,7 +141,7 @@ export const TRACK_FIELDS = [
   { name: 'summary_ar', label: 'لمن صُمّم المسار', type: 'textarea', rows: 3 },
   { name: 'focus_ar', label: 'أولويات التطوير (كل سطر بند)', type: 'textarea', rows: 4 },
   { name: 'project_ar', label: 'المشروع التطبيقي', type: 'textarea', rows: 2 },
-  { name: 'journey_ar', label: 'كيف تتوجه الرحلة: التدريب والكوتشينغ والأقران (كل سطر بند)', type: 'textarea', rows: 4 },
+  { name: 'journey_ar', label: 'كيف تتوجه الرحلة: التدريب والتوجيه ومجتمع الممارسة (كل سطر بند)', type: 'textarea', rows: 4 },
   { name: 'priority_dimension', label: 'محور التركيز الأول', type: 'select', options: DIM },
 ];
 

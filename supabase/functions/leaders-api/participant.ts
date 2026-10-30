@@ -5,13 +5,15 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict, fieldsFor,
 } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
+import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
+import { verifyGoogleToken } from './google.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -176,6 +178,33 @@ export async function authVerify(b: Body, ctx: Ctx) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
   const token = await issueSession(p.id, b.link ? 'email_link' : 'email_code', ctx);
+  return { success: true, token, ...(await mePayload(p)) };
+}
+
+// ── 3. الدخول بحساب Google ──
+// التوقيع يُتحقق منه محليًا بمفاتيح Google العامة (google.ts)، ثم العميل والمُصدر والصلاحية والبريد الموثّق.
+// البريد الموجود يُفتح حسابه، والجديد يُنشأ بالاسم من جوجل ويُكمل ملفه كالمعتاد.
+export async function authGoogle(b: Body, ctx: Ctx) {
+  const credential = String(b.credential || '');
+  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
+  const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
+  if (id.error) throw new Fail(id.error, 401, 'google');
+
+  let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();
+  if (!p) {
+    const r = await resolveOrg(b);
+    p = must(await db.from('participants').insert({
+      email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
+      campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
+      ...(r ? { organization_id: r.org.id, organization_name: r.org.name, org_via: r.via } : {}),
+      source: r ? 'invite' : 'self',
+    }).select('*').single());
+    await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
+  } else if (!p.email_verified_at) {
+    await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+  }
+  if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
+  const token = await issueSession(p.id, 'google', ctx);
   return { success: true, token, ...(await mePayload(p)) };
 }
 
@@ -481,10 +510,9 @@ export async function assessmentAnswer(p: any, b: Body) {
 
 export async function assessmentSubmit(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
-  const [qs, ans, rules, model] = await Promise.all([
+  const [qs, ans, model] = await Promise.all([
     db.from('questions').select('*').eq('instrument_id', a.instrument_id).eq('active', true),
     db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id),
-    db.from('level_rules').select('*'),
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
   const questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
@@ -494,8 +522,8 @@ export async function assessmentSubmit(p: any, b: Body) {
   const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
-  // النموذج المركّب إن وُجد (الترحيل 008)، وإلا قواعد level_rules القديمة
-  const result = placementFromAnswers(questions, answers, rules.data || [], model.data || null);
+  // المعيار المركّب وحده، من جدوله أو من قيمه الافتراضية في logic.js
+  const result = placementFromAnswers(questions, answers, [], model.data || DEFAULT_MODEL);
   const split = skillSplit(questions, answers);
   const now = new Date().toISOString();
   must(await db.from('assessment_results').upsert(result.map((r: any) => ({
@@ -613,7 +641,13 @@ export async function pointsOf(participantId: string) {
 export async function award(participantId: string, source: string, refId: string, points: number, note: string) {
   if (!points) return 0;
   const { error } = await db.from('points_ledger').insert({ participant_id: participantId, source, ref_id: refId, points, note });
-  return error ? 0 : points;
+  if (!error) return points;
+  // المنح المكرر يمنعه القيد الفريد (23505) وهذا مقصود؛ أي خطأ آخر يُسجَّل فلا تضيع النقاط بصمت
+  if (error.code !== '23505') {
+    console.error('award', { participantId, source, refId, error });
+    await audit('system', null, 'points.award-failed', 'points_ledger', participantId, null, { source, ref_id: refId, points, code: error.code, message: error.message }).catch(() => {});
+  }
+  return 0;
 }
 
 export async function handbookToc(p: any) {
@@ -663,7 +697,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     reading: readingVerdict(rd),
     chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
-    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q) => ({ q: q.q, options: q.options })),
+    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
