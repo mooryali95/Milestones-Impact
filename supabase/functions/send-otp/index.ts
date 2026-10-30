@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { deliver, esc, mailButton, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
 
 // send-otp: رسائل نموذج التواصل فقط (تنبيه الإدارة وتأكيد المرسل).
 // النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql).
@@ -13,7 +13,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const ADMIN_EMAIL = "p.o.m2012@hotmail.com";
-const FROM_EMAIL = "Milestone Impact <milestoneimpact@basserh.com>";
+const FROM_EMAIL = MAIL_FROM_DEFAULT;
 const FRESH_MS = 10 * 60 * 1000;
 
 const corsHeaders = {

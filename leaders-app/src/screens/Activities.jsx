@@ -128,7 +128,8 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-const MODE_CHIP = { in_person: 'حضوري', online: 'عن بعد' };
+import { SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
   join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
@@ -205,7 +206,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
   return (
     <div className="act">
       <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b>
-        <span className="chip">{a.mode === 'in_person' ? 'حضوري' : a.mode === 'any' ? 'حضوري أو عن بعد' : 'عن بعد'}</span></div>
+        <span className="chip">{SESSION_MODE_AR[a.mode] || SESSION_MODE_AR.online}</span></div>
       {a.location && <p className="h">المكان: {a.location}</p>}
       <Bar value={(a.count / a.total) * 100} label="الجلسات" />
       {a.sessions.length > 0 && (

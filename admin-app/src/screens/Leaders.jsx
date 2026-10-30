@@ -18,9 +18,10 @@ import Programs from './Programs.jsx';
 import ContentBank from './ContentBank.jsx';
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
-  ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', 'المسارات الـ27'],
+  ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
   ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها

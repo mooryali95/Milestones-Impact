@@ -4,7 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { deliver, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { deliver, MAIL_FROM_DEFAULT, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -19,7 +19,7 @@ import { deliver, mailCode, mailNote, mailRows, mailShell, mailText, plain } fro
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND = Deno.env.get("RESEND_API_KEY") || "";
-const FROM = "Milestone Impact <milestoneimpact@basserh.com>";
+const FROM = MAIL_FROM_DEFAULT;
 const APP = "Milestone Impact Admin";
 const RP_ID = Deno.env.get("ADMIN_RP_ID") || "sunkvalue.com";
 const RP_NAME = "Milestone Impact";

@@ -12,6 +12,7 @@ import {
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ROM = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -559,14 +560,14 @@ function Preview({ catalog, canWrite, open }) {
       <div className="pv-bar">
         <label>الكتاب <select value={track} onChange={(e) => setTrack(e.target.value)}>
           <option value={MASTER}>الكتاب الأصلي الكامل</option>
-          <optgroup label="الكتب الـ27 بحسب المسار">{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</optgroup>
+          <optgroup label={`الكتب الـ${TRACK_COUNT} بحسب المسار`}>{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</optgroup>
         </select></label>
         {!master && <label>نطاق العمل <select value={scope} onChange={(e) => setScope(e.target.value)}>
           <option value="">لم يحدده المشارك (يرى كل النطاقات)</option>
           {SCOPE_VIEW.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select></label>}
         {master
-          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ27: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
+          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ{TRACK_COUNT}: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
           : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>}
         <span className="la-muted">{chs.length} بابًا · {r.models.length} نماذج · الإجابات الصحيحة ظاهرة لك فقط</span>
         {master && <button className={`btn-sm ${cur.all ? '' : 'ghost'}`} onClick={() => setCur(cur.all ? {} : { all: true })}>{cur.all ? 'باب باب' : 'الكتاب متصلًا'}</button>}

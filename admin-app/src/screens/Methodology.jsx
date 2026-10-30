@@ -5,8 +5,10 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
+import { renderJourneyText } from '../../../supabase/functions/leaders-api/logic.js';
+import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import {
-  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, STAGE_FIELDS, TIER,
+  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
@@ -66,6 +68,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
+  const shown = (t, s) => renderJourneyText(t, { reqs, durationDays: s?.duration_days, readyMin: READY_MIN });
   return (
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
@@ -76,18 +79,18 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
           {stages.filter((s) => s.phase === ph).map((s) => (
             <section key={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>
               <div className="la-row between">
-                <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{s.duration_label}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
+                <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
                   <Move {...mv} entity="journey_stages" id={s.key} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: STAGE_FIELDS, values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
+                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs), values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
                 </div>
               </div>
-              {s.description_ar && <p className="la-muted">{s.description_ar}</p>}
+              {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
               <ul className="la-reqs">
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
                   <li key={r.id} className={r.active ? '' : 'off'}>
                     <span>
-                      <code>{r.code}</code> {r.title_ar} <small className="la-chip">{KIND[r.kind]}</small>
+                      <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small>
                       {r.dimension && <small className="la-chip">{DIM_EN[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
                       {!r.required && <small className="la-chip">اختياري</small>}
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}

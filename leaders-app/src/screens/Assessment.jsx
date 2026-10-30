@@ -149,7 +149,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
           <p>{data.assessment.intro || 'أسئلة قصيرة في ثلاثة أبعاد. نتيجتها تحدد مسارك في كل بُعد على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
           <div className="grid2 small">
-            <div className="alert info">⏱ حوالي {data.assessment.est_minutes || 12} دقيقة، {qs.length} سؤالًا</div>
+            <div className="alert info">⏱ {data.assessment.est_minutes ? `حوالي ${data.assessment.est_minutes} دقيقة، ` : ''}{qs.length} سؤالًا</div>
             <div className="alert info">💾 كل إجابة تُحفظ فورًا، ويمكنك العودة لاحقًا</div>
           </div>
           <p className="muted small">في أسئلة الممارسة لا توجد إجابة صحيحة: اختر ما تفعله فعلًا لا ما ينبغي فعله، فهذا ما يجعل مسارك مناسبًا لك.</p>

@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
@@ -642,6 +642,14 @@ export async function save(a: Admin, b: Body) {
     if (instrumentId && await instrumentLocked(instrumentId)) {
       const unsafe = isNew || Object.keys(row).some((k) => !SAFE_QUESTION_FIELDS.has(k));
       if (unsafe) throw new Fail('هذه الأداة لها نتائج سابقة. أنشئ إصدارًا جديدًا لتعديل الخيارات أو الدرجات أو إضافة أسئلة', 409, 'locked');
+    }
+  }
+
+  // رقم جلسات أو مدة مكتوب نصًا في وصف الرحلة يتباعد عن إعداد النشاط؛ يُكتب برمز يُملأ من مصدره
+  if (b.entity === 'journey_stages' || b.entity === 'stage_requirements') {
+    for (const f of ['title_ar', 'duration_label', 'description_ar', 'activities_ar', 'outcome_ar', 'mode_note_ar', 'builds_on_ar', 'help_ar']) {
+      const why = f in row ? hardcodedFacts(row[f]) : null;
+      if (why) throw new Fail(why, 400, 'hardcoded');
     }
   }
 

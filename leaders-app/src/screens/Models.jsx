@@ -5,7 +5,7 @@
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
-import { POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
@@ -85,10 +85,9 @@ function ImportRows({ imp, rows, onChange }) {
   return <button type="button" className="link small" onClick={go}>⇣ استورد {n} صفًا من «{imp.title}»</button>;
 }
 
-// هل اكتمل الحقل؟ نفس قاعدة الخادم قبل التسليم
-const filledOf = (f, v, initiative) => (f.bind === 'initiative' ? !!(initiative || String(v ?? '').trim()) : f.type === 'table'
-  ? (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim()).length >= (f.min_rows || 1)
-  : !!String(v ?? '').trim());
+// هل اكتمل الحقل؟ قاعدة الخادم نفسها (fieldFilled). الحقل الاختياري لا يُحسب ناقصًا،
+// وحقل اسم المبادرة يكتمل من بطاقة المبادرة كما يملؤه الخادم عند التسليم (bindAnswers)
+const filledOf = (f, v, initiative) => f.required === false || (f.bind === 'initiative' && !!initiative) || fieldFilled(f, v);
 const codeOf = (m) => `${(DIMENSIONS.find((x) => x.key === m.dimension)?.short || 'M')[0]}-${String(m.sort || 1).padStart(2, '0')}`;
 // علامات النموذج الجيد: إرشاد للمشارك، والمستشار يقيّم بالنجوم والملاحظات
 const RUBRIC = [

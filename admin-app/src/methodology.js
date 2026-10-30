@@ -4,11 +4,13 @@
 // الثوابت وحقول النماذج وحاسبة التسكين وإعادة الترتيب، مفصولة عن الشاشات
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
-import { VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { MODE_AR, PHASE_AR, SESSION_MODE_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
+import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
-export const TIER = { knowledge: 'معرفة', skill: 'مواقف', behavior: 'ممارسة', transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
-export const PHASE = { admission: 'القبول', qualification: 'التأهيل', impact: 'الأثر' };
+export const TIER = { ...TIER_AR, transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
+export const PHASE = PHASE_AR;
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
   reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز', curriculum: 'منهج المسار',
@@ -29,27 +31,32 @@ export const KIND_HELP = {
   model: 'نموذج من «كتيب القائد» يبنيه المشارك في المنصة، فيكتمل المتطلب بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
   capstone: 'وثيقة المبادرة كاملة: يكتمل حين تعتمدها بالمعيار ويؤيدها راعيها. تراجعها من «مشاريع التخرج».',
 };
-export const VERIFY = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
-export const COACH_MODE = { online: 'عن بعد', in_person: 'حضوري', any: 'حضوري أو عن بعد حسب الحجز' };
+export const VERIFY = VERIFY_AR;
+export const COACH_MODE = SESSION_MODE_AR;
 // أنواع يحسم النظام إكمالها بدليل، لا بنقرة المشارك: القائمة نفسها التي يحتسب بها الخادم
 export const VERIFIED = new Set(VERIFIED_KINDS);
 const ACCEPT = { reviewed: 'حين يقيّمه المستشار', submitted: 'بمجرد تسليمه' };
 const READ_SCOPE = { all: 'كل أبواب مسار المشارك', first: 'الباب الأول من كل إطار', dimension: 'أبواب إطار واحد' };
-export const MODE = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
+export const MODE = MODE_AR;
 export const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
-const LNUM = { beginner: 1, intermediate: 2, advanced: 3 };
 
 // ── حقول النماذج (صيغة Form.jsx) ──
-export const STAGE_FIELDS = [
+// أرقام الجلسات والمدد لا تُكتب في النص؛ رموز تُملأ من إعداد النشاط فلا يتباعد الوصف عن الواقع
+export const TOKEN_HELP = 'للأرقام رموز تُملأ تلقائيًا: {duration} مدة المرحلة، {sessions:الرمز} عدد جلسات النشاط، {minutes:الرمز} مدة جلسته، {days:الرمز} عدد أيامه، {ready_min} عتبة مشروع التخرج، {assessment_minutes} مدة القياس.';
+const preview = (reqs, f) => (v) => {
+  const out = renderJourneyText(v[f] || '', { reqs, durationDays: v.duration_days, readyMin: READY_MIN });
+  return out && out !== v[f] ? `يظهر للمشارك: ${out}` : TOKEN_HELP;
+};
+export const stageFields = (reqs = []) => [
   { name: 'title_ar', label: 'اسم المرحلة' },
   { name: 'phase', label: 'المحور', type: 'select', options: PHASE },
-  { name: 'duration_label', label: 'المدة كما تظهر للمشارك' },
-  { name: 'duration_days', label: 'المدة بالأيام', type: 'number' },
+  { name: 'duration_label', label: 'المدة كما تظهر للمشارك', help: preview(reqs, 'duration_label') },
+  { name: 'duration_days', label: 'المدة بالأيام (مصدر {duration})', type: 'number' },
   { name: 'mode', label: 'طريقة التنفيذ', type: 'select', options: MODE, empty: 'غير محددة' },
   { name: 'mode_note_ar', label: 'تفصيل الطريقة (مثال: حضوري في الرياض أو مباشر عن بعد)' },
   { name: 'description_ar', label: 'الوصف', type: 'textarea', rows: 3 },
   { name: 'builds_on_ar', label: 'تنطلق من (مخرج المرحلة السابقة)' },
-  { name: 'activities_ar', label: 'ماذا يتم (كل سطر بند)', type: 'textarea', rows: 5 },
+  { name: 'activities_ar', label: 'ماذا يتم (كل سطر بند)', type: 'textarea', rows: 5, help: preview(reqs, 'activities_ar') },
   { name: 'outcome_ar', label: 'ما يخرج به المشارك', type: 'textarea', rows: 3 },
   { name: 'active', label: 'ظاهرة للمشاركين', type: 'check' },
 ];
@@ -57,7 +64,7 @@ export const STAGE_FIELDS = [
 export const reqFields = (stages, models = []) => [
   { name: 'code', label: 'الرمز (فريد، مثل T-ATTEND)', dir: 'ltr' },
   { name: 'title_ar', label: 'نص المتطلب' },
-  { name: 'help_ar', label: 'توضيح للمشارك', type: 'textarea', rows: 2 },
+  { name: 'help_ar', label: 'توضيح للمشارك', type: 'textarea', rows: 2, help: TOKEN_HELP },
   { name: 'stage_key', label: 'المرحلة', type: 'select', options: Object.fromEntries(stages.map((s) => [s.key, s.title_ar])) },
   { name: 'kind', label: 'النوع', type: 'select', options: KIND, help: (v) => KIND_HELP[v.kind] },
   { name: 'dimension', label: 'خاص ببُعد', type: 'select', options: DIM, empty: 'للجميع' },
@@ -140,23 +147,19 @@ export const TRACK_FIELDS = [
 
 // ── المسارات ──
 // M2I1L3 ← { milestone: intermediate, impact: beginner, leadership: advanced }
-export const trackLevels = (key) => Object.fromEntries(DIMS.map((d, i) => [d, LVLS[Number(String(key)[i * 2 + 1]) - 1]]));
-export const trackKey = (m, i, l) => `M${LNUM[m]}I${LNUM[i]}L${LNUM[l]}`;
+export const trackLevels = (key) => trackLevelsOf(key) || {};
+export const trackKey = (m, i, l) => trackKeyOf({ milestone: m, impact: i, leadership: l });
 export const shortTitle = (t) => String(t || '').replace(/^مسار\s+/, '');
 export const lines = (x) => String(x || '').split('\n').map((l) => l.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
 
 // ── معيار التسكين المركّب ──
-export const MODEL_DEFAULT = { w_knowledge: 35, w_skill: 50, w_behavior: 15, min_intermediate: 55, min_advanced: 80, floor_intermediate: 40, floor_advanced: 60, borderline: 8 };
+// المعيار والحساب من الخادم نفسه (logic.js)، فما يراه المستشار في المعاينة هو ما يُحسب للمشارك
+export const MODEL_DEFAULT = DEFAULT_MODEL;
 export function evaluate(p, m) {
-  const w = { knowledge: +m.w_knowledge, skill: +m.w_skill, behavior: +m.w_behavior };
-  const tiers = ['knowledge', 'skill', 'behavior'].filter((t) => p[t] != null && p[t] !== '' && w[t] > 0);
-  const ws = tiers.reduce((a, t) => a + w[t], 0);
-  if (!ws) return null;
-  const composite = Math.round(tiers.reduce((a, t) => a + w[t] * p[t], 0) / ws * 10) / 10;
-  const low = Math.min(...tiers.map((t) => +p[t]));
-  const level = composite >= +m.min_advanced && low >= +m.floor_advanced ? 'advanced'
-    : composite >= +m.min_intermediate && low >= +m.floor_intermediate ? 'intermediate' : 'beginner';
-  return { composite, level, low };
+  const pcts = Object.fromEntries(['knowledge', 'skill', 'behavior'].filter((t) => p[t] != null && p[t] !== '').map((t) => [t, +p[t]]));
+  const r = evaluatePlacement(pcts, m);
+  if (r.composite == null) return null;
+  return { ...r, low: Math.min(...Object.values(pcts)) };
 }
 
 // ── إعادة الترتيب ──

@@ -9,6 +9,7 @@ import { Spinner } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { OrgSelect } from './Participants.jsx';
+import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 const VIA_ALL = { ...VIA, unassigned: 'بلا جهة' };
 const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
@@ -179,10 +180,10 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
               <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (o.matrix[x][l] / max).toFixed(2) }}><b>{o.matrix[x][l]}</b></td>)}</tr>
             ))}</tbody>
           </table>
-          <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من 27 مسارًا.</p>
+          <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من {TRACK_COUNT} مسارًا.</p>
         </section>
         <section className="la-card">
-          <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من 27 مسارًا مشغولة</span></div>
+          <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من {TRACK_COUNT} مسارًا مشغولة</span></div>
           {(o.top_tracks || []).length ? (
             <ul className="la-queue">{o.top_tracks.map((t) => (
               <li key={t.key}><button className="la-link" onClick={() => onTrack(t.key)}><code className="la-code">{t.key}</code> {t.title || ''}</button><b>{t.n}</b></li>

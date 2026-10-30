@@ -12,10 +12,13 @@ import { L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
+import { SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { minutesAr, QR_WINDOW, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 const SESSION_FIELDS = [
   { name: 'title_ar', label: 'عنوان الجلسة (مثل: اليوم الأول، Milestone)' },
-  { name: 'mode', label: 'الطريقة', type: 'select', options: { in_person: 'حضوري', online: 'عن بعد' } },
+  { name: 'mode', label: 'الطريقة', type: 'select', options: { in_person: SESSION_MODE_AR.in_person, online: SESSION_MODE_AR.online } },
   { name: 'location_ar', label: 'المكان (القاعة والمدينة)', show: (v) => v.mode !== 'online' },
   { name: 'join_url', label: 'رابط الاجتماع (Zoom أو Teams أو Google Meet)', dir: 'ltr', show: (v) => v.mode === 'online',
     help: 'يظهر للمشارك قبل الجلسة بساعة فقط.' },
@@ -30,7 +33,7 @@ const sessionFields = (cohorts) => cohorts.length < 2 ? SESSION_FIELDS : [
   ...SESSION_FIELDS,
 ];
 const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
-const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };
+const MODE_AR = SESSION_MODE_AR;
 const COACH_ST = { booked: ['محجوزة', ''], requested: ['اتصال فوري', 'warn'], attended: ['حضر', 'ok'], no_show: ['لم يحضر', 'bad'], cancelled: ['أُلغيت', ''] };
 
 // ── شاشة رمز الحضور للقاعة ──
@@ -57,7 +60,7 @@ function QrScreen({ id, onClose }) {
         <h2>{d.session.title}</h2>
         <p>{d.session.location} · {when(d.session.starts_at)}</p>
         {d.open ? <img src={img} alt="رمز الحضور" /> : <div className="la-err">تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).</div>}
-        <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك. يتجدد الرمز كل 30 ثانية.</p>
+        <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك. يتجدد الرمز كل {QR_WINDOW} ثانية.</p>
         <b className="la-qr-count">{d.attended} حاضر</b>
       </>}
     </div>
@@ -120,7 +123,7 @@ function Workshops({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || 1} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              <div><b>{r.title_ar}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
               {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
@@ -194,7 +197,7 @@ function Coaching({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · {c.sessions_required || 1} جلسات · {c.minutes || 60} دقيقة · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
+              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · {sessionsAr(c.sessions_required || SESSION_DEFAULTS.sessions_required)} · {minutesAr(c.minutes || SESSION_DEFAULTS.minutes)} · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
               <div className="la-row">
                 {c.booking_url ? <span className="la-chip ok">الحجز عبر {c.provider === 'calendly' ? 'Calendly' : 'Cal.com'}</span> : <span className="la-chip warn">بلا رابط حجز</span>}
                 {canWrite && c.instant_url && c.mode !== 'in_person' && (r.instant_open

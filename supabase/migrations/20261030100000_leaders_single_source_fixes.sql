@@ -7,7 +7,3 @@ update leaders.dimensions set title_ar = 'تمكين القائد' where key = '
 alter table leaders.placement_model alter column impact_min_n set default 50;
 alter table leaders.placement_model alter column rater_threshold set default 15;
 
--- 3) وصف التقييم كان يعد بـ«نفس أداة القياس المبدئي»، والأداة البعدية أسئلتها مكافئة لا مطابقة.
-update leaders.journey_stages
-   set activities_ar = replace(activities_ar, 'القياس البعدي بنفس أداة القياس المبدئي للمقارنة', 'القياس البعدي بأداة مكافئة للقياس المبدئي، فتُقارن النتيجتان على المحاور نفسها')
- where key = 'evaluation';

@@ -4,11 +4,12 @@
 // صيغة الاختبار وحذف كتل المستوى ونقاط الباب تأتي من logic.js على الخادم
 // نفسه، فما تراه الإدارة في المعاينة هو ما يصل المشارك حرفيًا.
 import { filterHandbookMd, handbookModulesFor, lintHandbookMd, lintQuiz, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
+import { TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
 export { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
-export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', 'الكتاب الأصلي والكتب الـ27'], ['reviews', 'التقييم']];
+export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', `الكتاب الأصلي والكتب الـ${TRACK_COUNT}`], ['reviews', 'التقييم']];
 export const SUB_FILTER = [['submitted', 'بانتظار تقييمك'], ['reviewed', 'قُيّمت'], ['returned', 'أُعيدت للتطوير'], ['', 'الكل']];
 export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير';
 
@@ -30,7 +31,7 @@ export function deleteNotice(catalog, m) {
   const labs = chapterLabs(catalog, m);
   return {
     blocked: false,
-    text: `حذف الباب "${m.title_ar}" نهائيًا من الكتب الـ27؟${labs.length ? ` يرتبط به ${labs.length} من المختبرات (${labs.map((l) => l.title_ar).join('، ')})، ولن تظهر بعده أسفل أي باب حتى تُربط بباب آخر.` : ''}`,
+    text: `حذف الباب "${m.title_ar}" نهائيًا من الكتب الـ${TRACK_COUNT}؟${labs.length ? ` يرتبط به ${labs.length} من المختبرات (${labs.map((l) => l.title_ar).join('، ')})، ولن تظهر بعده أسفل أي باب حتى تُربط بباب آخر.` : ''}`,
   };
 }
 export const SCOPE_VIEW = [['project', 'مشروع'], ['program', 'برنامج'], ['portfolio', 'محفظة']];

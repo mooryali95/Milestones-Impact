@@ -447,16 +447,17 @@ export function fieldsFor(fields, level, scope = null) {
 }
 
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
+// اكتمال الحقل: قاعدة واحدة يقرؤها الخادم عند التسليم والواجهة في شريط التقدم
+export const tableRows = (v) => (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
+export function fieldFilled(f, v) {
+  return f.type === 'table' ? tableRows(v).length >= (f.min_rows || 1) : !!String(v ?? '').trim();
+}
 export function missingFields(fields, answers) {
   const a = answers && typeof answers === 'object' ? answers : {};
   const missing = [];
   for (const f of fields || []) {
-    if (f.required === false) continue;
-    const v = a[f.key];
-    if (f.type === 'table') {
-      const rows = (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
-      if (rows.length < (f.min_rows || 1)) missing.push(`${f.label}: ${f.min_rows || 1} صفوف على الأقل`);
-    } else if (!String(v ?? '').trim()) missing.push(f.label);
+    if (f.required === false || fieldFilled(f, a[f.key])) continue;
+    missing.push(f.type === 'table' ? `${f.label}: ${f.min_rows || 1} صفوف على الأقل` : f.label);
   }
   return missing;
 }
@@ -813,6 +814,8 @@ export function modelStatus(c, models) {
 // إعداد النشاط كما يحفظه المستشار: حقول معروفة بقيم مضبوطة فقط.
 // prev: الإعداد السابق، لحفظ ما لا يُحرَّر من النموذج (توفر الاتصال الفوري).
 const httpsUrl = (u) => { try { const x = new URL(String(u || '').trim()); return x.protocol === 'https:' ? x.toString() : null; } catch { return null; } };
+// القيم الافتراضية لإعداد الجلسات: يعرضها كل من يقرأ إعدادًا ناقصًا
+export const SESSION_DEFAULTS = { sessions_required: 1, minutes: 60 };
 const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
 export function cleanConfig(kind, cfg, prev = {}) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
@@ -835,7 +838,7 @@ export function cleanConfig(kind, cfg, prev = {}) {
     return { url, min_pct: intIn(c.min_pct, 10, 100, 90), ...(c.title ? { title: String(c.title).slice(0, 200) } : {}) };
   }
   if (kind === 'workshop') {
-    return { sessions_required: intIn(c.sessions_required, 1, 30, 1), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr' };
+    return { sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr' };
   }
   if (kind === 'curriculum') {
     // منهج المسار كله، أو مواد بُعد واحد (لتوزيعه على مراحل)
@@ -849,7 +852,7 @@ export function cleanConfig(kind, cfg, prev = {}) {
   if (kind === 'capstone') return {};
   if (kind === 'coaching') {
     const out = {
-      sessions_required: intIn(c.sessions_required, 1, 30, 1), minutes: intIn(c.minutes, 5, 480, 60),
+      sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes),
       mode: ['online', 'in_person', 'any'].includes(c.mode) ? c.mode : 'online',
     };
     if (out.mode !== 'online' && String(c.location_ar || '').trim()) out.location_ar = String(c.location_ar).trim().slice(0, 300);
@@ -869,6 +872,8 @@ export function cleanConfig(kind, cfg, prev = {}) {
     if (prev?.instant_until) out.instant_until = prev.instant_until;
     return out;
   }
+  // لقاء بمدة معلنة (عرض أمام لجنة): المدة هنا مصدر ما يقوله وصف المرحلة
+  if (kind === 'meeting') return c.minutes ? { minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes) } : {};
   return {};
 }
 
@@ -1562,4 +1567,71 @@ export function weeklySeries(events, { weeks = 12, now = Date.now() } = {}) {
   }
   for (const [t, id] of events.active || []) { const r = t && rows.get(weekStart(t)); if (r) r.active.add(id); }
   return [...rows.values()].map((r) => ({ ...r, active: r.active.size }));
+}
+
+// ════════════════════════════════════════════════════════════════
+// نصوص الرحلة من الإعدادات: لا رقم جلسات أو مدة يُكتب في وصف
+// ════════════════════════════════════════════════════════════════
+// وصف المرحلة وعناوين متطلباتها تحمل رموزًا تُملأ من مصدرها عند العرض:
+//   {sessions:O-SESS} عدد جلسات المتطلب (أربع جلسات)    {minutes:O-SESS} مدة الجلسة (60 دقيقة)
+//   {days:T-ATTEND}  عدد الأيام (أربعة أيام)             {duration} مدة المرحلة من duration_days
+//   {ready_min} عتبة جاهزية مشروع التخرج               {assessment_minutes} مدة القياس المبدئي
+const FEM = { 3: 'ثلاث', 4: 'أربع', 5: 'خمس', 6: 'ست', 7: 'سبع', 8: 'ثماني', 9: 'تسع', 10: 'عشر' };
+const MASC = { 3: 'ثلاثة', 4: 'أربعة', 5: 'خمسة', 6: 'ستة', 7: 'سبعة', 8: 'ثمانية', 9: 'تسعة', 10: 'عشرة' };
+const counted = (n, one, two, few, many, words) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${words ? words[n] : n} ${few}` : `${n} ${many}`);
+export const sessionsAr = (n) => counted(n, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة', FEM);
+export const daysAr = (n) => counted(n, 'يوم واحد', 'يومان', 'أيام', 'يومًا', MASC);
+export const minutesAr = (n) => `${n} دقيقة`;
+export function durationAr(days) {
+  const d = Number(days) || 0;
+  if (!d) return '';
+  if (d % 30 === 0) return counted(d / 30, 'شهر', 'شهران', 'أشهر', 'شهرًا');
+  if (d % 7 === 0) return counted(d / 7, 'أسبوع', 'أسبوعان', 'أسابيع', 'أسبوعًا');
+  return counted(d, 'يوم', 'يومان', 'أيام', 'يومًا');
+}
+
+const TOKEN = /\{(sessions|minutes|days):([A-Z0-9-]+)\}|\{(duration|ready_min|assessment_minutes)\}/g;
+// ctx: { reqs: [{code, config}], durationDays, readyMin, assessmentMinutes }
+// رمز لمتطلب غير موجود يبقى ظاهرًا كما هو فيلاحظه المحرر، ولا يُخترع رقم
+export function renderJourneyText(text, ctx = {}) {
+  if (typeof text !== 'string' || !text.includes('{')) return text;
+  const byCode = new Map((ctx.reqs || []).map((r) => [r.code, r.config || {}]));
+  return text.replace(TOKEN, (all, kind, code, plain) => {
+    if (plain === 'duration') return durationAr(ctx.durationDays) || all;
+    if (plain === 'ready_min') return ctx.readyMin != null ? String(ctx.readyMin) : all;
+    if (plain === 'assessment_minutes') return ctx.assessmentMinutes ? minutesAr(ctx.assessmentMinutes) : all;
+    const c = byCode.get(code);
+    if (!c) return all;
+    const n = Math.max(1, Number(c.sessions_required) || SESSION_DEFAULTS.sessions_required);
+    if (kind === 'sessions') return sessionsAr(n);
+    if (kind === 'days') return daysAr(n);
+    return minutesAr(Number(c.minutes) || SESSION_DEFAULTS.minutes);
+  });
+}
+
+const STAGE_TEXT = ['title_ar', 'duration_label', 'description_ar', 'activities_ar', 'outcome_ar', 'mode_note_ar', 'builds_on_ar'];
+/** @param {any} def @param {{ readyMin?: number|null, assessmentMinutes?: number|null }} [opts] */
+export function renderJourney(def, { readyMin = null, assessmentMinutes = null } = {}) {
+  const base = { reqs: def.requirements, readyMin, assessmentMinutes };
+  const stages = def.stages.map((s) => {
+    const ctx = { ...base, durationDays: s.duration_days };
+    const out = { ...s };
+    for (const f of STAGE_TEXT) out[f] = renderJourneyText(s[f], ctx);
+    return out;
+  });
+  const requirements = def.requirements.map((r) => ({ ...r, title_ar: renderJourneyText(r.title_ar, base), help_ar: renderJourneyText(r.help_ar, base) }));
+  return { ...def, stages, requirements };
+}
+
+// حارس الحفظ: رقم جلسات أو دقائق أو مدة مكتوب نصًا في وصف الرحلة يُرفض، ويُقترح الرمز
+/** @type {Array<[RegExp, string]>} */
+const HARDCODED = [
+  [/\d+\s*دقيقة|دقيقتان|(?:ثلاث|أربع|خمس|ست|سبع|ثماني|تسع|عشر)\s+جلسات|جلستان|\d+\s*جلس/, 'اكتب عدد الجلسات ومدتها برمز من إعداد النشاط: {sessions:الرمز} و{minutes:الرمز}'],
+  [/\d+\s*(?:أسابيع|أسبوع|أشهر|شهر)|أسبوعان|شهران/, 'مدة المرحلة تُكتب برمز {duration} من حقل عدد الأيام'],
+  [/\d+\s*أيام/, 'عدد الأيام يُكتب برمز {days:الرمز} أو {duration}'],
+];
+export function hardcodedFacts(text) {
+  const t = String(text || '').replace(TOKEN, '');
+  const hit = HARDCODED.find(([re]) => re.test(t));
+  return hit ? hit[1] : null;
 }
