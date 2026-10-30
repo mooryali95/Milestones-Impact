@@ -42,3 +42,20 @@ describe('نصوص الرحلة من مصدرها', () => {
     expect(hardcodedFacts('قبل الجلسة بثلاثة أيام، وخطة بثلاثة أهداف')).toBeNull();
   });
 });
+
+import { journeyCoherence, unknownTokens } from '../../supabase/functions/leaders-api/logic.js';
+describe('اتساق الرحلة', () => {
+  const stage = { key: 'ojt', title_ar: 'التوجيه', duration_days: 28, activities_ar: '{sessions:O-SESS}' };
+  it('الرحلة الحالية متسقة', () => {
+    expect(journeyCoherence([stage], [{ code: 'O-SESS', stage_key: 'ojt', kind: 'coaching', config: { sessions_required: 4, minutes: 60 } }])).toEqual([]);
+  });
+  it('جلسات أكثر مما تسعه المرحلة، ومدة غير معتادة', () => {
+    const r = journeyCoherence([stage], [{ code: 'O-SESS', stage_key: 'ojt', kind: 'coaching', config: { sessions_required: 12, minutes: 200 } }]);
+    expect(r.map((x) => x.level)).toEqual(['warn', 'warn']);
+    expect(r[0].msg).toContain('12 جلسة في 4 أسابيع');
+  });
+  it('رمز لنشاط غير موجود خطأ', () => {
+    expect(unknownTokens('{minutes:X-1} و{sessions:O-SESS}', [{ code: 'O-SESS' }])).toEqual(['X-1']);
+    expect(journeyCoherence([{ ...stage, activities_ar: '{minutes:X-1}' }], [])[0].level).toBe('error');
+  });
+});

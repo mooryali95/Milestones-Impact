@@ -211,7 +211,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         )}
         <div className="la-org-hero-grid">
           <div><Seats n={all.length} seats={o.seats} /><div className="la-org-kpis">
-            <span><b>{fn.pending_approval}</b>بانتظار الاعتماد</span><span><b>{fn.approved}</b>اعتُمد مسارهم</span>
+            <span><b>{fn.pending_approval}</b>{STATUS.pending_approval}</span><span><b>{fn.approved}</b>اعتُمد مسارهم</span>
             <span><b>{fn.completed}</b>أنهوا</span><span><b>{fn.withdrawn}</b>منسحب أو موقوف</span></div></div>
           <div><Funnel f={fn} big /></div>
         </div>

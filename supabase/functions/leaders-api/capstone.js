@@ -20,6 +20,8 @@ export const STATUS_TITLES = {
   draft: 'قيد البناء', submitted: 'بانتظار مراجعة المستشار', returned: 'أُعيد للتحسين',
   accepted: 'بانتظار تأييد الراعي', approved: 'معتمد',
 };
+// ما تقوله الإدارة: المخاطَب هو المستشار نفسه
+export const STATUS_TITLES_ADMIN = { ...STATUS_TITLES, submitted: 'بانتظار مراجعتك', accepted: 'بانتظار الراعي' };
 // الوثيقة لا تُسلَّم قبل اكتمال فصولها وبلوغ الجاهزية هذا الحد
 // نقاط اعتماد الوثيقة: تُمنح مرة عند الاعتماد، وتعرضها الواجهة من هنا
 export const APPROVAL_POINTS = 100;

@@ -136,7 +136,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       </div>
       <div className="stats-grid">
         <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
-        <div className="stat-card"><div className="stat-label">بانتظار الاعتماد</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
+        <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
         <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{o.pending_reviews + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${o.pending_reviews} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
         <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>
       </div>

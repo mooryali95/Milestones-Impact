@@ -5,7 +5,7 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
-import { renderJourneyText } from '../../../supabase/functions/leaders-api/logic.js';
+import { journeyCoherence, renderJourneyText } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import {
   CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, TIER,
@@ -62,6 +62,18 @@ function ProgramBar({ current, onProgram }) {
   );
 }
 
+// فحص الاتساق: هل تتسع كل مرحلة لجلساتها، وهل لكل رمز في النصوص مصدر
+function Coherence({ stages, reqs }) {
+  const issues = journeyCoherence(stages, reqs);
+  if (!issues.length) return <p className="la-chip ok" role="status">الرحلة متسقة: كل رقم في النصوص من إعداد نشاطه، وكل مرحلة تتسع لجلساتها</p>;
+  return (
+    <section className="la-card" role="alert" aria-label="اتساق الرحلة">
+      <h3>اتساق الرحلة <small className="la-muted">· {issues.length} ملاحظة</small></h3>
+      <ul className="la-reqs">{issues.map((x, i) => <li key={i}><span className={`la-chip ${x.level === 'error' ? 'bad' : 'warn'}`}>{x.level === 'error' ? 'خطأ' : 'تنبيه'}</span> {x.msg}</li>)}</ul>
+    </section>
+  );
+}
+
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
   const pid = catalog.program_id;
@@ -72,6 +84,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   return (
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
+      <Coherence stages={stages} reqs={reqs} />
       <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى.</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>

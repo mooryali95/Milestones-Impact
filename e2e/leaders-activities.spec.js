@@ -64,7 +64,7 @@ test('الرحلة: الأنشطة الموثقة بلا زر «أنجزته»',
   await expect(page.getByText('بقي الاختبار')).toHaveCount(0);
   await expect(page.getByText('شاهدت 35%', { exact: false })).toBeVisible();
   await expect(page.getByText('حضرت 1 من 4', { exact: true })).toBeVisible();
-  await expect(page.getByText('حضرت ✓').first()).toBeVisible();
+  await expect(page.getByText('حضرت', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'انضم الآن' })).toBeVisible();
   await expect(page.getByText('عن بعد', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'أنجزته' })).toHaveCount(0);

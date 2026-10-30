@@ -37,3 +37,10 @@ export const SESSION_MODE_AR = { in_person: 'حضوري', online: 'عن بعد',
 export const VERIFY_AR = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا' };
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
+
+// حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
+export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'بانتظار تقييم المستشار', returned: 'أُعيد إليك للتطوير', reviewed: 'قيّمه المستشار' };
+export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'بانتظار تقييمك', returned: 'أُعيد للتطوير', reviewed: 'قُيّم' };
+// جلسات التوجيه
+export const COACH_STATUS = { booked: 'محجوزة', requested: 'اتصال فوري', attended: 'حضرت', no_show: 'لم تحضر', cancelled: 'أُلغيت' };
+export const COACH_STATUS_ADMIN = { ...COACH_STATUS, attended: 'حضر', no_show: 'لم يحضر' };

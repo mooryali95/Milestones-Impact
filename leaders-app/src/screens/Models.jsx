@@ -9,12 +9,13 @@ import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
+import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
 const STATUS = {
-  draft: { t: 'مسودة', c: 'warn' },
-  submitted: { t: 'بانتظار تقييم المستشار', c: 'gold' },
-  returned: { t: 'أُعيد إليك للتطوير', c: 'bad' },
-  reviewed: { t: 'قُيّم', c: 'ok' },
+  draft: { t: SUBMISSION_STATUS.draft, c: 'warn' },
+  submitted: { t: SUBMISSION_STATUS.submitted, c: 'gold' },
+  returned: { t: SUBMISSION_STATUS.returned, c: 'bad' },
+  reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
 };
 const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد مشروع التخرج' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);

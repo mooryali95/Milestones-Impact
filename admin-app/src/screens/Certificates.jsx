@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { openCertificate, previewCertificate, SignatoryChoice } from '../cert.jsx';
+import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
 const ST = { valid: ['سارية', 'ok'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
 
@@ -108,7 +109,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
     toast(r.success ? 'أُلغيت الشهادة' : r.message);
     if (r.success) load();
   };
-  const copy = (c) => { navigator.clipboard?.writeText(`https://leaders.sunkvalue.com/v/${c.serial}`); toast('نُسخ رابط التحقق'); };
+  const copy = (c) => { navigator.clipboard?.writeText(`${SITES.leaders}/v/${c.serial}`); toast('نُسخ رابط التحقق'); };
 
   const s = q.trim().toLowerCase();
   const rows = (d?.certificates || []).filter((c) => !s || [c.serial, c.name_ar, c.name_en, c.org_name].join(' ').toLowerCase().includes(s));

@@ -128,7 +128,9 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
+import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
@@ -173,14 +175,14 @@ function Workshop({ item, open, setToast }) {
 }
 
 // زر «أضف إلى تقويمي» لجلسة لم تبدأ بعد
-const ROUTE = 'https://leaders.sunkvalue.com/';
+const ROUTE = `${SITES.leaders}/`;
 function AddToCalendar({ id, title, start, end, location, url }) {
   if (!start || new Date(start) < new Date()) return null;
   const ev = { uid: id, title, start, end, location, url: url || ROUTE, description: `برنامج القادة من Milestone Impact. تفاصيل الجلسة ورابط الانضمام في رحلتك: ${ROUTE}` };
   return <button type="button" className="link small" onClick={() => downloadIcs(ev, 'milestone-impact-session.ics')}>أضف إلى تقويمي</button>;
 }
 
-const COACH_STATUS = { booked: ['', 'محجوزة'], requested: ['', 'اتصال فوري'], attended: ['ok', 'حضرت ✓'], no_show: ['bad', 'لم تحضر'] };
+const COACH_TONE = { attended: 'ok', no_show: 'bad' };
 
 function Coaching({ item, open, onRefresh, setToast }) {
   const a = item.activity;
@@ -212,7 +214,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
       {a.sessions.length > 0 && (
         <ul className="act-list">
           {a.sessions.map((s) => {
-            const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : COACH_STATUS[s.status] || ['', s.status];
+            const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : [COACH_TONE[s.status] || '', COACH_STATUS[s.status] || s.status];
             return (
               <li key={s.id}>
                 <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
@@ -291,8 +293,8 @@ function Curriculum({ item, open, onRefresh }) {
 }
 
 // متطلب «نموذج» أو «مشروع التخرج»: العمل نفسه في وثيقة المبادرة، والرحلة تعرض حالته
-const MODEL_STATUS = { draft: 'قيد العمل', submitted: 'مسلّم للمستشار', returned: 'أُعيد للتطوير', reviewed: 'قيّمه المستشار' };
-const CAP_STATUS = { draft: 'قيد البناء', submitted: 'عند المستشار', returned: 'أُعيد للتحسين', accepted: 'بانتظار تأييد الراعي', approved: 'معتمد' };
+const MODEL_STATUS = SUBMISSION_STATUS;
+const CAP_STATUS = STATUS_TITLES;
 function ModelLink({ a, onCapstone }) {
   if (a.na) return <p className="h">لا يخص مستواك أو نطاق عملك، فيُحتسب لك.</p>;
   if (a.locked) return <p className="h">يُفتح بعد اعتماد مسارك.</p>;

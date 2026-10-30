@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { SITES } from "../_shared/sites.js";
 
 // send-otp: رسائل نموذج التواصل فقط (تنبيه الإدارة وتأكيد المرسل).
 // النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql).
@@ -81,7 +82,7 @@ ${mailRows([
   ["نوع الطلب", r.interest_label || r.interest || "—"],
   ["المصدر", pageLabel],
 ])}
-${mailButton("https://admin.sunkvalue.com", "افتح لوحة الإدارة")}`, { eyebrow: "NEW CONTACT REQUEST", footnote: "" });
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { eyebrow: "NEW CONTACT REQUEST", footnote: "" });
       await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name)} — ${plain(pageLabel)}`, html);
       return json({ success: true });
     }

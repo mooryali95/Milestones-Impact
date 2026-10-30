@@ -58,4 +58,14 @@ describe('مصدر واحد لكل معلومة', () => {
       for (const k of f.s.match(/eyJhbGci[\w-]+\.[\w-]+\.[\w-]+/g) || []) expect(k, f.p).toBe(key);
     }
   });
+  it('حالات العمل المسلَّم ومشروع التخرج والجلسات تُعرَّف في مصدرها وحده', () => {
+    const src = ['supabase/functions/leaders-api/labels.js', 'supabase/functions/leaders-api/capstone.js'];
+    expect(offenders(/submitted:\s*'(بانتظار|مسلّم|عند المستشار)/, src)).toEqual([]);
+    expect(offenders(/attended:\s*\[?'حضر/, src)).toEqual([]);
+    expect(offenders(/>\s*بانتظار الاعتماد\s*</)).toEqual([]);
+  });
+  it('عناوين المواقع تُعرَّف في _shared/sites.js وحده', () => {
+    const js = (p) => /\.(jsx?|ts)$/.test(p);
+    expect(offenders(/https:\/\/(leaders|admin|mi|matrix)\.sunkvalue\.com/, ['supabase/functions/_shared/sites.js']).filter(js)).toEqual([]);
+  });
 });

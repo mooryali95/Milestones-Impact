@@ -14,6 +14,7 @@ import Visits from './screens/Visits.jsx';
 import { navigate, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';
+import { SITES } from '../../supabase/functions/_shared/sites.js';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
@@ -56,7 +57,7 @@ function Dashboard({ user, onUser, onLogout }) {
         {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة'], ['visits', 'زيارات الموقع']].map(([k, l]) => (
           <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
         ))}
-        <a className="ctx-tab ext" href="https://matrix.sunkvalue.com" target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
+        <a className="ctx-tab ext" href={SITES.matrix} target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
       {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
