@@ -1617,3 +1617,37 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
 
 // نصوص الرحلة واتساقها وساعات البرنامج في journey.js، وتُصدَّر من هنا كما كانت
 export * from './journey.js';
+
+// ════════════════════════════════════════════════════════════════
+// الخبراء: تنقية الملف، وما يُعرض لغير الإدارة
+// ════════════════════════════════════════════════════════════════
+export const EXPERT_ROLES = ['coach', 'advisor', 'specialist', 'assessor', 'mentor'];
+const pickSet = (v, allowed) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => allowed.includes(x)))];
+const txt = (v, max) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
+const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+// الحقول التي يكتبها الخبير بنفسه (طلب الانضمام) أو الإدارة. withAdmin يضيف السعر والملاحظة
+export function cleanExpert(b, { withAdmin = false } = {}) {
+  const out = {
+    full_name: txt(b.full_name, 120), title: txt(b.title, 160), bio: txt(b.bio, 3000),
+    linkedin_url: /^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(String(b.linkedin_url || '')) ? txt(b.linkedin_url, 300) : null,
+    roles: pickSet(b.roles, EXPERT_ROLES),
+    dimensions: pickSet(b.dimensions, ['milestone', 'impact', 'leadership']),
+    levels: pickSet(b.levels, ['beginner', 'intermediate', 'advanced']),
+    sectors: (Array.isArray(b.sectors) ? b.sectors : String(b.sectors || '').split(/[،,]/)).map((x) => String(x).trim()).filter(Boolean).slice(0, 8).map((x) => x.slice(0, 60)),
+    languages: pickSet(b.languages, ['ar', 'en']),
+    weekly_hours: int(b.weekly_hours, 0, 60), years_experience: int(b.years_experience, 0, 60),
+  };
+  if (!out.languages.length) out.languages = ['ar'];
+  if (withAdmin) {
+    const r = b.hourly_rate === '' || b.hourly_rate == null ? null : Number(b.hourly_rate);
+    out.hourly_rate = Number.isFinite(r) && r >= 0 ? Math.round(r * 100) / 100 : null;
+    out.admin_note = txt(b.admin_note, 2000);
+  }
+  return out;
+}
+// ما يخرج لغير الإدارة: لا سعر ولا ملاحظة داخلية ولا عنوان شبكة
+export function expertPublic(e) {
+  if (!e) return null;
+  const { hourly_rate, admin_note, applied_ip, approved_by, ...rest } = e;
+  return rest;
+}

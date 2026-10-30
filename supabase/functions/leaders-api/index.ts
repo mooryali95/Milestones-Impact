@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · expert.apply (طلب انضمام خبير) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
@@ -28,6 +28,7 @@ import * as G from './programs.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
+import * as E from './experts.ts';
 
 type Body = Record<string, any>;
 
@@ -50,6 +51,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'rater.submit': I.raterSubmit,
   'sponsor.get': X.sponsorGet,
   'sponsor.submit': X.sponsorSubmit,
+  'expert.apply': E.apply,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
@@ -167,6 +169,11 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.impact': (_a, b) => I.adminReport(b),
   'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),
+  'admin.experts': () => E.adminList(),
+  'admin.expert': E.adminGet,
+  'admin.expert-save': E.adminSave,
+  'admin.expert-invite': E.adminInvite,
+  'admin.expert-set-status': E.adminSetStatus,
   'admin.program': (_a, b) => G.program(b),
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
