@@ -982,7 +982,10 @@ a { text-decoration: none; color: inherit; }
   box-shadow: 0 8px 28px rgba(6,30,44,0.22);
   white-space: nowrap;
   border-bottom: 2px solid var(--gold);
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
 }
+@media (max-width: 720px) { .toast { white-space: normal; text-align: center; } }
 .toast.show { transform: translateX(-50%) translateY(0); }
 
 /* ══ TOTP Screens ══════════════════════════════════ */
@@ -1317,4 +1320,10 @@ button.la-cell:hover { border-color: var(--gold, #A97A2E); }
   .la-card { min-width: 0; max-width: 100%; }
   .la-card table:not(.la-matrix) { display: block; max-width: 100%; overflow-x: auto; }
   .dash-body { padding-inline: 14px; }
+}
+
+/* مؤشر تركيز ظاهر لمن يتنقل بلوحة المفاتيح، فوق كل outline:none في الحقول */
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--gold, #A97A2E) !important;
+  outline-offset: 2px;
 }

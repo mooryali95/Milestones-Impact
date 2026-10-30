@@ -578,3 +578,23 @@
 .cps-anchors button.on { border-color: var(--petrol); background: var(--petrol); color: var(--sand-cream); }
 .cps-crit textarea, .cps-note textarea, .cps-note input { width: 100%; }
 .cps-note { display: grid; gap: 4px; font-size: .82rem; font-weight: 600; }
+
+/* الأقسام في مجموعات: سطر لكل مجموعة على الحاسب، وتمرير أفقي واحد على الهاتف مع عنوان كل مجموعة */
+.la-tabs-grouped { flex-direction: column; gap: 8px; }
+.la-tab-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.la-tab-group-label { min-width: 64px; font-size: .72rem; font-weight: 700; color: var(--ink-faint, #6B7C80); letter-spacing: .02em; }
+@media (max-width: 720px) {
+  .la-tabs-grouped { flex-direction: row; overflow-x: auto; gap: 14px; mask-image: linear-gradient(to left, transparent 0, #000 24px); }
+  .la-tab-group { flex-wrap: nowrap; flex: none; }
+  .la-tab-group-label { min-width: 0; }
+}
+
+/* جدول المشاركين على الهاتف: بطاقة لكل مشارك، ولكل قيمة عنوانها من data-label */
+@media (max-width: 600px) {
+  .la-cards thead { display: none; }
+  .la-cards, .la-cards tbody, .la-cards tr, .la-cards td { display: block; width: 100%; }
+  .la-cards tr { border: 1px solid var(--line, rgba(11,39,47,.12)); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  .la-cards td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: start; }
+  .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-faint, #6B7C80); flex: none; }
+  .la-cards td small[dir="ltr"] { overflow-wrap: anywhere; }
+}
