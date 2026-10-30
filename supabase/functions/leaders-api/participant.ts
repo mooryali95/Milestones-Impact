@@ -13,6 +13,7 @@ import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.j
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
+import { verifyGoogleToken } from './google.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -181,14 +182,12 @@ export async function authVerify(b: Body, ctx: Ctx) {
 }
 
 // ── 3. الدخول بحساب Google ──
-// يتحقق Google من التوقيع (tokeninfo)، ونتحقق نحن من العميل والمُصدر والصلاحية والبريد الموثّق.
+// التوقيع يُتحقق منه محليًا بمفاتيح Google العامة (google.ts)، ثم العميل والمُصدر والصلاحية والبريد الموثّق.
 // البريد الموجود يُفتح حسابه، والجديد يُنشأ بالاسم من جوجل ويُكمل ملفه كالمعتاد.
 export async function authGoogle(b: Body, ctx: Ctx) {
   const credential = String(b.credential || '');
   if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
-  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
-  if (!res.ok) throw new Fail('تعذّر التحقق من حساب جوجل، حاول مرة أخرى', 401, 'google');
-  const id: any = googleIdentity(await res.json(), GOOGLE_CLIENT_ID);
+  const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
 
   let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();

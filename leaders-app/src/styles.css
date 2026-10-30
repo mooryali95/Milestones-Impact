@@ -1040,6 +1040,35 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .nav-item.locked { opacity: .55; cursor: not-allowed; }
 .nav-lock { font-style: normal; font-size: .7em; margin-inline-start: 4px; }
 
-/* زر جوجل: بعرض البطاقة وفي وسطها، ويخفت أثناء الطلب */
-.google-btn { display: flex; justify-content: center; min-height: 44px; }
-.google-btn.is-busy { opacity: .5; pointer-events: none; }
+/* ── زر Google بهوية المنصة: الشكل لنا، والنقر لزر Google الرسمي الشفاف فوقه ── */
+.gbtn { position: relative; height: 52px; border-radius: 12px; isolation: isolate; }
+.gbtn-face {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 12px;
+  background: linear-gradient(180deg, #12414E 0%, var(--graphite) 100%); color: var(--mist);
+  border: 1px solid rgba(199, 154, 75, .55); border-radius: inherit; font-weight: 600; font-size: 15px; letter-spacing: .2px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 6px 18px rgba(11, 39, 47, .18);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.gbtn-g { width: 30px; height: 30px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+.gbtn-hit { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; opacity: .001; z-index: 1; }
+.gbtn-hit > div, .gbtn-hit iframe { width: 100% !important; min-height: 52px; transform: scaleY(1.3); }
+.gbtn:hover .gbtn-face, .gbtn:focus-within .gbtn-face { transform: translateY(-1px); border-color: var(--copper); box-shadow: 0 0 0 1px rgba(199, 154, 75, .35), 0 10px 24px rgba(11, 39, 47, .24); }
+.gbtn:focus-within .gbtn-face { outline: 2px solid var(--copper); outline-offset: 3px; }
+.gbtn:not(.ready) .gbtn-face { opacity: .6; }
+.gbtn.busy { pointer-events: none; opacity: .6; }
+
+/* ── شاشة الانتقال بعد الدخول ── */
+.enter-screen {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 22px;
+  background: radial-gradient(120% 90% at 50% 30%, #12414E 0%, var(--graphite) 55%, var(--ink) 100%); color: var(--mist);
+  animation: mi-fade-in .25s ease-out both;
+}
+.enter-logo { width: 150px; height: auto; }
+.enter-ring { width: 46px; height: 46px; border-radius: 50%; border: 2px solid rgba(199, 154, 75, .2); border-top-color: var(--copper); animation: mi-spin .9s linear infinite; }
+.enter-screen p { margin: 0; font-size: 15px; color: rgba(234, 240, 240, .85); }
+@keyframes mi-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mi-spin { to { transform: rotate(360deg); } }
+/* الرحلة بعد الدخول تظهر بتلاشٍ وارتفاع خفيف */
+body.entering main { animation: mi-enter .45s ease-out both; }
+@keyframes mi-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .enter-ring, body.entering main, .enter-screen { animation: none; } .gbtn-face { transition: none; } }
