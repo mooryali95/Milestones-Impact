@@ -482,20 +482,23 @@ export function cleanAnswers(fields, answers) {
 
 // ── منسق الجهة ──
 // صلاحيات العرض الافتراضية: بلا درجات ولا وسائل تواصل، والتصدير مسموح
-export const COORD_DEFAULTS = { scores: false, contact: false, export: true };
+export const COORD_DEFAULTS = { scores: false, contact: false, activity: false, export: true };
 export function coordPermissions(p) {
   const x = p && typeof p === 'object' ? p : {};
-  return { scores: x.scores === true, contact: x.contact === true, export: x.export !== false };
+  return { scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false };
 }
+// أقل عدد تُعرض له أرقام مجمّعة عن مشاركين: دونه يكشف المتوسط درجة الفرد
+export const MIN_COHORT = 5;
 
 // ما يراه المنسق من المشارك: الاسم والمسمى والمسار والمرحلة ونسبة الإنجاز دائمًا،
-// والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
+// والنشاط (آخر دخول) والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
 export function coordParticipant(p, perms) {
   const out = {
     id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status,
     track: p.track || null, track_title: p.track_title || null, approved: !!p.approved,
-    progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at, last_login_at: p.last_login_at || null,
+    progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at,
   };
+  if (perms.activity) out.last_login_at = p.last_login_at || null;
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }
   if (perms.scores) out.levels = p.levels || null;
   return out;
