@@ -52,10 +52,10 @@ async function build(p: any) {
   });
   const checks = capstoneChecks({
     scope,
-    models: Object.fromEntries(sections.map((s) => [s.model.key, { ...s.model, fields: s.fields }])),
-    answers: Object.fromEntries(sections.map((s) => [s.model.key, s.answers])),
+    models: Object.fromEntries(sections.map((s: any) => [s.model.key, { ...s.model, fields: s.fields }])),
+    answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
-  const ready = readiness(sections.map((s) => s.state), checks);
+  const ready = readiness(sections.map((s: any) => s.state), checks);
   return { levels, scope, track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
@@ -80,16 +80,16 @@ export async function get(p: any) {
   const d = await build(p);
   const c = d.capstone;
   const status = c?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   return {
     success: true,
-    scope: d.scope, scope_title: d.scope ? SCOPE_TITLES[d.scope] : null, level: overallLevel(d.levels),
+    scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
     track: d.track ? { title: d.track.title_ar, brief: d.track.project_ar || null, priority: d.track.priority_dimension || null } : null,
     initiative: d.initiative,
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
     capstone: {
-      status, status_title: STATUS_TITLES[status], summary: c?.summary_ar || '', revisions: c?.revisions || 0, max_revisions: MAX_REVISIONS,
+      status, status_title: (STATUS_TITLES as Record<string, string>)[status], summary: c?.summary_ar || '', revisions: c?.revisions || 0, max_revisions: MAX_REVISIONS,
       submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
       // الملاحظات تصل المشارك فور المراجعة، والدرجات بعد الاعتماد
       review: reviewView(c, status === 'approved'), sponsor: sponsorView(c),
@@ -110,7 +110,7 @@ export async function saveSummary(p: any, b: Body) {
 export async function submit(p: any) {
   const d = await build(p);
   const status = d.capstone?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   if (!gate.ok) throw new Fail(gate.reason as string, 400, 'not_ready');
   const now = new Date().toISOString();
   must(await db.from('capstones').upsert({
@@ -129,23 +129,23 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
     p.organization_id ? db.from('organizations').select('name, logo, color').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data) : null,
     cohortOf(p),
   ]);
-  const cost = d.sections.find((s) => s.model.key === 'cost-plan');
+  const cost = d.sections.find((s: any) => s.model.key === 'cost-plan');
   const status = c?.status || 'draft';
   const showReview = audience === 'admin' || (audience === 'participant' && status === 'approved');
   return {
     meta: {
       ref: `MI-CP-${String(p.id).slice(0, 8).toUpperCase()}`, version: (c?.revisions || 0) + 1, generated_at: new Date().toISOString(),
-      status, status_title: STATUS_TITLES[status], submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
+      status, status_title: (STATUS_TITLES as Record<string, string>)[status], submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
       participant: { name: p.full_name, name_en: p.name_en || null, job_title: p.job_title || null },
       org: org ? { name: org.name, logo: org.logo || null, color: org.color || null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
       track: d.track ? { title: d.track.title_ar, priority: d.track.priority_dimension || null } : null,
-      level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? SCOPE_TITLES[d.scope] : null,
+      level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,
       readiness: d.readiness,
     },
     summary: c?.summary_ar || '',
-    sections: d.sections.map((s) => ({
+    sections: d.sections.map((s: any) => ({
       key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension,
       fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null })),
     })),
@@ -370,7 +370,7 @@ export async function orgList(orgId: string) {
     const approved = c?.status === 'approved';
     return {
       participant_id: x.id, full_name: x.full_name, initiative: String(ch[x.id].title).trim(), objective: ch[x.id].objective || null,
-      scope: x.work_scope || null, status: c?.status || 'draft', status_title: STATUS_TITLES[c?.status || 'draft'],
+      scope: x.work_scope || null, status: c?.status || 'draft', status_title: (STATUS_TITLES as Record<string, string>)[c?.status || 'draft'],
       readiness: c?.readiness ?? null, approved_at: c?.approved_at || null,
       cost: approved ? (c.snapshot?.cost?.withContingency ?? co[x.id]?.withContingency ?? null) : null,
       benefits: approved ? (c.snapshot?.sections || []).find((s: any) => s.key === 'benefits-register')?.fields?.find((f: any) => f.key === 'benefits')?.value?.length ?? null : null,

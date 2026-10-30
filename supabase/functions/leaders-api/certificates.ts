@@ -316,6 +316,6 @@ export async function settingsSave(a: Actor, b: Body) {
   const s = b.settings || {};
   const row = { id: 1, enabled: s.enabled !== false, ...cleanProfile({ program_ar: '', program_en: '', hours: null, signatory: null, ...s }), updated_by: a.email, updated_at: new Date().toISOString() };
   must(await db.from('certificate_settings').upsert(row));
-  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatory: row.signatory?.name || null });
+  await audit('admin', a.email, 'certificate.settings', 'certificate_settings', '1', null, { ...row, signatory: (row as any).signatory?.name || null });
   return { success: true, settings: row };
 }

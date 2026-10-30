@@ -668,7 +668,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     reading: readingVerdict(rd),
     chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
-    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q) => ({ q: q.q, options: q.options })),
+    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
