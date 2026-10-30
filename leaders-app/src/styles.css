@@ -1039,3 +1039,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 /* أقسام لم تُفتح بعد: ظاهرة بقفل وسبب فتحها في التلميح */
 .nav-item.locked { opacity: .55; cursor: not-allowed; }
 .nav-lock { font-style: normal; font-size: .7em; margin-inline-start: 4px; }
+
+/* زر جوجل: بعرض البطاقة وفي وسطها، ويخفت أثناء الطلب */
+.google-btn { display: flex; justify-content: center; min-height: 44px; }
+.google-btn.is-busy { opacity: .5; pointer-events: none; }
