@@ -95,6 +95,32 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
   );
 }
 
+const COACH_AR = { booked: 'محجوزة', requested: 'اتصال فوري', attended: 'منعقدة', no_show: 'لم يحضر المشارك', cancelled: 'أُلغيت' };
+const money = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} ريال`;
+
+// سجل الخدمات: من الجلسات المرتبطة بالخبير، ومراجعاته من حسابه في لوحة الإدارة بالبريد نفسه
+function Service({ s, rate }) {
+  if (!s) return null;
+  const r = s.reviews || {};
+  const reviews = (r.requirements || 0) + (r.models || 0) + (r.capstones || 0);
+  return (
+    <section className="la-card ex-service">
+      <h4>سجل الخدمات</h4>
+      <div className="ex-kpis">
+        <span><b>{s.hours}</b>ساعة قدّمها</span>
+        <span><b>{s.participants}</b>مشارك خدمه</span>
+        <span><b>{s.attended}</b>جلسة منعقدة{s.no_show ? <small> · {s.no_show} غياب</small> : null}</span>
+        <span><b>{s.upcoming}</b>جلسة قادمة</span>
+        <span><b>{reviews}</b>مراجعة{reviews ? <small> · {r.models || 0} نموذج · {r.capstones || 0} مشروع تخرج · {r.requirements || 0} متطلب</small> : null}</span>
+        <span className="ex-cost"><b>{s.cost != null ? money(s.cost) : '·'}</b>التكلفة المحسوبة{rate == null ? <small> · حدّد سعر الساعة</small> : <small> · {money(rate)}/ساعة</small>}</span>
+      </div>
+      {s.recent?.length ? (
+        <ul className="la-log">{s.recent.map((x) => <li key={x.id}><small>{date(x.starts_at)}</small> {x.participants?.full_name || 'مشارك'} <span className="la-chip">{COACH_AR[x.status] || x.status}</span></li>)}</ul>
+      ) : <p className="la-muted">لا جلسات مرتبطة به بعد. تُربط تلقائيًا حين يطابق اسم المدرب في الحجز بريده أو اسمه، أو حين تختاره عند تسجيل جلسة يدوية.</p>}
+    </section>
+  );
+}
+
 function Profile({ id, canWrite, onBack }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
@@ -125,6 +151,7 @@ function Profile({ id, canWrite, onBack }) {
             {['applied', 'invited', 'active', 'paused'].includes(e.status) && <button className="btn-sm ghost" onClick={async () => { const r = await L('admin.expert-invite', { id: e.id }); toast(r.success ? 'أُرسلت الدعوة' : r.message); if (r.success) load(); }}>إرسال دعوة</button>}</div>}
         </div>
       </section>
+      <Service s={d.service} rate={e.hourly_rate} />
       <ExpertForm key={e.updated_at} initial={e} canWrite={canWrite} onSaved={load} />
       <section className="la-card"><h4>السجل</h4>
         <ul className="la-log">{d.activity.length ? d.activity.map((x, i) => <li key={i}><small>{date(x.created_at)}</small> {ACT[x.action.replace('expert.', '')] || x.action} <small className="la-muted">{x.actor}</small></li>) : <li className="la-muted">لا شيء</li>}</ul>
@@ -157,7 +184,7 @@ export default function Experts({ canWrite, expertId, onOpen }) {
       <div className="stats-grid">
         <div className="stat-card"><div className="stat-label">خبراء نشطون</div><div className="stat-value s-replied">{d ? active.length : '·'}</div><div className="stat-sub">من {all.length} في الشبكة</div></div>
         <div className="stat-card"><div className="stat-label">طلبات بانتظارك</div><div className="stat-value s-new">{d ? counts.applied : '·'}</div><div className="stat-sub">طلب انضمام</div></div>
-        <div className="stat-card"><div className="stat-label">الطاقة الأسبوعية</div><div className="stat-value">{d ? hours : '·'}</div><div className="stat-sub">ساعة متاحة من النشطين</div></div>
+        <div className="stat-card"><div className="stat-label">ساعات مقدّمة</div><div className="stat-value">{d ? Math.round(all.reduce((a, e) => a + (e.stats?.hours || 0), 0) * 10) / 10 : '·'}</div><div className="stat-sub">من {hours} ساعة متاحة أسبوعيًا</div></div>
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
           <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => e.roles.includes(k)).length}</b>{l}</span>)}</div></div>
       </div>
@@ -170,16 +197,17 @@ export default function Experts({ canWrite, expertId, onOpen }) {
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع" />
           {!all.length ? <p className="la-muted ce-empty">لا خبراء بعد. أضف أول خبير، أو شارك رابط «انضم كخبير».</p> : (
             <div className="table-wrap"><table className="data-table la-cards">
-              <thead><tr><th>الخبير</th><th>الأدوار</th><th>الأبعاد</th><th>الطاقة</th><th>الحالة</th></tr></thead>
+              <thead><tr><th>الخبير</th><th>الأدوار</th><th>الأبعاد</th><th>الطاقة</th><th>ما قدّمه</th><th>الحالة</th></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" onClick={() => onOpen(e.id)}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
                   <td data-label="الأدوار"><Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} /></td>
                   <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
                   <td data-label="الطاقة">{e.weekly_hours != null ? `${e.weekly_hours} س/أسبوع` : '·'}</td>
+                  <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <span className="la-muted">·</span>}</td>
                   <td data-label="الحالة"><span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span></td>
                 </tr>
-              )) : <tr><td colSpan={5} className="la-empty">لا نتائج لهذه الفلاتر.</td></tr>}</tbody>
+              )) : <tr><td colSpan={6} className="la-empty">لا نتائج لهذه الفلاتر.</td></tr>}</tbody>
             </table></div>
           )}
         </>}

@@ -1651,3 +1651,22 @@ export function expertPublic(e) {
   const { hourly_rate, admin_note, applied_ip, approved_by, ...rest } = e;
   return rest;
 }
+
+// خدمات الخبير من جلساته: المنعقدة وحدها تُحتسب ساعات وتكلفة (السعر للإدارة وحدها)
+export function expertStats(sessions = [], rate = null, now = Date.now()) {
+  const attended = sessions.filter((s) => s.status === 'attended');
+  const minutes = attended.reduce((a, s) => {
+    const m = (Date.parse(s.ends_at) - Date.parse(s.starts_at)) / 6e4;
+    return a + (Number.isFinite(m) && m > 0 && m <= 480 ? m : 0);
+  }, 0);
+  const hours = Math.round((minutes / 60) * 10) / 10;
+  return {
+    sessions: sessions.filter((s) => s.status !== 'cancelled').length,
+    attended: attended.length,
+    no_show: sessions.filter((s) => s.status === 'no_show').length,
+    upcoming: sessions.filter((s) => s.status === 'booked' && Date.parse(s.starts_at) > now).length,
+    participants: new Set(attended.map((s) => s.participant_id)).size,
+    hours,
+    cost: rate == null ? null : Math.round(hours * Number(rate) * 100) / 100,
+  };
+}

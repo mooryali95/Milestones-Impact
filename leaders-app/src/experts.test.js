@@ -28,3 +28,15 @@ describe('ملف الخبير', () => {
     expect(out).toEqual({ id: 'e1', full_name: 'سارة' });
   });
 });
+
+import { expertStats } from '../../supabase/functions/leaders-api/logic.js';
+it('خدمات الخبير: المنعقدة وحدها ساعات وتكلفة، والمدد الشاذة لا تُحتسب', () => {
+  const now = Date.parse('2026-10-30T00:00:00Z');
+  const s = (status, start, mins, pid = 'p1') => ({ status, participant_id: pid, starts_at: start, ends_at: new Date(Date.parse(start) + mins * 6e4).toISOString() });
+  const st = expertStats([
+    s('attended', '2026-10-01T10:00:00Z', 60), s('attended', '2026-10-02T10:00:00Z', 45, 'p2'), s('attended', '2026-10-03T10:00:00Z', 900),
+    s('no_show', '2026-10-04T10:00:00Z', 60), s('cancelled', '2026-10-05T10:00:00Z', 60), s('booked', '2026-11-05T10:00:00Z', 60),
+  ], 300, now);
+  expect(st).toEqual({ sessions: 5, attended: 3, no_show: 1, upcoming: 1, participants: 2, hours: 1.8, cost: 540 });
+  expect(expertStats([], null, now).cost).toBeNull();
+});

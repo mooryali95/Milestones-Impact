@@ -7,7 +7,7 @@ import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { cleanExpert, isEmail, normalizeEmail, normalizePhone } from './logic.js';
+import { cleanExpert, expertStats, isEmail, normalizeEmail, normalizePhone } from './logic.js';
 import { EXPERT_STATUS } from './labels.js';
 
 type Body = Record<string, any>;
@@ -49,16 +49,30 @@ export async function apply(b: Body, ctx: Ctx) {
 
 // ── لوحة الإدارة ──
 export async function adminList() {
-  const rows = must(await db.from('experts').select('*').order('created_at', { ascending: false }).limit(500)) as any[];
-  return { success: true, experts: rows };
+  const [rows, { data: sessions }] = await Promise.all([
+    db.from('experts').select('*').order('created_at', { ascending: false }).limit(500).then((r) => must(r) as any[]),
+    db.from('coaching_sessions').select('expert_id, participant_id, status, starts_at, ends_at').not('expert_id', 'is', null).limit(5000),
+  ]);
+  const by: Record<string, any[]> = {};
+  for (const x of sessions || []) (by[x.expert_id] ||= []).push(x);
+  return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })) };
 }
 
 export async function adminGet(_a: Admin, b: Body) {
   const e = must(await db.from('experts').select('*').eq('id', String(b.id || '')).maybeSingle());
   if (!e) throw new Fail('الخبير غير موجود', 404);
-  const { data: log } = await db.from('audit_log').select('actor, action, created_at').eq('entity', 'experts').eq('entity_id', e.id)
-    .order('created_at', { ascending: false }).limit(30);
-  return { success: true, expert: e, activity: log || [] };
+  const count = (t: string) => db.from(t).select('participant_id', { count: 'exact', head: true }).eq('reviewed_by', e.email);
+  const [{ data: log }, { data: sessions }, reqs, models, caps] = await Promise.all([
+    db.from('audit_log').select('actor, action, created_at').eq('entity', 'experts').eq('entity_id', e.id).order('created_at', { ascending: false }).limit(30),
+    db.from('coaching_sessions').select('id, participant_id, status, starts_at, ends_at, participants(full_name)').eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
+    count('participant_requirements'), count('model_submissions'), count('capstones'),
+  ]);
+  // المراجعات تُنسب بالبريد: المستشار يراجع من حسابه في لوحة الإدارة بالبريد نفسه
+  const reviews = { requirements: reqs.count ?? 0, models: models.count ?? 0, capstones: caps.count ?? 0 };
+  return {
+    success: true, expert: e, activity: log || [],
+    service: { ...expertStats(sessions || [], e.hourly_rate), reviews, recent: (sessions || []).slice(0, 12) },
+  };
 }
 
 // إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم

@@ -171,12 +171,15 @@ function Coaching({ data, reload, canWrite }) {
     if (!res.success) toast(res.message); else { toast(minutes ? `متاح للاتصال الفوري ${minutes} دقيقة` : 'أُغلق الاتصال الفوري'); reload(); }
   };
   const addManual = async (r) => {
-    const list = people || (await L('admin.participants', {})).participants || [];
+    const [list, ex] = await Promise.all([people || L('admin.participants', {}).then((x) => x.participants || []), L('admin.experts')]);
     setPeople(list);
+    // الخبراء النشطون بدور الكوتش: الجلسة تُنسب للمختار، وفارغ = حسابك إن كان لك ملف خبير بالبريد نفسه
+    const coaches = (ex.experts || []).filter((e) => e.status === 'active' && e.roles.includes('coach'));
     setForm({
       title: `جلسة يدوية: ${r.title_ar}`,
       fields: [
         { name: 'participant_id', label: 'المشارك', type: 'select', options: Object.fromEntries(list.map((p) => [p.id, `${p.full_name} · ${p.email}`])) },
+        ...(coaches.length ? [{ name: 'expert_id', label: 'الكوتش', type: 'select', empty: 'أنا (بريد حسابي)', options: Object.fromEntries(coaches.map((e) => [e.id, e.full_name])) }] : []),
         { name: 'starts_at', label: 'الموعد', type: 'datetime' },
         { name: 'status', label: 'الحالة', type: 'select', options: { attended: `${COACH_STATUS_ADMIN.attended} (منعقدة)`, booked: `${COACH_STATUS_ADMIN.booked} (قادمة)` } },
         { name: 'join_url', label: 'رابط الاجتماع (اختياري)', dir: 'ltr' },
@@ -225,7 +228,7 @@ function Coaching({ data, reload, canWrite }) {
               <h4 className="la-phase">القادمة ({upcoming.length})</h4>
               <ul className="la-queue">{upcoming.map((s) => (
                 <li key={s.id}>
-                  <b>{s.participants?.full_name}</b>
+                  <b>{s.participants?.full_name}</b>{s.experts?.full_name && <small> · مع {s.experts.full_name}</small>}
                   {s.join_url && <a className="la-link" href={s.join_url} target="_blank" rel="noopener noreferrer">رابط الجلسة</a>}
                   <small>{when(s.starts_at)}</small>
                 </li>
@@ -235,7 +238,7 @@ function Coaching({ data, reload, canWrite }) {
               <h4 className="la-phase">آخر الجلسات</h4>
               <ul className="la-queue">{done.map((s) => (
                 <li key={s.id}>
-                  {s.participants?.full_name} <span className={`la-chip ${COACH_ST[s.status][1]}`}>{COACH_ST[s.status][0]}</span>
+                  {s.participants?.full_name}{s.experts?.full_name && <small> · مع {s.experts.full_name}</small>} <span className={`la-chip ${COACH_ST[s.status][1]}`}>{COACH_ST[s.status][0]}</span>
                   <small>{when(s.starts_at)}{s.confirmed_by ? ` · ${s.confirmed_by}` : ''}</small>
                   {canWrite && <button className="la-link" onClick={() => mark(s, 'booked')}>تراجع</button>}
                 </li>
