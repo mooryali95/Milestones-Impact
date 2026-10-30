@@ -6,6 +6,7 @@ import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/br
 import { call } from '../api.js';
 import { attribution } from '../attribution.js';
 import Captcha from '../Captcha.jsx';
+import GoogleButton from '../GoogleButton.jsx';
 
 const RESEND_SECONDS = 45;
 
@@ -79,6 +80,14 @@ export default function SignIn({ onSignedIn, initialError }) {
     else setError(res.message);
   };
 
+  const google = async (credential) => {
+    setBusy(true); setError('');
+    const res = await call('auth.google', { credential, ...via });
+    setBusy(false);
+    if (res.success) onSignedIn(res);
+    else setError(res.message);
+  };
+
   const captchaBox = captchaKey ? (
     <div className="stack">
       <p className="small muted">تحقق سريع قبل إرسال الرمز.</p>
@@ -109,11 +118,10 @@ export default function SignIn({ onSignedIn, initialError }) {
             </label>
             {error && <div className="alert err">{error}</div>}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'متابعة'}</button>
+            <div className="divider">أو</div>
+            <GoogleButton onCredential={google} disabled={busy} />
             {browserSupportsWebAuthn() && (
-              <>
-                <div className="divider">أو</div>
-                <button type="button" className="btn ghost block" onClick={passkey} disabled={busy}>الدخول بمفتاح المرور</button>
-              </>
+              <button type="button" className="btn ghost block" onClick={passkey} disabled={busy}>الدخول بمفتاح المرور</button>
             )}
           </form>
         )}

@@ -1576,5 +1576,21 @@ export function weeklySeries(events, { weeks = 12, now = Date.now() } = {}) {
   return [...rows.values()].map((r) => ({ ...r, active: r.active.size }));
 }
 
+
+// ── الدخول بحساب Google ──
+// بيانات الرمز كما يعيدها Google بعد التحقق من توقيعه (tokeninfo). يُقبل فقط لعميلنا،
+// ومن مُصدر Google، وغير منتهٍ، وببريد وثّقه Google.
+export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() / 1000)) {
+  const c = claims || {};
+  if (c.aud !== clientId) return { error: 'الرمز ليس لهذا التطبيق' };
+  if (!['accounts.google.com', 'https://accounts.google.com'].includes(c.iss)) return { error: 'مصدر الرمز غير معروف' };
+  if (!(Number(c.exp) > nowSec)) return { error: 'انتهت صلاحية الدخول بجوجل، حاول مرة أخرى' };
+  if (!(c.email_verified === true || c.email_verified === 'true')) return { error: 'بريد حساب جوجل غير موثّق' };
+  const email = normalizeEmail(c.email);
+  if (!isEmail(email)) return { error: 'لا بريد صالح في حساب جوجل' };
+  const name = String(c.name || [c.given_name, c.family_name].filter(Boolean).join(' ') || '').trim().slice(0, 120);
+  return { email, name };
+}
+
 // نصوص الرحلة واتساقها وساعات البرنامج في journey.js، وتُصدَّر من هنا كما كانت
 export * from './journey.js';

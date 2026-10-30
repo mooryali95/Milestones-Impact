@@ -5,13 +5,14 @@ import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
 } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict, fieldsFor,
 } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
+import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -176,6 +177,35 @@ export async function authVerify(b: Body, ctx: Ctx) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
   const token = await issueSession(p.id, b.link ? 'email_link' : 'email_code', ctx);
+  return { success: true, token, ...(await mePayload(p)) };
+}
+
+// ── 3. الدخول بحساب Google ──
+// يتحقق Google من التوقيع (tokeninfo)، ونتحقق نحن من العميل والمُصدر والصلاحية والبريد الموثّق.
+// البريد الموجود يُفتح حسابه، والجديد يُنشأ بالاسم من جوجل ويُكمل ملفه كالمعتاد.
+export async function authGoogle(b: Body, ctx: Ctx) {
+  const credential = String(b.credential || '');
+  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+  if (!res.ok) throw new Fail('تعذّر التحقق من حساب جوجل، حاول مرة أخرى', 401, 'google');
+  const id: any = googleIdentity(await res.json(), GOOGLE_CLIENT_ID);
+  if (id.error) throw new Fail(id.error, 401, 'google');
+
+  let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();
+  if (!p) {
+    const r = await resolveOrg(b);
+    p = must(await db.from('participants').insert({
+      email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
+      campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
+      ...(r ? { organization_id: r.org.id, organization_name: r.org.name, org_via: r.via } : {}),
+      source: r ? 'invite' : 'self',
+    }).select('*').single());
+    await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
+  } else if (!p.email_verified_at) {
+    await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+  }
+  if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
+  const token = await issueSession(p.id, 'google', ctx);
   return { success: true, token, ...(await mePayload(p)) };
 }
 
