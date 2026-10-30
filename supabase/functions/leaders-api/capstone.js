@@ -76,7 +76,8 @@ export function cleanRubric(scores, notes) {
 // ── نتيجة القائد في تقريره (لا في الشهادة) ──
 // الأوزان المعتمدة: اختبارات الأبواب 25، أدوات المختبر 30، مشروع التخرج 30،
 // المشاركة في الرحلة 15. الجزء الغائب لا يُحتسب صفرًا، بل يُعاد توزيع وزنه.
-export const LEADER_WEIGHTS = { quizzes: 25, lab: 30, capstone: 30, participation: 15 };
+// مشروع التخرج أصدق دليل على الأداء فوزنه الأكبر، والباقي متساوٍ. صوت الراعي داخل فيه أصلًا: لا تُعتمد الوثيقة دون تأييده.
+export const LEADER_WEIGHTS = { quizzes: 20, lab: 20, capstone: 40, participation: 20 };
 // مشروع التخرج إلزامي في النتيجة: بلا درجته لا تُحسب نتيجة القائد، فلا يُعاد توزيع وزنه على غيره
 export function leaderComposite(parts) {
   if (parts?.capstone == null || !Number.isFinite(Number(parts.capstone))) {
