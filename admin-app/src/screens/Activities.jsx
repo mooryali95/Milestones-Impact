@@ -12,7 +12,7 @@ import { L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
-import { COACH_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { minutesAr, QR_WINDOW, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
@@ -270,7 +270,7 @@ export default function Activities({ canWrite }) {
 }
 
 // ── ملخص النشاط في صفحة المشارك ──
-const READ_AR = { read: ['قرأ', 'ok'], skimmed: ['تصفّح سريعًا', 'warn'], partial: ['قراءة جزئية', ''], unread: ['لم يقرأ', ''] };
+const READ_AR = Object.fromEntries(Object.entries({ read: 'ok', skimmed: 'warn', partial: '', unread: '' }).map(([k, tone]) => [k, [READ_STATUS_ADMIN[k], tone]]));
 export function ActivitySummary({ a }) {
   const [open, setOpen] = useState(false);
   if (!a) return null;

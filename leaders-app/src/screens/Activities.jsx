@@ -19,12 +19,8 @@ function Bar({ value, label }) {
   );
 }
 
-const READ_CHIP = {
-  read: ['ok', 'قرأته'],
-  skimmed: ['warn', 'تصفّح سريع'],
-  partial: ['', 'قراءة جزئية'],
-  unread: ['', 'لم تقرأه'],
-};
+const READ_TONE = { read: 'ok', skimmed: 'warn' };
+const READ_CHIP = Object.fromEntries(Object.entries(READ_STATUS).map(([k, t]) => [k, [READ_TONE[k] || '', t]]));
 
 function Reading({ a, onHandbook }) {
   const skimmed = a.chapters.some((c) => c.state === 'skimmed');
@@ -128,7 +124,7 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { COACH_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;

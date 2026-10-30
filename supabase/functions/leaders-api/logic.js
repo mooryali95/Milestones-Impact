@@ -838,7 +838,11 @@ export function cleanConfig(kind, cfg, prev = {}) {
     return { url, min_pct: intIn(c.min_pct, 10, 100, 90), ...(c.title ? { title: String(c.title).slice(0, 200) } : {}) };
   }
   if (kind === 'workshop') {
-    return { sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr' };
+    return {
+      sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr',
+      // مدة اليوم أو الجلسة التدريبية: مصدر ساعات الشهادة، ولا تُفترض إن لم تُكتب
+      ...(c.minutes ? { minutes: intIn(c.minutes, 30, 600, 360) } : {}),
+    };
   }
   if (kind === 'curriculum') {
     // منهج المسار كله، أو مواد بُعد واحد (لتوزيعه على مراحل)
@@ -1671,4 +1675,23 @@ export function journeyCoherence(stages, requirements) {
     }
   }
   return out;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ساعات البرنامج: من الأنشطة نفسها، فلا تُكتب على الشهادة رقمًا منفصلًا
+// ════════════════════════════════════════════════════════════════
+// تُجمع الأنشطة الحضورية المطلوبة من المشارك: الورش والجلسات واللقاءات (عدد × مدة).
+// نشاط بلا مدة معلنة لا يُخمَّن: يُعاد في missing ليكمله المحرر.
+const TIMED_KINDS = new Set(['workshop', 'coaching', 'meeting']);
+export function programHours(requirements, levels = null) {
+  let minutes = 0;
+  const missing = [];
+  for (const r of requirements || []) {
+    if (!TIMED_KINDS.has(r.kind) || r.required === false || (levels && !requirementApplies(r, levels))) continue;
+    if (r.active === false) continue;
+    const c = r.config || {};
+    if (!c.minutes) { missing.push(r.code); continue; }
+    minutes += (r.kind === 'meeting' ? 1 : Math.max(1, Number(c.sessions_required) || 1)) * Number(c.minutes);
+  }
+  return { hours: Math.round(minutes / 60), minutes, missing };
 }
