@@ -128,10 +128,10 @@ function ImpactCard({ im, onReport }) {
   const c = im.counts || {};
   return (
     <section className="card op-impact">
-      <div className="row between"><h3>أثر البرنامج على مشاركيكم</h3>{onReport && c.paired > 0 && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
+      <div className="row between"><h3>أثر البرنامج على مشاركيكم</h3>{onReport && c.paired > 0 && !im.suppressed && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
       <p className="small muted">{c.baseline || 0} أجروا القياس المبدئي، و{c.post || 0} أجروا البعدي، و{c.paired || 0} لديهم القياسان.</p>
       {im.caution && <div className="alert info small">{im.caution}</div>}
-      {c.paired > 0 ? (
+      {im.suppressed ? <p className="small muted">تظهر المقارنة حين يُتم {im.suppressed} مشاركين على الأقل القياسين، حفاظًا على خصوصية كل مشارك.</p> : c.paired > 0 ? (
         <div className="op-scroll"><table>
           <thead><tr><th>الإطار</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسن موثوق</th></tr></thead>
           <tbody>{DIMS.map(([k, en]) => {
@@ -162,12 +162,12 @@ function Dashboard({ me, onLogout }) {
   // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
   const exportXlsx = async () => {
     const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const head = [['الاسم', 26], ['المسمى', 22], ['المسار', 28], ['المرحلة', 18], ['الإنجاز %', 11], ['آخر دخول', 16], ['التسجيل', 16],
+    const head = [['الاسم', 26], ['المسمى', 22], ['المسار', 28], ['المرحلة', 18], ['الإنجاز %', 11], ...(perms.activity ? [['آخر دخول', 16]] : []), ['التسجيل', 16],
       ...(perms.contact ? [['البريد', 30], ['الجوال', 16]] : []), ...(perms.scores ? DIMS.map(([, en]) => [en, 12]) : [])];
     exportWorkbook(
       { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
       head.map(([label, width]) => ({ label, width })),
-      rows.map((p) => [p.full_name, p.job_title, p.track_title || p.track, STATUS[p.status] || p.status, p.progress, fmt(p.last_login_at), fmt(p.created_at),
+      rows.map((p) => [p.full_name, p.job_title, p.track_title || p.track, STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
         ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
     );
   };
@@ -226,13 +226,13 @@ function Dashboard({ me, onLogout }) {
               <option value="">كل المسارات</option>{tracks.map(([k]) => <option key={k} value={k}>{titleOf(k)}</option>)}
             </select>
             <select className="input" aria-label="الترتيب" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="name">بالاسم</option><option value="progress">بالإنجاز</option><option value="recent">بآخر نشاط</option>
+              <option value="name">بالاسم</option><option value="progress">بالإنجاز</option>{perms.activity && <option value="recent">بآخر نشاط</option>}
             </select>
           </div>
         </div>
         <p className="small muted" aria-live="polite">{rows.length} من {kpis.total}</p>
         <div className="op-scroll"><table>
-          <thead><tr><th>الاسم</th><th>المسار</th><th>المرحلة</th><th>الإنجاز</th><th>آخر دخول</th>
+          <thead><tr><th>الاسم</th><th>المسار</th><th>المرحلة</th><th>الإنجاز</th>{perms.activity && <th>آخر دخول</th>}
             {perms.contact && <th>التواصل</th>}{perms.scores && DIMS.map(([k, en]) => <th key={k}>{en}</th>)}</tr></thead>
           <tbody>{rows.length ? rows.map((p) => (
             <tr key={p.id}>
@@ -240,7 +240,7 @@ function Dashboard({ me, onLogout }) {
               <td>{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>
               <td><span className="chip">{STATUS[p.status] || p.status}</span></td>
               <td><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</td>
-              <td>{fmt(p.last_login_at)}</td>
+              {perms.activity && <td>{fmt(p.last_login_at)}</td>}
               {perms.contact && <td className="ltr"><small>{p.email}<br />{p.phone}</small></td>}
               {perms.scores && DIMS.map(([k]) => <td key={k}>{lvl(p.levels?.[k])}</td>)}
             </tr>

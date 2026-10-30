@@ -7,7 +7,7 @@ import { journeyFor } from './participant.ts';
 import {
   allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
-import { coordParticipant, coordPermissions, isEmail, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
+import { coordParticipant, coordPermissions, isEmail, MIN_COHORT, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -141,7 +141,8 @@ export async function dashboardFor(c: any) {
     kpis: {
       total: participants.length,
       joined_week: participants.filter((p: any) => Date.parse(p.created_at) > weekAgo).length,
-      active_week: participants.filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
+      // عدد مجمّع من الصفوف الأصلية: يظهر ولو لم تُمنح صلاحية النشاط الفردي
+      active_week: (rows as any[]).filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
       approved: d.funnel.approved, completed: d.funnel.completed, avg_progress: avg,
     },
     participants,
@@ -152,6 +153,8 @@ export async function dashboardFor(c: any) {
 export async function impactFor(c: any) {
   const r: any = await impactReport({ organization_id: c.organization_id });
   const scores = coordPermissions(c.permissions).scores;
+  // دون الحد الأدنى تكشف المتوسطات درجة الفرد: تبقى الأعداد وتُحجب المقارنة
+  if ((r.counts?.paired ?? 0) < MIN_COHORT) return { counts: r.counts, cohort: null, transfer: null, caution: null, suppressed: MIN_COHORT, participants: [] };
   return {
     counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
     participants: scores ? r.participants.filter((p: any) => p.dimensions).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
@@ -160,8 +163,8 @@ export async function impactFor(c: any) {
 export async function dashboard(c: any) {
   const r: any = await dashboardFor(c);
   r.impact = await impactFor(c);
-  // محفظة مبادرات الدفعة: مشاريع التخرج لمشاركي الجهة
-  r.initiatives = await initiativesFor(c.organization_id);
+  // محفظة مبادرات الدفعة: المعتمدة وحدها، فالمسودة عمل المشارك قبل أن يكتمل
+  r.initiatives = (await initiativesFor(c.organization_id)).filter((x: any) => x.status === 'approved');
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }
