@@ -80,7 +80,7 @@ export async function get(p: any) {
   const d = await build(p);
   const c = d.capstone;
   const status = c?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness });
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   return {
     success: true,
     scope: d.scope, scope_title: d.scope ? SCOPE_TITLES[d.scope] : null, level: overallLevel(d.levels),
@@ -110,7 +110,7 @@ export async function saveSummary(p: any, b: Body) {
 export async function submit(p: any) {
   const d = await build(p);
   const status = d.capstone?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness });
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   if (!gate.ok) throw new Fail(gate.reason as string, 400, 'not_ready');
   const now = new Date().toISOString();
   must(await db.from('capstones').upsert({

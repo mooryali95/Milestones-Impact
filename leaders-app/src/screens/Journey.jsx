@@ -9,6 +9,8 @@ import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import Activity from './Activities.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import { CONTACT } from '../../../src/config/constants.js';
+const CONTACT_EMAIL = CONTACT.email;
 
 function deviceLabel() {
   const ua = navigator.userAgent;
@@ -417,6 +419,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
   const firstName = participant.full_name.split(' ')[0];
   const doneCount = journey.filter((s) => s.status === 'done').length;
+  // مدة المراجعة من مرحلة الاعتماد نفسها (مولَّدة من duration_days)، لا رقم هنا
+  const reviewWait = journey.find((s) => s.key === 'approval')?.duration_label || '';
   let order = 0;
 
   return (
@@ -427,7 +431,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
             {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {journey.length} مراحل</>
-              : 'أكملت الرحلة كاملة. أثرك الآن موثّق.'}
+              : doneCount === journey.length && journey.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
+                : !approved ? `أنجزت ${doneCount} من ${journey.length} مراحل، والخطوة التالية اعتماد مستواك`
+                  : `أنجزت ${doneCount} من ${journey.length} مراحل`}
           </p>
           <div className="phase-rail" aria-label="محاور الرحلة">
             {PHASES.map((ph) => {
@@ -446,7 +452,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <span className="ico">⏳</span>
           <div className="grow">
             <b>نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن</b>
-            <p className="small">بعد اعتماد مستواك يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.</p>
+            <p className="small">
+              {reviewWait ? `تستغرق المراجعة عادةً ${reviewWait}. ` : ''}بعد اعتماد مستواك يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.
+              {' '}للاستفسار: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            </p>
           </div>
         </div>
       )}

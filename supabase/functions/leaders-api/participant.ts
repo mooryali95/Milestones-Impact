@@ -613,7 +613,13 @@ export async function pointsOf(participantId: string) {
 export async function award(participantId: string, source: string, refId: string, points: number, note: string) {
   if (!points) return 0;
   const { error } = await db.from('points_ledger').insert({ participant_id: participantId, source, ref_id: refId, points, note });
-  return error ? 0 : points;
+  if (!error) return points;
+  // المنح المكرر يمنعه القيد الفريد (23505) وهذا مقصود؛ أي خطأ آخر يُسجَّل فلا تضيع النقاط بصمت
+  if (error.code !== '23505') {
+    console.error('award', { participantId, source, refId, error });
+    await audit('system', null, 'points.award-failed', 'points_ledger', participantId, null, { source, ref_id: refId, points, code: error.code, message: error.message }).catch(() => {});
+  }
+  return 0;
 }
 
 export async function handbookToc(p: any) {
