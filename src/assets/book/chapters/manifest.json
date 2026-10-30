@@ -1,5 +1,5 @@
 {
-  "complete": false,
+  "complete": true,
   "images": {
     "bf397d30-9143-47b4-9d76-e324f785d11a": "bf397d30.webp",
     "93ffc551-040a-4d23-ac4d-929046988410": "93ffc551.webp",
@@ -24,6 +24,9 @@
     "3aa39f8a-a249-4f82-91fc-965cf0cd2b79": "3aa39f8a.webp",
     "1506500b-e586-4e6b-87c6-429d7594539a": "1506500b.webp",
     "8d8e6bd1-8787-4daf-ab89-cee5e9c11f02": "8d8e6bd1.webp",
-    "ce5e2f1e-b35d-45a7-8247-4ddf2df98c11": "ce5e2f1e.webp"
+    "ce5e2f1e-b35d-45a7-8247-4ddf2df98c11": "ce5e2f1e.webp",
+    "900d7f73-7983-4a19-9d23-284849c027cc": "900d7f73.webp",
+    "399b3493-e0a2-48b1-98a2-689ddd5b94d2": "399b3493.webp",
+    "ba00351f-629d-4ee1-8d92-02ccd1ee9156": "ba00351f.webp"
   }
 }
