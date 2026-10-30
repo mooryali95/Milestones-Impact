@@ -77,7 +77,11 @@ export function cleanRubric(scores, notes) {
 // الأوزان المعتمدة: اختبارات الأبواب 25، أدوات المختبر 30، مشروع التخرج 30،
 // المشاركة في الرحلة 15. الجزء الغائب لا يُحتسب صفرًا، بل يُعاد توزيع وزنه.
 export const LEADER_WEIGHTS = { quizzes: 25, lab: 30, capstone: 30, participation: 15 };
+// مشروع التخرج إلزامي في النتيجة: بلا درجته لا تُحسب نتيجة القائد، فلا يُعاد توزيع وزنه على غيره
 export function leaderComposite(parts) {
+  if (parts?.capstone == null || !Number.isFinite(Number(parts.capstone))) {
+    return { score: null, parts: {}, weights: LEADER_WEIGHTS, complete: false, pending: 'capstone' };
+  }
   let got = 0, w = 0;
   const used = {};
   for (const [k, weight] of Object.entries(LEADER_WEIGHTS)) {
@@ -200,11 +204,14 @@ export function costSummary(model, answers) {
 // ── محرك الاتساق: الفصول تتحدث مع بعضها ──
 // ctx: { scope, models: { key: model }, answers: { key: answers } }
 // كل فحص يطبَّق متى وُجد فصلاه في وثيقة المشارك، وإلا يُتجاوز.
+// فحوص حاجبة: لا تُسلَّم وثيقة تخالفها مهما بلغت الجاهزية. هي ما يجعل المبادرة قابلة للاعتماد
+// في أي جهة: راعٍ حقيقي، ومحاسب واحد، وتكلفة ضمن الميزانية، ومنفعة لها مالك، وخطر عالٍ له مالك.
+export const BLOCKING = new Set(['sponsor', 'raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
 export function capstoneChecks(ctx) {
   const M = ctx.models || {}, A = ctx.answers || {};
   const has = (...keys) => keys.every((k) => M[k]);
   const out = [];
-  const add = (key, title, ok, detail) => out.push({ key, title, ok: !!ok, detail: ok ? null : detail });
+  const add = (key, title, ok, detail) => out.push({ key, title, ok: !!ok, detail: ok ? null : detail, ...(BLOCKING.has(key) ? { blocking: true } : {}) });
 
   const wbs = has('wbs') ? table(M.wbs, A.wbs, 'packages') : null;
   const wbsCodes = wbs ? wbs.rows.map((r) => codeOf(wbs.cell(r, wbs.col('الرمز')))).filter(Boolean) : [];
@@ -332,6 +339,8 @@ export function canSubmit(state) {
   if (!state.initiative) return { ok: false, reason: 'اكتب اسم المبادرة في بطاقة المبادرة' };
   const open = state.sections.filter((s) => !s.complete);
   if (open.length) return { ok: false, reason: `فصول لم تكتمل: ${open.map((s) => s.title).slice(0, 5).join('، ')}` };
+  const blocked = (state.checks || []).filter((x) => x.blocking && !x.ok);
+  if (blocked.length) return { ok: false, reason: `فحوص لازمة قبل التسليم: ${blocked.map((x) => x.title).join('، ')}` };
   if (state.readiness < READY_MIN) return { ok: false, reason: `الجاهزية ${state.readiness}% وتلزم ${READY_MIN}%. عالج فحوص الاتساق المفتوحة.` };
   return { ok: true };
 }

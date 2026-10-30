@@ -175,10 +175,17 @@ describe('المعيار ونتيجة القائد', () => {
     const r = cleanRubric(all(3), { strategy: ' جيد ', planning: '' });
     expect(r.notes).toEqual({ strategy: 'جيد' });
   });
-  it('الجزء الغائب يُعاد توزيع وزنه', () => {
+  it('مشروع التخرج إلزامي، وما غاب غيره يُعاد توزيع وزنه', () => {
     expect(leaderComposite({ quizzes: 100, lab: 100, capstone: 100, participation: 100 })).toMatchObject({ score: 100, complete: true });
-    expect(leaderComposite({ quizzes: 80, capstone: null })).toMatchObject({ score: 80, complete: false, parts: { quizzes: 80 } });
+    expect(leaderComposite({ quizzes: 80, capstone: null })).toMatchObject({ score: null, complete: false, pending: 'capstone' });
+    expect(leaderComposite({ quizzes: 80, capstone: 80 })).toMatchObject({ score: 80, complete: false, parts: { quizzes: 80, capstone: 80 } });
     expect(leaderComposite({}).score).toBeNull();
+  });
+
+  it('الفحص الحاجب يمنع التسليم مهما بلغت الجاهزية', () => {
+    const base = { status: 'draft', scope: 'project', initiative: 'م', sections: [{ complete: true, title: 'ب' }], readiness: 100 };
+    expect(canSubmit({ ...base, checks: [{ key: 'sponsor', title: 'راعٍ', ok: false, blocking: true }] })).toMatchObject({ ok: false });
+    expect(canSubmit({ ...base, checks: [{ key: 'dates', title: 'تواريخ', ok: false }] })).toMatchObject({ ok: true });
   });
 });
 

@@ -161,7 +161,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
             <h3>فحوص الاتساق</h3>
             <p className="muted small">الوثيقة الاحترافية تتحدث فصولها مع بعضها. يفحصها النظام كلما فتحت الصفحة.</p>
             <ul className="cp-checks">
-              {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}</b>{x.detail && <small>{x.detail}</small>}</li>)}
+              {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{x.detail}</small>}</li>)}
               {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
             </ul>
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}

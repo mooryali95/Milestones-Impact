@@ -144,6 +144,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           <h3>نتيجة القائد في تقريره</h3>
           <p className="la-muted">بالأوزان المعتمدة. الجزء الغائب يُعاد توزيع وزنه، ولا تظهر النتيجة في الشهادة.</p>
           <p className="cps-big">{lead?.score ?? '·'}<small> من 100</small></p>
+          {lead?.pending === 'capstone' && <p className="la-muted">تُحسب بعد تقييم مشروع التخرج؛ فهو إلزامي ولا يُعاد توزيع وزنه.</p>}
           <table className="la-table"><tbody>
             {Object.entries(lead?.weights || {}).map(([k, w]) => <tr key={k}><td>{PART[k]}</td><td>{w}%</td><td>{lead.parts[k] ?? 'لم يُقس'}</td></tr>)}
           </tbody></table>
