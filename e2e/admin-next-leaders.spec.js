@@ -44,21 +44,34 @@ async function setup(page, overrides = {}) {
   return calls;
 }
 
-test('قائمة المشاركين: تصفية فورية ومسار، وحفظ فلاتر الخادم بعد التحديث', async ({ page }) => {
-  const calls = await setup(page);
-  await expect(page.locator('.data-table tbody tr')).toHaveCount(2);
+test('قائمة المشاركين: شريط الفلترة الموحّد، والعروض السريعة، والفلاتر في عنوان الصفحة', async ({ page }) => {
+  await setup(page);
+  const rows = page.locator('.data-table tbody tr');
+  await expect(rows).toHaveCount(2);
   await expect(page.getByText('وت', { exact: true })).toBeVisible();
-  await page.getByLabel('بحث وتصفية').fill('omar');
-  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
-  await page.getByLabel('بحث وتصفية').fill('');
-  await page.getByLabel('المسار').selectOption('M1I1L2');
-  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
-  await page.getByLabel('الحالة').selectOption('enrolled');
-  await expect.poll(() => calls.filter((c) => c.action === 'admin.participants').at(-1)?.status).toBe('enrolled');
+  await page.getByLabel('بحث', { exact: true }).fill('omar');
+  await expect(rows).toHaveCount(1);
+  await page.getByLabel('بحث', { exact: true }).fill('');
+  await page.getByRole('combobox', { name: 'المسارات' }).selectOption('M1I1L2');
+  await expect(rows).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'المسارات' }).selectOption('');
+  // عرض سريع بعدّاده: واحدة بانتظار الاعتماد
+  const approval = page.getByRole('button', { name: /بانتظار الاعتماد/ });
+  await expect(approval).toContainText('1');
+  await approval.click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('سارة الأحمد');
+  await approval.click();
+  await page.getByRole('combobox', { name: 'الحالات' }).selectOption('enrolled');
+  await expect(rows).toHaveCount(1);
+  await expect(page.getByText('الحالات: في البرنامج')).toBeVisible();
+  expect(page.url()).toContain('status=enrolled');
   await page.reload();
-  await expect(page.getByLabel('الحالة')).toHaveValue('enrolled');
-  await page.getByRole('button', { name: 'مسح الفلاتر' }).click();
-  await expect(page.getByLabel('الحالة')).toHaveValue('');
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click().catch(() => {});
+  await expect(page.getByRole('combobox', { name: 'الحالات' })).toHaveValue('enrolled');
+  await page.getByRole('button', { name: 'مسح الكل' }).click();
+  await expect(page.getByRole('combobox', { name: 'الحالات' })).toHaveValue('');
+  await expect(rows).toHaveCount(2);
 });
 
 test('النقل الجماعي إلى جهة بتأكيد', async ({ page }) => {

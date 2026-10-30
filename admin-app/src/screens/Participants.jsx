@@ -4,19 +4,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Form from '../Form.jsx';
 import {
-  date, DIM, DIM_EN, DIMS, filterPeople, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import FilterBar, { useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts } from '../filters.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { stars } from '../handbook.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
-// الفلاتر المرسلة للخادم تُحفظ على هذا الجهاز
-const SAVED_KEY = 'mi_admin_list_filters';
-const loadSaved = () => { try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || {}; } catch { return {}; } };
-const saveSaved = (f) => { try { localStorage.setItem(SAVED_KEY, JSON.stringify(f)); } catch { /* */ } };
+const DAY = 864e5;
+const ACTIVE = ['placed', 'enrolled'];
+// عروض سريعة: الحالات التي يتدخل فيها المدير عادة، وعدد كل منها ظاهر على رقاقتها
+const PRESETS = [
+  { key: 'approval', label: 'بانتظار الاعتماد', test: (p) => p.status === 'pending_approval' },
+  { key: 'tentative', label: 'مستوى مبدئي', test: (p) => (p.placements || []).some((x) => !x.approved_at) },
+  { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!p.last_login_at || now - Date.parse(p.last_login_at) > 14 * DAY) },
+  { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
+  { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
+];
+const KEYS = ['q', 'view', 'status', 'org', 'track', 'joined', 'seen'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
   return (
@@ -36,35 +45,35 @@ function Lvl({ p, d }) {
 
 function List({ orgs, canWrite, onOpen, initialStatus }) {
   const { toast, confirm } = useUI();
-  const [srv, setSrv] = useState(() => ({ search: '', status: '', org: '', ...loadSaved(), ...(initialStatus ? { status: initialStatus } : {}) }));
-  const [draft, setDraft] = useState(srv.search);
+  const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {});
   const [list, setList] = useState(null);
   const [error, setError] = useState('');
-  const [quick, setQuick] = useState({ q: '', track: '' });
   const [picked, setPicked] = useState(() => new Set());
   const [moveTo, setMoveTo] = useState('');
   const [adding, setAdding] = useState(false);
 
+  // القائمة كاملة مرة واحدة (حتى 500)، والفلترة كلها في المتصفح فتستجيب فورًا
   const load = useCallback(async () => {
     setList(null); setError('');
-    const r = await L('admin.participants', srv);
+    const r = await L('admin.participants', {});
     if (!r.success) { setList([]); return setError(r.message); }
     setList(r.participants || []);
-  }, [srv]);
-  useEffect(() => { load(); saveSaved(srv); }, [load, srv]);
-  // حقل بحث واحد: يصفّي ما ظهر فورًا، ويبحث في الخادم بعد توقف قصير عن الكتابة
-  useEffect(() => {
-    const q = draft.trim();
-    if (q === srv.search || (q && q.length < 2)) return undefined;
-    const t = setTimeout(() => setSrv((s) => ({ ...s, search: q })), 500);
-    return () => clearTimeout(t);
-  }, [draft, srv.search]);
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const all = list || [];
-  const shown = useMemo(() => filterPeople(all, quick), [all, quick]);
   const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
   const orgOf = (p) => orgs.find((o) => o.id === p.organization_id);
-  const filtered = srv.search || srv.status || srv.org;
+  const fields = useMemo(() => [
+    { key: 'status', label: 'الحالات', get: (p) => p.status, options: Object.entries(STATUS) },
+    { key: 'org', label: 'الجهات', get: (p) => p.organization_id || 'none', options: [...orgs.map((o) => [o.id, o.name]), ['none', 'بدون جهة']] },
+    { key: 'track', label: 'المسارات', get: (p) => trackOfPlacements(p.placements) || p.track, options: tracks.map((k) => [k, k]) },
+    { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
+    { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
+  ], [orgs, tracks]);
+  const spec = { fields, presets: PRESETS, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
+  const shown = useMemo(() => applyFilters(all, spec, f), [all, f, fields]);
+  const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allOn = shown.length > 0 && shown.every((p) => picked.has(p.id));
@@ -92,22 +101,12 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
 
   return (
     <>
-      <form className="toolbar" onSubmit={(e) => { e.preventDefault(); setSrv({ ...srv, search: draft.trim() }); }}>
-        <div className="search-wrap"><input className="search-input" type="search" aria-label="بحث وتصفية" placeholder="ابحث بالاسم أو البريد أو الجهة" value={draft} onChange={(e) => { setDraft(e.target.value); setQuick((x) => ({ ...x, q: e.target.value })); }} /></div>
-        <select className="filter-select" aria-label="الحالة" value={srv.status} onChange={(e) => setSrv({ ...srv, status: e.target.value })}>
-          <option value="">كل الحالات</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <OrgSelect orgs={orgs} value={srv.org} onChange={(org) => setSrv({ ...srv, org })} />
-        {filtered && <button className="refresh-btn" type="button" onClick={() => { setDraft(''); setQuick((x) => ({ ...x, q: '' })); setSrv({ search: '', status: '', org: '' }); }}>مسح الفلاتر</button>}
-        {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
-      </form>
-      <div className="toolbar">
-        <select className="filter-select" aria-label="المسار" value={quick.track} onChange={(e) => setQuick({ ...quick, track: e.target.value })}>
-          <option value="">كل المسارات</option>{tracks.map((k) => <option key={k} value={k}>{k}</option>)}
-        </select>
-        <span className="la-muted" aria-live="polite">{shown.length === all.length ? `${all.length} مشارك` : `${shown.length} من ${all.length} مشارك`}</span>
-        <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel</button>
-      </div>
+      <FilterBar scope="participants" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
+        shown={shown.length} total={all.length} noun="مشارك" placeholder="ابحث بالاسم أو البريد أو الجوال أو الجهة"
+        actions={<>
+          <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel{shown.length !== all.length ? ` (${shown.length})` : ''}</button>
+          {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
+        </>} />
       {canWrite && picked.size > 0 && (
         <div className="la-bulk">
           <span><b>{picked.size}</b> محدد</span>
@@ -124,7 +123,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         <tbody>
           {!list ? <tr className="loading-row"><td colSpan={9}><Spinner /></td></tr>
             : error ? <tr><td colSpan={9}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
-              : !shown.length ? <tr><td colSpan={9} className="la-empty">{filtered || quick.q || quick.track ? 'لا نتائج لهذه الفلاتر. جرّب مسحها.' : 'لا مشاركين بعد'}</td></tr>
+              : !shown.length ? <tr><td colSpan={9} className="la-empty">{all.length ? 'لا نتائج لهذه الفلاتر. جرّب مسحها.' : 'لا مشاركين بعد'}</td></tr>
                 : shown.map((p) => {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);

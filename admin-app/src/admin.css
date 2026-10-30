@@ -1327,3 +1327,28 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   outline: 2px solid var(--gold, var(--brand-gold)) !important;
   outline-offset: 2px;
 }
+
+/* ── شريط الفلترة الموحّد (FilterBar.jsx) ── */
+.flt { display: grid; gap: 10px; margin: 0 0 16px; }
+.flt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.flt-search { flex: 1 1 260px; min-width: 200px; }
+.filter-select.on { border-color: var(--brand-copper); background: var(--brand-cream-light); }
+.flt-more, .flt-link { background: none; border: 0; padding: 6px 4px; font: inherit; font-size: .82rem; color: var(--brand-gold-deep); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.flt-presets { gap: 6px; }
+.flt-preset { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--brand-line); border-radius: 999px;
+  background: var(--brand-white); font: inherit; font-size: .82rem; color: var(--brand-ink-soft); cursor: pointer; transition: border-color .15s, background .15s; }
+.flt-preset b { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--brand-sand-soft); font-size: .74rem; text-align: center; }
+.flt-preset:hover { border-color: var(--brand-copper); }
+.flt-preset.on { border-color: var(--brand-graphite); background: var(--brand-graphite); color: var(--brand-paper); }
+.flt-preset.on b { background: var(--brand-copper); color: var(--brand-graphite); }
+.flt-status { min-height: 30px; font-size: .84rem; }
+.flt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 6px; background: var(--brand-cream); color: var(--brand-ink-soft); font-size: .8rem; }
+.flt-chip button { border: 0; background: none; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 1rem; line-height: 1; color: var(--brand-muted-soft); }
+.flt-chip button:hover { background: var(--brand-cream-hover); color: var(--brand-ink); }
+.flt-views { margin-inline-start: auto; }
+@media (max-width: 640px) {
+  .flt-presets { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .flt-preset { flex: 0 0 auto; }
+  .flt-row > .filter-select { flex: 1 1 140px; }
+  .flt-views { margin-inline-start: 0; }
+}

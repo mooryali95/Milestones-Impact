@@ -21,3 +21,7 @@ describe('المسار في عنوان الصفحة', () => {
     expect(formatRoute({ ctx: 'leaders', tab: 'orgs' })).toBe('#/leaders/orgs');
   });
 });
+
+it('ما بعد «?» فلاتر لا تغيّر الشاشة', () => {
+  expect(parseRoute('#/leaders/participants?status=placed&view=idle')).toEqual({ ctx: 'leaders', tab: 'participants', id: null });
+});
