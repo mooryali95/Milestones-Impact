@@ -6,6 +6,7 @@
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
 import { all, CONFIG, db, Fail, healthMail, publicDb, sendMail } from './core.ts';
 import { itemAnalysis, weeklySeries } from './logic.js';
+import { PARTICIPANT_STATUS } from './labels.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
 const MARKERS: [string, string, string][] = [
@@ -159,7 +160,7 @@ export async function weeklyHealth() {
   ];
   await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],
-    ['بانتظار الاعتماد', String(pending)], ['متطلبات للمراجعة', String(submitted)],
+    [PARTICIPANT_STATUS.pending_approval, String(pending)], ['متطلبات للمراجعة', String(submitted)],
     ['رسائل الرموز آخر 24 ساعة', `${h.mail.today} من ${h.mail.cap}`],
   ], issues));
   return { sent: true, issues: issues.length };

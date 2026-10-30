@@ -9,11 +9,12 @@ import { call } from '../api.js';
 import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import { LEADER_WEIGHTS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
-const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: 'قيّمه المستشار', c: 'ok' }
-  : s.status === 'submitted' ? { t: 'مسلّم', c: 'gold' }
-    : s.status === 'returned' ? { t: 'أُعيد للتطوير', c: 'bad' }
-      : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: 'قيد العمل', c: 'warn' } : { t: 'لم يبدأ', c: '' });
+const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.reviewed, c: 'ok' }
+  : s.status === 'submitted' ? { t: SUBMISSION_STATUS.submitted, c: 'gold' }
+    : s.status === 'returned' ? { t: SUBMISSION_STATUS.returned, c: 'bad' }
+      : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: SUBMISSION_STATUS.draft, c: 'warn' } : { t: 'لم يبدأ', c: '' });
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
 const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي'], ['approved', 'الاعتماد']];
 

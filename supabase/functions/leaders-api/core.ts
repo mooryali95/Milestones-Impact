@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
+import { SITES } from '../_shared/sites.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -11,13 +12,13 @@ export const CONFIG = {
   serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
   // ملح الهاش للرموز والتوكنات. سر مستقل حتى لا يكفي تسريب القاعدة وحده.
   pepper: env('LEADERS_TOKEN_PEPPER'),
-  appUrl: env('LEADERS_APP_URL', 'https://leaders.sunkvalue.com'),
+  appUrl: env('LEADERS_APP_URL', SITES.leaders),
   coordinatorDays: 14,
   rpId: env('LEADERS_RP_ID', 'leaders.sunkvalue.com'),
   rpName: 'Milestone Impact',
-  origins: env('LEADERS_ORIGINS', 'https://leaders.sunkvalue.com').split(',').map((s) => s.trim()),
+  origins: env('LEADERS_ORIGINS', SITES.leaders).split(',').map((s) => s.trim()),
   // لوحة الإدارة تنادي نفس الدالة؛ مسموحة في CORS فقط وليست أصلًا لمفاتيح المرور
-  adminOrigins: env('LEADERS_ADMIN_ORIGINS', 'https://admin.sunkvalue.com').split(',').map((s) => s.trim()),
+  adminOrigins: env('LEADERS_ADMIN_ORIGINS', SITES.admin).split(',').map((s) => s.trim()),
   resendKey: env('RESEND_API_KEY'),
   // سر يرسله المجدول (pg_cron) لتشغيل التذكيرات؛ بدونه لا يعمل الإجراء
   cronSecret: env('LEADERS_CRON_SECRET'),
@@ -173,7 +174,7 @@ export function healthMail(rows: [string, string][], issues: string[]) {
     ? `<p style="font-size:15px;margin:18px 0 6px;font-weight:600">ما يحتاج تدخلك</p><ul style="margin:0;padding-inline-start:20px;line-height:1.9">${issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
     : '<p style="font-size:15px;margin:18px 0 0">لا شيء يحتاج تدخلك هذا الأسبوع.</p>';
   return mailShell('تقرير الأسبوع: برنامج القادة', `<table role="presentation" width="100%" style="font-size:14px">${table}</table>${list}
-${mailButton('https://admin.sunkvalue.com/#/leaders/overview', 'افتح لوحة الإدارة')}`, { eyebrow: 'LEADERS PROGRAM', footnote: 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
+${mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة')}`, { eyebrow: 'LEADERS PROGRAM', footnote: 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
 }
 
 export function reminderMail(name: string, open: number) {

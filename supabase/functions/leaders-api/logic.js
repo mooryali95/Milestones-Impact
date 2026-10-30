@@ -1635,3 +1635,40 @@ export function hardcodedFacts(text) {
   const hit = HARDCODED.find(([re]) => re.test(t));
   return hit ? hit[1] : null;
 }
+
+// ════════════════════════════════════════════════════════════════
+// اتساق الرحلة: هل تتسع المرحلة لما يُطلب فيها؟
+// ════════════════════════════════════════════════════════════════
+// تُعرض للمحرر قبل الحفظ وبعده. error يمنع ما لا يُعرض صحيحًا (رمز بلا مصدر)،
+// وwarn ينبّه إلى ما يصعب تنفيذه (جلسات أكثر مما تسعه مدة المرحلة).
+const MIN_GAP_DAYS = { coaching: 3, workshop: 1 };       // أقل فاصل معقول بين جلستين
+const MINUTES_RANGE = { coaching: [15, 120], meeting: [10, 120] };
+export function unknownTokens(text, reqs) {
+  const codes = new Set((reqs || []).map((r) => r.code));
+  return [...String(text || '').matchAll(/\{(?:sessions|minutes|days):([A-Z0-9-]+)\}/g)].map((m) => m[1]).filter((c) => !codes.has(c));
+}
+export function journeyCoherence(stages, requirements) {
+  const out = [];
+  const reqs = (requirements || []).filter((r) => r.active !== false);
+  for (const s of (stages || []).filter((x) => x.active !== false)) {
+    const days = Number(s.duration_days) || 0;
+    for (const f of STAGE_TEXT) {
+      for (const c of unknownTokens(s[f], reqs)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: الرمز يشير إلى نشاط غير موجود (${c})` });
+      if (/\{duration\}/.test(s[f] || '') && !days) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: {duration} بلا مدة بالأيام` });
+    }
+    for (const r of reqs.filter((x) => x.stage_key === s.key)) {
+      const c = r.config || {};
+      const n = Number(c.sessions_required) || 0;
+      const gap = MIN_GAP_DAYS[r.kind];
+      if (gap && n > 1 && days && n > Math.ceil(days / gap)) {
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: ${sessionsAr(n)} في ${durationAr(days)} أكثر مما تسعه المرحلة (جلسة كل ${gap === 1 ? 'يوم' : `${gap} أيام`} على الأقل)` });
+      }
+      const range = MINUTES_RANGE[r.kind];
+      if (range && c.minutes && (c.minutes < range[0] || c.minutes > range[1])) {
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: مدة الجلسة ${minutesAr(c.minutes)} خارج المعتاد (${range[0]} إلى ${range[1]} دقيقة)` });
+      }
+      for (const code of [...unknownTokens(r.title_ar, reqs), ...unknownTokens(r.help_ar, reqs)]) out.push({ level: 'error', stage: s.key, req: r.code, msg: `${r.code}: الرمز يشير إلى نشاط غير موجود (${code})` });
+    }
+  }
+  return out;
+}

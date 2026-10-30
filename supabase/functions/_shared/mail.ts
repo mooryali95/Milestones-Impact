@@ -1,3 +1,4 @@
+import { SITES } from './sites.js';
 // ════════════════════════════════════════════════════════════════
 // قالب البريد الموحّد لكل دوال الحافة بهوية Milestone Impact (الوضع الفاتح)
 // ════════════════════════════════════════════════════════════════
@@ -7,7 +8,7 @@
 // جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
 // كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML.
 
-const LOGO_URL = 'https://mi.sunkvalue.com/assets/brand/png/milestone-impact-400w.png';
+const LOGO_URL = `${SITES.mi}/assets/brand/png/milestone-impact-400w.png`;
 export const MAIL = { graphite: '#0B272F', gold: '#A97A2E', mist: '#F7F8F6', line: '#DCE2E1', slate: '#2C4148', muted: '#6E8085' };
 const FONT = `'Noto Kufi Arabic',Tahoma,Arial,sans-serif`;
 const LATIN = `Arial,sans-serif`;

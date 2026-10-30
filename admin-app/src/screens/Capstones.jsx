@@ -7,15 +7,15 @@
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
-import { PRIORITY_WEIGHT } from '../../../supabase/functions/leaders-api/capstone.js';
+import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { useUI, Spinner } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 
-const STATUS = { draft: 'قيد البناء', submitted: 'بانتظار مراجعتك', returned: 'أُعيد للتحسين', accepted: 'بانتظار الراعي', approved: 'معتمد' };
+const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
-const FILTERS = [['submitted', 'بانتظار مراجعتك'], ['accepted', 'بانتظار الراعي'], ['returned', 'أُعيدت'], ['approved', 'معتمدة'], ['', 'الكل']];
+const FILTERS = [...['submitted', 'accepted', 'returned', 'approved'].map((k) => [k, STATUS[k]]), ['', 'الكل']];
 const PART = { quizzes: 'اختبارات الأبواب', lab: 'أدوات المختبر', capstone: 'مشروع التخرج', participation: 'المشاركة في الرحلة' };
 
 async function openDoc(doc, toast) {

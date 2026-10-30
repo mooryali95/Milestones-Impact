@@ -5,6 +5,7 @@ import {
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
 import { deliver, MAIL_FROM_DEFAULT, mailCode, mailShell, mailText } from "../_shared/mail.ts";
+import { SITES } from "../_shared/sites.js";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
 //
@@ -20,7 +21,7 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND = Deno.env.get("RESEND_API_KEY") || "";
 const FROM = MAIL_FROM_DEFAULT;
 const RP_ID = Deno.env.get("USER_RP_ID") || "sunkvalue.com";
-const ORIGINS = (Deno.env.get("USER_ORIGINS") || "https://matrix.sunkvalue.com,https://mi.sunkvalue.com")
+const ORIGINS = (Deno.env.get("USER_ORIGINS") || [SITES.matrix, SITES.mi].join(","))
   .split(",").map((s) => s.trim());
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h user sessions

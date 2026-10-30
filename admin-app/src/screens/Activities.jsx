@@ -12,7 +12,7 @@ import { L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
-import { SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { minutesAr, QR_WINDOW, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
@@ -34,7 +34,7 @@ const sessionFields = (cohorts) => cohorts.length < 2 ? SESSION_FIELDS : [
 ];
 const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
 const MODE_AR = SESSION_MODE_AR;
-const COACH_ST = { booked: ['محجوزة', ''], requested: ['اتصال فوري', 'warn'], attended: ['حضر', 'ok'], no_show: ['لم يحضر', 'bad'], cancelled: ['أُلغيت', ''] };
+const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'warn', attended: 'ok', no_show: 'bad', cancelled: '' }).map(([k, tone]) => [k, [COACH_STATUS_ADMIN[k], tone]]));
 
 // ── شاشة رمز الحضور للقاعة ──
 function QrScreen({ id, onClose }) {
@@ -177,7 +177,7 @@ function Coaching({ data, reload, canWrite }) {
       fields: [
         { name: 'participant_id', label: 'المشارك', type: 'select', options: Object.fromEntries(list.map((p) => [p.id, `${p.full_name} · ${p.email}`])) },
         { name: 'starts_at', label: 'الموعد', type: 'datetime' },
-        { name: 'status', label: 'الحالة', type: 'select', options: { attended: 'حضر (منعقدة)', booked: 'محجوزة (قادمة)' } },
+        { name: 'status', label: 'الحالة', type: 'select', options: { attended: `${COACH_STATUS_ADMIN.attended} (منعقدة)`, booked: `${COACH_STATUS_ADMIN.booked} (قادمة)` } },
         { name: 'join_url', label: 'رابط الاجتماع (اختياري)', dir: 'ltr' },
         { name: 'note', label: 'ملاحظة', type: 'textarea', rows: 2 },
       ],
