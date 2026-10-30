@@ -84,7 +84,7 @@ test('المستشار: يقيّم الأبعاد الستة ثم يقبل وي�
     const replies = {
       'admin.orgs': { success: true, orgs: [], unassigned: {} },
       'admin.capstones': { success: true, items: [] },
-      'admin.capstone': { success: true, doc, capstone: { status: 'submitted', revisions: 0 }, readiness: 100, sections: sections(true), checks: [], leader: { score: 82, weights: { quizzes: 25, lab: 30, capstone: 30, participation: 15 }, parts: { quizzes: 80 } }, max_revisions: 1, priority: 'milestone', rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', '4'] })) },
+      'admin.capstone': { success: true, doc, capstone: { status: 'submitted', revisions: 0 }, readiness: 100, sections: sections(true), checks: [], leader: { score: 82, weights: { quizzes: 20, lab: 20, capstone: 40, participation: 20 }, parts: { quizzes: 80 } }, max_revisions: 1, priority: 'milestone', rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', '4'] })) },
       'admin.capstone-review': { success: true, doc, capstone: { status: 'accepted', revisions: 0, score: 100 }, readiness: 100, sections: sections(true), checks: [], leader: null, max_revisions: 1 },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
