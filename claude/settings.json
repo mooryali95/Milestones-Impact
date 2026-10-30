@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx -y supabase@latest functions deploy:*)",
+      "Bash(npx supabase functions deploy:*)"
+    ]
+  }
+}
