@@ -55,12 +55,16 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
   'cron.expert-offers': E.sweepOffers,
+  'xp.auth-start': E.portalStart,
+  'xp.auth-verify': E.portalVerify,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
   'org.visibility': (p) => P.orgVisibilityFor(p),
+  'ratings.pending': (p) => E.pendingRatings(p),
+  'ratings.submit': (p, b) => E.rateExpert(p, b),
   'logout': (_p, _b, sid) => P.logout(sid),
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
   'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
@@ -103,6 +107,14 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
+// لوحة الخبير: الجلسة من expert_sessions، والخبير يُشتق منها على الخادم
+const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
+  'xp.dashboard': (e) => E.portalDashboard(e),
+  'xp.respond': (e, b) => E.portalRespond(e, b),
+  'xp.rate': (e, b) => E.portalRate(e, b),
+  'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
+};
+
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'coord.me': (c) => C.me(c),
   'coord.dashboard': (c) => C.dashboard(c),
@@ -214,6 +226,10 @@ Deno.serve(async (req) => {
     if (coordinator[action]) {
       const { coordinator: c, sessionId } = await C.fromToken(b.token);
       return reply(req, await coordinator[action](c, b, sessionId));
+    }
+    if (expert[action]) {
+      const { expert: e, sessionId } = await E.expertFromToken(b.token);
+      return reply(req, await expert[action](e, b, sessionId));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);

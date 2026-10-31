@@ -10,6 +10,7 @@ import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../la
 import Activity from './Activities.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
+import RateExpert from './RateExpert.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
 function deviceLabel() {
@@ -446,6 +447,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <Ring value={me.progress} />
       </section>
       {participant.status === 'completed' && <CertificateCard />}
+      <RateExpert />
 
       {!approved && profile && (
         <div className="banner gold">

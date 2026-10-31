@@ -118,3 +118,43 @@ test('عرض الخدمة للخبير: القبول برابط الرمز', asy
   await expect(page.getByRole('heading', { name: 'تم القبول' })).toBeVisible();
   expect(sent).toMatchObject({ accept: true });
 });
+
+test('لوحة الخبير: الدخول بالرمز، والرد على عرض، وتقييم مشارك، ولا سعر ولا تكلفة', async ({ page }) => {
+  const calls = [];
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    calls.push(b);
+    const r = {
+      'xp.auth-start': { success: true, sent: true },
+      'xp.auth-verify': b.code === '123456' ? { success: true, token: 'x'.repeat(40), expert: { full_name: 'د. سارة' } } : { success: false, message: 'الرمز غير صحيح', code: 'code' },
+      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة محافظ', roles: ['coach', 'advisor'] },
+        stats: { hours: 7.5, participants: 4, attended: 9, upcoming: 2, no_show: 1 }, rating: { count: 3, min: 5 },
+        requests: [
+          { id: 'r1', status: 'offered', role_ar: 'كوتش', dimension_ar: 'تمكين القائد', level_ar: 'متوسط', expires_at: new Date(Date.now() + 10 * 36e5).toISOString(), participant: { name: 'عمر' } },
+          { id: 'r2', status: 'accepted', role_ar: 'مستشار', participant: { name: 'منى السالم', email: 'm@x.com', job_title: 'مديرة مشروع' } },
+        ],
+        sessions: [{ id: 's1', status: 'attended', starts_at: '2026-10-20T10:00:00Z', ends_at: '2026-10-20T11:00:00Z', participant: 'منى السالم', to_rate: true }],
+        criteria: { ready: 'جاء مستعدًا', engaged: 'تفاعل بجدية', progress: 'يتقدّم في هدفه' } },
+      'xp.respond': { success: true, accepted: true },
+      'xp.rate': { success: true },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
+  });
+  await page.setViewportSize({ width: 1200, height: 1300 });
+  await page.goto('http://localhost:4304/x');
+  await page.getByLabel('البريد الإلكتروني').fill('s@x.com');
+  await page.getByRole('button', { name: 'أرسل الرمز' }).click();
+  await page.getByLabel('رمز التحقق').fill('123456');
+  await page.getByRole('button', { name: 'دخول' }).click();
+  await expect(page.getByRole('heading', { name: 'أهلًا د. سارة الحربي' })).toBeVisible();
+  await expect(page.locator('.xpp-kpis')).toContainText('7.5');
+  await expect(page.locator('.xpp-kpis')).toContainText('يظهر تقييمك بعد 5');
+  await expect(page.locator('body')).not.toContainText('ريال');
+  if (SHOT) await page.screenshot({ path: `${SHOT}/portal.png`, fullPage: true });
+  await page.locator('.xpp-offer').getByRole('button', { name: 'أقبل' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'xp.respond')).toMatchObject({ id: 'r1', accept: true });
+  await page.locator('.xpp-torate').getByRole('button', { name: 'قيّم' }).click();
+  for (const l of ['جاء مستعدًا', 'تفاعل بجدية', 'يتقدّم في هدفه']) await page.getByRole('radiogroup', { name: l }).getByRole('radio', { name: '4 من 5' }).click();
+  await page.getByRole('button', { name: 'احفظ التقييم' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'xp.rate')).toMatchObject({ kind: 'session', id: 's1', scores: { ready: 4, engaged: 4, progress: 4 } });
+});

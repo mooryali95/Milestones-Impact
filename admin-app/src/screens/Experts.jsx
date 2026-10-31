@@ -9,7 +9,8 @@ import { Spinner, useUI } from '../ui.jsx';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { RequestsBoard } from './ExpertMatch.jsx';
-import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
+import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 
 const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
 const ROLES = Object.entries(EXPERT_ROLE_AR);
@@ -122,6 +123,25 @@ function Service({ s, rate }) {
   );
 }
 
+// تقييم المشاركين للخبير: للإدارة كاملًا، والخبير يرى المتوسط بعد MIN_RATINGS فقط
+function Ratings({ r }) {
+  if (!r) return null;
+  const s = r.summary;
+  return (
+    <section className="la-card ex-ratings">
+      <div className="la-row between"><h4>تقييم المشاركين</h4>
+        <small className="la-muted">{s.count} تقييم{s.visible ? ' · يراه الخبير' : ` · يُعرض للخبير بعد ${MIN_RATINGS}`}{r.given ? ` · قيّم هو ${r.given} مشارك` : ''}</small></div>
+      {!s.count ? <p className="la-muted">لا تقييمات بعد. يُطلب من المشارك تقييم كل جلسة منعقدة وكل خدمة مكتملة.</p> : <>
+        <div className="ex-kpis">
+          <span className="ex-cost"><b>{s.avg} / 5</b>المتوسط العام</span>
+          {Object.entries(RATE_TO_EXPERT).map(([k, l]) => <span key={k}><b>{r.criteria[k] ?? '·'}</b>{l}</span>)}
+        </div>
+        {r.comments.length > 0 && <ul className="la-log">{r.comments.map((c, i) => <li key={i}><small>{date(c.created_at)} · {c.overall}/5</small> «{c.comment}»</li>)}</ul>}
+      </>}
+    </section>
+  );
+}
+
 function Profile({ id, canWrite, onBack }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
@@ -153,6 +173,7 @@ function Profile({ id, canWrite, onBack }) {
         </div>
       </section>
       <Service s={d.service} rate={e.hourly_rate} />
+      <Ratings r={d.ratings} />
       <ExpertForm key={e.updated_at} initial={e} canWrite={canWrite} onSaved={load} />
       <section className="la-card"><h4>السجل</h4>
         <ul className="la-log">{d.activity.length ? d.activity.map((x, i) => <li key={i}><small>{date(x.created_at)}</small> {ACT[x.action.replace('expert.', '')] || x.action} <small className="la-muted">{x.actor}</small></li>) : <li className="la-muted">لا شيء</li>}</ul>

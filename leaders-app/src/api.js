@@ -89,3 +89,26 @@ export async function coordCall(action, body = {}) {
   if (!res.success && (res.code === 'session' || res.code === 'suspended')) { coordSession.clear(); onCoordExpired(res.message); }
   return res;
 }
+
+// ── لوحة الخبير: جلسة مستقلة (expert_sessions) بالنمط نفسه ──
+const XP_KEY = 'mi_leaders_expert_session';
+export const xpSession = {
+  get() { try { return localStorage.getItem(XP_KEY); } catch { return null; } },
+  set(t) { try { localStorage.setItem(XP_KEY, t); } catch { /* وضع خاص */ } },
+  clear() { try { localStorage.removeItem(XP_KEY); } catch { /* وضع خاص */ } },
+};
+export async function xpCall(action, body = {}) {
+  let res;
+  try {
+    const r = await fetchRetry(`${SUPABASE_URL}/functions/v1/leaders-api`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      body: JSON.stringify({ action, token: xpSession.get(), ...body }),
+    });
+    res = BUSY_STATUS.includes(r.status) ? { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' } : await r.json();
+  } catch {
+    res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
+  }
+  if (!res.success && (res.code === 'session' || res.code === 'suspended')) xpSession.clear();
+  return res;
+}

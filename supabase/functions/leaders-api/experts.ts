@@ -3,12 +3,12 @@
 // ════════════════════════════════════════════════════════════════
 // ملف واحد للشخص بعدة أدوار. لا يعمل خبير قبل اعتماده (active)، وسعر الساعة
 // والملاحظة الداخلية للإدارة وحدها: expertPublic يحذفهما من كل رد لغيرها.
-import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
+import { mailButton, mailCode, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
-import { audit, CONFIG, db, Fail, hash, must, randomToken, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { cleanExpert, expertStats, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts } from './logic.js';
-import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR } from './labels.js';
+import { cleanExpert, cleanRating, expertPublic, expertStats, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
+import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -72,6 +72,7 @@ export async function adminGet(_a: Admin, b: Body) {
   return {
     success: true, expert: e, activity: log || [],
     service: { ...expertStats(sessions || [], e.hourly_rate), reviews, recent: (sessions || []).slice(0, 12) },
+    ratings: await expertRatings(e.id),
   };
 }
 
@@ -177,7 +178,8 @@ async function candidates(need: any, participantId: string, tried: string[] = []
     return m;
   };
   const r = tally(reqs), u = tally(upcoming), served = new Set((past || []).map((x: any) => x.expert_id));
-  return rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id) })), need, tried);
+  const ratings = await ratingsBy((experts || []).map((e: any) => e.id));
+  return rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id), rating: ratings[e.id] || null })), need, tried);
 }
 
 // معاينة الترشيح للإدارة قبل الإسناد، بتفصيل النقاط
@@ -336,4 +338,192 @@ export async function sweepOffers(b: Body) {
     moved += 1;
   }
   return { success: true, moved };
+}
+
+// ════════════════════════════════════════════════════════════════
+// التقييم في الاتجاهين
+// ════════════════════════════════════════════════════════════════
+// مصدر التقييم expert_ratings وحده: تقييم واحد لكل اتجاه لكل جلسة أو طلب (فهرس فريد).
+// المجمّع يدخل الترشيح (MATCH_WEIGHTS.quality) ولا يُعرض رقمه لغير الإدارة قبل MIN_RATINGS.
+async function ratingsBy(ids: string[]) {
+  if (!ids.length) return {};
+  const { data } = await db.from('expert_ratings').select('expert_id, overall').eq('direction', 'to_expert').in('expert_id', ids);
+  const by: Record<string, any[]> = {};
+  for (const x of data || []) (by[x.expert_id] ||= []).push(x);
+  return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, ratingSummary(v)]));
+}
+async function expertRatings(expertId: string) {
+  const { data } = await db.from('expert_ratings').select('direction, scores, overall, comment, created_at, participants(full_name)')
+    .eq('expert_id', expertId).order('created_at', { ascending: false }).limit(200);
+  const to = (data || []).filter((x: any) => x.direction === 'to_expert');
+  const avgOf = (k: string) => (to.length ? Math.round((to.reduce((a: number, x: any) => a + Number(x.scores?.[k] || 0), 0) / to.length) * 10) / 10 : null);
+  return {
+    summary: ratingSummary(to),
+    criteria: Object.fromEntries(Object.keys(RATE_TO_EXPERT).map((k) => [k, avgOf(k)])),
+    comments: to.filter((x: any) => x.comment).slice(0, 20).map((x: any) => ({ comment: x.comment, overall: x.overall, created_at: x.created_at })),
+    given: (data || []).filter((x: any) => x.direction === 'to_participant').length,
+  };
+}
+
+// ما ينتظر تقييم المشارك: جلساته المنعقدة مع خبير، وطلباته المكتملة، مما لم يقيّمه بعد (آخر 60 يومًا)
+export async function pendingRatings(p: any) {
+  const since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const [{ data: sessions }, { data: reqs }, { data: done }] = await Promise.all([
+    db.from('coaching_sessions').select('id, starts_at, expert_id, experts(full_name, title)').eq('participant_id', p.id).eq('status', 'attended')
+      .not('expert_id', 'is', null).gte('starts_at', since).order('starts_at', { ascending: false }),
+    db.from('expert_requests').select('id, role, updated_at, expert_id, experts(full_name, title)').eq('participant_id', p.id).eq('status', 'completed').gte('updated_at', since),
+    db.from('expert_ratings').select('session_id, request_id').eq('participant_id', p.id).eq('direction', 'to_expert'),
+  ]);
+  const rated = new Set((done || []).flatMap((x: any) => [x.session_id, x.request_id]).filter(Boolean));
+  const items = [
+    ...(sessions || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'session', id: x.id, when: x.starts_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: 'جلسة توجيه' })),
+    ...(reqs || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'request', id: x.id, when: x.updated_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: roleAr(x.role) })),
+  ];
+  return { success: true, items, criteria: RATE_TO_EXPERT };
+}
+
+export async function rateExpert(p: any, b: Body) {
+  const r = cleanRating(b.scores, Object.keys(RATE_TO_EXPERT));
+  if (!r) throw new Fail('قيّم كل معيار من 1 إلى 5');
+  let expertId: string | null = null, session_id = null, request_id = null;
+  if (b.kind === 'session') {
+    const s = must(await db.from('coaching_sessions').select('id, participant_id, status, expert_id').eq('id', String(b.id || '')).maybeSingle()) as any;
+    if (!s || s.participant_id !== p.id || s.status !== 'attended' || !s.expert_id) throw new Fail('لا تُقيَّم إلا جلستك المنعقدة', 403);
+    expertId = s.expert_id; session_id = s.id;
+  } else {
+    const q = must(await db.from('expert_requests').select('id, participant_id, status, expert_id').eq('id', String(b.id || '')).maybeSingle()) as any;
+    if (!q || q.participant_id !== p.id || q.status !== 'completed' || !q.expert_id) throw new Fail('لا تُقيَّم إلا خدمتك المكتملة', 403);
+    expertId = q.expert_id; request_id = q.id;
+  }
+  const { error } = await db.from('expert_ratings').insert({
+    direction: 'to_expert', expert_id: expertId, participant_id: p.id, session_id, request_id,
+    scores: r.scores, overall: r.overall, comment: b.comment ? String(b.comment).trim().slice(0, 1000) || null : null,
+  });
+  if (error) throw new Fail(error.code === '23505' ? 'قيّمت هذه الخدمة من قبل' : 'تعذّر حفظ التقييم', error.code === '23505' ? 409 : 500);
+  await audit('participant', p.email, 'expert.rated', 'experts', expertId);
+  return { success: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// لوحة الخبير: leaders.sunkvalue.com/x
+// ════════════════════════════════════════════════════════════════
+// يدخل الخبير النشط برمز البريد. يرى نفسه وطلباته وجلساته ومشاركيه المقبولين فقط،
+// ولا يرى سعر ساعته ولا تكلفته ولا ملاحظة الإدارة (expertPublic)، ولا متوسط تقييمه قبل MIN_RATINGS.
+const SESSION_DAYS = 14;
+const portalOk = (e: any) => e && ['active', 'paused'].includes(e.status);
+const SENT = { success: true, sent: true };
+
+export async function portalStart(b: Body, ctx: Ctx) {
+  const email = normalizeEmail(b.email);
+  if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
+  await mailGuard(b, ctx);
+  const { data: e } = await db.from('experts').select('id, full_name, status').eq('email', email).maybeSingle();
+  if (!portalOk(e)) return SENT;   // الرد واحد مسجلًا كان البريد أو لا
+  const { count } = await db.from('expert_challenges').select('id', { count: 'exact', head: true }).eq('email', email).gte('created_at', new Date(Date.now() - 36e5).toISOString());
+  if ((count ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
+  const code = randomCode();
+  must(await db.from('expert_challenges').insert({ expert_id: e!.id, email, code_hash: await hash(code), ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString() }));
+  await sendMail(email, 'رمز الدخول إلى لوحة الخبير', shell('رمز الدخول إلى لوحة الخبير',
+    mailText(`أهلًا ${firstName(e!.full_name)}، أدخل الرمز في صفحة الدخول.`) + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)));
+  return SENT;
+}
+
+export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
+  const email = normalizeEmail(b.email);
+  const { data: ch } = await db.from('expert_challenges').select('*').eq('email', email).is('consumed_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!ch || new Date(ch.expires_at) < new Date()) throw new Fail('الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
+  if (ch.attempts >= 5) throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
+  if (ch.code_hash !== await hash(String(b.code || '').trim())) {
+    await db.from('expert_challenges').update({ attempts: ch.attempts + 1 }).eq('id', ch.id);
+    throw new Fail('الرمز غير صحيح', 400, 'code');
+  }
+  const { data: used } = await db.from('expert_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', ch.id).is('consumed_at', null).select('id');
+  if (!used?.length) throw new Fail('الرمز مستخدم من قبل', 400, 'used');
+  const { data: e } = await db.from('experts').select('*').eq('id', ch.expert_id).maybeSingle();
+  if (!portalOk(e) || e.email !== email) throw new Fail('لا يوجد ملف خبير فعّال لهذا البريد', 403, 'denied');
+  const token = randomToken();
+  must(await db.from('expert_sessions').insert({ expert_id: e.id, token_hash: await hash(token), ip: ctx.ip, user_agent: ctx.ua || null, expires_at: new Date(Date.now() + SESSION_DAYS * 864e5).toISOString() }));
+  await db.from('experts').update({ last_login_at: new Date().toISOString() }).eq('id', e.id);
+  await audit('system', e.email, 'expert.login', 'experts', e.id);
+  return { success: true, token, expert: { full_name: e.full_name } };
+}
+
+export async function expertFromToken(token: unknown) {
+  if (typeof token !== 'string' || token.length < 20) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
+  const { data: s } = await db.from('expert_sessions').select('id, expert_id, expires_at, revoked_at').eq('token_hash', await hash(token)).maybeSingle();
+  if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
+  const { data: e } = await db.from('experts').select('*').eq('id', s.expert_id).maybeSingle();
+  if (!portalOk(e)) throw new Fail('ملفك غير فعّال، تواصل مع الإدارة', 403, 'suspended');
+  db.from('expert_sessions').update({ last_seen_at: new Date().toISOString() }).eq('id', s.id).then(() => {});
+  return { expert: e, sessionId: s.id as string };
+}
+export async function portalLogout(sessionId: string) {
+  await db.from('expert_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId);
+  return { success: true };
+}
+
+// كل ما يراه الخبير في لوحته، من مصادره نفسها (expert_requests وcoaching_sessions وexpert_ratings)
+export async function portalDashboard(e: any) {
+  const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
+    db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
+      .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
+    db.from('coaching_sessions').select('id, participant_id, status, starts_at, ends_at, join_url, participants(full_name)').eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
+    db.from('expert_ratings').select('session_id, request_id').eq('expert_id', e.id).eq('direction', 'to_participant'),
+    expertRatings(e.id),
+  ]);
+  const done = new Set((rated || []).flatMap((x: any) => [x.session_id, x.request_id]).filter(Boolean));
+  const now = Date.now();
+  // قبل القبول: الاسم الأول والبُعد والمستوى؛ بعده: التواصل لأداء الخدمة
+  const req = (x: any) => {
+    const lvl = x.dimension ? (x.participants?.placements || []).find((y: any) => y.dimension === x.dimension)?.level : null;
+    const open = x.status !== 'offered';
+    return {
+      id: x.id, status: x.status, role: x.role, role_ar: roleAr(x.role), dimension_ar: x.dimension ? (DIM_AR as Record<string, string>)[x.dimension] : null,
+      level_ar: lvl ? (LEVEL_AR as Record<string, string>)[lvl] : null, expires_at: x.expires_at, accepted_at: x.accepted_at,
+      participant: open ? { name: x.participants?.full_name, email: x.participants?.email, phone: x.participants?.phone, job_title: x.participants?.job_title, org: x.participants?.organization_name }
+        : { name: firstName(x.participants?.full_name) },
+      to_rate: x.status === 'completed' && !done.has(x.id),
+    };
+  };
+  const stats = expertStats(sessions || [], null);
+  return {
+    success: true,
+    expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
+    stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
+    rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: 5 },
+    requests: (reqs || []).map(req),
+    sessions: (sessions || []).map((x: any) => ({ id: x.id, status: x.status, starts_at: x.starts_at, ends_at: x.ends_at, join_url: x.status === 'booked' && Date.parse(x.ends_at) > now ? x.join_url : null,
+      participant: x.participants?.full_name, to_rate: x.status === 'attended' && !done.has(x.id) })),
+    criteria: RATE_TO_PARTICIPANT,
+  };
+}
+
+// رد الخبير من لوحته على عرض قائم له (الرابط في البريد يعمل أيضًا)
+export async function portalRespond(e: any, b: Body) {
+  const r = must(await db.from('expert_requests').select('id, expert_id, status').eq('id', String(b.id || '')).maybeSingle()) as any;
+  if (!r || r.expert_id !== e.id || r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا لك', 409, 'gone');
+  const token = randomToken();
+  await db.from('expert_requests').update({ offer_token_hash: await hash(token) }).eq('id', r.id).eq('status', 'offered');
+  return offerRespond({ t: token, accept: b.accept === true, reason: b.reason });
+}
+
+// الخبير يقيّم المشارك بعد جلسة منعقدة أو خدمة مكتملة له
+export async function portalRate(e: any, b: Body) {
+  const r = cleanRating(b.scores, Object.keys(RATE_TO_PARTICIPANT));
+  if (!r) throw new Fail('قيّم كل معيار من 1 إلى 5');
+  let participantId = null, session_id = null, request_id = null;
+  if (b.kind === 'session') {
+    const s = must(await db.from('coaching_sessions').select('id, participant_id, status, expert_id').eq('id', String(b.id || '')).maybeSingle()) as any;
+    if (!s || s.expert_id !== e.id || s.status !== 'attended') throw new Fail('تُقيَّم جلستك المنعقدة فقط', 403);
+    participantId = s.participant_id; session_id = s.id;
+  } else {
+    const q = must(await db.from('expert_requests').select('id, participant_id, status, expert_id').eq('id', String(b.id || '')).maybeSingle()) as any;
+    if (!q || q.expert_id !== e.id || q.status !== 'completed') throw new Fail('تُقيَّم خدمتك المكتملة فقط', 403);
+    participantId = q.participant_id; request_id = q.id;
+  }
+  const { error } = await db.from('expert_ratings').insert({ direction: 'to_participant', expert_id: e.id, participant_id: participantId, session_id, request_id,
+    scores: r.scores, overall: r.overall, comment: b.comment ? String(b.comment).trim().slice(0, 1000) || null : null });
+  if (error) throw new Fail(error.code === '23505' ? 'قيّمت هذا من قبل' : 'تعذّر حفظ التقييم', error.code === '23505' ? 409 : 500);
+  await audit('system', e.email, 'expert.rated-participant', 'participants', participantId);
+  return { success: true };
 }

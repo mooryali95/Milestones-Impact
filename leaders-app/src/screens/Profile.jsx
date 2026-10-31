@@ -11,7 +11,7 @@ const deviceOf = (ua = '') => {
   const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
   return br ? `${br} على ${os}` : os;
 };
-const when = (t) => (t ? new Date(t).toLocaleDateString('ar-SA-u-nu-latn', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
+const when = (t) => (t ? new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
 
 // ماذا ترى جهتك: الشفافية قبل الاطلاع. ما لا يُذكر هنا لا يخرج من الخادم لجهتك
 function OrgVisibility() {
