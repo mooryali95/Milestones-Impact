@@ -282,6 +282,7 @@ const SCOPE_RANK = { project: 0, program: 1, portfolio: 2 };
 // تُحذف على الخادم قبل الإرسال، فلا يصل للمشارك ما لا يخص مستواه ونطاقه.
 const BLOCK_RE = /^:::((?:\s*(?:min|only)=(?:beginner|intermediate|advanced)|\s*scope=(?:project|program|portfolio))+)\s*$/;
 /** @param {string} md @param {string} [level] @param {string|null} [scope] */
+/** @param {string|null} [scope] */
 export function filterHandbookMd(md, level, scope = null) {
   const out = [];
   let keep = true;
@@ -389,6 +390,7 @@ export function shuffleQuiz(quiz, seed) {
 //   * الخيار الصحيح
 //   لماذا: شرح يظهر بعد الإجابة
 // أسئلة الباب كما تخص المشارك: كتل المستوى والنطاق نفسها التي تصفّي المتن
+/** @param {any} md @param {any} level @param {string|null} [scope] */
 export const quizFor = (md, level, scope = null) => parseQuiz(filterHandbookMd(md, level, scope));
 
 export function parseQuiz(md) {

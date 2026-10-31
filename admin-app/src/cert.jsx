@@ -57,7 +57,7 @@ export function CertPreview({ body, label = 'معاينة الشهادة' }) {
       } catch (e) { if (live) setErr(`تعذّرت المعاينة: ${e.message || e}`); }
     }, 500);
     return () => { live = false; clearTimeout(t); };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key]);
   return (
     <figure className="ce-preview" aria-label={label}>
       <div className="ce-frame">
