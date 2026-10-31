@@ -1152,5 +1152,8 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .tr-scroll { overflow-x: auto; }
 .tr-ms { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 14px; }
 .tr-ms small { color: var(--muted); }
+<<<<<<< HEAD
 .cx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .cx-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; gap: 6px; }
+=======
+>>>>>>> origin/claude/project-thread-mic5xr
