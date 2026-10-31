@@ -1670,3 +1670,42 @@ export function expertStats(sessions = [], rate = null, now = Date.now()) {
     cost: rate == null ? null : Math.round(hours * Number(rate) * 100) / 100,
   };
 }
+
+// ── الإسناد: ترشيح الخبير الأنسب لطلب ──
+// الأوزان مصدر واحد (مجموعها 100) يقرؤها الخادم ولوحة الإدارة لشرح الترتيب
+export const MATCH_WEIGHTS = { fit: 35, capacity: 25, quality: 20, context: 10, continuity: 10 };
+export const OFFER_HOURS = 24;
+export const LEVEL_RANK = { beginner: 1, intermediate: 2, advanced: 3 };
+// need: { role, dimension, level, sector }
+// e: الخبير ومعه load (طلبات قائمة وجلسات قادمة) وrating (من المرحلة 5، وقد يكون فارغًا) وserved (خدم المشارك من قبل؟)
+export function matchScore(e, need) {
+  const w = MATCH_WEIGHTS;
+  const dims = e.dimensions || [];
+  const levels = e.levels || [];
+  // التخصص: البُعد المطلوب، والمستوى (المستوى الأعلى يخدم ما دونه بنصف الدرجة)
+  const dimFit = !need.dimension ? 1 : dims.includes(need.dimension) ? 1 : 0;
+  const lvl = LEVEL_RANK[need.level] || 0;
+  const lvlFit = !lvl || !levels.length ? 0.5 : levels.includes(need.level) ? 1 : levels.some((x) => LEVEL_RANK[x] > lvl) ? 0.5 : 0;
+  const fit = (dimFit * 0.6 + lvlFit * 0.4) * w.fit;
+  // السعة: ما بقي من ساعاته الأسبوعية بعد حِمله الحالي (كل طلب قائم أو جلسة قادمة = ساعة)
+  const hours = Number(e.weekly_hours) || 0;
+  const used = (e.load?.requests || 0) + (e.load?.upcoming || 0);
+  const capacity = hours > 0 ? Math.max(0, 1 - used / hours) * w.capacity : 0;
+  // الجودة: التقييم من 5 حين يوجد بعدد كافٍ، وإلا محايد
+  const r = e.rating?.count >= 5 ? e.rating.avg : null;
+  const quality = (r == null ? 0.6 : Math.max(0, Math.min(1, (r - 1) / 4))) * w.quality;
+  const context = (need.sector && (e.sectors || []).some((s) => String(s).trim() === String(need.sector).trim()) ? 1 : 0) * w.context;
+  const continuity = (e.served ? 1 : 0) * w.continuity;
+  const parts = { fit, capacity, quality, context, continuity };
+  const total = Math.round(Object.values(parts).reduce((a, n) => a + n, 0) * 10) / 10;
+  return { total, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, Math.round(v * 10) / 10])), full: hours > 0 && used >= hours };
+}
+// المرشحون: النشطون بالدور المطلوب، غير من عُرض عليهم، مرتبون بالنقاط ثم بالأقل حِملًا
+export function rankExperts(experts, need, tried = []) {
+  const skip = new Set(tried);
+  return experts
+    .filter((e) => e.status === 'active' && (e.roles || []).includes(need.role) && !skip.has(e.id))
+    .map((e) => ({ ...e, match: matchScore(e, need) }))
+    .filter((e) => !e.match.full)
+    .sort((a, b) => b.match.total - a.match.total || ((a.load?.requests || 0) - (b.load?.requests || 0)) || String(a.id).localeCompare(String(b.id)));
+}

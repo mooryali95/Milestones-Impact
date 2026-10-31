@@ -21,6 +21,11 @@ async function admin(page) {
         service: { sessions: 4, attended: 3, no_show: 1, upcoming: 0, participants: 2, hours: 2.5, cost: 750, reviews: { requirements: 1, models: 3, capstones: 1 }, recent: [{ id: 'c1', status: 'attended', starts_at: '2026-10-20', participants: { full_name: 'سارة' } }] } },
       'admin.expert-set-status': { success: true },
       'admin.expert-save': { success: true, expert: { ...experts[0], id: 'e3' }, invited: true },
+      'admin.expert-requests': { success: true, requests: [
+        { id: 'r1', participant_id: 'p1', role: 'coach', dimension: 'impact', status: 'unmatched', tried: ['e9'], created_at: '2026-10-29', participants: { full_name: 'سارة' } },
+        { id: 'r2', participant_id: 'p2', role: 'advisor', dimension: null, status: 'accepted', expert_id: 'e1', score: 82.5, created_at: '2026-10-28', participants: { full_name: 'عمر' }, experts: { full_name: 'د. سارة الحربي' } },
+      ] },
+      'admin.expert-request-retry': { success: true, status: 'offered' },
     }[b.action];
     await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
   });
@@ -35,7 +40,7 @@ async function admin(page) {
 test('شبكة الخبراء: المؤشرات والفلترة ثم اعتماد طلب انضمام', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
   const calls = await admin(page);
-  const rows = page.locator('.data-table tbody tr');
+  const rows = page.locator('.ex-table tbody tr');
   await expect(rows).toHaveCount(2);
   await page.getByRole('button', { name: /طلبات بانتظار المراجعة/ }).click();
   await expect(rows).toHaveCount(1);
@@ -84,4 +89,32 @@ test('انضم كخبير: التحقق ثم الإرسال', async ({ page }) =
   await page.getByRole('button', { name: 'أرسل طلب الانضمام' }).click();
   await expect(page.getByRole('heading', { name: 'وصل طلبك' })).toBeVisible();
   expect(sent).toMatchObject({ full_name: 'سارة الحربي', roles: ['advisor'], dimensions: ['leadership'] });
+});
+
+test('طلبات الإسناد: القائمة بحالاتها، وإعادة المحاولة لطلب بلا خبير', async ({ page }) => {
+  const calls = await admin(page);
+  const board = page.locator('.xm-board');
+  await expect(board.locator('tbody tr')).toHaveCount(1);
+  await expect(board).toContainText('قبِله الخبير');
+  await board.getByRole('button', { name: /بلا خبير/ }).click();
+  await board.getByRole('button', { name: 'أعد المحاولة' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.expert-request-retry')).toMatchObject({ id: 'r1' });
+});
+
+test('عرض الخدمة للخبير: القبول برابط الرمز', async ({ page }) => {
+  let sent = null;
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'offer.respond') sent = b;
+    await route.fulfill({ json: b.action === 'offer.get'
+      ? { success: true, offer: { status: 'offered', expert: 'د. سارة', role_ar: 'كوتش', dimension_ar: 'تحويل المشروع إلى أثر', level_ar: 'متوسط', participant: 'عمر', expires_at: new Date(Date.now() + 20 * 36e5).toISOString() } }
+      : { success: true, accepted: true } });
+  });
+  await page.goto('http://localhost:4304/offer?t=' + 'x'.repeat(40));
+  await expect(page.getByRole('heading', { name: 'أهلًا د. سارة' })).toBeVisible();
+  await expect(page.locator('.xo-facts')).toContainText('20 ساعة');
+  if (SHOT) await page.screenshot({ path: `${SHOT}/offer.png`, fullPage: true });
+  await page.getByRole('button', { name: 'أقبل الطلب' }).click();
+  await expect(page.getByRole('heading', { name: 'تم القبول' })).toBeVisible();
+  expect(sent).toMatchObject({ accept: true });
 });

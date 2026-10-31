@@ -7,7 +7,7 @@
 //   القياس لم يُرسل   ← تحديد المستوى
 //   غير ذلك           ← الرحلة
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
-// و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء.
+// و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -24,6 +24,7 @@ import Impact from './screens/Impact.jsx';
 import Rater from './screens/Rater.jsx';
 import Sponsor from './screens/Sponsor.jsx';
 import ExpertApply from './screens/ExpertApply.jsx';
+import ExpertOffer from './screens/ExpertOffer.jsx';
 import Capstone from './screens/Capstone.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
@@ -97,6 +98,7 @@ export default function App() {
   if (location.pathname === '/rate') return <Shell tag="تقدير الأثر"><Rater /></Shell>;
   if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة"><Sponsor /></Shell>;
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
+  if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
 

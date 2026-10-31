@@ -80,3 +80,6 @@ export const EXPERT_ROLE_AR = {
 export const EXPERT_STATUS = {
   applied: 'طلب انضمام', invited: 'مدعو', active: 'نشط', paused: 'متوقف مؤقتًا', suspended: 'موقوف', rejected: 'لم يُقبل',
 };
+export const EXPERT_REQUEST_STATUS = {
+  open: 'يبحث عن خبير', offered: 'معروض على خبير', accepted: 'قبِله الخبير', unmatched: 'لا خبير مطابق', cancelled: 'أُلغي', completed: 'اكتمل',
+};

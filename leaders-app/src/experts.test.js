@@ -40,3 +40,36 @@ it('خدمات الخبير: المنعقدة وحدها ساعات وتكلفة
   expect(st).toEqual({ sessions: 5, attended: 3, no_show: 1, upcoming: 1, participants: 2, hours: 1.8, cost: 540 });
   expect(expertStats([], null, now).cost).toBeNull();
 });
+
+import { MATCH_WEIGHTS, matchScore, rankExperts } from '../../supabase/functions/leaders-api/logic.js';
+describe('الإسناد: ترشيح الخبير', () => {
+  const base = { status: 'active', roles: ['coach'], dimensions: ['impact'], levels: ['intermediate'], sectors: ['حكومي'], weekly_hours: 4, load: { requests: 0, upcoming: 0 } };
+  const need = { role: 'coach', dimension: 'impact', level: 'intermediate', sector: 'حكومي' };
+  it('الأوزان مجموعها 100، والمطابقة الكاملة بلا تقييم = 88', () => {
+    expect(Object.values(MATCH_WEIGHTS).reduce((a, n) => a + n, 0)).toBe(100);
+    expect(matchScore(base, need).total).toBe(35 + 25 + 12 + 10);
+    expect(matchScore({ ...base, served: true, rating: { avg: 5, count: 6 } }, need).total).toBe(100);
+  });
+  it('التقييم لا يُحتسب قبل خمسة تقييمات', () => {
+    expect(matchScore({ ...base, rating: { avg: 1, count: 4 } }, need).parts.quality).toBe(12);
+    expect(matchScore({ ...base, rating: { avg: 1, count: 5 } }, need).parts.quality).toBe(0);
+  });
+  it('المستوى الأعلى يخدم ما دونه بنصف الدرجة، والأدنى لا', () => {
+    expect(matchScore({ ...base, levels: ['advanced'] }, need).parts.fit).toBe(35 * (0.6 + 0.2));
+    expect(matchScore({ ...base, levels: ['beginner'] }, need).parts.fit).toBe(35 * 0.6);
+  });
+  it('يستبعد غير النشط وغير صاحب الدور ومن عُرض عليه ومن اكتملت طاقته، ويرتب بالنقاط', () => {
+    const list = rankExperts([
+      { ...base, id: 'a', dimensions: ['milestone'] },
+      { ...base, id: 'b' },
+      { ...base, id: 'c', status: 'paused' },
+      { ...base, id: 'd', roles: ['advisor'] },
+      { ...base, id: 'e' },
+      { ...base, id: 'f', load: { requests: 3, upcoming: 1 } },
+    ], need, ['e']);
+    expect(list.map((x) => x.id)).toEqual(['b', 'a']);
+  });
+  it('الحِمل يُنقص السعة', () => {
+    expect(matchScore({ ...base, load: { requests: 1, upcoming: 1 } }, need).parts.capacity).toBe(12.5);
+  });
+});

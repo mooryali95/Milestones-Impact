@@ -5,10 +5,10 @@
 // والملاحظة الداخلية للإدارة وحدها: expertPublic يحذفهما من كل رد لغيرها.
 import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
-import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, must, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { cleanExpert, expertStats, isEmail, normalizeEmail, normalizePhone } from './logic.js';
-import { EXPERT_STATUS } from './labels.js';
+import { cleanExpert, expertStats, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts } from './logic.js';
+import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -142,4 +142,198 @@ export async function adminSetStatus(a: Admin, b: Body) {
       mailText('نقدّر اهتمامك بالانضمام إلى شبكة خبراء برنامج القادة. لا تتوافق احتياجات الدفعة الحالية مع ملفك، وسنحتفظ به لدفعات قادمة.'))).catch(() => {});
   }
   return { success: true, expert: saved };
+}
+
+// ════════════════════════════════════════════════════════════════
+// الإسناد: طلب ← ترشيح ← عرض 24 ساعة ← قبول، أو انتقال للتالي
+// ════════════════════════════════════════════════════════════════
+// حالة الطلب في expert_requests وحدها. tried يحفظ كل من عُرض عليه فلا يعود إليه،
+// وقيد «طلب قائم واحد لكل مشارك ودور» في القاعدة يمنع التكرار.
+const LIVE = ['open', 'offered', 'accepted'];
+const roleAr = (r: string) => (EXPERT_ROLE_AR as Record<string, string[]>)[r]?.[0] || r;
+
+// ما يحتاجه المشارك: مستواه في البُعد المطلوب (من تسكينه) وقطاعه
+async function needFor(participantId: string, role: string, dimension: string | null) {
+  const p = must(await db.from('participants').select('id, full_name, email, sector, placements(dimension, level)').eq('id', participantId).maybeSingle()) as any;
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  if (!(EXPERT_ROLE_AR as Record<string, unknown>)[role]) throw new Fail('دور غير معروف');
+  const dim = dimension && (DIM_AR as Record<string, string>)[dimension] ? dimension : null;
+  const level = dim ? (p.placements || []).find((x: any) => x.dimension === dim)?.level || null : null;
+  return { p, need: { role, dimension: dim, level, sector: p.sector || null } };
+}
+
+// الخبراء بحِملهم الحالي، وهل خدموا المشارك من قبل
+async function candidates(need: any, participantId: string, tried: string[] = []) {
+  const now = new Date().toISOString();
+  const [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }] = await Promise.all([
+    db.from('experts').select('*').eq('status', 'active').contains('roles', [need.role]),
+    db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
+    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
+    db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
+  ]);
+  const tally = (rows: any[] | null) => {
+    const m: Record<string, number> = {};
+    for (const x of rows || []) m[x.expert_id] = (m[x.expert_id] || 0) + 1;
+    return m;
+  };
+  const r = tally(reqs), u = tally(upcoming), served = new Set((past || []).map((x: any) => x.expert_id));
+  return rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id) })), need, tried);
+}
+
+// معاينة الترشيح للإدارة قبل الإسناد، بتفصيل النقاط
+export async function adminMatch(_a: Admin, b: Body) {
+  const { need } = await needFor(String(b.participant_id || ''), String(b.role || ''), b.dimension || null);
+  const list = await candidates(need, String(b.participant_id));
+  return {
+    success: true, need, weights: MATCH_WEIGHTS,
+    candidates: list.slice(0, 8).map((e: any) => ({ id: e.id, full_name: e.full_name, title: e.title, roles: e.roles, dimensions: e.dimensions, levels: e.levels, weekly_hours: e.weekly_hours, load: e.load, served: e.served, match: e.match })),
+  };
+}
+
+// يعرض الطلب على التالي في الترتيب (أو على خبير بعينه)، ويغلقه «لا خبير مطابق» حين تنفد القائمة
+async function offerNext(req: any, pick?: any) {
+  const { p, need } = await needFor(req.participant_id, req.role, req.dimension);
+  const list = pick ? [pick] : await candidates(need, req.participant_id, req.tried || []);
+  const now = new Date();
+  if (!list.length) {
+    await db.from('expert_requests').update({ status: 'unmatched', expert_id: null, offer_token_hash: null, expires_at: null, updated_at: now.toISOString() }).eq('id', req.id);
+    await audit('system', null, 'expert-request.unmatched', 'expert_requests', req.id);
+    if (CONFIG.alertEmail) {
+      sendMail(CONFIG.alertEmail, `لا خبير متاح: ${roleAr(req.role)} لـ ${p.full_name}`, shell('طلب بلا خبير مطابق',
+        mailText(`لم يقبل أحد من الخبراء المطابقين طلب ${roleAr(req.role)} للمشارك ${p.full_name}، أو لا أحد متاح. أسنده يدويًا أو أضف خبيرًا.`)
+        + mailButton(`${SITES.admin}/#/leaders/experts?view=requests`, 'افتح الطلبات'))).catch(() => {});
+    }
+    return { status: 'unmatched' };
+  }
+  const e = list[0];
+  const token = randomToken();
+  const expires = new Date(now.getTime() + OFFER_HOURS * 36e5);
+  must(await db.from('expert_requests').update({
+    status: 'offered', expert_id: e.id, offer_token_hash: await hash(token), offered_at: now.toISOString(), expires_at: expires.toISOString(),
+    score: e.match?.total ?? null, updated_at: now.toISOString(),
+  }).eq('id', req.id));
+  await audit('system', null, 'expert-request.offered', 'expert_requests', req.id, null, { expert_id: e.id, score: e.match?.total ?? null });
+  const what = [roleAr(req.role), need.dimension ? (DIM_AR as Record<string, string>)[need.dimension] : null, need.level ? `مستوى ${(LEVEL_AR as Record<string, string>)[need.level]}` : null].filter(Boolean).join(' · ');
+  sendMail(e.email, `طلب خدمة: ${roleAr(req.role)}`, shell(`أهلًا ${firstName(e.full_name)}`,
+    mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${what}</b>.`)
+    + mailText(`لديك ${OFFER_HOURS} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
+    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب'))).catch(() => {});
+  return { status: 'offered', expert_id: e.id };
+}
+
+// إسناد من الإدارة: تلقائي للأنسب، أو لخبير بعينه بسبب مسجّل إن لم يكن الأول في الترتيب
+export async function adminAssign(a: Admin, b: Body) {
+  requireWrite(a);
+  const participantId = String(b.participant_id || '');
+  const role = String(b.role || '');
+  const { need } = await needFor(participantId, role, b.dimension || null);
+  const { data: live } = await db.from('expert_requests').select('id, status').eq('participant_id', participantId).eq('role', role).in('status', LIVE).maybeSingle();
+  if (live) throw new Fail(`للمشارك طلب ${roleAr(role)} قائم (${(EXPERT_STATUS as any)[live.status] || live.status}). ألغِه أولًا`, 409);
+  let pick = null;
+  if (b.expert_id) {
+    const list = await candidates(need, participantId);
+    pick = list.find((e: any) => e.id === b.expert_id);
+    if (!pick) throw new Fail('الخبير المختار غير متاح لهذا الدور (غير نشط، أو بلا هذا الدور، أو اكتملت طاقته)');
+    if (list[0]?.id !== pick.id && !String(b.reason || '').trim()) throw new Fail('اكتب سبب اختيار غير الأول في الترشيح');
+  }
+  const req = must(await db.from('expert_requests').insert({
+    participant_id: participantId, role, dimension: need.dimension, status: 'open', created_by: a.email,
+    manual_reason: pick ? String(b.reason || '').trim().slice(0, 500) || null : null, note: b.note ? String(b.note).slice(0, 1000) : null,
+  }).select('*').single()) as any;
+  await audit('admin', a.email, 'expert-request.create', 'expert_requests', req.id, null, { participant_id: participantId, role, expert_id: pick?.id || null });
+  const r = await offerNext(req, pick);
+  return { success: true, request_id: req.id, ...r };
+}
+
+export async function adminRequests() {
+  const { data } = await db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)').order('created_at', { ascending: false }).limit(300);
+  return { success: true, requests: data || [] };
+}
+
+export async function adminCancelRequest(a: Admin, b: Body) {
+  requireWrite(a);
+  const r = must(await db.from('expert_requests').select('id, status').eq('id', String(b.id || '')).maybeSingle()) as any;
+  if (!r) throw new Fail('الطلب غير موجود', 404);
+  if (!LIVE.includes(r.status)) throw new Fail('الطلب مغلق أصلًا');
+  await db.from('expert_requests').update({ status: 'cancelled', offer_token_hash: null, updated_at: new Date().toISOString() }).eq('id', r.id);
+  await audit('admin', a.email, 'expert-request.cancel', 'expert_requests', r.id, { status: r.status }, { reason: b.reason || null });
+  return { success: true };
+}
+
+// إغلاق طلب مقبول بعد أداء الخدمة: يحرر سعة الخبير، ويفتح تقييمه (المرحلة 5)
+export async function adminCompleteRequest(a: Admin, b: Body) {
+  requireWrite(a);
+  const r = must(await db.from('expert_requests').select('id, status').eq('id', String(b.id || '')).maybeSingle()) as any;
+  if (!r || r.status !== 'accepted') throw new Fail('يُغلق الطلب المقبول فقط');
+  await db.from('expert_requests').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', r.id);
+  await audit('admin', a.email, 'expert-request.complete', 'expert_requests', r.id);
+  return { success: true };
+}
+
+// إعادة المحاولة لطلب «لا خبير مطابق» بعد إضافة خبراء: يبدأ الترتيب من جديد بلا من اعتذر
+export async function adminRetryRequest(a: Admin, b: Body) {
+  requireWrite(a);
+  const r = must(await db.from('expert_requests').select('*').eq('id', String(b.id || '')).maybeSingle()) as any;
+  if (!r || r.status !== 'unmatched') throw new Fail('إعادة المحاولة لطلب بلا خبير مطابق فقط');
+  await audit('admin', a.email, 'expert-request.retry', 'expert_requests', r.id);
+  return { success: true, ...(await offerNext(r)) };
+}
+
+// ── رد الخبير برابط العرض (مفتوح، الرمز وحده هو الإذن) ──
+async function offerByToken(t: unknown) {
+  if (typeof t !== 'string' || t.length < 20) throw new Fail('الرابط غير صحيح', 404);
+  const r = must(await db.from('expert_requests').select('*, experts(full_name), participants(full_name, placements(dimension, level))').eq('offer_token_hash', await hash(t)).maybeSingle()) as any;
+  if (!r) throw new Fail('انتهى هذا العرض أو لم يعد لك', 404, 'gone');
+  return r;
+}
+export async function offerGet(b: Body) {
+  const r = await offerByToken(b.t);
+  const lvl = r.dimension ? (r.participants?.placements || []).find((x: any) => x.dimension === r.dimension)?.level : null;
+  return {
+    success: true,
+    offer: {
+      status: r.status, expert: r.experts?.full_name, role: r.role, role_ar: roleAr(r.role),
+      dimension_ar: r.dimension ? (DIM_AR as Record<string, string>)[r.dimension] : null, level_ar: lvl ? (LEVEL_AR as Record<string, string>)[lvl] : null,
+      // قبل القبول: الاسم الأول وحده
+      participant: r.status === 'accepted' ? r.participants?.full_name : firstName(r.participants?.full_name), expires_at: r.expires_at,
+    },
+  };
+}
+export async function offerRespond(b: Body) {
+  const r = await offerByToken(b.t);
+  if (r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا', 409, 'gone');
+  const now = new Date().toISOString();
+  if (b.accept === true) {
+    if (Date.parse(r.expires_at) < Date.now()) throw new Fail('انتهت مهلة هذا العرض', 409, 'gone');
+    must(await db.from('expert_requests').update({ status: 'accepted', accepted_at: now, updated_at: now }).eq('id', r.id));
+    await audit('system', null, 'expert-request.accepted', 'expert_requests', r.id, null, { expert_id: r.expert_id });
+    const { data: p } = await db.from('participants').select('full_name, email').eq('id', r.participant_id).maybeSingle();
+    if (p?.email) {
+      sendMail(p.email, `خبيرك في برنامج القادة: ${r.experts?.full_name}`, shell(`أهلًا ${firstName(p.full_name)}`,
+        mailText(`أُسند إليك <b>${r.experts?.full_name}</b> ${roleAr(r.role)} في رحلتك. ستجده في رحلتك، وتصلك منه مواعيد الجلسات.`)
+        + mailButton(SITES.leaders, 'افتح رحلتك'))).catch(() => {});
+    }
+    return { success: true, accepted: true };
+  }
+  // اعتذار: يُسجّل ويُعرض الطلب على التالي
+  const tried = [...new Set([...(r.tried || []), r.expert_id].filter(Boolean))];
+  await db.from('expert_requests').update({ status: 'open', expert_id: null, offer_token_hash: null, tried, updated_at: now }).eq('id', r.id);
+  await audit('system', null, 'expert-request.declined', 'expert_requests', r.id, null, { expert_id: r.expert_id, reason: b.reason ? String(b.reason).slice(0, 300) : null });
+  await offerNext({ ...r, tried });
+  return { success: true, accepted: false };
+}
+
+// ── كل ساعة: العروض المنتهية تنتقل للتالي ──
+export async function sweepOffers(b: Body) {
+  if (!CONFIG.cronSecret || b.secret !== CONFIG.cronSecret) throw new Fail('غير مصرّح', 403, 'forbidden');
+  const { data: due } = await db.from('expert_requests').select('*').eq('status', 'offered').lt('expires_at', new Date().toISOString()).limit(100);
+  let moved = 0;
+  for (const r of due || []) {
+    const tried = [...new Set([...(r.tried || []), r.expert_id].filter(Boolean))];
+    await db.from('expert_requests').update({ status: 'open', expert_id: null, offer_token_hash: null, tried, updated_at: new Date().toISOString() }).eq('id', r.id).eq('status', 'offered');
+    await audit('system', null, 'expert-request.expired', 'expert_requests', r.id, null, { expert_id: r.expert_id });
+    await offerNext({ ...r, tried });
+    moved += 1;
+  }
+  return { success: true, moved };
 }
