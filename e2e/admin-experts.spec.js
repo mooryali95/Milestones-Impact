@@ -158,3 +158,10 @@ test('لوحة الخبير: الدخول بالرمز، والرد على عر�
   await page.getByRole('button', { name: 'احفظ التقييم' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'xp.rate')).toMatchObject({ kind: 'session', id: 's1', scores: { ready: 4, engaged: 4, progress: 4 } });
 });
+
+test('لوحة الخبير: زر الدخول بجوجل ظاهر في شاشة الدخول', async ({ page }) => {
+  await page.route(/accounts\.google\.com/, (r) => r.fulfill({ contentType: 'text/javascript', body: "window.google={accounts:{id:{initialize(){},renderButton(el){el.appendChild(document.createElement('div'));}}}};" }));
+  await page.goto('http://localhost:4304/x');
+  await expect(page.getByRole('heading', { name: 'لوحة الخبير' })).toBeVisible();
+  await expect(page.getByText('بحساب جوجل بالبريد نفسه المسجل في شبكة الخبراء.')).toBeVisible();
+});

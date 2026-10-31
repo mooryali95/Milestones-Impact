@@ -57,6 +57,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'cron.expert-offers': E.sweepOffers,
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
+  'xp.auth-google': E.portalGoogle,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
