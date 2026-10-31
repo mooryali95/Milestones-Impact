@@ -94,6 +94,10 @@ describe('مصدر واحد لكل معلومة', () => {
     for (const f of fns(join(ROOT, 'supabase/functions')).filter((x) => !x.endsWith('_shared/mail.ts'))) {
       expect(readFileSync(f, 'utf8'), f.slice(ROOT.length)).not.toMatch(/color:\s*#[0-9a-fA-F]{3,6}/);
     }
+    // ولا فاصلتان متتاليتان في استيراد: deno check يتسامح معها، ونشر الدالة يرفضها
+    for (const f of fns(join(ROOT, 'supabase/functions'))) {
+      expect(readFileSync(f, 'utf8'), f.slice(ROOT.length)).not.toMatch(/^import [^;]*,\s*,/m);
+    }
     // وكل رسالة بعائلتها: لا سطر إنجليزي مكتوب يدويًا فوق العنوان
     for (const f of fns(join(ROOT, 'supabase/functions')).filter((x) => !x.endsWith('_shared/mail.ts'))) {
       expect(readFileSync(f, 'utf8'), f.slice(ROOT.length)).not.toMatch(/eyebrow:\s*['"`]/);

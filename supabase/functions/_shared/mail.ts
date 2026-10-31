@@ -108,12 +108,14 @@ export function plainText(html: string) {
     .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 
-export async function deliver(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT } = {}) {
+// attachments: ملفات مرفقة بمحتواها base64 (مثل دعوة التقويم .ics)
+export type MailAttachment = { filename: string; content: string; content_type?: string };
+export async function deliver(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT, attachments = [] as MailAttachment[] } = {}) {
   if (!key) { console.error('RESEND_API_KEY missing; mail to', to, 'not sent'); return false; }
   const send = (sender: string) => fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: sender, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO }),
+    body: JSON.stringify({ from: sender, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO, ...(attachments.length ? { attachments } : {}) }),
   });
   try {
     let res = await send(from);
@@ -124,4 +126,16 @@ export async function deliver(to: string, subject: string, html: string, { key =
     if (!res.ok) { console.error('mail failed', res.status, await res.text()); return false; }
     return true;
   } catch (e) { console.error('mail failed', e); return false; }
+}
+
+// دعوة تقويم (iCalendar) لموعد واحد: تُضاف إلى أي تقويم بنقرة. النصوص تُهرَّب حسب RFC 5545
+export function icsEvent({ uid, start, end, title, description = '', url = '' }: { uid: string; start: string; end: string; title: string; description?: string; url?: string }) {
+  const t = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const x = (v: string) => String(v).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:${uid}@sunkvalue.com`, `DTSTAMP:${t(new Date().toISOString())}`, `DTSTART:${t(start)}`, `DTEND:${t(end)}`,
+    `SUMMARY:${x(title)}`, ...(description ? [`DESCRIPTION:${x(description)}`] : []), ...(url ? [`URL:${url}`, `LOCATION:${x(url)}`] : []),
+    'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${x(title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'];
+  const text = lines.join('\r\n') + '\r\n';
+  return { filename: 'session.ics', content: btoa(String.fromCharCode(...new TextEncoder().encode(text))), content_type: 'text/calendar; charset=utf-8; method=PUBLISH' };
 }

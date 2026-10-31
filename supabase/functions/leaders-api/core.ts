@@ -2,7 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, type MailFamily } from '../_shared/mail.ts';
+import { deliver, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, type MailFamily } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
@@ -143,9 +143,9 @@ const shell = (family: MailFamily, title: string, body: string, preheader = '', 
   mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
 const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
 
-export async function sendMail(to: string, subject: string, html: string) {
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = []) {
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom }))) {
+  if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments }))) {
     throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
   }
 }
@@ -215,6 +215,16 @@ export function sessionReminderMail(name: string, when: string, expert: string |
     `${when}${expert ? ` · مع ${expert}` : ''}`, '');
 }
 
+// دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
+export function newDeviceMail(name: string, device: string, when: string) {
+  return shell('access', 'دخول جديد إلى حسابك',
+    mailText(`${hello(name)} سُجّل دخول إلى رحلتك من جهاز لم تستعمله من قبل.`)
+    + mailRows([['الجهاز', device], ['الوقت', when]])
+    + mailNote('إن كان أنت فلا شيء عليك. وإن لم يكن: افتح ملفك › «أجهزتك» وأنهِ الجلسات الأخرى.')
+    + mailButton(`${CONFIG.appUrl}/?tab=profile`, 'أجهزتك'),
+    `${device} · ${when}`, '');
+}
+
 // ── الجهة ──
 export function coordinatorInviteMail(name: string | null, org: string) {
   return shell('organization', `لوحة ${org} في برنامج القادة`,
@@ -271,6 +281,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'certificate', family: 'journey', label: 'صدور الشهادة', subject: 'شهادة مشاركتك في برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
   { key: 'rater', family: 'journey', label: 'طلب تقدير 360', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
+  { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة') },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },

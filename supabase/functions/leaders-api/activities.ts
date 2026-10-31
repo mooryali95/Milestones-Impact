@@ -5,7 +5,7 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail } from './core.ts';
 import { requirementFor } from './programs.ts';
-import { esc, mailShell, mailText } from '../_shared/mail.ts';
+import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
@@ -443,7 +443,7 @@ export async function coachAvailable(a: any, b: Body) {
 // الجلسات المحجوزة التي تبدأ بين 23 و25 ساعة من الآن، ولم يُرسل تذكيرها: مرة واحدة لكل جلسة
 export async function sessionReminders() {
   const now = Date.now();
-  const { data } = await db.from('coaching_sessions').select('id, starts_at, join_url, participants(full_name, email), experts(full_name)')
+  const { data } = await db.from('coaching_sessions').select('id, starts_at, ends_at, join_url, participants(full_name, email), experts(full_name)')
     .eq('status', 'booked').is('reminded_at', null)
     .gte('starts_at', new Date(now + 23 * 36e5).toISOString()).lte('starts_at', new Date(now + 25 * 36e5).toISOString()).limit(200);
   let sent = 0;
@@ -451,7 +451,10 @@ export async function sessionReminders() {
     const { data: mark } = await db.from('coaching_sessions').update({ reminded_at: new Date().toISOString() }).eq('id', s.id).is('reminded_at', null).select('id');
     if (!mark?.length || !s.participants?.email) continue;
     const when = new Date(s.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, s.join_url || null)).catch((e) => console.error('session reminder', s.id, e));
+    // ومعه دعوة تقويم تُضاف بنقرة، بتنبيه قبل الجلسة بنصف ساعة
+    const ics = icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at || new Date(Date.parse(s.starts_at) + 36e5).toISOString(),
+      title: `جلسة توجيه${s.experts?.full_name ? ` مع ${s.experts.full_name}` : ''} · برنامج القادة`, description: 'Milestone Impact · Leaders Program', url: s.join_url || '' });
+    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, s.join_url || null), [ics]).catch((e) => console.error('session reminder', s.id, e));
     sent += 1;
   }
   return sent;
