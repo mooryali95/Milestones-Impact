@@ -43,7 +43,7 @@ async function load(participantId: string) {
 const updateView = (u: any) => ({
   id: u.id, period: u.period, checkpoint: u.checkpoint, checkpoint_title: CHECKPOINTS.find((c) => c.key === u.checkpoint)?.title || null,
   milestones: u.milestones || {}, benefits: u.benefits || {}, narrative: u.narrative, blockers: u.blockers, support: u.support,
-  verify: u.checkpoint ? { status: u.verify_status || 'none', title: VERIFY[u.verify_status || 'none'], name: u.verify_name, note: u.verify_note, at: u.verify_at } : null,
+  verify: u.checkpoint ? { status: u.verify_status || 'none', title: (VERIFY as Record<string, string>)[u.verify_status || 'none'], name: u.verify_name, note: u.verify_note, at: u.verify_at } : null,
   updated_at: u.updated_at,
 });
 
