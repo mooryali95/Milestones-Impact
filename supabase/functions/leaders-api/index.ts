@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
@@ -14,6 +14,7 @@
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
+//             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { clientIp, Fail, preflight, reply } from './core.ts';
@@ -28,6 +29,7 @@ import * as G from './programs.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
+import * as T from './tracking.ts';
 import * as E from './experts.ts';
 
 type Body = Record<string, any>;
@@ -40,7 +42,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
+    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,
@@ -51,6 +53,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'rater.submit': I.raterSubmit,
   'sponsor.get': X.sponsorGet,
   'sponsor.submit': X.sponsorSubmit,
+  'outcome.get': T.verifyGet,
+  'outcome.submit': T.verifySubmit,
   'expert.apply': E.apply,
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
@@ -106,6 +110,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'capstone.summary': (p, b) => X.saveSummary(p, b),
   'capstone.submit': (p) => X.submit(p),
   'capstone.doc': (p) => X.doc(p),
+  'tracking.get': (p) => T.mine(p),
+  'tracking.save': (p, b) => T.save(p, b),
 };
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
@@ -212,6 +218,7 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.capstone': (_a, b) => X.adminGet(b),
   'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
+  'admin.outcomes': (_a, b) => T.adminOutcomes(b),
 };
 
 Deno.serve(async (req) => {

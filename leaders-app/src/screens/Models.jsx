@@ -17,7 +17,7 @@ const STATUS = {
   returned: { t: SUBMISSION_STATUS.returned, c: 'bad' },
   reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
 };
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد مشروع التخرج' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'مشروع التخرج وأثره', tracking: 'متابعة تنفيذ المبادرة' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 

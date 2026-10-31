@@ -16,6 +16,7 @@ import {
   APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES } from './capstone.js';
 import type { Admin } from './admin.ts';
+import { trackingFor, trackingOf } from './tracking.ts';
 
 type Body = Record<string, any>;
 
@@ -168,8 +169,13 @@ async function recordFor(p: any, audience: 'participant' | 'admin' | 'sponsor' |
   return docFor(p, audience);
 }
 
+// الوثيقة المعتمدة تحمل متابعتها، فيطبع التقرير الخطة وما تحقق منها معًا
+async function withTracking(doc: any, participantId: string) {
+  return doc?.meta?.status === 'approved' ? { ...doc, tracking: await trackingOf(participantId) } : doc;
+}
+
 export async function doc(p: any) {
-  return { success: true, doc: await recordFor(p, 'participant') };
+  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
 }
 
 // ── المستشار ──
@@ -182,6 +188,11 @@ export async function adminList(b: Body) {
   const charters = ids.length ? must(await db.from('model_submissions').select('participant_id, answers, learning_models!inner(key)')
     .eq('learning_models.key', CHARTER_KEY).in('participant_id', ids)) as any[] ?? [] : [];
   const title = Object.fromEntries(charters.map((c) => [c.participant_id, String(c.answers?.title || '').trim() || null]));
+  // المعتمدة تحمل حالة متابعتها، من اللقطة نفسها التي تقرأ منها المتابعة
+  const approvedIds = rows.filter((r) => r.status === 'approved').map((r) => r.participant_id);
+  const tr = approvedIds.length
+    ? await trackingFor(must(await db.from('capstones').select('participant_id, status, approved_at, snapshot').in('participant_id', approvedIds)) as any[] ?? [])
+    : {};
   return {
     success: true,
     capstones: rows.map((r) => ({
@@ -189,6 +200,7 @@ export async function adminList(b: Body) {
       organization: r.participants?.organization_name || null, scope: r.participants?.work_scope || null,
       initiative: title[r.participant_id] || null, status: r.status, readiness: r.readiness, revisions: r.revisions,
       submitted_at: r.submitted_at, reviewed_at: r.reviewed_at, score: r.score, sponsor_status: r.sponsor_status, approved_at: r.approved_at,
+      tracking: tr[r.participant_id] || null,
     })),
   };
 }
@@ -223,7 +235,7 @@ export async function adminGet(b: Body) {
   const [document, state] = await Promise.all([recordFor(p, 'admin'), build(p)]);
   const c = state.capstone;
   return {
-    success: true, doc: document,
+    success: true, doc: await withTracking(document, p.id),
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
     sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
     priority: state.track?.priority_dimension || null, max_revisions: MAX_REVISIONS,
@@ -366,6 +378,7 @@ export async function orgList(orgId: string) {
   const cap = Object.fromEntries((caps.data || []).map((c: any) => [c.participant_id, c]));
   const ch = Object.fromEntries((charters.data || []).map((c: any) => [c.participant_id, c.answers || {}]));
   const co = Object.fromEntries((costs.data || []).map((c: any) => [c.participant_id, costSummary(c.learning_models, c.answers)]));
+  const tr = await trackingFor(caps.data || []);
   return people.filter((x) => ch[x.id]?.title).map((x) => {
     const c = cap[x.id];
     const approved = c?.status === 'approved';
@@ -374,6 +387,7 @@ export async function orgList(orgId: string) {
       scope: x.work_scope || null, status: c?.status || 'draft', status_title: (STATUS_TITLES as Record<string, string>)[c?.status || 'draft'],
       readiness: c?.readiness ?? null, approved_at: c?.approved_at || null,
       cost: approved ? (c.snapshot?.cost?.withContingency ?? co[x.id]?.withContingency ?? null) : null,
+      tracking: tr[x.id] || null,
       benefits: approved ? (c.snapshot?.sections || []).find((s: any) => s.key === 'benefits-register')?.fields?.find((f: any) => f.key === 'benefits')?.value?.length ?? null : null,
     };
   });
@@ -384,5 +398,5 @@ export async function orgDoc(orgId: string, b: Body) {
   if (p.organization_id !== orgId) throw new Fail('هذا المشارك ليس من جهتك', 403);
   const { data: c } = await db.from('capstones').select('status').eq('participant_id', p.id).maybeSingle();
   if (c?.status !== 'approved') throw new Fail('تُعرض الوثيقة للجهة بعد اعتمادها', 403, 'not_approved');
-  return { success: true, doc: await recordFor(p, 'org') };
+  return { success: true, doc: await withTracking(await recordFor(p, 'org'), p.id) };
 }

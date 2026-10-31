@@ -10,6 +10,7 @@ import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { useUI, Spinner } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
+import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
 
 const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
@@ -155,6 +156,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
       </div>
 
       {c.status === 'submitted' && <Review d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} />}
+      {c.status === 'approved' && <TrackingPanel t={d.doc.tracking} />}
       {c.status === 'accepted' && <Sponsor d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} />}
     </div>
   );
@@ -179,7 +181,7 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
             <tr key={x.participant_id}>
               <td><button className="la-link" onClick={() => onOpen(x.participant_id)}>{x.initiative || 'بلا اسم'}</button></td>
               <td>{x.full_name}</td><td>{x.organization || '·'}</td><td>{SCOPE[x.scope] || '·'}</td>
-              <td><span className={`la-chip ${CHIP[x.status] || ''}`}>{STATUS[x.status]}</span>{x.sponsor_status && x.status === 'accepted' ? <small className="la-muted"> · {SPONSOR[x.sponsor_status]}</small> : null}</td>
+              <td><span className={`la-chip ${CHIP[x.status] || ''}`}>{STATUS[x.status]}</span>{x.sponsor_status && x.status === 'accepted' ? <small className="la-muted"> · {SPONSOR[x.sponsor_status]}</small> : null}{x.tracking && <> <span className={`la-chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span></>}</td>
               <td>{x.readiness != null ? `${x.readiness}%` : '·'}</td><td>{x.score ?? '·'}</td><td>{date(x.submitted_at)}</td>
             </tr>
           ))}</tbody>

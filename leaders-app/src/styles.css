@@ -1120,3 +1120,35 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .xpp-person:last-child { border-bottom: 0; }
 .xpp-torate { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .xpp-rate { display: grid; gap: 8px; margin-top: 10px; }
+
+/* ── متابعة التنفيذ والأثر بعد اعتماد الوثيقة ── */
+.tr { display: grid; gap: 14px; }
+.tr-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.tr-head h2 { margin: 2px 0 4px; }
+.tr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 720px) { .tr-kpis { grid-template-columns: 1fr 1fr; } }
+.tr-kpis > div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.tr-kpis b { font-size: 22px; }
+.tr-kpis small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tr-cps { list-style: none; margin: 0; padding: 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.tr-cps li { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; display: grid; font-size: 13px; }
+.tr-cps li small { color: var(--muted); }
+.tr-cps li.due { border-style: solid; border-color: var(--gold); }
+.tr-cps li.verified { border-style: solid; border-color: var(--ok); }
+.tr-cps li.disputed, .tr-cps li.missed { border-color: var(--bad); }
+.tr-form { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.tr-form h3 { margin: 6px 0 0; font-size: 15px; }
+.tr-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 720px) { .tr-row { grid-template-columns: 1fr; } }
+.tr-t { display: grid; gap: 2px; }
+.tr-t small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 720px) { .tr-two { grid-template-columns: 1fr; } }
+.tr-log summary { cursor: pointer; font-weight: 600; }
+.tr-log ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 10px; }
+.tr-log li { display: grid; gap: 4px; font-size: 14px; }
+.tr-log li p { margin: 0; color: var(--muted); }
+.tr-log .chip { justify-self: start; }
+.tr-scroll { overflow-x: auto; }
+.tr-ms { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 14px; }
+.tr-ms small { color: var(--muted); }
