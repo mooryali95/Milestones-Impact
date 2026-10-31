@@ -231,7 +231,7 @@ function ProcessEditor({ p, procs, canWrite, onSaved }) {
   const init = () => ({ insight: p.insight, why_it_matters: p.whyItMatters, description: p.fullDesc, duration: p.duration, outputs: (p.outputs || []).join('\n'), feeds: p.feeds || [], fed_by: p.fedBy || [] });
   const [v, setV] = useState(init);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setV(init()); }, [p]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setV(init()); }, [p]);
   const dirty = JSON.stringify(v) !== JSON.stringify(init());
   const others = procs.filter((x) => x.key !== p.key);
   const pick = (k) => (e) => setV({ ...v, [k]: [...e.target.selectedOptions].map((o) => o.value) });
