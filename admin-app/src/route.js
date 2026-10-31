@@ -5,7 +5,7 @@
 // نستعمل الـhash لأن اللوحة تُخدم من مجلد ثابت (/next/) بلا إعادة توجيه على الخادم.
 import { useEffect, useState } from 'react';
 
-export const CTXS = ['contacts', 'leaders', 'visits'];
+export const CTXS = ['contacts', 'leaders', 'matrix', 'visits'];
 
 export function parseRoute(hash) {
   const [ctx, tab, ...rest] = String(hash || '').split('?')[0].replace(/^#\/?/, '').split('/').map((x) => decodeURIComponent(x));
