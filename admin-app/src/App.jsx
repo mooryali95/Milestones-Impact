@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
-// السياقات: طلبات التواصل وتطبيق القادة، ورابط خارجي لمصفوفة التأثير.
+// السياقات: طلبات التواصل وتطبيق القادة ومصفوفة التأثير وزيارات الموقع.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
@@ -11,16 +11,16 @@ import Settings from './screens/Settings.jsx';
 import Contacts from './screens/Contacts.jsx';
 import Leaders from './screens/Leaders.jsx';
 import Visits from './screens/Visits.jsx';
+import Matrix from './screens/Matrix.jsx';
 import { navigate, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';
-import { SITES } from '../../supabase/functions/_shared/sites.js';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
 // السياق يُحفظ للجلسة، فالتحديث يعيدك حيث كنت
 const CTX_KEY = 'mi_admin_next_ctx';
-const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return c === 'leaders' || c === 'visits' ? c : 'contacts'; } catch { return 'contacts'; } };
+const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return ['leaders', 'matrix', 'visits'].includes(c) ? c : 'contacts'; } catch { return 'contacts'; } };
 
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);
@@ -54,13 +54,12 @@ function Dashboard({ user, onUser, onLogout }) {
       </header>
 
       <nav className="ctx-bar" aria-label="السياق">
-        {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة'], ['visits', 'زيارات الموقع']].map(([k, l]) => (
+        {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة'], ['matrix', 'مصفوفة التأثير'], ['visits', 'زيارات الموقع']].map(([k, l]) => (
           <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
         ))}
-        <a className="ctx-tab ext" href={SITES.matrix} target="_blank" rel="noopener noreferrer">مصفوفة التأثير ↗</a>
       </nav>
 
-      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
 
       <Palette />
       {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}

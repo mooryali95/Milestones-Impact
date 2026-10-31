@@ -58,15 +58,6 @@ export const UserAPI = {
   passkeyRegisterVerify: (token, response, label) => callFn('user-api', { action: 'passkey-register-verify', token, response, label }),
 };
 
-// ── Admin data API (token-scoped: every action re-checks the admin session) ──
-export const AdminAPI = {
-  loginSend: (email) => callFn('admin-api', { action: 'login-send', email }),
-  loginVerify: (email, code) => callFn('admin-api', { action: 'login-verify', email, code }),
-  // مفاتيح المدير تُسجَّل من admin.sunkvalue.com وتعمل هنا لأن النطاق واحد (sunkvalue.com).
-  passkeyLoginOptions: () => callFn('admin-api', { action: 'passkey-login-options' }),
-  passkeyLoginVerify: (response) => callFn('admin-api', { action: 'passkey-login-verify', response }),
-  call: (token, action, extra = {}) => callFn('admin-api', { action, token, ...extra }),
-};
 
 // ── طلب يعيد المحاولة حين تُقلع دالة الحافة ──
 // بوابة Supabase ترد 502/503/504 («Service is temporarily unavailable») عند

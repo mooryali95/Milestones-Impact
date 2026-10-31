@@ -1,3 +1,6 @@
+# إدارة المصفوفة انتقلت إلى لوحة الإدارة الموحّدة
+/admin      https://admin.sunkvalue.com/#/matrix  301
+/admin/*    https://admin.sunkvalue.com/#/matrix  301
 # SPA fallback — all routes redirect to index.html
 # This allows React to handle routing client-side
 /*    /index.html   200

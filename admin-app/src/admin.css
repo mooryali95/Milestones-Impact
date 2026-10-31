@@ -1436,3 +1436,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .mg-view h3 { margin: 2px 0 0; }
 .mg-frame { width: 100%; height: 820px; border: 1px solid var(--brand-line); border-radius: 8px; margin: 12px 0; background: var(--brand-bg-alt); }
 @media (max-width: 900px) { .mg { grid-template-columns: 1fr; } .mg-list { position: static; } .mg-frame { height: 640px; } }
+
+/* ── مصفوفة التأثير (Matrix.jsx) ── */
+.mx-prog { display: inline-block; width: 70px; height: 5px; border-radius: 3px; background: var(--brand-sand-soft); vertical-align: middle; overflow: hidden; }
+.mx-prog i { display: block; height: 100%; background: var(--brand-copper); }
+.mx-content { padding: 8px 2px 4px; font-size: .86rem; line-height: 1.9; }

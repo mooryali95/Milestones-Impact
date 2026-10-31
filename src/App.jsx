@@ -9,16 +9,18 @@ import ConfirmDialog from './components/ConfirmDialog';
 import DemographicsScreen from './screens/demographics';
 import { API_URL, TRACKS, PHASES, OPERATIONS } from './config/constants';
 import { validPhone, validEmail, isPast } from './lib/dateUtils';
-import { UserAPI, AdminAPI } from './lib/api';
+import { UserAPI } from './lib/api';
 import { LocalSession, AdminSession } from './lib/session';
 import useTabHash from './lib/useTabHash';
 import { printFinalTable } from './lib/print';
-import AdminPanel from './screens/admin';
 import { MatrixTab, ScheduleTab, ReportTab, SummaryTab, OutputTab } from './screens/tabs';
-import { RegisterScreen, ResumeScreen, AdminLoginScreen } from './screens/auth';
+import { RegisterScreen, ResumeScreen } from './screens/auth';
+import { SITES } from '../supabase/functions/_shared/sites.js';
+const ADMIN_MATRIX_URL = `${SITES.admin}/#/matrix`;
 import { CSS } from './styles/appCss';
 import useDemographics, { DEMO_KEY } from './hooks/useDemographics';
 import usePublicContent from './hooks/usePublicContent';
+import { buildProcs } from './lib/procs';
 import useCooldown from './hooks/useCooldown';
 
 /*
@@ -54,12 +56,6 @@ export default function App() {
   const [introVisible, setIntroVisible] = useState(true);
   const [screen, setScreen] = useState("splash");
   const [tab, setTab] = useState("matrix");
-  const [adminTab, setAdminTab] = useState("regs");
-  const [expandedContent, setExpandedContent] = useState(null);
-  const [adminEditProcess, setAdminEditProcess] = useState(null);
-  const [adminEditContent, setAdminEditContent] = useState(null);
-  const [adminSaving, setAdminSaving] = useState(false);
-  const [adminReportReg, setAdminReportReg] = useState(null);
 
   const [user, setUser] = useState({ name: "", phone: "", email: "" });
   const [regErrors, setRegErrors] = useState({});
@@ -70,14 +66,6 @@ export default function App() {
   const [submitted, setSubmitted] = useState(false);
   const [reopenRequested, setReopenRequested] = useState(false);
 
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminCode, setAdminCode] = useState("");
-  const [adminOtpStep, setAdminOtpStep] = useState("email"); // "email" | "code"
-  const [adminSending, setAdminSending] = useState(false);
-  const [adminToken, setAdminToken] = useState(null);
-  const [adminError, setAdminError] = useState("");
-  const [allRegs, setAllRegs] = useState([]);
-  const [expandedReg, setExpandedReg] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const [selectedCell, setSelectedCell] = useState(null);
@@ -106,8 +94,6 @@ export default function App() {
   const otpCooldown = useCooldown(otpLastSent, OTP_COOLDOWN_SEC); // ثوانٍ متبقّية، 0 = مسموح
 
 
-  const [selectedReg, setSelectedReg] = useState(null); // المسجّل المفتوح في Modal الأدمن
-  const [selectedRegTab, setSelectedRegTab] = useState('schedule'); // تبويب Modal الأدمن
 
   const [highlightedKeys, setHighlightedKeys] = useState([]);
   const { processDetails, setProcessDetails, appContent, setAppContent, detailsState } = usePublicContent();
@@ -118,14 +104,8 @@ export default function App() {
 
   // ── Auto-restore local session ──
   useEffect(() => {
-    // Restore admin session (4h)
-    const savedAdminToken = AdminSession.load();
-    if (savedAdminToken) {
-      setAdminToken(savedAdminToken);
-      setScreen("admin");
-      loadRegs(savedAdminToken);
-      return;
-    }
+    // جلسة إدارة قديمة من المصفوفة: الإدارة الآن في اللوحة الموحّدة
+    if (AdminSession.load()) { AdminSession.clear(); window.location.replace(ADMIN_MATRIX_URL); return; }
     // Restore user session (24h) — requires a valid session token
     const session = LocalSession.load();
     if (session?.sessionId && session?.token && session?.user) {
@@ -147,34 +127,8 @@ export default function App() {
   }, []);
 
 
-  // Build process list (merge local + Supabase data)
-  const procs = useMemo(() => {
-    const list = [];
-    let idx = 0;
-    for (const ph of PHASES) {
-      for (const tr of TRACKS) {
-        const op = OPERATIONS[tr.id][ph.id - 1];
-        const key = `${tr.id}-${ph.id}`;
-        const detail = processDetails[key] || {};
-        list.push({
-          key, trackId: tr.id, trackNameAr: tr.nameAr,
-          trackColor: tr.color, trackWeight: tr.weight, trackIcon: tr.icon,
-          trackContentAr: tr.contentAr, phaseId: ph.id, phaseNameAr: ph.nameAr,
-          groupAr: ph.groupAr, group: ph.group, ...op, index: idx,
-          // Rich data from Supabase
-          insight: detail.insight || '',
-          whyItMatters: detail.why_it_matters || '',
-          fullDesc: detail.description || '',
-          outputs: detail.outputs || [],
-          duration: detail.duration || `${op.dur} أيام`,
-          feeds: detail.feeds || [],
-          fedBy: detail.fed_by || [],
-        });
-        idx++;
-      }
-    }
-    return list;
-  }, [processDetails]);
+  // العمليات من مصدرها الواحد (lib/procs.js) مدموجة بتفاصيلها
+  const procs = useMemo(() => buildProcs(processDetails), [processDetails]);
 
   const confirmedCount = Object.values(confirmed).filter(Boolean).length;
   const datedCount = Object.keys(dates).length;
@@ -192,45 +146,6 @@ export default function App() {
     loadDemoData, saveDemoData, updateDemoRow, addDemoRow, removeDemoRow,
   } = useDemographics({ sessionToken, showToast, onSessionEnd: () => doLogout() });
   const openDemoScreen = () => { loadDemoData(); setDemoScreen(true); setSelectedCell(null); };
-
-  const loadRegs = async (tokenArg) => {
-    const token = tokenArg || adminToken;
-    if (!token) return;
-    setLoading(true);
-    const res = await AdminAPI.call(token, 'list-regs');
-    if (res?.success) {
-      const regs = res.registrations || [];
-      setAllRegs(regs.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
-    } else if (res?.message) {
-      showToast(res.message);
-      if (res.message.includes('الجلسة')) doLogout();
-    }
-    setLoading(false);
-  };
-
-  // ── Admin: Save process detail ──
-  const adminSaveProcess = async (processKey, updates) => {
-    if (!adminToken) return;
-    setAdminSaving(true);
-    const res = await AdminAPI.call(adminToken, 'save-process', { process_key: processKey, updates });
-    if (res?.success) {
-      setProcessDetails(prev => ({ ...prev, [processKey]: { ...prev[processKey], ...updates } }));
-      showToast('تم الحفظ ✓');
-    } else { showToast(res?.message || 'خطأ في الحفظ'); }
-    setAdminSaving(false);
-  };
-
-  // ── Admin: Save app content ──
-  const adminSaveContent = async (key, value) => {
-    if (!adminToken) return;
-    setAdminSaving(true);
-    const res = await AdminAPI.call(adminToken, 'save-content', { key, value });
-    if (res?.success) {
-      setAppContent(prev => ({ ...prev, [key]: value }));
-      showToast('تم الحفظ ✓');
-    } else { showToast(res?.message || 'خطأ في الحفظ'); }
-    setAdminSaving(false);
-  };
 
   // ── Apply a verified user session returned by user-api ──
   const applyUserSession = (res) => {
@@ -296,26 +211,6 @@ export default function App() {
       showToast(`مرحباً مجدداً ${res.registration?.name || ""}!`);
     } catch (e) {
       if (!passkeyCancelled(e)) { setResumeError(e.message || "تعذّر الدخول بمفتاح المرور"); showToast(e.message || "تعذّر الدخول بمفتاح المرور"); }
-    } finally { setPasskeyBusy(false); }
-  };
-
-  const handleAdminPasskeyLogin = async () => {
-    if (passkeyBusy) return;
-    setPasskeyBusy(true);
-    setAdminError("");
-    try {
-      const o = await AdminAPI.passkeyLoginOptions();
-      if (!o.success) throw new Error(o.message);
-      const response = await startAuthentication({ optionsJSON: o.options });
-      const res = await AdminAPI.passkeyLoginVerify(response);
-      if (!res.success || !res.token) throw new Error(res.message);
-      AdminSession.save(res.token);
-      setAdminToken(res.token);
-      setAdminOtpStep("email");
-      setScreen("admin");
-      loadRegs(res.token);
-    } catch (e) {
-      if (!passkeyCancelled(e)) setAdminError(e.message || "تعذّر الدخول بمفتاح المرور");
     } finally { setPasskeyBusy(false); }
   };
 
@@ -425,38 +320,6 @@ export default function App() {
     }
   };
 
-  // ── Admin Login: Step 1 — send OTP to a registered admin email ──
-  const handleAdminSendCode = async (e) => {
-    e.preventDefault();
-    const email = adminEmail.trim().toLowerCase();
-    if (!validEmail(email)) { setAdminError("بريد إلكتروني غير صحيح"); return; }
-    setAdminSending(true);
-    setAdminError("");
-    const res = await AdminAPI.loginSend(email);
-    setAdminSending(false);
-    if (!res.success) { setAdminError(res.message || "تعذّر إرسال رمز الدخول"); return; }
-    setAdminOtpStep("code");
-    setAdminCode("");
-    showToast("تم إرسال رمز الدخول إلى بريدك ✉ (أو استخدم تطبيق المصادقة إن كان مفعّلاً)");
-  };
-
-  // ── Admin Login: Step 2 — verify TOTP/OTP, receive admin session token ──
-  const handleAdminVerify = async (e) => {
-    e.preventDefault();
-    if (adminCode.length !== 6) { setAdminError("أدخل الرمز المكون من 6 أرقام"); return; }
-    setAdminSending(true);
-    setAdminError("");
-    const res = await AdminAPI.loginVerify(adminEmail.trim().toLowerCase(), adminCode);
-    setAdminSending(false);
-    if (!res.success) { setAdminError(res.message || "الرمز غير صحيح"); return; }
-    AdminSession.save(res.token);
-    setAdminToken(res.token);
-    setAdminOtpStep("email");
-    setAdminCode("");
-    setScreen("admin");
-    loadRegs(res.token);
-  };
-
   // ══ التحليل الديموغرافي — منطق البيانات ══
 
 
@@ -550,12 +413,10 @@ export default function App() {
 
   // ── Logout ──
   const doLogout = () => {
-    if (adminToken) AdminAPI.call(adminToken, 'logout').catch(() => {});
     LocalSession.clear();
     AdminSession.clear();
     setScreen("splash"); setUser({ name: "", phone: "", email: "" }); setDates({}); setConfirmed({});
     setSubmitted(false); setReopenRequested(false); setSessionId(null); setSessionToken(null); setTab("matrix"); setRegErrors({});
-    setAdminEmail(""); setAdminCode(""); setAdminOtpStep("email"); setAdminToken(null); setAdminError(""); setExpandedReg(null);
     setResumePhone(""); setResumeError(""); setConfirmAction(null);
     setOtpStep("form"); setOtpCode(""); setOtpError(""); setOtpPending(null);
     setOtpLastSent(null); setOtpFailCount(0);
@@ -585,15 +446,6 @@ export default function App() {
     showToast("تم إرسال طلب إعادة الفتح للمدير ✓");
   };
 
-  // ── Admin: Unlock a registration ──
-  const adminUnlock = async (regId) => {
-    const res = await AdminAPI.call(adminToken, 'unlock-reg', { id: regId });
-    if (res?.success) {
-      showToast('تم فتح التعديل');
-      loadRegs();
-    } else { showToast(res?.message || 'خطأ'); }
-  };
-
   // ── ربط التبويب بالعنوان ──
   // قبل أي return مبكّر: قواعد الخطّافات تمنع استدعاءً مشروطاً.
   // التقرير محجوب حتى ثلاثة مواعيد، والنهائي حتى التقديم — فالقائمة
@@ -607,7 +459,7 @@ export default function App() {
 
   // قياس الزيارات: شاشةٌ واحدة = مشاهدةٌ واحدة. الانتظار يبتلع الشاشات
   // العابرة (splash ثم main عند استعادة الجلسة) فلا تُعدّ مرّتين.
-  const viewPath = screen === "main" ? `/#/${tab}` : screen === "admin" ? `/admin/${adminTab}` : screen === "splash" ? "/" : `/${screen}`;
+  const viewPath = screen === "main" ? `/#/${tab}` : screen === "splash" ? "/" : `/${screen}`;
   useEffect(() => {
     if (typeof window.miTrackView !== "function") return;
     const id = setTimeout(() => window.miTrackView(viewPath), 600);
@@ -624,7 +476,7 @@ export default function App() {
       <Landing
         onRegister={() => setScreen("register")}
         onResume={() => setScreen("resume")}
-        onAdmin={() => setScreen("admin-login")}
+        onAdmin={() => window.location.assign(ADMIN_MATRIX_URL)}
         OPERATIONS={OPERATIONS}
       />
       {toastEl}
@@ -686,62 +538,12 @@ export default function App() {
     </>
   );
 
-  // ════════ ADMIN LOGIN ════════
-  if (screen === "admin-login") return (
-    <>
-      <AdminLoginScreen
-        setScreen={setScreen}
-        adminOtpStep={adminOtpStep}
-        setAdminOtpStep={setAdminOtpStep}
-        adminEmail={adminEmail}
-        setAdminEmail={setAdminEmail}
-        adminCode={adminCode}
-        setAdminCode={setAdminCode}
-        adminError={adminError}
-        setAdminError={setAdminError}
-        adminSending={adminSending}
-        handleAdminSendCode={handleAdminSendCode}
-        handleAdminVerify={handleAdminVerify}
-        passkeyAvailable={passkeyAvailable}
-        passkeyBusy={passkeyBusy}
-        handlePasskeyLogin={handleAdminPasskeyLogin}
-      />
-      {toastEl}
-    </>
-  );
-
-  // ════════ ADMIN PANEL ════════
-  if (screen === "admin") return (
-    <>
-      <AdminPanel
-        DEMO_KEY={DEMO_KEY}
-        adminReportReg={adminReportReg}
-        adminTab={adminTab}
-        adminUnlock={adminUnlock}
-        allRegs={allRegs}
-        appContent={appContent}
-        confirmed={confirmed}
-        dates={dates}
-        expandedContent={expandedContent}
-        loadRegs={loadRegs}
-        loading={loading}
-        logout={logout}
-        procs={procs}
-        reopenRequested={reopenRequested}
-        selectedReg={selectedReg}
-        selectedRegTab={selectedRegTab}
-        setAdminReportReg={setAdminReportReg}
-        setAdminTab={setAdminTab}
-        setExpandedContent={setExpandedContent}
-        setSelectedReg={setSelectedReg}
-        setSelectedRegTab={setSelectedRegTab}
-        showToast={showToast}
-        submitted={submitted}
-        tab={tab}
-      />
-      {toastEl}
-    </>
-  );
+  // ════════ الإدارة ════════
+  // إدارة المصفوفة انتقلت إلى لوحة الإدارة الموحّدة (admin.sunkvalue.com/#/matrix)
+  if (screen === "admin-login" || screen === "admin") {
+    window.location.replace(ADMIN_MATRIX_URL);
+    return null;
+  }
 
   // ════════ USER MAIN ════════
   // showReport مُعرَّف أعلاه مع قائمة التبويبات المسموحة، فيبقى المصدر واحداً.

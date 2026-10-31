@@ -194,49 +194,15 @@ test('زرّ إعادة الإرسال ينتظر المهلة ولا يبعث �
   await expect(resend).toBeDisabled();
 });
 
-// «دخول الإدارة» يُنقر عند 1280×720. كان مؤشّر التمرير الزخرفيّ يغطّيه
-// فيذهب النقر إليه ولا يحدث شيء — على مقاسٍ شائع في الحواسيب المحمولة.
-test('زرّ دخول الإدارة يُنقر عند 1280×720', async ({ page }) => {
+// «دخول الإدارة» يُنقر عند 1280×720 ويقود إلى لوحة الإدارة الموحّدة (#/matrix):
+// كان مؤشّر التمرير الزخرفيّ يغطّيه على هذا المقاس، والإدارة الآن هناك لا هنا.
+test('زرّ دخول الإدارة يُنقر عند 1280×720 ويقود إلى اللوحة الموحّدة', async ({ page }) => {
   await page.route(/supabase\.co\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route(/admin\.sunkvalue\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p id="moved">admin</p>' }));
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: /دخول الإدارة/ }).click({ timeout: 5000 });
-  await expect(page.locator('#admin-email')).toBeVisible();
-});
-
-// «توزيع المسارات» في إحصائيات المدير: مسارٌ اكتمل يبلغ 100%. كان المقام
-// 16 × عدد المسجّلين — عمليات المصفوفة كلها — والمسار لا يسع إلا أربعاً،
-// فسقف كل عمود 25% مهما اكتمل.
-test('إحصائيات المدير: مسارٌ اكتمل حجزه يبلغ عموده 100%', async ({ page }) => {
-  const full = {};
-  for (const t of ['creation', 'innovation', 'establishment', 'making'])
-    for (let ph = 1; ph <= 4; ph++) full[`${t}-${ph}`] = '2026-11-0' + ph;
-  await page.route(/supabase\.co\/functions\/v1\/admin-api/, async (route) => {
-    const { action } = route.request().postDataJSON();
-    const res = {
-      'login-send': { success: true },
-      'login-verify': { success: true, token: 'admin-token' },
-      'list-regs': { success: true, registrations: [
-        { id: 'a', name: 'مكتمل', dates: full, confirmed: {}, registeredAt: '2026-10-01' },
-        { id: 'b', name: 'جزئيّ', dates: { 'creation-1': '2026-11-01', 'creation-2': '2026-11-02' }, confirmed: {}, registeredAt: '2026-10-02' },
-      ] },
-    }[action] || { success: true };
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(res) });
-  });
-  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-
-  await page.goto(BASE + '/');
-  await page.getByRole('button', { name: /دخول الإدارة/ }).click();
-  await page.locator('#admin-email').fill('admin@example.com');
-  await page.getByRole('button', { name: /إرسال/ }).click();
-  await page.locator('#admin-code').fill('123456');
-  await page.getByRole('button', { name: /دخول|تحقق/ }).last().click();
-  await page.locator('.tabs .tab', { hasText: 'إحصائيات' }).click();
-
-  // مسجّلان: الأول حجز المسارات الأربعة كاملة، والثاني عمليتين في «التكوين».
-  // فالتكوين 6 من 8 = 75%، وكلٌّ من البقية 4 من 8 = 50%.
-  const widths = await page.locator('.rpt-bar-fill').evaluateAll((els) => els.map((e) => e.style.width));
-  expect(widths).toEqual(['75%', '50%', '50%', '50%']);
+  await page.waitForURL(/admin\.sunkvalue\.com\/#\/matrix/);
 });
 
 test('الشعار في لوحة الدخول موسَّط مع النص تحته', async ({ page }) => {
