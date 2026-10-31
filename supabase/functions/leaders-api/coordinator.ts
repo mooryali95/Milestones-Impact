@@ -11,6 +11,7 @@ import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHOR
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
+import { portfolioOutcomes } from './tracking.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -169,6 +170,8 @@ export async function dashboard(c: any) {
   const list = coordPermissions(c.permissions).list;
   r.initiatives = (await initiativesFor(c.organization_id)).filter((x: any) => x.status === 'approved')
     .map((x: any) => (list ? x : { ...x, participant_id: null, full_name: null }));
+  // أثر المبادرات في الجهة: من ملخص المتابعة نفسه الذي يراه القائد والمستشار
+  r.outcomes = portfolioOutcomes(r.initiatives.map((x: any) => ({ summary: x.tracking, cost: x.cost })));
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }

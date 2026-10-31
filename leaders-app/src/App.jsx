@@ -23,6 +23,7 @@ import { CheckIn } from './screens/Activities.jsx';
 import Impact from './screens/Impact.jsx';
 import Rater from './screens/Rater.jsx';
 import Sponsor from './screens/Sponsor.jsx';
+import Outcome from './screens/Outcome.jsx';
 import ExpertApply from './screens/ExpertApply.jsx';
 import ExpertOffer from './screens/ExpertOffer.jsx';
 import ExpertPortal from './screens/ExpertPortal.jsx';
@@ -98,6 +99,7 @@ export default function App() {
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
   if (location.pathname === '/rate') return <Shell tag="تقدير الأثر"><Rater /></Shell>;
   if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة"><Sponsor /></Shell>;
+  if (location.pathname === '/outcome') return <Shell tag="تأكيد أثر المبادرة"><Outcome /></Shell>;
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;

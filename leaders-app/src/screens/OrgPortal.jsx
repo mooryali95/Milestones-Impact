@@ -89,7 +89,9 @@ function Bars({ obj, label = (k) => k, total }) {
 
 // محفظة مبادرات الدفعة: مشاريع تخرج مشاركي الجهة. الوثيقة كاملة بعد اعتمادها
 const SCOPE_AR = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
-function Initiatives({ list }) {
+const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
+const pctOf = (v) => (v == null ? '·' : `${v}%`);
+function Initiatives({ list, outcomes }) {
   const [msg, setMsg] = useState('');
   if (!list.length) return null;
   const approved = list.filter((x) => x.status === 'approved');
@@ -106,14 +108,24 @@ function Initiatives({ list }) {
     <section className="card op-table">
       <h3>محفظة مبادرات الجهة</h3>
       <p className="small muted">مشاريع تخرج مشاركيكم: مبادرات حقيقية في جهتكم. {approved.length} معتمدة{cost ? ` بتكلفة تقديرية ${Math.round(cost).toLocaleString('en-US')} ريال` : ''}.</p>
+      {outcomes?.approved > 0 && (
+        <div className="tr-kpis">
+          <div><b>{outcomes.reporting}</b><small>من {outcomes.approved} تتابع تنفيذها</small></div>
+          <div><b>{pctOf(outcomes.on_time)}</b><small>معالم في موعدها</small></div>
+          <div><b>{pctOf(outcomes.realization)}</b><small>تحقق المنافع المقيسة</small></div>
+          <div><b>{outcomes.verified}</b><small>مراجعة أثر أكّدها الرعاة</small></div>
+        </div>
+      )}
       {msg && <div className="alert err">{msg}</div>}
       <div className="op-scroll"><table>
-        <thead><tr><th>المبادرة</th><th>القائد</th><th>النوع</th><th>الحالة</th><th>التكلفة</th><th /></tr></thead>
+        <thead><tr><th>المبادرة</th><th>القائد</th><th>النوع</th><th>الحالة</th><th>التنفيذ</th><th>تحقق المنافع</th><th>التكلفة</th><th /></tr></thead>
         <tbody>{list.map((x) => (
           <tr key={x.participant_id || x.initiative}>
             <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
             <td>{x.full_name || <span className="muted">·</span>}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
             <td>{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
+            <td>{x.tracking ? <span className={`chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span> : '·'}</td>
+            <td>{x.tracking ? pctOf(x.tracking.benefits.realization) : '·'}</td>
             <td>{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
             <td>{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
           </tr>
@@ -212,7 +224,7 @@ function Dashboard({ me, onLogout }) {
       </div>
 
       <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
-      <Initiatives list={d.initiatives || []} />
+      <Initiatives list={d.initiatives || []} outcomes={d.outcomes} />
 
       {perms.list === false ? <section className="card"><h3>المشاركون</h3><p className="muted">صلاحيتك أرقام مجمّعة عن مشاركي جهتك، بلا أسماء ولا صفوف فردية.</p></section> : <section className="card op-table">
         <div className="row between op-tools">

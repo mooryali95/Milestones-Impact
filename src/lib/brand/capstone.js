@@ -158,8 +158,33 @@ function chapter(s, i) {
   return section(DIM_EN[s.dimension] || 'Chapter', `${i + 1}. ${s.title}`, body, DIM_AR[s.dimension] ? `إطار ${DIM_AR[s.dimension]}` : null);
 }
 
+// ── المتابعة بعد الاعتماد: الخطة المعتمدة وما تحقق منها ──
+const pct = (v) => (v == null ? '·' : `${v}%`);
+function trackingBlock(t) {
+  const s = t.summary;
+  const st = t.statuses || {};
+  const ms = (t.state?.milestones || []).map((x) => [x.title, x.due || '·', st[x.status] || 'لم يُحدَّث', x.actual || '', x.note || '']);
+  const bs = (t.state?.benefits || []).map((x) => [x.title, x.baseline || '·', x.target || '·', x.value ?? '·', x.realization == null ? '·' : `${Math.round(x.realization * 100)}%`]);
+  const cps = (s.checkpoints || []).map((c) => raw(`<b>${esc(c.title)}:</b> ${esc({ upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: c.verify_title || 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' }[c.status] || '')}`));
+  const last = (t.updates || [])[0];
+  return section('Implementation & impact', 'متابعة التنفيذ والأثر', `
+    ${kpis([
+      { value: t.health?.[s.health] || s.health_title, label: 'حالة المبادرة', hint: `اليوم ${s.day} من الاعتماد` },
+      { value: pct(s.milestones.on_time), label: 'معالم في موعدها', hint: `${s.milestones.done} من ${s.milestones.total} تحققت` },
+      { value: pct(s.benefits.realization), label: 'تحقق المنافع', hint: `${s.benefits.measured} من ${s.benefits.total} مقيسة` },
+      { value: s.updates, label: 'تحديث شهري' },
+    ])}
+    <h3>المعالم</h3>
+    ${table([{ label: 'المعلم' }, { label: 'المستهدف', width: '22mm' }, { label: 'الحالة', width: '24mm' }, { label: 'تحقق في', width: '22mm' }, { label: 'ملاحظة' }], ms)}
+    <h3>المنافع</h3>
+    ${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '20mm' }, { label: 'المستهدف', width: '20mm' }, { label: 'الفعلي', width: '20mm' }, { label: 'التحقق', width: '16mm' }], bs)}
+    ${points(cps, '')}
+    ${last?.narrative ? callout(`آخر ما كتبه القائد (${last.period})`, last.narrative) : ''}`,
+    'الخطة من الوثيقة المعتمدة، والفعلي من تحديثات القائد الشهرية. نسبة التحقق هي ما تحرك من خط الأساس نحو المستهدف، ويؤكد الراعي أرقام نقطتي المراجعة.');
+}
+
 // ── الوثيقة ──
-// doc: { meta, summary, sections, cost, checks, review, sponsor, rubric }
+// doc: { meta, summary, sections, cost, checks, review, sponsor, rubric, tracking? }
 export function capstoneReport(doc) {
   const m = doc.meta || {};
   const secs = doc.sections || [];
@@ -221,6 +246,8 @@ export function capstoneReport(doc) {
           : raw('<b>الراعي:</b> اعتُمدت بقرار الإدارة دون تأييد الراعي.'),
       ], '')}`);
   }
+
+  if (approved && doc.tracking?.summary) body += trackingBlock(doc.tracking);
 
   return {
     meta: {

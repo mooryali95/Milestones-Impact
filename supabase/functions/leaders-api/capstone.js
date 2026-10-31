@@ -115,7 +115,7 @@ export function bindAnswers(fields, answers, initiative) {
 // اسم المبادرة من مصدره الوحيد: حقل title في بطاقة المبادرة
 export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || '').trim() || null;
 
-const norm = (t) => String(t || '').replace(/\(.*?\)/g, '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+export const norm = (t) => String(t || '').replace(/\(.*?\)/g, '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const SYNONYMS = [['الخطر', 'البند', 'الوصف'], ['الاجراء', 'الاستجابه', 'التدخل'], ['المسؤول', 'المالك'], ['المؤشر', 'المقياس']].map((g) => g.map(norm));
 // أقرب عمود في المصدر لعمود الهدف: نفس الاسم، أو اسم يحتوي الآخر
 function columnMap(target, source) {

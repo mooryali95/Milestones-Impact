@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
+import Outcomes from './Outcomes.jsx';
 
 const VERDICT = {
   confirmed: ['تغير مؤكد', 'ok'], emerging: ['مؤشرات أولية', 'warn'], none: ['لا دليل كافٍ', ''], decline: ['تراجع يحتاج مراجعة', 'bad'],
@@ -155,7 +156,7 @@ function People({ list, onPerson }) {
   );
 }
 
-export default function Impact({ orgs, onPerson, catalog, reload, canWrite }) {
+export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, canWrite }) {
   const { toast } = useUI();
   const [org, setOrg] = useState('');
   const [r, setR] = useState(null);
@@ -194,6 +195,7 @@ export default function Impact({ orgs, onPerson, catalog, reload, canWrite }) {
       {r.counts.paired > 0 ? <Cohort r={r} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
       {r.counts.paired > 0 && <Overall o={r.overall} />}
       <Transfer rows={r.transfer} />
+      <Outcomes org={org} onOpen={onCapstone} />
       <People list={r.participants} onPerson={onPerson} />
       {catalog?.success && <Settings model={catalog.placement_model?.[0]} canWrite={canWrite} onSaved={() => { reload(); load(); }} />}
     </>
