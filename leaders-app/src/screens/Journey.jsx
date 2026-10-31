@@ -11,6 +11,7 @@ import Activity from './Activities.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
+import ChooseExpert from './ChooseExpert.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
 function deviceLabel() {
@@ -448,6 +449,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       </section>
       {participant.status === 'completed' && <CertificateCard />}
       <RateExpert />
+      {approved && <ChooseExpert />}
 
       {!approved && profile && (
         <div className="banner gold">
