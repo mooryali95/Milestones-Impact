@@ -21,21 +21,32 @@ test('المشارك يختار خبيره من ثلاثة مرشحين', async 
     const b = JSON.parse(route.request().postData() || '{}');
     const r = {
       me,
-      'experts.suggest': () => s.chosen
-        ? { success: true, role: 'coach', role_ar: 'مدربك', request: { status: 'offered', status_ar: 'معروض على خبير', expert: s.chosen, title: null } }
-        : { success: true, role: 'coach', role_ar: 'مدربك', candidates: cards },
-      'experts.choose': () => { const e = cards.find((c) => c.id === b.expert_id); s.chosen = e?.full_name; return { success: true, status: 'offered', expert: s.chosen }; },
+      'experts.suggest': () => ({
+        success: true, role: b.role, role_ar: 'كوتش',
+        roles: [{ key: 'coach', title: 'كوتش', hint: 'جلسات التوجيه الفردية' }, { key: 'specialist', title: 'خبير موضوعي', hint: 'ورش' }],
+        contexts: { program: 'خلال البرنامج', capstone: 'أثناء بناء المبادرة', tracking: 'أثناء تنفيذ المبادرة' },
+        dimensions: { milestone: 'إدارة المشروعات', impact: 'الأثر', leadership: 'تمكين القائد' },
+        requests: s.chosen ? [{ id: 'r1', role: 'coach', role_ar: 'كوتش', status: 'offered', status_ar: 'معروض على خبير', expert: s.chosen, note: s.note }] : [],
+        candidates: s.chosen && b.role === 'coach' ? [] : cards,
+      }),
+      'experts.choose': () => { const e = cards.find((c) => c.id === b.expert_id); s.chosen = e?.full_name; s.note = b.note; s.sent = b; return { success: true, status: 'offered', expert: s.chosen }; },
     }[b.action];
     await route.fulfill({ json: typeof r === 'function' ? r() : r || { success: true, items: [] } });
   });
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-choose-00000000000000000000'); });
   await page.goto(APP);
   const card = page.locator('section', { has: page.locator('#cx-h') });
+  await card.getByRole('button', { name: 'اطلب الآن' }).click();
   await expect(card.getByText('خالد المطيري')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'اختره' }).first()).toBeDisabled();
+  await card.getByLabel(/ما الذي تحتاجه/).fill('مراجعة سجل المخاطر قبل عرضه على الراعي');
+  await card.getByLabel('متى').selectOption('tracking');
   await expect(card.getByText('★ 4.7 (9 تقييم)')).toBeVisible();
   await expect(card.getByText('خبير جديد في البرنامج')).toHaveCount(2);
   await expect(card).not.toContainText(/ريال|ساعة/);
   await card.getByRole('button', { name: 'اختره' }).first().click();
   await expect(card).toContainText('معروض على خبير');
+  await expect(card).toContainText('مراجعة سجل المخاطر');
+  expect(s.sent).toMatchObject({ role: 'coach', context: 'tracking', expert_id: 'e1' });
   await expect(card).toContainText('خالد المطيري');
 });

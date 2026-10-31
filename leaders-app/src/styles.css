@@ -1154,3 +1154,6 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .tr-ms small { color: var(--muted); }
 .cx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .cx-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; gap: 6px; }
+.cx-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.cx-live { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cx-live li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }

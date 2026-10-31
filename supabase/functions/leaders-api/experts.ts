@@ -3,13 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // ملف واحد للشخص بعدة أدوار. لا يعمل خبير قبل اعتماده (active)، وسعر الساعة
 // والملاحظة الداخلية للإدارة وحدها: expertPublic يحذفهما من كل رد لغيرها.
-import { mailButton, mailCode, mailShell, mailText } from '../_shared/mail.ts';
+import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
-import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -219,6 +219,7 @@ async function offerNext(req: any, pick?: any) {
   const what = [roleAr(req.role), need.dimension ? (DIM_AR as Record<string, string>)[need.dimension] : null, need.level ? `مستوى ${(LEVEL_AR as Record<string, string>)[need.level]}` : null].filter(Boolean).join(' · ');
   sendMail(e.email, `طلب خدمة: ${roleAr(req.role)}`, shell(`أهلًا ${firstName(e.full_name)}`,
     mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${what}</b>.`)
+    + (req.note ? mailNote(`<b>ما يحتاجه:</b> ${esc(req.note)}`) : '')
     + mailText(`لديك ${OFFER_HOURS} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
     + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب'))).catch(() => {});
   return { status: 'offered', expert_id: e.id };
@@ -299,6 +300,7 @@ export async function offerGet(b: Body) {
       dimension_ar: r.dimension ? (DIM_AR as Record<string, string>)[r.dimension] : null, level_ar: lvl ? (LEVEL_AR as Record<string, string>)[lvl] : null,
       // قبل القبول: الاسم الأول وحده
       participant: r.status === 'accepted' ? r.participants?.full_name : firstName(r.participants?.full_name), expires_at: r.expires_at,
+      note: r.note || null, context: r.manual_reason?.startsWith('اختيار المشارك') ? r.manual_reason.split(' · ')[1] || null : null,
     },
   };
 }
@@ -549,34 +551,46 @@ export async function portalRate(e: any, b: Body) {
 // ════════════════════════════════════════════════════════════════
 // الترشيح نفسه (candidates وMATCH_WEIGHTS)، والطلب نفسه (expert_requests وofferNext):
 // المشارك يختار من الثلاثة الأوائل فقط، والتقييم يظهر بعد MIN_RATINGS وحده، ولا سعر ولا حِمل.
-const SELF_ROLES = ['coach', 'mentor'];
 const publicCard = (e: any) => ({
   id: e.id, full_name: e.full_name, title: e.title || null, bio: e.bio ? String(e.bio).slice(0, 280) : null,
   years: e.years_experience ?? null, sectors: (e.sectors || []).slice(0, 3), languages: e.languages || [],
   rating: e.rating?.visible ? { avg: e.rating.avg, count: e.rating.count } : null,
 });
 
+const consultRole = (r: any) => (CONSULT_ROLES.includes(r) ? r : 'coach');
+const consultContext = (c: any) => ((CONSULT_CONTEXT as Record<string, string>)[c] ? c : 'program');
+const liveView = (x: any) => ({ id: x.id, role: x.role, role_ar: roleAr(x.role), status: x.status,
+  status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[x.status] || x.status, dimension: x.dimension,
+  note: x.note || null, expert: x.experts?.full_name || null, title: x.experts?.title || null, expires_at: x.expires_at });
+
+// الاستشارة متى احتاجها المشارك: طلباته القائمة، وأنسب ثلاثة للدور والمحور المختارين
 export async function mySuggestions(p: any, b: Body) {
-  const role = SELF_ROLES.includes(b.role) ? b.role : 'coach';
-  const { data: live } = await db.from('expert_requests').select('id, status, expires_at, experts(full_name, title)')
-    .eq('participant_id', p.id).eq('role', role).in('status', LIVE).maybeSingle();
-  if (live) return { success: true, role, role_ar: roleAr(role), request: { status: live.status, status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[live.status] || live.status, expert: (live.experts as any)?.full_name || null, title: (live.experts as any)?.title || null, expires_at: live.expires_at } };
+  const role = consultRole(b.role);
+  const { data: live } = await db.from('expert_requests').select('id, role, status, dimension, note, expires_at, experts(full_name, title)')
+    .eq('participant_id', p.id).in('status', LIVE).order('created_at', { ascending: false });
+  const requests = (live || []).map(liveView);
+  const busy = requests.some((x) => x.role === role);
+  const roles = CONSULT_ROLES.map((r) => ({ key: r, title: roleAr(r), hint: (EXPERT_ROLE_AR as Record<string, string[]>)[r][1] }));
+  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests };
+  if (busy) return { ...base, candidates: [] };
   const { need } = await needFor(p.id, role, b.dimension || null);
-  const list = (await candidates(need, p.id)).slice(0, 3);
-  return { success: true, role, role_ar: roleAr(role), candidates: list.map(publicCard) };
+  return { ...base, candidates: (await candidates(need, p.id)).slice(0, 3).map(publicCard) };
 }
 
 export async function myChoose(p: any, b: Body) {
-  const role = SELF_ROLES.includes(b.role) ? b.role : 'coach';
+  const role = consultRole(b.role);
+  const context = consultContext(b.context);
+  const note = b.note ? String(b.note).trim().slice(0, 1000) : null;
   const { need } = await needFor(p.id, role, b.dimension || null);
   const top = (await candidates(need, p.id)).slice(0, 3);
   const pick = top.find((e: any) => e.id === b.expert_id);
   if (!pick) throw new Fail('اختر أحد الخبراء المقترحين لك', 400);
   const { data, error } = await db.from('expert_requests').insert({
-    participant_id: p.id, role, dimension: need.dimension, status: 'open', created_by: p.email, manual_reason: 'اختيار المشارك',
+    participant_id: p.id, role, dimension: need.dimension, status: 'open', created_by: p.email, note,
+    manual_reason: `اختيار المشارك · ${(CONSULT_CONTEXT as Record<string, string>)[context]}`,
   }).select('*').single();
   if (error) throw new Fail(error.code === '23505' ? `لديك طلب ${roleAr(role)} قائم` : 'تعذّر حفظ اختيارك', error.code === '23505' ? 409 : 500);
-  await audit('participant', p.email, 'expert-request.chosen', 'expert_requests', data.id, null, { expert_id: pick.id });
+  await audit('participant', p.email, 'expert-request.chosen', 'expert_requests', data.id, null, { expert_id: pick.id, context });
   const r = await offerNext(data, pick);
   return { success: true, status: r.status, expert: pick.full_name };
 }

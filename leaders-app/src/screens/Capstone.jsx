@@ -9,6 +9,7 @@ import { call } from '../api.js';
 import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
+import ChooseExpert from './ChooseExpert.jsx';
 import { LEADER_WEIGHTS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -133,6 +134,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         </div>
       )}
       {c.status === 'approved' && <Tracking />}
+      {c.status !== 'approved' && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}

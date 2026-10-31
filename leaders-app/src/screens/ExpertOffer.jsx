@@ -48,6 +48,8 @@ export default function ExpertOffer() {
           <div><dt>الخدمة</dt><dd>{o.role_ar}</dd></div>
           {o.dimension_ar && <div><dt>البُعد</dt><dd>{o.dimension_ar}</dd></div>}
           {o.level_ar && <div><dt>مستوى المشارك</dt><dd>{o.level_ar}</dd></div>}
+          {o.context && <div><dt>التوقيت</dt><dd>{o.context}</dd></div>}
+          {o.note && <div><dt>ما يحتاجه</dt><dd>{o.note}</dd></div>}
           <div><dt>المشارك</dt><dd>{o.participant}</dd></div>
           {o.expires_at && <div><dt>المهلة</dt><dd>{left(o.expires_at)}</dd></div>}
         </dl>
