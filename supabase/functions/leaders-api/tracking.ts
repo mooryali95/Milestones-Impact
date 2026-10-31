@@ -122,8 +122,10 @@ async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: st
 async function verifyFrom(tk: unknown) {
   const token = String(tk || '');
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
-  const u = must(await db.from('capstone_updates').select('*, participants(id, full_name, email)').eq('verify_token_hash', await hash(token)).maybeSingle()) as any;
+  // المتابعة مربوطة بالوثيقة لا بالمشارك مباشرة، فيُقرأ صاحبها في استعلام ثانٍ
+  const u = must(await db.from('capstone_updates').select('*').eq('verify_token_hash', await hash(token)).maybeSingle()) as any;
   if (!u) throw new Fail('الرابط غير صالح أو استُبدل بطلب أحدث', 404, 'invalid');
+  u.participants = must(await db.from('participants').select('id, full_name, email').eq('id', u.participant_id).maybeSingle());
   if (u.verify_status === 'pending' && new Date(u.verify_expires_at) < new Date()) throw new Fail('انتهت صلاحية الرابط، يرسل القائد المراجعة من جديد ليصلك رابط آخر', 410, 'expired');
   return u;
 }
