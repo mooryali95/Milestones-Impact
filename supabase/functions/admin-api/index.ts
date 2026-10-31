@@ -254,7 +254,34 @@ async function challengeFlood(sb: SB): Promise<boolean> {
 
 // whitelists: what admin sessions may write
 const PROCESS_FIELDS = ["insight", "why_it_matters", "description", "outputs", "duration", "feeds", "fed_by"];
-const REG_ADMIN_FIELDS = ["submitted", "submittedAt", "reopenRequested"];
+const REG_ADMIN_FIELDS = ["submitted", "submittedAt", "reopenRequested", "dates", "confirmed"];
+// مواعيد التسجيل وتأكيدها: مفاتيح العمليات الست عشرة وحدها، والقيمة تاريخ صحيح أو منطقية
+const PROC_KEY = /^(creation|innovation|establishment|making)-[1-4]$/;
+function cleanRegField(k: string, v: unknown): unknown {
+  if (k === "dates") {
+    if (!v || typeof v !== "object") throw new Error("مواعيد غير صحيحة");
+    const out: Record<string, string> = {};
+    for (const [key, d] of Object.entries(v as Record<string, unknown>)) {
+      if (!PROC_KEY.test(key)) throw new Error(`عملية غير معروفة: ${key}`);
+      if (d == null || d === "") continue;
+      if (Number.isNaN(Date.parse(String(d)))) throw new Error(`تاريخ غير صحيح: ${key}`);
+      out[key] = String(d).slice(0, 10);
+    }
+    return out;
+  }
+  if (k === "confirmed") {
+    if (!v || typeof v !== "object") throw new Error("تأكيدات غير صحيحة");
+    const out: Record<string, boolean> = {};
+    for (const [key, c] of Object.entries(v as Record<string, unknown>)) {
+      if (!PROC_KEY.test(key)) throw new Error(`عملية غير معروفة: ${key}`);
+      if (c === true) out[key] = true;
+    }
+    return out;
+  }
+  if (k === "submitted" || k === "reopenRequested") return v === true;
+  if (k === "submittedAt") return v ? new Date(String(v)).toISOString() : null;
+  return v;
+}
 const CONTACT_FIELDS = ["status", "context"];
 
 Deno.serve(async (req: Request) => {
@@ -593,8 +620,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       const id = String(body.id || "");
       const fields = body.fields || {};
       const updates: Record<string, unknown> = {};
-      for (const k of REG_ADMIN_FIELDS) if (k in fields) updates[k] = fields[k];
+      try {
+        for (const k of REG_ADMIN_FIELDS) if (k in fields) updates[k] = cleanRegField(k, fields[k]);
+      } catch (e) { return json({ success: false, message: (e as Error).message }, 400); }
       if (!id || !Object.keys(updates).length) return json({ success: false, message: "بيانات ناقصة" }, 400);
+      // تأكيد بلا موعد لا معنى له: يسقط التأكيد عن عملية حُذف موعدها
+      if (updates.dates && updates.confirmed) {
+        for (const key of Object.keys(updates.confirmed as Record<string, boolean>)) if (!(key in (updates.dates as Record<string, string>))) delete (updates.confirmed as Record<string, boolean>)[key];
+      }
       const { error } = await sb.from("registrations").update(updates).eq("id", id);
       if (error) throw error;
       await audit("update-reg", { id, updates });
@@ -604,7 +637,16 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     if (action === "save-process") {
       const key = String(body.process_key || "");
       const updates: Record<string, unknown> = {};
-      for (const k of PROCESS_FIELDS) if (k in (body.updates || {})) updates[k] = body.updates[k];
+      for (const k of PROCESS_FIELDS) {
+        if (!(k in (body.updates || {}))) continue;
+        const v = body.updates[k];
+        if (["outputs", "feeds", "fed_by"].includes(k)) {
+          const list = (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean).slice(0, 20);
+          if (k !== "outputs" && list.some((x) => !PROC_KEY.test(x))) return json({ success: false, message: "تبعية لعملية غير معروفة" }, 400);
+          updates[k] = list;
+        } else updates[k] = String(v ?? "").slice(0, 4000);
+      }
+      updates.updated_at = new Date().toISOString();
       if (!key || !Object.keys(updates).length) return json({ success: false, message: "بيانات ناقصة" }, 400);
       const { error } = await sb.from("process_details").update(updates).eq("process_key", key);
       if (error) throw error;
@@ -616,7 +658,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       const key = String(body.key || "");
       if (!key || !("value" in body)) return json({ success: false, message: "بيانات ناقصة" }, 400);
       const { error } = await sb.from("app_content")
-        .update({ value: body.value, updated_at: new Date().toISOString() }).eq("key", key);
+        .update({ value: String(body.value ?? "").slice(0, 4000), updated_at: new Date().toISOString() }).eq("key", key);
       if (error) throw error;
       await audit("save-content", { key });
       return json({ success: true });

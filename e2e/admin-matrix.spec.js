@@ -12,10 +12,11 @@ const regs = [
 async function admin(page) {
   const calls = [];
   await page.route(/rest\/v1\/process_details/, (r) => r.fulfill({ json: [] }));
+  await page.route(/rest\/v1\/app_content/, (r) => r.fulfill({ json: [{ key: 'hero_title', value: 'هندسة القيمة' }, { key: 'cta_start', value: 'ابدأ رحلتك' }] }));
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b);
-    const r = { 'list-regs': { success: true, registrations: regs }, 'unlock-reg': { success: true }, 'list-contacts': { success: true, contacts: [] } }[b.action];
+    const r = { 'list-regs': { success: true, registrations: regs }, 'unlock-reg': { success: true }, 'update-reg': { success: true }, 'save-process': { success: true }, 'save-content': { success: true }, 'list-contacts': { success: true, contacts: [] } }[b.action];
     await route.fulfill({ json: r ?? { success: true, contacts: [] } });
   });
   await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: false, message: 'x' } }));
@@ -58,4 +59,32 @@ test('الإحصاءات: مسار اكتمل حجزه يبلغ عموده كا�
   await page.locator('.la-tabs').getByRole('button', { name: 'الإحصاءات' }).click();
   const widths = await page.locator('.la-fn-bar i').evaluateAll((els) => els.map((e) => e.style.width));
   expect(widths).toEqual(['75%', '50%', '50%', '50%']);
+});
+
+test('تحكم كامل: تعديل المواعيد والتأكيد، ورفض إعادة الفتح، وتحرير العملية ونصوص الموقع', async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 1100 });
+  const calls = await admin(page);
+  await page.locator('.la-tabs').getByRole('button', { name: 'التسجيلات' }).click();
+  await page.locator('.mx-table tbody tr', { hasText: regs[0].name }).click();
+  const d = page.locator('input[type=date]').first();
+  await d.fill('2026-12-01');
+  await page.getByRole('checkbox').first().check();
+  await page.getByRole('button', { name: 'احفظ المواعيد' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'update-reg' && c.fields.dates)).toBeTruthy();
+  const sent = calls.find((c) => c.action === 'update-reg' && c.fields.dates).fields;
+  expect(Object.values(sent.dates)).toContain('2026-12-01');
+  if (regs[0].reopenRequested) {
+    await page.getByRole('button', { name: 'ارفض الطلب' }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'update-reg' && c.fields.reopenRequested === false)).toBeTruthy();
+  }
+  await page.getByRole('button', { name: '→ كل التسجيلات' }).click();
+  await page.locator('.la-tabs').getByRole('button', { name: 'المحتوى' }).click();
+  await page.locator('.la-reqs .la-link').first().click();
+  await page.getByLabel('البصيرة المنهجية').fill('بصيرة جديدة');
+  await page.getByRole('button', { name: 'احفظ العملية' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'save-process')).toMatchObject({ process_key: 'creation-1', updates: { insight: 'بصيرة جديدة' } });
+  await page.getByRole('button', { name: 'نصوص الموقع' }).click();
+  await page.getByLabel('hero_title').fill('هندسة القيمة الكامنة');
+  await page.getByRole('button', { name: 'احفظ', exact: true }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'save-content')).toMatchObject({ key: 'hero_title', value: 'هندسة القيمة الكامنة' });
 });
