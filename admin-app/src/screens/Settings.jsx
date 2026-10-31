@@ -266,7 +266,11 @@ function Users({ me }) {
                         {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                       </select>
                     </td>
-                    <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? 'var(--st-ok)' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : '—'}</span></td>
+                    <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? 'var(--st-ok)' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : u.passkey_only ? 'مفتاح فقط' : '—'}</span>
+                      {me.is_owner && !u.is_owner && (u.totp_enabled || u.passkey_only) && (
+                        <button className="btn-ghost-small" style={{ marginInlineStart: 6 }} title="يدخل برمز البريد ثم يضبط وسيلته من جديد"
+                          onClick={async () => { if (window.confirm(`إعادة وصول ${u.name}؟ يُلغى مفتاح المرور الوحيد وتطبيق المصادقة، ويدخل برمز البريد.`) && await update(u.id, 'reset_access', true)) { toast('✅ أُعيد الوصول وأُبلغ بالبريد'); load(); } }}>إعادة الوصول</button>
+                      )}</td>
                     <td>{u.is_owner ? '🔒' : (
                       <button className={`toggle-btn ${u.is_active ? 'on' : 'off'}`} role="switch" aria-checked={!!u.is_active} aria-label={`تفعيل ${u.name}`}
                         onClick={async () => { if (await update(u.id, 'is_active', !u.is_active)) load(); }} />

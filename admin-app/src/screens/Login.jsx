@@ -134,8 +134,13 @@ export default function Login({ onSignedIn }) {
               </button>
               <button className="login-btn" type="submit" disabled={!!busy} style={{ marginTop: 14 }}>{busy === 'verify' ? 'جارٍ التحقق...' : 'تأكيد الدخول'}</button>
               <Err msg={error} />
-              <div style={{ textAlign: 'center', marginTop: 14 }}>
+              <div style={{ textAlign: 'center', marginTop: 14, display: 'grid', gap: 8, justifyItems: 'center' }}>
                 <button type="button" className="btn-ghost-small" onClick={() => { setStep('email'); setCode(''); setError(''); }}>← تغيير البريد الإلكتروني</button>
+                <button type="button" className="btn-ghost-small" disabled={!!busy} onClick={async () => {
+                  setBusy('recover'); setError('');
+                  const r = await call('recovery-request', { email });
+                  setBusy(''); setError(r.message || '');
+                }}>فقدت مفتاح المرور أو تطبيق المصادقة؟</button>
               </div>
             </form>
           )}

@@ -2,8 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage,
-} from './core.ts';
+  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
   AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -18,13 +17,29 @@ type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
 
 // ── الجلسة ──
+// وصف مختصر للجهاز من المتصفح، لرسالة الدخول الجديد
+const deviceOf = (ua: string | null) => {
+  const s = String(ua || '');
+  const os = /iPhone|iPad/.test(s) ? 'iPhone/iPad' : /Android/.test(s) ? 'Android' : /Mac OS X/.test(s) ? 'Mac' : /Windows/.test(s) ? 'Windows' : /Linux/.test(s) ? 'Linux' : 'جهاز';
+  const br = /Edg\//.test(s) ? 'Edge' : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : /Firefox\//.test(s) ? 'Firefox' : '';
+  return br ? `${os} · ${br}` : os;
+};
+
 export async function issueSession(participantId: string, method: string, ctx: Ctx) {
+  // جهاز جديد: لصاحب الحساب دخول سابق، وليس بينها جلسة من المتصفح نفسه
+  const { data: prev } = await db.from('auth_sessions').select('user_agent').eq('participant_id', participantId).order('created_at', { ascending: false }).limit(20);
+  const isNew = (prev || []).length > 0 && ctx.ua && !(prev || []).some((x: any) => x.user_agent === ctx.ua);
   const token = randomToken();
   const expires = new Date(Date.now() + CONFIG.sessionDays * 864e5).toISOString();
   must(await db.from('auth_sessions').insert({
     participant_id: participantId, token_hash: await hash(token), method, ip: ctx.ip, user_agent: ctx.ua, expires_at: expires,
   }));
   await db.from('participants').update({ last_login_at: new Date().toISOString() }).eq('id', participantId);
+  if (isNew) {
+    const { data: p } = await db.from('participants').select('full_name, email').eq('id', participantId).maybeSingle();
+    const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
+    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when)).catch((e) => console.error('new device mail', e));
+  }
   return token;
 }
 

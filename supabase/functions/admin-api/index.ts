@@ -4,7 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { deliver, MAIL_FROM_DEFAULT, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
@@ -284,6 +284,32 @@ Deno.serve(async (req: Request) => {
         await sendEmail(email, `رمز الدخول: ${code} — ${APP}`, otpHtml(code));
       }
       return json({ success: true, message: SENT_MSG });
+    }
+
+    // ══ recovery-request: فقد المدير مفتاح مروره أو تطبيق المصادقة ══
+    // الرد واحد لكل بريد. يُبلَّغ المالك ليعيد الوصول من «المستخدمون»، ويُبلَّغ صاحب الحساب بما يحدث.
+    if (action === "recovery-request") {
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!isEmail(email)) return json({ success: false, message: "البريد غير صحيح" }, 400);
+      const reply = json({ success: true, message: "إن كان البريد لحساب إدارة يدخل بمفتاح مرور أو تطبيق مصادقة، أُبلغ المالك ليعيد وصولك، ويصلك بريد بذلك." });
+      const { data: u } = await sb.from("admin_users").select("id, name, email, is_active, totp_enabled, passkey_only, is_owner").ilike("email", email).limit(1);
+      const user = u?.[0];
+      if (!user?.is_active || user.is_owner || !(user.totp_enabled || user.passkey_only)) return reply;
+      const hourAgo = new Date(Date.now() - 36e5).toISOString();
+      const { count } = await sb.from("admin_audit_log").select("id", { count: "exact", head: true }).eq("action", "recovery-request").eq("user_id", user.id).gte("created_at", hourAgo);
+      if ((count ?? 0) >= 1) return reply;
+      await sb.from("admin_audit_log").insert({ user_id: user.id, user_email: user.email, action: "recovery-request", meta: { ip: req.headers.get("x-forwarded-for") || null } });
+      const { data: owners } = await sb.from("admin_users").select("email").eq("is_owner", true).eq("is_active", true);
+      for (const o of owners || []) {
+        await sendEmail(o.email, `طلب استعادة وصول: ${user.name} — ${APP}`, mailShell("طلب استعادة وصول", `
+${mailText(`طلب <b>${esc(user.name)}</b> (<span dir="ltr">${esc(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
+${mailNote("إن عرفت أنه طلبه: من «المستخدمون» اضغط «إعادة الوصول» لحسابه، فيدخل برمز البريد ثم يضبط وسيلته من جديد. وإن لم تعرف، تجاهل الطلب.")}
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }));
+      }
+      await sendEmail(user.email, `وصل طلب استعادة الوصول — ${APP}`, mailShell("وصل طلب استعادة الوصول", `
+${mailText(`أهلًا ${esc(user.name)}، أُبلغ مالك اللوحة بطلبك. حين يعيد وصولك تدخل برمز يصل إلى بريدك، ثم تضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
+${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }));
+      return reply;
     }
 
     // ══ login-verify: TOTP only when enabled, otherwise email OTP ══
@@ -657,6 +683,19 @@ Deno.serve(async (req: Request) => {
       const targetId = String(body.targetId || "");
       const field = String(body.field || "");
       const value = body.value;
+      // إعادة الوصول (المالك وحده): يُلغى الدخول بمفتاح المرور وحده وتطبيق المصادقة، فيدخل صاحبه برمز البريد
+      if (field === "reset_access") {
+        if (!session.isOwner) return json({ success: false, message: "إعادة الوصول للمالك وحده" }, 403);
+        const { data: t } = await sb.from("admin_users").select("id, name, email, is_owner").eq("id", targetId).limit(1);
+        if (!t?.length || t[0].is_owner) return json({ success: false, message: "المستخدم غير موجود أو محمي" }, 404);
+        await sb.from("admin_users").update({ passkey_only: false, totp_enabled: false, totp_secret: null }).eq("id", targetId);
+        await revokeSessions(sb, targetId);
+        await audit("reset-access", { targetId });
+        await sendEmail(t[0].email, `أُعيد وصولك إلى لوحة الإدارة — ${APP}`, mailShell("أُعيد وصولك إلى لوحة الإدارة", `
+${mailText(`أهلًا ${esc(t[0].name)}، أعاد مالك اللوحة وصولك. ادخل الآن برمز يصل إلى بريدك، ثم اضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
+${mailButton(SITES.admin, "الدخول إلى اللوحة")}`, { family: "access", preheader: "ادخل برمز البريد ثم اضبط وسيلتك الجديدة" }));
+        return json({ success: true });
+      }
       if (!["role_id", "is_active"].includes(field)) return json({ success: false, message: "حقل غير مسموح" }, 400);
       if (field === "role_id" && !ROLES.includes(String(value))) return json({ success: false, message: "دور غير معروف" }, 400);
       if (field === "is_active" && typeof value !== "boolean") return json({ success: false, message: "قيمة غير صحيحة" }, 400);
