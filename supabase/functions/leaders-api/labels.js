@@ -83,3 +83,6 @@ export const EXPERT_STATUS = {
 export const EXPERT_REQUEST_STATUS = {
   open: 'يبحث عن خبير', offered: 'معروض على خبير', accepted: 'قبِله الخبير', unmatched: 'لا خبير مطابق', cancelled: 'أُلغي', completed: 'اكتمل',
 };
+// معايير التقييم (1 إلى 5): ما يسأله المشارك عن خبيره، وما يسأله الخبير عن المشارك
+export const RATE_TO_EXPERT = { useful: 'أفادتني الجلسة فعلًا', clear: 'كان واضحًا ومحددًا', committed: 'التزم بالموعد والمتابعة' };
+export const RATE_TO_PARTICIPANT = { ready: 'جاء مستعدًا', engaged: 'تفاعل بجدية', progress: 'يتقدّم في هدفه' };

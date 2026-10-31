@@ -73,3 +73,13 @@ describe('الإسناد: ترشيح الخبير', () => {
     expect(matchScore({ ...base, load: { requests: 1, upcoming: 1 } }, need).parts.capacity).toBe(12.5);
   });
 });
+
+import { cleanRating, ratingSummary } from '../../supabase/functions/leaders-api/logic.js';
+it('التقييم: كل المعايير من 1 إلى 5، والمتوسط مرئي بعد خمسة', () => {
+  expect(cleanRating({ a: 5, b: 4, c: 3, x: 9 }, ['a', 'b', 'c'])).toEqual({ scores: { a: 5, b: 4, c: 3 }, overall: 4 });
+  expect(cleanRating({ a: 5, b: 0, c: 3 }, ['a', 'b', 'c'])).toBeNull();
+  expect(cleanRating({ a: 5, b: 4 }, ['a', 'b', 'c'])).toBeNull();
+  expect(ratingSummary([{ overall: 4 }, { overall: 5 }])).toEqual({ avg: 4.5, count: 2, visible: false });
+  expect(ratingSummary(Array.from({ length: 5 }, () => ({ overall: 3 }))).visible).toBe(true);
+  expect(ratingSummary([])).toEqual({ avg: null, count: 0, visible: false });
+});

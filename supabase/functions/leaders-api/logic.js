@@ -1692,7 +1692,7 @@ export function matchScore(e, need) {
   const used = (e.load?.requests || 0) + (e.load?.upcoming || 0);
   const capacity = hours > 0 ? Math.max(0, 1 - used / hours) * w.capacity : 0;
   // الجودة: التقييم من 5 حين يوجد بعدد كافٍ، وإلا محايد
-  const r = e.rating?.count >= 5 ? e.rating.avg : null;
+  const r = e.rating?.count >= MIN_RATINGS ? e.rating.avg : null;
   const quality = (r == null ? 0.6 : Math.max(0, Math.min(1, (r - 1) / 4))) * w.quality;
   const context = (need.sector && (e.sectors || []).some((s) => String(s).trim() === String(need.sector).trim()) ? 1 : 0) * w.context;
   const continuity = (e.served ? 1 : 0) * w.continuity;
@@ -1708,4 +1708,24 @@ export function rankExperts(experts, need, tried = []) {
     .map((e) => ({ ...e, match: matchScore(e, need) }))
     .filter((e) => !e.match.full)
     .sort((a, b) => b.match.total - a.match.total || ((a.load?.requests || 0) - (b.load?.requests || 0)) || String(a.id).localeCompare(String(b.id)));
+}
+
+// ── التقييم في الاتجاهين ──
+// يقبل المعايير المعروفة وحدها، كل منها 1 إلى 5، والمعدل متوسطها. ناقص = مرفوض
+export function cleanRating(scores, keys) {
+  const out = {};
+  for (const k of keys) {
+    const n = Math.round(Number(scores?.[k]));
+    if (!(n >= 1 && n <= 5)) return null;
+    out[k] = n;
+  }
+  const overall = Math.round((Object.values(out).reduce((a, n) => a + n, 0) / keys.length) * 100) / 100;
+  return { scores: out, overall };
+}
+// تقييم الخبير المجمّع: يُعرض رقمه لغير الإدارة بعد MIN_RATINGS فقط، فلا يُستدل على رأي فرد
+export const MIN_RATINGS = 5;
+export function ratingSummary(rows = []) {
+  const n = rows.length;
+  const avg = n ? Math.round((rows.reduce((a, r) => a + Number(r.overall), 0) / n) * 10) / 10 : null;
+  return { avg, count: n, visible: n >= MIN_RATINGS };
 }
