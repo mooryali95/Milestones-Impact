@@ -6,6 +6,7 @@
 // يقيس كل المنافع ويؤكدها راعي المبادرة. الملخص من الخادم وحده.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import ChooseExpert from './ChooseExpert.jsx';
 
 const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
 const CP_STATUS = { upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' };
@@ -129,6 +130,8 @@ export default function Tracking() {
           ))}</ul>
         </details>
       )}
+      {/* ما يحتاجه القائد في تحديثه يصير طلب استشارة بنقرة، لا ملاحظة تُقرأ فقط */}
+      <ChooseExpert context="tracking" title={d.current?.support ? 'اطلب خبيرًا لما تحتاجه' : 'استشارة أثناء التنفيذ'} note={d.current?.support || ''} />
     </section>
   );
 }

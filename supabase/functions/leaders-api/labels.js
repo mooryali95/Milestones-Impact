@@ -77,6 +77,9 @@ export const EXPERT_ROLE_AR = {
   assessor: ['مقيّم', 'تقييم مشروع التخرج النهائي والعرض'],
   mentor: ['مرشد', 'متابعة مشارك طوال رحلته'],
 };
+// الاستشارة يطلبها المشارك متى احتاجها: أدوارها ومواضعها في الرحلة
+export const CONSULT_ROLES = ['coach', 'mentor', 'specialist', 'advisor'];
+export const CONSULT_CONTEXT = { program: 'خلال البرنامج', capstone: 'أثناء بناء المبادرة', tracking: 'أثناء تنفيذ المبادرة' };
 export const EXPERT_STATUS = {
   applied: 'طلب انضمام', invited: 'مدعو', active: 'نشط', paused: 'متوقف مؤقتًا', suspended: 'موقوف', rejected: 'لم يُقبل',
 };
