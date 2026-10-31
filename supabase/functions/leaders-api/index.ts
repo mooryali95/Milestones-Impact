@@ -70,6 +70,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'org.logo': (p) => P.orgLogo(p),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
+  'experts.suggest': (p, b) => E.mySuggestions(p, b),
+  'experts.choose': (p, b) => E.myChoose(p, b),
   'ratings.submit': (p, b) => E.rateExpert(p, b),
   'logout': (_p, _b, sid) => P.logout(sid),
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),

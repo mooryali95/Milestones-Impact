@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
-import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -542,4 +542,41 @@ export async function portalRate(e: any, b: Body) {
   if (error) throw new Fail(error.code === '23505' ? 'قيّمت هذا من قبل' : 'تعذّر حفظ التقييم', error.code === '23505' ? 409 : 500);
   await audit('system', e.email, 'expert.rated-participant', 'participants', participantId);
   return { success: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// المشارك يختار خبيره: ثلاثة مرشحين بالاسم والتقييم، والعرض على من اختاره
+// ════════════════════════════════════════════════════════════════
+// الترشيح نفسه (candidates وMATCH_WEIGHTS)، والطلب نفسه (expert_requests وofferNext):
+// المشارك يختار من الثلاثة الأوائل فقط، والتقييم يظهر بعد MIN_RATINGS وحده، ولا سعر ولا حِمل.
+const SELF_ROLES = ['coach', 'mentor'];
+const publicCard = (e: any) => ({
+  id: e.id, full_name: e.full_name, title: e.title || null, bio: e.bio ? String(e.bio).slice(0, 280) : null,
+  years: e.years_experience ?? null, sectors: (e.sectors || []).slice(0, 3), languages: e.languages || [],
+  rating: e.rating?.visible ? { avg: e.rating.avg, count: e.rating.count } : null,
+});
+
+export async function mySuggestions(p: any, b: Body) {
+  const role = SELF_ROLES.includes(b.role) ? b.role : 'coach';
+  const { data: live } = await db.from('expert_requests').select('id, status, expires_at, experts(full_name, title)')
+    .eq('participant_id', p.id).eq('role', role).in('status', LIVE).maybeSingle();
+  if (live) return { success: true, role, role_ar: roleAr(role), request: { status: live.status, status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[live.status] || live.status, expert: (live.experts as any)?.full_name || null, title: (live.experts as any)?.title || null, expires_at: live.expires_at } };
+  const { need } = await needFor(p.id, role, b.dimension || null);
+  const list = (await candidates(need, p.id)).slice(0, 3);
+  return { success: true, role, role_ar: roleAr(role), candidates: list.map(publicCard) };
+}
+
+export async function myChoose(p: any, b: Body) {
+  const role = SELF_ROLES.includes(b.role) ? b.role : 'coach';
+  const { need } = await needFor(p.id, role, b.dimension || null);
+  const top = (await candidates(need, p.id)).slice(0, 3);
+  const pick = top.find((e: any) => e.id === b.expert_id);
+  if (!pick) throw new Fail('اختر أحد الخبراء المقترحين لك', 400);
+  const { data, error } = await db.from('expert_requests').insert({
+    participant_id: p.id, role, dimension: need.dimension, status: 'open', created_by: p.email, manual_reason: 'اختيار المشارك',
+  }).select('*').single();
+  if (error) throw new Fail(error.code === '23505' ? `لديك طلب ${roleAr(role)} قائم` : 'تعذّر حفظ اختيارك', error.code === '23505' ? 409 : 500);
+  await audit('participant', p.email, 'expert-request.chosen', 'expert_requests', data.id, null, { expert_id: pick.id });
+  const r = await offerNext(data, pick);
+  return { success: true, status: r.status, expert: pick.full_name };
 }
