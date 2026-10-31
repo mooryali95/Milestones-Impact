@@ -4,10 +4,10 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, parseQuiz, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
-import { bindAnswers, CHARTER_KEY, importRows, initiativeOf } from './capstone.js';
+import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
@@ -272,17 +272,29 @@ export async function postInstrumentFor(participantId: string) {
 // audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.
 // audience 'admin': التفصيل الكامل لكل بُعد.
 // هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
-const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, project_ar, journey_ar, priority_dimension';
-async function trackFor(levels: Record<string, string>) {
+const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, journey_ar, priority_dimension';
+// المشروع التطبيقي لا يُكتب لكل مسار: يُشتق من فصول وثيقة المبادرة نفسها
+async function trackFor(levels: Record<string, string>, scope: string | null = null) {
   const key = trackKey(levels);
   if (!key) return null;
-  const { data } = await db.from('tracks').select(TRACK_FIELDS).eq('key', key).maybeSingle();
-  return data || { key };
+  const [{ data }, models] = await Promise.all([
+    db.from('tracks').select(TRACK_FIELDS).eq('key', key).maybeSingle(),
+    db.from('learning_models').select('id, key, dimension, min_level, active, scopes, capstone_sort, title_ar').not('capstone_sort', 'is', null),
+  ]);
+  const t: any = data || { key };
+  return { ...t, project: trackProject(models.data || [], levels, scope, t.priority_dimension || null)?.text || null };
+}
+// محور الأولوية في مسار المشارك: يفتح حقول التعمق في نماذجه
+async function priorityFor(levels: Record<string, string>) {
+  const key = trackKey(levels);
+  if (!key) return null;
+  const { data } = await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle();
+  return (data as any)?.priority_dimension || null;
 }
 const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   ...(audience === 'admin' ? { key: t.key, priority_dimension: t.priority_dimension || null } : {}),
   title: t.title_ar || null, summary: t.summary_ar || null, focus: t.focus_ar || null,
-  project: t.project_ar || null, journey: t.journey_ar || null,
+  project: t.project || null, journey: t.journey_ar || null,
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
@@ -321,7 +333,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
       : null,
   ]);
-  const track = trackView(await trackFor(levels), audience);
+  const track = trackView(await trackFor(levels, p.work_scope || null), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
@@ -691,7 +703,7 @@ export async function handbookToc(p: any) {
     // الكتاب عام: يُعرض رمز المسار فقط
     code: trackKey(levels),
     chapters: chapters.map((m: any) => ({
-      id: m.id, dimension: m.dimension, title: m.title_ar, quiz: parseQuiz(m.quiz_md).length,
+      id: m.id, dimension: m.dimension, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
     })),
     models: { total: mine.length, submitted: mine.filter((m: any) => submitted.has(m.id)).length,
@@ -719,7 +731,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     reading: readingVerdict(rd),
     chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
-    quiz: shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
+    quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
@@ -762,7 +774,7 @@ export async function handbookComplete(p: any, b: Body) {
   const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md, quiz_md, title_ar').eq('id', String(b.id)).maybeSingle());
   if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
   // بالترتيب نفسه الذي عُرض به، فرقم الإجابة ورقم الصحيحة في النتيجة من القائمة المعروضة
-  const quiz = shuffleQuiz(parseQuiz(m.quiz_md), p.id + m.id);
+  const quiz = shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id);
   const g = gradeQuiz(quiz, b.answers);
   if (quiz.length && (!Array.isArray(b.answers) || b.answers.length < quiz.length || b.answers.some((x: any) => x === null || x === undefined))) {
     throw new Fail('أجب عن كل الأسئلة أولًا');
@@ -783,7 +795,8 @@ async function myModel(p: any, id: unknown) {
   const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
   if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
-  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope) };
+  const priority = await priorityFor(levels);
+  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
 }
 
 // اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
@@ -802,17 +815,18 @@ export async function capstoneStatus(participantId: string) {
 
 export async function modelsList(p: any) {
   const levels = await approvedLevels(p);
-  const [models, subs, pts] = await Promise.all([
+  const [models, subs, pts, priority] = await Promise.all([
     db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields, scopes, capstone_sort'),
     db.from('model_submissions').select('model_id, status, rating, bonus, answers, submitted_at, updated_at').eq('participant_id', p.id),
     pointsOf(p.id),
+    priorityFor(levels),
   ]);
   const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
   return {
     success: true,
     // تقدم كل نموذج: الحقول الإلزامية المكتملة من مجموعها، دون إرسال الإجابات نفسها
     models: modelsFor(must(models) ?? [], levels, p.work_scope).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
-      const fields = fieldsFor(all, levels[m.dimension], p.work_scope);
+      const fields = fieldsFor(all, levels[m.dimension], p.work_scope, m.dimension === priority);
       const sub = by[m.id];
       const total = fields.filter((f: any) => f.required !== false).length;
       const filled = total - missingFields(fields, sub?.answers || {}).length;

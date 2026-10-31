@@ -388,6 +388,9 @@ export function shuffleQuiz(quiz, seed) {
 //   - خيار
 //   * الخيار الصحيح
 //   لماذا: شرح يظهر بعد الإجابة
+// أسئلة الباب كما تخص المشارك: كتل المستوى والنطاق نفسها التي تصفّي المتن
+export const quizFor = (md, level, scope = null) => parseQuiz(filterHandbookMd(md, level, scope));
+
 export function parseQuiz(md) {
   const qs = [];
   let cur = null;
@@ -444,8 +447,12 @@ export function modelsFor(models, levels, scope = null) {
 // حقول النموذج كما تخص المشارك: الحقل قد يُطلب من مستوى أعلى (min_level)
 // أو لنطاقات بعينها (scopes)، فيتعمق النموذج نفسه مع المستوى والنطاق دون
 // نسخ نموذج لكل حالة. level: مستوى المشارك في بُعد النموذج.
-export function fieldsFor(fields, level, scope = null) {
-  return (fields || []).filter((f) => (!f.min_level || RANK[level] >= RANK[f.min_level]) && scopeOk(f.scopes, scope));
+// primary: بُعد النموذج هو محور الأولوية في مسار المشارك، فتظهر حقول التعمق (track).
+// min_rows_beginner: أقل صفوف الجدول للتأسيسي حين يكون أخف من غيره.
+export function fieldsFor(fields, level, scope = null, primary = false) {
+  return (fields || [])
+    .filter((f) => (!f.min_level || RANK[level] >= RANK[f.min_level]) && scopeOk(f.scopes, scope) && (!f.track || primary))
+    .map((f) => (f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f));
 }
 
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة

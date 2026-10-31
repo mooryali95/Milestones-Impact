@@ -14,7 +14,7 @@ import { cohortOf } from './programs.ts';
 import { isEmail, normalizeEmail, overallLevel, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
-  modelFields, READY_MIN, readiness, RUBRIC, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES } from './capstone.js';
+  modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 
@@ -38,15 +38,17 @@ async function build(p: any) {
     db.from('learning_models').select(MODEL_COLS).not('capstone_sort', 'is', null),
     db.from('model_submissions').select('model_id, status, rating, feedback_ar, answers, updated_at').eq('participant_id', p.id),
     db.from('capstones').select('*').eq('participant_id', p.id).maybeSingle(),
-    key ? db.from('tracks').select('key, title_ar, priority_dimension, project_ar').eq('key', key).maybeSingle() : Promise.resolve({ data: null }),
+    key ? db.from('tracks').select('key, title_ar, priority_dimension').eq('key', key).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
-  const mine = capstoneModels(must(models) ?? [], levels, scope);
+  const all = must(models) ?? [];
+  const priority = (track as any).data?.priority_dimension || null;
+  const mine = capstoneModels(all, levels, scope);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   const sections = mine.map((m: any) => {
-    const fields = modelFields(m, levels, scope);
+    const fields = modelFields(m, levels, scope, priority);
     const sub = by[m.id];
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
     return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };
@@ -57,7 +59,7 @@ async function build(p: any) {
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, scope, track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, scope, priority, project: trackProject(all, levels, scope, priority), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
 const sectionView = (s: any) => ({
@@ -85,7 +87,7 @@ export async function get(p: any) {
   return {
     success: true,
     scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
-    track: d.track ? { title: d.track.title_ar, brief: d.track.project_ar || null, priority: d.track.priority_dimension || null } : null,
+    track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.priority } : null,
     initiative: d.initiative,
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
@@ -96,7 +98,7 @@ export async function get(p: any) {
       review: reviewView(c, status === 'approved'), sponsor: sponsorView(c),
     },
     can_submit: gate.ok, blocker: gate.ok ? null : gate.reason,
-    rubric: RUBRIC.map((r) => ({ key: r.key, title: r.title, dimension: r.dimension, anchors: r.anchors })),
+    rubric: rubricFor(d.levels).map((r) => ({ key: r.key, title: r.title, dimension: r.dimension, level: r.level, anchors: r.anchors })),
   };
 }
 
@@ -239,7 +241,7 @@ export async function adminGet(b: Body) {
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
     sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
     priority: state.track?.priority_dimension || null, max_revisions: MAX_REVISIONS,
-    rubric: RUBRIC, leader: await leaderScore(p, c?.score != null ? Number(c.score) : null),
+    rubric: rubricFor(state.levels), leader: await leaderScore(p, c?.score != null ? Number(c.score) : null),
   };
 }
 

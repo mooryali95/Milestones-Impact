@@ -4,8 +4,9 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, parseQuiz, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
+import { trackProject } from './capstone.js';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
 
@@ -374,7 +375,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   content_items:      { table: 'content_items', key: ['id'], sortable: true,
                         fields: ['kind', 'title_ar', 'description_ar', 'url', 'minutes', 'dimension', 'min_level', 'only_level', 'track_keys', 'exclude_tracks', 'required', 'min_pct', 'sort', 'active'] },
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
-                        fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'project_ar', 'journey_ar', 'priority_dimension'] },
+                        fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
                         fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
@@ -401,6 +402,9 @@ function cleanModelFields(input: unknown) {
       out.columns = (Array.isArray(f.columns) ? f.columns : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 10);
       if (!out.columns.length) throw new Fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
       out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+      // التأسيسي بصفوف أقل: لا يُحفظ إلا إن كان أقل من العام
+      const mb = Math.round(Number(f.min_rows_beginner) || 0);
+      if (mb >= 1 && mb < out.min_rows) out.min_rows_beginner = mb;
       // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
       const im = f.import && typeof f.import === 'object' ? f.import : null;
       if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
@@ -411,6 +415,8 @@ function cleanModelFields(input: unknown) {
     if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
     // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
     if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
+    // حقل تعمق المسار: يظهر لمن بُعد النموذج محور الأولوية في مساره فقط
+    if (f?.track === true) out.track = true;
     return out;
   });
 }
@@ -449,10 +455,11 @@ export async function track(b: Body) {
   const key = String(b.key || '');
   if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
   const levels = Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(key[i * 2 + 1]) - 1]]));
-  const [t, byP, mods] = await Promise.all([
+  const [t, byP, mods, models] = await Promise.all([
     db.from('tracks').select('*').eq('key', key).maybeSingle(),
     placementsByParticipant(),
     db.from('handbook_modules').select('*'),
+    db.from('learning_models').select('id, key, dimension, min_level, active, scopes, capstone_sort, title_ar').not('capstone_sort', 'is', null),
   ]);
   const ids = Object.entries(byP).filter(([, x]) => trackKey(x.levels) === key).map(([id, x]) => ({ id, approved: x.approved === 3 }));
   const { data: ps } = ids.length
@@ -461,6 +468,8 @@ export async function track(b: Body) {
   const approved = new Set(ids.filter((x) => x.approved).map((x) => x.id));
   return {
     success: true, track: t.data || { key }, levels,
+    // المشروع التطبيقي مشتق من فصول الوثيقة بنطاق المشروع، ولا يُكتب يدويًا
+    project: trackProject(models.data || [], levels, 'project', (t.data as any)?.priority_dimension || null),
     participants: (ps || []).map((p: any) => ({ ...p, approved: approved.has(p.id) })),
     handbook: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
       id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
@@ -558,7 +567,7 @@ export async function bookPreview(b: Body) {
     success: true, track: t.data || { key }, levels, scope,
     chapters: handbookModulesFor(mods.data || [], levels).map((m: any) => ({
       id: m.id, dimension: m.dimension, title: m.title_ar, min_level: m.min_level,
-      md: filterHandbookMd(m.body_md, levels[m.dimension], scope), reflection: m.reflection_ar || '', quiz: parseQuiz(m.quiz_md),
+      md: filterHandbookMd(m.body_md, levels[m.dimension], scope), reflection: m.reflection_ar || '', quiz: quizFor(m.quiz_md, levels[m.dimension], scope),
       // مختبرات الباب التي تصل هذا المسار، كما تظهر للمشارك أسفل الباب
       labs: (labs.data || []).filter((l: any) => l.dimension === m.dimension && l.chapter_key === m.chapter_key
         && LEVELS.indexOf(levels[l.dimension]) >= LEVELS.indexOf(l.min_level)).map((l: any) => ({ key: l.key, title: l.title_ar })),

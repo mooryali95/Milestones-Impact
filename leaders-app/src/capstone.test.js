@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   bindAnswers, canSubmit, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
-  leaderComposite, parseDate, parseNumber, readiness, RUBRIC, rubricScore, sectionState,
+  leaderComposite, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
-import { activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
 import { documentHtml } from '../../src/lib/brand/doc.js';
 
@@ -228,5 +228,46 @@ describe('الوثيقة الاحترافية', () => {
   it('الاعتماد يخفي فحوص الاتساق', () => {
     const { body } = capstoneReport({ ...doc, meta: { ...doc.meta, status: 'approved' } });
     expect(body).not.toContain('فحوص الاتساق');
+  });
+});
+
+describe('مواءمة المستوى والمسار', () => {
+  const models = [
+    { key: 'initiative-charter', title_ar: 'بطاقة المبادرة', dimension: 'milestone', min_level: 'beginner', capstone_sort: 10, scopes: [], fields: [] },
+    { key: 'wbs', title_ar: 'هيكل تجزئة العمل', dimension: 'milestone', min_level: 'intermediate', capstone_sort: 70, scopes: [], fields: [] },
+    { key: 'roadmap', title_ar: 'خريطة الطريق', dimension: 'milestone', min_level: 'beginner', capstone_sort: 110, scopes: ['program'], fields: [] },
+    { key: 'story', title_ar: 'قصة التحول', dimension: 'leadership', min_level: 'beginner', capstone_sort: 170, scopes: [], fields: [] },
+  ];
+  const all = (lv) => ({ milestone: lv, impact: lv, leadership: lv });
+
+  it('المشروع التطبيقي يُشتق من فصول المستوى والنطاق', () => {
+    const b = trackProject(models, all('beginner'), 'project', null);
+    expect(b.chapters).toBe(2);
+    expect(b.text).toContain('في فصلين.');
+    const i = trackProject(models, all('intermediate'), 'program', 'milestone');
+    expect(i.chapters).toBe(4);
+    expect(i.deep).toEqual(['بطاقة المبادرة', 'هيكل تجزئة العمل', 'خريطة الطريق']);
+    expect(i.text).toContain('في 4 فصول، وتتعمق فيها بحسب مسارك: بطاقة المبادرة');
+  });
+
+  it('المعيار يقرأ مستوى كل بُعد', () => {
+    const b = rubricFor(all('beginner')), a = rubricFor(all('advanced')), n = rubricFor(null);
+    expect(b).toHaveLength(RUBRIC.length);
+    b.forEach((r, k) => { expect(r.anchors).toHaveLength(4); expect(r.anchors).not.toEqual(a[k].anchors); expect(r.levels).toBeUndefined(); });
+    expect(n.map((r) => r.anchors)).toEqual(RUBRIC.map((r) => r.anchors));
+  });
+
+  it('حقل المسار لمحور الأولوية فقط، وصفوف أقل للتأسيسي', () => {
+    const fs = [{ key: 'a', type: 'table', min_rows: 8, min_rows_beginner: 5 }, { key: 't', type: 'textarea', track: true }];
+    expect(fieldsFor(fs, 'beginner').map((f) => f.key)).toEqual(['a']);
+    expect(fieldsFor(fs, 'beginner', null, true).map((f) => f.key)).toEqual(['a', 't']);
+    expect(fieldsFor(fs, 'beginner')[0].min_rows).toBe(5);
+    expect(fieldsFor(fs, 'advanced')[0].min_rows).toBe(8);
+  });
+
+  it('أسئلة الكتاب تتبع كتل المستوى', () => {
+    const md = 'س: أ؟\n- x\n* y\n\n:::min=advanced\nس: ب؟\n- x\n* y\n:::';
+    expect(quizFor(md, 'beginner')).toHaveLength(1);
+    expect(quizFor(md, 'advanced')).toHaveLength(2);
   });
 });

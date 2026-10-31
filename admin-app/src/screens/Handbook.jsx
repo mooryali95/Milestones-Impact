@@ -360,6 +360,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                 {f.type === 'table' && <>
                   <input aria-label={`أعمدة الحقل ${i + 1}`} defaultValue={(f.columns || []).join('، ')} placeholder="الأعمدة مفصولة بفاصلة" onChange={(e) => setField(i, { columns: splitList(e.target.value) })} />
                   <input aria-label={`أقل عدد صفوف للحقل ${i + 1}`} type="number" min="1" max="30" value={f.min_rows || 1} onChange={(e) => setField(i, { min_rows: Number(e.target.value) || 1 })} />
+                  <input aria-label={`أقل عدد صفوف للتأسيسي في الحقل ${i + 1}`} type="number" min="1" max="30" placeholder="للتأسيسي" title="أقل عدد صفوف للمستوى التأسيسي إن كان أخف" value={f.min_rows_beginner || ''} onChange={(e) => setField(i, { min_rows_beginner: Number(e.target.value) || undefined })} />
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
                 <div className="fb-more">
@@ -367,6 +368,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                     {LVLS.map((l) => <option key={l} value={l}>{l === 'beginner' ? 'لكل المستويات' : `من مستوى ${LVL[l]}`}</option>)}</select>
                   <span className="me-scopes" role="group" aria-label={`نطاقات الحقل ${i + 1}`}>{SCOPE_VIEW.map(([k, l]) => <label key={k}><input type="checkbox" checked={!(f.scopes || []).length || f.scopes.includes(k)}
                     onChange={() => setField(i, { scopes: toggle(f.scopes || [], k) })} /> {l}</label>)}</span>
+                  <label title="يظهر لمن محور الأولوية في مساره هو محور هذا النموذج"><input type="checkbox" checked={f.track === true} onChange={(e) => setField(i, { track: e.target.checked || undefined })} /> تعمق المسار فقط</label>
                   {f.type === 'text' && <label><input type="checkbox" checked={f.bind === 'initiative'} onChange={(e) => setField(i, { bind: e.target.checked ? 'initiative' : undefined })} /> يأخذ اسم المبادرة من بطاقتها</label>}
                   {f.type === 'table' && <select aria-label={`استيراد الحقل ${i + 1}`} value={f.import ? `${f.import.model}|${f.import.field}` : ''}
                     onChange={(e) => { const [model, field] = e.target.value.split('|'); setField(i, { import: model ? { model, field } : undefined }); }}>
