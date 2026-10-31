@@ -20,15 +20,20 @@ type Ctx = { ip: string | null; ua: string | null };
 // cohortId: دفعة المشارك؛ يرى جلسات دفعته والجلسات العامة لكل الدفعات.
 
 // الخبير صاحب الجلسة: يُختار صراحة، أو يُطابق نص المدرب (من الحجز أو المسجّل) ببريد خبير أو اسمه
-async function expertFor(id: unknown, coach: unknown): Promise<string | null> {
+// وإلا فكوتش المشارك المسند إليه بطلب مقبول (expert_requests): مصدر واحد لـ«من كوتشه»
+async function expertFor(id: unknown, coach: unknown, participantId?: string): Promise<string | null> {
   if (id) {
     const { data } = await db.from('experts').select('id').eq('id', String(id)).maybeSingle();
     if (data) return data.id;
   }
   const c = String(coach || '').trim();
-  if (!c) return null;
-  const { data } = await db.from('experts').select('id').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(1);
-  return data?.[0]?.id || null;
+  if (c) {
+    const { data } = await db.from('experts').select('id').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(1);
+    if (data?.[0]) return data[0].id;
+  }
+  if (!participantId) return null;
+  const { data: req } = await db.from('expert_requests').select('expert_id').eq('participant_id', participantId).eq('role', 'coach').eq('status', 'accepted').maybeSingle();
+  return req?.expert_id || null;
 }
 export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean, cohortId: string | null = null) {
   const mine = reqs.filter((r) => VERIFIED_KINDS.includes(r.kind) && r.active !== false && requirementApplies(r, levels));
@@ -268,7 +273,7 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
   }
   must(await db.from('coaching_sessions').upsert({
     participant_id: p.id, requirement_id: r.id, kind: 'booked', provider, external_id: e.external_id,
-    starts_at: e.starts_at, ends_at: e.ends_at, join_url: e.join_url, coach: e.coach, expert_id: await expertFor(null, e.coach), status: 'booked', updated_at: now,
+    starts_at: e.starts_at, ends_at: e.ends_at, join_url: e.join_url, coach: e.coach, expert_id: await expertFor(null, e.coach, p.id), status: 'booked', updated_at: now,
   }, { onConflict: 'external_id' }));
   await audit('system', provider, 'coaching.booked', 'participants', p.id, null, { starts_at: e.starts_at });
   return { success: true };
@@ -416,7 +421,7 @@ export async function coachingAdd(a: any, b: Body) {
     participant_id: String(b.participant_id), requirement_id: r.id, kind: 'manual', provider: 'manual', status,
     starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + (Number(b.minutes) || 60) * 6e4).toISOString(),
     join_url: b.join_url ? String(b.join_url).slice(0, 500) : null, note: b.note ? String(b.note).slice(0, 2000) : null,
-    coach: a.email, expert_id: await expertFor(b.expert_id, a.email), confirmed_by: status === 'attended' ? a.email : null, confirmed_at: status === 'attended' ? now : null,
+    coach: a.email, expert_id: await expertFor(b.expert_id, a.email, String(b.participant_id)), confirmed_by: status === 'attended' ? a.email : null, confirmed_at: status === 'attended' ? now : null,
   }));
   await audit('admin', a.email, 'coaching.add', 'participants', String(b.participant_id), null, { requirement_id: r.id, status });
   return { success: true };

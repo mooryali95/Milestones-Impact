@@ -8,6 +8,7 @@ import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
+import { RequestsBoard } from './ExpertMatch.jsx';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
@@ -160,7 +161,7 @@ function Profile({ id, canWrite, onBack }) {
   );
 }
 
-export default function Experts({ canWrite, expertId, onOpen }) {
+export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
   const [adding, setAdding] = useState(false);
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source']);
@@ -188,6 +189,7 @@ export default function Experts({ canWrite, expertId, onOpen }) {
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
           <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => e.roles.includes(k)).length}</b>{l}</span>)}</div></div>
       </div>
+      <RequestsBoard canWrite={canWrite} onPerson={onPerson} />
       {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
       <section className="la-card">
         <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding(true)}>+ خبير</button>}</div>
@@ -196,7 +198,7 @@ export default function Experts({ canWrite, expertId, onOpen }) {
           <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع" />
           {!all.length ? <p className="la-muted ce-empty">لا خبراء بعد. أضف أول خبير، أو شارك رابط «انضم كخبير».</p> : (
-            <div className="table-wrap"><table className="data-table la-cards">
+            <div className="table-wrap"><table className="data-table la-cards ex-table">
               <thead><tr><th>الخبير</th><th>الأدوار</th><th>الأبعاد</th><th>الطاقة</th><th>ما قدّمه</th><th>الحالة</th></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" onClick={() => onOpen(e.id)}>

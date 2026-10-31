@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · expert.apply (طلب انضمام خبير) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
@@ -52,6 +52,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'sponsor.get': X.sponsorGet,
   'sponsor.submit': X.sponsorSubmit,
   'expert.apply': E.apply,
+  'offer.get': E.offerGet,
+  'offer.respond': E.offerRespond,
+  'cron.expert-offers': E.sweepOffers,
 };
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
@@ -174,6 +177,12 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.expert-save': E.adminSave,
   'admin.expert-invite': E.adminInvite,
   'admin.expert-set-status': E.adminSetStatus,
+  'admin.expert-match': E.adminMatch,
+  'admin.expert-assign': E.adminAssign,
+  'admin.expert-requests': () => E.adminRequests(),
+  'admin.expert-request-cancel': E.adminCancelRequest,
+  'admin.expert-request-retry': E.adminRetryRequest,
+  'admin.expert-request-complete': E.adminCompleteRequest,
   'admin.program': (_a, b) => G.program(b),
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),

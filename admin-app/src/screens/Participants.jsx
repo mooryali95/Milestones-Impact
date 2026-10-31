@@ -11,6 +11,7 @@ import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
+import { ExpertAssign } from './ExpertMatch.jsx';
 import { stars } from '../handbook.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -326,6 +327,8 @@ function Person({ id, canWrite, onBack }) {
         )}
         {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
       </section>
+
+      <ExpertAssign participantId={id} canWrite={canWrite} />
 
       <section className="la-card"><h3>السجل</h3><ul className="la-log">
         {(r.history || []).length ? r.history.map((h, i) => <li key={i}><small>{date(h.created_at)}</small> {h.action} <small className="la-muted">{h.actor}</small></li>) : <li className="la-muted">لا شيء</li>}
