@@ -26,6 +26,7 @@ const MARKERS: [string, string, string][] = [
   ['20261026090000_leaders_assessment_v4', 'raters', 'phase'],
   ['20261029120000_leaders_capstone', 'capstones', 'participant_id'],
   ['20261031140000_leaders_capstone_tracking', 'capstone_updates', 'id'],
+  ['20261031150000_leaders_level_fit', 'backup_20261031_level_fit', 'kind'],
 ];
 
 async function present(table: string, column: string, schema: any = db) {

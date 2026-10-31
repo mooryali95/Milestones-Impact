@@ -112,7 +112,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
         {t.summary_ar && <p>{t.summary_ar}</p>}
         <div className="la-track-cols">
           <div><h4>أولويات التطوير</h4><ol>{lines(t.focus_ar).map((x, i) => <li key={i}>{x}</li>)}</ol></div>
-          <div><h4>المشروع التطبيقي</h4><p>{String(t.project_ar || '').replace(/^مشروعك التطبيقي:\s*/, '')}</p></div>
+          <div><h4>المشروع التطبيقي</h4><p>{r.project?.text || 'لا فصول وثيقة بعد'}</p><small className="la-muted">يُشتق من فصول وثيقة المبادرة بمستويات المسار، فيُحرَّر من النماذج لا من هنا.</small></div>
           <div><h4>توجيه الرحلة</h4><ul>{lines(t.journey_ar).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
         </div>
       </section>

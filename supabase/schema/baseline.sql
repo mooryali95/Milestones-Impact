@@ -1029,7 +1029,6 @@ create table if not exists leaders.tracks (
   title_ar text not null,
   summary_ar text,
   focus_ar text,
-  project_ar text,
   journey_ar text,
   updated_at timestamp with time zone default now() not null,
   title_en text,

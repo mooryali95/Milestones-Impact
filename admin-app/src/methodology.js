@@ -140,7 +140,6 @@ export const TRACK_FIELDS = [
   { name: 'title_ar', label: 'اسم المسار' },
   { name: 'summary_ar', label: 'لمن صُمّم المسار', type: 'textarea', rows: 3 },
   { name: 'focus_ar', label: 'أولويات التطوير (كل سطر بند)', type: 'textarea', rows: 4 },
-  { name: 'project_ar', label: 'المشروع التطبيقي', type: 'textarea', rows: 2 },
   { name: 'journey_ar', label: 'كيف تتوجه الرحلة: التدريب والتوجيه ومجتمع الممارسة (كل سطر بند)', type: 'textarea', rows: 4 },
   { name: 'priority_dimension', label: 'محور التركيز الأول', type: 'select', options: DIM },
 ];

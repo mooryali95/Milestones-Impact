@@ -20,7 +20,7 @@ export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCoun
 // أسئلة كُتبت لكن لن تظهر: بلا خيار صحيح أو بأقل من خيارين
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;
 // كل ملاحظات الباب: كتله واختباره معًا، والخطأ أولًا
-export const chapterLint = (m) => [...lintHandbookMd(m.body_md, m.min_level), ...lintQuiz(m.quiz_md)]
+export const chapterLint = (m) => [...lintHandbookMd(m.body_md, m.min_level), ...lintHandbookMd(m.quiz_md, m.min_level), ...lintQuiz(m.quiz_md)]
   .sort((a, b) => (a.level === 'error' ? 0 : 1) - (b.level === 'error' ? 0 : 1));
 // مختبرات الباب: تظهر للمشارك أسفل الباب بمطابقة الإطار ومفتاح الباب
 export const chapterLabs = (catalog, m) => (catalog.lab_links || []).filter((l) => m && l.dimension === m.dimension && l.chapter_key === m.chapter_key);
