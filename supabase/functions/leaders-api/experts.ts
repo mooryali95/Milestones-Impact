@@ -4,10 +4,11 @@
 // ملف واحد للشخص بعدة أدوار. لا يعمل خبير قبل اعتماده (active)، وسعر الساعة
 // والملاحظة الداخلية للإدارة وحدها: expertPublic يحذفهما من كل رد لغيرها.
 import { mailButton, mailCode, mailShell, mailText } from '../_shared/mail.ts';
-import { SITES } from '../_shared/sites.js';
+import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
+import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { cleanExpert, cleanRating, expertPublic, expertStats, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
+import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
@@ -441,11 +442,26 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
   if (!used?.length) throw new Fail('الرمز مستخدم من قبل', 400, 'used');
   const { data: e } = await db.from('experts').select('*').eq('id', ch.expert_id).maybeSingle();
   if (!portalOk(e) || e.email !== email) throw new Fail('لا يوجد ملف خبير فعّال لهذا البريد', 403, 'denied');
+  return { success: true, token: await openSession(e, ctx, 'code'), expert: { full_name: e.full_name } };
+}
+
+// الدخول بحساب جوجل: البريد الموثّق من جوجل يجب أن يطابق بريد ملف خبير معتمد. لا إنشاء حساب من هنا
+export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
+  const credential = String(b.credential || '');
+  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
+  const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
+  if (id.error) throw new Fail(id.error, 401, 'google');
+  const { data: e } = await db.from('experts').select('*').eq('email', id.email).maybeSingle();
+  if (!portalOk(e)) throw new Fail('لا يوجد ملف خبير معتمد لهذا الحساب. ادخل بالبريد المسجل في شبكة الخبراء', 403, 'denied');
+  return { success: true, token: await openSession(e, ctx, 'google'), expert: { full_name: e.full_name } };
+}
+
+async function openSession(e: any, ctx: Ctx & { ua?: string | null }, method: string) {
   const token = randomToken();
   must(await db.from('expert_sessions').insert({ expert_id: e.id, token_hash: await hash(token), ip: ctx.ip, user_agent: ctx.ua || null, expires_at: new Date(Date.now() + SESSION_DAYS * 864e5).toISOString() }));
   await db.from('experts').update({ last_login_at: new Date().toISOString() }).eq('id', e.id);
-  await audit('system', e.email, 'expert.login', 'experts', e.id);
-  return { success: true, token, expert: { full_name: e.full_name } };
+  await audit('system', e.email, `expert.login.${method}`, 'experts', e.id);
+  return token;
 }
 
 export async function expertFromToken(token: unknown) {

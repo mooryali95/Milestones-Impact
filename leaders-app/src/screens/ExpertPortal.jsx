@@ -6,6 +6,7 @@
 // لا يرى سعر ساعته ولا تكلفته ولا ملاحظات الإدارة: الخادم لا يرسلها أصلًا.
 import React, { useEffect, useState } from 'react';
 import { xpCall, xpSession } from '../api.js';
+import GoogleButton from '../GoogleButton.jsx';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '·');
 const when = (d) => new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -41,6 +42,16 @@ function SignIn({ onIn }) {
         {err && <div className="alert err" role="alert">{err}</div>}
         <button className="btn" disabled={busy}>{busy ? 'لحظة…' : step === 'email' ? 'أرسل الرمز' : 'دخول'}</button>
         {step === 'code' && <button type="button" className="link small" onClick={() => { setStep('email'); setCode(''); }}>غيّر البريد</button>}
+        {step === 'email' && <>
+          <div className="divider">أو</div>
+          <GoogleButton disabled={busy} onCredential={async (credential) => {
+            setBusy(true); setErr('');
+            const r = await xpCall('xp.auth-google', { credential });
+            setBusy(false);
+            if (r.success) { xpSession.set(r.token); onIn(); } else setErr(r.message);
+          }} />
+          <p className="small muted">بحساب جوجل بالبريد نفسه المسجل في شبكة الخبراء.</p>
+        </>}
       </form>
     </div>
   );
