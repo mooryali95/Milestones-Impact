@@ -42,12 +42,10 @@ function useMatrix() {
     if (!r.success) { setRegs([]); setError(r.message); return; }
     setRegs((r.registrations || []).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
   }, []);
-  useEffect(() => {
-    load();
-    publicRead('process_details?select=*').then((rows) => setDetails(Object.fromEntries((rows || []).map((x) => [x.process_key, x])))).catch(() => {});
-  }, [load]);
+  const loadDetails = useCallback(() => publicRead('process_details?select=*').then((rows) => setDetails(Object.fromEntries((rows || []).map((x) => [x.process_key, x])))).catch(() => {}), []);
+  useEffect(() => { load(); loadDetails(); }, [load, loadDetails]);
   const procs = useMemo(() => buildProcs(details), [details]);
-  return { regs, procs, error, load };
+  return { regs, procs, error, load, loadDetails };
 }
 
 function Overview({ regs, procs, onOpen, onTab }) {
@@ -88,7 +86,13 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
   return (
     <section className="la-card">
       <FilterBar scope="matrix" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
-        shown={rows.length} total={regs.length} noun="تسجيل" placeholder="ابحث بالاسم أو البريد أو الجوال" />
+        shown={rows.length} total={regs.length} noun="تسجيل" placeholder="ابحث بالاسم أو البريد أو الجوال"
+        actions={<button className="refresh-btn" type="button" disabled={!rows.length} onClick={async () => {
+          const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
+          await exportWorkbook({ kind: 'MTX', title: 'تسجيلات مصفوفة التأثير', subtitle: rows.length === regs.length ? 'كل التسجيلات' : `${rows.length} من ${regs.length} حسب الفلاتر`, sheet: 'التسجيلات', file: 'Impact-Matrix' },
+            [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['بموعد', 10], ['مؤكدة', 10], ['الشبكة', 10], ['الحالة', 18], ['التسجيل', 16], ['التقديم', 16]].map(([label, width]) => ({ label, width })),
+            rows.map((r) => [r.name, r.email, r.phone, booked(r), confirmedOf(r), people(r).length, STATUS_AR[statusOf(r)][0], fmt(r.registeredAt), r.submittedAt ? fmt(r.submittedAt) : '']));
+        }}>تصدير Excel{rows.length !== regs.length ? ` (${rows.length})` : ''}</button>} />
       <div className="table-wrap"><table className="data-table la-cards mx-table">
         <thead><tr><th>المسجّل</th><th>الإنجاز</th><th>التأكيد</th><th>الشبكة</th><th>التسجيل</th><th>الحالة</th></tr></thead>
         <tbody>{rows.length ? rows.map((r) => {
@@ -113,7 +117,20 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
 function RegDetail({ r, procs, canWrite, onBack, reload }) {
   const { toast, confirm } = useUI();
   const [tab, setTab] = useState('schedule');
+  const [dates, setDates] = useState(() => ({ ...(r.dates || {}) }));
+  const [conf, setConf] = useState(() => ({ ...(r.confirmed || {}) }));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setDates({ ...(r.dates || {}) }); setConf({ ...(r.confirmed || {}) }); }, [r]);
+  const dirty = JSON.stringify(dates) !== JSON.stringify(r.dates || {}) || JSON.stringify(conf) !== JSON.stringify(r.confirmed || {});
   const a = analyzeBookings(procs, r.dates || {}, r.confirmed || {});
+  const save = async (fields, ok) => {
+    setBusy(true);
+    const res = await call('update-reg', { id: r.id, fields });
+    setBusy(false);
+    toast(res.success ? ok : res.message);
+    if (res.success) reload();
+    return res.success;
+  };
   const unlock = async () => {
     if (!(await confirm(`فتح خطة ${r.name} للتعديل؟ تعود إلى «قيد التخطيط» حتى يقدّمها من جديد.`))) return;
     const res = await call('unlock-reg', { id: r.id });
@@ -128,7 +145,12 @@ function RegDetail({ r, procs, canWrite, onBack, reload }) {
         <div><h3>{r.name}</h3><p className="la-muted" dir="ltr">{[r.email, r.phone].filter(Boolean).join(' · ')}</p>
           <small className="la-muted">سُجّل {fmt(r.registeredAt)}{r.submittedAt ? ` · قُدّمت ${fmt(r.submittedAt)}` : ''}</small></div>
         <div className="ex-side"><span className={`la-chip ${t}`}>{l}</span>
-          {canWrite && r.submitted && <button className="btn-sm primary" onClick={unlock}>{r.reopenRequested ? 'اقبل إعادة الفتح' : 'افتح للتعديل'}</button>}</div>
+          {canWrite && <div className="la-row">
+            {r.submitted && <button className="btn-sm primary" disabled={busy} onClick={unlock}>{r.reopenRequested ? 'اقبل إعادة الفتح' : 'افتح للتعديل'}</button>}
+            {r.reopenRequested && <button className="btn-sm ghost" disabled={busy} onClick={() => save({ reopenRequested: false }, 'رُفض طلب إعادة الفتح، وبقيت الخطة مكتملة')}>ارفض الطلب</button>}
+            {!r.submitted && <button className="btn-sm ghost" disabled={busy} onClick={async () => { if (await confirm(`اعتماد خطة ${r.name} مكتملة نيابة عنه؟`)) save({ submitted: true, submittedAt: new Date().toISOString() }, 'اعتُمدت الخطة مكتملة'); }}>اعتمدها مكتملة</button>}
+          </div>}
+        </div>
       </section>
       <div className="ex-kpis">
         <span><b>{booked(r)}/{PROC_COUNT}</b>عملية بموعد</span>
@@ -141,16 +163,27 @@ function RegDetail({ r, procs, canWrite, onBack, reload }) {
         {[['schedule', 'المواعيد'], ['analysis', 'التحليل'], ['network', 'الشبكة']].map(([k, v]) => <button key={k} className={`flt-preset${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>{v}</button>)}
       </nav>
       <section className="la-card">
-        {tab === 'schedule' && (
+        {tab === 'schedule' && <>
+          {canWrite && <p className="la-muted">عدّل الموعد أو التأكيد لأي عملية ثم احفظ. حذف الموعد يُسقط تأكيده.</p>}
           <div className="table-wrap"><table className="data-table">
-            <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الموعد</th><th>الحالة</th></tr></thead>
-            <tbody>{procs.map((p, j) => {
-              const d = r.dates?.[p.key]; const c = r.confirmed?.[p.key];
-              return <tr key={p.key}><td>{j + 1}</td><td><b>{p.nameAr}</b></td><td style={{ color: p.trackColor }}>{p.trackNameAr}</td><td>{d ? fmt(d) : <span className="la-muted">·</span>}</td>
-                <td>{c ? <span className="la-chip ok">مؤكد</span> : d ? <span className="la-chip warn">بموعد</span> : <span className="la-muted">·</span>}</td></tr>;
-            })}</tbody>
+            <thead><tr><th>#</th><th>العملية</th><th>المسار</th><th>الموعد</th><th>مؤكد</th></tr></thead>
+            <tbody>{procs.map((p, j) => (
+              <tr key={p.key}><td>{j + 1}</td><td><b>{p.nameAr}</b></td><td style={{ color: p.trackColor }}>{p.trackNameAr}</td>
+                <td>{canWrite
+                  ? <input type="date" className="mx-date" aria-label={`موعد ${p.nameAr}`} value={(dates[p.key] || '').slice(0, 10)}
+                      onChange={(e) => { const v = e.target.value; setDates((d) => { const n = { ...d }; if (v) n[p.key] = v; else { delete n[p.key]; } return n; }); if (!v) setConf((c) => { const n = { ...c }; delete n[p.key]; return n; }); }} />
+                  : dates[p.key] ? fmt(dates[p.key]) : <span className="la-muted">·</span>}</td>
+                <td>{canWrite
+                  ? <input type="checkbox" aria-label={`تأكيد ${p.nameAr}`} disabled={!dates[p.key]} checked={!!conf[p.key]} onChange={(e) => setConf((c) => { const n = { ...c }; if (e.target.checked) n[p.key] = true; else delete n[p.key]; return n; })} />
+                  : conf[p.key] ? <span className="la-chip ok">مؤكد</span> : <span className="la-muted">·</span>}</td></tr>
+            ))}</tbody>
           </table></div>
-        )}
+          {canWrite && <div className="la-row mx-save">
+            <button className="btn-sm primary" disabled={!dirty || busy} onClick={() => save({ dates, confirmed: conf }, 'حُفظت المواعيد')}>{busy ? 'لحظة…' : 'احفظ المواعيد'}</button>
+            {dirty && <button className="btn-sm ghost" onClick={() => { setDates({ ...(r.dates || {}) }); setConf({ ...(r.confirmed || {}) }); }}>تراجع</button>}
+            {dirty && <small className="la-muted">تعديلات لم تُحفظ</small>}
+          </div>}
+        </>}
         {tab === 'analysis' && (!a ? <p className="la-muted">يظهر التحليل بعد ثلاثة مواعيد على الأقل.</p> : <>
           <p><b>{a.pattern.nameAr}</b> · الجاهزية: {a.readinessAr}</p>
           {a.depGaps.length > 0 && <div className="la-err">تبعيات مفقودة: {a.depGaps.map((g) => `${g.process} يحتاج ${g.missing}`).join('، ')}</div>}
@@ -192,20 +225,88 @@ function Reports({ regs, procs, onOpen }) {
   );
 }
 
-function Content({ procs }) {
+// محتوى العمليات ونصوص الموقع: تحرير كامل، ويُحفظ في الخادم نفسه (save-process وsave-content)
+function ProcessEditor({ p, procs, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const init = () => ({ insight: p.insight, why_it_matters: p.whyItMatters, description: p.fullDesc, duration: p.duration, outputs: (p.outputs || []).join('\n'), feeds: p.feeds || [], fed_by: p.fedBy || [] });
+  const [v, setV] = useState(init);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setV(init()); }, [p]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = JSON.stringify(v) !== JSON.stringify(init());
+  const others = procs.filter((x) => x.key !== p.key);
+  const pick = (k) => (e) => setV({ ...v, [k]: [...e.target.selectedOptions].map((o) => o.value) });
+  const save = async () => {
+    setBusy(true);
+    const r = await call('save-process', { process_key: p.key, updates: { ...v, outputs: v.outputs.split('\n') } });
+    setBusy(false);
+    toast(r.success ? `حُفظت «${p.nameAr}»` : r.message);
+    if (r.success) onSaved();
+  };
+  return (
+    <fieldset className="mx-edit" disabled={!canWrite || busy}>
+      {[['insight', 'البصيرة المنهجية', 2], ['why_it_matters', 'لماذا يهم', 2], ['description', 'الوصف التفصيلي', 4]].map(([k, l, rows]) => (
+        <label key={k} className="of-field"><span className="of-label">{l}</span><textarea rows={rows} value={v[k] || ''} onChange={(e) => setV({ ...v, [k]: e.target.value })} /></label>
+      ))}
+      <div className="ex-grid">
+        <label className="of-field"><span className="of-label">المدة</span><input value={v.duration || ''} onChange={(e) => setV({ ...v, duration: e.target.value })} /></label>
+        <label className="of-field"><span className="of-label">المخرجات (سطر لكل مخرج)</span><textarea rows={3} value={v.outputs} onChange={(e) => setV({ ...v, outputs: e.target.value })} /></label>
+        <label className="of-field"><span className="of-label">تغذّي (اختر بـ Ctrl)</span><select multiple size={5} value={v.feeds} onChange={pick('feeds')}>{others.map((x) => <option key={x.key} value={x.key}>{x.trackNameAr} · {x.nameAr}</option>)}</select></label>
+        <label className="of-field"><span className="of-label">تتغذّى من</span><select multiple size={5} value={v.fed_by} onChange={pick('fed_by')}>{others.map((x) => <option key={x.key} value={x.key}>{x.trackNameAr} · {x.nameAr}</option>)}</select><small className="la-muted">يدخل في تحليل «التبعيات المفقودة»</small></label>
+      </div>
+      {canWrite && <div className="la-row mx-save"><button type="button" className="btn-sm primary" disabled={!dirty || busy} onClick={save}>{busy ? 'لحظة…' : 'احفظ العملية'}</button>
+        {dirty && <button type="button" className="btn-sm ghost" onClick={() => setV(init())}>تراجع</button>}</div>}
+    </fieldset>
+  );
+}
+
+function SiteText({ canWrite }) {
+  const { toast } = useUI();
+  const [rows, setRows] = useState(null);
+  const [edit, setEdit] = useState({});
+  const [q, setQ] = useState('');
+  const load = useCallback(() => publicRead('app_content?select=key,value&order=key').then((r) => { setRows(r || []); setEdit({}); }).catch(() => setRows([])), []);
+  useEffect(() => { load(); }, [load]);
+  if (!rows) return <Spinner />;
+  const save = async (key) => {
+    const r = await call('save-content', { key, value: edit[key] });
+    toast(r.success ? 'حُفظ النص، ويظهر فورًا في المصفوفة' : r.message);
+    if (r.success) load();
+  };
+  const shown = rows.filter((x) => !q || `${x.key} ${x.value}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <>
+      <input className="search-input mx-q" type="search" placeholder="ابحث في النصوص" aria-label="بحث في نصوص الموقع" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="mx-texts">{shown.map((x) => {
+        const v = edit[x.key] ?? String(x.value ?? '');
+        const dirty = x.key in edit && edit[x.key] !== String(x.value ?? '');
+        return (
+          <div key={x.key} className="mx-text">
+            <code dir="ltr">{x.key}</code>
+            <textarea rows={v.length > 70 ? 3 : 1} value={v} disabled={!canWrite} aria-label={x.key} onChange={(e) => setEdit({ ...edit, [x.key]: e.target.value })} />
+            {dirty && <div className="la-row"><button className="btn-sm primary" onClick={() => save(x.key)}>احفظ</button><button className="btn-sm ghost" onClick={() => { const n = { ...edit }; delete n[x.key]; setEdit(n); }}>تراجع</button></div>}
+          </div>
+        );
+      })}</div>
+    </>
+  );
+}
+
+function Content({ procs, canWrite, reloadDetails }) {
   const [open, setOpen] = useState(null);
+  const [part, setPart] = useState('processes');
   return (
     <section className="la-card">
-      <h3>محتوى العمليات</h3>
-      <p className="la-muted">نصوص العمليات الست عشرة كما تظهر للجهات. للعرض هنا، والتعديل من قاعدة البيانات (process_details).</p>
-      <ul className="la-reqs">{procs.map((p) => (
-        <li key={p.key} style={{ display: 'block' }}>
-          <button className="la-link" aria-expanded={open === p.key} onClick={() => setOpen(open === p.key ? null : p.key)} style={{ color: p.trackColor }}>{p.trackNameAr} · {p.nameAr}</button>
-          {open === p.key && <div className="mx-content">
-            {[['البصيرة المنهجية', p.insight], ['لماذا يهم', p.whyItMatters], ['الوصف', p.fullDesc]].map(([l, v]) => <p key={l}><b>{l}:</b> {v || <span className="la-muted">لا نص</span>}</p>)}
-          </div>}
-        </li>
-      ))}</ul>
+      <div className="la-row between"><h3>المحتوى</h3>
+        <nav className="flt-presets la-row">{[['processes', `العمليات (${procs.length})`], ['texts', 'نصوص الموقع']].map(([k, l]) => <button key={k} className={`flt-preset${part === k ? ' on' : ''}`} onClick={() => setPart(k)}>{l}</button>)}</nav></div>
+      <p className="la-muted">{part === 'processes' ? 'نصوص كل عملية وتبعياتها كما تظهر للجهات في المصفوفة. التعديل يظهر لهم فور الحفظ.' : 'عناوين الموقع وأزراره ورسائله. التعديل يظهر فور الحفظ.'}</p>
+      {part === 'texts' ? <SiteText canWrite={canWrite} /> : (
+        <ul className="la-reqs">{procs.map((p) => (
+          <li key={p.key} style={{ display: 'block' }}>
+            <button className="la-link" aria-expanded={open === p.key} onClick={() => setOpen(open === p.key ? null : p.key)} style={{ color: p.trackColor }}>{p.trackNameAr} · {p.nameAr}{!p.insight && !p.fullDesc ? ' (بلا نص)' : ''}</button>
+            {open === p.key && <ProcessEditor p={p} procs={procs} canWrite={canWrite} onSaved={reloadDetails} />}
+          </li>
+        ))}</ul>
+      )}
     </section>
   );
 }
@@ -226,7 +327,7 @@ function Stats({ regs, procs }) {
 }
 
 export default function Matrix({ canWrite, tab, id }) {
-  const { regs, procs, error, load } = useMatrix();
+  const { regs, procs, error, load, loadDetails } = useMatrix();
   const t = TABS.some(([k]) => k === tab) ? tab : 'overview';
   const go = (k, rid = null) => navigate({ ctx: 'matrix', tab: k, id: rid });
   return (
@@ -247,7 +348,7 @@ export default function Matrix({ canWrite, tab, id }) {
           : t === 'overview' ? <Overview regs={regs} procs={procs} onOpen={(rid) => go('regs', rid)} onTab={go} />
           : t === 'regs' ? <Registrations regs={regs} procs={procs} canWrite={canWrite} id={id} onOpen={(rid) => go('regs', rid)} reload={load} />
           : t === 'reports' ? <Reports regs={regs} procs={procs} onOpen={(rid) => go('regs', rid)} />
-          : t === 'content' ? <Content procs={procs} />
+          : t === 'content' ? <Content procs={procs} canWrite={canWrite} reloadDetails={loadDetails} />
           : <Stats regs={regs} procs={procs} />}
       </div>
     </div>
