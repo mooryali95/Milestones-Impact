@@ -8,7 +8,7 @@
 // المسار: مسودة ← تسليم (اكتمال وجاهزية 80%) ← مراجعة المستشار (إعادة
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
-import { esc, mailShell } from '../_shared/mail.ts';
+import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, initiativeFor, mePayload } from './participant.ts';
 import { cohortOf } from './programs.ts';
 import { isEmail, normalizeEmail, overallLevel, trackKey } from './logic.js';
@@ -232,11 +232,12 @@ export async function adminGet(b: Body) {
 }
 
 function sponsorMail(sponsor: string | null, who: string, initiative: string, link: string) {
-  return mailShell(`طلب تأييد مبادرة: ${initiative}`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أعدّ ${esc(who)} وثيقة مبادرة «${esc(initiative)}» مشروعًا ختاميًا في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتكم.</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات جهتكم، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.</p>
-${mailButton(link, 'اقرأ الوثيقة وأيّدها')}
-<p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح ${SPONSOR_DAYS} يومًا.</p>`, { eyebrow: 'LEADERS PROGRAM' });
+  return mailShell(`طلب تأييد مبادرة: ${initiative}`,
+    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أعدّ ${esc(who)} وثيقة مبادرة «${esc(initiative)}» مشروعًا ختاميًا في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتكم.`)
+    + mailText('راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات جهتكم، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
+    + mailButton(link, 'اقرأ الوثيقة وأيّدها')
+    + mailNote(`الرابط خاص بك وصالح ${SPONSOR_DAYS} يومًا.`),
+    { family: 'capstone', preheader: `${who} يطلب تأييدك لمبادرة «${initiative}»`, footnote: '' });
 }
 
 async function inviteSponsor(p: any, c: any) {

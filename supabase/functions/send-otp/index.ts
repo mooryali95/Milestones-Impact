@@ -82,7 +82,7 @@ ${mailRows([
   ["نوع الطلب", r.interest_label || r.interest || "—"],
   ["المصدر", pageLabel],
 ])}
-${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { eyebrow: "NEW CONTACT REQUEST", footnote: "" });
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admin", preheader: "طلب تواصل جديد من الموقع", footnote: "" });
       await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name)} — ${plain(pageLabel)}`, html);
       return json({ success: true });
     }
@@ -94,10 +94,10 @@ ${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { eyebrow: "NEW
 
       const isLeaders = r.product === "MI-LEADERS";
       const homeHtml = mailShell(`وصلتنا رسالتكم، ${r.name}`, `
-${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b style="font-weight:400;color:#0B272F">48 ساعة عمل</b>.`)}
-${mailNote(`طلبكم: ${esc(r.interest_label || r.interest || "استفسار عام")}`)}`, { footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
+${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b>48 ساعة عمل</b>.`)}
+${mailNote(`طلبكم: ${esc(r.interest_label || r.interest || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
       const leadersHtml = mailShell(`أهلًا بكم، ${r.name}`, `
-${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b style="font-weight:400;color:#0B272F">48 ساعة عمل</b>.`)}`, { eyebrow: "LEADERS PROGRAM", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
+${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b>48 ساعة عمل</b>.`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
       const subject = isLeaders ? `تأكيد طلبكم — برنامج القادة` : `استلمنا طلبكم — Milestone Impact`;
       await sendEmail(r.email as string, subject, isLeaders ? leadersHtml : homeHtml);
       return json({ success: true });

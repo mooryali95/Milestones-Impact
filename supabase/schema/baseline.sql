@@ -192,6 +192,7 @@ create table if not exists leaders.coaching_sessions (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   expert_id uuid,
+  reminded_at timestamp with time zone,
   constraint coaching_sessions_kind_check CHECK ((kind = ANY (ARRAY['booked'::text, 'instant'::text, 'manual'::text]))),
   constraint coaching_sessions_note_check CHECK ((char_length(note) <= 2000)),
   constraint coaching_sessions_provider_check CHECK ((provider = ANY (ARRAY['calcom'::text, 'calendly'::text, 'instant'::text, 'manual'::text]))),
@@ -1804,11 +1805,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_project_shares add constraint planner_project_shares_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+  alter table public.planner_project_shares add constraint planner_project_shares_shared_by_fkey FOREIGN KEY (shared_by) REFERENCES auth.users(id);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_project_shares add constraint planner_project_shares_shared_by_fkey FOREIGN KEY (shared_by) REFERENCES auth.users(id);
+  alter table public.planner_project_shares add constraint planner_project_shares_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin

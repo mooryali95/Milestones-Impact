@@ -5,9 +5,9 @@
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
 import {
-  allFor, audit, CONFIG, coordinatorInviteMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
+  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
-import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
+import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -219,6 +219,7 @@ export async function adminSave(a: Admin, b: Body) {
   if (b.phone && !phone) throw new Fail('جوال المنسق غير صحيح');
   // جديد صراحة (new)، أو مطّلع بعينه (id)، أو الأول في الجهة (توافق مع بطاقة الجهة)
   const before = b.new ? null : await coordinatorOf(orgId, b.id);
+  const seenBefore = orgVisibility(await viewersOf(orgId));
   if (b.id && !before) throw new Fail('المطّلع غير موجود في هذه الجهة', 404);
   // البريد لمطّلع واحد: الدخول برمز البريد يحدد صاحبه
   const { data: others } = await db.from('org_coordinators').select('id, organization_id, organizations(name)').eq('email', email);
@@ -247,9 +248,23 @@ export async function adminSave(a: Admin, b: Body) {
   const first = await coordinatorOf(orgId);
   if (first?.id === saved.id) await db.from('organizations').update({ contact_name: row.full_name, contact_email: email, contact_phone: phone }).eq('id', orgId);
   await audit('admin', a.email, before ? 'coordinator.update' : 'coordinator.create', 'org_coordinators', saved.id, before, saved);
+  await notifyNewAccess(orgId, o.name, seenBefore);
   let invited = false;
   if (emailChanged && saved.status !== 'suspended' && b.send_invite !== false) invited = await sendInvite(saved, o.name);
   return { success: true, coordinator: saved, invited };
+}
+
+// الشفافية: حين يتسع ما تراه الجهة عن مشاركيها (حقل لم يكن يراه أي مطّلع نافذ)، يُبلَّغ كل مشارك بما فُتح
+const SENSITIVE: Record<string, string> = { list: 'اسمك وتقدّمك في الرحلة', activity: 'آخر دخول لك', contact: 'بريدك وجوالك', scores: 'مستوياتك في الأبعاد الثلاثة' };
+async function notifyNewAccess(orgId: string, orgName: string, before: Record<string, any>) {
+  const after: Record<string, any> = orgVisibility(await viewersOf(orgId));
+  const opened = Object.keys(SENSITIVE).filter((k) => after[k] && !before[k]).map((k) => SENSITIVE[k]);
+  if (!opened.length) return;
+  await audit('system', null, 'org.access-widened', 'organizations', orgId, null, { opened });
+  const { data: people } = await db.from('participants').select('full_name, email').eq('organization_id', orgId).neq('status', 'withdrawn').limit(500);
+  for (const p of people || []) {
+    if (p.email) sendMail(p.email, `${orgName} تطّلع على رحلتك`, orgAccessMail(p.full_name, orgName, opened)).catch((e) => console.error('org access mail', e));
+  }
 }
 
 async function sendInvite(c: any, orgName: string) {

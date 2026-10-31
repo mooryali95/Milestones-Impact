@@ -15,7 +15,7 @@ type Body = Record<string, any>;
 type Ctx = { ip: string | null };
 type Admin = import('./admin.ts').Admin;
 
-const shell = (title: string, body: string) => mailShell(title, body, { eyebrow: 'EXPERT NETWORK' });
+const shell = (title: string, body: string, preheader = '') => mailShell(title, body, { family: 'experts', preheader });
 const firstName = (n: string | null) => String(n || '').trim().split(/\s+/)[0] || '';
 
 // ── طلب الانضمام (مفتوح) ──

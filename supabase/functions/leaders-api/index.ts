@@ -54,7 +54,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'expert.apply': E.apply,
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
-  'cron.expert-offers': E.sweepOffers,
+  // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
+  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders() }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,
@@ -125,6 +126,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
 
 const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.health': () => S.health(),
+  'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
+  'admin.mail-send-test': S.mailSendTest,
   'admin.visits': (_a, b) => S.visits(b),
   'admin.trends': () => S.trends(),
   'admin.item-analysis': (_a, b) => S.itemReport(b),

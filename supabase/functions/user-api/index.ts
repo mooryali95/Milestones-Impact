@@ -66,7 +66,7 @@ const otpHash = (email: string, code: string) => sha256hex(`user-otp:${email}:${
 const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
 const otpHtml = (code: string) => mailShell("رمز التحقق إلى مصفوفة التأثير", `
 ${mailText("أدخل هذا الرمز في الصفحة التي طلبته منها لإكمال الدخول.")}
-${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { eyebrow: "IMPACT MATRIX" });
+${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { family: "access", preheader: `رمزك ${code} · صالح 10 دقائق` });
 
 type SB = ReturnType<typeof createClient>;
 

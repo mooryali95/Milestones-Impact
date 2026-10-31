@@ -165,3 +165,32 @@ test('لوحة الخبير: زر الدخول بجوجل ظاهر في شاشة
   await expect(page.getByRole('heading', { name: 'لوحة الخبير' })).toBeVisible();
   await expect(page.getByText('بحساب جوجل بالبريد نفسه المسجل في شبكة الخبراء.')).toBeVisible();
 });
+
+test('قوالب البريد: معرض بعائلاته، ونسخة تجريبية لبريد المدير', async ({ page }) => {
+  const calls = [];
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    calls.push(b);
+    const r = {
+      'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
+      'admin.participants': { success: true, participants: [] },
+      'admin.mail-gallery': { success: true, mails: [
+        { key: 'signin', family: 'access', label: 'رمز دخول المشارك', subject: 'رمز الدخول إلى رحلتك', html: '<h1>رمز الدخول</h1>' },
+        { key: 'approved', family: 'journey', label: 'اعتماد المستوى', subject: 'اعتُمد مستواك', html: '<h1>اعتُمد</h1>' },
+      ] },
+      'admin.mail-send-test': { success: true, to: 'a@x' },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
+  });
+  await page.goto('http://localhost:4303/');
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.locator('.la-tabs').getByRole('button', { name: 'قوالب البريد' }).click();
+  await expect(page.getByRole('heading', { name: 'رمز الدخول إلى رحلتك' })).toBeVisible();
+  await page.getByRole('button', { name: 'اعتماد المستوى' }).click();
+  await expect(page.frameLocator('.mg-frame').getByText('اعتُمد')).toBeVisible();
+  await page.getByRole('button', { name: 'أرسل نسخة لي' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.mail-send-test')).toMatchObject({ key: 'approved' });
+});

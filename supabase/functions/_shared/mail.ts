@@ -49,11 +49,21 @@ export const mailNote = (html: string) => `<p style="font-size:14px;line-height:
 // ── الإطار ──
 // eyebrow: سطر صغير بالإنجليزية فوق العنوان (اسم المنتج)، في سطره وحده فلا يختلط بالعربي
 // footnote: سطر أسفل البطاقة (افتراضيًا: تجاهل الرسالة إن لم تطلبها)
-export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IMPACT', footnote = 'إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.' } = {}) {
+// عائلات الرسائل: السطر الإنجليزي فوق العنوان يدل على نوع الرسالة (مصدر واحد لكل الدوال)
+export const MAIL_FAMILY = {
+  access: 'SECURE ACCESS', journey: 'YOUR JOURNEY', capstone: 'CAPSTONE', sessions: 'SESSIONS',
+  organization: 'ORGANIZATION', experts: 'EXPERT NETWORK', admin: 'ADMIN REPORT', general: 'MILESTONE IMPACT',
+} as const;
+export type MailFamily = keyof typeof MAIL_FAMILY;
+
+// preheader: السطر الذي يظهر تحت العنوان في صندوق الوارد، مخفي داخل الرسالة
+export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IMPACT', family, preheader = '', footnote = 'إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.' }: { eyebrow?: string; family?: MailFamily; preheader?: string; footnote?: string } = {}) {
+  if (family) eyebrow = MAIL_FAMILY[family];
   const year = new Date().getFullYear();
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${esc(title)}</title></head>
 <body style="margin:0;padding:0;background:${MAIL.ground};font-family:${FONT};color:${MAIL.graphite};-webkit-text-size-adjust:100%">
+${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">${esc(preheader)}&#8203;${'&nbsp;&zwnj;'.repeat(40)}</div>` : ''}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${MAIL.ground}" style="background:${MAIL.ground}"><tr><td align="center" style="padding:40px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px rgba(11,39,47,.08)">
 <tr><td bgcolor="${MAIL.graphite}" style="background:${MAIL.graphite};padding:30px 40px 26px" align="left" dir="ltr">

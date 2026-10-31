@@ -3,9 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
-import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail } from './core.ts';
 import { requirementFor } from './programs.ts';
-import { esc, mailShell } from '../_shared/mail.ts';
+import { esc, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
@@ -236,9 +236,9 @@ export async function coachingInstant(p: any, b: Body) {
     starts_at: now.toISOString(), ends_at: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString(), join_url: c.instant_url,
   }));
   if (c.coach_email) {
-    sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${esc(p.full_name)} طلب اتصالًا فوريًا في «${esc(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.</p>
-${mailButton(c.instant_url, 'افتح الغرفة')}`, { eyebrow: 'LEADERS PROGRAM' })).catch((e) => console.error(e));
+    sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن',
+      mailText(`${esc(p.full_name)} طلب اتصالًا فوريًا في «${esc(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.`) + mailButton(c.instant_url, 'افتح الغرفة'),
+      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' })).catch((e) => console.error(e));
   }
   await audit('participant', p.email, 'coaching.instant', 'stage_requirements', r.id);
   return { success: true, join_url: c.instant_url };
@@ -437,4 +437,22 @@ export async function coachAvailable(a: any, b: Body) {
   must(await db.from('stage_requirements').update({ config }).eq('id', r.id));
   await audit('admin', a.email, minutes ? 'coaching.available' : 'coaching.unavailable', 'stage_requirements', r.id, null, { minutes });
   return { success: true, instant_until: config.instant_until };
+}
+
+// ── تذكير الجلسات (من المهمة الساعية) ──
+// الجلسات المحجوزة التي تبدأ بين 23 و25 ساعة من الآن، ولم يُرسل تذكيرها: مرة واحدة لكل جلسة
+export async function sessionReminders() {
+  const now = Date.now();
+  const { data } = await db.from('coaching_sessions').select('id, starts_at, join_url, participants(full_name, email), experts(full_name)')
+    .eq('status', 'booked').is('reminded_at', null)
+    .gte('starts_at', new Date(now + 23 * 36e5).toISOString()).lte('starts_at', new Date(now + 25 * 36e5).toISOString()).limit(200);
+  let sent = 0;
+  for (const s of (data || []) as any[]) {
+    const { data: mark } = await db.from('coaching_sessions').update({ reminded_at: new Date().toISOString() }).eq('id', s.id).is('reminded_at', null).select('id');
+    if (!mark?.length || !s.participants?.email) continue;
+    const when = new Date(s.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
+    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, s.join_url || null)).catch((e) => console.error('session reminder', s.id, e));
+    sent += 1;
+  }
+  return sent;
 }
