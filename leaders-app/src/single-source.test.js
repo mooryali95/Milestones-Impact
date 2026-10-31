@@ -89,6 +89,15 @@ describe('مصدر واحد لكل معلومة', () => {
     const palette = new Set(Object.values(BRAND).map((v) => v.toUpperCase()));
     for (const h of mail.match(/#[0-9a-fA-F]{6}\b/g)) expect(palette.has(h.toUpperCase()), `mail.ts ${h}`).toBe(true);
     expect(mail, 'لا اسم قديم في تذييل البريد').not.toMatch(/مَ?عل?َ?م/);
+    // ولا لون مكتوب بقيمته في أي رسالة خارج قالب البريد: الألوان من MAIL وحده
+    const fns = (d) => readdirSync(d).flatMap((f) => { const x = join(d, f); return statSync(x).isDirectory() ? (/node_modules/.test(x) ? [] : fns(x)) : /\.ts$/.test(x) ? [x] : []; });
+    for (const f of fns(join(ROOT, 'supabase/functions')).filter((x) => !x.endsWith('_shared/mail.ts'))) {
+      expect(readFileSync(f, 'utf8'), f.slice(ROOT.length)).not.toMatch(/color:\s*#[0-9a-fA-F]{3,6}/);
+    }
+    // وكل رسالة بعائلتها: لا سطر إنجليزي مكتوب يدويًا فوق العنوان
+    for (const f of fns(join(ROOT, 'supabase/functions')).filter((x) => !x.endsWith('_shared/mail.ts'))) {
+      expect(readFileSync(f, 'utf8'), f.slice(ROOT.length)).not.toMatch(/eyebrow:\s*['"`]/);
+    }
     const generated = readFileSync(join(ROOT, 'shared/css/brand.css'), 'utf8');
     for (const [k, v] of Object.entries(BRAND)) expect(generated, k).toContain(`--brand-${k}: ${v};`);
   });

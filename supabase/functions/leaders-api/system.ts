@@ -4,7 +4,8 @@
 // الترحيلات تُشغَّل يدويًا، فلا سجل لما طُبّق منها. الفحص هنا يسأل القاعدة
 // عن أثر كل ترحيل (جدول أو عمود أنشأه)، فيظهر في اللوحة ما لم يُشغَّل بعد،
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
-import { all, CONFIG, db, Fail, healthMail, publicDb, sendMail } from './core.ts';
+import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, publicDb, sendMail } from './core.ts';
+import { requireWrite } from './admin.ts';
 import { itemAnalysis, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 
@@ -164,4 +165,19 @@ export async function weeklyHealth() {
     ['رسائل الرموز آخر 24 ساعة', `${h.mail.today} من ${h.mail.cap}`],
   ], issues));
   return { sent: true, issues: issues.length };
+}
+
+// ── معرض رسائل البريد: كل قالب كما يصل، من الدوال نفسها التي تُرسل، ببيانات تجريبية ──
+export function mailGallery() {
+  return { success: true, mails: MAIL_GALLERY.map((m) => ({ key: m.key, family: m.family, label: m.label, subject: m.subject, html: m.html() })) };
+}
+// نسخة تجريبية إلى بريد المدير نفسه فقط، بعنوان يوضح أنها تجربة
+export async function mailSendTest(a: import('./admin.ts').Admin, b: Record<string, any>) {
+  requireWrite(a);
+  const m = MAIL_GALLERY.find((x) => x.key === b.key);
+  if (!m) throw new Fail('قالب غير معروف', 404);
+  if (!a.email) throw new Fail('لا بريد لحسابك', 400);
+  await sendMail(a.email, `[تجربة] ${m.subject}`, m.html());
+  await audit('admin', a.email, 'mail.test', 'mail', m.key);
+  return { success: true, to: a.email };
 }

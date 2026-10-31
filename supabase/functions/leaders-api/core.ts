@@ -2,7 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailShell } from '../_shared/mail.ts';
+import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, type MailFamily } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
@@ -138,7 +138,10 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
 // ── البريد ──
 // القالب من المصدر الموحّد (_shared/mail.ts)؛ هنا رسائل البرنامج فقط
 export { mailButton };
-const shell = (title: string, body: string) => mailShell(title, body, { eyebrow: 'LEADERS PROGRAM' });
+// كل رسالة تحمل عائلتها (السطر الإنجليزي فوق العنوان) وسطر معاينة صندوق الوارد
+const shell = (family: MailFamily, title: string, body: string, preheader = '', footnote?: string) =>
+  mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
+const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
 
 export async function sendMail(to: string, subject: string, html: string) {
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
@@ -147,95 +150,132 @@ export async function sendMail(to: string, subject: string, html: string) {
   }
 }
 
+// ── الدخول ──
 export function signInMail(name: string, code: string, link: string, isNew: boolean) {
-  const hello = name ? `أهلًا ${esc(name)}،` : 'أهلًا،';
-  return shell(isNew ? 'أكمل تسجيلك في برنامج القادة' : 'رمز الدخول إلى رحلتك', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${hello} اضغط الزر للمتابعة، أو أدخل الرمز في الصفحة التي طلبته منها.</p>
-${mailButton(link, isNew ? 'تأكيد التسجيل' : 'الدخول الآن')}
-${mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)}`);
+  return shell('access', isNew ? 'أكمل تسجيلك في برنامج القادة' : 'رمز الدخول إلى رحلتك',
+    mailText(`${hello(name)} اضغط الزر للمتابعة، أو أدخل الرمز في الصفحة التي طلبته منها.`)
+    + mailButton(link, isNew ? 'تأكيد التسجيل' : 'الدخول الآن')
+    + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`),
+    `رمزك ${code} · صالح ${CONFIG.codeMinutes} دقيقة`);
 }
 
+// ── الرحلة ──
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
 export function reviewMail(name: string, title: string, returned: boolean, note?: string | null) {
-  const head = returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك';
-  const body = returned
-    ? `راجع المستشار «${esc(title)}» وطلب تعديلًا قبل اعتماده.`
-    : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`;
-  return shell(head, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">أهلًا ${esc(name)}، ${body}</p>
-${returned && note ? `<p style="font-size:14px;line-height:1.8;margin:0 0 18px;padding:12px 14px;background:#F7F8F6;border-right:2px solid #A97A2E;border-radius:2px">${esc(note)}</p>` : ''}
-${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
-}
-
-// تذكير أسبوعي لمن غاب عن رحلته وما زالت لديه خطوات مفتوحة
-export function healthMail(rows: [string, string][], issues: string[]) {
-  const table = rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#5F7176">${esc(k)}</td><td style="padding:6px 0;font-weight:600" align="left">${esc(v)}</td></tr>`).join('');
-  const list = issues.length
-    ? `<p style="font-size:15px;margin:18px 0 6px;font-weight:600">ما يحتاج تدخلك</p><ul style="margin:0;padding-inline-start:20px;line-height:1.9">${issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
-    : '<p style="font-size:15px;margin:18px 0 0">لا شيء يحتاج تدخلك هذا الأسبوع.</p>';
-  return mailShell('تقرير الأسبوع: برنامج القادة', `<table role="presentation" width="100%" style="font-size:14px">${table}</table>${list}
-${mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة')}`, { eyebrow: 'LEADERS PROGRAM', footnote: 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
+  return shell('journey', returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك',
+    mailText(`${hello(name)} ${returned ? `راجع المستشار «${esc(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
+    + (returned && note ? mailNote(esc(note)) : '')
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+    returned ? `ملاحظة على «${title}» قبل اعتماده` : `اعتُمد «${title}»`);
 }
 
 export function reminderMail(name: string, open: number) {
-  return shell('رحلتك بانتظارك', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.</p>
-${mailButton(CONFIG.appUrl, 'أكمل رحلتي')}`);
-}
-
-// ── منسق الجهة ──
-const btn = mailButton;
-
-export function coordinatorInviteMail(name: string | null, org: string) {
-  return shell(`لوحة ${org} في برنامج القادة`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} أُنشئ لك حساب اطلاع بصفتك منسق ${esc(org)} في برنامج القادة من Milestone Impact.</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">ترى منه تقدّم مشاركي جهتك وتوزيعهم على المسارات وتقارير الجهة، ويصلك ملخص أسبوعي بالبريد. الدخول برمز يصل إلى هذا البريد، بلا كلمة مرور.</p>
-${btn(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة')}`);
-}
-
-export function coordinatorSignInMail(name: string | null, code: string, link: string) {
-  return shell('رمز الدخول إلى لوحة الجهة', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} اضغط الزر للدخول، أو أدخل الرمز في الصفحة.</p>
-${btn(link, 'الدخول الآن')}
-${mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)}`);
-}
-
-export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
-  const row = (l: string, v: number | string) => `<tr><td style="padding:8px 0;border-bottom:1px solid #DCE2E1">${l}</td><td style="padding:8px 0;border-bottom:1px solid #DCE2E1;text-align:left;font-family:Arial,sans-serif;font-weight:300;font-size:16px;color:#0B272F">${v}</td></tr>`;
-  return shell(`ملخص ${org} الأسبوعي`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${name ? `أهلًا ${esc(name)}،` : 'أهلًا،'} هذا ملخص مشاركي جهتك في برنامج القادة.</p>
-<table width="100%" style="font-size:14px;margin:0 0 20px">
-${row('المشاركون', k.total)}${row('انضموا هذا الأسبوع', k.joined_week)}${row('نشطون هذا الأسبوع', k.active_week)}
-${row('اعتُمد مسارهم', k.approved)}${row('أنهوا البرنامج', k.completed)}${row('متوسط الإنجاز', `${k.avg_progress}%`)}
-</table>
-${btn(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة')}
-<p style="font-size:12px;color:#4A6A72;margin:0">يمكن للإدارة إيقاف هذا الملخص متى طلبت.</p>`);
+  return shell('journey', 'رحلتك بانتظارك',
+    mailText(`${hello(name)} لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.`)
+    + mailButton(CONFIG.appUrl, 'أكمل رحلتي'),
+    `${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك`);
 }
 
 export function approvedMail(name: string) {
-  return shell('اعتُمد مستواك، ورحلتك مفتوحة الآن', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">أهلًا ${esc(name)}، راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.</p>
-${mailButton(CONFIG.appUrl, 'افتح رحلتي')}`);
+  return shell('journey', 'اعتُمد مستواك، ورحلتك مفتوحة الآن',
+    mailText(`${hello(name)} راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.`)
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+    'ملف كفاءتك ومرحلتك الأولى بانتظارك');
 }
 
 export function certificateMail(name: string, url: string) {
-  return shell('مبارك، صدرت شهادة مشاركتك', `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">أهلًا ${esc(name)}، أتممت متطلبات برنامج القادة، وصدرت شهادة مشاركتك باسمك.</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">تجدها في رحلتك جاهزة للطباعة والحفظ PDF، ولها رابط تحقق عام يمكنك مشاركته أو إضافته إلى ملفك في LinkedIn.</p>
-${mailButton(url, 'اعرض شهادتي')}`);
+  return shell('journey', 'مبارك، صدرت شهادة مشاركتك',
+    mailText(`${hello(name)} أتممت متطلبات برنامج القادة، وصدرت شهادة مشاركتك باسمك.`)
+    + mailText('تجدها في رحلتك جاهزة للطباعة والحفظ PDF، ولها رابط تحقق عام يمكنك مشاركته أو إضافته إلى ملفك في LinkedIn.')
+    + mailButton(url, 'اعرض شهادتي'),
+    'شهادتك جاهزة برابط تحقق عام');
 }
 
 // phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة
 export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' = 'post') {
   const pre = phase === 'pre';
-  return shell(`طلب تقدير من ${who}`, `
-<p style="font-size:15px;line-height:1.8;margin:0 0 14px">${rater ? `أهلًا ${esc(rater)}،` : 'أهلًا،'} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}</p>
-<p style="font-size:15px;line-height:1.8;margin:0 0 18px">${pre
-    ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
-    : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.'}</p>
-${mailButton(link, 'ابدأ التقدير')}
-<p style="font-size:12px;color:#4A6A72;margin:18px 0 0">الرابط خاص بك وصالح 30 يومًا.</p>`);
+  return shell('journey', `طلب تقدير من ${who}`,
+    mailText(`${hello(rater)} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
+    + mailText(pre
+      ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
+      : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.')
+    + mailButton(link, 'ابدأ التقدير')
+    + mailNote('الرابط خاص بك وصالح 30 يومًا.'),
+    `${pre ? 'ثلاث' : 'خمس'} دقائق لتقدير ممارسة ${who}`, '');
 }
+
+// ── الجلسات ──
+// تذكير قبل الجلسة بيوم، ومعه رابطها إن كانت عن بعد
+export function sessionReminderMail(name: string, when: string, expert: string | null, joinUrl: string | null) {
+  return shell('sessions', 'جلستك غدًا',
+    mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${esc(expert)}` : ''}.`)
+    + mailRows([['الموعد', when], ...(expert ? [['الخبير', expert] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
+    + mailButton(joinUrl || CONFIG.appUrl, joinUrl ? 'رابط الجلسة' : 'افتح رحلتي')
+    + mailNote('جهّز سؤالًا أو موقفًا من عملك هذا الأسبوع، فالجلسة على قدر ما تحمله إليها.'),
+    `${when}${expert ? ` · مع ${expert}` : ''}`, '');
+}
+
+// ── الجهة ──
+export function coordinatorInviteMail(name: string | null, org: string) {
+  return shell('organization', `لوحة ${org} في برنامج القادة`,
+    mailText(`${hello(name)} أُنشئ لك حساب اطلاع على ${esc(org)} في برنامج القادة من Milestone Impact.`)
+    + mailText('ترى منه ما تتيحه لك صلاحياتك عن مشاركي جهتك وتقاريرها، ويصلك ملخص أسبوعي بالبريد. الدخول برمز يصل إلى هذا البريد، بلا كلمة مرور.')
+    + mailButton(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة'),
+    `حساب اطلاع على ${org}`, '');
+}
+
+export function coordinatorSignInMail(name: string | null, code: string, link: string) {
+  return shell('access', 'رمز الدخول إلى لوحة الجهة',
+    mailText(`${hello(name)} اضغط الزر للدخول، أو أدخل الرمز في الصفحة.`)
+    + mailButton(link, 'الدخول الآن')
+    + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`),
+    `رمزك ${code} · صالح ${CONFIG.codeMinutes} دقيقة`);
+}
+
+export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
+  return shell('organization', `ملخص ${org} الأسبوعي`,
+    mailText(`${hello(name)} هذا ملخص مشاركي جهتك في برنامج القادة.`)
+    + mailRows([['المشاركون', k.total], ['انضموا هذا الأسبوع', k.joined_week], ['نشطون هذا الأسبوع', k.active_week],
+      ['اعتُمد مسارهم', k.approved], ['أنهوا البرنامج', k.completed], ['متوسط الإنجاز', `${k.avg_progress}%`]])
+    + mailButton(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة'),
+    `${k.active_week} نشطون · متوسط الإنجاز ${k.avg_progress}%`, 'يصلك هذا الملخص كل أسبوع، ويمكن للإدارة إيقافه متى طلبت.');
+}
+
+// إشعار المشارك حين تُفتح لجهته صلاحية تكشف بياناته (الشفافية قبل الاطلاع)
+export function orgAccessMail(name: string, org: string, items: string[]) {
+  return shell('organization', `${org} تطّلع على رحلتك`,
+    mailText(`${hello(name)} فُتح لجهتك ${esc(org)} الاطلاع على: <b>${items.map(esc).join('، ')}</b>.`)
+    + mailNote('لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.')
+    + mailButton(`${CONFIG.appUrl}/?tab=profile`, 'ماذا ترى جهتك'),
+    `فُتح لجهتك: ${items.join('، ')}`, '');
+}
+
+// ── الإدارة ──
+export function healthMail(rows: [string, string][], issues: string[]) {
+  return shell('admin', 'تقرير الأسبوع: برنامج القادة',
+    mailRows(rows)
+    + (issues.length ? mailText('<b>ما يحتاج تدخلك</b>') + mailNote(issues.map(esc).join('<br>')) : mailText('لا شيء يحتاج تدخلك هذا الأسبوع.'))
+    + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
+    issues.length ? `${issues.length} يحتاج تدخلك` : 'لا شيء يحتاج تدخلك', 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+}
+
+// معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل
+export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; subject: string; html: () => string }[] = [
+  { key: 'signin', family: 'access', label: 'رمز دخول المشارك', subject: 'رمز الدخول إلى رحلتك', html: () => signInMail('سارة', '153262', CONFIG.appUrl, false) },
+  { key: 'register', family: 'access', label: 'إكمال التسجيل', subject: 'أكمل تسجيلك في برنامج القادة', html: () => signInMail('سارة', '153262', CONFIG.appUrl, true) },
+  { key: 'coord-signin', family: 'access', label: 'رمز دخول لوحة الجهة', subject: 'رمز الدخول إلى لوحة الجهة', html: () => coordinatorSignInMail('خالد', '820417', `${CONFIG.appUrl}/org`) },
+  { key: 'approved', family: 'journey', label: 'اعتماد المستوى', subject: 'اعتُمد مستواك في برنامج القادة', html: () => approvedMail('سارة') },
+  { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
+  { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
+  { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
+  { key: 'certificate', family: 'journey', label: 'صدور الشهادة', subject: 'شهادة مشاركتك في برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
+  { key: 'rater', family: 'journey', label: 'طلب تقدير 360', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
+  { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
+  { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة') },
+  { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
+  { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
+  { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },
+];
 
 // ── حارس رسائل الرموز ──
 // قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام

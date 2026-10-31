@@ -1425,3 +1425,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .xm-bars i { grid-area: 1 / 1; height: 4px; border-radius: 2px; background: var(--brand-copper); }
 .xm-bars small { font-size: .64rem; color: var(--brand-muted-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 640px) { .xm-list li { grid-template-columns: 52px 1fr; } .xm-list li > button { grid-column: 1 / -1; } .xm-bars { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ── قوالب البريد (MailGallery.jsx) ── */
+.mg { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.mg-list { position: sticky; top: 16px; display: grid; gap: 10px; }
+.mg-list h4 { margin: 8px 0 4px; font-size: .74rem; color: var(--brand-muted-soft); letter-spacing: .02em; }
+.mg-item { display: block; width: 100%; text-align: start; padding: 8px 10px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: .86rem; cursor: pointer; color: var(--brand-ink-soft); }
+.mg-item:hover { background: var(--brand-cream-pale); }
+.mg-item.on { background: var(--brand-graphite); color: var(--brand-paper); }
+.mg-view h3 { margin: 2px 0 0; }
+.mg-frame { width: 100%; height: 820px; border: 1px solid var(--brand-line); border-radius: 8px; margin: 12px 0; background: var(--brand-bg-alt); }
+@media (max-width: 900px) { .mg { grid-template-columns: 1fr; } .mg-list { position: static; } .mg-frame { height: 640px; } }

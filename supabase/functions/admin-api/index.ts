@@ -107,7 +107,7 @@ function totpUri(secret: string, email: string): string {
 
 // البريد بالقالب الموحّد (_shared/mail.ts)
 const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
-const ADMIN_MAIL = { eyebrow: "ADMIN CONSOLE" };
+const ADMIN_MAIL = { family: "access" as const };
 const otpHtml = (code: string) => mailShell("رمز الدخول إلى لوحة الإدارة", `
 ${mailText("أدخل هذا الرمز في صفحة الدخول لإكمال تسجيل دخولك.")}
 ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, ADMIN_MAIL);
