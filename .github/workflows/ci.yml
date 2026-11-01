@@ -50,7 +50,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Typecheck leaders-api
-        run: deno check supabase/functions/leaders-api/index.ts
+        run: deno check --node-modules-dir=auto supabase/functions/leaders-api/index.ts
 
       - name: Test
         run: npm test
