@@ -1174,3 +1174,28 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .ca-index { font-size: 1.5rem; color: var(--accent); }
 .ca-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .ca-list li { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--st-warn-bg); }
+
+/* «كاتون» */
+.kt-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.85rem}
+.kt-legend i{font-style:normal;color:var(--accent);margin-inline-end:4px}
+.kt-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.kt-sum>div{display:grid;gap:2px}
+.kt-big{font-size:1.5rem;color:var(--accent)}
+.kt-topics{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px}
+.kt-topic{all:unset;box-sizing:border-box;cursor:pointer;display:grid;gap:6px;width:100%}
+.kt-topic:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kt-layers{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.9rem}
+.kt-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.kt-sent{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px;min-width:0}
+.kt-sent.done{border-color:var(--accent)}
+.kt-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kt-num{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--brand-cream);color:var(--accent);font-weight:700}
+.kt-pts{margin-inline-start:auto;color:var(--ok);font-size:1.1rem}.kt-pts.neg{color:var(--bad)}
+.kt-text{margin:0;font-size:1.05rem;line-height:1.8}
+.kt-opts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+@media (max-width:560px){.kt-opts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kt-opt{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;justify-content:center;padding:10px 6px;border:1px solid var(--line);border-radius:10px;font-size:.88rem;text-align:center}
+.kt-opt i{font-style:normal;font-size:1.1rem;color:var(--accent)}
+.kt-opt.on{background:var(--brand-cream);border-color:var(--accent);font-weight:600}
+.kt-opt:disabled{cursor:default;opacity:.75}
+.kt-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

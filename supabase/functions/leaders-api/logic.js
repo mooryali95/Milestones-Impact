@@ -1855,6 +1855,7 @@ export * from './milestones.js';
 export * from './groups.js';
 export * from './continuous.js';
 export * from './final.js';
+export * from './katon.js';
 import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════
