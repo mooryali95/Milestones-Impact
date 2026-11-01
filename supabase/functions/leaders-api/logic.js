@@ -4,7 +4,7 @@
 // بلا اعتماد على قاعدة البيانات ولا على Deno، حتى يُختبر في vitest
 // (leaders-app/src/logic.test.js) ويُستورد كما هو في دالة الحافة.
 
-import { LEVEL_AR, TIER_AR } from './labels.js';
+import { DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -62,11 +62,62 @@ export function formFor(seed, previous = null) {
 export const usesForms = (questions) => (questions || []).some((q) => q.form);
 export const forForm = (questions, form) => (questions || []).filter((q) => !q.form || q.form === form);
 
-// المواقف المشتركة والخاصة بالصيغة كلٌّ على حدة، لتقدير أثر تكرار الأسئلة
+// ── القياس البعدي: تدرّج المستوى وتوائم المواقف المشتركة ──
+// فقرة لها min_level لا تُقدَّم إلا لمن اعتُمد مستواه في بُعدها عندها أو فوقها،
+// وتُحسب منفصلة («مكتسبات المستوى») فلا تدخل في فرق القبلي والبعدي.
+// التوأم (anchor_code لا يساوي code) فقرة موازية لمشتركة يراها المشارك في
+// المبدئي: يُقدَّم التوأم بدل الأصل لغالبية المشاركين حتى لا يقيس البعدي تذكّر
+// السؤال، ويُبقى الأصل لربعهم (anchorRepeat) فيبقى تقدير أثر التكرار قائمًا.
+export const isTwin = (q) => !!q.anchor_code && q.anchor_code !== q.code;
+export const levelGated = (q) => !!q.min_level;
+export function anchorRepeat(seed) {
+  let h = 7;
+  for (const c of `anchor:${seed}`) h = (h * 33 + c.charCodeAt(0)) >>> 0;
+  return h % 4 === 0;
+}
+export function servedPost(questions, { levels = {}, repeat = false } = {}) {
+  const qs = questions || [];
+  const twinned = new Set(qs.filter(isTwin).map((q) => q.anchor_code));
+  return qs.filter((q) => {
+    if (q.min_level && (LEVEL_RANK[q.min_level] ?? 9) > (LEVEL_RANK[levels[q.dimension]] ?? LEVEL_RANK.beginner)) return false;
+    if (isTwin(q)) return !repeat;
+    if (twinned.has(q.code)) return repeat;
+    return true;
+  });
+}
+// مكتسبات المستوى لكل بُعد: نسبة الدرجة على فقرات المستوى المقدَّمة (معرفة ومواقف معًا)
+export function levelGains(questions, answers) {
+  const acc = {};
+  for (const q of (questions || []).filter(levelGated)) {
+    if (q.active === false || !['knowledge', 'skill'].includes(q.tier)) continue;
+    const t = (acc[q.dimension] ||= { got: 0, max: 0, n: 0, level: q.min_level });
+    const w = Number(q.weight ?? 1);
+    t.max += maxScore(q) * w;
+    if (answers[q.id] != null) { t.got += Math.max(0, scoreFor(q, answers[q.id]) || 0) * w; t.n += 1; }
+    if ((LEVEL_RANK[q.min_level] ?? 0) > (LEVEL_RANK[t.level] ?? 0)) t.level = q.min_level;
+  }
+  return Object.fromEntries(DIMENSIONS.map((d) => {
+    const t = acc[d];
+    return [d, t && t.max > 0 ? { pct: Math.round((t.got / t.max) * 10000) / 100, n: t.n, level: t.level } : null];
+  }));
+}
+
+// تقرير «مكتسبات المستوى» من نتائج البعدي المحفوظة: لكل بُعد نسبته وعدد فقراته
+// ومستواه، أو null إن لم تُقدَّم له فقرات مستوى. لا يمس pre/post ولا الفرق.
+export const LEVEL_GAIN_AR = 'مكتسبات المستوى';
+export function levelGainReport(post) {
+  return Object.fromEntries(DIMENSIONS.map((d) => {
+    const r = post?.[d];
+    return [d, r && r.level_gain != null ? { label_ar: LEVEL_GAIN_AR, pct: r.level_gain, n: r.level_gain_n ?? null, level: r.level_gain_level ?? null } : null];
+  }));
+}
+
+// المواقف المشتركة والخاصة بالصيغة كلٌّ على حدة، لتقدير أثر تكرار الأسئلة.
+// التوأم جديد على المشارك فيُحسب مع الموازية لا مع المشتركة.
 export function skillSplit(questions, answers) {
-  const skill = questions.filter((q) => q.tier === 'skill');
-  const anchor = tierPercents(skill.filter((q) => !q.form), answers);
-  const own = tierPercents(skill.filter((q) => q.form), answers);
+  const skill = questions.filter((q) => q.tier === 'skill' && !levelGated(q));
+  const anchor = tierPercents(skill.filter((q) => !q.form && !isTwin(q)), answers);
+  const own = tierPercents(skill.filter((q) => q.form || isTwin(q)), answers);
   return Object.fromEntries(DIMENSIONS.map((d) => [d, { anchor: anchor[d].skill, form: own[d].skill }]));
 }
 
@@ -99,8 +150,11 @@ export function levelFor(pcts, rules) {
 // المؤشر المركّب = متوسط موزون لجوانب الإطار الثلاثة. الأوزان تعطي
 // المواقف (اختبار الحكم الموقفي) الثقل الأكبر لأنها أصدق تنبؤًا بالأداء،
 // وتعطي الممارسة (تقدير ذاتي) الأقل لأنها تميل إلى التضخم.
-// المستوى يُمنح بالمؤشر المركّب، بشرط ألا يقل أي جانب عن حدّ أدنى،
-// فلا تُخفي قوة جانب فجوة حقيقية في آخر. وتُعلَّم الحالة الحدّية للمستشار.
+// المستوى يُمنح بالمؤشر المركّب، بشرط ألا تقل المعرفة ولا المواقف عن حدّ
+// أدنى، فلا تُخفي قوة جانب فجوة حقيقية في آخر. وتُعلَّم الحالة الحدّية للمستشار.
+// الممارسة (تقدير ذاتي غير متحقَّق منه) تبقى في المؤشر بوزنها لكنها ليست
+// بوابة: لا يملك التقرير الذاتي حق النقض على اختبار موضوعي (سياسة المرحلة ب،
+// ملحق التدقيق 1). إن قلّت عن الأرضية والاختبار ناجح تُعلَّم للمستشار.
 // حد المتوسط الأدنى 40 فوق نسبة التخمين في أسئلة الأربعة بدائل (25%)،
 // والهامش الحدّي 8 قريب من خطأ القياس المتوقع لستة أسئلة في الجانب.
 export const DEFAULT_MODEL = {
@@ -111,28 +165,82 @@ export const DEFAULT_MODEL = {
   min_behavior_items: 3,
 };
 
-export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
+// الجوانب التي تنطبق عليها الأرضيات: الاختبار الموضوعي وحده
+export const FLOOR_TIERS = ['knowledge', 'skill'];
+
+// أعلام معلوماتية للمستشار: لا تغيّر المستوى ولا المؤشر
+export const PLACEMENT_FLAGS_AR = {
+  low_practice: 'اختبار مرتفع وممارسة ذاتية منخفضة',
+  acquiescence: 'ممارسة بأعلى درجة في كل العبارات',
+};
+
+// الموافقة المطلقة: كل عبارات الممارسة في البُعد بأعلى درجة (دون «لا ينطبق»).
+// يُعاد لكل بُعد true/false، وfalse لبُعد بلا عبارات مجابة.
+export function acquiescenceFor(questions, answers) {
+  const by = {};
+  for (const q of questions || []) {
+    if (q.active === false || q.tier !== 'behavior') continue;
+    const k = answers?.[q.id];
+    const s = k == null ? null : scoreFor(q, k);
+    if (s != null && s < 0) continue;
+    const d = (by[q.dimension] ||= { n: 0, top: 0 });
+    d.n += 1;
+    if (s != null && s >= maxScore(q) && maxScore(q) > 0) d.top += 1;
+  }
+  return Object.fromEntries(DIMENSIONS.map((d) => [d, !!by[d] && by[d].n > 0 && by[d].top === by[d].n]));
+}
+
+// «لا ينطبق» في الممارسة: كم عبارة في كل بُعد أُجيبت بدرجة سالبة
+export function behaviorNaCounts(questions, answers) {
+  const out = Object.fromEntries(DIMENSIONS.map((d) => [d, 0]));
+  for (const q of questions || []) {
+    if (q.active === false || q.tier !== 'behavior' || answers?.[q.id] == null) continue;
+    if ((scoreFor(q, answers[q.id]) ?? 0) < 0) out[q.dimension] = (out[q.dimension] || 0) + 1;
+  }
+  return out;
+}
+export const MAX_BEHAVIOR_NA = 1;
+export const BEHAVIOR_NA_MESSAGE = 'اختر «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم';
+
+// opts.acquiescence: من acquiescenceFor لبُعد التقييم (يحتاج الإجابات نفسها)
+export function evaluatePlacement(pcts, model = DEFAULT_MODEL, opts = {}) {
   const m = { ...DEFAULT_MODEL, ...(model || {}) };
   const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
   const tiers = TIERS.filter((t) => pcts?.[t] != null && w[t] > 0);
   const wsum = tiers.reduce((a, t) => a + w[t], 0);
-  if (!wsum) return { level: 'beginner', composite: null, borderline: false, reason: 'لا إجابات كافية للاحتساب' };
+  const flagsOf = (lowPractice) => {
+    const acquiescence = !!opts?.acquiescence;
+    const flags = [
+      ...(lowPractice ? [{ key: 'low_practice', reason_ar: PLACEMENT_FLAGS_AR.low_practice }] : []),
+      ...(acquiescence ? [{ key: 'acquiescence', reason_ar: PLACEMENT_FLAGS_AR.acquiescence }] : []),
+    ];
+    return { low_practice: lowPractice, acquiescence, flags };
+  };
+  if (!wsum) return { level: 'beginner', composite: null, borderline: false, reason: 'لا إجابات كافية للاحتساب', ...flagsOf(false) };
   const composite = Math.round(tiers.reduce((a, t) => a + w[t] * Number(pcts[t]), 0) / wsum * 10) / 10;
-  const weakest = tiers.reduce((a, t) => (Number(pcts[t]) < Number(pcts[a]) ? t : a), tiers[0]);
+  // الأرضيات على المعرفة والمواقف فقط؛ بلا أيٍّ منهما لا مستوى فوق التأسيسي
+  const gated = tiers.filter((t) => FLOOR_TIERS.includes(t));
+  if (!gated.length) {
+    return { level: 'beginner', composite, borderline: false, reason: `المؤشر ${composite} من الممارسة وحدها، دون اختبار معرفة أو مواقف`, ...flagsOf(false) };
+  }
+  const weakest = gated.reduce((a, t) => (Number(pcts[t]) < Number(pcts[a]) ? t : a), gated[0]);
   const low = Number(pcts[weakest]);
   const gate = (min, floor) => composite >= Number(min) && low >= Number(floor);
   const level = gate(m.min_advanced, m.floor_advanced) ? 'advanced' : gate(m.min_intermediate, m.floor_intermediate) ? 'intermediate' : 'beginner';
+  // ممارسة ذاتية دون أرضية المستوى الذي بلغه الاختبار: معلومة للمستشار
+  const levelFloor = level === 'advanced' ? m.floor_advanced : level === 'intermediate' ? m.floor_intermediate : null;
+  const lowPractice = levelFloor != null && pcts?.behavior != null && Number(pcts.behavior) < Number(levelFloor);
 
   let reason, borderline = false;
   const next = level === 'beginner' ? ['intermediate', m.min_intermediate, m.floor_intermediate]
     : level === 'intermediate' ? ['advanced', m.min_advanced, m.floor_advanced] : null;
-  if (!next) reason = `المؤشر ${composite} بلغ حد مستوى احترافي (${m.min_advanced}) ولا جانب دون ${m.floor_advanced}`;
+  if (!next) reason = `المؤشر ${composite} بلغ حد مستوى احترافي (${m.min_advanced}) ولا المعرفة ولا المواقف دون ${m.floor_advanced}`;
   else {
     const [nl, nmin, nfloor] = next;
     const gap = Math.round((Number(nmin) - composite) * 10) / 10;
     // الحدّية تعني أن المستوى التالي في متناول هامش صغير: فجوة المؤشر عن حده
-    // وفجوة أضعف جانب عن أرضيته معًا داخل الهامش. من بلغ المؤشر لكن أرضيته
-    // بعيدة، أو العكس، ليس حدّيًا لأن هامشًا واحدًا لا يرفعه.
+    // وفجوة أضعف جانب مُقيَّد عن أرضيته معًا داخل الهامش. من بلغ المؤشر لكن
+    // أرضيته بعيدة، أو العكس، ليس حدّيًا لأن هامشًا واحدًا لا يرفعه.
     const floorGap = Math.round((Number(nfloor) - low) * 10) / 10;
     borderline = gap <= Number(m.borderline) && floorGap <= Number(m.borderline);
     if (composite >= Number(nmin)) {
@@ -141,8 +249,11 @@ export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
       reason = `المؤشر ${composite} من 100، ويبعد ${gap} عن حد مستوى ${LEVEL_AR[nl]} (${nmin})`;
     }
   }
-  return { level, composite, borderline, reason };
+  return { level, composite, borderline, reason, ...flagsOf(lowPractice) };
 }
+
+// السبب المخزَّن: سبب المستوى ثم الأعلام، حتى يراها من يقرأ reason_ar وحده
+export const reasonWithFlags = (e) => [e.reason, ...(e.flags || []).map((f) => f.reason_ar)].filter(Boolean).join(' · ');
 
 // ── مسافة الأسئلة عن المستوى التالي ──
 // كم سؤالًا يفصل المشارك عن المستوى التالي؟ رقم للمستشار يكمل رقاقة «حدّية».
@@ -152,7 +263,8 @@ export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
 // و0.50·(100/24) = 2.08 للمواقف و0.15·(100/16) = 0.94 للممارسة (بالأوزان
 // الافتراضية). السؤال الكامل (0 ← 4) أربع نقاط: 5.83 و8.33 و3.75 في المؤشر.
 // نبحث عن أقل عدد من الأسئلة الكاملة (موزعة على الجوانب الحاضرة) يرفع
-// المؤشر فوق حد المستوى التالي ويرفع كل جانب فوق أرضيته معًا، بإعادة تقييم
+// المؤشر فوق حد المستوى التالي ويرفع المعرفة والمواقف فوق أرضيتهما معًا (الممارسة
+// تدخل المؤشر بوزنها ولا أرضية لها)، بإعادة تقييم
 // evaluatePlacement نفسها حتى لا يختلف الرقم عن قرار المستوى. null حين لا
 // مستوى تالٍ (احترافي) أو لا جوانب أو لا يُبلغ بكل الأسئلة.
 // evaluation: ناتج evaluatePlacement مع نسب الجوانب { knowledge, skill, behavior }.
@@ -190,8 +302,9 @@ export function itemsToFlip(evaluation, model = DEFAULT_MODEL) {
 export function placementFromAnswers(questions, answers, rules, model = null) {
   const minBehavior = model ? Number(model.min_behavior_items ?? DEFAULT_MODEL.min_behavior_items) : 0;
   const pcts = tierPercents(questions, answers, { minBehavior });
+  const acq = model ? acquiescenceFor(questions, answers) : {};
   return DIMENSIONS.map((dimension) => {
-    if (model) return { dimension, ...pcts[dimension], ...evaluatePlacement(pcts[dimension], model) };
+    if (model) return { dimension, ...pcts[dimension], ...evaluatePlacement(pcts[dimension], model, { acquiescence: acq[dimension] }) };
     return { dimension, ...pcts[dimension], level: levelFor(pcts[dimension], rules.filter((r) => r.dimension === dimension)) };
   });
 }
@@ -308,6 +421,51 @@ export function trackKey(levels) {
 export function trackLevels(key) {
   const m = String(key || '').match(/^M([1-3])I([1-3])L([1-3])$/);
   return m ? Object.fromEntries(DIMENSIONS.map((d, i) => [d, LEVELS[Number(m[i + 1]) - 1]])) : null;
+}
+
+// ── محور الأولوية للمشارك ──
+// الأضعف مستوى بين الأبعاد الثلاثة. عند التعادل: الأدنى مؤشرًا مركّبًا من
+// نتائج قياسه (assessment_results)، ثم ترتيب الأبعاد. بلا مؤشرات للمتعادلين
+// يبقى افتراض المسار (tracks.priority_dimension) إن كان بينهم.
+// composites: { milestone: 52.3, ... } أو null.
+/** @param {Record<string, string>} levels @param {Record<string, number> | null} [composites] @param {string | null} [fallback] @returns {string | null} */
+export function priorityFor(levels, composites = null, fallback = null) {
+  const rank = (d) => LEVELS.indexOf(levels?.[d]);
+  if (DIMENSIONS.some((d) => rank(d) < 0)) return fallback || null;
+  const min = Math.min(...DIMENSIONS.map(rank));
+  const tied = DIMENSIONS.filter((d) => rank(d) === min);
+  if (tied.length === 1) return tied[0];
+  const c = (d) => (composites?.[d] == null || composites[d] === '' ? null : Number(composites[d]));
+  if (tied.every((d) => c(d) != null && Number.isFinite(c(d)))) {
+    return tied.reduce((a, d) => (c(d) < c(a) ? d : a), tied[0]);
+  }
+  return fallback && tied.includes(fallback) ? fallback : tied[0];
+}
+// مضاعفة وزن محور الأولوية في معيار الوثيقة: لا مضاعفة إذا تساوت المستويات
+// الثلاثة، فلا أولوية حقيقية يُكافأ عليها محور دون غيره.
+/** @param {Record<string, string>} levels @param {string | null} priority @returns {string | null} */
+export function rubricPriority(levels, priority) {
+  const ls = DIMENSIONS.map((d) => levels?.[d]);
+  if (ls.every((l) => l) && ls.every((l) => l === ls[0])) return null;
+  return priority || null;
+}
+
+// ملف التعريف المعروض للمشارك: المسارات الـ27 تبقى مفتاحًا داخليًا للاشتقاق،
+// وما يُعرض هو محور الأولوية بمستواه فيه (9 ملفات في track_profiles: الأولوية عند التعادل بمؤشرات المشارك).
+export const profileKey = (levels, priority) => (priority && levels?.[priority] in RANK ? `${priority}-${levels[priority]}` : null);
+
+// سطر مولَّد يسمّي أقوى أطر المشارك بأسماء القاموس، ولا يكشف مستوى أي إطار
+/** @param {Record<string, string>} levels @param {string | null} [priority] */
+export function strengthsLine(levels, priority = null) {
+  const r = DIMENSIONS.map((d) => RANK[levels?.[d]]);
+  if (r.some((x) => x === undefined)) return null;
+  const top = Math.max(...r);
+  const strong = DIMENSIONS.filter((d, i) => r[i] === top);
+  const name = (d) => DIM_AR[d];
+  const deep = priority ? name(priority) : null;
+  if (strong.length === DIMENSIONS.length) return `مستوياتك متقاربة في الأطر الثلاثة${deep ? `، ويبدأ تعمقك من ${deep}` : ''}.`;
+  const list = strong.map(name).join(' و');
+  return `أقوى أطرك: ${list}.${deep ? ` ${strong.length === 1 ? 'تبني عليه' : 'تبني عليهما'} وأنت تعمّق ${deep}.` : ''}`;
 }
 
 export function handbookModulesFor(modules, levels) {

@@ -48,7 +48,7 @@ function Review({ d, canWrite, onSaved }) {
   };
   return (
     <section className="la-card cps-review">
-      <h3>تقييمك بالمعيار <small className="la-muted">· أبعاد {DIM[d.priority] || 'الإطار الأولوي'} وزنها ×{PRIORITY_WEIGHT}</small></h3>
+      <h3>تقييمك بالمعيار <small className="la-muted">{d.priority ? <>· أبعاد {DIM[d.priority]} وزنها ×{PRIORITY_WEIGHT}</> : '· المستويات الثلاثة متساوية، فكل الأبعاد بوزن واحد'}</small></h3>
       <fieldset disabled={!canWrite || !!busy}>
         {d.rubric.map((r) => (
           <div key={r.key} className="cps-crit">

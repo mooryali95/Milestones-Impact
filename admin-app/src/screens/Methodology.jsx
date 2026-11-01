@@ -236,7 +236,7 @@ function PlacementModel({ model, reload, canWrite }) {
       <div className="la-model-grid">
         <div><h4>1. أوزان الجوانب</h4>{f('w_skill', 'المواقف', 'الأصدق تنبؤًا بالأداء')}{f('w_knowledge', 'المعرفة', 'الفهم والمفاهيم')}{f('w_behavior', 'الممارسة', 'تقدير ذاتي يميل للتضخم')}</div>
         <div><h4>2. حدود المستويات</h4>{f('min_intermediate', 'المؤشر للمتوسط من 100', 'الحد الأدنى')}{f('min_advanced', 'المؤشر للاحترافي من 100', 'الحد الأدنى')}{f('borderline', 'هامش الحالة الحدّية', 'نقاط تحت الحد')}</div>
-        <div><h4>3. الحد الأدنى لأي جانب</h4>{f('floor_intermediate', 'للمتوسط', 'فوق نسبة التخمين 25%')}{f('floor_advanced', 'للاحترافي', 'نسبة الجانب الأضعف')}</div>
+        <div><h4>3. الحد الأدنى للمعرفة والمواقف</h4>{f('floor_intermediate', 'للمتوسط', 'فوق نسبة التخمين 25%')}{f('floor_advanced', 'للاحترافي', 'الممارسة الذاتية ليست بوابة، وتُعلَّم إن قلّت')}</div>
       </div>
       {canWrite && <button className="btn-sm primary" onClick={store}>حفظ المعيار</button>}
       <div className="la-calc">
@@ -250,7 +250,7 @@ function PlacementModel({ model, reload, canWrite }) {
         <div className="la-muted" role="status">
           {!out ? 'أدخل نسبًا واضغط احسب. القيم الافتراضية مثال من مشارك حقيقي.'
             : out === 'bad' ? 'أدخل نسبًا صحيحة'
-              : <>المؤشر المركّب <b>{out.composite}</b> · أضعف جانب {out.low}% · المستوى: <span className={`la-lvl ${out.level}`}>{LVL[out.level]}</span></>}
+              : <>المؤشر المركّب <b>{out.composite}</b> · أضعف اختبار {out.low ?? '·'}% ·{(out.flags || []).map((f) => <span key={f.key}> <span className="la-chip warn">{f.reason_ar}</span></span>)} · المستوى: <span className={`la-lvl ${out.level}`}>{LVL[out.level]}</span></>}
         </div>
       </div>
     </section>

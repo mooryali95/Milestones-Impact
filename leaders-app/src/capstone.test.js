@@ -6,7 +6,7 @@ import {
   bindAnswers, canSubmit, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
   leaderComposite, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
-import { activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { priorityFor, rubricPriority, activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
 import { documentHtml } from '../../src/lib/brand/doc.js';
 
@@ -169,6 +169,17 @@ describe('المعيار ونتيجة القائد', () => {
     expect(rubricScore({ ...all(4), strategy: 0 })).toBeNull();
     const s = { ...all(1), planning: 4, risk: 4 };
     expect(rubricScore(s, 'milestone')).toBeGreaterThan(rubricScore(s, 'leadership'));
+  });
+  it('لا مضاعفة عند تساوي المستويات الثلاثة، والأولوية بأدنى مؤشر بين المتعادلين', () => {
+    const s = { ...all(1), planning: 4, risk: 4 };
+    const flat = { milestone: 'intermediate', impact: 'intermediate', leadership: 'intermediate' };
+    const p = priorityFor(flat, { milestone: 70, impact: 60, leadership: 65 }, 'milestone');
+    expect(p).toBe('impact');
+    expect(rubricScore(s, rubricPriority(flat, p))).toBe(rubricScore(s, null));
+    const two = { milestone: 'beginner', impact: 'beginner', leadership: 'advanced' };
+    const q = priorityFor(two, { milestone: 30, impact: 45, leadership: 90 }, 'impact');
+    expect(q).toBe('milestone');
+    expect(rubricScore(s, rubricPriority(two, q))).toBe(rubricScore(s, 'milestone'));
   });
   it('يرفض بعدًا بلا درجة ويقص الملاحظات', () => {
     expect(() => cleanRubric({ ...all(3), value: 5 })).toThrow();

@@ -158,7 +158,9 @@ export function evaluate(p, m) {
   const pcts = Object.fromEntries(['knowledge', 'skill', 'behavior'].filter((t) => p[t] != null && p[t] !== '').map((t) => [t, +p[t]]));
   const r = evaluatePlacement(pcts, m);
   if (r.composite == null) return null;
-  return { ...r, low: Math.min(...Object.values(pcts)) };
+  // أضعف جانب مُقيَّد بأرضية: المعرفة أو المواقف (الممارسة ليست بوابة)
+  const gated = ['knowledge', 'skill'].filter((t) => pcts[t] != null).map((t) => pcts[t]);
+  return { ...r, low: gated.length ? Math.min(...gated) : null };
 }
 
 // ── إعادة الترتيب ──

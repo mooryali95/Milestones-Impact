@@ -365,6 +365,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .track-eyebrow { font-size: 12px; letter-spacing: .06em; color: var(--copper); font-weight: 700; }
 .track-head h3 { font-size: 21px; line-height: 1.5; font-weight: 800; }
 .track-head p { font-size: 14px; line-height: 1.9; color: rgba(255, 255, 255, .82); max-width: 760px; }
+.track-head p.track-strengths { margin-top: 6px; font-weight: 600; color: var(--gold); }
 .track-head .chip.track-lvl { background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255, 255, 255, .2); }
 .track-body { display: grid; grid-template-columns: repeat(3, 1fr); }
 .track-col { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
-  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL, itemsToFlip,
+  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL, itemsToFlip, acquiescenceFor, behaviorNaCounts, MAX_BEHAVIOR_NA, priorityFor, reasonWithFlags, rubricPriority,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const RULES = ['milestone', 'impact', 'leadership'].flatMap((dimension) => [
@@ -224,8 +224,8 @@ describe('evaluatePlacement', () => {
   });
   it('is borderline only when both the composite gap and the floor gap are within the margin', () => {
     expect(ev(60, 50, 45).borderline).toBe(true);     // المؤشر 52.8 يبعد 2.2، وكل جانب فوق 40
-    expect(ev(100, 100, 35).borderline).toBe(true);   // المؤشر 90، والممارسة تبعد 5 عن 40
-    expect(ev(100, 100, 20).borderline).toBe(false);  // المؤشر كافٍ لكن الممارسة تبعد 20
+    expect(ev(100, 35, 100).borderline).toBe(true);   // المؤشر 67.5، والمواقف تبعد 5 عن 40
+    expect(ev(100, 20, 100).borderline).toBe(false);  // المؤشر كافٍ لكن المواقف تبعد 20
     expect(ev(45, 45, 45).borderline).toBe(false);    // كل جانب فوق الأرضية لكن المؤشر يبعد 10
     expect(ev(100, 100, 100).borderline).toBe(false); // احترافي لا يكون حدّيًا
   });
@@ -234,18 +234,50 @@ describe('evaluatePlacement', () => {
     expect(ev(50, 75, 75).level).toBe('intermediate');
     expect(ev(100, 75, 75).level).toBe('advanced');
   });
-  it('a weak tier caps the level even with a high composite', () => {
+  it('a weak tested tier caps the level even with a high composite', () => {
+    const r = ev(100, 35, 100);
+    expect(r.composite).toBeGreaterThan(55);
+    expect(r.level).toBe('beginner');
+    expect(r.reason).toContain('المواقف');
+  });
+  it('self reported practice is not a gate: low practice is flagged, not capped', () => {
     const r = ev(100, 100, 50);
-    expect(r.composite).toBeGreaterThan(80);
-    expect(r.level).toBe('intermediate');
-    expect(r.reason).toContain('الممارسة');
+    expect(r.level).toBe('advanced');
+    expect(r.low_practice).toBe(true);
+    expect(r.flags.map((f) => f.key)).toEqual(['low_practice']);
+    expect(r.flags[0].reason_ar).toBe('اختبار مرتفع وممارسة ذاتية منخفضة');
+    // الخبير المتواضع: اختبار كامل وممارسة «نادرًا» يُسكَّن متوسطًا على الأقل
+    expect(ev(100, 75, 25).level).toBe('intermediate');
+    expect(ev(100, 75, 25).low_practice).toBe(true);
+    // ممارسة فوق أرضية المستوى الذي بلغه: لا علم
+    expect(ev(75, 50, 50).low_practice).toBe(false);
+    // التأسيسي لا يُعلَّم: لا اختبار ناجح يقابل الممارسة المنخفضة
+    expect(ev(20, 20, 10).low_practice).toBe(false);
+  });
+  it('still weighs practice in the composite', () => {
+    expect(ev(50, 50, 100).composite).toBe(57.5);
+    expect(ev(50, 50, 100).level).toBe('intermediate');
+    expect(ev(50, 50, 0).level).toBe('beginner');
+  });
+  it('flags acquiescence only when told, without changing the score', () => {
+    const a = evaluatePlacement({ knowledge: 50, skill: 50, behavior: 100 }, DEFAULT_MODEL, { acquiescence: true });
+    expect(a.acquiescence).toBe(true);
+    expect(a.flags.map((f) => f.reason_ar)).toContain('ممارسة بأعلى درجة في كل العبارات');
+    expect(a.composite).toBe(ev(50, 50, 100).composite);
+    expect(ev(50, 50, 100).acquiescence).toBe(false);
+  });
+  it('gives nothing above beginner from practice alone', () => {
+    const r = evaluatePlacement({ knowledge: null, skill: null, behavior: 100 });
+    expect(r.composite).toBe(100);
+    expect(r.level).toBe('beginner');
   });
   it('uses the admin tuned model', () => {
     expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 45, floor_intermediate: 25 }).level).toBe('intermediate');
   });
-  it('keeps a weak tier above chance (25%) out of intermediate', () => {
-    expect(ev(70, 70, 35).level).toBe('beginner');
-    expect(ev(70, 70, 45).level).toBe('intermediate');
+  it('keeps a weak tested tier above chance (25%) out of intermediate', () => {
+    expect(ev(70, 35, 70).level).toBe('beginner');
+    expect(ev(35, 70, 70).level).toBe('beginner');
+    expect(ev(70, 45, 70).level).toBe('intermediate');
   });
   it('ignores missing tiers', () => {
     expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
@@ -263,16 +295,19 @@ describe('itemsToFlip', () => {
     expect(flip(45, 45, 45)).toBe(2);
   });
   it('must clear the floors too, not only the composite threshold', () => {
-    // المؤشر 90 لكن الممارسة 20: عبارة واحدة (20 → 45) تعبر أرضية المتوسط 40
-    expect(flip(100, 100, 20)).toBe(1);
-    expect(evaluatePlacement({ knowledge: 100, skill: 100, behavior: 45 }).level).toBe('intermediate');
+    // المؤشر 62.5 لكن المواقف 25: سؤال مواقف واحد (25 → 41.67) يعبر أرضية المتوسط 40
+    expect(flip(100, 25, 100)).toBe(1);
+    expect(evaluatePlacement({ knowledge: 100, skill: 41.67, behavior: 100 }).level).toBe('intermediate');
+    // الممارسة لا أرضية لها: المؤشر 90 والممارسة 20 احترافي أصلًا
+    expect(flip(100, 100, 20)).toBeNull();
   });
   it('is null for the top level, for no tiers, and when no number of questions reaches the next threshold', () => {
     expect(flip(100, 100, 100)).toBeNull();
     expect(itemsToFlip({ level: 'beginner', knowledge: null, skill: null, behavior: null })).toBeNull();
     expect(flip(50, 50, 50, { ...DEFAULT_MODEL, min_intermediate: 100.5, min_advanced: 100.5 })).toBeNull();
     // القفز مستويين ببعد واحد يُحتسب أيضًا: المتوسط ممنوع لكن الاحترافي في المتناول
-    expect(flip(50, 50, 50, { ...DEFAULT_MODEL, min_intermediate: 100.5 })).toBe(5);
+    // (5 أسئلة مع أرضية ممارسة سابقًا؛ 4 الآن لأن الممارسة لا تحتاج رفعًا إلى 60)
+    expect(flip(50, 50, 50, { ...DEFAULT_MODEL, min_intermediate: 100.5 })).toBe(4);
   });
   it('ignores missing tiers like evaluatePlacement does', () => {
     expect(flip(50, 50, null)).toBe(1);
@@ -287,6 +322,51 @@ describe('placementFromAnswers with the composite model', () => {
     expect(m.level).toBe('advanced');
     expect(m.borderline).toBe(false);
     expect(typeof m.reason).toBe('string');
+  });
+  it('flags acquiescence when every practice statement is at the top score', () => {
+    const lik = [{ score: 0 }, { score: 1 }, { score: 2 }, { score: 3 }, { score: 4 }, { score: -1 }];
+    const qs = [
+      { id: 'k', dimension: 'milestone', tier: 'knowledge', options: [{ score: 0 }, { score: 4 }] },
+      ...[1, 2, 3, 4].map((i) => ({ id: `b${i}`, dimension: 'milestone', tier: 'behavior', options: lik })),
+      ...[1, 2, 3, 4].map((i) => ({ id: `c${i}`, dimension: 'impact', tier: 'behavior', options: lik })),
+    ];
+    const ans = { k: 1, b1: 4, b2: 4, b3: 4, b4: 4, c1: 4, c2: 4, c3: 4, c4: 3 };
+    const [m, i] = placementFromAnswers(qs, ans, [], DEFAULT_MODEL);
+    expect(m.acquiescence).toBe(true);
+    expect(i.acquiescence).toBe(false);
+    // «لا ينطبق» لا تكسر العلم ولا تُحتسب أعلى درجة
+    expect(acquiescenceFor(qs, { ...ans, b4: 5 }).milestone).toBe(true);
+    expect(acquiescenceFor(qs, { b1: 5, b2: 5 }).milestone).toBe(false);
+    expect(reasonWithFlags(m)).toContain('ممارسة بأعلى درجة في كل العبارات');
+  });
+  it('counts «not applicable» per dimension for the baseline guard', () => {
+    const lik = [{ score: 0 }, { score: 4 }, { score: -1 }];
+    const qs = [1, 2, 3, 4].map((i) => ({ id: `b${i}`, dimension: 'leadership', tier: 'behavior', options: lik }));
+    expect(behaviorNaCounts(qs, { b1: 2, b2: 1 })).toEqual({ milestone: 0, impact: 0, leadership: 1 });
+    expect(behaviorNaCounts(qs, { b1: 2, b2: 2 }).leadership).toBeGreaterThan(MAX_BEHAVIOR_NA);
+  });
+});
+
+describe('priorityFor', () => {
+  const L = (m, i, l) => ({ milestone: m, impact: i, leadership: l });
+  it('takes the single weakest dimension regardless of composites', () => {
+    expect(priorityFor(L('advanced', 'beginner', 'intermediate'), { milestone: 10, impact: 90, leadership: 10 }, 'milestone')).toBe('impact');
+  });
+  it('breaks ties by the lowest composite among the tied weakest', () => {
+    expect(priorityFor(L('beginner', 'beginner', 'advanced'), { milestone: 40, impact: 31.5, leadership: 5 })).toBe('impact');
+    expect(priorityFor(L('intermediate', 'intermediate', 'intermediate'), { milestone: 70, impact: 66, leadership: 58 })).toBe('leadership');
+    // تعادل في المؤشر أيضًا: ترتيب الأبعاد
+    expect(priorityFor(L('beginner', 'beginner', 'beginner'), { milestone: 30, impact: 30, leadership: 30 })).toBe('milestone');
+  });
+  it('falls back to the track default when composites are absent', () => {
+    expect(priorityFor(L('beginner', 'beginner', 'advanced'), null, 'impact')).toBe('impact');
+    expect(priorityFor(L('beginner', 'beginner', 'advanced'), { milestone: 40 }, 'impact')).toBe('impact');
+    expect(priorityFor(L('beginner', 'beginner', 'advanced'), null, null)).toBe('milestone');
+    expect(priorityFor({ milestone: 'beginner' }, null, 'impact')).toBe('impact');
+  });
+  it('does not double the rubric weight when all three levels are equal', () => {
+    expect(rubricPriority(L('beginner', 'beginner', 'beginner'), 'milestone')).toBeNull();
+    expect(rubricPriority(L('beginner', 'beginner', 'advanced'), 'impact')).toBe('impact');
   });
 });
 

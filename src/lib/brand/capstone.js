@@ -233,7 +233,7 @@ export function capstoneReport(doc) {
     body += section('Advisor review', 'تقييم المستشار', `
       <p class="cp-score"><b>${esc(r.score ?? '·')}</b><span>من 100</span></p>
       ${table([{ label: 'البعد' }, { label: 'الدرجة', width: '18mm' }, { label: 'الملاحظة' }], rows)}
-      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار الأولوي في مسار القائد وزنها ×${PRIORITY_WEIGHT}.`);
+      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, r.priority ? `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار الأولوي في مسار القائد وزنها ×${PRIORITY_WEIGHT}.` : `معيار من ${RUBRIC.length} أبعاد بوزن واحد، لتساوي مستويات القائد في الأطر الثلاثة.`);
   }
 
   if (approved) {

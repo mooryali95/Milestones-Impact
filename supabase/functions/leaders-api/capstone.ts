@@ -9,14 +9,15 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
-import { award, CAPSTONE_LOCKED, initiativeFor, mePayload } from './participant.ts';
+import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf } from './programs.ts';
-import { isEmail, normalizeEmail, overallLevel, trackKey } from './logic.js';
+import { isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
+import { profileFor } from './profiles.ts';
 
 type Body = Record<string, any>;
 
@@ -42,7 +43,13 @@ async function build(p: any) {
   ]);
   const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
   const all = must(models) ?? [];
-  const priority = (track as any).data?.priority_dimension || null;
+  // محور الأولوية للمشارك نفسه (التعادل بمؤشراته)، وافتراض المسار عند غيابها.
+  // وزن المعيار لا يُضاعف إذا تساوت المستويات الثلاثة (rubricPriority).
+  const priority = await participantPriority(p.id, levels, (track as any).data?.priority_dimension || null);
+  const weighted = rubricPriority(levels, priority);
+  // العنوان المعروض للمشارك وراعيه: ملف التعريف، وإلا عنوان المسار
+  const profile = await profileFor(levels, priority);
+  if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
   const mine = capstoneModels(all, levels, scope);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
@@ -59,7 +66,7 @@ async function build(p: any) {
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, scope, priority, project: trackProject(all, levels, scope, priority), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
 const sectionView = (s: any) => ({
@@ -87,7 +94,7 @@ export async function get(p: any) {
   return {
     success: true,
     scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
-    track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.priority } : null,
+    track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.weighted } : null,
     initiative: d.initiative,
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
@@ -142,7 +149,7 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
       participant: { name: p.full_name, name_en: p.name_en || null, job_title: p.job_title || null },
       org: org ? { name: org.name, logo: org.logo || null, color: org.color || null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
-      track: d.track ? { title: d.track.title_ar, priority: d.track.priority_dimension || null } : null,
+      track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
       level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,
       readiness: d.readiness,
@@ -154,7 +161,7 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,
     checks: d.checks,
-    review: showReview && c?.scores ? { score: c.score, scores: c.scores, notes: c.notes || {}, note: c.review_note || null, priority: d.track?.priority_dimension || null } : null,
+    review: showReview && c?.scores ? { score: c.score, scores: c.scores, notes: c.notes || {}, note: c.review_note || null, priority: d.weighted } : null,
     sponsor: sponsorView(c),
     rubric: RUBRIC.map((r) => ({ key: r.key, title: r.title, dimension: r.dimension })),
   };
@@ -240,7 +247,7 @@ export async function adminGet(b: Body) {
     success: true, doc: await withTracking(document, p.id),
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
     sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
-    priority: state.track?.priority_dimension || null, max_revisions: MAX_REVISIONS,
+    priority: state.weighted, max_revisions: MAX_REVISIONS,
     rubric: rubricFor(state.levels), leader: await leaderScore(p, c?.score != null ? Number(c.score) : null),
   };
 }
@@ -302,7 +309,8 @@ export async function adminReview(a: Admin, b: Body) {
   const { levels } = await levelsOf(p.id);
   const key = trackKey(levels);
   const { data: t } = key ? await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle() : { data: null };
-  const score = rubricScore(rubric.scores, (t as any)?.priority_dimension || null);
+  const priority = await participantPriority(p.id, levels, (t as any)?.priority_dimension || null);
+  const score = rubricScore(rubric.scores, rubricPriority(levels, priority));
   must(await db.from('capstones').update({
     status: 'accepted', scores: rubric.scores, notes: rubric.notes, review_note: note, score, reviewed_by: a.email, reviewed_at: now, updated_at: now,
   }).eq('participant_id', p.id));

@@ -1,0 +1,7170 @@
+[
+  {
+    "instrument": "baseline-v4",
+    "id": "a6fe06d7-6464-461e-86ab-2a361db977f5",
+    "code": "M-B1",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 1,
+    "competency_ar": "قيادة اجتماعات القرار",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أختم اجتماعات المتابعة التي أقودها بقرار موثق له مسؤول وموعد.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يختم اجتماعات المتابعة التي يقودها بقرار موثق له مسؤول وموعد.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "7266a534-cb90-44fd-a183-dba29a67364d",
+    "code": "M-B2",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 2,
+    "competency_ar": "معايير التسليم والقبول",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أتفق مع الجهة المستلمة على معايير قبول المخرج قبل تسليمه.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يتفق مع الجهة المستلمة على معايير قبول المخرج قبل تسليمه.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "6f2bd69b-3591-42da-80d5-6a37096bb6ed",
+    "code": "M-B3",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 3,
+    "competency_ar": "مراجعة مبرر الاستمرار",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "في كل بوابة مرحلة، أراجع هل ما زال مبرر المشروع قائمًا.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "في كل بوابة مرحلة، يراجع هل ما زال مبرر المشروع قائمًا.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "7393e7ee-6bc5-4da4-a5df-cdb41a88420f",
+    "code": "M-B4",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 4,
+    "competency_ar": "إيقاف ما لا يخدم القيمة",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أقترح إيقاف عمل اتضح أنه لم يعد يخدم الهدف.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يقترح إيقاف عمل اتضح أنه لم يعد يخدم الهدف.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "01d74f0f-1b14-4a41-ade5-886985057b1f",
+    "code": "M-S1",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 5,
+    "competency_ar": "بناء سجل المعالم",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "طُلب منك بناء سجل معالم لمشروع جديد. أي سجل هو الأفضل؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "معالم لاكتمال كل مخرج، لكل منها تاريخ ومسؤول",
+        "score": 1
+      },
+      {
+        "label": "معالم قرارات ونتائج، لكل منها دليل يثبت بلوغها",
+        "score": 4
+      },
+      {
+        "label": "معلم في نهاية كل شهر لضمان انتظام التقارير",
+        "score": 0
+      },
+      {
+        "label": "معالم دفعات العقد مع المورد ومواعيد استحقاق كل دفعة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e0e82972-f9b6-48f2-b532-dbe83785f05b",
+    "code": "M-S3",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 6,
+    "competency_ar": "قراءة الانزلاق",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "في تقارير المتابعة، يتأخر تاريخ معلم رئيسي أسبوعًا في كل تقرير منذ أربعة أشهر. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مطالبة الفريق بخطة تسريع لتعويض الأسابيع المتأخرة",
+        "score": 1
+      },
+      {
+        "label": "اعتماد التاريخ الجديد في خط الأساس وإبلاغ الراعي",
+        "score": 1
+      },
+      {
+        "label": "الاستمرار في المتابعة لأن تأخير كل تقرير محدود",
+        "score": 0
+      },
+      {
+        "label": "تحليل السبب الجذري للانزلاق قبل أي تعديل للخطة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "7eeff23e-925e-4596-b2fe-bb134c063bc8",
+    "code": "M-S4",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 7,
+    "competency_ar": "مواءمة متطلبات المانح",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "مشروع تنموي ممول من جهة مانحة، وتقارير المنحة ترهق الفريق ولا تُستخدم داخليًا. ما المعالجة الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التفاوض مع المانح على تقرير فصلي بدل الشهري",
+        "score": 2
+      },
+      {
+        "label": "ربط مواعيد التقارير بمعالم القرار الداخلية",
+        "score": 4
+      },
+      {
+        "label": "إسناد التقارير لموظف متخصص بعيدًا عن الفريق",
+        "score": 1
+      },
+      {
+        "label": "دمج التقارير في تقرير سنوي واحد شامل",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "6efaed27-bbc8-4192-b03a-b85dc9e1b05b",
+    "code": "M-S2",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 8,
+    "competency_ar": "قرار البوابة",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في جلسة بوابة مرحلة: المشروع متأخر ثلاثة أسابيع، ومبرر الاستمرار قائم، والمخاطر معروفة. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إعادة عقد الجلسة بعد أسبوعين وقد حُدّث الجدول",
+        "score": 1
+      },
+      {
+        "label": "عبور مع خطة تصحيح تُعرض في الاجتماع الدوري القادم",
+        "score": 2
+      },
+      {
+        "label": "عبور مع طلب اعتماد خط أساس معدل بالتاريخ الجديد",
+        "score": 1
+      },
+      {
+        "label": "عبور مشروط بخطة تصحيح ومعلم مراجعة خلال أسبوعين",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "3dc1b8c8-c5fa-42c4-9ecf-1bb2fbc76ba5",
+    "code": "M-S2B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 8,
+    "competency_ar": "قرار البوابة",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مراجعة مرحلية: المشروع ضمن الموعد، لكن دراسة حديثة تظهر أن الطلب على الخدمة أقل بكثير مما بُني عليه المبرر. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الاستمرار مع تحديث دراسة الطلب خلال المرحلة القادمة",
+        "score": 2
+      },
+      {
+        "label": "الاستمرار لأن الأداء ضمن الخطة والميزانية المعتمدتين",
+        "score": 1
+      },
+      {
+        "label": "عرض المبرر المحدث على اللجنة لتقرر الاستمرار أو التعديل",
+        "score": 4
+      },
+      {
+        "label": "تسريع التنفيذ لإطلاق الخدمة قبل أن يتراجع الطلب أكثر",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "9f2c9476-99e4-4008-9a3b-e613624d9479",
+    "code": "M-S5",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 9,
+    "competency_ar": "ضبط تغيير النطاق",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في منتصف مرحلة التنفيذ طلب الراعي إضافة خدمة يراها مهمة، ويقدّر الفريق أنها تضيف شهرًا. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافتها وإعادة توزيع الفريق لامتصاص الشهر الإضافي",
+        "score": 0
+      },
+      {
+        "label": "اقتراح إدراجها في إصدار لاحق بعد التسليم الأول",
+        "score": 2
+      },
+      {
+        "label": "عرض أثرها على الموعد والتكلفة مع بديلين ليقرر الراعي",
+        "score": 4
+      },
+      {
+        "label": "إضافتها مقابل حذف ميزة أقل أولوية باتفاق الفريق",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "05486af3-502f-4c84-a3f2-76cec00c9462",
+    "code": "M-S5B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 9,
+    "competency_ar": "ضبط تغيير النطاق",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "بعد اعتماد خطة مشروع لتطوير نظام داخلي، طلبت إدارة مستفيدة ربطه بنظام آخر لم يكن في النطاق. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تقديم طلب تغيير يبيّن أثر الربط على الوقت والتكلفة",
+        "score": 4
+      },
+      {
+        "label": "تسجيل الطلب ودراسته ضمن المرحلة الثانية من المشروع",
+        "score": 2
+      },
+      {
+        "label": "تنفيذ الربط إن قدّر الفريق أنه لا يؤخر موعد التسليم",
+        "score": 1
+      },
+      {
+        "label": "الاتفاق مع الإدارة المستفيدة مباشرة على تنفيذه",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "325a4592-5ebc-4ae9-b9b9-3d5608df47e5",
+    "code": "M-S6",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 10,
+    "competency_ar": "الاستجابة للمخاطر",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أبلغك المورد أن تسليم مكون رئيسي سيتأخر ستة أسابيع، وهذا الخطر مسجل مسبقًا مع خطة استجابة. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفعيل خطة الاستجابة المسجلة وإبلاغ أصحاب القرار",
+        "score": 4
+      },
+      {
+        "label": "مطالبة المورد بخطة تعافٍ مكتوبة قبل تحديث الجدول",
+        "score": 2
+      },
+      {
+        "label": "تحديث الجدول بالتاريخ الجديد وذكره في التقرير الشهري",
+        "score": 1
+      },
+      {
+        "label": "مطالبة المورد بغرامة التأخير المنصوص عليها في العقد",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "52d57444-1a8d-4385-a6b5-50b4f91d6c17",
+    "code": "M-S6B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 10,
+    "competency_ar": "الاستجابة للمخاطر",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "قبل إطلاق خدمة بأسبوع تحقق خطر مسجل: انتقل الفريق التقني الرئيسي إلى مشروع آخر، وخطة الاستجابة تنص على فريق مساند. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "طلب إعادة الفريق الرئيسي من مدير المشروع الآخر",
+        "score": 1
+      },
+      {
+        "label": "تأجيل الإطلاق أسبوعين لتهيئة فريق جديد من الداخل",
+        "score": 1
+      },
+      {
+        "label": "تفعيل الفريق المساند وإبلاغ أصحاب القرار",
+        "score": 4
+      },
+      {
+        "label": "تقييم قدرة الفريق المساند ثم إبلاغ أصحاب القرار لاحقًا",
+        "score": 2
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "7b667e2a-2007-4bbb-9589-ee9c443c2d07",
+    "code": "M-K2",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 11,
+    "competency_ar": "البوابة والمعلم",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي النقاط التالية في مشروع إنشاء مركز خدمة تمثل بوابة مرحلة (Stage Gate)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع الفريق الأسبوعي لمراجعة المهام والمخاطر",
+        "score": 0
+      },
+      {
+        "label": "استلام الدفعة الأولى من مواد البناء من المورد",
+        "score": 0
+      },
+      {
+        "label": "اعتماد اللجنة للتصميم قبل صرف ميزانية الإنشاء",
+        "score": 4
+      },
+      {
+        "label": "رفع تقرير الإنجاز الشهري إلى الإدارة العليا",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "ef263e5a-b5aa-493b-b9c2-f7ebdbd77dba",
+    "code": "M-K2B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 11,
+    "competency_ar": "البوابة والمعلم",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مشروع تحوّل رقمي، أي النقاط التالية تمثل بوابة مرحلة (Stage Gate)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع الفريق الأسبوعي لمتابعة المهام والمخاطر",
+        "score": 0
+      },
+      {
+        "label": "تسليم المورد النسخة الأولى من النظام للاختبار",
+        "score": 0
+      },
+      {
+        "label": "رفع تقرير الإنجاز الشهري إلى الإدارة العليا",
+        "score": 0
+      },
+      {
+        "label": "اعتماد اللجنة لنتائج التجربة قبل التعميم",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "4d8eb763-df4c-4245-80cc-e721e8f28cef",
+    "code": "M-K4",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 12,
+    "competency_ar": "اختيار نهج الإدارة",
+    "chapter_key": "ch1",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "جهة تطلق برنامجًا متطلباته واضحة ومستقرة، وتشترط اعتماد اللجنة قبل كل مرحلة وصرف الميزانية على دفعات. أي نهج أنسب لإدارته؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نهج تنبؤي بمراحل وبوابات اعتماد",
+        "score": 4
+      },
+      {
+        "label": "نهج تكيفي بدورات قصيرة وأولويات متغيرة",
+        "score": 0
+      },
+      {
+        "label": "نهج هجين يبدأ تكيفيًا ثم يصبح تنبؤيًا",
+        "score": 0
+      },
+      {
+        "label": "إدارة تشغيلية بمؤشرات أداء شهرية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "842b69ed-1320-4754-8421-b7ddcf6c4de7",
+    "code": "M-K4B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 12,
+    "competency_ar": "اختيار نهج الإدارة",
+    "chapter_key": "ch1",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "فريق يبني خدمة رقمية جديدة، ومتطلباتها غير واضحة وتتغير مع ملاحظات المستخدمين كل أسبوعين. أي نهج أنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نهج تنبؤي بخطة تفصيلية معتمدة من البداية حتى الإغلاق",
+        "score": 0
+      },
+      {
+        "label": "نهج تكيفي بدورات قصيرة وتخطيط يتجدد مع المستخدمين",
+        "score": 4
+      },
+      {
+        "label": "تجميد المتطلبات حتى تتضح ثم البدء في التنفيذ",
+        "score": 0
+      },
+      {
+        "label": "إدارة تشغيلية بمؤشرات أداء شهرية لكل فريق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "20238522-94be-45ef-9b37-df4422e6118f",
+    "code": "M-K5",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 13,
+    "competency_ar": "المسار الحرج",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في الجدول الزمني، ماذا يعني أن نشاطًا يقع على المسار الحرج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن تأخيره يؤخر موعد انتهاء المشروع مباشرة",
+        "score": 4
+      },
+      {
+        "label": "أنه أعلى الأنشطة تكلفة في ميزانية المشروع",
+        "score": 0
+      },
+      {
+        "label": "أنه يحتاج أكبر عدد من أعضاء الفريق",
+        "score": 0
+      },
+      {
+        "label": "أنه يحمل أعلى درجة مخاطر في سجل المخاطر",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e43b29df-cfcc-40dd-a59a-eb7ac1fd3269",
+    "code": "M-K5B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 13,
+    "competency_ar": "المسار الحرج",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "نشاط ليس على المسار الحرج وله فائض زمني (Float) قدره خمسة أيام. ماذا يحدث إن تأخر ثلاثة أيام؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "يتأخر انتهاء المشروع ثلاثة أيام",
+        "score": 0
+      },
+      {
+        "label": "يطول المسار الحرج خمسة أيام",
+        "score": 0
+      },
+      {
+        "label": "لا يتأثر موعد انتهاء المشروع",
+        "score": 4
+      },
+      {
+        "label": "يلزم اعتماد خط أساس جديد",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "d9f4e723-6927-42c1-9bd9-9842e6f546bb",
+    "code": "M-K6",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 14,
+    "competency_ar": "ضبط التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الغرض الأساسي من إجراء ضبط التغيير في المشروع؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "منع التعديل على النطاق بعد اعتماده",
+        "score": 0
+      },
+      {
+        "label": "تقييم أثر التغيير قبل اعتماده أو رفضه",
+        "score": 4
+      },
+      {
+        "label": "توثيق التغييرات بعد تنفيذها لأغراض التدقيق",
+        "score": 0
+      },
+      {
+        "label": "إحالة طلبات التغيير إلى الراعي ليقررها",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "0a789cb7-bfb2-49c6-9ab1-50d8925cee16",
+    "code": "M-K6B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 14,
+    "competency_ar": "ضبط التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الذي يميّز طلب التغيير الرسمي عن التعديل اليومي في المهام؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أنه يأتي من الراعي أو من الإدارة العليا للجهة",
+        "score": 0
+      },
+      {
+        "label": "أنه يمس نطاقًا أو موعدًا أو تكلفة معتمدة",
+        "score": 4
+      },
+      {
+        "label": "أنه يتطلب إضافة أعضاء جدد إلى فريق المشروع",
+        "score": 0
+      },
+      {
+        "label": "أنه يُوثَّق بالبريد الإلكتروني لا في الاجتماع",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e3f22d59-e8fc-4181-8469-1b4b93c08fa0",
+    "code": "M-K7",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 15,
+    "competency_ar": "الخطر والمشكلة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الفرق بين الخطر (Risk) والمشكلة (Issue)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الخطر حدث محتمل لم يقع، والمشكلة حدث وقع فعلًا",
+        "score": 4
+      },
+      {
+        "label": "الخطر يخص التكلفة، والمشكلة تخص الجدول الزمني",
+        "score": 0
+      },
+      {
+        "label": "الخطر يديره الراعي، والمشكلة يديرها المدير",
+        "score": 0
+      },
+      {
+        "label": "الخطر مصدره خارجي، والمشكلة مصدرها داخل الفريق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "6c28b6e6-b18c-4f5a-90e6-4fb05fc0216f",
+    "code": "M-K7B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 15,
+    "competency_ar": "الخطر والمشكلة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "بند في سجل المشروع: «أبلغ المورد اليوم أن الشحنة لن تصل في موعدها». كيف يُصنَّف؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خطر يُراقب حتى يتأكد وقوعه",
+        "score": 0
+      },
+      {
+        "label": "افتراض يُراجع في الخطة القادمة",
+        "score": 0
+      },
+      {
+        "label": "قرار معلق ينتظر اللجنة التوجيهية",
+        "score": 0
+      },
+      {
+        "label": "مشكلة قائمة تحتاج معالجة الآن",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "0237035d-fec0-49fb-888e-53434622c67a",
+    "code": "M-K8",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 16,
+    "competency_ar": "خط الأساس",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما خط الأساس (Baseline) في إدارة المشروعات؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "النسخة المعتمدة من الخطة للقياس عليها",
+        "score": 4
+      },
+      {
+        "label": "أحدث نسخة من الخطة بعد آخر تحديث أجراه فريق المشروع",
+        "score": 0
+      },
+      {
+        "label": "الحد الأدنى من النطاق المقبول لتسليم المشروع",
+        "score": 0
+      },
+      {
+        "label": "تقدير أولي للتكلفة قبل دراسة الجدوى التفصيلية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "506006c4-d400-481e-b291-fd42083fd91c",
+    "code": "M-K8B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 16,
+    "competency_ar": "خط الأساس",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "لماذا يُحتفظ بخط الأساس (Baseline) دون تعديل إلا بتغيير معتمد؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "ليبقى مرجعًا يُقاس عليه الانحراف",
+        "score": 4
+      },
+      {
+        "label": "لأن تعديله يُعيد احتساب الميزانية",
+        "score": 0
+      },
+      {
+        "label": "لتقليل التقارير المطلوبة من الفريق",
+        "score": 0
+      },
+      {
+        "label": "لأن الراعي هو من يحتفظ بالنسخة المعتمدة منه",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "d89b61e3-fcd5-4e4b-a554-1dc3f224a9f3",
+    "code": "I-B1",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 21,
+    "competency_ar": "سؤال التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أطلب في مراجعات المشروعات بيانات عما تغيّر لدى المستفيدين، لا عن الأنشطة فقط.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يطلب في مراجعات المشروعات بيانات عما تغيّر لدى المستفيدين، لا عن الأنشطة فقط.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "914cc90a-aa96-4e56-95fd-3fbd23bde797",
+    "code": "I-B2",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 22,
+    "competency_ar": "ملكية المنافع",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أتأكد أن لكل نتيجة متوقعة من المشروع شخصًا محددًا يتابع تحققها بعد التسليم.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يتأكد أن لكل نتيجة متوقعة من المشروع شخصًا محددًا يتابع تحققها بعد التسليم.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "496aae5b-f27a-42ee-b2e4-71645440a0cb",
+    "code": "I-B3",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 23,
+    "competency_ar": "نزاهة الأدلة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أذكر حدود الأدلة في تقارير الأثر التي أعدّها أو أعتمدها.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يذكر حدود الأدلة في تقارير الأثر التي يعدّها أو يعتمدها.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "32ec1b75-fb2e-44a3-8d81-7646fc24c450",
+    "code": "I-B4",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 24,
+    "competency_ar": "الأثر في القرار",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أستخدم مؤشرات الأثر عند ترتيب أولويات المشروعات.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يستخدم مؤشرات الأثر عند ترتيب أولويات المشروعات.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "ad541e73-bc42-40bd-b321-8e3ad394d6c8",
+    "code": "I-S1",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 25,
+    "competency_ar": "صياغة المنفعة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "تبني سجل منافع لبرنامج تدريبي. أي صياغة تصلح منفعةً؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تدريب 500 متدرب خلال العام بنسبة حضور 95%",
+        "score": 0
+      },
+      {
+        "label": "رفع توظيف الخريجين من 30% إلى 45% خلال 12 شهرًا",
+        "score": 4
+      },
+      {
+        "label": "رضا المتدربين عن الدورة بنسبة 90% في الاستبانة",
+        "score": 1
+      },
+      {
+        "label": "ارتفاع ثقة المتدربين بقدراتهم بعد الدورة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "1805e31a-dd7d-4743-9b5d-d587e40343de",
+    "code": "I-S4",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 26,
+    "competency_ar": "خط الأساس المتأخر",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "برنامج بدأ قبل شهرين دون خط أساس. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "بناء خط أساس فوري بالبيانات المتاحة وتوثيق قيوده",
+        "score": 4
+      },
+      {
+        "label": "اعتماد أول قياس بعد ثلاثة أشهر خطًا للأساس",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بقياس المخرجات حتى نهاية البرنامج",
+        "score": 0
+      },
+      {
+        "label": "تقديرات الفريق للوضع السابق دون توثيق مصدرها",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e06a38f0-65aa-4e75-9916-ac585b4f4cf4",
+    "code": "I-S5",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 27,
+    "competency_ar": "اختيار مؤشر الأثر",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "تصمم مؤشر أثر لبرنامج يدعم رواد الأعمال. أي مؤشر هو الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "عدد الورش المنفذة لرواد الأعمال خلال العام",
+        "score": 0
+      },
+      {
+        "label": "نسبة المشاركين الراضين عن جودة الورش المقدمة",
+        "score": 1
+      },
+      {
+        "label": "عدد طلبات الالتحاق بالبرنامج في كل دورة",
+        "score": 0
+      },
+      {
+        "label": "نسبة المنشآت المستمرة بعد عامين من الدعم",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "4211046c-2eb6-4d16-be04-e023a87b7333",
+    "code": "I-S2",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 28,
+    "competency_ar": "مراجعة المنافع",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في مراجعة منافع: منفعة متأخرة عن مسارها 40%، ومالكها يقترح تأجيل القياس للدورة القادمة. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الموافقة على التأجيل مع توثيق السبب في السجل",
+        "score": 1
+      },
+      {
+        "label": "ضخ موارد إضافية لتعويض الفجوة في الدورة القادمة",
+        "score": 1
+      },
+      {
+        "label": "خفض مستهدف المنفعة ليتوافق مع الأداء الفعلي",
+        "score": 0
+      },
+      {
+        "label": "تحليل السبب ثم قرار موثق بتصحيح المسار",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "fefa770d-3c45-475c-beae-e9861c5147e7",
+    "code": "I-S2B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 28,
+    "competency_ar": "مراجعة المنافع",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مراجعة ربعية ظهر أن منفعة «خفض زمن الخدمة» تحققت أسرع من المخطط بكثير. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع مستهدف المنفعة للعام القادم بناءً على الأداء",
+        "score": 1
+      },
+      {
+        "label": "التحقق من دقة القياس وسبب التسارع قبل التعميم",
+        "score": 4
+      },
+      {
+        "label": "إعلان النتيجة في التقرير السنوي كما وردت",
+        "score": 1
+      },
+      {
+        "label": "إيقاف قياس المنفعة لأنها تحققت قبل موعدها",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e8bc4b0d-e870-43f3-8670-1919ef717614",
+    "code": "I-S3",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 29,
+    "competency_ar": "ادعاءات الأثر",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "تقرير أثر يذكر أن البرنامج خفّض البطالة في المنطقة 10%، دون خط أساس أو مجموعة مقارنة. كيف تتعامل معه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أعتمده مع حاشية تذكر غياب خط الأساس",
+        "score": 1
+      },
+      {
+        "label": "أعيد صياغته ليبيّن أن البرنامج أسهم مع عوامل أخرى",
+        "score": 4
+      },
+      {
+        "label": "أحذف الرقم وأكتفي بعرض مخرجات البرنامج",
+        "score": 1
+      },
+      {
+        "label": "أؤجل نشر التقرير حتى تُجرى دراسة مقارنة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "aa21387d-ee94-404e-bbc0-f99ea728286f",
+    "code": "I-S3B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 29,
+    "competency_ar": "ادعاءات الأثر",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "عرض لبرنامج صحي يقول إن المشاركين خسروا 5 كيلوغرامات في المتوسط، والقياس تم على من أكملوا البرنامج فقط (40% من المسجلين). كيف تتعامل مع الرقم؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أعرضه كما هو لأنه قياس فعلي",
+        "score": 1
+      },
+      {
+        "label": "أعمّم الرقم على المسجلين جميعًا لأن المكملين عينة ممثلة",
+        "score": 0
+      },
+      {
+        "label": "أعرضه مع نسبة المنسحبين موضحًا أنه يخص المكملين فقط",
+        "score": 4
+      },
+      {
+        "label": "أستبدله بعدد المسجلين في البرنامج لأنه أدق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "ea8b69b9-24df-480c-bf58-7723d6057c4c",
+    "code": "I-S6",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 30,
+    "competency_ar": "الآثار غير المقصودة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أظهرت متابعة برنامج توظيف أن أصحاب العمل صاروا يفضلون خريجيه على غيرهم، فتراجعت فرص المتقدمين من خارجه. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافة مؤشر يتابع الظاهرة في التقرير السنوي",
+        "score": 2
+      },
+      {
+        "label": "تسجيله منفعة سلبية وقياسه وعرضه على صاحب القرار",
+        "score": 4
+      },
+      {
+        "label": "توسيع شروط القبول في الدورة القادمة دون عرضه",
+        "score": 1
+      },
+      {
+        "label": "إحالته إلى جهة سوق العمل لأنه خارج اختصاص البرنامج",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "80b54e1f-989e-4536-a88f-b966d7b73fda",
+    "code": "I-S6B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 30,
+    "competency_ar": "الآثار غير المقصودة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "بعد إطلاق خدمة إلكترونية لتسريع المعاملات، تراجع وصول كبار السن إليها لأن كثيرًا منهم لا يستخدمون التطبيقات. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إطلاق حملة توعية بالتطبيق تستهدف كبار السن",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بمؤشر زمن المعاملة لأنه هدف الخدمة",
+        "score": 0
+      },
+      {
+        "label": "إضافة قناة هاتفية لهم وتسجيل ذلك في التقرير القادم",
+        "score": 2
+      },
+      {
+        "label": "تسجيله أثرًا سلبيًا وقياسه وعرض معالجته على صاحب القرار",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "66c0a52e-400d-4e94-b615-6c5574676843",
+    "code": "I-K1",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 31,
+    "competency_ar": "مستويات سلسلة القيمة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "«ارتفاع معرفة المتدربين بالمهارة المستهدفة بعد انتهاء الدورة» يقع في أي مستوى من سلسلة النتائج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مخرجات",
+        "score": 0
+      },
+      {
+        "label": "نتائج قصيرة المدى",
+        "score": 4
+      },
+      {
+        "label": "نتائج متوسطة المدى",
+        "score": 0
+      },
+      {
+        "label": "أثر طويل المدى",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "db984245-e41c-4271-90a9-3dd3ce8e2640",
+    "code": "I-K1B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 31,
+    "competency_ar": "مستويات سلسلة القيمة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "«تدريب 200 موظف على نظام المشتريات الجديد» يقع في أي مستوى من سلسلة النتائج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مخرجات",
+        "score": 4
+      },
+      {
+        "label": "نتائج قصيرة المدى",
+        "score": 0
+      },
+      {
+        "label": "نتائج متوسطة المدى",
+        "score": 0
+      },
+      {
+        "label": "أثر طويل المدى",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "4aa20897-8baa-4f78-9d02-e6849c695aaf",
+    "code": "I-K2",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 32,
+    "competency_ar": "المساهمة والإسناد",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في أي حالة تكون لغة «المساهمة» أدق من «الإسناد» في تقرير الأثر؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "عند الإبلاغ عن عدد المستفيدين من الخدمة",
+        "score": 0
+      },
+      {
+        "label": "عند تغيّر مؤشر وطني تؤثر فيه عوامل كثيرة",
+        "score": 4
+      },
+      {
+        "label": "عندما يكون البرنامج ممولًا من الجهة",
+        "score": 0
+      },
+      {
+        "label": "عندما يكون التقرير موجهًا للإدارة العليا",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "1a8954af-854e-44e3-81f7-37059086c4a1",
+    "code": "I-K2B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 32,
+    "competency_ar": "المساهمة والإسناد",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي العبارات التالية يصح فيها الإسناد المباشر إلى برنامج الجهة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "انخفاض معدل البطالة في المنطقة",
+        "score": 0
+      },
+      {
+        "label": "عدد المستفيدين الذين أتموا البرنامج",
+        "score": 4
+      },
+      {
+        "label": "ارتفاع متوسط دخل الأسر في المدينة",
+        "score": 0
+      },
+      {
+        "label": "تحسن ترتيب الدولة في مؤشر تنافسية دولي",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "c307dd27-eced-467e-8f1e-310fbbe31160",
+    "code": "I-K4",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 33,
+    "competency_ar": "النتائج الرئيسية ومؤشرات الأداء",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي ما يلي أقرب إلى نتيجة رئيسية (Key Result) منه إلى مؤشر أداء تشغيلي (KPI)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "متوسط زمن الرد على العملاء أقل من 3 دقائق",
+        "score": 0
+      },
+      {
+        "label": "نسبة توفر النظام 99.5% في كل شهر",
+        "score": 0
+      },
+      {
+        "label": "رفع رضا المستفيدين من 60% إلى 80% هذا العام",
+        "score": 4
+      },
+      {
+        "label": "إنجاز 1200 معاملة يوميًا في مراكز الخدمة كافة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e46634f1-5a22-4a63-a3bf-f9c4c295cf60",
+    "code": "I-K4B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 33,
+    "competency_ar": "النتائج الرئيسية ومؤشرات الأداء",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الفرق الأساسي بين النتيجة الرئيسية (Key Result) ومؤشر الأداء التشغيلي (KPI)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الأولى تقيس تغييرًا مستهدفًا في مدة محددة، والثاني يراقب أداءً مستمرًا",
+        "score": 4
+      },
+      {
+        "label": "الأولى تخص الإدارة العليا، والثاني يخص الموظفين في الميدان",
+        "score": 0
+      },
+      {
+        "label": "الأولى تُقاس يوميًا، والثاني يُقاس مرة واحدة في نهاية السنة",
+        "score": 0
+      },
+      {
+        "label": "الأولى نوعية لا أرقام فيها، والثاني كمي يُقاس بالأرقام",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "946aded7-5ca2-4d73-88ae-2175127b17d8",
+    "code": "I-K5",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 34,
+    "competency_ar": "مكونات المؤشر",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي عنصر ينقص المؤشر التالي: «رفع نسبة رضا المستفيدين إلى 85% بنهاية 2027»؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خط الأساس للقياس",
+        "score": 4
+      },
+      {
+        "label": "الجهة المستفيدة منه",
+        "score": 0
+      },
+      {
+        "label": "وحدة قياس المؤشر",
+        "score": 0
+      },
+      {
+        "label": "مصدر بيانات القياس",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "d1cc4a43-0710-4769-80cf-dbbc1b46862b",
+    "code": "I-K5B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 34,
+    "competency_ar": "مكونات المؤشر",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي عنصر ينقص المؤشر التالي: «خفض زمن إنجاز المعاملة من 10 أيام إلى 4 أيام»؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خط الأساس للقياس",
+        "score": 0
+      },
+      {
+        "label": "القيمة المستهدفة",
+        "score": 0
+      },
+      {
+        "label": "الموعد المستهدف",
+        "score": 4
+      },
+      {
+        "label": "وحدة القياس المستخدمة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "b2ac61c5-8cdb-4728-b31e-daa563d6b987",
+    "code": "I-K6",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 35,
+    "competency_ar": "نظرية التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الذي تضيفه نظرية التغيير (Theory of Change) إلى خطة البرنامج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "قائمة الأنشطة وجدولها الزمني ومسؤولياتها",
+        "score": 0
+      },
+      {
+        "label": "توزيع الميزانية على المخرجات بحسب أولويتها",
+        "score": 0
+      },
+      {
+        "label": "مؤشرات الأداء الشهرية لكل فريق من فرق البرنامج",
+        "score": 0
+      },
+      {
+        "label": "المسار السببي من الأنشطة إلى الأثر",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "6eb60a17-285a-41a3-ab65-de9476fde811",
+    "code": "I-K6B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 35,
+    "competency_ar": "نظرية التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي سؤال تجيب عنه نظرية التغيير (Theory of Change)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "كم تكلفة أنشطة البرنامج؟",
+        "score": 0
+      },
+      {
+        "label": "من المسؤول عن تنفيذ المهام في المرحلة؟",
+        "score": 0
+      },
+      {
+        "label": "لماذا نتوقع أن تؤدي أنشطتنا إلى الأثر؟",
+        "score": 4
+      },
+      {
+        "label": "متى تُسلَّم مخرجات البرنامج للجهة؟",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "e0b500a8-95af-41a2-8cc0-e921db3f0d96",
+    "code": "I-K7",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 36,
+    "competency_ar": "المنافع السلبية",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما المقصود بالمنفعة السلبية (Dis-benefit)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "منفعة متوقعة لم تتحقق في موعدها المحدد",
+        "score": 0
+      },
+      {
+        "label": "تكلفة إضافية تتجاوز الميزانية المعتمدة",
+        "score": 0
+      },
+      {
+        "label": "أثر جانبي إيجابي لم يُخطط له",
+        "score": 0
+      },
+      {
+        "label": "نتيجة يراها طرف سلبية وتنتج عن التغيير",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "95179afe-be0a-4b95-a5aa-e11a1fe37264",
+    "code": "I-K7B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 36,
+    "competency_ar": "المنافع السلبية",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي مما يلي منفعة سلبية (Dis-benefit) وليس خطرًا؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "زيادة وقت تعبئة النماذج بعد تطبيق النظام",
+        "score": 4
+      },
+      {
+        "label": "احتمال تأخر المورد في توريد الخوادم المطلوبة",
+        "score": 0
+      },
+      {
+        "label": "احتمال رفض المستخدمين للنظام بعد إطلاقه",
+        "score": 0
+      },
+      {
+        "label": "منفعة متوقعة لم تُقس بعد لغياب البيانات",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "a56a356e-a510-4fe0-900a-d812f55551ff",
+    "code": "L-B1",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 41,
+    "competency_ar": "المرونة القيادية",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أحدد مستوى متابعتي لكل عضو في المهمة الجديدة بحسب خبرته فيها.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يحدد مستوى متابعته لكل عضو في المهمة الجديدة بحسب خبرته فيها.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "61c5f35b-1cf6-4ec3-b412-c92a0944ba06",
+    "code": "L-B2",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 42,
+    "competency_ar": "ضبط الانفعال",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "حين يحتد النقاش في اجتماع أقوده، ألخّص مواقف الأطراف قبل المتابعة.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "حين يحتد النقاش في اجتماع يقوده، يلخّص مواقف الأطراف قبل المتابعة.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "4a73f885-a99b-47fa-8feb-f23e871cc3eb",
+    "code": "L-B3",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 43,
+    "competency_ar": "توثيق العهدة",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "عند تسليم مشروع أو ملف لزميل، أسلّمه مكتوبًا المخاطر والقرارات المعلقة.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "عند تسليم مشروع أو ملف لزميل، يسلّمه مكتوبًا المخاطر والقرارات المعلقة.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "10095df9-1a9c-495c-9a9f-3af2ed4443e8",
+    "code": "L-B4",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 44,
+    "competency_ar": "شرح سبب التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أشرح لفريقي سبب التغيير قبل توزيع المهام.",
+    "help_ar": "فكّر في الأشهر الثلاثة الأخيرة من عملك. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يشرح لفريقه سبب التغيير قبل توزيع المهام.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "99404c84-d0fa-47c1-aea0-b27cc54813b1",
+    "code": "L-S3",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 45,
+    "competency_ar": "تلقي التوجيه",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "وصلك توجيه عاجل من الإدارة العليا بصياغة عامة. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "البدء بالتنفيذ بأقرب تفسير لإظهار سرعة الاستجابة",
+        "score": 1
+      },
+      {
+        "label": "إقرار الاستلام والتحقق من المقصود قبل التحرك",
+        "score": 4
+      },
+      {
+        "label": "طلب التفاصيل كتابةً من مكتب المسؤول قبل البدء",
+        "score": 1
+      },
+      {
+        "label": "تمرير التوجيه للفريق كما وصل لبدء العمل",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "489695c3-85df-4812-a94b-78bab065d2b4",
+    "code": "L-S4",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 46,
+    "competency_ar": "إدارة أصحاب المصلحة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "مسؤول له نفوذ عالٍ على قرارات مشروعك، لكنه قليل الاهتمام بتفاصيله. ما الأنسب معه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع أسبوعي لإطلاعه على سير المشروع",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بنسخة من التقرير الشهري العام",
+        "score": 1
+      },
+      {
+        "label": "التواصل معه عند ظهور مشكلة كبيرة",
+        "score": 0
+      },
+      {
+        "label": "إحاطة موجزة عند كل نقطة قرار تخص جهته",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "5ffeb838-de1e-4294-9d74-ec74a3244cb7",
+    "code": "L-S6",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 47,
+    "competency_ar": "إيصال الأخبار الصعبة",
+    "chapter_key": "ch2",
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "اتضح لك أن البرنامج لن يحقق مستهدفه السنوي، ومراجعة الأداء مع المسؤول الأعلى بعد ثلاثة أسابيع، وقرار ميزانية الربع القادم يُتخذ هذا الأسبوع. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إبلاغه الآن بالأسباب وخيارات المعالجة",
+        "score": 4
+      },
+      {
+        "label": "عرض الأمر في المراجعة كما هو مجدول",
+        "score": 1
+      },
+      {
+        "label": "عرضه في المراجعة مع خطة تعويض جاهزة",
+        "score": 2
+      },
+      {
+        "label": "إبراز المؤشرات المتحققة وترك المتأخر للربع القادم",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "07722242-5c5d-4a76-bb13-e5eb8b660a13",
+    "code": "L-S1",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 48,
+    "competency_ar": "توجيه عضو جديد",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "كلّفت عضوًا انضم حديثًا بإعداد أول خطة تواصل في مسيرته، وهو يبادر ويطلب مزيدًا من المهام. ما الأسلوب الأنسب معه في هذه المهمة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفويض المهمة مع موعد تسليم واضح",
+        "score": 0
+      },
+      {
+        "label": "تعليمات محددة ومتابعة قريبة",
+        "score": 4
+      },
+      {
+        "label": "تشجيعه ودعمه وترك طريقة التنفيذ له",
+        "score": 1
+      },
+      {
+        "label": "شرح المطلوب ثم مراجعة النسخة النهائية",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "4c39680c-8073-4c84-935e-bc9884c7e45c",
+    "code": "L-S1B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 48,
+    "competency_ar": "توجيه عضو جديد",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "انضم إليك موظف من إدارة أخرى، خبرته طويلة في المشتريات لكنه يدير مشروعًا لأول مرة ويتردد في اتخاذ القرارات. ما الأسلوب الأنسب معه في أول مهمة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفويضه المهمة كاملة اعتمادًا على خبرته الطويلة",
+        "score": 1
+      },
+      {
+        "label": "تشجيعه وترك طريقة التنفيذ له ليبني ثقته",
+        "score": 1
+      },
+      {
+        "label": "خطوات واضحة ومتابعة قريبة مع شرح سبب كل خطوة",
+        "score": 4
+      },
+      {
+        "label": "إسناد المهمة لزميل أقدم ليتعلم منه بالمشاهدة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "d1caf792-8dbb-493e-ab6c-e66dac5c8e30",
+    "code": "L-S2",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 49,
+    "competency_ar": "إدارة الخلاف",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "خلاف مع إدارة موازية على مورد مشترك. القضية مهمة لمشروعك، والعلاقة ممتدة، وأمامكما أسبوعان قبل الحاجة إلى المورد. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "حسم المورد لصالح مشروعك عبر الإدارة العليا",
+        "score": 1
+      },
+      {
+        "label": "تقاسم المورد مناصفة لإنهاء الخلاف سريعًا",
+        "score": 1
+      },
+      {
+        "label": "اقتراح جدول تناوب على المورد يعتمده المديران",
+        "score": 2
+      },
+      {
+        "label": "جلسة مشتركة لبناء حل يلبي حاجة الطرفين",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "9e558df4-28f0-4872-b7b4-c8236e1dadfb",
+    "code": "L-S2B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 49,
+    "competency_ar": "إدارة الخلاف",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "إدارتك وإدارة أخرى تحتاجان قاعة التدريب الوحيدة في الأسبوع نفسه، ولكل منهما برنامج معتمد، والعلاقة بينكما جيدة. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لقاء مع مدير الإدارة الأخرى لبحث بدائل تلبي البرنامجين",
+        "score": 4
+      },
+      {
+        "label": "اقتراح تقسيم أيام الأسبوع بين البرنامجين",
+        "score": 2
+      },
+      {
+        "label": "رفع الأمر لمن يملك صلاحية تخصيص القاعة ليحسمه",
+        "score": 1
+      },
+      {
+        "label": "نقل برنامجك إلى موعد لاحق حفاظًا على العلاقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "571bbcf7-9063-4f07-8eb7-177d759f6bda",
+    "code": "L-S5",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 50,
+    "competency_ar": "التسليم والتسلم",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ستنتقل إلى مهمة جديدة بعد أسبوعين، وسيتسلم زميلك مشروعك. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تسليمه الملفات مع محضر رسمي موقّع",
+        "score": 1
+      },
+      {
+        "label": "مرافقته في الاجتماعات والقرارات حتى يقودها بنفسه",
+        "score": 4
+      },
+      {
+        "label": "إعداد تقرير مفصل عن حالة المشروع وإرساله إليه",
+        "score": 1
+      },
+      {
+        "label": "الرد على أسئلته بعد انتقالك متى احتاج",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "00fcd4fe-b282-482b-939f-af9ec022623a",
+    "code": "L-S5B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 50,
+    "competency_ar": "التسليم والتسلم",
+    "chapter_key": "ch3",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "سيتسلم زميل منك ملف شراكة مع جهة خارجية بعد ثلاثة أسابيع، والعلاقة مع ممثل الجهة قائمة على ثقة بنيتها معه. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إرسال ملخص مكتوب عن الشراكة وحالتها إليه",
+        "score": 1
+      },
+      {
+        "label": "تسليمه الملف ووثائق الاتفاقية بمحضر رسمي",
+        "score": 1
+      },
+      {
+        "label": "إبلاغ ممثل الجهة بالتغيير في رسالة رسمية",
+        "score": 1
+      },
+      {
+        "label": "تعريفه بممثل الجهة وحضوره معك اللقاءات حتى يتولاها",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "23670cfa-e7d8-4d57-afca-c7e81ccbe6b1",
+    "code": "L-K2",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 51,
+    "competency_ar": "القيادة الموقفية",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "في القيادة الموقفية، على أي أساس يُختار أسلوب القائد مع الفرد؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "شخصية القائد وما اعتاد عليه",
+        "score": 0
+      },
+      {
+        "label": "قدرة الفرد ورغبته في المهمة المحددة",
+        "score": 4
+      },
+      {
+        "label": "أقدمية الفرد ومستواه الوظيفي",
+        "score": 0
+      },
+      {
+        "label": "حجم المشروع وحساسية مخرجاته للجهة المالكة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "f1a84f4d-8c5b-41f1-b01d-3e119b867af0",
+    "code": "L-K2B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 51,
+    "competency_ar": "القيادة الموقفية",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "موظف خبير في مهمته لكنه فقد حماسه لها مؤخرًا. أي أسلوب أنسب معه وفق القيادة الموقفية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تعليمات تفصيلية ومتابعة قريبة",
+        "score": 0
+      },
+      {
+        "label": "الدعم وإشراكه في القرار مع توجيه قليل",
+        "score": 4
+      },
+      {
+        "label": "تفويض المهمة مع مراجعة ختامية",
+        "score": 0
+      },
+      {
+        "label": "نقله إلى مهمة جديدة يتعلمها من البداية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "84823854-7c70-4cad-97dd-496ace4b9ffd",
+    "code": "L-K5",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 52,
+    "competency_ar": "التأثير دون سلطة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "مدير مشروع يحتاج تعاون إدارة لا سلطة له عليها. ما الأساس الأقوى للتأثير فيها؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع الأمر إلى الإدارة العليا لإلزامها بالتعاون",
+        "score": 0
+      },
+      {
+        "label": "الاستناد إلى أقدميته وخبرته الطويلة في الجهة",
+        "score": 0
+      },
+      {
+        "label": "تكرار الطلب رسميًا حتى تستجيب الإدارة",
+        "score": 0
+      },
+      {
+        "label": "ربط طلبه بمصلحة تهم تلك الإدارة نفسها",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "29f37499-7e5e-47ba-9e05-20ff5427f906",
+    "code": "L-K5B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 52,
+    "competency_ar": "التأثير دون سلطة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي ما يلي من مصادر التأثير لا يعتمد على السلطة الرسمية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "صلاحية اعتماد الميزانية وصرفها",
+        "score": 0
+      },
+      {
+        "label": "حق التقييم السنوي لأداء الموظف",
+        "score": 0
+      },
+      {
+        "label": "الخبرة والثقة والعلاقات المتبادلة",
+        "score": 4
+      },
+      {
+        "label": "قرار التعيين والنقل والترقية في الإدارة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "fc68fc0c-f649-4218-ac23-2b7571d378a0",
+    "code": "L-K6",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 53,
+    "competency_ar": "الأمان النفسي",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما المقصود بالأمان النفسي في الفريق؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "ثقة الأعضاء بأن الاعتراض والخطأ لا يجلبان العقاب",
+        "score": 4
+      },
+      {
+        "label": "ضمان استقرار وظائف الأعضاء حتى نهاية المشروع",
+        "score": 0
+      },
+      {
+        "label": "تجنب الخلافات داخل الفريق حفاظًا على الانسجام",
+        "score": 0
+      },
+      {
+        "label": "حماية الفريق من ضغط الإدارة العليا ومطالبها المتكررة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "c74bc7aa-a5fc-41a9-a1ab-234767d83b26",
+    "code": "L-K6B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 53,
+    "competency_ar": "الأمان النفسي",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي سلوك من القائد يبني الأمان النفسي في الفريق أكثر من غيره؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن يتجنب الخلاف داخل الفريق حفاظًا على الانسجام",
+        "score": 0
+      },
+      {
+        "label": "أن يعد الفريق بعدم تغيير المهام حتى نهاية المشروع",
+        "score": 0
+      },
+      {
+        "label": "أن يتولى الرد على ملاحظات الخارج بنفسه",
+        "score": 0
+      },
+      {
+        "label": "أن يعترف بأخطائه ويشكر من ينبّه إلى خلل",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "cdd754df-6872-4ccd-8003-1a4534743884",
+    "code": "L-K7",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 54,
+    "competency_ar": "القيادة التحويلية والتبادلية",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "وفق نموذج المدى الكامل للقيادة عند باس وأفوليو (Bass & Avolio)، ما العلاقة بين القيادة التبادلية والتحويلية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التحويلية تُبنى فوق تبادلية سليمة ولا تلغيها",
+        "score": 4
+      },
+      {
+        "label": "التحويلية تحل محل التبادلية لأن المكافأة تضعف الدافع",
+        "score": 0
+      },
+      {
+        "label": "التبادلية للفرق الجديدة والتحويلية للفرق المتمرسة",
+        "score": 0
+      },
+      {
+        "label": "أسلوبان متعارضان يختار القائد بينهما بحسب شخصيته",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "188df6e8-b2a3-4432-ab67-374f72997946",
+    "code": "L-K7B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 54,
+    "competency_ar": "القيادة التحويلية والتبادلية",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "قائد يوضح لكل عضو ما المتوقع منه ويكافئ الإنجاز بعدل، لكن فريقه لا يتجاوز الحد الأدنى. ما الذي ينقصه وفق نموذج المدى الكامل؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مكافآت أكبر مرتبطة بأهداف أعلى",
+        "score": 0
+      },
+      {
+        "label": "متابعة أدق للانحرافات قبل وقوعها",
+        "score": 0
+      },
+      {
+        "label": "ربط العمل بمعنى أكبر والاهتمام بنمو كل فرد",
+        "score": 4
+      },
+      {
+        "label": "تقليل المتابعة ليشعر الفريق بالثقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "b296beec-9e79-484a-8bb5-935513f28e68",
+    "code": "L-K8",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 55,
+    "competency_ar": "نتائج القيادة في الفريق",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "وفق إطار مركز القيادة الإبداعية (CCL)، بأي شيء يُستدل على نجاح القيادة في الفريق؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رضا أعضاء الفريق عن قائدهم في الاستبانة السنوية",
+        "score": 0
+      },
+      {
+        "label": "اكتمال مهام الخطة في مواعيدها المعتمدة",
+        "score": 0
+      },
+      {
+        "label": "امتلاك القائد للصفات القيادية المعروفة",
+        "score": 0
+      },
+      {
+        "label": "توجيه مشترك ومواءمة والتزام بالهدف",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "be54f4b0-e492-43a7-b6c8-a86896406190",
+    "code": "L-K8B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 55,
+    "competency_ar": "نتائج القيادة في الفريق",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "فريق متفق على هدفه ومتحمس له، لكن أعمال أعضائه تتعارض وتتكرر. أي نتائج القيادة الثلاث في إطار CCL هي الضعيفة فيه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الالتزام",
+        "score": 0
+      },
+      {
+        "label": "التوجيه",
+        "score": 0
+      },
+      {
+        "label": "المواءمة",
+        "score": 4
+      },
+      {
+        "label": "الثقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "2cb18d7e-d968-4d96-86a1-80878a2eb8a3",
+    "code": "L-K9",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 56,
+    "competency_ar": "الملاحظة البنّاءة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي صياغة للملاحظة على أداء زميل هي الأكثر فاعلية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أنت لا تهتم بمواعيد التسليم كما ينبغي",
+        "score": 0
+      },
+      {
+        "label": "تأخر تقريرك يومين فتأخر قرار اللجنة",
+        "score": 4
+      },
+      {
+        "label": "أرجو أن تكون أكثر التزامًا في الفترة القادمة",
+        "score": 0
+      },
+      {
+        "label": "الفريق كله لاحظ أن أداءك تراجع في الفترة الأخيرة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "baseline-v4",
+    "id": "358a2b96-3021-4317-9d23-94393d1f942a",
+    "code": "L-K9B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 56,
+    "competency_ar": "الملاحظة البنّاءة",
+    "chapter_key": "ch4",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الذي يجعل الملاحظة على الأداء بنّاءة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن تكون عامة حتى لا تجرح الشخص المعني",
+        "score": 0
+      },
+      {
+        "label": "أن تصف سلوكًا محددًا وأثره، ثم تفتح حوارًا عن الحل",
+        "score": 4
+      },
+      {
+        "label": "أن تُقال في اجتماع الفريق ليستفيد الآخرون",
+        "score": 0
+      },
+      {
+        "label": "أن تُؤجل إلى التقييم السنوي لتكون شاملة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "65d46be2-3fb7-477d-b6cc-57121b423d8f",
+    "code": "M-B1",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 1,
+    "competency_ar": "قيادة اجتماعات القرار",
+    "chapter_key": "ch3",
+    "anchor_code": "M-B1",
+    "retro": true,
+    "form": null,
+    "text_ar": "أختم اجتماعات المتابعة التي أقودها بقرار موثق له مسؤول وموعد.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يختم اجتماعات المتابعة التي يقودها بقرار موثق له مسؤول وموعد.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "ebb4da8a-7d87-4d99-8fdf-055afdb4ea11",
+    "code": "M-B2",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 2,
+    "competency_ar": "معايير التسليم والقبول",
+    "chapter_key": "ch4",
+    "anchor_code": "M-B2",
+    "retro": true,
+    "form": null,
+    "text_ar": "أتفق مع الجهة المستلمة على معايير قبول المخرج قبل تسليمه.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يتفق مع الجهة المستلمة على معايير قبول المخرج قبل تسليمه.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "0e110270-d7b2-4cee-8212-df51eeedf944",
+    "code": "M-B3",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 3,
+    "competency_ar": "مراجعة مبرر الاستمرار",
+    "chapter_key": "ch3",
+    "anchor_code": "M-B3",
+    "retro": true,
+    "form": null,
+    "text_ar": "في كل بوابة مرحلة، أراجع هل ما زال مبرر المشروع قائمًا.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "في كل بوابة مرحلة، يراجع هل ما زال مبرر المشروع قائمًا.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "1d09c670-d059-45df-b81f-2336d90324cb",
+    "code": "M-B4",
+    "dimension": "milestone",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 4,
+    "competency_ar": "إيقاف ما لا يخدم القيمة",
+    "chapter_key": "ch3",
+    "anchor_code": "M-B4",
+    "retro": true,
+    "form": null,
+    "text_ar": "أقترح إيقاف عمل اتضح أنه لم يعد يخدم الهدف.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يقترح إيقاف عمل اتضح أنه لم يعد يخدم الهدف.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "27e5b452-d483-42f3-99aa-b82b02f43645",
+    "code": "M-S1",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 5,
+    "competency_ar": "بناء سجل المعالم",
+    "chapter_key": "ch4",
+    "anchor_code": "M-S1",
+    "retro": false,
+    "form": null,
+    "text_ar": "طُلب منك بناء سجل معالم لمشروع جديد. أي سجل هو الأفضل؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "معالم لاكتمال كل مخرج، لكل منها تاريخ ومسؤول",
+        "score": 1
+      },
+      {
+        "label": "معالم قرارات ونتائج، لكل منها دليل يثبت بلوغها",
+        "score": 4
+      },
+      {
+        "label": "معلم في نهاية كل شهر لضمان انتظام التقارير",
+        "score": 0
+      },
+      {
+        "label": "معالم دفعات العقد مع المورد ومواعيد استحقاق كل دفعة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "55bbf4d1-d423-4d4c-9beb-8db329dcb367",
+    "code": "M-S3",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 6,
+    "competency_ar": "قراءة الانزلاق",
+    "chapter_key": "ch4",
+    "anchor_code": "M-S3",
+    "retro": false,
+    "form": null,
+    "text_ar": "في تقارير المتابعة، يتأخر تاريخ معلم رئيسي أسبوعًا في كل تقرير منذ أربعة أشهر. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مطالبة الفريق بخطة تسريع لتعويض الأسابيع المتأخرة",
+        "score": 1
+      },
+      {
+        "label": "اعتماد التاريخ الجديد في خط الأساس وإبلاغ الراعي",
+        "score": 1
+      },
+      {
+        "label": "الاستمرار في المتابعة لأن تأخير كل تقرير محدود",
+        "score": 0
+      },
+      {
+        "label": "تحليل السبب الجذري للانزلاق قبل أي تعديل للخطة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "850a81e2-6ce4-4ae7-9eac-01674da5b444",
+    "code": "M-S4",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 7,
+    "competency_ar": "مواءمة متطلبات المانح",
+    "chapter_key": "ch2",
+    "anchor_code": "M-S4",
+    "retro": false,
+    "form": null,
+    "text_ar": "مشروع تنموي ممول من جهة مانحة، وتقارير المنحة ترهق الفريق ولا تُستخدم داخليًا. ما المعالجة الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التفاوض مع المانح على تقرير فصلي بدل الشهري",
+        "score": 2
+      },
+      {
+        "label": "ربط مواعيد التقارير بمعالم القرار الداخلية",
+        "score": 4
+      },
+      {
+        "label": "إسناد التقارير لموظف متخصص بعيدًا عن الفريق",
+        "score": 1
+      },
+      {
+        "label": "دمج التقارير في تقرير سنوي واحد شامل",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "94f66850-40eb-49e5-85a5-b287a57848ab",
+    "code": "M-S2",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 8,
+    "competency_ar": "قرار البوابة",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في جلسة بوابة مرحلة: المشروع متأخر ثلاثة أسابيع، ومبرر الاستمرار قائم، والمخاطر معروفة. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إعادة عقد الجلسة بعد أسبوعين وقد حُدّث الجدول",
+        "score": 1
+      },
+      {
+        "label": "عبور مع خطة تصحيح تُعرض في الاجتماع الدوري القادم",
+        "score": 2
+      },
+      {
+        "label": "عبور مع طلب اعتماد خط أساس معدل بالتاريخ الجديد",
+        "score": 1
+      },
+      {
+        "label": "عبور مشروط بخطة تصحيح ومعلم مراجعة خلال أسبوعين",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "957e7734-12b5-4ea7-8a39-89c37343044b",
+    "code": "M-S2B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 8,
+    "competency_ar": "قرار البوابة",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مراجعة مرحلية: المشروع ضمن الموعد، لكن دراسة حديثة تظهر أن الطلب على الخدمة أقل بكثير مما بُني عليه المبرر. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الاستمرار مع تحديث دراسة الطلب خلال المرحلة القادمة",
+        "score": 2
+      },
+      {
+        "label": "الاستمرار لأن الأداء ضمن الخطة والميزانية المعتمدتين",
+        "score": 1
+      },
+      {
+        "label": "عرض المبرر المحدث على اللجنة لتقرر الاستمرار أو التعديل",
+        "score": 4
+      },
+      {
+        "label": "تسريع التنفيذ لإطلاق الخدمة قبل أن يتراجع الطلب أكثر",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "fba3ca78-7eee-4342-aae7-cf96b2217396",
+    "code": "M-S5",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 9,
+    "competency_ar": "ضبط تغيير النطاق",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S5",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في منتصف مرحلة التنفيذ طلب الراعي إضافة خدمة يراها مهمة، ويقدّر الفريق أنها تضيف شهرًا. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافتها وإعادة توزيع الفريق لامتصاص الشهر الإضافي",
+        "score": 0
+      },
+      {
+        "label": "اقتراح إدراجها في إصدار لاحق بعد التسليم الأول",
+        "score": 2
+      },
+      {
+        "label": "عرض أثرها على الموعد والتكلفة مع بديلين ليقرر الراعي",
+        "score": 4
+      },
+      {
+        "label": "إضافتها مقابل حذف ميزة أقل أولوية باتفاق الفريق",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "9d1d2322-10aa-427c-80d4-205957c2a9e5",
+    "code": "M-S5B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 9,
+    "competency_ar": "ضبط تغيير النطاق",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S5B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "بعد اعتماد خطة مشروع لتطوير نظام داخلي، طلبت إدارة مستفيدة ربطه بنظام آخر لم يكن في النطاق. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تقديم طلب تغيير يبيّن أثر الربط على الوقت والتكلفة",
+        "score": 4
+      },
+      {
+        "label": "تسجيل الطلب ودراسته ضمن المرحلة الثانية من المشروع",
+        "score": 2
+      },
+      {
+        "label": "تنفيذ الربط إن قدّر الفريق أنه لا يؤخر موعد التسليم",
+        "score": 1
+      },
+      {
+        "label": "الاتفاق مع الإدارة المستفيدة مباشرة على تنفيذه",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "f21bf4b7-241c-4317-b258-f3cf8b66b98e",
+    "code": "M-S6",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 10,
+    "competency_ar": "الاستجابة للمخاطر",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S6",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أبلغك المورد أن تسليم مكون رئيسي سيتأخر ستة أسابيع، وهذا الخطر مسجل مسبقًا مع خطة استجابة. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفعيل خطة الاستجابة المسجلة وإبلاغ أصحاب القرار",
+        "score": 4
+      },
+      {
+        "label": "مطالبة المورد بخطة تعافٍ مكتوبة قبل تحديث الجدول",
+        "score": 2
+      },
+      {
+        "label": "تحديث الجدول بالتاريخ الجديد وذكره في التقرير الشهري",
+        "score": 1
+      },
+      {
+        "label": "مطالبة المورد بغرامة التأخير المنصوص عليها في العقد",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "492d6b4b-5ad1-4be7-9bcc-30e8f5a1ed35",
+    "code": "M-S6B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 10,
+    "competency_ar": "الاستجابة للمخاطر",
+    "chapter_key": "ch3",
+    "anchor_code": "M-S6B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "قبل إطلاق خدمة بأسبوع تحقق خطر مسجل: انتقل الفريق التقني الرئيسي إلى مشروع آخر، وخطة الاستجابة تنص على فريق مساند. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "طلب إعادة الفريق الرئيسي من مدير المشروع الآخر",
+        "score": 1
+      },
+      {
+        "label": "تأجيل الإطلاق أسبوعين لتهيئة فريق جديد من الداخل",
+        "score": 1
+      },
+      {
+        "label": "تفعيل الفريق المساند وإبلاغ أصحاب القرار",
+        "score": 4
+      },
+      {
+        "label": "تقييم قدرة الفريق المساند ثم إبلاغ أصحاب القرار لاحقًا",
+        "score": 2
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "74c715f9-1504-4878-81f4-37c3f36d9443",
+    "code": "M-K2",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 11,
+    "competency_ar": "البوابة والمعلم",
+    "chapter_key": "ch3",
+    "anchor_code": "M-K2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي النقاط التالية في مشروع إنشاء مركز خدمة تمثل بوابة مرحلة (Stage Gate)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع الفريق الأسبوعي لمراجعة المهام والمخاطر",
+        "score": 0
+      },
+      {
+        "label": "استلام الدفعة الأولى من مواد البناء من المورد",
+        "score": 0
+      },
+      {
+        "label": "اعتماد اللجنة للتصميم قبل صرف ميزانية الإنشاء",
+        "score": 4
+      },
+      {
+        "label": "رفع تقرير الإنجاز الشهري إلى الإدارة العليا",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "182616d3-a075-4cdd-b0ff-3bacaa253b0d",
+    "code": "M-K2B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 11,
+    "competency_ar": "البوابة والمعلم",
+    "chapter_key": "ch3",
+    "anchor_code": "M-K2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مشروع تحوّل رقمي، أي النقاط التالية تمثل بوابة مرحلة (Stage Gate)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع الفريق الأسبوعي لمتابعة المهام والمخاطر",
+        "score": 0
+      },
+      {
+        "label": "تسليم المورد النسخة الأولى من النظام للاختبار",
+        "score": 0
+      },
+      {
+        "label": "رفع تقرير الإنجاز الشهري إلى الإدارة العليا",
+        "score": 0
+      },
+      {
+        "label": "اعتماد اللجنة لنتائج التجربة قبل التعميم",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "e021eaf3-998b-4f51-9638-d185eb39d056",
+    "code": "M-K4",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 12,
+    "competency_ar": "اختيار نهج الإدارة",
+    "chapter_key": "ch1",
+    "anchor_code": "M-K4",
+    "retro": false,
+    "form": "A",
+    "text_ar": "جهة تطلق برنامجًا متطلباته واضحة ومستقرة، وتشترط اعتماد اللجنة قبل كل مرحلة وصرف الميزانية على دفعات. أي نهج أنسب لإدارته؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نهج تنبؤي بمراحل وبوابات اعتماد",
+        "score": 4
+      },
+      {
+        "label": "نهج تكيفي بدورات قصيرة وأولويات متغيرة",
+        "score": 0
+      },
+      {
+        "label": "نهج هجين يبدأ تكيفيًا ثم يصبح تنبؤيًا",
+        "score": 0
+      },
+      {
+        "label": "إدارة تشغيلية بمؤشرات أداء شهرية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "ace8a5d5-0f46-4120-a3b3-4ba7ec805eba",
+    "code": "M-K4B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 12,
+    "competency_ar": "اختيار نهج الإدارة",
+    "chapter_key": "ch1",
+    "anchor_code": "M-K4B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "فريق يبني خدمة رقمية جديدة، ومتطلباتها غير واضحة وتتغير مع ملاحظات المستخدمين كل أسبوعين. أي نهج أنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نهج تنبؤي بخطة تفصيلية معتمدة من البداية حتى الإغلاق",
+        "score": 0
+      },
+      {
+        "label": "نهج تكيفي بدورات قصيرة وتخطيط يتجدد مع المستخدمين",
+        "score": 4
+      },
+      {
+        "label": "تجميد المتطلبات حتى تتضح ثم البدء في التنفيذ",
+        "score": 0
+      },
+      {
+        "label": "إدارة تشغيلية بمؤشرات أداء شهرية لكل فريق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "fe964fe4-81c2-4aae-985b-8db579dbe8a3",
+    "code": "M-K5",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 13,
+    "competency_ar": "المسار الحرج",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K5",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في الجدول الزمني، ماذا يعني أن نشاطًا يقع على المسار الحرج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن تأخيره يؤخر موعد انتهاء المشروع مباشرة",
+        "score": 4
+      },
+      {
+        "label": "أنه أعلى الأنشطة تكلفة في ميزانية المشروع",
+        "score": 0
+      },
+      {
+        "label": "أنه يحتاج أكبر عدد من أعضاء الفريق",
+        "score": 0
+      },
+      {
+        "label": "أنه يحمل أعلى درجة مخاطر في سجل المخاطر",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "f180d675-2189-4209-a2ee-5322b4f3d4ac",
+    "code": "M-K5B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 13,
+    "competency_ar": "المسار الحرج",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K5B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "نشاط ليس على المسار الحرج وله فائض زمني (Float) قدره خمسة أيام. ماذا يحدث إن تأخر ثلاثة أيام؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "يتأخر انتهاء المشروع ثلاثة أيام",
+        "score": 0
+      },
+      {
+        "label": "يطول المسار الحرج خمسة أيام",
+        "score": 0
+      },
+      {
+        "label": "لا يتأثر موعد انتهاء المشروع",
+        "score": 4
+      },
+      {
+        "label": "يلزم اعتماد خط أساس جديد",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "29932de9-840b-4b06-95bc-96ab079a24e3",
+    "code": "M-K6",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 14,
+    "competency_ar": "ضبط التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K6",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الغرض الأساسي من إجراء ضبط التغيير في المشروع؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "منع التعديل على النطاق بعد اعتماده",
+        "score": 0
+      },
+      {
+        "label": "تقييم أثر التغيير قبل اعتماده أو رفضه",
+        "score": 4
+      },
+      {
+        "label": "توثيق التغييرات بعد تنفيذها لأغراض التدقيق",
+        "score": 0
+      },
+      {
+        "label": "إحالة طلبات التغيير إلى الراعي ليقررها",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "783ace6f-5f1c-4529-92dc-4415561ce81d",
+    "code": "M-K6B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 14,
+    "competency_ar": "ضبط التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K6B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الذي يميّز طلب التغيير الرسمي عن التعديل اليومي في المهام؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أنه يأتي من الراعي أو من الإدارة العليا للجهة",
+        "score": 0
+      },
+      {
+        "label": "أنه يمس نطاقًا أو موعدًا أو تكلفة معتمدة",
+        "score": 4
+      },
+      {
+        "label": "أنه يتطلب إضافة أعضاء جدد إلى فريق المشروع",
+        "score": 0
+      },
+      {
+        "label": "أنه يُوثَّق بالبريد الإلكتروني لا في الاجتماع",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "521a9a8c-2870-4de1-a13b-83236624067d",
+    "code": "M-K7",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 15,
+    "competency_ar": "الخطر والمشكلة",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K7",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الفرق بين الخطر (Risk) والمشكلة (Issue)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الخطر حدث محتمل لم يقع، والمشكلة حدث وقع فعلًا",
+        "score": 4
+      },
+      {
+        "label": "الخطر يخص التكلفة، والمشكلة تخص الجدول الزمني",
+        "score": 0
+      },
+      {
+        "label": "الخطر يديره الراعي، والمشكلة يديرها المدير",
+        "score": 0
+      },
+      {
+        "label": "الخطر مصدره خارجي، والمشكلة مصدرها داخل الفريق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "22553ad8-f70a-41b9-b26b-25339a7a4247",
+    "code": "M-K7B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 15,
+    "competency_ar": "الخطر والمشكلة",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K7B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "بند في سجل المشروع: «أبلغ المورد اليوم أن الشحنة لن تصل في موعدها». كيف يُصنَّف؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خطر يُراقب حتى يتأكد وقوعه",
+        "score": 0
+      },
+      {
+        "label": "افتراض يُراجع في الخطة القادمة",
+        "score": 0
+      },
+      {
+        "label": "قرار معلق ينتظر اللجنة التوجيهية",
+        "score": 0
+      },
+      {
+        "label": "مشكلة قائمة تحتاج معالجة الآن",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "6d533b2d-699f-48c5-85a5-97b7ba41625f",
+    "code": "M-K8",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 16,
+    "competency_ar": "خط الأساس",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K8",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما خط الأساس (Baseline) في إدارة المشروعات؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "النسخة المعتمدة من الخطة للقياس عليها",
+        "score": 4
+      },
+      {
+        "label": "أحدث نسخة من الخطة بعد آخر تحديث أجراه فريق المشروع",
+        "score": 0
+      },
+      {
+        "label": "الحد الأدنى من النطاق المقبول لتسليم المشروع",
+        "score": 0
+      },
+      {
+        "label": "تقدير أولي للتكلفة قبل دراسة الجدوى التفصيلية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "97a60cdc-3b3c-4920-9487-f8a9ff7389be",
+    "code": "M-K8B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 16,
+    "competency_ar": "خط الأساس",
+    "chapter_key": "ch4",
+    "anchor_code": "M-K8B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "لماذا يُحتفظ بخط الأساس (Baseline) دون تعديل إلا بتغيير معتمد؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "ليبقى مرجعًا يُقاس عليه الانحراف",
+        "score": 4
+      },
+      {
+        "label": "لأن تعديله يُعيد احتساب الميزانية",
+        "score": 0
+      },
+      {
+        "label": "لتقليل التقارير المطلوبة من الفريق",
+        "score": 0
+      },
+      {
+        "label": "لأن الراعي هو من يحتفظ بالنسخة المعتمدة منه",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b5113b89-8a3c-4dee-be61-ad0ef525f7a0",
+    "code": "I-B1",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 21,
+    "competency_ar": "سؤال التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": "I-B1",
+    "retro": true,
+    "form": null,
+    "text_ar": "أطلب في مراجعات المشروعات بيانات عما تغيّر لدى المستفيدين، لا عن الأنشطة فقط.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يطلب في مراجعات المشروعات بيانات عما تغيّر لدى المستفيدين، لا عن الأنشطة فقط.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "e1f3c502-efed-4df4-89f9-0422ace34199",
+    "code": "I-B2",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 22,
+    "competency_ar": "ملكية المنافع",
+    "chapter_key": "ch4",
+    "anchor_code": "I-B2",
+    "retro": true,
+    "form": null,
+    "text_ar": "أتأكد أن لكل نتيجة متوقعة من المشروع شخصًا محددًا يتابع تحققها بعد التسليم.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يتأكد أن لكل نتيجة متوقعة من المشروع شخصًا محددًا يتابع تحققها بعد التسليم.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "75e93af6-cfa3-49d8-880d-b82d4392363c",
+    "code": "I-B3",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 23,
+    "competency_ar": "نزاهة الأدلة",
+    "chapter_key": "ch2",
+    "anchor_code": "I-B3",
+    "retro": true,
+    "form": null,
+    "text_ar": "أذكر حدود الأدلة في تقارير الأثر التي أعدّها أو أعتمدها.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يذكر حدود الأدلة في تقارير الأثر التي يعدّها أو يعتمدها.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "f3d31bec-0fab-4a9a-b5ba-23b74717d562",
+    "code": "I-B4",
+    "dimension": "impact",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 24,
+    "competency_ar": "الأثر في القرار",
+    "chapter_key": "ch4",
+    "anchor_code": "I-B4",
+    "retro": true,
+    "form": null,
+    "text_ar": "أستخدم مؤشرات الأثر عند ترتيب أولويات المشروعات.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يستخدم مؤشرات الأثر عند ترتيب أولويات المشروعات.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "876c875c-b864-4c0a-b7ad-634d53072e09",
+    "code": "I-S1",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 25,
+    "competency_ar": "صياغة المنفعة",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S1",
+    "retro": false,
+    "form": null,
+    "text_ar": "تبني سجل منافع لبرنامج تدريبي. أي صياغة تصلح منفعةً؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تدريب 500 متدرب خلال العام بنسبة حضور 95%",
+        "score": 0
+      },
+      {
+        "label": "رفع توظيف الخريجين من 30% إلى 45% خلال 12 شهرًا",
+        "score": 4
+      },
+      {
+        "label": "رضا المتدربين عن الدورة بنسبة 90% في الاستبانة",
+        "score": 1
+      },
+      {
+        "label": "ارتفاع ثقة المتدربين بقدراتهم بعد الدورة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b8b2b1b5-af73-46b6-adfc-00c3307a8718",
+    "code": "I-S4",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 26,
+    "competency_ar": "خط الأساس المتأخر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S4",
+    "retro": false,
+    "form": null,
+    "text_ar": "برنامج بدأ قبل شهرين دون خط أساس. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "بناء خط أساس فوري بالبيانات المتاحة وتوثيق قيوده",
+        "score": 4
+      },
+      {
+        "label": "اعتماد أول قياس بعد ثلاثة أشهر خطًا للأساس",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بقياس المخرجات حتى نهاية البرنامج",
+        "score": 0
+      },
+      {
+        "label": "تقديرات الفريق للوضع السابق دون توثيق مصدرها",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "4e676472-b221-4209-8290-92cf2dc081ef",
+    "code": "I-S5",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 27,
+    "competency_ar": "اختيار مؤشر الأثر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S5",
+    "retro": false,
+    "form": null,
+    "text_ar": "تصمم مؤشر أثر لبرنامج يدعم رواد الأعمال. أي مؤشر هو الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "عدد الورش المنفذة لرواد الأعمال خلال العام",
+        "score": 0
+      },
+      {
+        "label": "نسبة المشاركين الراضين عن جودة الورش المقدمة",
+        "score": 1
+      },
+      {
+        "label": "عدد طلبات الالتحاق بالبرنامج في كل دورة",
+        "score": 0
+      },
+      {
+        "label": "نسبة المنشآت المستمرة بعد عامين من الدعم",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "50541e3a-8a22-468f-964f-55e53ad8d002",
+    "code": "I-S2",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 28,
+    "competency_ar": "مراجعة المنافع",
+    "chapter_key": "ch3",
+    "anchor_code": "I-S2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في مراجعة منافع: منفعة متأخرة عن مسارها 40%، ومالكها يقترح تأجيل القياس للدورة القادمة. ما القرار الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الموافقة على التأجيل مع توثيق السبب في السجل",
+        "score": 1
+      },
+      {
+        "label": "ضخ موارد إضافية لتعويض الفجوة في الدورة القادمة",
+        "score": 1
+      },
+      {
+        "label": "خفض مستهدف المنفعة ليتوافق مع الأداء الفعلي",
+        "score": 0
+      },
+      {
+        "label": "تحليل السبب ثم قرار موثق بتصحيح المسار",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "82f9f1f2-e25d-439a-9eb7-d771bf04bb4c",
+    "code": "I-S2B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 28,
+    "competency_ar": "مراجعة المنافع",
+    "chapter_key": "ch3",
+    "anchor_code": "I-S2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "في مراجعة ربعية ظهر أن منفعة «خفض زمن الخدمة» تحققت أسرع من المخطط بكثير. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع مستهدف المنفعة للعام القادم بناءً على الأداء",
+        "score": 1
+      },
+      {
+        "label": "التحقق من دقة القياس وسبب التسارع قبل التعميم",
+        "score": 4
+      },
+      {
+        "label": "إعلان النتيجة في التقرير السنوي كما وردت",
+        "score": 1
+      },
+      {
+        "label": "إيقاف قياس المنفعة لأنها تحققت قبل موعدها",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "4817d910-f832-4fa4-85fc-201d269347d6",
+    "code": "I-S3",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 29,
+    "competency_ar": "ادعاءات الأثر",
+    "chapter_key": "ch2",
+    "anchor_code": "I-S3",
+    "retro": false,
+    "form": "A",
+    "text_ar": "تقرير أثر يذكر أن البرنامج خفّض البطالة في المنطقة 10%، دون خط أساس أو مجموعة مقارنة. كيف تتعامل معه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أعتمده مع حاشية تذكر غياب خط الأساس",
+        "score": 1
+      },
+      {
+        "label": "أعيد صياغته ليبيّن أن البرنامج أسهم مع عوامل أخرى",
+        "score": 4
+      },
+      {
+        "label": "أحذف الرقم وأكتفي بعرض مخرجات البرنامج",
+        "score": 1
+      },
+      {
+        "label": "أؤجل نشر التقرير حتى تُجرى دراسة مقارنة",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "3576260c-e17c-4f5d-9de5-92af23f7c166",
+    "code": "I-S3B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 29,
+    "competency_ar": "ادعاءات الأثر",
+    "chapter_key": "ch2",
+    "anchor_code": "I-S3B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "عرض لبرنامج صحي يقول إن المشاركين خسروا 5 كيلوغرامات في المتوسط، والقياس تم على من أكملوا البرنامج فقط (40% من المسجلين). كيف تتعامل مع الرقم؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أعرضه كما هو لأنه قياس فعلي",
+        "score": 1
+      },
+      {
+        "label": "أعمّم الرقم على المسجلين جميعًا لأن المكملين عينة ممثلة",
+        "score": 0
+      },
+      {
+        "label": "أعرضه مع نسبة المنسحبين موضحًا أنه يخص المكملين فقط",
+        "score": 4
+      },
+      {
+        "label": "أستبدله بعدد المسجلين في البرنامج لأنه أدق",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "609f3732-2cb4-4a12-9b73-f14d34b7a76b",
+    "code": "I-S6",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 30,
+    "competency_ar": "الآثار غير المقصودة",
+    "chapter_key": "ch2",
+    "anchor_code": "I-S6",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أظهرت متابعة برنامج توظيف أن أصحاب العمل صاروا يفضلون خريجيه على غيرهم، فتراجعت فرص المتقدمين من خارجه. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافة مؤشر يتابع الظاهرة في التقرير السنوي",
+        "score": 2
+      },
+      {
+        "label": "تسجيله منفعة سلبية وقياسه وعرضه على صاحب القرار",
+        "score": 4
+      },
+      {
+        "label": "توسيع شروط القبول في الدورة القادمة دون عرضه",
+        "score": 1
+      },
+      {
+        "label": "إحالته إلى جهة سوق العمل لأنه خارج اختصاص البرنامج",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "979af25a-8cb2-49ff-b749-420f19ee4d53",
+    "code": "I-S6B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 30,
+    "competency_ar": "الآثار غير المقصودة",
+    "chapter_key": "ch2",
+    "anchor_code": "I-S6B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "بعد إطلاق خدمة إلكترونية لتسريع المعاملات، تراجع وصول كبار السن إليها لأن كثيرًا منهم لا يستخدمون التطبيقات. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إطلاق حملة توعية بالتطبيق تستهدف كبار السن",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بمؤشر زمن المعاملة لأنه هدف الخدمة",
+        "score": 0
+      },
+      {
+        "label": "إضافة قناة هاتفية لهم وتسجيل ذلك في التقرير القادم",
+        "score": 2
+      },
+      {
+        "label": "تسجيله أثرًا سلبيًا وقياسه وعرض معالجته على صاحب القرار",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b1ecbea2-d9ab-4a8c-af33-2e6bb0199598",
+    "code": "I-K1",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 31,
+    "competency_ar": "مستويات سلسلة القيمة",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K1",
+    "retro": false,
+    "form": "A",
+    "text_ar": "«ارتفاع معرفة المتدربين بالمهارة المستهدفة بعد انتهاء الدورة» يقع في أي مستوى من سلسلة النتائج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مخرجات",
+        "score": 0
+      },
+      {
+        "label": "نتائج قصيرة المدى",
+        "score": 4
+      },
+      {
+        "label": "نتائج متوسطة المدى",
+        "score": 0
+      },
+      {
+        "label": "أثر طويل المدى",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "983107f7-4e0d-45d5-9295-21138124e87a",
+    "code": "I-K1B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 31,
+    "competency_ar": "مستويات سلسلة القيمة",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K1B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "«تدريب 200 موظف على نظام المشتريات الجديد» يقع في أي مستوى من سلسلة النتائج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مخرجات",
+        "score": 4
+      },
+      {
+        "label": "نتائج قصيرة المدى",
+        "score": 0
+      },
+      {
+        "label": "نتائج متوسطة المدى",
+        "score": 0
+      },
+      {
+        "label": "أثر طويل المدى",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "fb8bb37b-bd99-4b18-a6a5-594bc56c2f21",
+    "code": "I-K2",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 32,
+    "competency_ar": "المساهمة والإسناد",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في أي حالة تكون لغة «المساهمة» أدق من «الإسناد» في تقرير الأثر؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "عند الإبلاغ عن عدد المستفيدين من الخدمة",
+        "score": 0
+      },
+      {
+        "label": "عند تغيّر مؤشر وطني تؤثر فيه عوامل كثيرة",
+        "score": 4
+      },
+      {
+        "label": "عندما يكون البرنامج ممولًا من الجهة",
+        "score": 0
+      },
+      {
+        "label": "عندما يكون التقرير موجهًا للإدارة العليا",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "7631f80e-b856-43b4-a591-43351116137a",
+    "code": "I-K2B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 32,
+    "competency_ar": "المساهمة والإسناد",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي العبارات التالية يصح فيها الإسناد المباشر إلى برنامج الجهة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "انخفاض معدل البطالة في المنطقة",
+        "score": 0
+      },
+      {
+        "label": "عدد المستفيدين الذين أتموا البرنامج",
+        "score": 4
+      },
+      {
+        "label": "ارتفاع متوسط دخل الأسر في المدينة",
+        "score": 0
+      },
+      {
+        "label": "تحسن ترتيب الدولة في مؤشر تنافسية دولي",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "caf2972b-5e2c-467d-969f-a5affa41ae60",
+    "code": "I-K4",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 33,
+    "competency_ar": "النتائج الرئيسية ومؤشرات الأداء",
+    "chapter_key": "ch4",
+    "anchor_code": "I-K4",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي ما يلي أقرب إلى نتيجة رئيسية (Key Result) منه إلى مؤشر أداء تشغيلي (KPI)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "متوسط زمن الرد على العملاء أقل من 3 دقائق",
+        "score": 0
+      },
+      {
+        "label": "نسبة توفر النظام 99.5% في كل شهر",
+        "score": 0
+      },
+      {
+        "label": "رفع رضا المستفيدين من 60% إلى 80% هذا العام",
+        "score": 4
+      },
+      {
+        "label": "إنجاز 1200 معاملة يوميًا في مراكز الخدمة كافة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "88df8714-0fb3-4801-8488-8f2d36c5d98a",
+    "code": "I-K4B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 33,
+    "competency_ar": "النتائج الرئيسية ومؤشرات الأداء",
+    "chapter_key": "ch4",
+    "anchor_code": "I-K4B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الفرق الأساسي بين النتيجة الرئيسية (Key Result) ومؤشر الأداء التشغيلي (KPI)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الأولى تقيس تغييرًا مستهدفًا في مدة محددة، والثاني يراقب أداءً مستمرًا",
+        "score": 4
+      },
+      {
+        "label": "الأولى تخص الإدارة العليا، والثاني يخص الموظفين في الميدان",
+        "score": 0
+      },
+      {
+        "label": "الأولى تُقاس يوميًا، والثاني يُقاس مرة واحدة في نهاية السنة",
+        "score": 0
+      },
+      {
+        "label": "الأولى نوعية لا أرقام فيها، والثاني كمي يُقاس بالأرقام",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "5b125578-bfee-473a-8407-d0ef4256973d",
+    "code": "I-K5",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 34,
+    "competency_ar": "مكونات المؤشر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-K5",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي عنصر ينقص المؤشر التالي: «رفع نسبة رضا المستفيدين إلى 85% بنهاية 2027»؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خط الأساس للقياس",
+        "score": 4
+      },
+      {
+        "label": "الجهة المستفيدة منه",
+        "score": 0
+      },
+      {
+        "label": "وحدة قياس المؤشر",
+        "score": 0
+      },
+      {
+        "label": "مصدر بيانات القياس",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "6c2cd479-0a07-426c-94a2-e94a39891b1a",
+    "code": "I-K5B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 34,
+    "competency_ar": "مكونات المؤشر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-K5B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي عنصر ينقص المؤشر التالي: «خفض زمن إنجاز المعاملة من 10 أيام إلى 4 أيام»؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "خط الأساس للقياس",
+        "score": 0
+      },
+      {
+        "label": "القيمة المستهدفة",
+        "score": 0
+      },
+      {
+        "label": "الموعد المستهدف",
+        "score": 4
+      },
+      {
+        "label": "وحدة القياس المستخدمة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "5411a5b6-38c8-4fb2-be06-bc023f6dc2ee",
+    "code": "I-K6",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 35,
+    "competency_ar": "نظرية التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": "I-K6",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما الذي تضيفه نظرية التغيير (Theory of Change) إلى خطة البرنامج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "قائمة الأنشطة وجدولها الزمني ومسؤولياتها",
+        "score": 0
+      },
+      {
+        "label": "توزيع الميزانية على المخرجات بحسب أولويتها",
+        "score": 0
+      },
+      {
+        "label": "مؤشرات الأداء الشهرية لكل فريق من فرق البرنامج",
+        "score": 0
+      },
+      {
+        "label": "المسار السببي من الأنشطة إلى الأثر",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "991ab04e-7874-481e-8d0d-0b721f0e31f1",
+    "code": "I-K6B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 35,
+    "competency_ar": "نظرية التغيير",
+    "chapter_key": "ch3",
+    "anchor_code": "I-K6B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي سؤال تجيب عنه نظرية التغيير (Theory of Change)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "كم تكلفة أنشطة البرنامج؟",
+        "score": 0
+      },
+      {
+        "label": "من المسؤول عن تنفيذ المهام في المرحلة؟",
+        "score": 0
+      },
+      {
+        "label": "لماذا نتوقع أن تؤدي أنشطتنا إلى الأثر؟",
+        "score": 4
+      },
+      {
+        "label": "متى تُسلَّم مخرجات البرنامج للجهة؟",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "8a2127b6-946a-47f7-8861-3f69dfc91f73",
+    "code": "I-K7",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 36,
+    "competency_ar": "المنافع السلبية",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K7",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما المقصود بالمنفعة السلبية (Dis-benefit)؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "منفعة متوقعة لم تتحقق في موعدها المحدد",
+        "score": 0
+      },
+      {
+        "label": "تكلفة إضافية تتجاوز الميزانية المعتمدة",
+        "score": 0
+      },
+      {
+        "label": "أثر جانبي إيجابي لم يُخطط له",
+        "score": 0
+      },
+      {
+        "label": "نتيجة يراها طرف سلبية وتنتج عن التغيير",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "0a94f350-e436-4e7a-8582-f6fa038f143e",
+    "code": "I-K7B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 36,
+    "competency_ar": "المنافع السلبية",
+    "chapter_key": "ch2",
+    "anchor_code": "I-K7B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي مما يلي منفعة سلبية (Dis-benefit) وليس خطرًا؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "زيادة وقت تعبئة النماذج بعد تطبيق النظام",
+        "score": 4
+      },
+      {
+        "label": "احتمال تأخر المورد في توريد الخوادم المطلوبة",
+        "score": 0
+      },
+      {
+        "label": "احتمال رفض المستخدمين للنظام بعد إطلاقه",
+        "score": 0
+      },
+      {
+        "label": "منفعة متوقعة لم تُقس بعد لغياب البيانات",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "cc6ea8f0-3246-4235-a345-491ac2094018",
+    "code": "L-B1",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 41,
+    "competency_ar": "المرونة القيادية",
+    "chapter_key": "ch4",
+    "anchor_code": "L-B1",
+    "retro": true,
+    "form": null,
+    "text_ar": "أحدد مستوى متابعتي لكل عضو في المهمة الجديدة بحسب خبرته فيها.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يحدد مستوى متابعته لكل عضو في المهمة الجديدة بحسب خبرته فيها.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "1f9c8d8b-dfb7-4860-abab-0a65d698356c",
+    "code": "L-B2",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 42,
+    "competency_ar": "ضبط الانفعال",
+    "chapter_key": "ch4",
+    "anchor_code": "L-B2",
+    "retro": true,
+    "form": null,
+    "text_ar": "حين يحتد النقاش في اجتماع أقوده، ألخّص مواقف الأطراف قبل المتابعة.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "حين يحتد النقاش في اجتماع يقوده، يلخّص مواقف الأطراف قبل المتابعة.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "bf7ec418-b8f5-4a95-958a-e1e4a76eecee",
+    "code": "L-B3",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 43,
+    "competency_ar": "توثيق العهدة",
+    "chapter_key": "ch3",
+    "anchor_code": "L-B3",
+    "retro": true,
+    "form": null,
+    "text_ar": "عند تسليم مشروع أو ملف لزميل، أسلّمه مكتوبًا المخاطر والقرارات المعلقة.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "عند تسليم مشروع أو ملف لزميل، يسلّمه مكتوبًا المخاطر والقرارات المعلقة.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "69dfa1fc-9bab-453e-88e7-e6a72f5d6dc0",
+    "code": "L-B4",
+    "dimension": "leadership",
+    "tier": "behavior",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 44,
+    "competency_ar": "شرح سبب التغيير",
+    "chapter_key": "ch4",
+    "anchor_code": "L-B4",
+    "retro": true,
+    "form": null,
+    "text_ar": "أشرح لفريقي سبب التغيير قبل توزيع المهام.",
+    "help_ar": "قدّر ممارستك في الأشهر الثلاثة الأخيرة، ثم في الأشهر الثلاثة التي سبقت البرنامج. اختر «لا ينطبق على عملي» إن لم تمرّ بهذا الموقف.",
+    "text_rater_ar": "يشرح لفريقه سبب التغيير قبل توزيع المهام.",
+    "options": [
+      {
+        "label": "نادرًا أو أبدًا",
+        "score": 0
+      },
+      {
+        "label": "في أقل من نصف المرات",
+        "score": 1
+      },
+      {
+        "label": "في نحو نصف المرات",
+        "score": 2
+      },
+      {
+        "label": "في أغلب المرات",
+        "score": 3
+      },
+      {
+        "label": "في كل المرات تقريبًا",
+        "score": 4
+      },
+      {
+        "label": "لا ينطبق على عملي",
+        "score": -1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "114216ac-10c5-41be-8905-b4d53e52606f",
+    "code": "L-S3",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 45,
+    "competency_ar": "تلقي التوجيه",
+    "chapter_key": "ch2",
+    "anchor_code": "L-S3",
+    "retro": false,
+    "form": null,
+    "text_ar": "وصلك توجيه عاجل من الإدارة العليا بصياغة عامة. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "البدء بالتنفيذ بأقرب تفسير لإظهار سرعة الاستجابة",
+        "score": 1
+      },
+      {
+        "label": "إقرار الاستلام والتحقق من المقصود قبل التحرك",
+        "score": 4
+      },
+      {
+        "label": "طلب التفاصيل كتابةً من مكتب المسؤول قبل البدء",
+        "score": 1
+      },
+      {
+        "label": "تمرير التوجيه للفريق كما وصل لبدء العمل",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "7d646822-d68e-4240-bb7c-817d39a7e63e",
+    "code": "L-S4",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 46,
+    "competency_ar": "إدارة أصحاب المصلحة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S4",
+    "retro": false,
+    "form": null,
+    "text_ar": "مسؤول له نفوذ عالٍ على قرارات مشروعك، لكنه قليل الاهتمام بتفاصيله. ما الأنسب معه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "اجتماع أسبوعي لإطلاعه على سير المشروع",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بنسخة من التقرير الشهري العام",
+        "score": 1
+      },
+      {
+        "label": "التواصل معه عند ظهور مشكلة كبيرة",
+        "score": 0
+      },
+      {
+        "label": "إحاطة موجزة عند كل نقطة قرار تخص جهته",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "82530013-363d-46e1-bab8-7b295b02f412",
+    "code": "L-S6",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 47,
+    "competency_ar": "إيصال الأخبار الصعبة",
+    "chapter_key": "ch2",
+    "anchor_code": "L-S6",
+    "retro": false,
+    "form": null,
+    "text_ar": "اتضح لك أن البرنامج لن يحقق مستهدفه السنوي، ومراجعة الأداء مع المسؤول الأعلى بعد ثلاثة أسابيع، وقرار ميزانية الربع القادم يُتخذ هذا الأسبوع. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إبلاغه الآن بالأسباب وخيارات المعالجة",
+        "score": 4
+      },
+      {
+        "label": "عرض الأمر في المراجعة كما هو مجدول",
+        "score": 1
+      },
+      {
+        "label": "عرضه في المراجعة مع خطة تعويض جاهزة",
+        "score": 2
+      },
+      {
+        "label": "إبراز المؤشرات المتحققة وترك المتأخر للربع القادم",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "88587b56-cb0f-4c77-a30f-a38a9c5dad60",
+    "code": "L-S1",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 48,
+    "competency_ar": "توجيه عضو جديد",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S1",
+    "retro": false,
+    "form": "A",
+    "text_ar": "كلّفت عضوًا انضم حديثًا بإعداد أول خطة تواصل في مسيرته، وهو يبادر ويطلب مزيدًا من المهام. ما الأسلوب الأنسب معه في هذه المهمة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفويض المهمة مع موعد تسليم واضح",
+        "score": 0
+      },
+      {
+        "label": "تعليمات محددة ومتابعة قريبة",
+        "score": 4
+      },
+      {
+        "label": "تشجيعه ودعمه وترك طريقة التنفيذ له",
+        "score": 1
+      },
+      {
+        "label": "شرح المطلوب ثم مراجعة النسخة النهائية",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "261c787f-301d-446b-a8ec-2164690b4745",
+    "code": "L-S1B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 48,
+    "competency_ar": "توجيه عضو جديد",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S1B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "انضم إليك موظف من إدارة أخرى، خبرته طويلة في المشتريات لكنه يدير مشروعًا لأول مرة ويتردد في اتخاذ القرارات. ما الأسلوب الأنسب معه في أول مهمة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تفويضه المهمة كاملة اعتمادًا على خبرته الطويلة",
+        "score": 1
+      },
+      {
+        "label": "تشجيعه وترك طريقة التنفيذ له ليبني ثقته",
+        "score": 1
+      },
+      {
+        "label": "خطوات واضحة ومتابعة قريبة مع شرح سبب كل خطوة",
+        "score": 4
+      },
+      {
+        "label": "إسناد المهمة لزميل أقدم ليتعلم منه بالمشاهدة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "7be9cb60-dee7-40e8-b273-cdaacb69d9ee",
+    "code": "L-S2",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 49,
+    "competency_ar": "إدارة الخلاف",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "خلاف مع إدارة موازية على مورد مشترك. القضية مهمة لمشروعك، والعلاقة ممتدة، وأمامكما أسبوعان قبل الحاجة إلى المورد. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "حسم المورد لصالح مشروعك عبر الإدارة العليا",
+        "score": 1
+      },
+      {
+        "label": "تقاسم المورد مناصفة لإنهاء الخلاف سريعًا",
+        "score": 1
+      },
+      {
+        "label": "اقتراح جدول تناوب على المورد يعتمده المديران",
+        "score": 2
+      },
+      {
+        "label": "جلسة مشتركة لبناء حل يلبي حاجة الطرفين",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "35430a16-af7d-4b07-9fb3-5e7470652dfd",
+    "code": "L-S2B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 49,
+    "competency_ar": "إدارة الخلاف",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "إدارتك وإدارة أخرى تحتاجان قاعة التدريب الوحيدة في الأسبوع نفسه، ولكل منهما برنامج معتمد، والعلاقة بينكما جيدة. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لقاء مع مدير الإدارة الأخرى لبحث بدائل تلبي البرنامجين",
+        "score": 4
+      },
+      {
+        "label": "اقتراح تقسيم أيام الأسبوع بين البرنامجين",
+        "score": 2
+      },
+      {
+        "label": "رفع الأمر لمن يملك صلاحية تخصيص القاعة ليحسمه",
+        "score": 1
+      },
+      {
+        "label": "نقل برنامجك إلى موعد لاحق حفاظًا على العلاقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "82d8c9db-b680-47d8-ba48-06b8b57aabc2",
+    "code": "L-S5",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 50,
+    "competency_ar": "التسليم والتسلم",
+    "chapter_key": "ch3",
+    "anchor_code": "L-S5",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ستنتقل إلى مهمة جديدة بعد أسبوعين، وسيتسلم زميلك مشروعك. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تسليمه الملفات مع محضر رسمي موقّع",
+        "score": 1
+      },
+      {
+        "label": "مرافقته في الاجتماعات والقرارات حتى يقودها بنفسه",
+        "score": 4
+      },
+      {
+        "label": "إعداد تقرير مفصل عن حالة المشروع وإرساله إليه",
+        "score": 1
+      },
+      {
+        "label": "الرد على أسئلته بعد انتقالك متى احتاج",
+        "score": 1
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "34153a94-1750-4120-854c-4c1c2c5ea0d6",
+    "code": "L-S5B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 50,
+    "competency_ar": "التسليم والتسلم",
+    "chapter_key": "ch3",
+    "anchor_code": "L-S5B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "سيتسلم زميل منك ملف شراكة مع جهة خارجية بعد ثلاثة أسابيع، والعلاقة مع ممثل الجهة قائمة على ثقة بنيتها معه. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إرسال ملخص مكتوب عن الشراكة وحالتها إليه",
+        "score": 1
+      },
+      {
+        "label": "تسليمه الملف ووثائق الاتفاقية بمحضر رسمي",
+        "score": 1
+      },
+      {
+        "label": "إبلاغ ممثل الجهة بالتغيير في رسالة رسمية",
+        "score": 1
+      },
+      {
+        "label": "تعريفه بممثل الجهة وحضوره معك اللقاءات حتى يتولاها",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "c5cf9381-acdc-4fae-9ddc-24d4d15be6fc",
+    "code": "L-K2",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 51,
+    "competency_ar": "القيادة الموقفية",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K2",
+    "retro": false,
+    "form": "A",
+    "text_ar": "في القيادة الموقفية، على أي أساس يُختار أسلوب القائد مع الفرد؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "شخصية القائد وما اعتاد عليه",
+        "score": 0
+      },
+      {
+        "label": "قدرة الفرد ورغبته في المهمة المحددة",
+        "score": 4
+      },
+      {
+        "label": "أقدمية الفرد ومستواه الوظيفي",
+        "score": 0
+      },
+      {
+        "label": "حجم المشروع وحساسية مخرجاته للجهة المالكة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "1cbe6291-2d11-425c-9545-6a3de35d3200",
+    "code": "L-K2B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 51,
+    "competency_ar": "القيادة الموقفية",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K2B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "موظف خبير في مهمته لكنه فقد حماسه لها مؤخرًا. أي أسلوب أنسب معه وفق القيادة الموقفية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تعليمات تفصيلية ومتابعة قريبة",
+        "score": 0
+      },
+      {
+        "label": "الدعم وإشراكه في القرار مع توجيه قليل",
+        "score": 4
+      },
+      {
+        "label": "تفويض المهمة مع مراجعة ختامية",
+        "score": 0
+      },
+      {
+        "label": "نقله إلى مهمة جديدة يتعلمها من البداية",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "9c84537a-36eb-498d-b6fe-d14f1b622db7",
+    "code": "L-K5",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 52,
+    "competency_ar": "التأثير دون سلطة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K5",
+    "retro": false,
+    "form": "A",
+    "text_ar": "مدير مشروع يحتاج تعاون إدارة لا سلطة له عليها. ما الأساس الأقوى للتأثير فيها؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع الأمر إلى الإدارة العليا لإلزامها بالتعاون",
+        "score": 0
+      },
+      {
+        "label": "الاستناد إلى أقدميته وخبرته الطويلة في الجهة",
+        "score": 0
+      },
+      {
+        "label": "تكرار الطلب رسميًا حتى تستجيب الإدارة",
+        "score": 0
+      },
+      {
+        "label": "ربط طلبه بمصلحة تهم تلك الإدارة نفسها",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "974d112e-3ff9-42fe-b5ab-327eb3aa787e",
+    "code": "L-K5B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 52,
+    "competency_ar": "التأثير دون سلطة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K5B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي ما يلي من مصادر التأثير لا يعتمد على السلطة الرسمية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "صلاحية اعتماد الميزانية وصرفها",
+        "score": 0
+      },
+      {
+        "label": "حق التقييم السنوي لأداء الموظف",
+        "score": 0
+      },
+      {
+        "label": "الخبرة والثقة والعلاقات المتبادلة",
+        "score": 4
+      },
+      {
+        "label": "قرار التعيين والنقل والترقية في الإدارة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b158d96b-0c2d-45af-bfb0-9a5986172300",
+    "code": "L-K6",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 53,
+    "competency_ar": "الأمان النفسي",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K6",
+    "retro": false,
+    "form": "A",
+    "text_ar": "ما المقصود بالأمان النفسي في الفريق؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "ثقة الأعضاء بأن الاعتراض والخطأ لا يجلبان العقاب",
+        "score": 4
+      },
+      {
+        "label": "ضمان استقرار وظائف الأعضاء حتى نهاية المشروع",
+        "score": 0
+      },
+      {
+        "label": "تجنب الخلافات داخل الفريق حفاظًا على الانسجام",
+        "score": 0
+      },
+      {
+        "label": "حماية الفريق من ضغط الإدارة العليا ومطالبها المتكررة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "448ff781-5291-495d-9f62-b9831fe6e58f",
+    "code": "L-K6B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 53,
+    "competency_ar": "الأمان النفسي",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K6B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "أي سلوك من القائد يبني الأمان النفسي في الفريق أكثر من غيره؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن يتجنب الخلاف داخل الفريق حفاظًا على الانسجام",
+        "score": 0
+      },
+      {
+        "label": "أن يعد الفريق بعدم تغيير المهام حتى نهاية المشروع",
+        "score": 0
+      },
+      {
+        "label": "أن يتولى الرد على ملاحظات الخارج بنفسه",
+        "score": 0
+      },
+      {
+        "label": "أن يعترف بأخطائه ويشكر من ينبّه إلى خلل",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "38f2923f-b7a1-4ec9-8bd5-265cf331a025",
+    "code": "L-K7",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 54,
+    "competency_ar": "القيادة التحويلية والتبادلية",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K7",
+    "retro": false,
+    "form": "A",
+    "text_ar": "وفق نموذج المدى الكامل للقيادة عند باس وأفوليو (Bass & Avolio)، ما العلاقة بين القيادة التبادلية والتحويلية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التحويلية تُبنى فوق تبادلية سليمة ولا تلغيها",
+        "score": 4
+      },
+      {
+        "label": "التحويلية تحل محل التبادلية لأن المكافأة تضعف الدافع",
+        "score": 0
+      },
+      {
+        "label": "التبادلية للفرق الجديدة والتحويلية للفرق المتمرسة",
+        "score": 0
+      },
+      {
+        "label": "أسلوبان متعارضان يختار القائد بينهما بحسب شخصيته",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "8c22edb5-1eb9-4686-9ef4-83e48a02c946",
+    "code": "L-K7B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 54,
+    "competency_ar": "القيادة التحويلية والتبادلية",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K7B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "قائد يوضح لكل عضو ما المتوقع منه ويكافئ الإنجاز بعدل، لكن فريقه لا يتجاوز الحد الأدنى. ما الذي ينقصه وفق نموذج المدى الكامل؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "مكافآت أكبر مرتبطة بأهداف أعلى",
+        "score": 0
+      },
+      {
+        "label": "متابعة أدق للانحرافات قبل وقوعها",
+        "score": 0
+      },
+      {
+        "label": "ربط العمل بمعنى أكبر والاهتمام بنمو كل فرد",
+        "score": 4
+      },
+      {
+        "label": "تقليل المتابعة ليشعر الفريق بالثقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "900bac7b-fc19-4381-8ae8-e49db1afa4c3",
+    "code": "L-K8",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 55,
+    "competency_ar": "نتائج القيادة في الفريق",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K8",
+    "retro": false,
+    "form": "A",
+    "text_ar": "وفق إطار مركز القيادة الإبداعية (CCL)، بأي شيء يُستدل على نجاح القيادة في الفريق؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رضا أعضاء الفريق عن قائدهم في الاستبانة السنوية",
+        "score": 0
+      },
+      {
+        "label": "اكتمال مهام الخطة في مواعيدها المعتمدة",
+        "score": 0
+      },
+      {
+        "label": "امتلاك القائد للصفات القيادية المعروفة",
+        "score": 0
+      },
+      {
+        "label": "توجيه مشترك ومواءمة والتزام بالهدف",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "1c430630-698e-4096-b893-931a90c10a51",
+    "code": "L-K8B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 55,
+    "competency_ar": "نتائج القيادة في الفريق",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K8B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "فريق متفق على هدفه ومتحمس له، لكن أعمال أعضائه تتعارض وتتكرر. أي نتائج القيادة الثلاث في إطار CCL هي الضعيفة فيه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الالتزام",
+        "score": 0
+      },
+      {
+        "label": "التوجيه",
+        "score": 0
+      },
+      {
+        "label": "المواءمة",
+        "score": 4
+      },
+      {
+        "label": "الثقة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "cce86932-332c-40f7-bdcb-db97e505dca1",
+    "code": "L-K9",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 56,
+    "competency_ar": "الملاحظة البنّاءة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K9",
+    "retro": false,
+    "form": "A",
+    "text_ar": "أي صياغة للملاحظة على أداء زميل هي الأكثر فاعلية؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أنت لا تهتم بمواعيد التسليم كما ينبغي",
+        "score": 0
+      },
+      {
+        "label": "تأخر تقريرك يومين فتأخر قرار اللجنة",
+        "score": 4
+      },
+      {
+        "label": "أرجو أن تكون أكثر التزامًا في الفترة القادمة",
+        "score": 0
+      },
+      {
+        "label": "الفريق كله لاحظ أن أداءك تراجع في الفترة الأخيرة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "77d74f2a-d4ff-46cd-9075-a5761756b880",
+    "code": "L-K9B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 56,
+    "competency_ar": "الملاحظة البنّاءة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-K9B",
+    "retro": false,
+    "form": "B",
+    "text_ar": "ما الذي يجعل الملاحظة على الأداء بنّاءة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن تكون عامة حتى لا تجرح الشخص المعني",
+        "score": 0
+      },
+      {
+        "label": "أن تصف سلوكًا محددًا وأثره، ثم تفتح حوارًا عن الحل",
+        "score": 4
+      },
+      {
+        "label": "أن تُقال في اجتماع الفريق ليستفيد الآخرون",
+        "score": 0
+      },
+      {
+        "label": "أن تُؤجل إلى التقييم السنوي لتكون شاملة",
+        "score": 0
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "bdbaf393-57ae-4e38-a9b2-74effa844050",
+    "code": "T-1",
+    "dimension": "leadership",
+    "tier": "transfer",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 101,
+    "competency_ar": null,
+    "chapter_key": null,
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "ما تعلمته في البرنامج يرتبط مباشرة بتحديات عملي الفعلية.",
+    "help_ar": "تصف هذه العبارات تجربتك في البرنامج وبيئة عملك، لا أداءك.",
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لا أوافق بشدة",
+        "score": 0
+      },
+      {
+        "label": "لا أوافق",
+        "score": 1
+      },
+      {
+        "label": "محايد",
+        "score": 2
+      },
+      {
+        "label": "أوافق",
+        "score": 3
+      },
+      {
+        "label": "أوافق بشدة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "469b169d-f912-4916-bf6e-431cc97bca9a",
+    "code": "T-2",
+    "dimension": "leadership",
+    "tier": "transfer",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 102,
+    "competency_ar": null,
+    "chapter_key": null,
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أتيحت لي فرص حقيقية لتطبيق ما تعلمته خلال البرنامج.",
+    "help_ar": "تصف هذه العبارات تجربتك في البرنامج وبيئة عملك، لا أداءك.",
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لا أوافق بشدة",
+        "score": 0
+      },
+      {
+        "label": "لا أوافق",
+        "score": 1
+      },
+      {
+        "label": "محايد",
+        "score": 2
+      },
+      {
+        "label": "أوافق",
+        "score": 3
+      },
+      {
+        "label": "أوافق بشدة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b83e8f74-6c81-45b7-8611-1b8d3d23f62e",
+    "code": "T-3",
+    "dimension": "leadership",
+    "tier": "transfer",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 103,
+    "competency_ar": null,
+    "chapter_key": null,
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "دعمني مديري المباشر في تطبيق ما تعلمته.",
+    "help_ar": "تصف هذه العبارات تجربتك في البرنامج وبيئة عملك، لا أداءك.",
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لا أوافق بشدة",
+        "score": 0
+      },
+      {
+        "label": "لا أوافق",
+        "score": 1
+      },
+      {
+        "label": "محايد",
+        "score": 2
+      },
+      {
+        "label": "أوافق",
+        "score": 3
+      },
+      {
+        "label": "أوافق بشدة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "a1c3ad81-4987-4eec-b6d0-712095db16e4",
+    "code": "T-4",
+    "dimension": "leadership",
+    "tier": "transfer",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 104,
+    "competency_ar": null,
+    "chapter_key": null,
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "أستطيع أن أذكر قرارًا محددًا اتخذته بطريقة مختلفة بسبب البرنامج.",
+    "help_ar": "تصف هذه العبارات تجربتك في البرنامج وبيئة عملك، لا أداءك.",
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لا أوافق بشدة",
+        "score": 0
+      },
+      {
+        "label": "لا أوافق",
+        "score": 1
+      },
+      {
+        "label": "محايد",
+        "score": 2
+      },
+      {
+        "label": "أوافق",
+        "score": 3
+      },
+      {
+        "label": "أوافق بشدة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b119cd2c-7155-4d85-9449-4dcefc577c26",
+    "code": "T-5",
+    "dimension": "leadership",
+    "tier": "transfer",
+    "kind": "likert",
+    "weight": "1.00",
+    "sort": 105,
+    "competency_ar": null,
+    "chapter_key": null,
+    "anchor_code": null,
+    "retro": false,
+    "form": null,
+    "text_ar": "استخدمت أداة واحدة على الأقل من أدوات البرنامج في عملي خلال الشهر الماضي.",
+    "help_ar": "تصف هذه العبارات تجربتك في البرنامج وبيئة عملك، لا أداءك.",
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لا أوافق بشدة",
+        "score": 0
+      },
+      {
+        "label": "لا أوافق",
+        "score": 1
+      },
+      {
+        "label": "محايد",
+        "score": 2
+      },
+      {
+        "label": "أوافق",
+        "score": 3
+      },
+      {
+        "label": "أوافق بشدة",
+        "score": 4
+      }
+    ],
+    "min_level": null
+  },
+  {
+    "instrument": "post-v2",
+    "id": "ce59bee3-c8c8-5601-a437-ea1c925e8530",
+    "code": "M-K10",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 200,
+    "competency_ar": "أسئلة طبقات المعالم",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "وفق طبقات المعالم الثلاث، أي سؤال يجيب عنه معلم البرنامج؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "هل تتكامل المشاريع لتنتج المنافع؟",
+        "score": 4
+      },
+      {
+        "label": "هل ننفذ المخرجات بشكل صحيح؟",
+        "score": 0
+      },
+      {
+        "label": "هل نستثمر في الأشياء الصحيحة؟",
+        "score": 0
+      },
+      {
+        "label": "هل يلتزم الفريق بالجدول المعتمد؟",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "d3b3ce67-bdbd-581b-a498-68de2db6628e",
+    "code": "M-K10B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 201,
+    "competency_ar": "أسئلة طبقات المعالم",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "لجنة تقرر عند معالمها دخول المبادرات وخروجها. أي سؤال تجيب عنه طبقتها؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "هل تتكامل المشاريع لتنتج المنافع؟",
+        "score": 0
+      },
+      {
+        "label": "هل نستثمر في الأشياء الصحيحة؟",
+        "score": 4
+      },
+      {
+        "label": "هل ننفذ المخرجات بشكل صحيح؟",
+        "score": 0
+      },
+      {
+        "label": "هل سُلّمت المخرجات في موعدها؟",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "e1e39849-df4c-58b2-b143-39b49bbe063e",
+    "code": "M-S10",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 202,
+    "competency_ar": "التمويل المرحلي في المحفظة",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "تدرس لجنة المحفظة مبادرة تحول مدتها ثلاث سنوات، دراستها واعدة وجاهزيتها غير مؤكدة. ما ترتيب التمويل الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تمويلها سنويًا بحصة ثابتة تُراجع مع الموازنة",
+        "score": 2
+      },
+      {
+        "label": "تأجيل تمويلها إلى العام القادم حتى تتضح جاهزيتها",
+        "score": 1
+      },
+      {
+        "label": "تمويلها حتى معلمها القادم ثم القرار عنده بالأدلة",
+        "score": 4
+      },
+      {
+        "label": "اعتماد تمويلها حتى نهايتها لضمان استقرار فريقها",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "12912c89-7592-52b9-9b00-53b9864a7cbe",
+    "code": "M-S10B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 203,
+    "competency_ar": "التمويل المرحلي في المحفظة",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "مبادرة استهلكت نصف ميزانيتها ومعلمها القادم بعد شهرين، ورئيس اللجنة متحمس لها. ما الأنسب في مراجعة المحفظة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "طلب تقرير تفصيلي من مكتب المشاريع قبل أي قرار",
+        "score": 2
+      },
+      {
+        "label": "زيادة تمويلها لتسريع الوصول إلى معلمها القادم",
+        "score": 1
+      },
+      {
+        "label": "اعتماد بقية ميزانيتها لأن نصفها صُرف فعلًا",
+        "score": 0
+      },
+      {
+        "label": "تمويلها حتى معلمها القادم والحكم بمعايير معلنة",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "46ebc850-cd8d-5c2b-939e-a850f3aacbf8",
+    "code": "M-K11",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 204,
+    "competency_ar": "جدارات القائد في إطار المعلم",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "أي مما يلي من الجدارات التي يملكها القائد ذاتيًا في إطار المعلم، لا مما يقدمه للمؤسسة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "قراءة الانحراف عن خط الأساس مبكرًا",
+        "score": 4
+      },
+      {
+        "label": "تصميم منظومة معالم متوازنة",
+        "score": 0
+      },
+      {
+        "label": "حوكمة البوابات بمعايير معلنة",
+        "score": 0
+      },
+      {
+        "label": "بيانات موثوقة تخدم القرار",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "c12f906f-6778-5992-907f-4c66bfd9045d",
+    "code": "M-K11B",
+    "dimension": "milestone",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 205,
+    "competency_ar": "جدارات القائد في إطار المعلم",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "يريد قائد أن يتجاوز أثره مشروعه إلى المؤسسة. بأي إسهام يحقق ذلك في إطار المعلم؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التفكير القراري عند كل معلم",
+        "score": 0
+      },
+      {
+        "label": "حوكمة البوابات بجلسات قرار منضبطة",
+        "score": 4
+      },
+      {
+        "label": "الحكم على استمرار المشروع",
+        "score": 0
+      },
+      {
+        "label": "قراءة اتجاه المعالم مبكرًا",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "4afee4d1-cef2-50f1-a72b-0cdfaa17aced",
+    "code": "M-S11",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 206,
+    "competency_ar": "الأداة تخدم المنهجية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "تقترح إدارة التقنية شراء نظام متقدم لإدارة المشاريع، ولم يُعرَّف بعد صاحب قرار لكل معلم. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "شراء النظام وتعريف أصحاب القرار أثناء التشغيل",
+        "score": 1
+      },
+      {
+        "label": "تأجيل الشراء والاكتفاء بتقارير يدوية أسبوعية",
+        "score": 1
+      },
+      {
+        "label": "تعريف صاحب قرار كل معلم أولًا ثم اختيار أداة تخدمه",
+        "score": 4
+      },
+      {
+        "label": "شراء النظام وتكليف المكتب بتعبئة تواريخ المعالم",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "9337caab-8b09-576c-a188-bdd7f8f973d5",
+    "code": "M-S11B",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 207,
+    "competency_ar": "الأداة تخدم المنهجية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "لوحة معلومات جديدة تعرض حالة كل مشروع بالألوان، واللجنة ما زالت لا تعرف ما المطلوب منها أن تقرره. ما المعالجة الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافة مؤشرات تفصيلية أكثر لكل مشروع في اللوحة",
+        "score": 1
+      },
+      {
+        "label": "تدريب أعضاء اللجنة على قراءة ألوان اللوحة ورموزها",
+        "score": 1
+      },
+      {
+        "label": "استبدال اللوحة بنظام أحدث يصدر تقارير آلية",
+        "score": 0
+      },
+      {
+        "label": "إعادة بناء اللوحة حول القرار المطلوب عند كل معلم",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "e67bd9f3-b08d-57a6-966b-0a962c417538",
+    "code": "I-K10",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 208,
+    "competency_ar": "معلم القيمة بعد التسليم",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "وفق أدوات طبقة المشروع في إطار الأثر، متى يُقرأ الاستخدام الفعلي للمخرج بعد تسليمه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "بعد 90 يومًا، تسبقها قراءة أولى للتبني بعد 30 يومًا",
+        "score": 4
+      },
+      {
+        "label": "يوم التسليم مع توقيع محضر الاستلام النهائي",
+        "score": 0
+      },
+      {
+        "label": "عند إغلاق البرنامج بعد اكتمال كل مشاريعه",
+        "score": 0
+      },
+      {
+        "label": "في التقرير السنوي للجهة بعد اعتماد الميزانية",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "96259831-f730-5a23-b8a3-8ccb77ff3f58",
+    "code": "I-K10B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 209,
+    "competency_ar": "معلم القيمة بعد التسليم",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "ما الغرض من «معلم القيمة» الذي يُحدَّد بعد تسليم مخرج المشروع؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التحقق من سداد مستحقات المورد بعد الاستلام",
+        "score": 0
+      },
+      {
+        "label": "قراءة التبني والاستخدام الفعلي لدى المستفيد",
+        "score": 4
+      },
+      {
+        "label": "توثيق الدروس المستفادة قبل حل فريق المشروع",
+        "score": 0
+      },
+      {
+        "label": "مراجعة مطابقة المخرج لمواصفات العقد",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "d079a23c-005e-50ff-b558-6491af8ce89e",
+    "code": "I-S10",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 210,
+    "competency_ar": "ملكية المنفعة والتبني",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "يعدّ مدير برنامج خطة تحقيق المنافع، ويقترح أن يتسلم فريق البرنامج المنافع حتى تظهر. ما التعديل الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إبقاء التسلم لدى فريق البرنامج مع تمديد عقده سنة",
+        "score": 1
+      },
+      {
+        "label": "إسناد المنافع إلى مكتب إدارة المشاريع لأنه يعد التقارير",
+        "score": 1
+      },
+      {
+        "label": "تعيين مالك لكل منفعة من وحدة الأعمال يتسلمها ويُحاسب عليها",
+        "score": 4
+      },
+      {
+        "label": "إغلاق البرنامج عند اكتمال مشاريعه وقياس المنافع لاحقًا",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "b9a2561d-ae45-5e9f-a96c-360ee2714968",
+    "code": "I-S10B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 211,
+    "competency_ar": "ملكية المنفعة والتبني",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "تسلّمت وحدة أعمال نظامًا جديدًا من برنامج تحول، لكن موظفيها يواصلون العمل بالطريقة القديمة. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إلزام الموظفين بالنظام بتعميم من الإدارة العليا",
+        "score": 1
+      },
+      {
+        "label": "إعادة النظام إلى فريق المشروع لتحسين واجهته",
+        "score": 1
+      },
+      {
+        "label": "إعلان اكتمال البرنامج لأن النظام سُلّم في موعده",
+        "score": 0
+      },
+      {
+        "label": "تكليف مالك تغيير الأعمال بقيادة التبني وقياس الاستخدام",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "ce0e96ca-df18-5046-bfe9-a641cbb05f10",
+    "code": "I-K11",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 212,
+    "competency_ar": "أخلاقيات بيانات الأثر",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "وفق مبدأ «الحد الأدنى من البيانات»، ما الذي يُجمع من المستفيدين عند قياس الأثر؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "ما يخدم قرارًا، ويُحذف ما انتهى غرضه",
+        "score": 4
+      },
+      {
+        "label": "ما قد يفيد تحليلات مستقبلية لم تتحدد",
+        "score": 0
+      },
+      {
+        "label": "ما يطلبه المانح في نموذج تقاريره المعتاد",
+        "score": 0
+      },
+      {
+        "label": "ما يسهل جمعه من السجلات الإدارية المتاحة",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "ba3b1db8-a1ee-5bba-95e0-6a1e8e4ee179",
+    "code": "I-K11B",
+    "dimension": "impact",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 213,
+    "competency_ar": "أخلاقيات بيانات الأثر",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "ماذا تعني «الموافقة المستنيرة» عند جمع بيانات الأثر من المستفيدين؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "أن يوقّع استمارة الخدمة المتضمنة بند البيانات",
+        "score": 0
+      },
+      {
+        "label": "أن يعرف ما يُجمع ولماذا، ويرفض دون أن يخسر الخدمة",
+        "score": 4
+      },
+      {
+        "label": "أن يُبلَّغ بنتائج القياس بعد نشر التقرير السنوي",
+        "score": 0
+      },
+      {
+        "label": "أن تعتمد الإدارة القانونية أداة الجمع مسبقًا",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "7e67e29f-318e-5143-8834-1dddf45957d1",
+    "code": "I-S11",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 214,
+    "competency_ar": "حوكمة الأدلة والأمانة القياسية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "طلب منك الراعي حذف مؤشر لم يتحقق من تقرير الأثر السنوي «حتى لا يشوّش على الإنجازات». ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نقله إلى ملحق التقرير بصياغة مخففة",
+        "score": 2
+      },
+      {
+        "label": "حذفه من التقرير وعرضه في اجتماع داخلي",
+        "score": 1
+      },
+      {
+        "label": "إبقاؤه مع تحليل سببه وما سيُعدَّل في الخطة",
+        "score": 4
+      },
+      {
+        "label": "استبداله بمؤشر نشاط تحقق بنسبة عالية",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "1ffae06f-d93c-57db-956c-c4a27cffb9e8",
+    "code": "I-S11B",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 215,
+    "competency_ar": "حوكمة الأدلة والأمانة القياسية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "تقارير الأثر في جهتك تعرض أعداد المستفيدين والورش، ولا يرجع إليها أحد في قرارات المحفظة. بأي تغيير تبدأ؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تحويل التقارير إلى لوحة رقمية حية ملونة",
+        "score": 2
+      },
+      {
+        "label": "إضافة قصص المستفيدين لتصبح التقارير مؤثرة",
+        "score": 1
+      },
+      {
+        "label": "زيادة عدد المؤشرات المعروضة في كل تقرير",
+        "score": 0
+      },
+      {
+        "label": "ربط كل مؤشر أثر بقرار محدد في مراجعة المحفظة",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "bf5e36fe-68bf-530e-8394-bb7612880e56",
+    "code": "L-K10",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 216,
+    "competency_ar": "أدوات قيادة التحول",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "في طبقة المحفظة من إطار القيادة، أي مما يلي من أدوات قيادة التحول؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "سردية تحول موحدة تُروى في كل منبر",
+        "score": 4
+      },
+      {
+        "label": "إطلاق موجات التحول معًا في وقت واحد",
+        "score": 0
+      },
+      {
+        "label": "إسناد قيادة التحول إلى بيت استشارات",
+        "score": 0
+      },
+      {
+        "label": "تعميم التحول بمذكرات رسمية متتابعة",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "adb0396b-208d-54d0-bc71-d4efedb60ac9",
+    "code": "L-K10B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 217,
+    "competency_ar": "أدوات قيادة التحول",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "ما المقصود بإدارة «طاقة التغيير» عند قيادة التحول في المؤسسة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع حماس الموظفين بحملات تحفيز متتابعة",
+        "score": 0
+      },
+      {
+        "label": "معاملتها موردًا نادرًا: من يستوعب المزيد ومن أُرهق",
+        "score": 4
+      },
+      {
+        "label": "قياس رضا الموظفين عن التغيير بعد كل موجة",
+        "score": 0
+      },
+      {
+        "label": "توزيع ميزانية التغيير بالتساوي على الوحدات",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "d870ea9f-1e2f-5b04-a93b-889f3e59a5bd",
+    "code": "L-S10",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 218,
+    "competency_ar": "اصطفاف أصحاب المصلحة في البرنامج",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "intermediate",
+    "text_ar": "في برنامج يضم ثلاث إدارات، وُعدت كل إدارة على حدة بأولوية مشروعها في الموارد المشتركة. ما الأنسب الآن؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "الوفاء للإدارة الأعلى نفوذًا وإبلاغ الأخريين لاحقًا",
+        "score": 1
+      },
+      {
+        "label": "توزيع الموارد بالتساوي حتى لا تغضب أي إدارة",
+        "score": 1
+      },
+      {
+        "label": "جمع الإدارات على المنافع المشتركة وحسم الأولويات معًا",
+        "score": 4
+      },
+      {
+        "label": "تأجيل الحسم حتى تطالب إحدى الإدارات بمواردها",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "eed88601-e25e-50ff-8f02-1185424fb5fb",
+    "code": "L-S10B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 219,
+    "competency_ar": "اصطفاف أصحاب المصلحة في البرنامج",
+    "chapter_key": "ch5",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "intermediate",
+    "text_ar": "إدارة مستفيدة لم تعترض على البرنامج في أي اجتماع، لكن بياناتها تتأخر عن كل معلم تكامل. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رفع التأخير إلى مجلس البرنامج في التقرير القادم",
+        "score": 1
+      },
+      {
+        "label": "إرسال تذكير رسمي بمواعيد التسليم قبل كل معلم",
+        "score": 1
+      },
+      {
+        "label": "تخطيط المعالم القادمة دون بياناتها تجنبًا للتعطيل",
+        "score": 0
+      },
+      {
+        "label": "لقاء مسؤولها لفهم تحفظه وربط البرنامج بمنفعة تخصه",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "67a22b93-0a9c-51da-92b0-620204e98c72",
+    "code": "L-K11",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 220,
+    "competency_ar": "أداة DIRECT",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "في أداة DIRECT، لماذا يأتي التعاطف بعد الحل في ترتيب الخطوات؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "لأنه لحظة تثبيت الحل مع المتأثرين به",
+        "score": 4
+      },
+      {
+        "label": "لأن التعاطف لا يلزم قبل اختيار الحل",
+        "score": 0
+      },
+      {
+        "label": "لأن الحل يُعرض على الراعي قبل الفريق",
+        "score": 0
+      },
+      {
+        "label": "لأن التواصل يغني عنه في بداية المسار",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "539fadf4-7227-56b0-aaa5-cf20658a648f",
+    "code": "L-K11B",
+    "dimension": "leadership",
+    "tier": "knowledge",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 221,
+    "competency_ar": "أداة DIRECT",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "بأي خطوة تبدأ أداة DIRECT أمام تحدٍّ قيادي جديد؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تحديد من تحتاج كسبه من الأطراف",
+        "score": 0
+      },
+      {
+        "label": "تشخيص التحدي وفهمه قبل التحرك",
+        "score": 4
+      },
+      {
+        "label": "اختيار الحل الأسرع في التنفيذ",
+        "score": 0
+      },
+      {
+        "label": "إبلاغ الأطراف المعنية بالخطة",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "23a7169a-d436-52ae-9f5c-50bf9afc4a8b",
+    "code": "L-S11",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 222,
+    "competency_ar": "جدارات القائد الذاتية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "A",
+    "min_level": "advanced",
+    "text_ar": "قائد نمطه الغالب التوجيه التفصيلي، وفي فريقه خبيران ناضجان في مهمتهما يشتكيان من تدخله. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تقليل التدخل مع الفريق كله بالدرجة نفسها",
+        "score": 2
+      },
+      {
+        "label": "شرح أسباب تدخله لهما حتى يتقبلاه",
+        "score": 1
+      },
+      {
+        "label": "تبديل نمطه معهما إلى التفويض مع متابعة القرارات",
+        "score": 4
+      },
+      {
+        "label": "الإبقاء على نمطه لأنه ما يتقنه ويرتاح إليه",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "97b34527-706b-5459-b58d-76d6ea7ba564",
+    "code": "L-S11B",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 223,
+    "competency_ar": "جدارات القائد الذاتية",
+    "chapter_key": "ch6",
+    "anchor_code": null,
+    "retro": false,
+    "form": "B",
+    "min_level": "advanced",
+    "text_ar": "في اجتماع متوتر انتقد مدير إدارة موازية فريقك علنًا، وشعرت بالغضب. ما الأنسب في اللحظة نفسها؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تجاهل النقد ومتابعة جدول الاجتماع كما هو",
+        "score": 2
+      },
+      {
+        "label": "الرد عليه فورًا دفاعًا عن الفريق أمام الحضور",
+        "score": 1
+      },
+      {
+        "label": "مغادرة الاجتماع حتى يهدأ النقاش",
+        "score": 0
+      },
+      {
+        "label": "ضبط انفعالك وطلب أمثلة محددة ثم استكمال النقاش لاحقًا",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "86676d1c-11a6-5097-a1cc-c30327460052",
+    "code": "M-S1T",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 5,
+    "competency_ar": "بناء سجل المعالم",
+    "chapter_key": "ch4",
+    "anchor_code": "M-S1",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "تراجع سجل معالم أعدّه زميل لمشروع تطوير خدمة. أي سجل يحقق التحكم المطلوب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "معالم عند نقاط القرار، لكل منها معيار تحقق وصاحب قرار",
+        "score": 4
+      },
+      {
+        "label": "معالم لكل مهمة في الجدول، لكل منها نسبة إنجاز",
+        "score": 1
+      },
+      {
+        "label": "معالم مربوطة بمواعيد اجتماعات اللجنة الشهرية",
+        "score": 1
+      },
+      {
+        "label": "معلم واحد عند التسليم النهائي للخدمة",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "037bd964-2e55-527a-9c31-a24bf14585f8",
+    "code": "M-S3T",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 6,
+    "competency_ar": "قراءة الانزلاق",
+    "chapter_key": "ch4",
+    "anchor_code": "M-S3",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "تحليل اتجاه المعالم يُظهر ثلاثة معالم متتالية تُرحَّل أسبوعين في كل مراجعة، والفريق يؤكد أن الموعد النهائي آمن. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إضافة موارد للفريق لاستعادة الأسابيع المرحّلة",
+        "score": 1
+      },
+      {
+        "label": "البحث عن سبب الترحيل المتكرر قبل قبول الطمأنة",
+        "score": 4
+      },
+      {
+        "label": "تحديث خط الأساس بالمواعيد المرحّلة الجديدة",
+        "score": 1
+      },
+      {
+        "label": "قبول تقدير الفريق لأنه الأقرب إلى العمل",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "04d0247f-b735-5f05-bec3-4e94b43201ed",
+    "code": "M-S4T",
+    "dimension": "milestone",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 7,
+    "competency_ar": "مواءمة متطلبات المانح",
+    "chapter_key": "ch2",
+    "anchor_code": "M-S4",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "جهة ممولة تشترط في تقاريرها مؤشرات تختلف عما تتابعه إدارة المشروع، فصار الفريق يعدّ مجموعتين من التقارير. ما المعالجة الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "التفاوض على إلغاء مؤشرات الممول قليلة الفائدة",
+        "score": 2
+      },
+      {
+        "label": "إعداد تقارير الممول بقالب مختصر لتوفير الوقت",
+        "score": 1
+      },
+      {
+        "label": "مواءمة مؤشرات الممول مع معالم القرار في خطة واحدة",
+        "score": 4
+      },
+      {
+        "label": "متابعة مؤشرات الممول وحدها لأنها شرط التمويل",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "525df9cd-0304-594f-a632-d2ea4dbf05ee",
+    "code": "I-S1T",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 25,
+    "competency_ar": "صياغة المنفعة",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S1",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "تصوغ منافع مشروع رقمنة خدمات الترخيص في البلدية. أي صياغة تصلح أن تُسجَّل منفعةً؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "رضا الموظفين عن واجهة المنصة الجديدة بنسبة 85%",
+        "score": 1
+      },
+      {
+        "label": "إطلاق منصة الترخيص الإلكترونية في الربع الثالث",
+        "score": 0
+      },
+      {
+        "label": "ارتفاع إلمام الموظفين بالمنصة بعد تدريبهم",
+        "score": 1
+      },
+      {
+        "label": "خفض زمن إصدار الرخصة من 15 يومًا إلى 5 أيام خلال سنة",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "a45ada79-461d-5711-a3f9-2884ab14d750",
+    "code": "I-S4T",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 26,
+    "competency_ar": "خط الأساس المتأخر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S4",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "انطلقت مبادرة لتحسين رضا المراجعين قبل ستة أسابيع، ولم يُقس رضاهم قبلها. ما التصرف الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "استخدام أقرب بيانات سابقة متاحة وتوثيق حدودها",
+        "score": 4
+      },
+      {
+        "label": "اعتبار نتيجة أول استطلاع بعد الإطلاق خط الأساس",
+        "score": 1
+      },
+      {
+        "label": "الاعتماد على انطباعات الموظفين عن الرضا السابق",
+        "score": 1
+      },
+      {
+        "label": "إيقاف المبادرة حتى يُبنى خط أساس سليم",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "2ef1de7b-d301-521f-aad4-f79bc32bbf32",
+    "code": "I-S5T",
+    "dimension": "impact",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 27,
+    "competency_ar": "اختيار مؤشر الأثر",
+    "chapter_key": "ch4",
+    "anchor_code": "I-S5",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "برنامج يؤهل الباحثين عن عمل، ويريد راعيه رقمًا واحدًا يدل على ما أحدثه لديهم. بأي مقياس يُقاس ذلك؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "نسبة رضا المستفيدين عن مدربي البرنامج",
+        "score": 1
+      },
+      {
+        "label": "نسبة المستفيدين في وظائف مستقرة بعد سنة",
+        "score": 4
+      },
+      {
+        "label": "عدد الدورات التأهيلية المقدمة في العام",
+        "score": 0
+      },
+      {
+        "label": "عدد المسجلين في البوابة الإلكترونية",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "4de9ba3b-77dd-5bfd-985c-a48fe8163ba4",
+    "code": "L-S3T",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 45,
+    "competency_ar": "تلقي التوجيه",
+    "chapter_key": "ch2",
+    "anchor_code": "L-S3",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "كلّفك وكيل الجهة شفهيًا في ممر المبنى بـ«تحسين تجربة المراجعين» قبل نهاية الشهر. ما أول خطوة؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "تشكيل فريق عمل فورًا والبدء بأفكار سريعة",
+        "score": 1
+      },
+      {
+        "label": "انتظار تعميم مكتوب قبل اتخاذ أي خطوة",
+        "score": 1
+      },
+      {
+        "label": "تأكيد الاستلام والتحقق من النتيجة المقصودة وحدودها",
+        "score": 4
+      },
+      {
+        "label": "إحالة التكليف إلى إدارة خدمة العملاء كما ورد",
+        "score": 0
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "5efdf01d-29ac-577d-a4a1-8902e6e04fea",
+    "code": "L-S4T",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 46,
+    "competency_ar": "إدارة أصحاب المصلحة",
+    "chapter_key": "ch4",
+    "anchor_code": "L-S4",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "رئيس إدارة مستفيدة يتابع مشروعك باهتمام كبير ويحضر عروضه، لكن قراراته لا تؤثر في مساره. ما الأنسب معه؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إشراكه في قرارات المشروع الرئيسية مع الراعي",
+        "score": 1
+      },
+      {
+        "label": "الاكتفاء بإرسال التقرير الشهري العام إليه",
+        "score": 1
+      },
+      {
+        "label": "تقليل تواصله مع الفريق تجنبًا للتشتيت",
+        "score": 0
+      },
+      {
+        "label": "تحديثات منتظمة تبقيه مطلعًا وكسبه سفيرًا للمشروع",
+        "score": 4
+      }
+    ]
+  },
+  {
+    "instrument": "post-v2",
+    "id": "bf27e0b4-2233-5f13-bc83-07639e569dc6",
+    "code": "L-S6T",
+    "dimension": "leadership",
+    "tier": "skill",
+    "kind": "choice",
+    "weight": "1.00",
+    "sort": 47,
+    "competency_ar": "إيصال الأخبار الصعبة",
+    "chapter_key": "ch2",
+    "anchor_code": "L-S6",
+    "retro": false,
+    "form": null,
+    "min_level": null,
+    "text_ar": "اكتشفت أن مشروعًا يرعاه رئيسك سيتجاوز ميزانيته 20%، واجتماع اللجنة المالية لاعتماد مخصصات العام بعد يومين. ما الأنسب؟",
+    "help_ar": null,
+    "text_rater_ar": null,
+    "options": [
+      {
+        "label": "إبلاغ رئيسك الآن بالأرقام والأسباب وخيارات المعالجة",
+        "score": 4
+      },
+      {
+        "label": "إعداد خطة تقشف أولًا ثم إبلاغه بها بعد الاجتماع",
+        "score": 2
+      },
+      {
+        "label": "انتظار لقائك الدوري القادم مع رئيسك",
+        "score": 1
+      },
+      {
+        "label": "التركيز في العرض على ما تحقق من المشروع",
+        "score": 0
+      }
+    ]
+  }
+]
