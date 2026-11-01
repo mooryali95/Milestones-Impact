@@ -253,6 +253,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
             <div className="meta">
               {mode && <span className="tag"><i aria-hidden="true">{mode.icon}</i>{mode.title}</span>}
               {stage.duration_label && <span className="tag">{stage.duration_label}</span>}
+              {stage.work_mode && <span className="tag">{WORK_AR[stage.work_mode]}</span>}
               {stage.total > 0 && <span className="tag">{stage.done} من {stage.total}</span>}
             </div>
             {locked && stage.lock_reason && <small className="muted">{stage.lock_reason}</small>}
@@ -398,6 +399,8 @@ function PreManager() {
   );
 }
 
+const WORK_AR = { shared: 'جماعي مع دفعتك', individual: 'فردي', groups: 'مع مجموعتك' };
+
 // المعالم: أين أنت من مشروعك ورحلتك، وما المتأخر وبكم يوم
 const MS_CHIP = { done: 'ok', late: 'bad', due_soon: 'gold', on_time: '', unscheduled: '' };
 const MS_AR = { done: 'منجز', late: 'متأخر', due_soon: 'يستحق قريبًا', on_time: 'في الموعد', unscheduled: 'بلا موعد بعد' };
@@ -485,6 +488,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       </section>
       {participant.status === 'completed' && <CertificateCard />}
       <RateExpert />
+      {approved && me.group && (
+        <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
+      )}
       {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
       {approved && <ChooseExpert />}
 

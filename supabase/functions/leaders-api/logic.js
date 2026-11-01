@@ -1852,6 +1852,7 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
 // نصوص الرحلة واتساقها وساعات البرنامج في journey.js، وتُصدَّر من هنا كما كانت
 export * from './journey.js';
 export * from './milestones.js';
+export * from './groups.js';
 import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════

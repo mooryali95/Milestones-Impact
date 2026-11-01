@@ -10,7 +10,7 @@
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority } from './participant.ts';
-import { cohortOf } from './programs.ts';
+import { cohortOf, contentLevelsFor } from './programs.ts';
 import { isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
@@ -34,6 +34,8 @@ async function build(p: any) {
   const { levels, approved } = await levelsOf(p.id);
   if (!approved) throw new Fail('تُفتح وثيقة مبادرتك بعد اعتماد مسارك', 403, 'locked');
   const scope = p.work_scope || null;
+  // النماذج وحقولها بمستوى المحتوى (الموحد في الدفعة المتجانسة)، والمسار والأولوية من قياسه
+  const content = await contentLevelsFor(p, levels);
   const key = trackKey(levels);
   const [models, subs, cap, track] = await Promise.all([
     db.from('learning_models').select(MODEL_COLS).not('capstone_sort', 'is', null),
@@ -50,12 +52,12 @@ async function build(p: any) {
   // العنوان المعروض للمشارك وراعيه: ملف التعريف، وإلا عنوان المسار
   const profile = await profileFor(levels, priority);
   if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
-  const mine = capstoneModels(all, levels, scope);
+  const mine = capstoneModels(all, content, scope);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   const sections = mine.map((m: any) => {
-    const fields = modelFields(m, levels, scope, priority);
+    const fields = modelFields(m, content, scope, priority);
     const sub = by[m.id];
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
     return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };

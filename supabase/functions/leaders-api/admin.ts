@@ -269,7 +269,7 @@ export async function participant(b: Body) {
     db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
   ]);
   return {
-    success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary,
+    success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group,
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
     points: pts, book: book || [], models: subs || [],
