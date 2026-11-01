@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
-import { JourneySkeleton } from '../ui.jsx';
+import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 
 import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -102,12 +102,12 @@ function Initiatives({ list, outcomes }) {
     if (!r.success) { win?.close(); return setMsg(r.message); }
     const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
     const { meta, body } = capstoneReport(r.doc);
-    if (!writeDocument(win, meta, body)) setMsg('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+    if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
   };
   return (
     <section className="card op-table">
       <h3>محفظة مبادرات الجهة</h3>
-      <p className="small muted">مشاريع تخرج مشاركيكم: مبادرات حقيقية في جهتكم. {approved.length} معتمدة{cost ? ` بتكلفة تقديرية ${Math.round(cost).toLocaleString('en-US')} ريال` : ''}.</p>
+      <p className="small muted">مبادرات مشاركيك: مشاريع حقيقية في جهتك. {approved.length} معتمدة{cost ? ` بتكلفة تقديرية ${Math.round(cost).toLocaleString('en-US')} ريال` : ''}.</p>
       {outcomes?.approved > 0 && (
         <div className="tr-kpis">
           <div><b>{outcomes.reporting}</b><small>من {outcomes.approved} تتابع تنفيذها</small></div>
@@ -140,10 +140,10 @@ function ImpactCard({ im, onReport }) {
   const c = im.counts || {};
   return (
     <section className="card op-impact">
-      <div className="row between"><h3>أثر البرنامج على مشاركيكم</h3>{onReport && c.paired > 0 && !im.suppressed && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
+      <div className="row between"><h3>أثر البرنامج على مشاركيك</h3>{onReport && c.paired > 0 && !im.suppressed && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
       <p className="small muted">{c.baseline || 0} أجروا القياس المبدئي، و{c.post || 0} أجروا البعدي، و{c.paired || 0} لديهم القياسان.</p>
       {im.caution && <div className="alert info small">{im.caution}</div>}
-      {im.suppressed ? <p className="small muted">تظهر المقارنة حين يُتم {im.suppressed} مشاركين على الأقل القياسين، حفاظًا على خصوصية كل مشارك.</p> : c.paired > 0 ? (
+      {im.suppressed ? <p className="small muted">تظهر المقارنة حين يكمل {im.suppressed} مشاركين على الأقل القياسين، حفاظًا على خصوصيتهم.</p> : c.paired > 0 ? (
         <div className="op-scroll"><table>
           <thead><tr><th>الإطار</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسن موثوق</th></tr></thead>
           <tbody>{DIMS.map(([k, en]) => {
@@ -152,7 +152,7 @@ function ImpactCard({ im, onReport }) {
             return <tr key={k}><td><b>{en}</b><br /><small className="muted">{DIM_AR[k]}</small></td><td>{x.pre ?? '·'}</td><td>{x.post ?? '·'}</td><td><b>{signed(x.diff)}</b></td><td>{x.reliable_up ?? 0} من {x.n ?? 0}</td></tr>;
           })}</tbody>
         </table></div>
-      ) : <p className="small muted">تظهر المقارنة حين يُتم مشاركوكم القياس البعدي في نهاية البرنامج.</p>}
+      ) : <p className="small muted">تظهر المقارنة حين يكمل مشاركوك القياس البعدي في نهاية البرنامج.</p>}
     </section>
   );
 }
@@ -161,6 +161,7 @@ function Dashboard({ me, onLogout }) {
   const [d, setD] = useState(null);
   const [f, setF] = useState({ q: '', status: '', track: '' });
   const [sort, setSort] = useState('name');
+  const [msg, setMsg] = useState('');
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
   useEffect(load, []);
 
@@ -187,13 +188,13 @@ function Dashboard({ me, onLogout }) {
     const win = window.open('', '_blank');   // تُفتح قبل التحميل حتى لا يحجبها المتصفح
     const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
     const { meta, body } = orgReport({ ...d, participants: rows }, 'coordinator');
-    if (!writeDocument(win, meta, body)) alert('اسمح بالنوافذ المنبثقة لعرض التقرير');
+    if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
   };
   const printImpact = async () => {
     const win = window.open('', '_blank');
     const [{ writeDocument }, { impactReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
     const { meta, body } = impactReport(d.impact, { org: org.name, audience: 'coordinator', names: perms.scores });
-    if (!writeDocument(win, meta, body)) alert('اسمح بالنوافذ المنبثقة لعرض التقرير');
+    if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
   };
   return (
     <div className="page op" style={org.color ? { '--org': org.color } : undefined}>
@@ -201,7 +202,8 @@ function Dashboard({ me, onLogout }) {
         <div className="stack">
           <p className="eyebrow">لوحة الجهة · للاطلاع</p>
           <h1>{org.name}</h1>
-          <p className="muted">أهلًا {me.coordinator.full_name || ''}. هذه لوحة مشاركي جهتك في برنامج القادة، وتتحدث مع كل نشاط.</p>
+          <p className="muted">أهلًا {me.coordinator.full_name || ''}. لوحة مشاركي جهتك في برنامج القادة، تُحدَّث مع كل نشاط.</p>
+          {msg && <div className="alert err small" role="alert">{msg}</div>}
           <div className="row">
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}

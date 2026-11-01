@@ -11,11 +11,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, TIERS } from '../labels.js';
+import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 
 const ADVANCE_MS = 280;
 const BREAK_LINES = {
   milestone: { title: 'أنهيت ثلث الطريق', next: 'القسم التالي عن تحويل مشروعاتك إلى أثر يُقاس.' },
-  impact: { title: 'بقي قسم واحد فقط', next: 'الأخير عن قيادتك للتنفيذ وفريقك. هو الأقرب ليومك.' },
+  impact: { title: 'بقي قسم واحد فقط', next: 'الأخير عن قيادتك للتنفيذ وفريقك.' },
 };
 const POST_BREAK_LINES = {
   ...BREAK_LINES,
@@ -114,7 +115,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     return (
       <div className="page narrow stack">
         <div className="alert err">{error}</div>
-        {onBack && <div className="row"><button className="btn ghost" onClick={onBack}>عودة إلى رحلتي</button></div>}
+        {onBack && <div className="row"><button className="btn ghost" onClick={onBack}>→ رحلتي</button></div>}
       </div>
     );
   }
@@ -131,7 +132,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const header = (
     <>
       <div className="quiz-head">
-        <span className="small muted">{post ? 'القياس البعدي' : 'المرحلة 2 من 3 في القبول'}</span>
+        <span className="small muted">{post ? 'القياس البعدي' : 'الخطوة 2 من 3 في القبول'}</span>
         <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         <span className="small"><b>{answered}</b>/{qs.length}</span>
       </div>
@@ -147,12 +148,8 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
         <div className="card stack">
           <p className="eyebrow">{post ? 'القياس البعدي' : 'تحديد المستوى'}</p>
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
-          <p>{data.assessment.intro || 'أسئلة قصيرة في ثلاثة أبعاد. نتيجتها تحدد مسارك في كل بُعد على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
-          <div className="grid2 small">
-            <div className="alert info">⏱ {data.assessment.est_minutes ? `حوالي ${data.assessment.est_minutes} دقيقة، ` : ''}{qs.length} سؤالًا</div>
-            <div className="alert info">💾 كل إجابة تُحفظ فورًا، ويمكنك العودة لاحقًا</div>
-          </div>
-          <p className="muted small">في أسئلة الممارسة لا توجد إجابة صحيحة: اختر ما تفعله فعلًا لا ما ينبغي فعله، فهذا ما يجعل مسارك مناسبًا لك.</p>
+          <p>{data.assessment.intro || 'أسئلة قصيرة في الأطر الثلاثة. نتيجتها تحدد مسارك في كل إطار على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
+          <div className="alert info small">⏱ {data.assessment.est_minutes ? `حوالي ${data.assessment.est_minutes} دقيقة، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
           {resumed && <div className="bar"><i style={{ width: `${pct}%` }} /></div>}
           <div className="row">
             <button className="btn gold" onClick={() => setMode('q')}>{resumed ? `تابع (${answered} من ${qs.length})` : 'ابدأ'}</button>
@@ -190,14 +187,14 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <p className="muted">{missing.length
             ? 'أجب عنها لتظهر نتيجتك.'
             : post ? 'أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها، ثم ادعُ مديرك ليقدّر التغير من موقعه.'
-              : 'أرسل إجاباتك لتظهر نتيجتك المبدئية في الأبعاد الثلاثة فورًا، ثم يراجعها المستشار ويعتمد مسارك.'}</p>
+              : 'أرسل إجاباتك لتظهر نتيجتك المبدئية في الأطر الثلاثة فورًا، ثم يراجعها المستشار ويعتمد مسارك.'}</p>
           {error && <div className="alert err">{error}</div>}
           {saving > 0 && <p className="saving">جارٍ حفظ آخر إجابة…</p>}
           <div className="row" style={{ justifyContent: 'center' }}>
             {missing.length
               ? <button className="btn gold" onClick={() => { setIdx(qs.indexOf(missing[0])); setMode('q'); }}>أكمل الناقص</button>
               : <button className="btn gold" disabled={busy || saving > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : post ? 'أرسل واعرض ما تغيّر' : 'أرسل واعرض نتيجتي'}</button>}
-            <button className="btn ghost" onClick={() => { setIdx(qs.length - 1); setMode('q'); }}>مراجعة</button>
+            <button className="btn ghost" onClick={() => { setIdx(qs.length - 1); setMode('q'); }}>راجع إجاباتي</button>
           </div>
         </div>
       </div>
@@ -217,6 +214,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
         <p className="q-text">{q.text}</p>
         {q.help && <p className="q-help">{q.help}</p>}
         {!q.help && <div style={{ height: 12 }} />}
+        {q.tier === 'behavior' && qs[idx - 1]?.tier !== 'behavior' && <p className="q-help">لا إجابة صحيحة هنا: اختر ما تفعله فعلًا.</p>}
         {q.retro && <p className="retro-label">الآن، في الأشهر الثلاثة الأخيرة</p>}
         <div className={`options${likert ? ' likert' : ''}`} role="radiogroup" aria-label={q.retro ? `${q.text}: الآن` : q.text}>
           {q.options.map((o, i) => (

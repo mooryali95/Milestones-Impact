@@ -31,7 +31,7 @@ async function levelsOf(participantId: string) {
 // ── بناء الوثيقة من مصادرها ──
 async function build(p: any) {
   const { levels, approved } = await levelsOf(p.id);
-  if (!approved) throw new Fail('يُفتح مشروع التخرج بعد اعتماد مسارك', 403, 'locked');
+  if (!approved) throw new Fail('تُفتح وثيقة مبادرتك بعد اعتماد مسارك', 403, 'locked');
   const scope = p.work_scope || null;
   const key = trackKey(levels);
   const [models, subs, cap, track] = await Promise.all([
@@ -247,8 +247,8 @@ export async function adminGet(b: Body) {
 
 function sponsorMail(sponsor: string | null, who: string, initiative: string, link: string) {
   return mailShell(`طلب تأييد مبادرة: ${initiative}`,
-    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أعدّ ${esc(who)} وثيقة مبادرة «${esc(initiative)}» مشروعًا ختاميًا في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتكم.`)
-    + mailText('راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات جهتكم، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
+    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أعدّ ${esc(who)} وثيقة مبادرة «${esc(initiative)}» مشروع تخرجه في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتك.`)
+    + mailText('راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات جهتك، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
     + mailButton(link, 'اقرأ الوثيقة وأيّدها')
     + mailNote(`الرابط خاص بك وصالح ${SPONSOR_DAYS} يومًا.`),
     { family: 'capstone', preheader: `${who} يطلب تأييدك لمبادرة «${initiative}»`, footnote: '' });
@@ -276,8 +276,8 @@ async function approve(p: any, by: string, waived: string | null = null) {
   const snapshot = await docFor(p, 'admin');
   must(await db.from('capstones').update({ snapshot }).eq('participant_id', p.id));
   const initiative = await initiativeFor(p.id);
-  await award(p.id, 'capstone', p.id, APPROVAL_POINTS, `اعتماد مشروع التخرج: ${initiative || ''}`.trim());
-  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مشروع التخرج'}»`, false))
+  await award(p.id, 'capstone', p.id, APPROVAL_POINTS, `اعتماد وثيقة المبادرة: ${initiative || ''}`.trim());
+  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مبادرتك'}»`, false))
     .catch((e) => console.error('capstone mail:', e));
 }
 

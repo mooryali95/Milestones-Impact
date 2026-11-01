@@ -130,15 +130,61 @@ export function evaluatePlacement(pcts, model = DEFAULT_MODEL) {
   else {
     const [nl, nmin, nfloor] = next;
     const gap = Math.round((Number(nmin) - composite) * 10) / 10;
+    // الحدّية تعني أن المستوى التالي في متناول هامش صغير: فجوة المؤشر عن حده
+    // وفجوة أضعف جانب عن أرضيته معًا داخل الهامش. من بلغ المؤشر لكن أرضيته
+    // بعيدة، أو العكس، ليس حدّيًا لأن هامشًا واحدًا لا يرفعه.
+    const floorGap = Math.round((Number(nfloor) - low) * 10) / 10;
+    borderline = gap <= Number(m.borderline) && floorGap <= Number(m.borderline);
     if (composite >= Number(nmin)) {
       reason = `المؤشر ${composite} يكفي لمستوى ${LEVEL_AR[nl]}، لكن ${TIER_AR[weakest]} ${low}% دون الحد الأدنى ${nfloor}%`;
-      borderline = Number(nfloor) - low <= Number(m.borderline);
     } else {
       reason = `المؤشر ${composite} من 100، ويبعد ${gap} عن حد مستوى ${LEVEL_AR[nl]} (${nmin})`;
-      borderline = gap <= Number(m.borderline);
     }
   }
   return { level, composite, borderline, reason };
+}
+
+// ── مسافة الأسئلة عن المستوى التالي ──
+// كم سؤالًا يفصل المشارك عن المستوى التالي؟ رقم للمستشار يكمل رقاقة «حدّية».
+// الحساب: كل سؤال معرفة أو موقف درجته القصوى 4 من 24 في الجانب (6 أسئلة)،
+// وكل عبارة ممارسة 4 من 16 (4 عبارات)؛ فالنقطة الواحدة في الجانب تساوي
+// 100/24 أو 100/16 من مئته، وفي المؤشر المركّب 0.35·(100/24) = 1.46 للمعرفة
+// و0.50·(100/24) = 2.08 للمواقف و0.15·(100/16) = 0.94 للممارسة (بالأوزان
+// الافتراضية). السؤال الكامل (0 ← 4) أربع نقاط: 5.83 و8.33 و3.75 في المؤشر.
+// نبحث عن أقل عدد من الأسئلة الكاملة (موزعة على الجوانب الحاضرة) يرفع
+// المؤشر فوق حد المستوى التالي ويرفع كل جانب فوق أرضيته معًا، بإعادة تقييم
+// evaluatePlacement نفسها حتى لا يختلف الرقم عن قرار المستوى. null حين لا
+// مستوى تالٍ (احترافي) أو لا جوانب أو لا يُبلغ بكل الأسئلة.
+// evaluation: ناتج evaluatePlacement مع نسب الجوانب { knowledge, skill, behavior }.
+export const ITEM_POINTS = 4;
+export const TIER_MAX_POINTS = { knowledge: 24, skill: 24, behavior: 16 };
+export function itemsToFlip(evaluation, model = DEFAULT_MODEL) {
+  if (!evaluation || evaluation.level === 'advanced') return null;
+  const m = { ...DEFAULT_MODEL, ...(model || {}) };
+  const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
+  const tiers = TIERS.filter((t) => evaluation[t] != null && w[t] > 0);
+  if (!tiers.length) return null;
+  const rank = (l) => LEVELS.indexOf(l);
+  const current = rank(evaluatePlacement(Object.fromEntries(tiers.map((t) => [t, evaluation[t]])), m).level);
+  const step = (t) => ITEM_POINTS * 100 / TIER_MAX_POINTS[t];
+  const room = (t) => Math.ceil(Math.max(0, 100 - Number(evaluation[t])) / step(t) - 1e-9);
+  const lifted = (counts) => {
+    const pcts = {};
+    for (const t of tiers) pcts[t] = Math.min(100, Number(evaluation[t]) + (counts[t] || 0) * step(t));
+    return rank(evaluatePlacement(pcts, m).level) > current;
+  };
+  const limit = tiers.reduce((a, t) => a + room(t), 0);
+  // أقل مجموع أولًا: كل توزيع لعدد n على الجوانب الحاضرة
+  for (let n = 1; n <= limit; n += 1) {
+    const found = (i, left, counts) => {
+      if (i === tiers.length) return left === 0 && lifted(counts);
+      const t = tiers[i];
+      for (let k = Math.min(left, room(t)); k >= 0; k -= 1) if (found(i + 1, left - k, { ...counts, [t]: k })) return true;
+      return false;
+    };
+    if (found(0, n, {})) return n;
+  }
+  return null;
 }
 
 export function placementFromAnswers(questions, answers, rules, model = null) {
@@ -1139,14 +1185,17 @@ export function normalizedChange(pre, post) {
 }
 
 // practice: ما يُتوقع أن يكسبه المشارك من تكرار الأسئلة وحده، يُطرح من
-// الفرق قبل القسمة (Chelune وزملاؤه 1993).
+// الفرق قبل القسمة (Chelune وزملاؤه 1993). يُطرح من المكسب الموجب وحده،
+// فالتكرار يرفع الدرجة ولا يخفضها، وطرحه من التراجع يضخّمه؛ ومكسب أصغر من
+// أثر التكرار يُعدّ صفرًا لا تراجعًا.
 export function reliableChange(pre, post, sd, reliability, practice = 0) {
   if (pre == null || post == null) return { rci: null, reliable: false, direction: null, threshold: null };
   const sem = Number(sd) * Math.sqrt(Math.max(0, 1 - Number(reliability)));
   const sdiff = Math.SQRT2 * sem;
   if (!(sdiff > 0)) return { rci: null, reliable: false, direction: null, threshold: null };
-  const p = Number(practice) || 0;
-  const rci = (post - pre - p) / sdiff;
+  const p = Math.max(0, Number(practice) || 0);
+  const diff = post - pre;
+  const rci = (diff > 0 ? Math.max(0, diff - p) : diff) / sdiff;
   const reliable = Math.abs(rci) >= 1.96;
   return { rci: r2(rci), reliable, direction: reliable ? (rci > 0 ? 'up' : 'down') : 'flat', threshold: r1(1.96 * sdiff + p) };
 }
@@ -1395,6 +1444,17 @@ function practiceOn(tiers, points, model) {
   return W && tiers.includes('skill') ? (Number(points) || 0) * w.skill / W : 0;
 }
 
+// حارس الإقران: البعدي يُقارن بالمبدئي الذي بُني له (pairs_with) لا بأي
+// مبدئي. أداة بعدية بلا pairs_with عامة تقبل أي مبدئي. تُعاد قابلية
+// المقارنة وسببها للعرض، ولا تُحسب مقارنة لزوج غير متطابق.
+// baseline/post: { key, pairs_with } (صفّا instruments)
+export const PAIR_MISMATCH_AR = 'الأداتان غير متطابقتين';
+export function pairComparable(baseline, post) {
+  if (!baseline || !post) return { comparable: false, reason: 'لم يكتمل القياسان' };
+  if (post.pairs_with && post.pairs_with !== baseline.key) return { comparable: false, reason: PAIR_MISMATCH_AR };
+  return { comparable: true, reason: null };
+}
+
 export function compareAssessments({ pre, post, model, impact, rater, evidence }) {
   const cfg = { ...IMPACT_DEFAULTS, ...(impact || {}) };
   return DIMENSIONS.map((dimension) => {
@@ -1616,10 +1676,10 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
   const c = claims || {};
   if (c.aud !== clientId) return { error: 'الرمز ليس لهذا التطبيق' };
   if (!['accounts.google.com', 'https://accounts.google.com'].includes(c.iss)) return { error: 'مصدر الرمز غير معروف' };
-  if (!(Number(c.exp) > nowSec)) return { error: 'انتهت صلاحية الدخول بجوجل، حاول مرة أخرى' };
-  if (!(c.email_verified === true || c.email_verified === 'true')) return { error: 'بريد حساب جوجل غير موثّق' };
+  if (!(Number(c.exp) > nowSec)) return { error: 'انتهت صلاحية الدخول بحساب Google، حاول مرة أخرى' };
+  if (!(c.email_verified === true || c.email_verified === 'true')) return { error: 'بريد حساب Google غير موثّق' };
   const email = normalizeEmail(c.email);
-  if (!isEmail(email)) return { error: 'لا بريد صالح في حساب جوجل' };
+  if (!isEmail(email)) return { error: 'لا بريد صالح في حساب Google' };
   const name = String(c.name || [c.given_name, c.family_name].filter(Boolean).join(' ') || '').trim().slice(0, 120);
   return { email, name };
 }

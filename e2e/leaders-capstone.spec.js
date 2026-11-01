@@ -54,7 +54,7 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
   await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: srv.reply(JSON.parse(r.request().postData() || '{}')) }));
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-capstone-0000000000000000'); });
   await page.goto(APP);
-  await page.getByRole('button', { name: 'مشروعي' }).first().click();
+  await page.getByRole('button', { name: 'مبادرتي' }).first().click();
 
   await expect(page.getByRole('heading', { name: 'رقمنة خدمات المستفيدين' })).toBeVisible();
   await expect(page.locator('.cp-meter b')).toHaveText('58%');
@@ -64,7 +64,7 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
 
   srv.s.ready = true;
   await page.reload();
-  await page.getByRole('button', { name: 'مشروعي' }).first().click();
+  await page.getByRole('button', { name: 'مبادرتي' }).first().click();
   await expect(page.locator('.cp-meter b')).toHaveText('100%');
   await page.getByRole('textbox').fill('المشكلة والحل والقيمة وما نطلبه.');
   page.once('dialog', (d) => d.accept());

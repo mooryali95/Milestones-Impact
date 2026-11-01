@@ -13,7 +13,7 @@ const b64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(
 async function keys(force = false) {
   if (!force && cache && cache.until > Date.now()) return cache.keys;
   const res = await fetch(CERTS);
-  if (!res.ok) throw new Fail('تعذّر التحقق من حساب جوجل، حاول مرة أخرى', 503, 'google');
+  if (!res.ok) throw new Fail('تعذّر التحقق من حساب Google، حاول مرة أخرى', 503, 'google');
   const maxAge = Number((res.headers.get('cache-control') || '').match(/max-age=(\d+)/)?.[1] || 3600);
   const { keys: jwks } = await res.json();
   const out: Record<string, CryptoKey> = {};
@@ -27,17 +27,17 @@ async function keys(force = false) {
 // يعيد بيانات الرمز إن صح توقيعه، وإلا يرمي
 export async function verifyGoogleToken(jwt: string) {
   const parts = String(jwt || '').split('.');
-  if (parts.length !== 3) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى', 400, 'google');
+  if (parts.length !== 3) throw new Fail('لم يكتمل الدخول بحساب Google، حاول مرة أخرى', 400, 'google');
   const [h, p, sig] = parts;
   let header: any, claims: any;
   try { header = JSON.parse(new TextDecoder().decode(b64url(h))); claims = JSON.parse(new TextDecoder().decode(b64url(p))); }
-  catch { throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى', 400, 'google'); }
-  if (header.alg !== 'RS256') throw new Fail('رمز جوجل غير مقبول', 401, 'google');
+  catch { throw new Fail('لم يكتمل الدخول بحساب Google، حاول مرة أخرى', 400, 'google'); }
+  if (header.alg !== 'RS256') throw new Fail('رمز Google غير مقبول', 401, 'google');
   // مفتاح جديد لم يُحفظ بعد: Google يدوّر مفاتيحه، فيُعاد الجلب مرة
   let key = (await keys())[header.kid];
   if (!key) key = (await keys(true))[header.kid];
-  if (!key) throw new Fail('رمز جوجل غير مقبول', 401, 'google');
+  if (!key) throw new Fail('رمز Google غير مقبول', 401, 'google');
   const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64url(sig), new TextEncoder().encode(`${h}.${p}`));
-  if (!ok) throw new Fail('رمز جوجل غير مقبول', 401, 'google');
+  if (!ok) throw new Fail('رمز Google غير مقبول', 401, 'google');
   return claims;
 }

@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // صفحة مفتوحة بلا دخول، يصلها من يمسح رمز QR على الشهادة. تعرض حالة
 // الشهادة وبياناتها من اللقطة المحفوظة على الخادم، وتفتح نسختها الرسمية.
+import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js';
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 
@@ -10,8 +11,8 @@ const STATE = {
   valid: 'شهادة صحيحة وسارية',
   revoked: 'شهادة ملغاة',
   replaced: 'استُبدلت بإصدار أحدث',
-  invalid: 'بيانات الشهادة لا تطابق توقيعها',
-  missing: 'لا توجد شهادة بهذا الرقم',
+  invalid: `بيانات الشهادة لا تطابق توقيعها. لا تعتمد عليها، وراسل ${CONTACT_EMAIL} للتأكد.`,
+  missing: 'لا توجد شهادة بهذا الرقم. تأكد من الرقم كما هو مطبوع على الشهادة (مثل MI-LDR-2026-XXXXXX).',
 };
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '');
 

@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { trackProject } from './capstone.js';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
@@ -236,13 +236,15 @@ export async function participant(b: Body) {
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
   // تقييم كل نتيجة بالنموذج الحالي: المؤشر المركّب، والمستوى المقترح وسببه،
-  // وهل الحالة حدّية. يُحسب عند العرض فيصلح للنتائج القديمة أيضًا.
+  // وهل الحالة حدّية، وكم سؤالًا يفصله عن المستوى التالي. يُحسب عند العرض
+  // فيصلح للنتائج القديمة أيضًا.
   const assessments = (results.data || []).map((a: any) => ({
     ...a,
-    assessment_results: (a.assessment_results || []).map((r: any) => ({
-      ...r,
-      evaluation: evaluatePlacement({ knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct }, model || DEFAULT_MODEL),
-    })),
+    assessment_results: (a.assessment_results || []).map((r: any) => {
+      const pcts = { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct };
+      const evaluation = evaluatePlacement(pcts, model || DEFAULT_MODEL);
+      return { ...r, evaluation: { ...evaluation, items_to_flip: itemsToFlip({ ...pcts, ...evaluation }, model || DEFAULT_MODEL) } };
+    }),
   }));
   let cvUrl = null;
   if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;

@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// مشروع التخرج: وثيقة مبادرتك
+// وثيقة المبادرة (مشروع التخرج)
 // ════════════════════════════════════════════════════════════════
 // فصول الوثيقة هي نماذجك التعليمية نفسها، تفتحها من هنا أو من المكتبة
 // فتجد العمل ذاته. الصفحة تجمعها، وتفحص اتساقها، وتسلّمها للمستشار، وتصدر
@@ -11,7 +11,8 @@ import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 import { LEADER_WEIGHTS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
-import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
+import { POPUP_BLOCKED } from '../ui.jsx';
 
 const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.reviewed, c: 'ok' }
   : s.status === 'submitted' ? { t: SUBMISSION_STATUS.submitted, c: 'gold' }
@@ -81,17 +82,17 @@ export default function Capstone({ me, onEditProfile, onBack }) {
     const r = await call('capstone.doc');
     setBusy('');
     if (!r.success) return setMsg({ err: r.message });
-    if (!(await openCapstoneDoc(r.doc))) setMsg({ err: 'اسمح بالنوافذ المنبثقة لفتح الوثيقة' });
+    if (!(await openCapstoneDoc(r.doc))) setMsg({ err: POPUP_BLOCKED });
   };
 
   return (
     <div className="page capstone">
       <section className="cp-hero">
         <div className="cp-hero-main">
-          <span className="book-eyebrow">The Capstone · Initiative Document</span>
+          <span className="book-eyebrow">{TERMS.capstoneEyebrow}</span>
           <h1>{d.initiative || 'وثيقة مبادرتك'}</h1>
           <p>
-            {d.scope_title ? <>مشروع تخرجك: <b>{d.scope_title}</b></> : 'مشروع تخرجك'}
+            {d.scope_title ? <b>{d.scope_title}</b> : 'وثيقة مبادرتك'}
             {' · '}مستوى {levelOf(d.level).title}{d.track?.title ? <> · {d.track.title}</> : null}
           </p>
           <ol className="cp-flow">
@@ -122,7 +123,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
           {Object.keys(c.review.notes || {}).length > 0 && (
             <ul>{d.rubric.filter((r) => c.review.notes[r.key]).map((r) => <li key={r.key}><b>{r.title}:</b> {c.review.notes[r.key]}</li>)}</ul>
           )}
-          <small className="muted">هذا التحسين المتاح بعد المراجعة. عدّل الفصول ثم أعد التسليم.</small>
+          <small className="muted">أعاد المستشار الوثيقة إليك. عدّل الفصول ثم أعد التسليم.</small>
         </div>
       ))}
       {c.status === 'approved' && (
@@ -142,7 +143,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       <div className="cp-grid">
         <section className="card cp-sections">
           <h2>فصول الوثيقة</h2>
-          <p className="muted small">كل فصل نموذج من مكتبة النماذج، يحفظ تلقائيًا ويُحسب في نقاطك. ابدأ ببطاقة المبادرة: منها يأخذ كل فصل اسمها.</p>
+          <p className="muted small">كل فصل نموذج من مكتبة النماذج، يُحفظ تلقائيًا ويُحسب في نقاطك. ابدأ ببطاقة المبادرة: منها يأخذ كل فصل اسمها.</p>
           <ol className="cp-list">
             {d.sections.map((s, i) => {
               const st = SECTION_STATE(s);
@@ -163,7 +164,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         <aside className="cp-side">
           <section className="card">
             <h3>فحوص الاتساق</h3>
-            <p className="muted small">الوثيقة الاحترافية تتحدث فصولها مع بعضها. يفحصها النظام كلما فتحت الصفحة.</p>
+            <p className="muted small">يفحص النظام اتساق الفصول كلما فتحت الصفحة.</p>
             <ul className="cp-checks">
               {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{x.detail}</small>}</li>)}
               {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
@@ -192,12 +193,12 @@ export default function Capstone({ me, onEditProfile, onBack }) {
 
           <details className="card cp-rubric">
             <summary>كيف تُقيَّم الوثيقة</summary>
-            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. أبعاد الإطار الأولوي في مسارك وزنها ×{PRIORITY_WEIGHT}{d.track?.priority ? ` (${dimOf(d.track.priority).short})` : ''}. الدرجة تدخل تقرير القائد بوزن {LEADER_WEIGHTS.capstone}%، ولا تظهر في الشهادة.</p>
+            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. أبعاد إطارك الأولوي{d.track?.priority ? ` (${dimOf(d.track.priority).short})` : ''} وزنها ×{PRIORITY_WEIGHT}. الدرجة تدخل تقرير القائد بوزن {LEADER_WEIGHTS.capstone}%، ولا تظهر في الشهادة.</p>
             <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}</b><small>{r.anchors[3]}</small></li>)}</ul>
           </details>
         </aside>
       </div>
-      <p className="row"><button className="link small" onClick={onBack}>رجوع للرحلة</button></p>
+      <p className="row"><button className="link small" onClick={onBack}>→ رحلتي</button></p>
     </div>
   );
 }

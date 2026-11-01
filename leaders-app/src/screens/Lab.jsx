@@ -4,7 +4,7 @@
 // الخادم يرسل الخطوات بلا حلولها، ويصحح كل خطوة عند إرسالها ويحدد
 // التالية (قد يتفرع الموقف بحسب القرار). كل التفاعل بالنقر لا بالسحب،
 // فيعمل باللمس على الجوال. يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
-// باب في الكتاب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
+// باب في الكتيب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
 import React, { useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
@@ -70,7 +70,7 @@ export function Gantt({ tasks, links, title }) {
           );
         })}
       </svg>
-      <div className="lab-legend"><span><i className="crit" />المسار الحرج</span><span><i />له فائض</span><span><i className="float" />الفائض</span></div>
+      <div className="lab-legend"><span><i className="crit" />المسار الحرج</span><span><i />له فائض زمني</span><span><i className="float" />الفائض الزمني</span></div>
     </figure>
   );
 }
@@ -265,7 +265,7 @@ function PlotStep({ step, value, onChange, result }) {
           )))}
         </div>
       </div>
-      {result && <p className="small muted">المنقّط موضعه الصحيح حين يختلف عن موضعك.</p>}
+      {result && <p className="small muted">الخانة المنقّطة هي الموضع الصحيح إن اختلف عن اختيارك.</p>}
       {result?.notes?.map((x) => <small key={x.id} className="lab-note">{labelOf(step.items, x.id)}: {x.note_ar}</small>)}
     </div>
   );
@@ -282,7 +282,7 @@ function MatrixStep({ step, value, onChange, result }) {
         <tbody>
           {step.rows.map((r) => (
             <tr key={r.id}>
-              <td className="lab-mrow">{r.label}{!result && broken(r.id).length > 0 && Object.keys(a[r.id] || {}).length > 0 && <small>يلزم {broken(r.id).join('، ')} واحد بالضبط</small>}</td>
+              <td className="lab-mrow">{r.label}{!result && broken(r.id).length > 0 && Object.keys(a[r.id] || {}).length > 0 && <small>يلزم صاحب قرار واحد ({broken(r.id).join('، ')}) بالضبط</small>}</td>
               {step.cols.map((c) => {
                 const mine = a[r.id]?.[c.id] || '';
                 const exp = result ? (result.solution?.[r.id]?.[c.id] || '') : null;
@@ -373,7 +373,7 @@ function Runner({ id, onExit, onPoints }) {
   };
   useEffect(() => { load(false); }, [id]);
 
-  if (err) return <div className="lab-run"><div className="alert err">{err}</div><button className="btn ghost sm" onClick={onExit}>رجوع للمختبر</button></div>;
+  if (err) return <div className="lab-run"><div className="alert err">{err}</div><button className="btn ghost sm" onClick={onExit}>→ المختبر</button></div>;
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   const { item, spec } = d;
   const step = spec.steps[cur];
@@ -407,7 +407,7 @@ function Runner({ id, onExit, onPoints }) {
           <h2>{item.title}</h2>
           {spec.role_ar && <p>دورك: {spec.role_ar}</p>}
         </div>
-        <button className="link small lab-exit" onClick={onExit}>رجوع للمختبر</button>
+        <button className="link small lab-exit" onClick={onExit}>→ المختبر</button>
       </div>
 
       {phase !== 'done' && <Meters meters={spec.meters} values={meters} prev={prevMeters} />}
@@ -415,7 +415,7 @@ function Runner({ id, onExit, onPoints }) {
       {phase === 'intro' && (
         <div className="lab-card">
           <p className="lab-story">{spec.story_ar}</p>
-          <p className="small muted">{spec.steps.length > 1 ? `${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} تقريبًا: ${spec.steps.length}` : ''} · نحو {item.minutes} دقيقة · {item.points} نقطة عند الإتقان ({MASTERY}%)</p>
+          <p className="small muted">{spec.steps.length > 1 ? `${spec.steps.length} ${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} · ` : ''}نحو {item.minutes} دقيقة · {item.points} نقطة عند {MASTERY}%</p>
           <button className="btn gold" onClick={() => setPhase('step')}>ابدأ</button>
         </div>
       )}
@@ -453,7 +453,7 @@ function Runner({ id, onExit, onPoints }) {
           {finish.closing_ar && <p className="lab-why"><b>الخلاصة</b>{finish.closing_ar}</p>}
           <div className="row">
             <button className="btn" onClick={() => load(true)}>محاولة جديدة</button>
-            <button className="btn ghost" onClick={onExit}>رجوع للمختبر</button>
+            <button className="btn ghost" onClick={onExit}>→ المختبر</button>
           </div>
         </div>
       )}
@@ -480,7 +480,7 @@ function ItemCard({ it, onOpen }) {
   );
 }
 
-// بطاقات "طبّق ما قرأت" تحت صفحة الباب في الكتاب
+// بطاقات "طبّق ما قرأت" تحت صفحة الباب في الكتيب
 export function ChapterLab({ items, onOpen }) {
   if (!items?.length) return null;
   return (
@@ -509,7 +509,7 @@ export function Lab({ items, open, onOpen, onPoints, reload }) {
         <div>
           <span className="book-eyebrow">The Leader's Lab</span>
           <h2>مختبر القائد</h2>
-          <p className="muted">أدوات عمل تحسب وتكشف ما لا يكشفه القالب، ومواقف تتخذ فيها قرارات وترى أثرها. كل خطوة تُصحح فورًا ومعها سببها من الكتاب، وتُمنح نقاط الأداة عند الإتقان ({MASTERY}%).</p>
+          <p className="muted">أدوات ومواقف تُصحَّح فورًا مع سببها من الكتيب. تُمنح نقاط الأداة عند {MASTERY}%.</p>
         </div>
         <div className="models-count"><b>{mastered}</b><small>من {items.length} أتقنتها</small></div>
       </div>
