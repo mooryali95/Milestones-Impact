@@ -4,8 +4,8 @@
 // الثوابت وحقول النماذج وحاسبة التسكين وإعادة الترتيب، مفصولة عن الشاشات
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
-import { MODE_AR, PHASE_AR, SESSION_MODE_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
+import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -47,7 +47,31 @@ const preview = (reqs, f) => (v) => {
   const out = renderJourneyText(v[f] || '', { reqs, durationDays: v.duration_days, readyMin: READY_MIN });
   return out && out !== v[f] ? `يظهر للمشارك: ${out}` : TOKEN_HELP;
 };
-export const stageFields = (reqs = []) => [
+// قواعد المرحلة في النموذج: حقول rule_* تُجمع في rules عند الحفظ
+export function stageToForm(s) {
+  const r = stageRules(s);
+  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_day: r.day ?? '', rule_complete: r.complete };
+}
+export function formToStage(v) {
+  const { rule_mode, rule_unlock, rule_after, rule_day, rule_complete, ...rest } = v;
+  const rules = { mode: rule_mode, unlock: rule_unlock, complete: rule_complete };
+  if (rule_unlock === 'stages') rules.after = rule_after || [];
+  if (rule_unlock === 'day') rules.day = rule_day;
+  return { ...rest, rules };
+}
+const RULE_HELP = {
+  required: 'يمر بها كل مشارك، وما بعدها ينتظرها.',
+  on_demand: 'تظهر للمشارك متاحة، يدخلها حين يحتاجها (مثل التوجيه على رأس العمل أو الاستشارة)، ولا توقف ما بعدها.',
+  optional: 'مقترحة للمشارك، ولا تُنقص تقدمه إن تركها.',
+};
+export const stageFields = (reqs = [], stages = [], selfKey = null) => [
+  { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode] },
+  { name: 'rule_unlock', label: 'متى تُفتح', type: 'select', options: STAGE_UNLOCK_AR },
+  { name: 'rule_after', label: 'تُفتح بعد اكتمال', type: 'multi', show: (v) => v.rule_unlock === 'stages',
+    options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false).map((s) => [s.key, s.title_ar])) },
+  { name: 'rule_day', label: 'بعد كم يومًا من بداية الدفعة', type: 'number', show: (v) => v.rule_unlock === 'day',
+    help: 'يُحسب من تاريخ بداية دفعة المشارك. إن لم يكن للدفعة تاريخ بداية تُفتح بعد ما قبلها.' },
+  { name: 'rule_complete', label: 'متى تكتمل', type: 'select', options: STAGE_COMPLETE_AR },
   { name: 'title_ar', label: 'اسم المرحلة' },
   { name: 'phase', label: 'المحور', type: 'select', options: PHASE },
   { name: 'duration_label', label: 'المدة كما تظهر للمشارك', help: preview(reqs, 'duration_label') },

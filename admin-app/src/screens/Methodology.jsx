@@ -5,10 +5,10 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
-import { journeyCoherence, renderJourneyText } from '../../../supabase/functions/leaders-api/logic.js';
+import { journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import {
-  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, TIER,
+  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
@@ -76,6 +76,7 @@ function Coherence({ stages, reqs }) {
 
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
+  const { toast, prompt } = useUI();
   const pid = catalog.program_id;
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
@@ -85,19 +86,30 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
       <Coherence stages={stages} reqs={reqs} />
-      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى.</p>
+      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الطلب، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>
-          <h3 className="la-phase">{phl}</h3>
+          <div className="la-row between">
+            <h3 className="la-phase">{phl}</h3>
+            {canWrite && <button className="btn-sm ghost" onClick={async () => {
+              const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
+              if (!title_ar) return;
+              const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });
+              if (!r.success) return toast(r.message);
+              toast('أُضيفت المرحلة آخر الرحلة. رتّبها بالأسهم واضبط نوعها ومتى تُفتح من «تحرير».');
+              reload();
+            }}>+ مرحلة</button>}
+          </div>
           {stages.filter((s) => s.phase === ph).map((s) => (
             <section key={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>
               <div className="la-row between">
                 <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
                   <Move {...mv} entity="journey_stages" id={s.key} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs), values: s, onSave: save('journey_stages', { key: s.key, program_id: pid }) })}>تحرير</button>}
+                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
                 </div>
               </div>
+              <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
               {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
               <ul className="la-reqs">
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (

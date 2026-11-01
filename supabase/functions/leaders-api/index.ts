@@ -148,6 +148,8 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.status': A.setStatus,
   'admin.reset-assessment': A.resetAssessment,
   'admin.review': A.reviewRequirement,
+  'admin.stage-override': A.stageOverride,
+  'admin.stage-create': A.stageCreate,
   'admin.create-participant': A.createParticipant,
   'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),

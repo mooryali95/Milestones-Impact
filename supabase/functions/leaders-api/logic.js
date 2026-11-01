@@ -341,10 +341,10 @@ export const AUTO_CHECKS = {
 // يبني الرحلة كما يراها المشارك: كل مرحلة بحالتها ومتطلباتها.
 // المرحلة تكتمل حين تكتمل متطلباتها الإلزامية، والمرحلة الأولى غير
 // المكتملة هي الحالية، وما بعدها مقفل. لا قفز فوق مرحلة.
-export function buildJourney({ stages, requirements, progress, levels, state, activity = {} }) {
+// ctx (اختياري): قواعد الفتح الزمنية وتدخل الأدمن لهذا المشارك — انظر resolveStages
+export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date() }) {
   const sorted = [...stages].filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort);
-  let reachedCurrent = false;
-  return sorted.map((stage) => {
+  const withItems = sorted.map((stage) => {
     const items = requirements
       .filter((r) => r.stage_key === stage.key && requirementApplies(r, levels))
       .sort((a, b) => a.sort - b.sort)
@@ -358,26 +358,23 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
           : p.status || 'pending';
         return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, ...(act ? { activity: act } : {}) };
       });
-    const required = items.filter((i) => i.required);
-    const complete = required.length > 0 && required.every((i) => i.status === 'done');
-    let status;
-    if (reachedCurrent) status = 'locked';
-    else if (complete) status = 'done';
-    else { status = 'active'; reachedCurrent = true; }
     const doneCount = items.filter((i) => i.status === 'done').length;
-    return { ...stage, status, items, done: doneCount, total: items.length };
+    return { ...stage, items, done: doneCount, total: items.length };
   });
+  return resolveStages(withItems, { overrides, cohortStart, today });
 }
 
-// نسبة التقدم الكلية: المراحل المكتملة مع جزء المرحلة الحالية.
+// نسبة التقدم الكلية: المراحل المكتملة مع جزء الحالية. المرحلة عند الطلب أو
+// الاختيارية لا تُنقص التقدم إن لم يحتجها المشارك، وتُحسب له إن أتمّها.
 export function journeyProgress(journey) {
-  if (!journey.length) return 0;
+  const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
+  if (!counted.length) return 0;
   let score = 0;
-  for (const s of journey) {
+  for (const s of counted) {
     if (s.status === 'done') score += 1;
     else if (s.status === 'active' && s.total) score += s.done / s.total;
   }
-  return Math.round((score / journey.length) * 100);
+  return Math.round((score / counted.length) * 100);
 }
 
 // خلط ثابت لكل مشارك: نفس الترتيب كلما عاد، ومختلف بين المشاركين.
@@ -1854,6 +1851,7 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
 
 // نصوص الرحلة واتساقها وساعات البرنامج في journey.js، وتُصدَّر من هنا كما كانت
 export * from './journey.js';
+import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════
 // الخبراء: تنقية الملف، وما يُعرض لغير الإدارة
