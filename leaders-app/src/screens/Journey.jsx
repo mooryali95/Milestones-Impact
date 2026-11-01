@@ -237,9 +237,11 @@ const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
 function Stage({ stage, n, expanded, onToggle, ...rest }) {
   const locked = stage.status === 'locked';
   const mode = MODES[stage.mode];
-  const chip = stage.status === 'done' ? <span className="chip ok">مكتملة</span>
-    : stage.status === 'active' ? <span className="chip gold">الحالية</span>
-      : <span className="chip">مقفلة</span>;
+  const chip = stage.skipped ? <span className="chip ok">أُعفيت منها</span>
+    : stage.status === 'done' ? <span className="chip ok">مكتملة</span>
+      : stage.status === 'active' ? <span className="chip gold">الحالية</span>
+        : stage.status === 'available' ? <span className="chip blue">{stage.stage_mode === 'optional' ? 'مقترحة لك' : 'متاحة عند الحاجة'}</span>
+          : <span className="chip">مقفلة</span>;
   const steps = lines(stage.activities_ar);
   return (
     <div id={`stage-${stage.key}`} className={`stage ${stage.status}${expanded ? ' open' : ''}`}>
@@ -253,6 +255,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
               {stage.duration_label && <span className="tag">{stage.duration_label}</span>}
               {stage.total > 0 && <span className="tag">{stage.done} من {stage.total}</span>}
             </div>
+            {locked && stage.lock_reason && <small className="muted">{stage.lock_reason}</small>}
           </div>
           {chip}
           <span className="chev" aria-hidden="true">⌄</span>
@@ -424,7 +427,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   });
 
   const firstName = participant.full_name.split(' ')[0];
-  const doneCount = journey.filter((s) => s.status === 'done').length;
+  // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
+  const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
+  const doneCount = counted.filter((s) => s.status === 'done').length;
   // مدة المراجعة من مرحلة الاعتماد نفسها (مولَّدة من duration_days)، لا رقم هنا
   const reviewWait = journey.find((s) => s.key === 'approval')?.duration_label || '';
   let order = 0;
@@ -436,10 +441,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <p className="eyebrow">رحلتك القيادية</p>
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
-            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
-              : doneCount === journey.length && journey.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
-                : !approved ? `أنجزت ${doneCount} من ${countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
-                  : `أنجزت ${doneCount} من ${countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
+            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
+              : doneCount === counted.length && counted.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
+                : !approved ? `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
+                  : `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
           </p>
           <div className="phase-rail" aria-label="أطوار الرحلة">
             {PHASES.map((ph) => {

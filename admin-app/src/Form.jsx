@@ -1,10 +1,10 @@
 // ════════════════════════════════════════════════════════════════
 // نافذة نموذج عامة: حقول نصية ورقمية وقوائم ومربعات نص
 // ════════════════════════════════════════════════════════════════
-// fields: [{ name, label, type?: text|number|select|textarea|email|check|options|datetime|date, options?, empty?, rows?, dir?, show?, help? }]
+// fields: [{ name, label, type?: text|number|select|multi|textarea|email|check|options|datetime|date, options?, empty?, rows?, dir?, show?, help? }]
 // help ← نص إرشاد تحت عنوان الحقل، أو دالة تعيده بحسب القيم الحالية
 // show(قيم) ← يظهر الحقل ويُحفظ فقط حين تعيد true (حقول تتبع نوعًا مختارًا) · datetime ← تاريخ ووقت محليان يُحفظان ISO
-// check ← قيمة منطقية · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
+// check ← قيمة منطقية · multi ← مربعات اختيار من options تُحفظ مصفوفة مفاتيح · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
 import React, { useState } from 'react';
 import { useEscape, useUI } from './ui.jsx';
@@ -22,6 +22,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     f.type === 'check' ? !!values[f.name]
       : f.type === 'options' ? (Array.isArray(values[f.name]) && values[f.name].length ? values[f.name] : [{ label: '', score: 0 }, { label: '', score: 0 }])
         : f.type === 'datetime' ? toLocal(values[f.name])
+          : f.type === 'multi' ? (Array.isArray(values[f.name]) ? values[f.name] : [])
           : values[f.name] ?? ''])));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,6 +37,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
       if (f.type === 'datetime') return [f.name, x ? new Date(x).toISOString() : null];
       if (f.type === 'number') return [f.name, x === '' ? null : Number(x)];
       if (f.type === 'check') return [f.name, !!x];
+      if (f.type === 'multi') return [f.name, x];
       if (f.type === 'options') return [f.name, x.map((o) => ({ label: String(o.label).trim(), score: Number(o.score || 0) })).filter((o) => o.label)];
       return [f.name, String(x).trim() || null];
     }));
@@ -63,6 +65,21 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               <label key={f.name} htmlFor={id} className="la-check">
                 <input id={id} type="checkbox" checked={v[f.name]} onChange={(e) => setV({ ...v, [f.name]: e.target.checked })} /> <span>{f.label}</span>
               </label>
+            );
+          }
+          if (f.type === 'multi') {
+            const list = v[f.name];
+            const help = typeof f.help === 'function' ? f.help(v) : f.help;
+            return (
+              <fieldset key={f.name} className="la-multi">
+                <legend>{f.label}</legend>
+                {help && <small className="la-muted">{help}</small>}
+                {Object.entries(f.options).map(([k, l]) => (
+                  <label key={k} className="la-check">
+                    <input type="checkbox" checked={list.includes(k)} onChange={(e) => setV({ ...v, [f.name]: e.target.checked ? [...list, k] : list.filter((x) => x !== k) })} /> <span>{l}</span>
+                  </label>
+                ))}
+              </fieldset>
             );
           }
           if (f.type === 'options') {

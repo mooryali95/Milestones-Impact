@@ -108,7 +108,8 @@ export function journeyCoherence(stages, requirements) {
       for (const code of [...unknownTokens(r.title_ar, reqs), ...unknownTokens(r.help_ar, reqs)]) out.push({ level: 'error', stage: s.key, req: r.code, msg: `${r.code}: الرمز يشير إلى نشاط غير موجود (${code})` });
     }
   }
-  return out;
+  // قواعد الفتح والاكتمال (تُعرَّف أسفل الملف وتُستدعى وقت التشغيل)
+  return [...out, ...stageRulesIssues(stages)];
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -128,4 +129,157 @@ export function programHours(requirements, levels = null) {
     minutes += (r.kind === 'meeting' ? 1 : Math.max(1, Number(c.sessions_required) || 1)) * Number(c.minutes);
   }
   return { hours: Math.round(minutes / 60), minutes, missing };
+}
+
+// ════════════════════════════════════════════════════════════════
+// محرك قواعد المراحل: النوع، وشرط الفتح، وشرط الاكتمال، لكل مرحلة
+// ════════════════════════════════════════════════════════════════
+// يضبطها الأدمن في journey_stages.rules. الفارغ يعني السلوك الأصلي حرفيًا:
+// إلزامية، تُفتح بعد اكتمال الإلزامية قبلها، وتكتمل بمتطلباتها الإلزامية.
+// تدخل الأدمن لمشارك بعينه (فتح، اعتماد اكتمال، إعفاء) يأتي من overrides.
+const MODES = ['required', 'on_demand', 'optional'];
+const UNLOCKS = ['previous', 'always', 'stages', 'day', 'approval'];
+const COMPLETES = ['required', 'any', 'approval'];
+
+// القواعد كما تُقرأ: كل مفتاح بقيمته الافتراضية إن غاب
+export function stageRules(stage) {
+  const r = stage?.rules && typeof stage.rules === 'object' ? stage.rules : {};
+  return {
+    mode: MODES.includes(r.mode) ? r.mode : 'required',
+    unlock: UNLOCKS.includes(r.unlock) ? r.unlock : 'previous',
+    after: Array.isArray(r.after) ? r.after.map(String) : [],
+    day: Number.isFinite(Number(r.day)) && r.day !== null && r.day !== '' ? Math.max(0, Math.round(Number(r.day))) : null,
+    complete: COMPLETES.includes(r.complete) ? r.complete : 'required',
+  };
+}
+
+// القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا
+/** @param {any} raw @param {string[]} stageKeys @param {string} [selfKey] */
+export function cleanStageRules(raw, stageKeys, selfKey) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const out = {};
+  if (r.mode != null && r.mode !== '') {
+    if (!MODES.includes(r.mode)) throw new Error('نوع المرحلة غير معروف');
+    if (r.mode !== 'required') out.mode = r.mode;
+  }
+  if (r.unlock != null && r.unlock !== '') {
+    if (!UNLOCKS.includes(r.unlock)) throw new Error('شرط الفتح غير معروف');
+    if (r.unlock !== 'previous') out.unlock = r.unlock;
+  }
+  if (out.unlock === 'stages') {
+    const keys = new Set(stageKeys || []);
+    const after = [...new Set((Array.isArray(r.after) ? r.after : []).map(String))];
+    if (!after.length) throw new Error('اختر المرحلة أو المراحل التي تُفتح هذه بعد اكتمالها');
+    const bad = after.find((k) => !keys.has(k) || k === selfKey);
+    if (bad) throw new Error(bad === selfKey ? 'المرحلة لا تشترط نفسها' : `مرحلة غير موجودة في البرنامج: ${bad}`);
+    out.after = after;
+  }
+  if (out.unlock === 'day') {
+    const d = Number(r.day);
+    if (!Number.isFinite(d) || d < 0 || d > 3650) throw new Error('عدد الأيام من بداية الدفعة بين 0 و3650');
+    out.day = Math.round(d);
+  }
+  if (r.complete != null && r.complete !== '') {
+    if (!COMPLETES.includes(r.complete)) throw new Error('شرط الاكتمال غير معروف');
+    if (r.complete !== 'required') out.complete = r.complete;
+  }
+  return out;
+}
+
+// فحص الرحلة كلها: حلقات في شروط الفتح، ومراجع لمراحل مخفية أو محذوفة،
+// ومراحل لا يصلها أحد. error يمنع النشر، وwarn ينبّه.
+export function stageRulesIssues(stages) {
+  const out = [];
+  const all = stages || [];
+  const live = all.filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const byKey = new Map(all.map((s) => [s.key, s]));
+  const title = (k) => byKey.get(k)?.title_ar || k;
+  const deps = new Map(live.map((s, i) => {
+    const r = stageRules(s);
+    if (r.unlock === 'stages') return [s.key, r.after];
+    if (r.unlock === 'previous') return [s.key, live.slice(0, i).filter((x) => stageRules(x).mode === 'required').map((x) => x.key)];
+    return [s.key, []];
+  }));
+  for (const s of live) {
+    const r = stageRules(s);
+    for (const k of r.unlock === 'stages' ? r.after : []) {
+      if (!byKey.has(k)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد مرحلة غير موجودة (${k})` });
+      else if (byKey.get(k).active === false) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد «${title(k)}» وهي مخفية، فلن تُفتح أبدًا` });
+    }
+    if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
+    if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
+    if (r.unlock === 'approval') out.push({ level: 'warn', stage: s.key, msg: `«${s.title_ar}»: لا تُفتح إلا بيد الأدمن أو الخبير لكل مشارك` });
+    if (r.complete === 'approval' && r.mode === 'required') out.push({ level: 'warn', stage: s.key, msg: `«${s.title_ar}»: إلزامية لا تكتمل إلا باعتماد يدوي، وما بعدها ينتظر هذا الاعتماد` });
+  }
+  // حلقة: مرحلة تنتظر (مباشرة أو عبر غيرها) مرحلة تنتظرها
+  const seen = new Set(), stack = new Set();
+  const visit = (k, path) => {
+    if (stack.has(k)) { out.push({ level: 'error', stage: k, msg: `حلقة في شروط الفتح: ${[...path, k].map(title).join(' ← ')}` }); return true; }
+    if (seen.has(k)) return false;
+    seen.add(k); stack.add(k);
+    for (const d of deps.get(k) || []) if (deps.has(d) && visit(d, [...path, k])) { stack.delete(k); return true; }
+    stack.delete(k);
+    return false;
+  };
+  for (const s of live) visit(s.key, []);
+  return out;
+}
+
+// القاعدة بجملة يقرؤها الأدمن على بطاقة المرحلة
+export function stageRuleSummary(stage, stages = []) {
+  const r = stageRules(stage);
+  const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
+  const mode = { required: 'إلزامية', on_demand: 'عند الطلب', optional: 'اختيارية مقترحة' }[r.mode];
+  const unlock = {
+    previous: 'تُفتح بعد اكتمال الإلزامية قبلها',
+    always: 'متاحة من البداية',
+    stages: `تُفتح بعد اكتمال: ${r.after.map(title).join('، ')}`,
+    day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
+    approval: 'يفتحها الأدمن أو الخبير',
+  }[r.unlock];
+  const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
+  return `${mode} · ${unlock} · ${complete}`;
+}
+
+const DAY_MS = 86400000;
+// حالة كل مرحلة بعد حساب متطلباتها. stages مرتبة، ولكل منها items محسوبة.
+// ctx: { overrides: { [stage_key]: 'open'|'complete'|'skip' }, cohortStart: 'YYYY-MM-DD'|null, today: Date|string }
+export function resolveStages(stages, { overrides = {}, cohortStart = null, today = new Date() } = {}) {
+  const now = new Date(today).getTime();
+  const start = cohortStart ? new Date(`${cohortStart}T00:00:00Z`).getTime() : null;
+  const done = new Map();
+  const out = [];
+  const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i];
+    const r = stageRules(s);
+    const ov = overrides[s.key] || null;
+    const required = s.items.filter((x) => x.required);
+    const byItems = r.complete === 'any' ? s.items.some((x) => x.status === 'done')
+      : r.complete === 'approval' ? false
+        : required.length > 0 && required.every((x) => x.status === 'done');
+    const before = stages.slice(0, i).filter((x) => stageRules(x).mode === 'required');
+    let unlocked, waits = [];
+    if (ov === 'open') unlocked = true;
+    else if (r.unlock === 'always') unlocked = true;
+    else if (r.unlock === 'approval') unlocked = false;
+    else if (r.unlock === 'stages') { waits = r.after.filter((k) => !done.get(k)); unlocked = !waits.length; }
+    else if (r.unlock === 'day' && start != null && r.day != null) unlocked = now >= start + r.day * DAY_MS;
+    else { waits = before.filter((x) => !done.get(x.key)).map((x) => x.key); unlocked = !waits.length; }
+    let status;
+    // المقفلة تبقى مقفلة ولو اكتملت متطلباتها (كالسلوك الأصلي)، إلا بتدخل الأدمن
+    if (ov === 'complete' || ov === 'skip') status = 'done';
+    else if (!unlocked) status = 'locked';
+    else if (byItems) status = 'done';
+    else status = r.mode === 'required' ? 'active' : 'available';
+    done.set(s.key, status === 'done');
+    let lock_reason = null;
+    if (status === 'locked') {
+      if (r.unlock === 'approval') lock_reason = 'تُفتح حين يفتحها لك فريق البرنامج';
+      else if (r.unlock === 'day' && start != null && r.day != null) lock_reason = `تُفتح في ${new Date(start + r.day * DAY_MS).toISOString().slice(0, 10)}`;
+      else if (waits.length) lock_reason = `تُفتح بعد اكتمال: ${waits.map(title).join('، ')}`;
+    }
+    out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip' });
+  }
+  return out;
 }

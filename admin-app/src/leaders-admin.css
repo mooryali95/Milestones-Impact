@@ -599,3 +599,13 @@
   .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-faint, var(--brand-muted-soft)); flex: none; }
   .la-cards td small[dir="ltr"] { overflow-wrap: anywhere; }
 }
+
+/* قواعد المرحلة: سطر واحد على بطاقتها، ولون بحسب النوع */
+.la-rule { font-size: .8rem; margin: 4px 0 6px; padding: 3px 10px; border-radius: 999px; display: inline-block; background: var(--st-warn-bg); color: var(--st-warn-dark); }
+.la-rule.on_demand { background: var(--st-info-bg); color: var(--st-info-dark); }
+.la-rule.optional { background: var(--st-ok-bg); color: var(--st-ok-dark); }
+.la-multi { border: 1px solid var(--st-warn-bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 4px; }
+.la-multi legend { font-size: .85rem; padding: 0 4px; }
+.la-stage.available { border-inline-start: 3px solid var(--st-info); }
+.la-stage-ov { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.la-reach { font-size: .82rem; color: var(--gold-text); margin-top: 2px; }

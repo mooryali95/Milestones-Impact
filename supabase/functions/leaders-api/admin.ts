@@ -4,12 +4,12 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
-import { defaultProgramId } from './programs.ts';
+import { defaultProgramId, journeyDefinition } from './programs.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -370,6 +370,45 @@ export async function reviewRequirement(a: Admin, b: Body) {
   return { success: true };
 }
 
+// تدخل في مرحلة لمشارك بعينه: يفتحها، أو يعتمد اكتمالها، أو يعفيه منها؛ وaction فارغ يلغي التدخل.
+// يخص برنامج المشارك الحالي، فلا يسري إن انتقل إلى برنامج آخر.
+export async function stageOverride(a: Admin, b: Body) {
+  requireWrite(a);
+  const p = must(await db.from('participants').select('id, organization_id').eq('id', String(b.participant_id || '')).maybeSingle());
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  const def = await journeyDefinition(p);
+  const stage = def.stages.find((s: any) => s.key === String(b.stage_key || ''));
+  if (!stage) throw new Fail('المرحلة ليست في رحلة هذا المشارك', 404);
+  const action = b.action == null || b.action === '' ? null : String(b.action);
+  if (action && !['open', 'complete', 'skip'].includes(action)) throw new Fail('إجراء غير معروف');
+  const key = { participant_id: p.id, program_id: def.program_id, stage_key: stage.key };
+  if (action) {
+    must(await db.from('participant_stage_overrides').upsert({ ...key, action, note: b.note ? String(b.note).slice(0, 1000) : null, by_email: a.email, created_at: new Date().toISOString() }));
+  } else {
+    must(await db.from('participant_stage_overrides').delete().match(key));
+  }
+  await audit('admin', a.email, action ? `stage.${action}` : 'stage.reset', 'participants', p.id, null, { stage: stage.key, program: def.program_id, note: b.note || null });
+  return { success: true };
+}
+
+// مرحلة جديدة في برنامج: مفتاح يُولَّد، وتأتي آخر الرحلة، وقواعدها تُضبط بعدها من «تحرير»
+export async function stageCreate(a: Admin, b: Body) {
+  requireWrite(a);
+  const pid = /^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId();
+  const title = String(b.title_ar || '').trim().slice(0, 120);
+  if (!title) throw new Fail('اسم المرحلة مطلوب');
+  const why = hardcodedFacts(title);
+  if (why) throw new Fail(why, 400, 'hardcoded');
+  const phase = ['admission', 'qualification', 'impact'].includes(b.phase) ? b.phase : 'qualification';
+  const { data: rows } = await db.from('journey_stages').select('sort').eq('program_id', pid).order('sort', { ascending: false }).limit(1);
+  const key = `s-${Date.now().toString(36)}`;
+  const row = must(await db.from('journey_stages').insert({
+    program_id: pid, key, title_ar: title, phase, sort: (rows?.[0]?.sort || 0) + 1, duration_label: '', duration_days: 0, active: true, rules: {},
+  }).select('*').single(), 'تعذّر إنشاء المرحلة');
+  await audit('admin', a.email, 'journey_stages.create', 'journey_stages', `${pid}:${key}`, null, { title_ar: title, phase });
+  return { success: true, row };
+}
+
 // ── الإعدادات القابلة للتحرير: كل ما يشكّل المنهجية ──
 // قائمة بيضاء بالجداول وحقولها، فلا يكتب أحد في جدول أو عمود غير مقصود.
 const ENTITIES: Record<string, { table: string; key: string[]; fields: string[]; sortable?: boolean }> = {
@@ -379,7 +418,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
                                  'rci_reliability', 'rci_sd', 'impact_min_n', 'rater_threshold', 'min_behavior_items', 'rci_practice'] },
   journey_stages:     { table: 'journey_stages', key: ['program_id', 'key'], sortable: true,
                         fields: ['title_ar', 'duration_label', 'duration_days', 'description_ar', 'activities_ar', 'outcome_ar', 'phase', 'active', 'sort',
-                                 'mode', 'mode_note_ar', 'builds_on_ar'] },
+                                 'mode', 'mode_note_ar', 'builds_on_ar', 'rules'] },
   stage_requirements: { table: 'stage_requirements', key: ['id'], sortable: true,
                         fields: ['program_id', 'stage_key', 'dimension', 'level', 'code', 'title_ar', 'help_ar', 'kind', 'required', 'needs_review', 'active', 'sort', 'config'] },
   questions:          { table: 'questions', key: ['id'], sortable: true,
@@ -686,6 +725,18 @@ export async function save(a: Admin, b: Body) {
       const unknown = TEXT.flatMap((f) => unknownTokens(row[f], codes));
       if (unknown.length) throw new Fail(`الرمز يشير إلى نشاط غير موجود: ${[...new Set(unknown)].join('، ')}`, 400, 'token');
     }
+  }
+
+  // قواعد المرحلة: قيم معروفة فقط، ولا حلقة ولا مرجع لمرحلة مخفية في الرحلة بعد الحفظ
+  if (b.entity === 'journey_stages' && 'rules' in row) {
+    const pid = String(b.row.program_id);
+    const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, rules').eq('program_id', pid);
+    const list = siblings || [];
+    try { row.rules = cleanStageRules(row.rules, list.map((s: any) => s.key), String(b.row.key)); }
+    catch (err) { throw new Fail((err as Error).message, 400, 'rules'); }
+    const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
+    const bad = stageRulesIssues(after).find((x: any) => x.level === 'error' && (x.stage === b.row.key || /حلقة/.test(x.msg)));
+    if (bad) throw new Fail(bad.msg, 400, 'rules');
   }
 
   // كتلة لم تُغلق أو وسم غير معروف يغيّر ما يصل كل مسار، فلا يُحفظ

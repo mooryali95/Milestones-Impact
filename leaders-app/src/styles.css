@@ -135,6 +135,8 @@ textarea.input { min-height: 96px; resize: vertical; }
 .chip.warn { background: var(--st-warn-bg); color: var(--warn); }
 .chip.bad { background: var(--st-bad-bg); color: var(--bad); }
 .chip.gold { background: var(--brand-cream); color: var(--accent); }
+.chip.blue { background: var(--st-info-bg); color: var(--st-info-dark); }
+.stage.available .dot { background: var(--st-info-bg); color: var(--st-info-dark); }
 .chip.dark { background: var(--graphite); color: var(--mist); }
 
 /* ── الدخول ── */

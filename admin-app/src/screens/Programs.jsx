@@ -81,6 +81,15 @@ export default function Programs({ canWrite, onEditJourney }) {
     const r = await act('admin.program-save', { id: cert.p.id, cert: cert.value }, 'حُفظت شهادة البرنامج. تسري على ما يصدر من الآن.');
     if (r) setCert(null);
   };
+  // لمن يسري البرنامج: الدفعة المفتوحة (الجميع بلا جهة)، وجهات دفعاته غير المغلقة
+  const reach = (p) => {
+    const live = d.cohorts.filter((c) => c.program_id === p.id && c.status !== 'closed');
+    const general = live.some((c) => c.is_default);
+    const orgs = [...new Set(live.filter((c) => c.organization_id).map((c) => orgName(c.organization_id)))];
+    const indiv = live.filter((c) => !c.is_default && !c.organization_id).length;
+    const parts = [general && 'الجميع (الدفعة المفتوحة)', orgs.length && `الجهات: ${orgs.join('، ')}`, indiv && `${indiv} دفعة أفراد`].filter(Boolean);
+    return parts.length ? `يسري على: ${parts.join(' · ')}` : 'لا يسري على أحد بعد. اربطه بجهة بدفعة جديدة، أو اجعله لدفعة أفراد.';
+  };
   const editCohort = (c = {}) => {
     const pid = c.program_id || programs.find((p) => p.is_default)?.id;
     const p = programs.find((x) => x.id === pid);
@@ -108,11 +117,13 @@ export default function Programs({ canWrite, onEditJourney }) {
               <div className="la-muted">
                 {p.requirements} متطلب · {p.versions[0] ? `آخر نسخة محفوظة: ${p.versions[0].number}، ${p.versions[0].label}، ${date(p.versions[0].created_at)}` : 'لم تُحفظ له نسخة بعد'}
               </div>
+              <div className="la-reach">{reach(p)}</div>
               {p.description_ar && <p className="la-muted">{p.description_ar}</p>}
             </div>
             <div className="la-row">
               <button className="btn-sm ghost" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
               {canWrite && <button className="btn-sm primary" onClick={() => saveVersion(p)}>احفظ نسخة</button>}
+              {canWrite && !p.archived_at && <button className="la-link" onClick={() => editCohort({ program_id: p.id })}>اربطه بجهة أو دفعة</button>}
               <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
               {canWrite && <button className="la-link" onClick={() => editCert(p)}>الشهادة{p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}</button>}
               {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>تكرار</button>}

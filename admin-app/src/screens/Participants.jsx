@@ -13,6 +13,7 @@ import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
 import { stars } from '../handbook.js';
+import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 // عدد الأسئلة بصيغة عربية سليمة: سؤال واحد، سؤالان، 3–10 أسئلة، 11+ سؤالًا
@@ -156,6 +157,19 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
 
 const pct = (v) => (v == null ? '·' : `${Math.round(v)}%`);
 
+// أزرار التدخل بحسب حالة المرحلة: لا يُعرض إلا ما له أثر
+function StageOverride({ s, onPick }) {
+  if (s.override) return <div className="la-stage-ov"><small className="la-chip">{{ open: 'فُتحت له يدويًا', complete: 'اعتُمدت يدويًا', skip: 'أُعفي منها' }[s.override]}</small><button className="la-link" onClick={() => onPick('')}>إلغاء التدخل</button></div>;
+  if (s.status === 'done') return null;
+  return (
+    <div className="la-stage-ov">
+      {s.status === 'locked' && <button className="la-link" onClick={() => onPick('open')}>افتحها له</button>}
+      <button className="la-link" onClick={() => onPick('complete')}>اعتمد اكتمالها</button>
+      <button className="la-link" onClick={() => onPick('skip')}>أعفه منها</button>
+    </div>
+  );
+}
+
 function Person({ id, canWrite, onBack }) {
   const { toast, confirm, prompt } = useUI();
   const [r, setR] = useState(null);
@@ -209,6 +223,13 @@ function Person({ id, canWrite, onBack }) {
     let note = null;
     if (st === 'returned') { note = await prompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
     act('admin.review', { participant_id: p.id, requirement_id: req, status: st, note }, st === 'returned' ? 'أُعيد مع الملاحظة' : 'تم');
+  };
+  // تدخل في مرحلة لهذا المشارك وحده، بسبب مكتوب يُحفظ في السجل
+  const stageAct = async (s, action) => {
+    const msg = { open: `فتح «${s.title_ar}» له الآن؟`, complete: `اعتماد اكتمال «${s.title_ar}»؟`, skip: `إعفاؤه من «${s.title_ar}»؟`, '': `إلغاء التدخل في «${s.title_ar}» وإعادتها لقواعد البرنامج؟` }[action];
+    const note = await prompt(`${msg}\nالسبب (يُحفظ في السجل):`, '');
+    if (note === null) return;
+    act('admin.stage-override', { participant_id: p.id, stage_key: s.key, action, note }, 'تم');
   };
   const evidence = async (path) => {
     const d = await L('admin.evidence-url', { path });
@@ -301,7 +322,9 @@ function Person({ id, canWrite, onBack }) {
         <div className="la-row between"><h3>الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
         <div className="la-journey">{r.journey.map((s) => (
           <div key={s.key} className={`la-stage ${s.status}`}>
-            <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{{ done: 'مكتملة', active: 'الحالية', locked: 'مقفلة' }[s.status]}</span></div>
+            <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{s.skipped ? 'أُعفي منها' : STAGE_STATUS_AR[s.status]}</span></div>
+            {s.lock_reason && <small className="la-muted">{s.lock_reason}</small>}
+            {canWrite && <StageOverride s={s} onPick={(action) => stageAct(s, action)} />}
             <ul>{s.items.length ? s.items.map((it) => (
               <li key={it.id} className={it.status}>
                 <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>

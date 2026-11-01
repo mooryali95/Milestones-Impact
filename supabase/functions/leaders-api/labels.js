@@ -31,6 +31,17 @@ export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الم
 export const REQ_STATUS = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد للتعديل' };
 
 export const PHASE_AR = { admission: 'القبول', qualification: 'التأهيل', impact: 'الأثر' };
+// قواعد المرحلة (يضبطها الأدمن لكل مرحلة في كل برنامج). الفارغ = السلوك الأصلي:
+// إلزامية، تُفتح بعد اكتمال ما قبلها، وتكتمل بمتطلباتها الإلزامية.
+export const STAGE_MODE_AR = { required: 'إلزامية', on_demand: 'عند الطلب', optional: 'اختيارية مقترحة' };
+export const STAGE_UNLOCK_AR = {
+  previous: 'بعد اكتمال المراحل الإلزامية قبلها', always: 'متاحة من البداية', stages: 'بعد اكتمال مراحل أختارها',
+  day: 'بعد عدد أيام من بداية الدفعة', approval: 'حين يفتحها الأدمن أو الخبير',
+};
+export const STAGE_COMPLETE_AR = { required: 'بإنجاز متطلباتها الإلزامية', any: 'بإنجاز أي متطلب فيها', approval: 'باعتماد الأدمن أو الخبير' };
+export const STAGE_STATUS_AR = { done: 'مكتملة', active: 'الحالية', available: 'متاحة عند الحاجة', locked: 'مقفلة' };
+// تدخل الأدمن لمشارك بعينه في مرحلة: يفتحها أو يعتمد اكتمالها أو يعفيه منها
+export const STAGE_OVERRIDE_AR = { open: 'فُتحت له', complete: 'اعتُمد اكتمالها', skip: 'أُعفي منها' };
 // طريقة تنفيذ المرحلة، وطريقة انعقاد الجلسة (any: يختار المشارك عند الحجز)
 export const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
 export const SESSION_MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };

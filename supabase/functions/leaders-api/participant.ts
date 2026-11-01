@@ -326,12 +326,13 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 export async function journeyFor(p: any) {
-  const [placements, def, progress, assessments, reports] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
+    db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -347,7 +348,9 @@ export async function journeyFor(p: any) {
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   const activity = await evidenceFor(p, def.requirements, levels, approved, def.cohort?.id || null);
-  const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity });
+  // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
+  const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
+  const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
   return { pl, levels, approved, def, journey, progress: journeyProgress(journey) };
 }
 
