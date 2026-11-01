@@ -12,6 +12,7 @@ import { applyFilters, presetCounts } from '../filters.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
+import { ParticipantMilestones } from './Milestones.jsx';
 import { stars } from '../handbook.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -317,6 +318,8 @@ function Person({ id, canWrite, onBack }) {
           </>}
         </section>
       </div>
+
+      <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
 
       <section className="la-card">
         <div className="la-row between"><h3>الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>

@@ -609,3 +609,4 @@
 .la-stage.available { border-inline-start: 3px solid var(--st-info); }
 .la-stage-ov { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
 .la-reach { font-size: .82rem; color: var(--gold-text); margin-top: 2px; }
+.mi-form.wide { max-width: 860px; width: 100%; }

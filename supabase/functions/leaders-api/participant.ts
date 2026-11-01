@@ -4,7 +4,7 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
@@ -326,13 +326,14 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 export async function journeyFor(p: any) {
-  const [placements, def, progress, assessments, reports, ovr] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr, msRecs] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
+    db.from('participant_milestones').select('milestone_id, done_at, due_override, note').eq('participant_id', p.id),
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -351,11 +352,17 @@ export async function journeyFor(p: any) {
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey) };
+  // المعالم: استحقاقها من جدول الدفعة، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
+  const milestones = milestoneStatuses(def.milestones || [], {
+    stagesDone: new Set(journey.filter((s: any) => s.status === 'done').map((s: any) => s.key)),
+    records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
+    cohort: def.cohort || {},
+  });
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones) };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress }, passkeys, cells, org] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary }, passkeys, cells, org] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -384,6 +391,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     journey: audience === 'admin' ? journey
       : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
     progress,
+    // معالم الرحلة وموقع المشارك منها (المتأخر بعدد أيامه)
+    milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
+    milestone_summary,
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'
