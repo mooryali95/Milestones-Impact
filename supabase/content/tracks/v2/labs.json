@@ -1,0 +1,20 @@
+{
+  "_about": "جمهور كل مختبر (lab_items.audience). all: يظهر تلقائيًا لكل من اعتُمد مستواه في إطار المختبر إن بلغ min_level (labVisible في lab.js). granted: لا يظهر إلا بمنحة من المستشار أو لجهة. min_level للمختبر لا يقل عن مستوى بابه (chapter_key)، فلا يصل مختبر قبل بابه.",
+  "audience": {
+    "schedule-critical-path": "all",
+    "red-gate": "all",
+    "risk-register": "all",
+    "evm-checkpoint": "all",
+    "benefits-map": "all",
+    "indicator-check": "all",
+    "stakeholder-map": "all",
+    "raci-delegation": "all",
+    "hard-week": "all",
+    "conflict-modes": "all",
+    "direct-challenge": "all",
+    "portfolio-review": "granted"
+  },
+  "granted_why": {
+    "portfolio-review": "موقف مراجعة محفظة: يفترض أن المشارك يفاضل بين مبادرات متعددة. lab_items لا تحمل نطاقًا (scopes) كالنماذج، فلو فُتح لكل محترف في إدارة المشروعات لوصل قائد مشروع واحد إلى موقف لا يمارسه، بينما نموذج «مراجعة المحفظة» نفسه مقصور على نطاق المحفظة. يبقى بمنحة المستشار لمن نطاقه برنامج أو محفظة."
+  }
+}

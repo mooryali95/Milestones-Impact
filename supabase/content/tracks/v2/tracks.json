@@ -1,0 +1,197 @@
+{
+ "_about": "مولَّد بـ scripts/tracks/build.mjs: كل مسار من الـ27 وملف تعريفه (إطار الأولوية + مستواه فيه)، وعنوانه الإنجليزي، والعناوين الثلاثة المصححة. journey_ar للمسار = رحلة ملف تعريفه.",
+ "tracks": [
+  {
+   "key": "M1I1L1",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار التأسيس القيادي المتكامل",
+   "title_en": "From Plan to Decision Points · Even across all three frameworks"
+  },
+  {
+   "key": "M1I1L2",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار التأسيس بحضور قيادي",
+   "title_en": "From Plan to Decision Points · Strengths: Leadership"
+  },
+  {
+   "key": "M1I1L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار القائد الملهم نحو الانضباط التنفيذي",
+   "title_en": "From Plan to Decision Points · Strengths: Leadership"
+  },
+  {
+   "key": "M1I2L1",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار التأسيس بعين الأثر",
+   "title_en": "From Plan to Decision Points · Strengths: Impact"
+  },
+  {
+   "key": "M1I2L2",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار بناء الانضباط التنفيذي",
+   "title_en": "From Plan to Decision Points · Strengths: Impact & Leadership"
+  },
+  {
+   "key": "M1I2L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار القائد المؤثر نحو أدوات التنفيذ",
+   "title_en": "From Plan to Decision Points · Strengths: Leadership"
+  },
+  {
+   "key": "M1I3L1",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار صانع القيمة نحو إحكام التنفيذ",
+   "title_en": "From Plan to Decision Points · Strengths: Impact"
+  },
+  {
+   "key": "M1I3L2",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار مهندس القيمة نحو التنفيذ المنضبط",
+   "title_en": "From Plan to Decision Points · Strengths: Impact"
+  },
+  {
+   "key": "M1I3L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-beginner",
+   "title_ar": "مسار القائد الاستراتيجي نحو إتقان التنفيذ",
+   "title_en": "From Plan to Decision Points · Strengths: Impact & Leadership"
+  },
+  {
+   "key": "M2I1L1",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار المنفّذ نحو الأثر والقيادة",
+   "title_en": "From Output to Benefit · Strengths: Milestone"
+  },
+  {
+   "key": "M2I1L2",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار ربط التنفيذ بالقيمة",
+   "title_en": "From Output to Benefit · Strengths: Milestone & Leadership"
+  },
+  {
+   "key": "M2I1L3",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار القائد المنفّذ نحو قياس الأثر",
+   "title_en": "From Output to Benefit · Strengths: Leadership"
+  },
+  {
+   "key": "M2I2L1",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-beginner",
+   "title_ar": "مسار تمكين القيادة التنفيذية",
+   "title_en": "Leading Through Others · Strengths: Milestone & Impact"
+  },
+  {
+   "key": "M2I2L2",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-intermediate",
+   "title_ar": "مسار الاحتراف المتوازن",
+   "title_en": "Tightening Delivery: Gates and Cost · Even across all three frameworks"
+  },
+  {
+   "key": "M2I2L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-intermediate",
+   "title_ar": "مسار القائد المؤثر نحو التميز التنفيذي",
+   "title_en": "Tightening Delivery: Gates and Cost · Strengths: Leadership"
+  },
+  {
+   "key": "M2I3L1",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-beginner",
+   "title_ar": "مسار قائد القيمة نحو قيادة الناس",
+   "title_en": "Leading Through Others · Strengths: Impact"
+  },
+  {
+   "key": "M2I3L2",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-intermediate",
+   "title_ar": "مسار صانع الأثر: إحكام التنفيذ",
+   "title_ar_before": "مسار الأثر المؤسسي",
+   "title_en": "Tightening Delivery: Gates and Cost · Strengths: Impact"
+  },
+  {
+   "key": "M2I3L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-intermediate",
+   "title_ar": "مسار القيادة الاستراتيجية للتنفيذ",
+   "title_en": "Tightening Delivery: Gates and Cost · Strengths: Impact & Leadership"
+  },
+  {
+   "key": "M3I1L1",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار خبير التنفيذ نحو القيادة بالأثر",
+   "title_en": "From Output to Benefit · Strengths: Milestone"
+  },
+  {
+   "key": "M3I1L2",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار خبير التنفيذ نحو صناعة القيمة",
+   "title_en": "From Output to Benefit · Strengths: Milestone"
+  },
+  {
+   "key": "M3I1L3",
+   "priority_dimension": "impact",
+   "profile_key": "impact-beginner",
+   "title_ar": "مسار القائد التنفيذي: من المخرج إلى المنفعة",
+   "title_ar_before": "مسار القائد التنفيذي نحو إثبات الأثر",
+   "title_en": "From Output to Benefit · Strengths: Milestone & Leadership"
+  },
+  {
+   "key": "M3I2L1",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-beginner",
+   "title_ar": "مسار خبير التنفيذ نحو القيادة التحويلية",
+   "title_en": "Leading Through Others · Strengths: Milestone"
+  },
+  {
+   "key": "M3I2L2",
+   "priority_dimension": "impact",
+   "profile_key": "impact-intermediate",
+   "title_ar": "مسار خبير التنفيذ نحو إثبات القيمة",
+   "title_en": "Evidence Before Claims · Strengths: Milestone"
+  },
+  {
+   "key": "M3I2L3",
+   "priority_dimension": "impact",
+   "profile_key": "impact-intermediate",
+   "title_ar": "مسار قائد التنفيذ نحو قيادة القيمة",
+   "title_en": "Evidence Before Claims · Strengths: Milestone & Leadership"
+  },
+  {
+   "key": "M3I3L1",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-beginner",
+   "title_ar": "مسار خبير التنفيذ والأثر نحو القيادة التحويلية",
+   "title_en": "Leading Through Others · Strengths: Milestone & Impact"
+  },
+  {
+   "key": "M3I3L2",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-intermediate",
+   "title_ar": "مسار خبير التنفيذ والأثر نحو الريادة القيادية",
+   "title_en": "Influence Beyond Authority · Strengths: Milestone & Impact"
+  },
+  {
+   "key": "M3I3L3",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-advanced",
+   "title_ar": "مسار الاحتراف الشامل: قرارات التنفيذ تحت الضغط",
+   "title_ar_before": "مسار الريادة الاستراتيجية للأثر",
+   "title_en": "Delivery Decisions Under Pressure · Even across all three frameworks"
+  }
+ ]
+}

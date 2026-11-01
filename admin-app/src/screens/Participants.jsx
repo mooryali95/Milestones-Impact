@@ -256,8 +256,8 @@ function Person({ id, canWrite, onBack }) {
           </div>
           {!prof && !latest && <p className="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>}
           {prof?.track && (
-            <div className="la-track-now"><code className="la-code">{prof.track.key}</code><b>{prof.track.title || 'مسار بلا عنوان'}</b>
-              <p className="la-muted">{prof.track.summary}</p><small className="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>
+            <div className="la-track-now"><code className="la-code">{prof.track.key}</code><b>{prof.track.title || 'مسار بلا عنوان'}</b>{prof.track.track_title && prof.track.track_title !== prof.track.title && <small className="la-muted"> · {prof.track.track_title}</small>}
+              <p className="la-muted">{prof.track.summary}</p>{prof.track.strengths && <p className="la-muted">{prof.track.strengths}</p>}<small className="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>
           )}
           <div className="table-wrap"><table className="la-table">
             <thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المؤشر</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead>

@@ -4,7 +4,7 @@
 // بلا اعتماد على قاعدة البيانات ولا على Deno، حتى يُختبر في vitest
 // (leaders-app/src/logic.test.js) ويُستورد كما هو في دالة الحافة.
 
-import { LEVEL_AR, TIER_AR } from './labels.js';
+import { DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -448,6 +448,24 @@ export function rubricPriority(levels, priority) {
   const ls = DIMENSIONS.map((d) => levels?.[d]);
   if (ls.every((l) => l) && ls.every((l) => l === ls[0])) return null;
   return priority || null;
+}
+
+// ملف التعريف المعروض للمشارك: المسارات الـ27 تبقى مفتاحًا داخليًا للاشتقاق،
+// وما يُعرض هو محور الأولوية بمستواه فيه (7 ملفات فعلية في track_profiles).
+export const profileKey = (levels, priority) => (priority && levels?.[priority] in RANK ? `${priority}-${levels[priority]}` : null);
+
+// سطر مولَّد يسمّي أقوى أطر المشارك بأسماء القاموس، ولا يكشف مستوى أي إطار
+/** @param {Record<string, string>} levels @param {string | null} [priority] */
+export function strengthsLine(levels, priority = null) {
+  const r = DIMENSIONS.map((d) => RANK[levels?.[d]]);
+  if (r.some((x) => x === undefined)) return null;
+  const top = Math.max(...r);
+  const strong = DIMENSIONS.filter((d, i) => r[i] === top);
+  const name = (d) => DIM_AR[d];
+  const deep = priority ? name(priority) : null;
+  if (strong.length === DIMENSIONS.length) return `مستوياتك متقاربة في الأطر الثلاثة${deep ? `، ويبدأ تعمقك من ${deep}` : ''}.`;
+  const list = strong.map(name).join(' و');
+  return `أقوى أطرك: ${list}.${deep ? ` ${strong.length === 1 ? 'تبني عليه' : 'تبني عليهما'} وأنت تعمّق ${deep}.` : ''}`;
 }
 
 export function handbookModulesFor(modules, levels) {

@@ -1,0 +1,1566 @@
+{
+ "_about": "لقطة مختصرة من قاعدة الإنتاج قبل ترحيل 20261101140000 (المفاتيح والمستويات والحقول، بلا محتوى طويل). يقرؤها verify.mjs.",
+ "tracks": [
+  {
+   "key": "M1I1L1",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار التأسيس القيادي المتكامل"
+  },
+  {
+   "key": "M1I1L2",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار التأسيس بحضور قيادي"
+  },
+  {
+   "key": "M1I1L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار القائد الملهم نحو الانضباط التنفيذي"
+  },
+  {
+   "key": "M1I2L1",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار التأسيس بعين الأثر"
+  },
+  {
+   "key": "M1I2L2",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار بناء الانضباط التنفيذي"
+  },
+  {
+   "key": "M1I2L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار القائد المؤثر نحو أدوات التنفيذ"
+  },
+  {
+   "key": "M1I3L1",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار صانع القيمة نحو إحكام التنفيذ"
+  },
+  {
+   "key": "M1I3L2",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار مهندس القيمة نحو التنفيذ المنضبط"
+  },
+  {
+   "key": "M1I3L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار القائد الاستراتيجي نحو إتقان التنفيذ"
+  },
+  {
+   "key": "M2I1L1",
+   "priority_dimension": "impact",
+   "title_ar": "مسار المنفّذ نحو الأثر والقيادة"
+  },
+  {
+   "key": "M2I1L2",
+   "priority_dimension": "impact",
+   "title_ar": "مسار ربط التنفيذ بالقيمة"
+  },
+  {
+   "key": "M2I1L3",
+   "priority_dimension": "impact",
+   "title_ar": "مسار القائد المنفّذ نحو قياس الأثر"
+  },
+  {
+   "key": "M2I2L1",
+   "priority_dimension": "leadership",
+   "title_ar": "مسار تمكين القيادة التنفيذية"
+  },
+  {
+   "key": "M2I2L2",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار الاحتراف المتوازن"
+  },
+  {
+   "key": "M2I2L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار القائد المؤثر نحو التميز التنفيذي"
+  },
+  {
+   "key": "M2I3L1",
+   "priority_dimension": "leadership",
+   "title_ar": "مسار قائد القيمة نحو قيادة الناس"
+  },
+  {
+   "key": "M2I3L2",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار الأثر المؤسسي"
+  },
+  {
+   "key": "M2I3L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار القيادة الاستراتيجية للتنفيذ"
+  },
+  {
+   "key": "M3I1L1",
+   "priority_dimension": "impact",
+   "title_ar": "مسار خبير التنفيذ نحو القيادة بالأثر"
+  },
+  {
+   "key": "M3I1L2",
+   "priority_dimension": "impact",
+   "title_ar": "مسار خبير التنفيذ نحو صناعة القيمة"
+  },
+  {
+   "key": "M3I1L3",
+   "priority_dimension": "impact",
+   "title_ar": "مسار القائد التنفيذي نحو إثبات الأثر"
+  },
+  {
+   "key": "M3I2L1",
+   "priority_dimension": "leadership",
+   "title_ar": "مسار خبير التنفيذ نحو القيادة التحويلية"
+  },
+  {
+   "key": "M3I2L2",
+   "priority_dimension": "impact",
+   "title_ar": "مسار خبير التنفيذ نحو إثبات القيمة"
+  },
+  {
+   "key": "M3I2L3",
+   "priority_dimension": "impact",
+   "title_ar": "مسار قائد التنفيذ نحو قيادة القيمة"
+  },
+  {
+   "key": "M3I3L1",
+   "priority_dimension": "leadership",
+   "title_ar": "مسار خبير التنفيذ والأثر نحو القيادة التحويلية"
+  },
+  {
+   "key": "M3I3L2",
+   "priority_dimension": "leadership",
+   "title_ar": "مسار خبير التنفيذ والأثر نحو الريادة القيادية"
+  },
+  {
+   "key": "M3I3L3",
+   "priority_dimension": "milestone",
+   "title_ar": "مسار الريادة الاستراتيجية للأثر"
+  }
+ ],
+ "models": [
+  {
+   "key": "benefits-register",
+   "dimension": "impact",
+   "title_ar": "سجل المنافع",
+   "min_level": "beginner",
+   "capstone_sort": 40,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "project",
+     "label": "المشروع"
+    },
+    {
+     "key": "benefits",
+     "label": "المنافع"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: المنفعة الأصعب إثباتًا، وكيف ستثبتها",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "theory-of-change",
+   "dimension": "impact",
+   "title_ar": "نظرية التغيير",
+   "min_level": "intermediate",
+   "capstone_sort": 30,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "program",
+     "label": "البرنامج"
+    },
+    {
+     "key": "impact",
+     "label": "الأثر بعيد المدى"
+    },
+    {
+     "key": "chain",
+     "label": "السلسلة السببية"
+    },
+    {
+     "key": "weakest",
+     "label": "الافتراض الأضعف"
+    },
+    {
+     "key": "test",
+     "label": "كيف ستختبره مبكرًا"
+    },
+    {
+     "key": "external",
+     "label": "العوامل الخارجية التي قد تكسر السلسلة وكيف ترصدها",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: كيف يعرف المستفيد أن التغيير حدث، بلسانه لا بلسان الجهة",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "impact-report",
+   "dimension": "impact",
+   "title_ar": "تقرير الأثر",
+   "min_level": "advanced",
+   "capstone_sort": null,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "program",
+     "label": "البرنامج"
+    },
+    {
+     "key": "changes",
+     "label": "ما الذي تغيّر"
+    },
+    {
+     "key": "contribution",
+     "label": "لغة المساهمة: ما دورنا وما العوامل الأخرى"
+    },
+    {
+     "key": "not_achieved",
+     "label": "ما لم يتحقق ولماذا"
+    },
+    {
+     "key": "lessons",
+     "label": "الدروس للبرامج القادمة"
+    }
+   ]
+  },
+  {
+   "key": "options-analysis",
+   "dimension": "impact",
+   "title_ar": "المبرر والبدائل",
+   "min_level": "intermediate",
+   "capstone_sort": 20,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "evidence",
+     "label": "الدليل على المشكلة"
+    },
+    {
+     "key": "options",
+     "label": "البدائل"
+    },
+    {
+     "key": "criteria",
+     "label": "معايير المقارنة وأوزانها",
+     "min_level": "advanced"
+    },
+    {
+     "key": "recommendation",
+     "label": "التوصية ومبررها"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: أثر كل بديل على المستفيد النهائي، لا على الجهة وحدها",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "evidence-plan",
+   "dimension": "impact",
+   "title_ar": "خطة القياس والأدلة",
+   "min_level": "intermediate",
+   "capstone_sort": 50,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "plan",
+     "label": "خطة القياس"
+    },
+    {
+     "key": "privacy",
+     "label": "حماية البيانات الشخصية في القياس"
+    },
+    {
+     "key": "attribution",
+     "label": "المساهمة والإسناد: كيف تميّز أثر المبادرة من العوامل الأخرى"
+    },
+    {
+     "key": "evidence_level",
+     "label": "مستوى الدليل لكل مؤشر على سلّم الأدلة، ولماذا يكفي لقرارك",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: المؤشر المبكر الذي يتنبأ بالأثر قبل ظهوره",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "stakeholder-map",
+   "dimension": "leadership",
+   "title_ar": "خريطة أصحاب المصلحة",
+   "min_level": "beginner",
+   "capstone_sort": 60,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "project",
+     "label": "المشروع"
+    },
+    {
+     "key": "stakeholders",
+     "label": "أصحاب المصلحة"
+    },
+    {
+     "key": "silent",
+     "label": "المعارض الصامت وخطة كسبه",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: كيف تبني تحالفًا من أصحاب النفوذ خارج سلطتك",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "development-plan",
+   "dimension": "leadership",
+   "title_ar": "خطة التطوير القيادي",
+   "min_level": "beginner",
+   "capstone_sort": 160,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "competencies",
+     "label": "الجدارات"
+    },
+    {
+     "key": "support",
+     "label": "من سيدعمك ويمنحك تغذية راجعة، وكيف"
+    },
+    {
+     "key": "successor",
+     "label": "من تبنيه قائدًا في فريقك ليأخذ مكانك، وكيف",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: جدارتك الأضعف، وكيف يقيس فريقك تقدمك فيها",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "conflict-mode",
+   "dimension": "leadership",
+   "title_ar": "تشخيص نمط الخلاف",
+   "min_level": "intermediate",
+   "capstone_sort": null,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "situation",
+     "label": "موقف الخلاف"
+    },
+    {
+     "key": "issue",
+     "label": "أهمية القضية"
+    },
+    {
+     "key": "relation",
+     "label": "أهمية العلاقة"
+    },
+    {
+     "key": "used",
+     "label": "النمط الذي استخدمته"
+    },
+    {
+     "key": "right",
+     "label": "النمط الأنسب"
+    },
+    {
+     "key": "next",
+     "label": "ما الذي ستفعله مختلفًا"
+    }
+   ]
+  },
+  {
+   "key": "direct",
+   "dimension": "leadership",
+   "title_ar": "أداة DIRECT",
+   "min_level": "advanced",
+   "capstone_sort": null,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "challenge",
+     "label": "التحدي"
+    },
+    {
+     "key": "diagnose",
+     "label": "التشخيص: ما حقيقة المشكلة وجذورها؟"
+    },
+    {
+     "key": "influence",
+     "label": "التأثير: من تحتاج التأثير عليه وكيف؟"
+    },
+    {
+     "key": "resolve",
+     "label": "الحل: ما القرار أو الإجراء؟"
+    },
+    {
+     "key": "empathy",
+     "label": "التعاطف: كيف ستراعي المتأثرين؟"
+    },
+    {
+     "key": "communicate",
+     "label": "التواصل: من يعرف ماذا ومتى؟"
+    },
+    {
+     "key": "track",
+     "label": "التتبع: متى وكيف ستتابع حتى الإغلاق؟"
+    }
+   ]
+  },
+  {
+   "key": "governance",
+   "dimension": "leadership",
+   "title_ar": "الحوكمة والمسؤوليات",
+   "min_level": "beginner",
+   "capstone_sort": 120,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "structure",
+     "label": "هيكل الحوكمة: من يقرر ماذا"
+    },
+    {
+     "key": "cadence",
+     "label": "إيقاع القرار",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "raci",
+     "label": "مصفوفة المسؤوليات"
+    },
+    {
+     "key": "escalation",
+     "label": "حدود الصلاحية ومسار التصعيد",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "layers",
+     "label": "اتصال الحوكمة بالبرنامج أو المحفظة: ما يُرفع، ومتى، ولمن",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: كيف تبني قرار فريقك في هذه الحوكمة بدل أن تتخذه عنه",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "change-sustain",
+   "dimension": "leadership",
+   "title_ar": "قيادة التغيير والاستدامة",
+   "min_level": "beginner",
+   "capstone_sort": 150,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "impacted",
+     "label": "الفئات المتأثرة",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "handover",
+     "label": "التسليم والتسلم: من يشغّل بعد الإغلاق وكيف"
+    },
+    {
+     "key": "sustain",
+     "label": "ما يضمن استمرار المنافع بعد المبادرة"
+    },
+    {
+     "key": "resistance",
+     "label": "المقاومة المتوقعة وخطة التعامل معها",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "win_resisters",
+     "label": "كسب المقاومين المؤثرين: من هم، وما مصلحتهم، وكيف تحولهم إلى داعمين",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: دورك الشخصي في التغيير، ومن يحمله معك",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "transformation-story",
+   "dimension": "leadership",
+   "title_ar": "قصة التحول",
+   "min_level": "beginner",
+   "capstone_sort": 170,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "before",
+     "label": "أين كانت المبادرة وأين كنت"
+    },
+    {
+     "key": "decisions",
+     "label": "قرارات قيادية غيّرت المسار"
+    },
+    {
+     "key": "lessons",
+     "label": "ما تعلمته عن نفسك قائدًا، وما ستفعله بشكل مختلف"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: كيف تغيّر أسلوبك القيادي عبر المبادرة، بشاهد من فريقك",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "learning-agreement",
+   "dimension": "leadership",
+   "title_ar": "اتفاق التعلم الثلاثي",
+   "min_level": "beginner",
+   "capstone_sort": null,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "project",
+     "label": "مشروع التطبيق"
+    },
+    {
+     "key": "behaviors",
+     "label": "السلوكان اللذان ستغيرهما في عملك، وكيف سيلاحظهما مديرك"
+    },
+    {
+     "key": "manager",
+     "label": "ما يقدمه مديرك: وقت، أو صلاحية، أو فرصة تطبيق"
+    },
+    {
+     "key": "sponsor",
+     "label": "راعي المبادرة وموعد إحاطته ببطاقتها"
+    },
+    {
+     "key": "review",
+     "label": "موعد مراجعة منتصف الرحلة مع مديرك"
+    }
+   ]
+  },
+  {
+   "key": "milestone-register",
+   "dimension": "milestone",
+   "title_ar": "سجل المعالم",
+   "min_level": "beginner",
+   "capstone_sort": 80,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "project",
+     "label": "اسم المشروع"
+    },
+    {
+     "key": "goal",
+     "label": "هدف المشروع في جملة واحدة"
+    },
+    {
+     "key": "milestones",
+     "label": "المعالم"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: المعلم الذي يحسم مصير المبادرة، ومعيار القرار عنده",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "stage-gate",
+   "dimension": "milestone",
+   "title_ar": "ورقة قرار بوابة المرحلة",
+   "min_level": "intermediate",
+   "capstone_sort": 140,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "project",
+     "label": "المشروع"
+    },
+    {
+     "key": "gate",
+     "label": "البوابة أو المرحلة"
+    },
+    {
+     "key": "status",
+     "label": "الحالة مقابل خط الأساس"
+    },
+    {
+     "key": "risks",
+     "label": "المخاطر المفتوحة"
+    },
+    {
+     "key": "justification",
+     "label": "مبرر الاستمرار"
+    },
+    {
+     "key": "decision",
+     "label": "القرار المقترح"
+    },
+    {
+     "key": "alternative",
+     "label": "البديل إن لم يُعتمد القرار"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: المعيار الذي لو لم يتحقق لأوصيت بالإيقاف",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "portfolio-review",
+   "dimension": "milestone",
+   "title_ar": "مراجعة المحفظة",
+   "min_level": "advanced",
+   "capstone_sort": 115,
+   "scopes": [
+    "portfolio"
+   ],
+   "active": true,
+   "fields": [
+    {
+     "key": "portfolio",
+     "label": "المحفظة أو الإدارة"
+    },
+    {
+     "key": "criteria",
+     "label": "معايير المفاضلة"
+    },
+    {
+     "key": "initiatives",
+     "label": "المبادرات"
+    },
+    {
+     "key": "stop",
+     "label": "المبادرة الموقفة أو المعاد توجيهها، ومبرر القرار"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: ما الذي يدفعك إلى إعادة المفاضلة قبل موعد المراجعة",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "initiative-charter",
+   "dimension": "milestone",
+   "title_ar": "بطاقة المبادرة",
+   "min_level": "beginner",
+   "capstone_sort": 10,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "title",
+     "label": "اسم المبادرة"
+    },
+    {
+     "key": "objective",
+     "label": "الهدف الاستراتيجي الذي تخدمه في جهتك"
+    },
+    {
+     "key": "problem",
+     "label": "المشكلة أو الفرصة بالأرقام"
+    },
+    {
+     "key": "in_scope",
+     "label": "داخل النطاق"
+    },
+    {
+     "key": "out_scope",
+     "label": "خارج النطاق"
+    },
+    {
+     "key": "deliverables",
+     "label": "المخرجات الرئيسة"
+    },
+    {
+     "key": "start",
+     "label": "تاريخ البدء"
+    },
+    {
+     "key": "end",
+     "label": "تاريخ الانتهاء المستهدف"
+    },
+    {
+     "key": "sponsor",
+     "label": "الراعي: الاسم والمنصب"
+    },
+    {
+     "key": "sponsor_email",
+     "label": "بريد الراعي"
+    },
+    {
+     "key": "constraints",
+     "label": "القيود والافتراضات الكبرى",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: معيار نجاح كل مخرج رئيس، ومن يعلن تحققه",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "wbs",
+   "dimension": "milestone",
+   "title_ar": "هيكل تجزئة العمل",
+   "min_level": "intermediate",
+   "capstone_sort": 70,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "packages",
+     "label": "حزم العمل"
+    },
+    {
+     "key": "dictionary",
+     "label": "قاموس الحزم: معيار اكتمال أهم ثلاث حزم"
+    },
+    {
+     "key": "rule",
+     "label": "كيف تحققت من قاعدة 100%"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: الحزم الأعلى خطرًا على الموعد، ولماذا",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "schedule",
+   "dimension": "milestone",
+   "title_ar": "الجدول الزمني والمسار الحرج",
+   "min_level": "beginner",
+   "capstone_sort": 90,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "activities",
+     "label": "الأنشطة"
+    },
+    {
+     "key": "critical",
+     "label": "المسار الحرج وما الذي يهدده",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "buffer",
+     "label": "الاحتياطي الزمني ومكانه ومبرره",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "sensitivity",
+     "label": "سيناريو التأخير: أثر تأخر أخطر نشاط شهرًا",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: المعالم الحاكمة في الجدول، والقرار المرتبط بكل منها",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "cost-plan",
+   "dimension": "milestone",
+   "title_ar": "الموارد والتكلفة",
+   "min_level": "intermediate",
+   "capstone_sort": 100,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "items",
+     "label": "بنود التكلفة"
+    },
+    {
+     "key": "envelope",
+     "label": "الميزانية المتاحة أو المعتمدة (ريال)"
+    },
+    {
+     "key": "contingency",
+     "label": "نسبة الاحتياطي %"
+    },
+    {
+     "key": "funding",
+     "label": "مصدر التمويل ومن يعتمده"
+    },
+    {
+     "key": "cba",
+     "label": "التكلفة مقابل المنفعة: متى تسترد المبادرة كلفتها",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: متى يُراجع تقدير التكلفة عند المعالم، ومن يقرر استخدام الاحتياطي",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "roadmap",
+   "dimension": "milestone",
+   "title_ar": "خريطة طريق البرنامج",
+   "min_level": "beginner",
+   "capstone_sort": 110,
+   "scopes": [
+    "program"
+   ],
+   "active": true,
+   "fields": [
+    {
+     "key": "blueprint",
+     "label": "الحالة المستهدفة بعد البرنامج"
+    },
+    {
+     "key": "tranches",
+     "label": "الدفعات"
+    },
+    {
+     "key": "dependencies",
+     "label": "الاعتماديات بين المشاريع وإدارتها"
+    },
+    {
+     "key": "resources",
+     "label": "التنازع على الموارد المشتركة وقواعد حسمه",
+     "min_level": "intermediate"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: معلم التكامل الذي يحكم منفعة الدفعة الأولى",
+     "track": true
+    }
+   ]
+  },
+  {
+   "key": "raid",
+   "dimension": "milestone",
+   "title_ar": "سجل المخاطر والافتراضات والاعتماديات",
+   "min_level": "beginner",
+   "capstone_sort": 130,
+   "scopes": [],
+   "active": true,
+   "fields": [
+    {
+     "key": "items",
+     "label": "البنود"
+    },
+    {
+     "key": "appetite",
+     "label": "شهية المخاطرة: ما الذي تقبله الجهة وما لا تقبله",
+     "min_level": "advanced"
+    },
+    {
+     "key": "track_depth",
+     "label": "تعمق المسار: أخطر بند على المعالم، ومؤشر الإنذار المبكر له",
+     "track": true
+    }
+   ]
+  }
+ ],
+ "labs": [
+  {
+   "key": "schedule-critical-path",
+   "dimension": "milestone",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "مخطط الجدول والمسار الحرج",
+   "sort": 1
+  },
+  {
+   "key": "benefits-map",
+   "dimension": "impact",
+   "chapter_key": "ch2",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "خريطة المنافع وسلسلة القيمة",
+   "sort": 1
+  },
+  {
+   "key": "indicator-check",
+   "dimension": "impact",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "فاحص المؤشرات",
+   "sort": 2
+  },
+  {
+   "key": "stakeholder-map",
+   "dimension": "leadership",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "خريطة أصحاب المصلحة",
+   "sort": 1
+  },
+  {
+   "key": "raci-delegation",
+   "dimension": "leadership",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "مصفوفة المسؤوليات والتفويض",
+   "sort": 2
+  },
+  {
+   "key": "red-gate",
+   "dimension": "milestone",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "البوابة الحمراء",
+   "sort": 3
+  },
+  {
+   "key": "hard-week",
+   "dimension": "leadership",
+   "chapter_key": "ch2",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "الأسبوع الصعب",
+   "sort": 3
+  },
+  {
+   "key": "direct-challenge",
+   "dimension": "leadership",
+   "chapter_key": "ch6",
+   "min_level": "advanced",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "تحدٍّ قيادي بأداة DIRECT",
+   "sort": 1
+  },
+  {
+   "key": "evm-checkpoint",
+   "dimension": "milestone",
+   "chapter_key": "ch4",
+   "min_level": "advanced",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "القيمة المكتسبة عند المعلم",
+   "sort": 4
+  },
+  {
+   "key": "risk-register",
+   "dimension": "milestone",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "سجل المخاطر والمشكلات والتغيير",
+   "sort": 2
+  },
+  {
+   "key": "portfolio-review",
+   "dimension": "milestone",
+   "chapter_key": "ch5",
+   "min_level": "advanced",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "مراجعة المحفظة",
+   "sort": 1
+  },
+  {
+   "key": "conflict-modes",
+   "dimension": "leadership",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "audience": "granted",
+   "active": true,
+   "title_ar": "أنماط إدارة الخلاف",
+   "sort": 3
+  }
+ ],
+ "requirements": [
+  {
+   "code": "AP-OK",
+   "stage_key": "approval",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "اعتماد المستوى من المستشار"
+  },
+  {
+   "code": "AP-INT",
+   "stage_key": "approval",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "مقابلة التحقق مع المستشار (عند الحاجة)"
+  },
+  {
+   "code": "A-DONE",
+   "stage_key": "assessment",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "إكمال القياس المبدئي"
+  },
+  {
+   "code": "C-BRIEF",
+   "stage_key": "consulting",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "ملخص التحدي في صفحة واحدة قبل الجلسة"
+  },
+  {
+   "code": "C-MEET",
+   "stage_key": "consulting",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "حضور الجلسة الاستشارية"
+  },
+  {
+   "code": "C-ACT",
+   "stage_key": "consulting",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "خطة تنفيذ التوصيات"
+  },
+  {
+   "code": "CP-FINAL",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "اعتماد وثيقة مبادرتك (مشروع التخرج)"
+  },
+  {
+   "code": "E-POST",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "إكمال القياس البعدي"
+  },
+  {
+   "code": "E-CASE",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "قصة نجاح مشروعك بالأدلة"
+  },
+  {
+   "code": "E-PRES",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "عرض المشروع أمام لجنة التقييم"
+  },
+  {
+   "code": "E-MGR",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "إفادة المدير المباشر"
+  },
+  {
+   "code": "E-360",
+   "stage_key": "evaluation",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "تقييم 360 بعدي بالأداة القبلية نفسها"
+  },
+  {
+   "code": "L-SESS",
+   "stage_key": "leadership_coaching",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "حضور {sessions:L-SESS} توجيه فردية"
+  },
+  {
+   "code": "L-PLAN",
+   "stage_key": "leadership_coaching",
+   "dimension": "leadership",
+   "level": null,
+   "active": true,
+   "title_ar": "خطة التطوير القيادي الشخصية"
+  },
+  {
+   "code": "L-MAP",
+   "stage_key": "leadership_coaching",
+   "dimension": "leadership",
+   "level": "beginner",
+   "active": true,
+   "title_ar": "تحديث خريطة أصحاب المصلحة لمشروعك"
+  },
+  {
+   "code": "L-DIRECT",
+   "stage_key": "leadership_coaching",
+   "dimension": "leadership",
+   "level": "advanced",
+   "active": true,
+   "title_ar": "تطبيق أداة DIRECT على تحدٍّ حقيقي"
+  },
+  {
+   "code": "L-360A",
+   "stage_key": "leadership_coaching",
+   "dimension": "leadership",
+   "level": "advanced",
+   "active": false,
+   "title_ar": "تقييم 360 درجة مختصر (المدير والزملاء والفريق)"
+  },
+  {
+   "code": "L-360I",
+   "stage_key": "leadership_coaching",
+   "dimension": "leadership",
+   "level": "intermediate",
+   "active": false,
+   "title_ar": "تقييم 360 درجة مختصر (المدير والزملاء)"
+  },
+  {
+   "code": "O-SESS",
+   "stage_key": "ojt_coaching",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "حضور {sessions:O-SESS} توجيه أسبوعية"
+  },
+  {
+   "code": "O-MREG",
+   "stage_key": "ojt_coaching",
+   "dimension": "milestone",
+   "level": null,
+   "active": true,
+   "title_ar": "بناء سجل معالم لمشروع من عملك"
+  },
+  {
+   "code": "O-BREG",
+   "stage_key": "ojt_coaching",
+   "dimension": "impact",
+   "level": null,
+   "active": true,
+   "title_ar": "بناء سجل منافع لنفس المشروع"
+  },
+  {
+   "code": "O-GATE",
+   "stage_key": "ojt_coaching",
+   "dimension": "milestone",
+   "level": "advanced",
+   "active": true,
+   "title_ar": "إدارة جلسة بوابة مرحلة موثقة"
+  },
+  {
+   "code": "O-KPI",
+   "stage_key": "ojt_coaching",
+   "dimension": "impact",
+   "level": "intermediate",
+   "active": false,
+   "title_ar": "مؤشرات أثر بخط أساس وقيمة مستهدفة"
+  },
+  {
+   "code": "O-CHAIN",
+   "stage_key": "ojt_coaching",
+   "dimension": "impact",
+   "level": "advanced",
+   "active": true,
+   "title_ar": "نظرية التغيير لمشروعك: من المخرجات إلى الأثر"
+  },
+  {
+   "code": "P-INFO",
+   "stage_key": "profile",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "إكمال البيانات الأساسية"
+  },
+  {
+   "code": "P-CV",
+   "stage_key": "profile",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "رفع السيرة الذاتية"
+  },
+  {
+   "code": "P-PROJECT",
+   "stage_key": "profile",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "تسمية مشروع التطبيق ووصفه في سطرين"
+  },
+  {
+   "code": "R-ISSUE",
+   "stage_key": "report",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "استلام التقرير النهائي"
+  },
+  {
+   "code": "R-6M",
+   "stage_key": "report",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "قراءة الأثر بعد ستة أشهر"
+  },
+  {
+   "code": "S-CHECK",
+   "stage_key": "support",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "متابعة شهرية مع الموجّه ({sessions:S-CHECK})"
+  },
+  {
+   "code": "S-COP",
+   "stage_key": "support",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "المشاركة في لقاءات مجتمع الممارسة"
+  },
+  {
+   "code": "S-UPDATE",
+   "stage_key": "support",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "سجل المنافع محدّثًا بالقراءات الفعلية"
+  },
+  {
+   "code": "CP-CARD",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "بطاقة مبادرتك: بداية مشروع التخرج"
+  },
+  {
+   "code": "T-AGREE",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "اتفاق التعلم الثلاثي: أنت ومديرك وراعي مبادرتك"
+  },
+  {
+   "code": "T-PRE",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "قراءة الباب التمهيدي لكل إطار قبل اليوم الأول"
+  },
+  {
+   "code": "T-ATTEND",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "حضور الأيام التدريبية ({days:T-ATTEND})"
+  },
+  {
+   "code": "T-HB",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "قراءة كتيبك الشخصي"
+  },
+  {
+   "code": "T-PLAN",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "رفع خطة التطبيق الأولية (مخرج آخر أيام التدريب)"
+  },
+  {
+   "code": "T-MA",
+   "stage_key": "training",
+   "dimension": "milestone",
+   "level": "advanced",
+   "active": true,
+   "title_ar": "تمرين: تصميم بوابات المراحل لمحفظة من مشروعين أو أكثر"
+  },
+  {
+   "code": "T-MB",
+   "stage_key": "training",
+   "dimension": "milestone",
+   "level": "beginner",
+   "active": true,
+   "title_ar": "تمرين: تحويل جدول مشروعك إلى خمسة معالم قرار"
+  },
+  {
+   "code": "T-360",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "تقييم 360 قبلي مختصر (المدير والزملاء)"
+  },
+  {
+   "code": "T-REACT",
+   "stage_key": "training",
+   "dimension": null,
+   "level": null,
+   "active": true,
+   "title_ar": "رأيك في أيام التدريب"
+  }
+ ],
+ "stages": [
+  {
+   "key": "profile",
+   "active": true
+  },
+  {
+   "key": "assessment",
+   "active": true
+  },
+  {
+   "key": "approval",
+   "active": true
+  },
+  {
+   "key": "training",
+   "active": true
+  },
+  {
+   "key": "ojt_coaching",
+   "active": true
+  },
+  {
+   "key": "consulting",
+   "active": true
+  },
+  {
+   "key": "leadership_coaching",
+   "active": true
+  },
+  {
+   "key": "support",
+   "active": true
+  },
+  {
+   "key": "evaluation",
+   "active": true
+  },
+  {
+   "key": "report",
+   "active": true
+  }
+ ],
+ "chapters": [
+  {
+   "dimension": "impact",
+   "chapter_key": "intro",
+   "min_level": "beginner",
+   "title_ar": "القسم التمهيدي: التعريف بالإطار وأهدافه"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch1",
+   "min_level": "beginner",
+   "title_ar": "الباب الأول: المشهد العالمي والمستخلص القيادي"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch2",
+   "min_level": "beginner",
+   "title_ar": "الباب الثاني: سلسلة القيمة والأثر"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch3",
+   "min_level": "beginner",
+   "title_ar": "الباب الثالث: النموذج الفكري لقيادة الأثر"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "title_ar": "الباب الرابع: عمق المفهوم، القاموس، النماذج ومنتجات العمل"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch5",
+   "min_level": "intermediate",
+   "title_ar": "الباب الخامس: الطبقات الثلاث (المشروع، البرنامج، المحفظة)"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "ch6",
+   "min_level": "advanced",
+   "title_ar": "الباب السادس: النظام البيئي وجدارات القائد"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "labs",
+   "min_level": "beginner",
+   "title_ar": "التطبيقات العملية والمختبرات"
+  },
+  {
+   "dimension": "impact",
+   "chapter_key": "close",
+   "min_level": "beginner",
+   "title_ar": "الخلاصة: خمس رسائل جوهرية"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "intro",
+   "min_level": "beginner",
+   "title_ar": "القسم التمهيدي: التعريف بالإطار وأهدافه"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch1",
+   "min_level": "beginner",
+   "title_ar": "الباب الأول: المشهد العالمي والمستخلص القيادي"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch2",
+   "min_level": "beginner",
+   "title_ar": "الباب الثاني: جدارة الاستجابة المنضبطة"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch3",
+   "min_level": "beginner",
+   "title_ar": "الباب الثالث: جدارة انتقال العهدة"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "title_ar": "الباب الرابع: عمق المفهوم، القاموس، النماذج ومنتجات العمل"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch5",
+   "min_level": "intermediate",
+   "title_ar": "الباب الخامس: الطبقات الثلاث (المشروع، البرنامج، المحفظة)"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "ch6",
+   "min_level": "advanced",
+   "title_ar": "الباب السادس: النظام البيئي وجدارات القائد"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "labs",
+   "min_level": "beginner",
+   "title_ar": "التطبيقات العملية والمختبرات"
+  },
+  {
+   "dimension": "leadership",
+   "chapter_key": "close",
+   "min_level": "beginner",
+   "title_ar": "الخلاصة: خمس رسائل جوهرية"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "intro",
+   "min_level": "beginner",
+   "title_ar": "القسم التمهيدي: التعريف بالإطار وأهدافه"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch1",
+   "min_level": "beginner",
+   "title_ar": "الباب الأول: المشهد العالمي والمستخلص القيادي"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch2",
+   "min_level": "beginner",
+   "title_ar": "الباب الثاني: إدارة المشاريع التنموية"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch3",
+   "min_level": "beginner",
+   "title_ar": "الباب الثالث: النموذج الفكري لصناعة القرار"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch4",
+   "min_level": "beginner",
+   "title_ar": "الباب الرابع: عمق المفهوم، القاموس، النماذج ومنتجات العمل"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch5",
+   "min_level": "intermediate",
+   "title_ar": "الباب الخامس: الطبقات الثلاث (المشروع، البرنامج، المحفظة)"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "ch6",
+   "min_level": "advanced",
+   "title_ar": "الباب السادس: النظام البيئي وجدارات القائد"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "labs",
+   "min_level": "beginner",
+   "title_ar": "التطبيقات العملية والمختبرات"
+  },
+  {
+   "dimension": "milestone",
+   "chapter_key": "close",
+   "min_level": "beginner",
+   "title_ar": "الخلاصة: خمس رسائل جوهرية"
+  }
+ ]
+}

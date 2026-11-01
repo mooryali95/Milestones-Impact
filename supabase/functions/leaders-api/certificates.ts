@@ -7,6 +7,7 @@
 // ذلك عند التحقق. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
 import { audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
+import { displayTitles } from './profiles.ts';
 import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
 
 type Body = Record<string, any>;
@@ -113,7 +114,8 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string) {
   const levels = Object.fromEntries((pl.data || []).map((x: any) => [x.dimension, x.level]));
   const key = trackKey(levels);
   const [track, prCert, def] = await Promise.all([
-    key ? db.from('tracks').select('title_ar, title_en').eq('key', key).maybeSingle().then((r: any) => r.data) : null,
+    // الشهادة تحمل اسم ملف التعريف الذي رآه المشارك، لا عنوان المسار الداخلي
+    key ? displayTitles().then((t) => (t[key] ? { title_ar: t[key].ar, title_en: t[key].en } : null)) : null,
     programCert(cohort?.program_id || await defaultProgramId()),
     journeyDefinition(p),
   ]);
@@ -296,7 +298,7 @@ export async function preview(b: Body) {
     success: true,
     certificate: snapshotOf({
       serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
-      track: { title_ar: 'مسار التوازن القيادي', title_en: 'Balanced Leadership Track' }, start: now, end: now,
+      track: { title_ar: 'القيادة من خلال الآخرين', title_en: 'Leading Through Others' }, start: now, end: now,
       org, profile: profileFor(draft, prCert, cert),
     }),
   };

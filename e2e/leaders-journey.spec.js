@@ -15,7 +15,12 @@ function server() {
     profile: {
       full_name: 'سارة عبدالله الأحمد', phone: s.profileDone ? '0500000000' : '', job_title: s.profileDone ? 'مديرة مشاريع' : '',
       organization_name: s.profileDone ? 'جهة الاختبار' : '', years_experience: s.profileDone ? 8 : null,
-      approved: s.approved, level: s.assessed ? 'intermediate' : null, track: s.approved ? { title: 'مسار التنفيذ المؤثر' } : null,
+      approved: s.approved, level: s.assessed ? 'intermediate' : null, track: s.approved ? {
+        // ملف التعريف الذي يراه المشارك (لا عنوان المسار الداخلي) وسطر أقوى أطره
+        title: 'القيادة من خلال الآخرين', summary: 'تتقن أدوات العمل، والفرق الذي ينتظرك في الناس.',
+        strengths: 'أقوى أطرك: إدارة المشروعات وتحويل المشروع إلى أثر. تبني عليهما وأنت تعمّق تمكين القائد.',
+        journey: 'المختبر: خريطة أصحاب المصلحة، والأسبوع الصعب، وأنماط إدارة الخلاف.',
+      } : null,
     },
     journey: [
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active'),
@@ -140,6 +145,9 @@ test('رحلة المشارك: بعد الاعتماد يفتح الكتيب، �
   await page.goto(APP);
 
   await expect(page.getByRole('heading', { name: /رحلتك مفتوحة/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'القيادة من خلال الآخرين' })).toBeVisible();
+  await expect(page.getByText('أقوى أطرك: إدارة المشروعات وتحويل المشروع إلى أثر.', { exact: false })).toBeVisible();
+  await expect(page.getByText('خريطة أصحاب المصلحة، والأسبوع الصعب', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'افتح كتيبي' }).click();
   await expect(page.getByRole('heading', { name: 'كتيب القائد' }).first()).toBeVisible();
   await expect(page.getByText('نسخة شخصية مرخصة باسم')).toBeVisible();

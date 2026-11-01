@@ -4,9 +4,10 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { trackProject } from './capstone.js';
+import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId } from './programs.ts';
 
@@ -79,8 +80,9 @@ export async function org(b: Body) {
   const rows = await all((f, t) => orgFilter(db.from('participants')
     .select('id, full_name, email, phone, job_title, organization_name, status, source, org_via, campaign, referrer_host, created_at, last_login_at, placements(dimension, level, approved_at)'), id)
     .order('created_at', { ascending: false }).order('id').range(f, t));
-  const { data: tracks } = await db.from('tracks').select('key, title_ar');
-  const titles = Object.fromEntries((tracks || []).map((t: any) => [t.key, t.title_ar]));
+  // ما تراه الجهة اسم ملف التعريف لا عنوان المسار الداخلي
+  const shown = await displayTitles();
+  const titles = Object.fromEntries(Object.entries(shown).map(([k, v]) => [k, v.ar]));
   const participants = rows.map((p: any) => {
     const lv = Object.fromEntries((p.placements || []).map((x: any) => [x.dimension, x.level]));
     const key = trackKey(lv);
@@ -481,8 +483,11 @@ export async function track(b: Body) {
     ? await db.from('participants').select('id, full_name, email, organization_name, status').in('id', ids.map((x) => x.id))
     : { data: [] };
   const approved = new Set(ids.filter((x) => x.approved).map((x) => x.id));
+  const priority = (t.data as any)?.priority_dimension || null;
   return {
     success: true, track: t.data || { key }, levels,
+    // ما يراه المشارك فعلًا: ملف التعريف وسطر أقوى أطره
+    profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
     // المشروع التطبيقي مشتق من فصول الوثيقة بنطاق المشروع، ولا يُكتب يدويًا
     project: trackProject(models.data || [], levels, 'project', (t.data as any)?.priority_dimension || null),
     participants: (ps || []).map((p: any) => ({ ...p, approved: approved.has(p.id) })),

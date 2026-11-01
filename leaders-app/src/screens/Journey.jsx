@@ -95,8 +95,9 @@ function Competency({ profile }) {
   );
 }
 
-// المسار: واحد من 27 تركيبة لمستوياتك في الأطر الثلاثة. يرى المشارك
-// اسمه ووصفه وتوجيه رحلته فقط، والتفصيل لكل إطار للإدارة.
+// المسار: واحد من 27 تركيبة لمستوياتك في الأطر الثلاثة، يبقى مفتاحًا داخليًا.
+// يرى المشارك ملف تعريفه (إطار الأولوية بمستواه فيه): اسمه ووصفه ورحلته، وسطرًا
+// مولَّدًا بأقوى أطره، والتفصيل لكل إطار للإدارة.
 const points = (t) => String(t || '').split('\n').map((x) => x.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
 
 function TrackCard({ profile, cohort }) {
@@ -117,6 +118,7 @@ function TrackCard({ profile, cohort }) {
         </div>
         <h3>{t.title}</h3>
         {t.summary && <p>{t.summary}</p>}
+        {t.strengths && <p className="track-strengths">{t.strengths}</p>}
       </header>
       <div className="track-body">
         {focus.length > 0 && (

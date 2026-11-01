@@ -17,6 +17,7 @@ import {
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
+import { profileFor } from './profiles.ts';
 
 type Body = Record<string, any>;
 
@@ -46,6 +47,9 @@ async function build(p: any) {
   // وزن المعيار لا يُضاعف إذا تساوت المستويات الثلاثة (rubricPriority).
   const priority = await participantPriority(p.id, levels, (track as any).data?.priority_dimension || null);
   const weighted = rubricPriority(levels, priority);
+  // العنوان المعروض للمشارك وراعيه: ملف التعريف، وإلا عنوان المسار
+  const profile = await profileFor(levels, priority);
+  if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
   const mine = capstoneModels(all, levels, scope);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};

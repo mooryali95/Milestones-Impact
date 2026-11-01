@@ -115,6 +115,13 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
           <div><h4>المشروع التطبيقي</h4><p>{r.project?.text || 'لا فصول وثيقة بعد'}</p><small className="la-muted">يُشتق من فصول وثيقة المبادرة بمستويات المسار، فيُحرَّر من النماذج لا من هنا.</small></div>
           <div><h4>توجيه الرحلة</h4><ul>{lines(t.journey_ar).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
         </div>
+        {r.profile && (
+          <div className="la-track-profile">
+            <small className="la-muted">ما يراه المشارك: ملف التعريف «{r.profile.title_ar}» ({r.profile.title_en}). العنوان أعلاه داخلي للإدارة.</small>
+            <p>{r.profile.summary_ar}</p>
+            {r.strengths && <p className="la-muted">{r.strengths}</p>}
+          </div>
+        )}
       </section>
 
       <section className="la-card">

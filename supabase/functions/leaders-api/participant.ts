@@ -4,11 +4,12 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
+import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
 import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
@@ -288,7 +289,10 @@ async function trackFor(p: any, levels: Record<string, string>, scope: string | 
   ]);
   const t: any = data || { key };
   const priority = await participantPriority(p.id, levels, t.priority_dimension || null);
-  return { ...t, priority_dimension: priority, project: trackProject(models.data || [], levels, scope, priority)?.text || null };
+  return {
+    ...t, priority_dimension: priority, profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
+    project: trackProject(models.data || [], levels, scope, priority)?.text || null,
+  };
 }
 // المؤشرات المركّبة من آخر قياس مبدئي مُرسل، لكسر التعادل في محور الأولوية
 export async function baselineComposites(participantId: string) {
@@ -311,10 +315,13 @@ export async function participantPriority(participantId: string, levels: Record<
   }
   return priorityFor(levels, await baselineComposites(participantId), def);
 }
+// المشارك يرى ملف التعريف (العنوان والوصف والرحلة) وسطر أقوى أطره؛ والإدارة
+// ترى فوقها عنوان المسار الداخلي ورمزه
 const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
-  ...(audience === 'admin' ? { key: t.key, priority_dimension: t.priority_dimension || null } : {}),
-  title: t.title_ar || null, summary: t.summary_ar || null, focus: t.focus_ar || null,
-  project: t.project || null, journey: t.journey_ar || null,
+  ...(audience === 'admin' ? { key: t.key, priority_dimension: t.priority_dimension || null, track_title: t.title_ar || null, profile_key: t.profile?.key || null } : {}),
+  title: t.profile?.title_ar || t.title_ar || null, summary: t.profile?.summary_ar || t.summary_ar || null,
+  strengths: t.strengths || null, focus: t.focus_ar || null,
+  project: t.project || null, journey: t.profile?.journey_ar || t.journey_ar || null,
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر

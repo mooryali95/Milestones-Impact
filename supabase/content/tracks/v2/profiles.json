@@ -1,0 +1,190 @@
+{
+  "_about": "ملفات التعريف السبعة: هوية المسار كما يراها المشارك. المفتاح = إطار الأولوية + مستواه فيه. المسارات الـ27 تبقى مفتاحًا داخليًا (M{m}I{i}L{l}) تُطوى إليها بحسب ملحق التدقيق 4 §7. journey_ar أسطر «عنوان: نص»، وكل ما تعد به مسجّل في promises ويتحقق منه scripts/tracks/verify.mjs على ما يسلّمه النظام فعلًا. لا وعد بنصيب من الجلسات، ولا ورشة أو عيادة أو حلقة بحسب المستوى (لا متطلب رحلة يفرّقها).",
+  "profiles": [
+    {
+      "key": "milestone-beginner",
+      "priority_dimension": "milestone",
+      "level": "beginner",
+      "title_ar": "من الخطة إلى نقاط القرار",
+      "title_en": "From Plan to Decision Points",
+      "summary_ar": "أولويتك الآن إدارة المشروعات: أن تتحول خطة مبادرتك من قائمة مهام وتواريخ إلى معالم يُتخذ عند كل منها قرار واضح، وأن ترى مبكرًا ما يؤخرها وما يهددها قبل أن يصير مشكلة على طاولة الراعي.",
+      "journey_ar": [
+        "الكتيب: أبواب إدارة المشروعات من التمهيد إلى الباب الرابع، تقرؤها وتجيب عن أسئلة كل باب.",
+        "المختبر: مخطط الجدول والمسار الحرج، والبوابة الحمراء، وسجل المخاطر والمشكلات والتغيير؛ تتدرب فيها على حالات قبل أن تنقلها إلى مبادرتك.",
+        "وثيقة مبادرتك: معايير إدارة المشروعات وزنها مضاعف في تقييمها، وتجيب عن سؤال تعمق إضافي في بطاقة المبادرة وسجل المعالم والجدول الزمني والمسار الحرج وسجل المخاطر والافتراضات والاعتماديات.",
+        "تمرين مستواك: تحويل جدول مشروعك إلى معالم قرار، لكل منها ما يُقرَّر عنده."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch4" },
+        { "kind": "lab", "key": "schedule-critical-path" },
+        { "kind": "lab", "key": "red-gate" },
+        { "kind": "lab", "key": "risk-register" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["initiative-charter", "milestone-register", "schedule", "raid"] },
+        { "kind": "requirement", "code": "T-MB" }
+      ]
+    },
+    {
+      "key": "milestone-intermediate",
+      "priority_dimension": "milestone",
+      "level": "intermediate",
+      "title_ar": "إحكام التنفيذ بالبوابات والتكلفة",
+      "title_en": "Tightening Delivery: Gates and Cost",
+      "summary_ar": "تعرف أدوات التخطيط وتستعملها، والخطوة التالية أن تصمد خطتك أمام أول تغيير: مبادرة مجزأة إلى حزم عمل لكل منها مالك وتكلفة، وقرار عبور موثق عند كل بوابة بين الاستمرار والتصحيح والإيقاف.",
+      "journey_ar": [
+        "الكتيب: يُضاف إلى أبواب إدارة المشروعات الأساسية الباب الخامس، وهو ما يميّز مستواك فيها.",
+        "المختبر: مخطط الجدول والمسار الحرج، والبوابة الحمراء، وسجل المخاطر والمشكلات والتغيير.",
+        "وثيقة مبادرتك: تضيف إليها هيكل تجزئة العمل والموارد والتكلفة وورقة قرار بوابة المرحلة، وتحدد في الجدول الزمني الأنشطة الحرجة والاحتياطي الزمني.",
+        "التقييم: معايير إدارة المشروعات وزنها مضاعف، وفي كل فصل من فصولها سؤال تعمق إضافي: بطاقة المبادرة، وهيكل تجزئة العمل، وسجل المعالم، والجدول الزمني والمسار الحرج، والموارد والتكلفة، وسجل المخاطر والافتراضات والاعتماديات، وورقة قرار بوابة المرحلة."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch5" },
+        { "kind": "lab", "key": "schedule-critical-path" },
+        { "kind": "lab", "key": "red-gate" },
+        { "kind": "lab", "key": "risk-register" },
+        { "kind": "model", "key": "wbs" },
+        { "kind": "model", "key": "cost-plan" },
+        { "kind": "model", "key": "stage-gate" },
+        { "kind": "field", "model": "schedule", "field": "critical" },
+        { "kind": "field", "model": "schedule", "field": "buffer" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["initiative-charter", "wbs", "milestone-register", "schedule", "cost-plan", "raid", "stage-gate"] }
+      ]
+    },
+    {
+      "key": "milestone-advanced",
+      "priority_dimension": "milestone",
+      "level": "advanced",
+      "title_ar": "قرارات التنفيذ تحت الضغط",
+      "title_en": "Delivery Decisions Under Pressure",
+      "summary_ar": "مستواك احترافي في الأطر الثلاثة، فتبدأ أولويتك من إدارة المشروعات لأنها الأولى في ترتيب الأطر عند التساوي. المنتظر منك هنا قرارات لا خطط: أن تختبر حساسية الجدول، وتزن التكلفة بالمنفعة، وتحدد كم من المخاطرة تقبله الجهة قبل أن تلتزم.",
+      "journey_ar": [
+        "الكتيب: الباب الخامس والباب السادس من إدارة المشروعات فوق أبوابها الأساسية.",
+        "المختبر: القيمة المكتسبة عند المعلم، ومعه مخطط الجدول والمسار الحرج، والبوابة الحمراء، وسجل المخاطر والمشكلات والتغيير.",
+        "وثيقة مبادرتك: حقول تخص مستواك في فصولها: حساسية الجدول، والتكلفة مقابل المنفعة، وحدود المخاطرة المقبولة، وما تتنازل عنه الجهة لأجل المبادرة، والتكلفة الغارقة في قرار البوابة، والواجهات بين حزم العمل والأطراف الأخرى. ومعايير إدارة المشروعات وزنها مضاعف.",
+        "متطلبات مستواك: إدارة جلسة بوابة مرحلة موثقة، وتمرين في تصميم بوابات المراحل لأكثر من مشروع معًا."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch6" },
+        { "kind": "lab", "key": "evm-checkpoint" },
+        { "kind": "lab", "key": "schedule-critical-path" },
+        { "kind": "lab", "key": "red-gate" },
+        { "kind": "lab", "key": "risk-register" },
+        { "kind": "field", "model": "schedule", "field": "sensitivity" },
+        { "kind": "field", "model": "cost-plan", "field": "cba" },
+        { "kind": "field", "model": "raid", "field": "appetite" },
+        { "kind": "field", "model": "initiative-charter", "field": "trade_off" },
+        { "kind": "field", "model": "stage-gate", "field": "sunk_cost" },
+        { "kind": "field", "model": "wbs", "field": "interfaces" },
+        { "kind": "rubric_weight" },
+        { "kind": "requirement", "code": "O-GATE" },
+        { "kind": "requirement", "code": "T-MA" }
+      ]
+    },
+    {
+      "key": "impact-beginner",
+      "priority_dimension": "impact",
+      "level": "beginner",
+      "title_ar": "من المخرج إلى المنفعة",
+      "title_en": "From Output to Benefit",
+      "summary_ar": "تسلّم ما تعد به في موعده، والسؤال الذي ينتظرك بعد التسليم: ماذا تغيّر للمستفيد؟ تتعلم أن تفرّق بين المخرج والمنفعة والأثر، وأن تكتب لكل منفعة مؤشرًا بخط أساس ومستهدف، ومالكًا من الجهة يبقى بعد إغلاق المبادرة.",
+      "journey_ar": [
+        "الكتيب: أبواب تحويل المشروع إلى أثر من التمهيد إلى الباب الرابع، وأقربها إلى أولويتك الباب الثاني: سلسلة القيمة والأثر.",
+        "المختبر: خريطة المنافع وسلسلة القيمة، وفاحص المؤشرات.",
+        "وثيقة مبادرتك: سجل المنافع، ونظرية التغيير في صيغتها الأولى (الأثر بعيد المدى والسلسلة السببية من الأنشطة إلى الأثر)، وفي كل منهما سؤال تعمق إضافي.",
+        "التقييم: معايير الأثر وزنها مضاعف في تقييم وثيقتك."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch2" },
+        { "kind": "lab", "key": "benefits-map" },
+        { "kind": "lab", "key": "indicator-check" },
+        { "kind": "model", "key": "benefits-register" },
+        { "kind": "model", "key": "theory-of-change" },
+        { "kind": "field", "model": "theory-of-change", "field": "impact" },
+        { "kind": "field", "model": "theory-of-change", "field": "chain" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["theory-of-change", "benefits-register"] }
+      ]
+    },
+    {
+      "key": "impact-intermediate",
+      "priority_dimension": "impact",
+      "level": "intermediate",
+      "title_ar": "الدليل قبل الادعاء",
+      "title_en": "Evidence Before Claims",
+      "summary_ar": "تكتب منافع مبادرتك ومؤشراتها، وما يرفعك الآن أن تدافع عن اختيارك وتثبت نتيجته: لماذا هذا الحل دون بدائله، وما الافتراض الأضعف في سلسلة الأثر، وكيف ستعرف أن المنفعة تحققت بفعل مبادرتك لا بعامل آخر.",
+      "journey_ar": [
+        "الكتيب: يُضاف إلى أبواب تحويل المشروع إلى أثر الأساسية الباب الخامس.",
+        "المختبر: خريطة المنافع وسلسلة القيمة، وفاحص المؤشرات.",
+        "وثيقة مبادرتك: المبرر والبدائل، وخطة القياس والأدلة، ونظرية التغيير كاملة بافتراضها الأضعف وطريقة اختباره مبكرًا، مع سجل المنافع.",
+        "التقييم: معايير الأثر وزنها مضاعف، وفي كل فصل من فصوله الأربعة سؤال تعمق إضافي."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch5" },
+        { "kind": "lab", "key": "benefits-map" },
+        { "kind": "lab", "key": "indicator-check" },
+        { "kind": "model", "key": "options-analysis" },
+        { "kind": "model", "key": "evidence-plan" },
+        { "kind": "field", "model": "theory-of-change", "field": "weakest" },
+        { "kind": "field", "model": "theory-of-change", "field": "test" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["options-analysis", "theory-of-change", "benefits-register", "evidence-plan"] }
+      ]
+    },
+    {
+      "key": "leadership-beginner",
+      "priority_dimension": "leadership",
+      "level": "beginner",
+      "title_ar": "القيادة من خلال الآخرين",
+      "title_en": "Leading Through Others",
+      "summary_ar": "تتقن أدوات العمل، والفرق الذي ينتظرك في الناس: أن يرفع فريقك المشكلة إليك مبكرًا، وأن يعرف كل واحد قراره ومسؤوليته، وأن تبقى ثابتًا حين يشتد الضغط ويتعارض أصحاب المصلحة.",
+      "journey_ar": [
+        "الكتيب: أبواب تمكين القائد من التمهيد إلى الباب الرابع، ومنها جدارة الاستجابة المنضبطة وجدارة انتقال العهدة.",
+        "المختبر: خريطة أصحاب المصلحة، ومصفوفة المسؤوليات والتفويض، والأسبوع الصعب، وأنماط إدارة الخلاف.",
+        "النماذج: تشخيص نمط الخلاف على موقف حقيقي مررت به، إلى جانب فصول وثيقتك.",
+        "وثيقة مبادرتك: معايير القيادة وزنها مضاعف، وتجيب عن سؤال تعمق إضافي في خريطة أصحاب المصلحة، والحوكمة والمسؤوليات، وقيادة التغيير والاستدامة، وخطة التطوير القيادي، وقصة التحول.",
+        "متطلب مستواك: تحديث خريطة أصحاب المصلحة لمشروعك."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch2" },
+        { "kind": "chapter", "chapter": "ch3" },
+        { "kind": "lab", "key": "stakeholder-map" },
+        { "kind": "lab", "key": "raci-delegation" },
+        { "kind": "lab", "key": "hard-week" },
+        { "kind": "lab", "key": "conflict-modes" },
+        { "kind": "model", "key": "conflict-mode" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["stakeholder-map", "governance", "change-sustain", "development-plan", "transformation-story"] },
+        { "kind": "requirement", "code": "L-MAP" }
+      ]
+    },
+    {
+      "key": "leadership-intermediate",
+      "priority_dimension": "leadership",
+      "level": "intermediate",
+      "title_ar": "التأثير فيمن لا يتبعك إداريًا",
+      "title_en": "Influence Beyond Authority",
+      "summary_ar": "تتقدم في التنفيذ والأثر، وما يرفع قيادتك الآن أن تؤثر فيمن لا تملك عليهم سلطة: مديرك، وشركاؤك في الجهات الأخرى، والطرف الآخر في خلاف لا يُحسم بقرار.",
+      "journey_ar": [
+        "الكتيب: يُضاف إلى أبواب تمكين القائد الأساسية الباب الخامس.",
+        "المختبر: الأسبوع الصعب، وأنماط إدارة الخلاف، وخريطة أصحاب المصلحة، ومصفوفة المسؤوليات والتفويض.",
+        "وثيقة مبادرتك: تضيف إلى فصول القيادة أصحاب المصلحة الصامتين، وإيقاع القرار ومسار التصعيد، ومن تمسّهم المبادرة وأين تتوقع مقاومتهم.",
+        "التقييم: معايير القيادة وزنها مضاعف، وفي خريطة أصحاب المصلحة، والحوكمة والمسؤوليات، وقيادة التغيير والاستدامة، وخطة التطوير القيادي، وقصة التحول سؤال تعمق إضافي."
+      ],
+      "promises": [
+        { "kind": "chapter", "chapter": "ch5" },
+        { "kind": "lab", "key": "stakeholder-map" },
+        { "kind": "lab", "key": "raci-delegation" },
+        { "kind": "lab", "key": "hard-week" },
+        { "kind": "lab", "key": "conflict-modes" },
+        { "kind": "field", "model": "stakeholder-map", "field": "silent" },
+        { "kind": "field", "model": "governance", "field": "cadence" },
+        { "kind": "field", "model": "governance", "field": "escalation" },
+        { "kind": "field", "model": "change-sustain", "field": "impacted" },
+        { "kind": "field", "model": "change-sustain", "field": "resistance" },
+        { "kind": "rubric_weight" },
+        { "kind": "track_depth", "models": ["stakeholder-map", "governance", "change-sustain", "development-plan", "transformation-story"] }
+      ]
+    }
+  ]
+}
