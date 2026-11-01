@@ -28,6 +28,7 @@ import * as I from './impact.ts';
 import * as G from './programs.ts';
 import * as F from './final.ts';
 import * as KT from './katon.ts';
+import * as H from './hall.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
@@ -77,6 +78,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'ratings.submit': (p, b) => E.rateExpert(p, b),
   'katon.mine': (p) => KT.mine(p),
   'katon.answer': (p, b) => KT.answer(p, b),
+  'hall.state': (p, b) => H.state(p, b),
+  'hall.join': (p) => H.join(p),
+  'hall.hand': (p, b) => H.hand(p, b),
+  'hall.pick': (p, b) => H.pick(p, b),
   'logout': (_p, _b, sid) => P.logout(sid),
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
   'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
@@ -221,6 +226,12 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
+  'admin.hall': (_a, b) => H.adminState(b),
+  'admin.hall-open': (a, b) => A.writer(a, H.open, b),
+  'admin.hall-step': (a, b) => A.writer(a, H.step, b),
+  'admin.hall-split': (a, b) => A.writer(a, H.split, b),
+  'admin.hall-assign': (a, b) => A.writer(a, H.assign, b),
+  'admin.hall-close': (a, b) => A.writer(a, H.close, b),
   'admin.katon': (_a, b) => KT.adminList(b),
   'admin.katon-topic-save': (a, b) => A.writer(a, KT.topicSave, b),
   'admin.katon-sentence-save': (a, b) => A.writer(a, KT.sentenceSave, b),

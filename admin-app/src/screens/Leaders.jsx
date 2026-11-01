@@ -16,6 +16,7 @@ import Impact from './Impact.jsx';
 import Capstones from './Capstones.jsx';
 import Programs from './Programs.jsx';
 import KatonBank from './Katon.jsx';
+import HallScreen from './Hall.jsx';
 import ContentBank from './ContentBank.jsx';
 import Experts from './Experts.jsx';
 import MailGallery from './MailGallery.jsx';
@@ -25,14 +26,14 @@ import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
 // الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
 const TAB_GROUPS = [
-  ['اليومي', ['overview', 'participants', 'capstones', 'activities', 'experts']],
+  ['اليومي', ['overview', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels']],
   ['النتائج', ['impact', 'certs', 'mail']],
@@ -89,6 +90,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'katon') body = <KatonBank canWrite={canWrite} />;
+  else if (tab === 'hall') body = <HallScreen canWrite={canWrite} />;
   else if (tab === 'capstones') body = <Capstones canWrite={canWrite} capId={capId} onOpen={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
   else if (tab === 'lab') body = <Lab canWrite={canWrite} />;
   else if (tab === 'assessment') body = <Assessment {...meth} />;

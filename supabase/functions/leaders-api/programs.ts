@@ -402,7 +402,7 @@ export async function contentLevelsFor(p: any, levels: Record<string, string>) {
 }
 
 // مشاركو الدفعة فعلًا: من سُجّل فيها، ومن تتبعها تلقائيًا بجهته (ما لم يُسجَّل في غيرها)
-async function cohortMembers(c: any) {
+export async function cohortMembers(c: any) {
   const [enr, cohorts] = await Promise.all([
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
     db.from('cohorts').select(COHORT_COLS),
@@ -411,13 +411,13 @@ async function cohortMembers(c: any) {
   const extra = c.organization_id ? ((await db.from('participants').select('id').eq('organization_id', c.organization_id)).data || []).map((r: any) => r.id) : [];
   const all = [...new Set([...ids, ...extra])] as string[];
   if (!all.length) return [];
-  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, status').in('id', all);
+  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, organization_name, job_title, status').in('id', all);
   const byP = new Map<string, any[]>();
   for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const mine = (ps || []).filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts: cohorts.data || [], organizationId: p.organization_id }).cohort?.id === c.id);
   const { data: pl } = await db.from('placements').select('participant_id, dimension, level').in('participant_id', mine.map((p: any) => p.id));
   return mine.map((p: any) => ({
-    id: p.id, name: p.full_name, email: p.email, status: p.status,
+    id: p.id, name: p.full_name, email: p.email, status: p.status, title: p.job_title || null, org: p.organization_name || null,
     levels: Object.fromEntries((pl || []).filter((x: any) => x.participant_id === p.id).map((x: any) => [x.dimension, x.level])),
   }));
 }
