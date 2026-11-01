@@ -12,8 +12,13 @@ describe('المنهجية', () => {
     expect(r.composite).toBe(49.1);
     expect(r.level).toBe('beginner');
     expect(evaluate({ knowledge: 90, skill: 90, behavior: 90 }, MODEL_DEFAULT).level).toBe('advanced');
-    // مؤشر عالٍ لكن جانب تحت حد الاحترافي
-    expect(evaluate({ knowledge: 100, skill: 100, behavior: 50 }, MODEL_DEFAULT).level).toBe('intermediate');
+    // مؤشر عالٍ لكن مواقف تحت حد الاحترافي
+    expect(evaluate({ knowledge: 100, skill: 50, behavior: 100 }, MODEL_DEFAULT).level).toBe('intermediate');
+    // الممارسة الذاتية ليست بوابة: تُعلَّم ولا تمنع
+    const lp = evaluate({ knowledge: 100, skill: 100, behavior: 50 }, MODEL_DEFAULT);
+    expect(lp.level).toBe('advanced');
+    expect(lp.low).toBe(100);
+    expect(lp.low_practice).toBe(true);
     expect(evaluate({}, MODEL_DEFAULT)).toBeNull();
   });
 

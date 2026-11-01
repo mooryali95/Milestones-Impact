@@ -75,8 +75,11 @@ export const RUBRIC = [
 export const rubricFor = (levels) => RUBRIC.map(({ levels: by, ...r }) => ({ ...r, level: levels?.[r.dimension] || null, anchors: by?.[levels?.[r.dimension]] || r.anchors }));
 export const RUBRIC_MAX = 4;
 
-// درجة المعيار من 100: كل بعد وزنه 1، وأبعاد الإطار الأولوي وزنها 2
+// درجة المعيار من 100: كل بعد وزنه 1، وأبعاد الإطار الأولوي وزنها 2.
+// priority هنا من rubricPriority (logic.js): null إذا تساوت المستويات الثلاثة،
+// فلا يُضاعف وزن أي إطار.
 export const PRIORITY_WEIGHT = 2;
+/** @param {any} scores @param {string | null} [priority] */
 export function rubricScore(scores, priority = null) {
   let got = 0, max = 0;
   for (const r of RUBRIC) {
@@ -131,7 +134,7 @@ export function capstoneModels(models, levels, scope) {
 
 // حقول نموذج للمشارك: بمستواه في بُعد النموذج ونطاقه، وحقول التعمق إن كان
 // بُعد النموذج محور الأولوية في مساره
-export const modelFields = (m, levels, scope, priority = null) => fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority);
+export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null) => fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority);
 
 // مشروع المسار التطبيقي من مصدره الوحيد: فصول الوثيقة نفسها بمستوى المشارك
 // ونطاقه، وما يتعمق فيه منها بمحور أولويته. لا نص يُكتب يدويًا لكل مسار.

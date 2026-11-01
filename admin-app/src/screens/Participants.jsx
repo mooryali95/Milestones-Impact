@@ -272,6 +272,8 @@ function Person({ id, canWrite, onBack }) {
                   <td>{ev?.composite != null ? <>
                     <b>{ev.composite}</b>
                     {ev.borderline && <><br /><span className="la-chip warn">حدّية</span></>}
+                    {/* أعلام معلوماتية للمستشار: لا تغيّر المستوى المقترح */}
+                    {(ev.flags || []).map((f) => <span key={f.key}><br /><span className="la-chip warn" title={f.reason_ar}>{f.reason_ar}</span></span>)}
                     {ev.reason && <><br /><small className="la-why">{ev.reason}</small></>}
                     {ev.items_to_flip != null && <><br /><small className="la-muted">يفصله {questionsAr(ev.items_to_flip)} عن المستوى التالي</small></>}
                   </> : '·'}</td>

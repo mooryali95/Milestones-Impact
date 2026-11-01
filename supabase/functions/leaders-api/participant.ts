@@ -4,7 +4,7 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
@@ -278,7 +278,7 @@ export async function postInstrumentFor(participantId: string) {
 // هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
 const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, journey_ar, priority_dimension';
 // المشروع التطبيقي لا يُكتب لكل مسار: يُشتق من فصول وثيقة المبادرة نفسها
-async function trackFor(levels: Record<string, string>, scope: string | null = null) {
+async function trackFor(p: any, levels: Record<string, string>, scope: string | null = null) {
   const key = trackKey(levels);
   if (!key) return null;
   const [{ data }, models] = await Promise.all([
@@ -286,14 +286,29 @@ async function trackFor(levels: Record<string, string>, scope: string | null = n
     db.from('learning_models').select('id, key, dimension, min_level, active, scopes, capstone_sort, title_ar').not('capstone_sort', 'is', null),
   ]);
   const t: any = data || { key };
-  return { ...t, project: trackProject(models.data || [], levels, scope, t.priority_dimension || null)?.text || null };
+  const priority = await participantPriority(p.id, levels, t.priority_dimension || null);
+  return { ...t, priority_dimension: priority, project: trackProject(models.data || [], levels, scope, priority)?.text || null };
 }
-// محور الأولوية في مسار المشارك: يفتح حقول التعمق في نماذجه
-async function priorityFor(levels: Record<string, string>) {
+// المؤشرات المركّبة من آخر قياس مبدئي مُرسل، لكسر التعادل في محور الأولوية
+export async function baselineComposites(participantId: string) {
+  const base = await lastBaseline(participantId);
+  if (!base) return null;
+  const { data } = await db.from('assessment_results').select('dimension, composite_pct').eq('assessment_id', base.id);
+  const out = Object.fromEntries((data || []).filter((r: any) => r.composite_pct != null).map((r: any) => [r.dimension, Number(r.composite_pct)]));
+  return Object.keys(out).length ? out : null;
+}
+// محور الأولوية في مسار المشارك: الأضعف مستوى، والتعادل بمؤشراته الفعلية،
+// وافتراض المسار (tracks.priority_dimension) حين تغيب المؤشرات.
+// يفتح حقول التعمق في نماذجه ويحدد مشروع المسار ووزن المعيار.
+export async function participantPriority(participantId: string, levels: Record<string, string>, fallback?: string | null) {
   const key = trackKey(levels);
   if (!key) return null;
-  const { data } = await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle();
-  return (data as any)?.priority_dimension || null;
+  let def = fallback;
+  if (def === undefined) {
+    const { data } = await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle();
+    def = (data as any)?.priority_dimension || null;
+  }
+  return priorityFor(levels, await baselineComposites(participantId), def);
 }
 const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   ...(audience === 'admin' ? { key: t.key, priority_dimension: t.priority_dimension || null } : {}),
@@ -337,7 +352,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
       : null,
   ]);
-  const track = trackView(await trackFor(levels, p.work_scope || null), audience);
+  const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
@@ -560,6 +575,10 @@ export async function assessmentSubmit(p: any, b: Body) {
   const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
+  // «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم من الممارسة: أكثر من ذلك
+  // يُسقط الممارسة من المؤشر ويعيد توزيع وزنها صامتًا (ملحق التدقيق 1، #1)
+  const na = behaviorNaCounts(questions, answers);
+  if (Object.values(na).some((n: any) => n > MAX_BEHAVIOR_NA)) throw new Fail(BEHAVIOR_NA_MESSAGE, 400, 'too_many_na');
   // المعيار المركّب وحده، من جدوله أو من قيمه الافتراضية في logic.js
   const result = placementFromAnswers(questions, answers, [], model.data || DEFAULT_MODEL);
   const split = skillSplit(questions, answers);
@@ -570,7 +589,7 @@ export async function assessmentSubmit(p: any, b: Body) {
     // الدرجة هي المؤشر المركّب نفسه حتى لا يختلف رقم التقرير عن سبب المستوى
     score: r.composite ?? Math.round(((r.knowledge ?? 0) + (r.skill ?? 0) + (r.behavior ?? 0)) / 3 * 100) / 100,
     knowledge_pct: r.knowledge, skill_pct: r.skill, behavior_pct: r.behavior,
-    ...(r.composite !== undefined ? { composite_pct: r.composite, borderline: r.borderline, reason_ar: r.reason } : {}),
+    ...(r.composite !== undefined ? { composite_pct: r.composite, borderline: r.borderline, reason_ar: reasonWithFlags(r) } : {}),
   }))));
   // مستوى مبدئي، لا يُكتب فوق مستوى اعتمده المستشار
   const { data: current } = await db.from('placements').select('dimension, approved_at').eq('participant_id', p.id);
@@ -799,7 +818,7 @@ async function myModel(p: any, id: unknown) {
   const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
   if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
-  const priority = await priorityFor(levels);
+  const priority = await participantPriority(p.id, levels);
   return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
 }
 
@@ -823,7 +842,7 @@ export async function modelsList(p: any) {
     db.from('learning_models').select('id, dimension, key, sort, title_ar, icon, summary_ar, min_level, points, active, fields, scopes, capstone_sort'),
     db.from('model_submissions').select('model_id, status, rating, bonus, answers, submitted_at, updated_at').eq('participant_id', p.id),
     pointsOf(p.id),
-    priorityFor(levels),
+    participantPriority(p.id, levels),
   ]);
   const by = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s]));
   return {

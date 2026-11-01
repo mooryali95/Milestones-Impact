@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, itemsToFlip, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
 import { hostOf, mePayload, pointsOf } from './participant.ts';
 import { trackProject } from './capstone.js';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
@@ -238,14 +238,27 @@ export async function participant(b: Body) {
   // تقييم كل نتيجة بالنموذج الحالي: المؤشر المركّب، والمستوى المقترح وسببه،
   // وهل الحالة حدّية، وكم سؤالًا يفصله عن المستوى التالي. يُحسب عند العرض
   // فيصلح للنتائج القديمة أيضًا.
-  const assessments = (results.data || []).map((a: any) => ({
-    ...a,
-    assessment_results: (a.assessment_results || []).map((r: any) => {
-      const pcts = { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct };
-      const evaluation = evaluatePlacement(pcts, model || DEFAULT_MODEL);
-      return { ...r, evaluation: { ...evaluation, items_to_flip: itemsToFlip({ ...pcts, ...evaluation }, model || DEFAULT_MODEL) } };
-    }),
-  }));
+  // الموافقة المطلقة تحتاج الإجابات نفسها (كل عبارات الممارسة بأعلى درجة)
+  const submittedIds = (results.data || []).filter((a: any) => a.status === 'submitted').map((a: any) => a.id);
+  const { data: behaviorAnswers } = submittedIds.length
+    ? await db.from('assessment_answers').select('assessment_id, question_id, value, questions!inner(id, dimension, tier, options)')
+      .in('assessment_id', submittedIds).eq('questions.tier', 'behavior')
+    : { data: [] };
+  const acqOf = (id: string) => {
+    const rows = (behaviorAnswers || []).filter((x: any) => x.assessment_id === id);
+    return acquiescenceFor(rows.map((x: any) => x.questions), Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k])));
+  };
+  const assessments = (results.data || []).map((a: any) => {
+    const acq: Record<string, boolean> = acqOf(a.id);
+    return {
+      ...a,
+      assessment_results: (a.assessment_results || []).map((r: any) => {
+        const pcts = { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct };
+        const evaluation = evaluatePlacement(pcts, model || DEFAULT_MODEL, { acquiescence: acq[r.dimension] });
+        return { ...r, evaluation: { ...evaluation, items_to_flip: itemsToFlip({ ...pcts, ...evaluation }, model || DEFAULT_MODEL) } };
+      }),
+    };
+  });
   let cvUrl = null;
   if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;
   const [pts, { data: book }, { data: subs }] = await Promise.all([
