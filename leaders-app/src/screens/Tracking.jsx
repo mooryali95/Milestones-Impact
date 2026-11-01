@@ -59,7 +59,7 @@ export default function Tracking() {
         <div>
           <span className="mg-cap">بعد الاعتماد</span>
           <h2>متابعة التنفيذ والأثر</h2>
-          <p className="muted small">الخطة من وثيقتك المعتمدة. حدّث كل شهر حالة المعالم وما تحرك من المؤشرات، وعند اليوم 90 و180 تقيس كل المنافع ويؤكدها راعي المبادرة.</p>
+          <p className="muted small">الخطة من وثيقتك المعتمدة. حدّث كل شهر حالة المعالم وقيم المؤشرات. في اليوم 90 و180 تقيس كل المنافع ويؤكدها راعي المبادرة.</p>
         </div>
         <span className={`chip ${HEALTH_CHIP[s.health] || ''}`}>{s.health_title}</span>
       </div>
@@ -80,7 +80,7 @@ export default function Tracking() {
           {checkpoint ? `ابدأ ${checkpoint.title}` : d.current ? `عدّل تحديث ${monthName(s.current)}` : `حدّث متابعة ${monthName(s.current)}`}
         </button>
       )}
-      {verifying && <p className="muted small">{d.current.verify.title}. لا يُعدَّل تحديث هذا الشهر بعد إرساله للراعي.</p>}
+      {verifying && <p className="muted small">{d.current.verify.title}: بانتظار تأكيد الراعي.</p>}
 
       {open && v && (
         <div className="tr-form">
@@ -92,7 +92,7 @@ export default function Tracking() {
               <select className="input" aria-label={`حالة ${m.title}`} value={v.milestones[m.key].status} onChange={(e) => setM(m.key, { status: e.target.value })}>
                 <option value="">لم يتغير</option>{Object.entries(t.statuses).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
-              {v.milestones[m.key].status === 'done' && <input className="input" aria-label={`تاريخ تحقق ${m.title}`} placeholder="تحقق في 2026-03-15" value={v.milestones[m.key].date} onChange={(e) => setM(m.key, { date: e.target.value })} />}
+              {v.milestones[m.key].status === 'done' && <input className="input" type="date" aria-label={`تاريخ تحقق ${m.title}`} value={v.milestones[m.key].date} onChange={(e) => setM(m.key, { date: e.target.value })} />}
               {['at_risk', 'late', 'dropped'].includes(v.milestones[m.key].status) && <input className="input" aria-label={`ملاحظة ${m.title}`} placeholder={v.milestones[m.key].status === 'dropped' ? 'سبب الإلغاء ومن قرّره' : 'السبب وما تفعله'} value={v.milestones[m.key].note} onChange={(e) => setM(m.key, { note: e.target.value })} />}
             </div>
           ))}
@@ -103,7 +103,7 @@ export default function Tracking() {
             <div key={b.key} className="tr-row">
               <div className="tr-t"><b>{b.title}</b><small>{b.indicator || ''} · خط الأساس {b.baseline || '·'} · المستهدف {b.target || '·'}{b.realization != null ? ` · آخر تحقق ${Math.round(b.realization * 100)}%` : ''}</small></div>
               <input className="input" aria-label={`القيمة الحالية لـ${b.title}`} placeholder="القيمة الحالية" inputMode={b.numeric ? 'decimal' : undefined} value={v.benefits[b.key].value} onChange={(e) => setB(b.key, { value: e.target.value })} />
-              <input className="input" dir="ltr" aria-label={`رابط دليل ${b.title}`} placeholder="https:// رابط الدليل (اختياري)" value={v.benefits[b.key].evidence} onChange={(e) => setB(b.key, { evidence: e.target.value })} />
+              <input className="input" dir="ltr" aria-label={`رابط دليل ${b.title}`} placeholder="رابط الدليل (اختياري)" value={v.benefits[b.key].evidence} onChange={(e) => setB(b.key, { evidence: e.target.value })} />
             </div>
           ))}
 

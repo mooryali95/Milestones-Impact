@@ -92,7 +92,7 @@ export default function SignIn({ onSignedIn, initialError }) {
 
   const captchaBox = captchaKey ? (
     <div className="stack">
-      <p className="small muted">تحقق سريع قبل إرسال الرمز.</p>
+      <p className="small muted">تحقّق سريع قبل إرسال الرمز.</p>
       <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />
     </div>
   ) : null;
@@ -140,19 +140,19 @@ export default function SignIn({ onSignedIn, initialError }) {
             <div>
               <p className="eyebrow">تسجيل جديد</p>
               <h1>أهلًا بك في البرنامج</h1>
-              <p className="muted">خطوة واحدة قبل إرسال رابط التأكيد إلى <b className="ltr">{email}</b></p>
+              <p className="muted">خطوة واحدة قبل إرسال الرمز إلى <b className="ltr">{email}</b></p>
             </div>
             <label className="field">
               <span>الاسم الكامل</span>
               <input className="input" autoComplete="name" required minLength={3} value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             <label className="field">
-              <span>رقم الجوال <em>(اختياري الآن)</em></span>
+              <span>رقم الجوال <em>(يمكنك إكماله في ملفك)</em></span>
               <input className="input ltr" type="tel" inputMode="tel" autoComplete="tel" value={phone}
                 onChange={(e) => setPhone(e.target.value)} placeholder="05XXXXXXXX" />
             </label>
             {error && <div className="alert err">{error}</div>}
-            <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل رابط التأكيد'}</button>
+            <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
             <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
           </form>
         )}
@@ -162,14 +162,14 @@ export default function SignIn({ onSignedIn, initialError }) {
             <div>
               <p className="eyebrow">تحقّق من بريدك</p>
               <h1>أرسلنا لك رابطًا ورمزًا</h1>
-              <p className="muted">إلى <b className="ltr">{email}</b>. اضغط الرابط في البريد، أو أدخل الرمز هنا.</p>
+              <p className="muted">أرسلناهما إلى <b className="ltr">{email}</b>. اضغط الرابط، أو أدخل الرمز هنا.</p>
             </div>
             <input ref={codeRef} className="input code-input" inputMode="numeric" autoComplete="one-time-code"
               aria-label="رمز التحقق" value={code} onChange={(e) => onCode(e.target.value)} placeholder="••••••" disabled={busy} />
             {error && <div className="alert err">{error}</div>}
             <div className="row between small">
               <button className="link" onClick={() => { setStep('email'); setError(''); }}>بريد آخر</button>
-              {wait ? <span className="muted">إعادة الإرسال بعد {wait} ث</span>
+              {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>
                 : <button className="link" onClick={start} disabled={busy}>أعد إرسال الرمز</button>}
             </div>
             <p className="muted small">لم يصل؟ تفقّد مجلد الرسائل غير المرغوبة.</p>

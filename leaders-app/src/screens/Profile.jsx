@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
 import { call, uploadFile } from '../api.js';
-import { VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
 const deviceOf = (ua = '') => {
@@ -24,7 +24,7 @@ function OrgVisibility() {
     <section className="card stack org-see" aria-labelledby="org-see-h">
       <h3 id="org-see-h">ماذا ترى جهتك</h3>
       {!v.viewers ? <p className="muted">لا أحد من {d.org} يطّلع على رحلتك الآن.</p> : <>
-        <p className="muted">{v.viewers === 1 ? 'مطّلع واحد' : `${v.viewers} مطّلعين`} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
+        <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
         {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{h}</small></li>)}</ul>}
       </>}
       <p className="small muted">لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.</p>
@@ -113,7 +113,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       {onboarding && (
         <div className="stack" style={{ marginBottom: 18 }}>
           <div className="row between small">
-            <span className="eyebrow">المرحلة 1 من 3 في القبول</span>
+            <span className="eyebrow">الخطوة 1 من 3 في القبول</span>
             <span className="muted">{filled} من {REQUIRED.length} حقول أساسية</span>
           </div>
           {/* تقدّم ممنوح: التسجيل نفسه خطوة منجزة، فلا يبدأ الشريط من الصفر */}
@@ -123,9 +123,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       <form className="card stack" onSubmit={save}>
         <div>
           <h1 style={{ fontSize: 22 }}>{onboarding ? `أهلًا ${p.full_name.split(' ')[0]}، عرّفنا بك` : 'ملفي الشخصي'}</h1>
-          <p className="muted">{onboarding
-            ? 'هذه البيانات تساعد المستشار على فهم سياقك قبل اعتماد مستواك. تستغرق دقيقتين.'
-            : 'حدّث بياناتك متى شئت.'}</p>
+          {onboarding && <p className="muted">هذه البيانات تساعد المستشار على فهم سياقك قبل اعتماد مسارك. تستغرق دقيقتين.</p>}
         </div>
 
         <div className="grid2">
@@ -144,7 +142,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
           <label className="field"><span>سنوات الخبرة</span>
             <input className="input" required type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
-          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد أمثلة الكتاب وتمارينه)</em></span>
+          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتيب)</em></span>
             <select className="input" value={f.work_scope} onChange={set('work_scope')}>
               <option value="">لم أحدد بعد</option>
               <option value="project">مشروع أو أكثر</option>

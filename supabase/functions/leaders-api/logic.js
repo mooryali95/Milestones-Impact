@@ -1616,10 +1616,10 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
   const c = claims || {};
   if (c.aud !== clientId) return { error: 'الرمز ليس لهذا التطبيق' };
   if (!['accounts.google.com', 'https://accounts.google.com'].includes(c.iss)) return { error: 'مصدر الرمز غير معروف' };
-  if (!(Number(c.exp) > nowSec)) return { error: 'انتهت صلاحية الدخول بجوجل، حاول مرة أخرى' };
-  if (!(c.email_verified === true || c.email_verified === 'true')) return { error: 'بريد حساب جوجل غير موثّق' };
+  if (!(Number(c.exp) > nowSec)) return { error: 'انتهت صلاحية الدخول بحساب Google، حاول مرة أخرى' };
+  if (!(c.email_verified === true || c.email_verified === 'true')) return { error: 'بريد حساب Google غير موثّق' };
   const email = normalizeEmail(c.email);
-  if (!isEmail(email)) return { error: 'لا بريد صالح في حساب جوجل' };
+  if (!isEmail(email)) return { error: 'لا بريد صالح في حساب Google' };
   const name = String(c.name || [c.given_name, c.family_name].filter(Boolean).join(' ') || '').trim().slice(0, 120);
   return { email, name };
 }

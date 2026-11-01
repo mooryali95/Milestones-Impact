@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { openCapstoneDoc } from './Capstone.jsx';
+import { POPUP_BLOCKED } from '../ui.jsx';
 
 export default function Sponsor() {
   const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
@@ -47,8 +48,8 @@ export default function Sponsor() {
         <p className="eyebrow">تأييد راعي المبادرة</p>
         <h1 style={{ fontSize: 22 }}>{data.sponsor ? `أهلًا ${data.sponsor}، ` : ''}هل تؤيد مبادرة «{m.initiative}»؟</h1>
         <p className="muted">
-          أعدّها {m.participant?.name}{m.org?.name ? ` من ${m.org.name}` : ''} مشروعًا ختاميًا في برنامج القادة، وراجعها المستشار وقبلها.
-          تأييدك يعني أنها مبادرة حقيقية تخدم أولويات جهتكم، وأن خطتها واقعية.
+          أعدّها {m.participant?.name}{m.org?.name ? ` من ${m.org.name}` : ''} مشروع تخرجه في برنامج القادة، وراجعها المستشار وقبلها.
+          تأييدك يعني أنها مبادرة حقيقية تخدم أولويات جهتك، وأن خطتها واقعية.
         </p>
         <dl className="sp-meta">
           <div><dt>النوع</dt><dd>{m.scope_title || '·'}</dd></div>
@@ -56,7 +57,7 @@ export default function Sponsor() {
           <div><dt>التكلفة مع الاحتياطي</dt><dd>{data.doc.cost ? `${Math.round(data.doc.cost.withContingency).toLocaleString('en-US')} ريال` : '·'}</dd></div>
           <div><dt>الفصول</dt><dd>{data.doc.sections.length}</dd></div>
         </dl>
-        <button className="btn ghost" onClick={() => openCapstoneDoc(data.doc).then((ok) => !ok && setError('اسمح بالنوافذ المنبثقة لفتح الوثيقة'))}>اقرأ الوثيقة كاملة</button>
+        <button className="btn ghost" onClick={() => openCapstoneDoc(data.doc).then((ok) => !ok && setError(POPUP_BLOCKED))}>اقرأ الوثيقة كاملة</button>
       </div>
       <div className="card stack">
         <label className="field">

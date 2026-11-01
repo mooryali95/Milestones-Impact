@@ -27,7 +27,7 @@ function Reading({ a, onHandbook }) {
   return (
     <div className="act">
       <div className="row between"><b className="small">قرأت {a.count} من {a.total} {a.total === 1 ? 'باب' : 'أبواب'}</b>
-        {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتاب</button>}</div>
+        {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتيب</button>}</div>
       <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
       <ul className="act-list">
         {a.chapters.map((c) => {
@@ -41,7 +41,7 @@ function Reading({ a, onHandbook }) {
           );
         })}
       </ul>
-      {skimmed && <p className="h">الباب الذي تصفحته سريعًا لا يُحتسب. عد إليه واقرأه بتمعن، فالتدريب يبني عليه.</p>}
+      {skimmed && <p className="h">الباب الذي تصفحته سريعًا لا يُحتسب. عد إليه واقرأه بتمعن.</p>}
     </div>
   );
 }
@@ -129,7 +129,6 @@ import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
-  qr: 'عند بدء الجلسة امسح رمز الحضور الذي يعرضه المدرب في القاعة أو على الشاشة المشتركة بكاميرا جوالك.',
   join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
   manual: 'يسجل المدرب حضورك في الجلسة.',
 };
@@ -165,7 +164,7 @@ function Workshop({ item, open, setToast }) {
           ))}
         </ul>
       ) : <p className="h">ستظهر هنا مواعيد الجلسات وطريقتها حين تُجدول.</p>}
-      {upcoming.length > 0 && <p className="h">{VERIFY_HINT[a.verify] || VERIFY_HINT.qr}</p>}
+      {upcoming.length > 0 && VERIFY_HINT[a.verify] && <p className="h">{VERIFY_HINT[a.verify]}</p>}
     </div>
   );
 }
@@ -249,7 +248,7 @@ function Curriculum({ item, open, onRefresh }) {
   const [a, setA] = useState(item.activity);
   const [play, setPlay] = useState(null);
   useEffect(() => setA(item.activity), [item.activity]);
-  if (a.locked) return <div className="act"><p className="h">يُفتح منهج مسارك بعد اعتماد مستواك.</p></div>;
+  if (a.locked) return <div className="act"><p className="h">يُفتح منهج مسارك بعد اعتماد مسارك.</p></div>;
   if (!a.items.length) return <div className="act"><p className="h">لا مواد إضافية لمسارك في هذه المرحلة.</p></div>;
   const patch = (id, v) => setA((x) => {
     const items = x.items.map((i) => (i.id === id ? { ...i, ...v } : i));
@@ -271,7 +270,7 @@ function Curriculum({ item, open, onRefresh }) {
             <span aria-hidden="true">{i.done ? '✓' : CONTENT_ICON[i.kind]}</span>
             <span className="grow">
               {i.title}{!i.required && <small className="muted"> · اختياري</small>}
-              {i.minutes ? <small className="muted"> · {i.minutes} د</small> : null}
+              {i.minutes ? <small className="muted"> · {i.minutes} دقيقة</small> : null}
               {i.kind === 'video' && i.started && !i.done ? <small className="muted"> · شاهدت {i.pct}%</small> : null}
               {i.description && <small className="muted block">{i.description}</small>}
             </span>
@@ -304,7 +303,7 @@ function ModelLink({ a, onCapstone }) {
   return (
     <div className="act-model row between">
       <span className="h">{label}</span>
-      {onCapstone && !a.done && <button className="btn sm" onClick={onCapstone}>{a.type === 'capstone' ? 'افتح وثيقة مبادرتك' : 'افتح في مشروعي'}</button>}
+      {onCapstone && !a.done && <button className="btn sm" onClick={onCapstone}>{a.type === 'capstone' ? 'افتح وثيقة مبادرتك' : 'افتح النموذج'}</button>}
     </div>
   );
 }
@@ -341,9 +340,9 @@ export function CheckIn({ token, onDone }) {
         {state.error && <>
           <span className="checkin-mark bad" aria-hidden="true">!</span>
           <h1>لم يُسجل الحضور</h1>
-          <p className="muted">{state.error}</p>
+          <p className="muted">{state.error} أعد المسح، أو اطلب من المدرب تسجيل حضورك.</p>
         </>}
-        {!state.busy && <button className="btn" onClick={onDone}>إلى رحلتي</button>}
+        {!state.busy && <button className="btn" onClick={onDone}>→ رحلتي</button>}
       </section>
     </div>
   );
