@@ -1,11 +1,13 @@
-// قراءة أبواب الكتاب v2 من supabase/content/handbook/v2
+// قراءة أبواب الكتاب من supabase/content/handbook/<الإصدار> (الحالي v3)
 // الملف: ترويسة (chapter_key, dimension) ثم المتن، ثم ---QUIZ--- ثم ---REFLECTION---
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
-export const DIR = join(ROOT, 'supabase/content/handbook/v2');
+export const VERSION = 'v3';
+export const dirOf = (ver = VERSION) => join(ROOT, 'supabase/content/handbook', ver);
+export const DIR = dirOf();
 
 export function parseChapter(text, file = '') {
   const m = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
@@ -19,5 +21,5 @@ export function parseChapter(text, file = '') {
   return { file, chapter_key: meta.chapter_key, dimension: meta.dimension, body_md: body.trim(), quiz_md: quiz.trim(), reflection_ar: reflection.trim() };
 }
 
-export const loadChapters = () => readdirSync(DIR).filter((f) => f.endsWith('.md')).sort()
-  .map((f) => parseChapter(readFileSync(join(DIR, f), 'utf8'), f));
+export const loadChapters = (ver = VERSION) => { const dir = dirOf(ver); return readdirSync(dir).filter((f) => f.endsWith('.md')).sort()
+  .map((f) => parseChapter(readFileSync(join(dir, f), 'utf8'), f)); };
