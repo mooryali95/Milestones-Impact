@@ -259,7 +259,9 @@ export async function lastBaseline(participantId: string) {
 }
 
 // الأداة البعدية التي تقابل قياس المشارك المبدئي (pairs_with)، فمن بدأ على
-// v3 يُختم بـ post-v1 ومن بدأ على v4 بـ post-v2. وإلا أحدث أداة بعدية مفعّلة.
+// v3 يُختم بـ post-v1 ومن بدأ على v4 بـ post-v2، وإلا أداة بعدية عامة (بلا
+// pairs_with). أداة مقرونة بمبدئي آخر لا تُعطى أبدًا، فنتائجها لا تُقارن
+// (حارس الإقران pairComparable)؛ وأحدث أداة لمن لا مبدئي له بعد.
 export async function postInstrumentFor(participantId: string) {
   const [{ data: posts }, base] = await Promise.all([
     db.from('instruments').select('*').eq('kind', 'post').eq('active', true).order('version', { ascending: false }),
@@ -267,7 +269,8 @@ export async function postInstrumentFor(participantId: string) {
   ]);
   const list = posts || [];
   const key = base?.instruments?.key;
-  return list.find((i: any) => key && i.pairs_with === key) || list.find((i: any) => !i.pairs_with) || list[0] || null;
+  if (!key) return list[0] || null;
+  return list.find((i: any) => i.pairs_with === key) || list.find((i: any) => !i.pairs_with) || null;
 }
 
 // audience 'participant' (الافتراضي): مستوى واحد ملخص دون تفصيل الأبعاد.

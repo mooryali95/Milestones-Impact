@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildJourney, filterHandbookMd, handbookModulesFor, isEmail, journeyProgress, levelFor, normalizeEmail, normalizePhone, overallLevel, placementFromAnswers,
-  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL,
+  requirementApplies, scoreFor, seededShuffle, tierPercents, trackKey, evaluatePlacement, DEFAULT_MODEL, itemsToFlip,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const RULES = ['milestone', 'impact', 'leadership'].flatMap((dimension) => [
@@ -219,7 +219,15 @@ describe('evaluatePlacement', () => {
     const r = ev(75, 25, 69);
     expect(r.composite).toBe(49.1);
     expect(r.level).toBe('beginner');
-    expect(r.borderline).toBe(true);   // 5.9 نقاط تحت 55، ضمن الهامش 8
+    // 5.9 نقاط تحت 55 ضمن الهامش، لكن المواقف 25 تبعد 15 عن أرضية 40: ليس حدّيًا
+    expect(r.borderline).toBe(false);
+  });
+  it('is borderline only when both the composite gap and the floor gap are within the margin', () => {
+    expect(ev(60, 50, 45).borderline).toBe(true);     // المؤشر 52.8 يبعد 2.2، وكل جانب فوق 40
+    expect(ev(100, 100, 35).borderline).toBe(true);   // المؤشر 90، والممارسة تبعد 5 عن 40
+    expect(ev(100, 100, 20).borderline).toBe(false);  // المؤشر كافٍ لكن الممارسة تبعد 20
+    expect(ev(45, 45, 45).borderline).toBe(false);    // كل جانب فوق الأرضية لكن المؤشر يبعد 10
+    expect(ev(100, 100, 100).borderline).toBe(false); // احترافي لا يكون حدّيًا
   });
   it('places intermediate and advanced by composite', () => {
     expect(ev(75, 50, 50).level).toBe('intermediate');
@@ -241,6 +249,33 @@ describe('evaluatePlacement', () => {
   });
   it('ignores missing tiers', () => {
     expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
+  });
+});
+
+describe('itemsToFlip', () => {
+  const flip = (k, s, b, m) => itemsToFlip({ knowledge: k, skill: s, behavior: b, ...evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m) }, m);
+  it('counts whole questions: a knowledge or skill question is 4 of 24, a practice statement 4 of 16', () => {
+    // المواقف 25 → 41.67 بسؤال واحد، فيبلغ المؤشر 57.4 وتعبر الأرضية: سؤال واحد
+    expect(flip(75, 25, 69)).toBe(1);
+    // المؤشر 50: سؤال مواقف يرفعه 8.33 إلى 58.3
+    expect(flip(50, 50, 50)).toBe(1);
+    // المؤشر 45: سؤال واحد لا يكفي (53.3)، وسؤالا مواقف يكفيان (61.7)
+    expect(flip(45, 45, 45)).toBe(2);
+  });
+  it('must clear the floors too, not only the composite threshold', () => {
+    // المؤشر 90 لكن الممارسة 20: عبارة واحدة (20 → 45) تعبر أرضية المتوسط 40
+    expect(flip(100, 100, 20)).toBe(1);
+    expect(evaluatePlacement({ knowledge: 100, skill: 100, behavior: 45 }).level).toBe('intermediate');
+  });
+  it('is null for the top level, for no tiers, and when no number of questions reaches the next threshold', () => {
+    expect(flip(100, 100, 100)).toBeNull();
+    expect(itemsToFlip({ level: 'beginner', knowledge: null, skill: null, behavior: null })).toBeNull();
+    expect(flip(50, 50, 50, { ...DEFAULT_MODEL, min_intermediate: 100.5, min_advanced: 100.5 })).toBeNull();
+    // القفز مستويين ببعد واحد يُحتسب أيضًا: المتوسط ممنوع لكن الاحترافي في المتناول
+    expect(flip(50, 50, 50, { ...DEFAULT_MODEL, min_intermediate: 100.5 })).toBe(5);
+  });
+  it('ignores missing tiers like evaluatePlacement does', () => {
+    expect(flip(50, 50, null)).toBe(1);
   });
 });
 

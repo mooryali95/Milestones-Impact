@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   beforePercents, comparableComposite, compareAssessments, cronbachAlpha, effectLabel, impactVerdict, normalizedChange,
-  pairedStats, raterPercents, reliableChange,
+  pairComparable, pairedStats, PAIR_MISMATCH_AR, raterPercents, reliableChange,
 } from '../../supabase/functions/leaders-api/logic.js';
 import POST_SQL from '../../supabase/migrations/20261024150000_leaders_post_assessment.sql?raw';
 
@@ -47,6 +47,32 @@ describe('reliableChange', () => {
   });
   it('a more reliable instrument detects smaller change', () => {
     expect(reliableChange(50, 65, 15, 0.9).reliable).toBe(true);
+  });
+  it('subtracts the practice effect from gains only, never from declines', () => {
+    // مكسب 25 ناقص 4 نقاط تكرار = 21 > 20.8 فما زال موثوقًا، والحد يرتفع بها
+    const up = reliableChange(50, 75, 15, 0.75, 4);
+    expect(up.direction).toBe('up');
+    expect(up.threshold).toBe(24.8);
+    // تراجع 18 لا يُضخَّم إلى 22 بطرح التكرار منه: يبقى دون الحد
+    const down = reliableChange(70, 52, 15, 0.75, 4);
+    expect(down.rci).toBe(-1.7);
+    expect(down.direction).toBe('flat');
+    expect(reliableChange(75, 50, 15, 0.75, 4).direction).toBe('down');
+    // مكسب أصغر من أثر التكرار يُعدّ صفرًا لا تراجعًا
+    expect(reliableChange(50, 52, 15, 0.75, 4).rci).toBe(0);
+  });
+});
+
+describe('pairComparable', () => {
+  it('accepts the post instrument built for the baseline, or a generic one', () => {
+    expect(pairComparable({ key: 'baseline-v4' }, { key: 'post-v2', pairs_with: 'baseline-v4' })).toEqual({ comparable: true, reason: null });
+    expect(pairComparable({ key: 'baseline-v3' }, { key: 'post-v0', pairs_with: null }).comparable).toBe(true);
+  });
+  it('flags a post instrument paired with another baseline', () => {
+    const r = pairComparable({ key: 'baseline-v2' }, { key: 'post-v2', pairs_with: 'baseline-v4' });
+    expect(r.comparable).toBe(false);
+    expect(r.reason).toBe(PAIR_MISMATCH_AR);
+    expect(pairComparable(null, { key: 'post-v2' }).comparable).toBe(false);
   });
 });
 
