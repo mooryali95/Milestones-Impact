@@ -1,6 +1,7 @@
-// تحقق الكتاب v2 قبل الترحيل
+// تحقق الكتاب v3 قبل الترحيل
 //   node scripts/handbook/verify.mjs [handbook.json] [questions-live.json]
-// 1) لا أخطاء في كتل المستوى ولا في الاختبار لكل باب ولكل مستوى
+// 1) لا أخطاء في كتل المستوى ولا في الاختبار لكل باب ولكل مستوى، وسؤالان على
+//    الأقل لكل مستوى ونطاق، ومثال في متن ch1/ch3/ch5/ch6 لكل مستوى، وتأمل مفتوح
 // 2) عدد الكلمات قبل وبعد لكل مستوى (القديم من تفريغ الإنتاج إن وُجد)
 // 3) الأسئلة الثلاثة البديلة لا تشبه بنود التسكين (Jaccard < 0.15)
 import { existsSync, readFileSync } from 'node:fs';
@@ -32,7 +33,8 @@ for (const c of chapters) {
     for (const scope of [null, 'project', 'program', 'portfolio']) {
       const quiz = filterHandbookMd(c.quiz_md, level, scope);
       all.push(...lintHandbookMd(filterHandbookMd(c.body_md, level, scope), level), ...lintQuiz(quiz));
-      if (!parseQuiz(quiz).length) fail(`${id} (${level}/${scope}): لا سؤال يظهر`);
+      if (parseQuiz(quiz).length < 2) fail(`${id} (${level}/${scope}): أقل من سؤالين يظهران`);
+      if (/^ch[1356]$/.test(c.chapter_key) && !/^مثال:/m.test(filterHandbookMd(c.body_md, level, scope))) fail(`${id} (${level}/${scope}): لا مثال في المتن`);
     }
   }
   all.filter((x) => x.level === 'error').forEach((x) => fail(`${id}: ${x.msg}`));
@@ -40,6 +42,7 @@ for (const c of chapters) {
   w.forEach((x) => console.warn(`! ${id} ${x}`));
   warns += w.length;
   if (!c.reflection_ar) fail(`${id}: تأمل فارغ`);
+  if (/^هل\s/.test(c.reflection_ar) && !/\sأم\s/.test(c.reflection_ar)) fail(`${id}: التأمل سؤال نعم/لا`);
 }
 
 // ── 2) الكلمات ──
@@ -82,6 +85,17 @@ if (existsSync(BANK)) {
     if (before && before.q === qz.q) fail(`${code}: السؤال لم يُستبدل`);
   }
 } else console.warn(`! لم يُعثر على ${BANK}، فتُخطّى فحص التداخل`);
+
+// ── 4) سؤال DIRECT في leadership/ch4: تطبيق لا استدعاء ──
+{
+  const v2 = loadChapters('v2').find((x) => x.dimension === 'leadership' && x.chapter_key === 'ch4');
+  const v3 = chapters.find((x) => x.dimension === 'leadership' && x.chapter_key === 'ch4');
+  const before = parseQuiz(filterHandbookMd(v2.quiz_md, 'advanced'))[3];
+  const after = parseQuiz(filterHandbookMd(v3.quiz_md, 'advanced'))[3];
+  if (!after || after.q === before.q) fail('leadership/ch4 س4: سؤال DIRECT لم يُستبدل');
+  else if (after.options.some((o) => o.trim() === 'التشخيص')) fail('leadership/ch4 س4: ما زال خياراته أسماء خطوات (استدعاء)');
+  else console.log('\nleadership/ch4 س4: سؤال DIRECT صار سيناريو تطبيق ✓');
+}
 
 console.log(`\n${failed ? `✗ ${failed} خطأ` : '✓ لا أخطاء'} · ${warns} تنبيه`);
 process.exit(failed ? 1 : 0);
