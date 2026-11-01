@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanRubricScores, autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
@@ -387,9 +387,10 @@ export async function participantMilestone(a: Admin, b: Body) {
   const prev = (await db.from('participant_milestones').select('*').eq('participant_id', pid).eq('milestone_id', mid).maybeSingle()).data;
   const rec: Body = { participant_id: pid, milestone_id: mid, by_email: a.email, updated_at: new Date().toISOString(), note: b.note ? String(b.note).slice(0, 1000) : prev?.note || null };
   if ('done' in b) rec.done_at = b.done ? new Date().toISOString() : null;
+  if ('scores' in b) rec.scores = cleanRubricScores(b.scores);
   if ('due_override' in b) rec.due_override = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due_override || '')) ? b.due_override : null;
   must(await db.from('participant_milestones').upsert({ ...(prev || {}), ...rec }));
-  await audit('admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, note: rec.note });
+  await audit('admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, scores: rec.scores ?? null, note: rec.note });
   return { success: true };
 }
 

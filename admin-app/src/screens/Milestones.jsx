@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useUI } from '../ui.jsx';
+import { MILESTONE_RUBRIC } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDue,
 } from '../../../supabase/functions/leaders-api/logic.js';
@@ -130,8 +131,26 @@ export function CohortSchedule({ cohort, onClose }) {
 }
 
 // موقع المشارك من المعالم في ملفه
+// المعيار الوصفي عند اعتماد المعلم: لكل معيار وصف كل مستوى، والتقييم اختياري
+const rubricFields = [
+  ...Object.entries(MILESTONE_RUBRIC).map(([k, r]) => ({
+    name: `r_${k}`, label: r.title, type: 'select', empty: 'بلا تقييم',
+    options: Object.fromEntries(r.levels.map((t, i) => [String(i + 1), `${i + 1}. ${t}`])),
+  })),
+  { name: 'note', label: 'ملاحظة للسجل', type: 'textarea', rows: 2 },
+];
+
 export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
   const { toast, prompt } = useUI();
+  const [rub, setRub] = useState(null);
+  const rate = (m) => setRub({
+    title: `${m.done ? 'تقييم' : 'اعتماد إنجاز'}: ${m.title_ar}`, fields: rubricFields,
+    values: Object.fromEntries(Object.entries(m.scores || {}).map(([k, v]) => [`r_${k}`, String(v)])),
+    onSave: (v) => L('admin.participant-milestone', {
+      participant_id: p.id, milestone_id: m.id, note: v.note, ...(m.done ? {} : { done: true }),
+      scores: Object.fromEntries(Object.keys(MILESTONE_RUBRIC).map((k) => [k, v[`r_${k}`]]).filter(([, x]) => x)),
+    }),
+  });
   if (!list?.length) return null;
   const act = async (m, body, ok) => {
     const note = await prompt('السبب (يُحفظ في السجل):', '');
@@ -154,14 +173,45 @@ export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
       <ul className="la-reqs">{list.map((m) => (
         <li key={m.id}>
           <span><b>{m.title_ar}</b> <span className={`la-chip ${STATUS_CHIP[m.status]}`}>{MILESTONE_STATUS_AR[m.status]}{m.status === 'late' ? ` ${m.late_days} يومًا` : ''}</span>
-            <small className="la-muted"> {m.due ? day(m.due) : ''}{m.extended ? ' (ممدَّد)' : ''}</small></span>
+            <small className="la-muted"> {m.due ? day(m.due) : ''}{m.extended ? ' (ممدَّد)' : ''}</small>
+            {Object.keys(m.scores || {}).length > 0 && <small className="la-muted"> · {Object.entries(m.scores).map(([k, v]) => `${MILESTONE_RUBRIC[k]?.title} ${v}/4`).join('، ')}</small>}</span>
           {canWrite && <span className="la-row">
-            {!m.done && <button className="la-link" onClick={() => act(m, { done: true }, 'اعتُمد الإنجاز')}>اعتمد الإنجاز</button>}
+            {!m.done && <button className="la-link" onClick={() => rate(m)}>اعتمد الإنجاز</button>}
+            {m.done && <button className="la-link" onClick={() => rate(m)}>{Object.keys(m.scores || {}).length ? 'عدّل التقييم' : 'قيّم بالمعيار'}</button>}
             {m.done && m.done_at && <button className="la-link" onClick={() => act(m, { done: false }, 'أُلغي')}>إلغاء الاعتماد</button>}
             {!m.done && <button className="la-link" onClick={() => extend(m)}>مدّد له</button>}
           </span>}
         </li>
       ))}</ul>
+      {rub && <Form {...rub} onClose={(saved) => { setRub(null); if (saved) { toast('تم'); onDone(); } }} />}
+    </section>
+  );
+}
+
+// التقييم المستمر في ملف المشارك: المؤشر، ومكوّناته بأسبابها، والاتجاه، وما يحتاج انتباهًا
+const TREND = { up: '↑ يتحسن', down: '↓ يتراجع', flat: '→ مستقر' };
+export function ContinuousCard({ c }) {
+  if (!c) return null;
+  return (
+    <section className="la-card" aria-label="التقييم المستمر">
+      <div className="la-row between">
+        <h3>التقييم المستمر <small className="la-muted">· تكويني، لا يحكم وحده</small></h3>
+        <span className="la-row">{c.trend && <span className={`la-chip ${c.trend.dir === 'down' ? 'bad' : c.trend.dir === 'up' ? 'ok' : ''}`}>{TREND[c.trend.dir]} ({c.trend.delta > 0 ? '+' : ''}{c.trend.delta})</span>}
+          <b className="la-big">{c.index != null ? `${c.index}٪` : '—'}</b></span>
+      </div>
+      {c.flags.length > 0 && <ul className="la-flags">{c.flags.map((f) => <li key={f}>{f}</li>)}</ul>}
+      <div className="table-wrap"><table className="la-table">
+        <thead><tr><th>المصدر</th><th>النسبة</th><th>لماذا</th></tr></thead>
+        <tbody>{c.components.map((x) => (
+          <tr key={x.key}><td>{x.label}</td><td>{x.value != null ? `${x.value}٪` : '—'}</td><td><small className="la-muted">{x.reason}</small></td></tr>
+        ))}</tbody>
+      </table></div>
+      {c.events.length > 0 && (
+        <details><summary>آخر التقييمات ({c.count})</summary>
+          <ul className="la-reqs">{c.events.map((e, i) => (
+            <li key={i}><span>{e.label} <small className="la-muted">{e.at ? new Date(e.at).toLocaleDateString('ar') : ''}</small>{e.comment && <><br /><small className="la-muted">«{e.comment}»</small></>}</span><b>{e.pct}٪</b></li>
+          ))}</ul></details>
+      )}
     </section>
   );
 }

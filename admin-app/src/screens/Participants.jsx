@@ -12,7 +12,7 @@ import { applyFilters, presetCounts } from '../filters.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
-import { ParticipantMilestones } from './Milestones.jsx';
+import { ContinuousCard, ParticipantMilestones } from './Milestones.jsx';
 import { stars } from '../handbook.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -320,6 +320,7 @@ function Person({ id, canWrite, onBack }) {
       </div>
 
       {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
+      <ContinuousCard c={r.continuous} />
       <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
 
       <section className="la-card">

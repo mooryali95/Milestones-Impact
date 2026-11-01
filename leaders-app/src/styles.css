@@ -1171,3 +1171,6 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .ms-list li.done { border-inline-start-color: var(--st-ok); opacity: .75; }
 .ms-list li.due_soon { border-inline-start-color: var(--st-warn); }
 .ms-when { display: grid; justify-items: end; gap: 4px; white-space: nowrap; }
+.ca-index { font-size: 1.5rem; color: var(--accent); }
+.ca-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ca-list li { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px solid var(--st-warn-bg); }

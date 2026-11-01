@@ -4,7 +4,7 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, continuousAssessment, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
@@ -325,6 +325,21 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
+// مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها
+async function continuousFor(participantId: string, milestones: any[]) {
+  const [hb, subs, rt] = await Promise.all([
+    db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
+    db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
+    db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
+  ]);
+  return continuousAssessment({
+    quizzes: (hb.data || []).map((q: any) => ({ ...q, title: q.handbook_modules?.title_ar })),
+    models: (subs.data || []).map((m: any) => ({ ...m, title: m.learning_models?.title_ar })),
+    ratings: (rt.data || []).map((r: any) => ({ ...r, label: r.session_id ? 'جلسة توجيه' : 'استشارة' })),
+    milestones: milestones.filter((m: any) => m.done),
+  });
+}
+
 export async function journeyFor(p: any) {
   const [placements, def, progress, assessments, reports, ovr, msRecs] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
@@ -333,7 +348,7 @@ export async function journeyFor(p: any) {
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
-    db.from('participant_milestones').select('milestone_id, done_at, due_override, note').eq('participant_id', p.id),
+    db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -361,12 +376,12 @@ export async function journeyFor(p: any) {
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  const group = await groupOf(p.id, def.cohort?.id || null);
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group };
+  const [group, continuous] = await Promise.all([groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones)]);
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group }, passkeys, cells, org] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous }, passkeys, cells, org] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -400,6 +415,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     milestone_summary,
     // مجموعته في دفعته، ونمط المشروع
     group, project_mode: def.cohort?.project_mode || 'individual',
+    // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
+    continuous: audience === 'admin' ? continuous
+      : { ...continuous, events: continuous.events.map(({ comment: _c, ...e }: any) => e) },
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'

@@ -613,3 +613,5 @@
 .la-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .la-group .la-reqs li { gap: 6px; }
 .la-group select { max-width: 130px; }
+.la-big { font-size: 1.4rem; }
+.la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad-dark); font-size: .85rem; }
