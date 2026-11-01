@@ -5,8 +5,8 @@
 // بعد الإجابة عن جمل الموضوع كلها يُكشف المفتاح والشرح والنقاط، وتُقفل الإجابات.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { KATON_QUESTION_AR as Q_AR } from '../../../supabase/functions/leaders-api/katon.js';
 
-const Q_AR = { why: 'لماذا', what: 'ماذا يقدّم', how: 'كيف', absent: 'ماذا لو غاب', who: 'من', when: 'متى' };
 const KEY_AR = { true: 'صحيحة', false: 'خاطئة', opinion: 'رأي بلا مفتاح' };
 const FAM_AR = { certainty: 'دقة التحليل', curiosity: 'الفضول البحثي', initiative: 'المبادرة', openness: 'الانفتاح الفكري' };
 

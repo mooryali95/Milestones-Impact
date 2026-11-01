@@ -63,7 +63,7 @@ export default function KatonBank({ canWrite, programId }) {
 
   return (
     <>
-      <p className="la-muted">كل موضوع ست جمل تجيب عن الأسئلة الست (لماذا، ماذا يقدّم، كيف، ماذا لو غاب، من، متى). المشارك يختار لكل جملة أحد الخيارات الثمانية، ويُكشف المفتاح بعد إتمامه الموضوع. البنك المستورد من ملف الأسس يبدأ مسودة.</p>
+      <p className="la-muted">كل موضوع ست جمل تجيب عن الأسئلة الست (لماذا، ماذا، كيف، ماذا لو، من، متى). المشارك يختار لكل جملة أحد الخيارات الثمانية، ويُكشف المفتاح بعد إتمامه الموضوع. البنك المستورد من ملف الأسس يبدأ مسودة.</p>
       <div className="la-row between">
         <div className="la-muted">النقاط: {d.options.map((o) => `${o.glyph} ${o.key === 'true' || o.key === 'false' ? '±' : '+'}${d.points[o.key]}`).join('  ·  ')}</div>
         {canWrite && <button className="btn-sm ghost" onClick={() => editTopic()}>+ موضوع</button>}
