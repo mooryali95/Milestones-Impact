@@ -16,7 +16,7 @@ describe('التقييم المستمر', () => {
       milestones: [{ scores: { understanding: 4, structure: 2 }, done_at: '2026-01-04', title_ar: 'م1' }],
     });
     const by = Object.fromEntries(c.components.map((x) => [x.key, x.value]));
-    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67 });
+    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67, katon: null });
     expect(c.index).toBe(74);
     expect(c.events[0].label).toBe('م1');
     expect(c.trend.dir).toBe('down');

@@ -12,6 +12,7 @@ import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
+import { continuousEvents as katonEvents } from './katon.ts';
 import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
@@ -327,16 +328,18 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 // مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها
 async function continuousFor(participantId: string, milestones: any[]) {
-  const [hb, subs, rt] = await Promise.all([
+  const [hb, subs, rt, kt] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
     db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
     db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
+    katonEvents(participantId),
   ]);
   return continuousAssessment({
     quizzes: (hb.data || []).map((q: any) => ({ ...q, title: q.handbook_modules?.title_ar })),
     models: (subs.data || []).map((m: any) => ({ ...m, title: m.learning_models?.title_ar })),
     ratings: (rt.data || []).map((r: any) => ({ ...r, label: r.session_id ? 'جلسة توجيه' : 'استشارة' })),
     milestones: milestones.filter((m: any) => m.done),
+    katon: kt,
   });
 }
 

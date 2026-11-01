@@ -27,6 +27,7 @@ import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
 import * as F from './final.ts';
+import * as KT from './katon.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
@@ -74,6 +75,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
   'experts.choose': (p, b) => E.myChoose(p, b),
   'ratings.submit': (p, b) => E.rateExpert(p, b),
+  'katon.mine': (p) => KT.mine(p),
+  'katon.answer': (p, b) => KT.answer(p, b),
   'logout': (_p, _b, sid) => P.logout(sid),
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
   'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
@@ -218,6 +221,11 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
+  'admin.katon': (_a, b) => KT.adminList(b),
+  'admin.katon-topic-save': (a, b) => A.writer(a, KT.topicSave, b),
+  'admin.katon-sentence-save': (a, b) => A.writer(a, KT.sentenceSave, b),
+  'admin.katon-sentence-delete': (a, b) => A.writer(a, KT.sentenceDelete, b),
+  'admin.katon-points': (a, b) => A.writer(a, KT.pointsSave, b),
   'admin.final-eval': (_a, b) => F.get(b),
   'admin.final-eval-save': (a, b) => A.writer(a, F.save, b),
   'admin.final-eval-vote': (a, b) => A.writer(a, F.vote, b),

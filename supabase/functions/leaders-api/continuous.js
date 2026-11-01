@@ -27,8 +27,8 @@ export const rubricPct = (scores) => {
 };
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
-/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[] }} [src] */
-export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [] } = {}) {
+/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], katon?: any[] }} [src] */
+export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], katon = [] } = {}) {
   const events = [];
   for (const q of quizzes) if (q.quiz_total > 0) events.push({ source: 'quizzes', at: q.completed_at, pct: Math.round((q.quiz_score / q.quiz_total) * 100), label: q.title || 'اختبار باب' });
   for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: pct(m.rating, 1, 5), label: m.title || 'نموذج' });
@@ -37,6 +37,7 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
     const p = rubricPct(m.scores);
     if (p != null) events.push({ source: 'milestones', at: m.done_at, pct: p, label: m.title_ar || 'معلم' });
   }
+  for (const k of katon) if (k.pct != null) events.push({ source: 'katon', at: k.at, pct: k.pct, label: k.title });
   events.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
   const components = Object.keys(CONTINUOUS_SOURCE_AR).map((key) => {
     const ev = events.filter((e) => e.source === key);
@@ -61,9 +62,9 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
 }
 
 function reasonFor(key, ev, value) {
-  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', experts: 'لم يقيّمه خبير بعد جلسة أو استشارة', milestones: 'لم يُقيَّم له معلم بالمعيار بعد' }[key];
+  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', experts: 'لم يقيّمه خبير بعد جلسة أو استشارة', milestones: 'لم يُقيَّم له معلم بالمعيار بعد', katon: 'لم يُتم موضوعًا في «كاتون» بعد' }[key];
   const n = ev.length;
   const low = [...ev].sort((a, b) => a.pct - b.pct)[0];
-  const base = { quizzes: `متوسط ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, experts: `متوسط ${n} تقييم خبير`, milestones: `متوسط ${n} معلم بالمعيار` }[key];
+  const base = { quizzes: `متوسط ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, experts: `متوسط ${n} تقييم خبير`, milestones: `متوسط ${n} معلم بالمعيار`, katon: `يقين صادق في ${n} موضوع` }[key];
   return value < 60 && n > 1 ? `${base}؛ أضعفها «${low.label}» (${low.pct}٪)` : base;
 }

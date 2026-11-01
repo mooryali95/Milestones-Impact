@@ -118,4 +118,4 @@ export const MILESTONE_RUBRIC = {
   presentation: { title: 'العرض', levels: ['غير واضح', 'واضح جزئيًا', 'واضح ومقنع', 'احترافي يصلح للراعي مباشرة'] },
 };
 // مصادر التقييم المستمر
-export const CONTINUOUS_SOURCE_AR = { quizzes: 'اختبارات الكتيب', models: 'النماذج التطبيقية', experts: 'تقييم الخبراء بعد الجلسات والاستشارات', milestones: 'المعالم' };
+export const CONTINUOUS_SOURCE_AR = { quizzes: 'اختبارات الكتيب', models: 'النماذج التطبيقية', experts: 'تقييم الخبراء بعد الجلسات والاستشارات', milestones: 'المعالم', katon: 'دقة التحليل في «كاتون»' };
