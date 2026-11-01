@@ -5,14 +5,14 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanDelivery, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, starts_on, ends_on, capacity, notes_ar, created_at';
+const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, starts_on, ends_on, capacity, notes_ar, created_at';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;
@@ -65,7 +65,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
     ...rendered, via, program_id: programId,
-    cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on } : null,
+    cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {} } : null,
+    milestones: ((await db.from('program_milestones').select('*').eq('program_id', programId).eq('active', true).order('sort')).data || []),
     version: version ? { id: version.id, number: version.number, label: version.label } : null,
   };
 }
@@ -271,6 +272,21 @@ export async function cohortSave(a: Admin, b: Body) {
     try { row.delivery = cleanDelivery(b.delivery, reqs); }
     catch (err) { throw new Fail((err as Error).message); }
   }
+  // جدول المراحل: يحفظه الأدمن كما وضعه، أو يوزعه النظام على مدة الدفعة ثم يعدّله
+  if ('schedule' in b || b.distribute === true) {
+    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
+    const stages = vid
+      ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data?.stages || [])
+      : (await liveRows(programId)).stages;
+    if (b.distribute === true) {
+      const s0 = row.starts_on ?? prev?.starts_on, e0 = row.ends_on ?? prev?.ends_on;
+      if (!s0 || !e0) throw new Fail('حدد تاريخي بداية الدفعة ونهايتها أولًا ليتوزع الجدول عليها');
+      row.schedule = distributeSchedule(stages, s0, e0);
+    } else {
+      try { row.schedule = cleanSchedule(b.schedule, stages.map((x: any) => x.key)); }
+      catch (err) { throw new Fail((err as Error).message); }
+    }
+  }
   row.updated_at = new Date().toISOString();
   const saved: any = prev
     ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
@@ -309,4 +325,56 @@ export async function cohortEnroll(a: Admin, b: Body) {
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));
   await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
   return { success: true, enrolled: ids.length };
+}
+
+// ── المعالم ──
+export async function milestones(b: Body) {
+  const pid = isUuid(b.program_id) ? String(b.program_id) : await defaultProgramId();
+  const { data } = await db.from('program_milestones').select('*').eq('program_id', pid).order('sort');
+  return { success: true, program_id: pid, milestones: data || [] };
+}
+
+export async function milestoneSave(a: Admin, b: Body) {
+  const pid = isUuid(b.program_id) ? String(b.program_id) : await defaultProgramId();
+  const { stages } = await liveRows(pid);
+  let row: any;
+  try { row = cleanMilestone(b.row || {}, stages.map((s: any) => s.key)); }
+  catch (err) { throw new Fail((err as Error).message); }
+  row.updated_at = new Date().toISOString();
+  let saved;
+  if (isUuid(b.row?.id)) {
+    saved = must(await db.from('program_milestones').update(row).eq('id', b.row.id).eq('program_id', pid).select('*').single(), 'المعلم غير موجود');
+  } else {
+    const { data: last } = await db.from('program_milestones').select('sort').eq('program_id', pid).order('sort', { ascending: false }).limit(1);
+    saved = must(await db.from('program_milestones').insert({ ...row, program_id: pid, sort: (last?.[0]?.sort || 0) + 1 }).select('*').single());
+  }
+  await audit('admin', a.email, 'milestone.save', 'program_milestones', saved.id, null, row);
+  return { success: true, row: saved };
+}
+
+// حذف معلم له سجلات مشاركين يمحوها؛ يُعطَّل بدلًا من ذلك
+export async function milestoneDelete(a: Admin, b: Body) {
+  const id = String(b.id || '');
+  const { count } = await db.from('participant_milestones').select('milestone_id', { count: 'exact', head: true }).eq('milestone_id', id);
+  if (count) {
+    must(await db.from('program_milestones').update({ active: false, updated_at: new Date().toISOString() }).eq('id', id));
+    await audit('admin', a.email, 'milestone.disable', 'program_milestones', id);
+    return { success: true, disabled: true };
+  }
+  must(await db.from('program_milestones').delete().eq('id', id));
+  await audit('admin', a.email, 'milestone.delete', 'program_milestones', id);
+  return { success: true };
+}
+
+// لمشارك بعينه: اعتماد إنجاز المعلم أو إلغاؤه، أو تمديد موعده له وحده
+export async function participantMilestone(a: Admin, b: Body) {
+  const pid = String(b.participant_id || ''), mid = String(b.milestone_id || '');
+  if (!isUuid(pid) || !isUuid(mid)) throw new Fail('بيانات ناقصة');
+  const prev = (await db.from('participant_milestones').select('*').eq('participant_id', pid).eq('milestone_id', mid).maybeSingle()).data;
+  const rec: Body = { participant_id: pid, milestone_id: mid, by_email: a.email, updated_at: new Date().toISOString(), note: b.note ? String(b.note).slice(0, 1000) : prev?.note || null };
+  if ('done' in b) rec.done_at = b.done ? new Date().toISOString() : null;
+  if ('due_override' in b) rec.due_override = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due_override || '')) ? b.due_override : null;
+  must(await db.from('participant_milestones').upsert({ ...(prev || {}), ...rec }));
+  await audit('admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, note: rec.note });
+  return { success: true };
 }

@@ -398,6 +398,33 @@ function PreManager() {
   );
 }
 
+// المعالم: أين أنت من مشروعك ورحلتك، وما المتأخر وبكم يوم
+const MS_CHIP = { done: 'ok', late: 'bad', due_soon: 'gold', on_time: '', unscheduled: '' };
+const MS_AR = { done: 'منجز', late: 'متأخر', due_soon: 'يستحق قريبًا', on_time: 'في الموعد', unscheduled: 'بلا موعد بعد' };
+const msDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('ar', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+function Milestones({ list, summary }) {
+  if (!list?.length) return null;
+  return (
+    <section className="card stack ms-card" aria-labelledby="ms-h">
+      <div className="row between">
+        <h3 id="ms-h">معالمك</h3>
+        <span className="small muted">{summary.done} من {summary.total} منجزة</span>
+      </div>
+      {summary.late > 0 && <div className="banner"><span className="ico">⏰</span><div className="grow">لديك {summary.late === 1 ? 'معلم متأخر' : `${summary.late} معالم متأخرة`}، أقصاها {summary.max_late} يومًا. ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
+      <div className="ms-bar" role="progressbar" aria-valuenow={summary.pct || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${summary.pct || 0}%` }} /></div>
+      <ol className="ms-list">{list.map((m) => (
+        <li key={m.id} className={m.status}>
+          <div className="grow"><b>{m.title_ar}</b>{m.description_ar && <p className="small muted">{m.description_ar}</p>}</div>
+          <div className="ms-when">
+            {m.due && <small className="muted">{msDay(m.due)}</small>}
+            <span className={`chip ${MS_CHIP[m.status]}`}>{MS_AR[m.status]}{m.status === 'late' ? ` ${m.late_days} يومًا` : ''}</span>
+          </div>
+        </li>
+      ))}</ol>
+    </section>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
@@ -458,6 +485,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       </section>
       {participant.status === 'completed' && <CertificateCard />}
       <RateExpert />
+      {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
       {approved && <ChooseExpert />}
 
       {!approved && profile && (

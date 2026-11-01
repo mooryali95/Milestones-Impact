@@ -1161,3 +1161,13 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .cx-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .cx-live { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cx-live li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
+
+/* المعالم */
+.ms-bar { height: 6px; border-radius: 999px; background: var(--st-warn-bg); overflow: hidden; }
+.ms-bar i { display: block; height: 100%; background: var(--st-ok); }
+.ms-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ms-list li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border-inline-start: 3px solid var(--st-warn-bg); }
+.ms-list li.late { border-inline-start-color: var(--st-bad); }
+.ms-list li.done { border-inline-start-color: var(--st-ok); opacity: .75; }
+.ms-list li.due_soon { border-inline-start-color: var(--st-warn); }
+.ms-when { display: grid; justify-items: end; gap: 4px; white-space: nowrap; }
