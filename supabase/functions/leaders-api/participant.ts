@@ -4,7 +4,7 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, continuousAssessment, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
@@ -376,12 +376,18 @@ export async function journeyFor(p: any) {
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  const [group, continuous] = await Promise.all([groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones)]);
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous };
+  const [group, continuous, fe] = await Promise.all([
+    groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones),
+    db.from('final_evaluations').select('score, decision, status, decided_at').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
+  ]);
+  // التقييم الختامي يظهر للمشارك بعد اعتماده فقط
+  const final = fe.data?.status === 'approved'
+    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at } : null;
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous }, passkeys, cells, org] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final }, passkeys, cells, org] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -414,7 +420,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
     milestone_summary,
     // مجموعته في دفعته، ونمط المشروع
-    group, project_mode: def.cohort?.project_mode || 'individual',
+    group, project_mode: def.cohort?.project_mode || 'individual', final,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
       : { ...continuous, events: continuous.events.map(({ comment: _c, ...e }: any) => e) },

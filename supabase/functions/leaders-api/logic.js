@@ -1854,6 +1854,7 @@ export * from './journey.js';
 export * from './milestones.js';
 export * from './groups.js';
 export * from './continuous.js';
+export * from './final.js';
 import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════

@@ -26,6 +26,7 @@ import * as Z from './certificates.ts';
 import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
+import * as F from './final.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
@@ -217,6 +218,11 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
+  'admin.final-eval': (_a, b) => F.get(b),
+  'admin.final-eval-save': (a, b) => A.writer(a, F.save, b),
+  'admin.final-eval-vote': (a, b) => A.writer(a, F.vote, b),
+  'admin.final-eval-reopen': (a, b) => A.writer(a, F.reopen, b),
+  'admin.final-eval-config': (a, b) => A.writer(a, F.config, b),
   'admin.cohort-groups': (_a, b) => G.cohortGroups(b),
   'admin.cohort-group-save': (a, b) => A.writer(a, G.cohortGroupSave, b),
   'admin.cohort-group-assign': (a, b) => A.writer(a, G.cohortGroupAssign, b),

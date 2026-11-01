@@ -12,6 +12,7 @@ import { CertOverride } from '../cert.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
 import CohortGroups from './Groups.jsx';
+import { FinalConfig } from './FinalEval.jsx';
 
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
@@ -34,6 +35,7 @@ export default function Programs({ canWrite, onEditJourney }) {
   const [cert, setCert] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [groups, setGroups] = useState(null);
+  const [finalCfg, setFinalCfg] = useState(null);
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
   useEffect(() => { load(); }, [load]);
@@ -128,6 +130,7 @@ export default function Programs({ canWrite, onEditJourney }) {
               <button className="btn-sm ghost" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
               {canWrite && <button className="btn-sm primary" onClick={() => saveVersion(p)}>احفظ نسخة</button>}
               {canWrite && !p.archived_at && <button className="la-link" onClick={() => editCohort({ program_id: p.id })}>اربطه بجهة أو دفعة</button>}
+              {canWrite && <button className="la-link" onClick={() => setFinalCfg(p)}>التقييم الختامي</button>}
               <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
               {canWrite && <button className="la-link" onClick={() => editCert(p)}>الشهادة{p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}</button>}
               {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>تكرار</button>}
@@ -207,6 +210,7 @@ export default function Programs({ canWrite, onEditJourney }) {
         </div>
       )}
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
+      {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortGroups cohort={groups} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
     </>
