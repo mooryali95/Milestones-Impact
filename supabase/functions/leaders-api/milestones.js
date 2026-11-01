@@ -111,7 +111,7 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
     else if (!due) status = 'unscheduled';
     else if (t > due) { status = 'late'; late_days = daysBetween(due, t); }
     else status = daysBetween(t, due) <= 7 ? 'due_soon' : 'on_time';
-    return { ...m, due, done, done_at: rec.done_at || null, extended: !!rec.due_override, status, late_days, note: rec.note || null };
+    return { ...m, due, done, done_at: rec.done_at || null, extended: !!rec.due_override, status, late_days, note: rec.note || null, scores: rec.scores || {} };
   }).sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || (a.sort ?? 0) - (b.sort ?? 0));
 }
 

@@ -1853,6 +1853,7 @@ export function googleIdentity(claims, clientId, nowSec = Math.floor(Date.now() 
 export * from './journey.js';
 export * from './milestones.js';
 export * from './groups.js';
+export * from './continuous.js';
 import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════

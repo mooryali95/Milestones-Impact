@@ -428,6 +428,25 @@ function Milestones({ list, summary }) {
   );
 }
 
+// التقييم المستمر بصوت المشارك: أين أنت، ومن أين جاء الرقم، وما الذي يرفعه
+const TREND_AR = { up: 'أداؤك يتحسن في آخر تقييماتك', down: 'آخر تقييماتك أقل مما قبلها؛ راجع الملاحظات أو اطلب استشارة', flat: 'أداؤك مستقر' };
+function Continuous({ c }) {
+  if (!c || c.index == null) return null;
+  return (
+    <section className="card stack" aria-labelledby="ca-h">
+      <div className="row between">
+        <h3 id="ca-h">تقدمك في التقييم المستمر</h3>
+        <b className="ca-index">{c.index}٪</b>
+      </div>
+      <p className="small muted">يُجمع من اختبارات الكتيب، ونماذجك، وتقييم الخبراء بعد جلساتك، ومعالم مشروعك. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>
+      {c.trend && <p className="small">{TREND_AR[c.trend.dir]}</p>}
+      <ul className="ca-list">{c.components.map((x) => (
+        <li key={x.key}><span>{x.label}</span><small className="muted">{x.value != null ? `${x.value}٪ · ${x.reason}` : x.reason}</small></li>
+      ))}</ul>
+    </section>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
@@ -492,6 +511,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}
       {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
+      {approved && <Continuous c={me.continuous} />}
       {approved && <ChooseExpert />}
 
       {!approved && profile && (
