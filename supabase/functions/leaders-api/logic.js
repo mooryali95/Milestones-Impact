@@ -451,7 +451,7 @@ export function rubricPriority(levels, priority) {
 }
 
 // ملف التعريف المعروض للمشارك: المسارات الـ27 تبقى مفتاحًا داخليًا للاشتقاق،
-// وما يُعرض هو محور الأولوية بمستواه فيه (7 ملفات فعلية في track_profiles).
+// وما يُعرض هو محور الأولوية بمستواه فيه (9 ملفات في track_profiles: الأولوية عند التعادل بمؤشرات المشارك).
 export const profileKey = (levels, priority) => (priority && levels?.[priority] in RANK ? `${priority}-${levels[priority]}` : null);
 
 // سطر مولَّد يسمّي أقوى أطر المشارك بأسماء القاموس، ولا يكشف مستوى أي إطار

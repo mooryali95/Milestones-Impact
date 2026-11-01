@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DIMENSIONS, DIM_AR, LEVEL_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { fieldsFor, handbookModulesFor, modelsFor, profileKey, strengthsLine, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
+import { fieldsFor, handbookModulesFor, modelsFor, priorityFor, profileKey, rubricPriority, strengthsLine, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneModels, RUBRIC, trackProject } from '../../supabase/functions/leaders-api/capstone.js';
 import { labVisible } from '../../supabase/functions/leaders-api/lab.js';
 
@@ -76,9 +76,26 @@ for (const t of tracks) {
 }
 for (const p of profiles) {
   check(p.key === `${p.priority_dimension}-${p.level}`, `${p.key}: المفتاح لا يطابق الإطار والمستوى`);
-  check(tracks.some((t) => t.profile_key === p.key), `${p.key}: لا مسار يُطوى إليه`);
 }
-check(profiles.length === 7, `عدد ملفات التعريف ${profiles.length} لا 7`);
+// الأولوية للمشارك (priorityFor): عند التعادل تحسمها مؤشراته، فأي إطار متعادل في الأضعف ممكن.
+// كل تركيبة (إطار × مستوى) يبلغها priorityFor لها ملف، وكل ملف تبلغه تركيبة واحدة على الأقل.
+const reach = {}; // مفتاح الملف ← تركيبات المستويات التي تبلغه
+for (const t of tracks) {
+  const lv = trackLevels(t.key);
+  const tied = DIMS.filter((d) => LV.indexOf(lv[d]) === Math.min(...DIMS.map((x) => LV.indexOf(lv[x]))));
+  for (const d of tied) {
+    const comp = Object.fromEntries(DIMS.map((x) => [x, x === d ? 10 : 50]));
+    const pr = priorityFor(lv, comp, t.priority_dimension);
+    check(pr === d, `${t.key}: priorityFor لا يختار ${d} بأدنى مؤشر`);
+    const pk = profileKey(lv, pr);
+    check(pkeys.has(pk), `${t.key} بأولوية ${pr}: لا ملف تعريف ${pk}`);
+    (reach[pk] ||= []).push(lv);
+  }
+  check(priorityFor(lv, null, t.priority_dimension) === t.priority_dimension, `${t.key}: الافتراض بلا مؤشرات ≠ tracks.priority_dimension`);
+}
+for (const p of profiles) check((reach[p.key] || []).length > 0, `${p.key}: لا تركيبة تبلغه`);
+check(Object.keys(reach).length === 9 && profiles.length === 9, `ملفات التعريف ${profiles.length} والممكنة ${Object.keys(reach).length}، والمطلوب 9`);
+const allEqual = (lv) => DIMS.every((d) => lv[d] === lv[DIMS[0]]);
 for (const [k, f] of Object.entries(fixes)) {
   const t = tracks.find((x) => x.key === k);
   check(t?.title_ar === f.to, `${k}: العنوان لم يُصحح`);
@@ -143,7 +160,19 @@ for (const p of profiles) {
       const deep = myCap.filter((m) => m.fields.some((f) => f.track)).map((m) => m.key);
       check(JSON.stringify([...deep].sort()) === JSON.stringify([...pr.models].sort()), `${tag}: فصول التعمق الفعلية ${deep.join('، ')}`);
       for (const k of pr.models) check(txt.includes(byKey[k].title_ar), `${tag}: «${byKey[k].title_ar}» غير مذكور`);
-    } else if (pr.kind === 'rubric_weight') check(RUBRIC_DIMS.has(d), `${tag}: لا معيار تقييم للإطار`);
+    } else if (pr.kind === 'rubric_weight') {
+      // المضاعفة تحدث فعلًا في تركيبة غير متساوية، ولا تحدث في المتساوية؛ فإن بلغته تركيبة متساوية فالنص يستثنيها
+      const rs = reach[p.key] || [];
+      check(RUBRIC_DIMS.has(d), `${tag}: لا معيار تقييم للإطار`);
+      check(rs.some((lv) => rubricPriority(lv, d) === d), `${tag}: لا تركيبة يتضاعف فيها الوزن`);
+      check(rs.filter(allEqual).every((lv) => rubricPriority(lv, d) === null), `${tag}: وزن مضاعف عند تساوي المستويات`);
+      check(/مضاعف/.test(txt), `${tag}: الوعد غير مذكور`);
+      if (rs.some(allEqual)) check(txt.includes('ما لم تتساوَ مستوياتك في الأطر الثلاثة'), `${tag}: الوعد لا يستثني تساوي المستويات`);
+    } else if (pr.kind === 'equal_weight') {
+      const rs = reach[p.key] || [];
+      check(rs.length > 0 && rs.every((lv) => allEqual(lv) && rubricPriority(lv, d) === null), `${tag}: تبلغه تركيبة يتضاعف فيها الوزن`);
+      check(!/مضاعف/.test(txt) && /بوزن واحد/.test(txt), `${tag}: النص لا يقول «بوزن واحد» أو يعد بالمضاعفة`);
+    }
     else if (pr.kind === 'requirement') {
       const r = state.requirements.find((x) => x.code === pr.code);
       const st = state.stages.find((s) => s.key === r?.stage_key);
@@ -151,6 +180,7 @@ for (const p of profiles) {
       check(r && r.dimension === d && r.level === p.level, `${tag}: المتطلب ليس لهذا الإطار والمستوى`);
     } else check(false, `${tag}: نوع وعد غير معروف`);
   }
+  check(p.promises.filter((x) => x.kind === 'rubric_weight' || x.kind === 'equal_weight').length === 1, `${p.key}: قاعدة الوزن غير محددة`);
   // كل مختبر يصل هذا الإطار والمستوى مذكور، ولا اسم مختبر في النص بلا وعد
   const promisedLabs = new Set(p.promises.filter((x) => x.kind === 'lab').map((x) => x.key));
   for (const l of myLabs) check(promisedLabs.has(l.key), `${p.key}: المختبر «${l.title_ar}» يصل المستوى ولا يذكره الملف`);
@@ -207,8 +237,8 @@ for (const k of ['initiative-charter', 'benefits-register', 'transformation-stor
 }
 
 // ── التقرير ──
-console.log('\nملفات التعريف السبعة:');
-console.table(profiles.map((p) => ({ المفتاح: p.key, العنوان: p.title_ar, English: p.title_en, المسارات: tracks.filter((t) => t.profile_key === p.key).map((t) => t.key).join(' ') })));
+console.log('\nملفات التعريف التسعة:');
+console.table(profiles.map((p) => ({ المفتاح: p.key, العنوان: p.title_ar, English: p.title_en, 'افتراضي لـ': tracks.filter((t) => t.profile_key === p.key).map((t) => t.key).join(' ') || '—', 'تبلغه': (reach[p.key] || []).length })));
 console.log('المختبرات بالمستوى (تلقائيًا، audience = all):');
 console.table(table);
 console.log(`بمنحة المستشار فقط: ${granted.join('، ') || 'لا شيء'}`);
