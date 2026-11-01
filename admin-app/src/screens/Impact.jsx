@@ -136,6 +136,8 @@ function People({ list, onPerson }) {
             })() : <small className="la-muted">·</small>}</td>
             {DIMS.map((d) => {
               const x = p.dimensions?.find((y) => y.dimension === d);
+              // زوج أداتاه غير متطابقتين: لا أرقام، وسبب واحد في خلية الإطار الأول
+              if (p.comparable === false) return <td key={d}>{d === DIMS[0] ? <><span className="la-chip">غير قابل للمقارنة</span><br /><small className="la-muted">{p.reason}{p.baseline_key && p.post_key ? ` (${p.baseline_key} ← ${p.post_key})` : ''}</small></> : <small className="la-muted">·</small>}</td>;
               if (!x) return <td key={d}><small className="la-muted">{p.post_at ? '·' : 'لم يُجرِ البعدي'}</small></td>;
               const [vl, vc] = VERDICT[x.verdict.key];
               return (

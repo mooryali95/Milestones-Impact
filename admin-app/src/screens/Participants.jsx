@@ -15,6 +15,8 @@ import { ExpertAssign } from './ExpertMatch.jsx';
 import { stars } from '../handbook.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
+// عدد الأسئلة بصيغة عربية سليمة: سؤال واحد، سؤالان، 3–10 أسئلة، 11+ سؤالًا
+const questionsAr = (n) => (n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤالان' : n <= 10 ? `${n} أسئلة` : `${n} سؤالًا`);
 
 const DAY = 864e5;
 const ACTIVE = ['placed', 'enrolled'];
@@ -267,7 +269,12 @@ function Person({ id, canWrite, onBack }) {
                 <tr key={d}>
                   <td><b>{DIM_EN[d]}</b><br /><small>{DIM[d]}</small></td>
                   <td>{pct(rr?.knowledge_pct)}</td><td>{pct(rr?.skill_pct)}</td><td>{pct(rr?.behavior_pct)}</td>
-                  <td>{ev?.composite != null ? <><b>{ev.composite}</b>{ev.borderline && <><br /><span className="la-chip warn">حدّية</span></>}</> : '·'}</td>
+                  <td>{ev?.composite != null ? <>
+                    <b>{ev.composite}</b>
+                    {ev.borderline && <><br /><span className="la-chip warn">حدّية</span></>}
+                    {ev.reason && <><br /><small className="la-why">{ev.reason}</small></>}
+                    {ev.items_to_flip != null && <><br /><small className="la-muted">يفصله {questionsAr(ev.items_to_flip)} عن المستوى التالي</small></>}
+                  </> : '·'}</td>
                   <td>
                     {canWrite ? (
                       <select aria-label={`مستوى ${DIM_EN[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
@@ -275,7 +282,6 @@ function Person({ id, canWrite, onBack }) {
                       </select>
                     ) : LVL[x?.level] || ''}
                     {ev && <><br /><small className="la-muted">المعيار: {LVL[ev.level]}</small></>}
-                    {ev?.reason && <><br /><small className="la-why">{ev.reason}</small></>}
                   </td>
                   <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder="اختياري" onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
                 </tr>

@@ -8,7 +8,7 @@ import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.
 import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
-  overallChange, pairedStats, practiceEffect, raterPercents, raterProspective,
+  overallChange, pairComparable, pairedStats, practiceEffect, raterPercents, raterProspective,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -16,18 +16,25 @@ type Body = Record<string, any>;
 const RATER_LIMIT = 3;
 const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق' };
 
-// آخر قياس مُرسل من كل نوع لكل مشارك، بنتائجه
+// آخر قياس مُرسل من كل نوع لكل مشارك، بنتائجه. زوج أداتاه غير متطابقتين
+// (pairs_with البعدي لا يساوي مفتاح المبدئي) يُعلَّم غير قابل للمقارنة ولا
+// تُقرأ نتائجه.
 async function latestResults(ids: string[] | null) {
-  const rows = await allFor(ids, () => db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key)')
+  const rows = await allFor(ids, () => db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)')
     .eq('status', 'submitted').order('submitted_at', { ascending: false }).order('id'));
-  const pick: Record<string, { baseline?: any; post?: any }> = {};
+  const pick: Record<string, { baseline?: any; post?: any; comparable?: boolean; reason?: string | null }> = {};
   for (const a of rows) {
     const kind = a.instruments?.kind;
     if (kind !== 'baseline' && kind !== 'post') continue;
     const x = (pick[a.participant_id] ||= {});
     if (!(x as any)[kind]) (x as any)[kind] = a;
   }
-  const aids = Object.values(pick).flatMap((x) => [x.baseline?.id, x.post?.id]).filter(Boolean) as string[];
+  for (const x of Object.values(pick)) {
+    if (!x.baseline || !x.post) continue;
+    const c = pairComparable(x.baseline.instruments, x.post.instruments);
+    x.comparable = c.comparable; x.reason = c.reason;
+  }
+  const aids = Object.values(pick).filter((x) => x.comparable).flatMap((x) => [x.baseline?.id, x.post?.id]).filter(Boolean) as string[];
   const results: Record<string, Record<string, any>> = {};
   for (let i = 0; i < aids.length; i += 200) {
     const part = must(await db.from('assessment_results').select('*').in('assessment_id', aids.slice(i, i + 200))) as any[] ?? [];
@@ -158,6 +165,15 @@ export async function compareFor(ids: string[] | null) {
   const out: Record<string, any> = {};
   for (const [pid, x] of Object.entries(pick)) {
     if (!x.baseline || !x.post) { out[pid] = { pid, baseline_at: x.baseline?.submitted_at || null, post_at: x.post?.submitted_at || null, dimensions: null }; continue; }
+    // أداتان غير متطابقتين: لا مقارنة، ويظهر السبب للإدارة
+    if (!x.comparable) {
+      out[pid] = {
+        pid, baseline_at: x.baseline.submitted_at, post_at: x.post.submitted_at,
+        baseline_key: x.baseline.instruments?.key, post_key: x.post.instruments?.key,
+        comparable: false, reason: x.reason, dimensions: null,
+      };
+      continue;
+    }
     // معادلة الصيغتين قبل المقارنة: كل نتيجة بصيغتها
     const dimensions = compareAssessments({
       pre: equate(results[x.baseline.id] || {}, x.baseline.form, cfg.offsets),
@@ -341,6 +357,9 @@ export async function adminReport(b: Body) {
     baseline_at: rows[p.id]?.baseline_at || null, post_at: rows[p.id]?.post_at || null,
     raters_invited: rCount(p.id, 'invited') + rCount(p.id, 'submitted'), raters_done: rCount(p.id, 'submitted'),
     dimensions: rows[p.id]?.dimensions || null, overall: rows[p.id]?.overall || null, forms: rows[p.id]?.forms || null,
+    // زوج غير قابل للمقارنة: الأداتان غير متطابقتين، يظهر سببه بدل الأرقام
+    comparable: rows[p.id]?.comparable ?? null, reason: rows[p.id]?.reason || null,
+    baseline_key: rows[p.id]?.baseline_key || null, post_key: rows[p.id]?.post_key || null,
   }));
   const paired = list.filter((x) => x.dimensions);
   const cohort = Object.fromEntries(DIMENSIONS.map((d) => {

@@ -6,7 +6,7 @@
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
 import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, publicDb, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { itemAnalysis, weeklySeries } from './logic.js';
+import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
@@ -119,7 +119,10 @@ export async function itemReport(b: Record<string, any>) {
     rows.push(...await all((f, t) => db.from('assessment_answers').select('assessment_id, question_id, score, value').in('assessment_id', part).range(f, t)));
   }
   const forms = Object.fromEntries(sessions.map((x: any) => [x.id, x.form]));
-  const r = itemAnalysis(questions || [], rows.map((x) => ({ assessment_id: x.assessment_id, question_id: x.question_id, score: x.score, k: x.value?.k })), { forms });
+  // بنود انتقال التعلم (transfer) بلا درجة ولا بُعد حقيقي، فلا تدخل في ألفا
+  // ولا تمييز بُعد القيادة الذي تحمله شكليًا
+  const scored = (questions || []).filter((q: any) => TIERS.includes(q.tier));
+  const r = itemAnalysis(scored, rows.map((x) => ({ assessment_id: x.assessment_id, question_id: x.question_id, score: x.score, k: x.value?.k })), { forms });
   return { success: true, instrument_id: id, ...r };
 }
 
