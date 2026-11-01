@@ -4,14 +4,14 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
-import { journeyDefinition, requirementFor } from './programs.ts';
+import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
 import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
@@ -348,21 +348,25 @@ export async function journeyFor(p: any) {
     reportIssued: (reports.data || []).length > 0,
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
-  const activity = await evidenceFor(p, def.requirements, levels, approved, def.cohort?.id || null);
+  // المحتوى بمستوى الدفعة الموحد إن كانت متجانسة، وإلا بمستوى المشارك؛ القياس والمسار يبقيان من قياسه
+  const content = contentLevels(levels, def.cohort) as Record<string, string>;
+  const activity = await evidenceFor(p, def.requirements, content, approved, def.cohort?.id || null);
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
-  const journey = buildJourney({ stages: def.stages, requirements: def.requirements, progress: prog, levels, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
+  const modes = def.cohort?.stage_modes || {};
+  const journey = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
   // المعالم: استحقاقها من جدول الدفعة، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
   const milestones = milestoneStatuses(def.milestones || [], {
     stagesDone: new Set(journey.filter((s: any) => s.status === 'done').map((s: any) => s.key)),
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones) };
+  const group = await groupOf(p.id, def.cohort?.id || null);
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary }, passkeys, cells, org] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group }, passkeys, cells, org] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -394,6 +398,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     // معالم الرحلة وموقع المشارك منها (المتأخر بعدد أيامه)
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
     milestone_summary,
+    // مجموعته في دفعته، ونمط المشروع
+    group, project_mode: def.cohort?.project_mode || 'individual',
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'
@@ -725,7 +731,7 @@ const HANDBOOK_VIEWS_PER_HOUR = 120;
 export async function approvedLevels(p: any) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
   if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
-  return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
+  return contentLevelsFor(p, Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>);
 }
 
 // نقاط المشارك ولقبه من سجل النقاط

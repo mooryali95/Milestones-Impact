@@ -610,3 +610,6 @@
 .la-stage-ov { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
 .la-reach { font-size: .82rem; color: var(--gold-text); margin-top: 2px; }
 .mi-form.wide { max-width: 860px; width: 100%; }
+.la-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.la-group .la-reqs li { gap: 6px; }
+.la-group select { max-width: 130px; }

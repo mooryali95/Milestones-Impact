@@ -5,7 +5,7 @@
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -222,6 +222,10 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'ends_on', label: 'تنتهي', type: 'date' },
     { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
     { name: 'capacity', label: 'المقاعد', type: 'number' },
+    { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
+      help: 'المتجانس يوحّد المحتوى (الرحلة والكتيب والنماذج) للجميع، ويبقى قياس كل مشارك ومساره من نتيجته.' },
+    { name: 'content_level', label: 'مستوى المحتوى للدفعة', type: 'select', options: LVL, show: (v) => v.level_mode === 'uniform' },
+    { name: 'project_mode', label: 'المشروع', type: 'select', options: PROJECT_MODE_AR },
     { name: 'notes_ar', label: 'ملاحظات', type: 'textarea', rows: 2 },
   ];
   const delivery = [];
@@ -244,7 +248,9 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 }
 
 export function cohortToForm(c = {}) {
-  const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '' };
+  const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual' };
+  delete v.schedule; delete v.stage_modes;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;
   return v;

@@ -4,7 +4,7 @@
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail } from './core.ts';
-import { requirementFor } from './programs.ts';
+import { contentLevelsFor, requirementFor } from './programs.ts';
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -103,7 +103,7 @@ export function participantItem(it: any, p: any) {
 // المتطلب كما يسري على المشارك: من برنامج دفعته وبتخصيصها
 async function myRequirement(p: any, id: unknown, kind: string, session?: { cohort_id?: string | null }) {
   const { r, def } = await requirementFor(p, id, kind);
-  const levels = await levelsOf(p.id);
+  const levels = await contentLevelsFor(p, await levelsOf(p.id));
   if (!requirementApplies(r, levels)) throw new Fail('هذا النشاط لا يخص مسارك', 403);
   if (session?.cohort_id && session.cohort_id !== def.cohort?.id) throw new Fail('هذه الجلسة لدفعة أخرى', 403, 'cohort');
   return r;
@@ -118,7 +118,7 @@ async function levelsOf(participantId: string, approvedOnly = false) {
 // ── نبضة القراءة ──
 // يرسلها القارئ كل 15 ثانية تقريبًا: ثوانٍ نشطة لكل شريحة من الباب.
 export async function readingPing(p: any, b: Body) {
-  const levels = await levelsOf(p.id, true);
+  const levels = await contentLevelsFor(p, await levelsOf(p.id, true));
   const id = String(b.id || '');
   const { data: row } = await db.from('reading_progress').select('*').eq('participant_id', p.id).eq('module_id', id).maybeSingle();
   let words = row?.words || 0;
@@ -137,7 +137,7 @@ export async function readingPing(p: any, b: Body) {
 // ── منهج المسار ──
 const CONTENT_COLS = 'id, kind, title_ar, description_ar, url, minutes, dimension, min_level, only_level, track_keys, exclude_tracks, required, min_pct, sort, active';
 async function myContent(p: any, id: unknown) {
-  const levels = await levelsOf(p.id, true);
+  const levels = await contentLevelsFor(p, await levelsOf(p.id, true));
   const item = must(await db.from('content_items').select(CONTENT_COLS).eq('id', String(id || '')).maybeSingle());
   if (!item || !contentApplies(item, levels)) throw new Fail('هذه المادة لا تخص مسارك', 404);
   return item;

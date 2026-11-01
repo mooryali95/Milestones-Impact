@@ -319,6 +319,7 @@ function Person({ id, canWrite, onBack }) {
         </section>
       </div>
 
+      {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
       <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
 
       <section className="la-card">

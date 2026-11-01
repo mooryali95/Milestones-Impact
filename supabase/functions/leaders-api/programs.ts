@@ -5,14 +5,14 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, starts_on, ends_on, capacity, notes_ar, created_at';
+const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, created_at';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;
@@ -65,7 +65,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
     ...rendered, via, program_id: programId,
-    cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {} } : null,
+    cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {},
+      level_mode: cohort.level_mode || 'mixed', content_level: cohort.content_level || null, stage_modes: cohort.stage_modes || {}, project_mode: cohort.project_mode || 'individual' } : null,
     milestones: ((await db.from('program_milestones').select('*').eq('program_id', programId).eq('active', true).order('sort')).data || []),
     version: version ? { id: version.id, number: version.number, label: version.label } : null,
   };
@@ -287,6 +288,19 @@ export async function cohortSave(a: Admin, b: Body) {
       catch (err) { throw new Fail((err as Error).message); }
     }
   }
+  // نمط المجموعة: تجانس المستوى ونمط المشروع، ونمط العمل لكل مرحلة
+  try { Object.assign(row, cleanGroupSettings(b)); }
+  catch (err) { throw new Fail((err as Error).message); }
+  if ((row.level_mode ?? prev?.level_mode) === 'uniform' && !(row.content_level !== undefined ? row.content_level : prev?.content_level)) {
+    throw new Fail('اختر مستوى المحتوى للدفعة المتجانسة');
+  }
+  if ('stage_modes' in b) {
+    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
+    const stages = vid
+      ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data?.stages || [])
+      : (await liveRows(programId)).stages;
+    row.stage_modes = cleanStageModes(b.stage_modes, stages.map((x: any) => x.key));
+  }
   row.updated_at = new Date().toISOString();
   const saved: any = prev
     ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
@@ -377,4 +391,111 @@ export async function participantMilestone(a: Admin, b: Body) {
   must(await db.from('participant_milestones').upsert({ ...(prev || {}), ...rec }));
   await audit('admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, note: rec.note });
   return { success: true };
+}
+
+// ── نمط المجموعة ──
+// مستويات المحتوى للمشارك: مستواه من القياس، أو مستوى دفعته الموحد إن كانت متجانسة
+export async function contentLevelsFor(p: any, levels: Record<string, string>) {
+  const { cohort } = await cohortOf(p);
+  return contentLevels(levels, cohort) as Record<string, string>;
+}
+
+// مشاركو الدفعة فعلًا: من سُجّل فيها، ومن تتبعها تلقائيًا بجهته (ما لم يُسجَّل في غيرها)
+async function cohortMembers(c: any) {
+  const [enr, cohorts] = await Promise.all([
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+    db.from('cohorts').select(COHORT_COLS),
+  ]);
+  let ids = new Set((enr.data || []).filter((e: any) => e.cohort_id === c.id && e.status !== 'withdrawn').map((e: any) => e.participant_id));
+  const extra = c.organization_id ? ((await db.from('participants').select('id').eq('organization_id', c.organization_id)).data || []).map((r: any) => r.id) : [];
+  const all = [...new Set([...ids, ...extra])] as string[];
+  if (!all.length) return [];
+  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, status').in('id', all);
+  const byP = new Map<string, any[]>();
+  for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
+  const mine = (ps || []).filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts: cohorts.data || [], organizationId: p.organization_id }).cohort?.id === c.id);
+  const { data: pl } = await db.from('placements').select('participant_id, dimension, level').in('participant_id', mine.map((p: any) => p.id));
+  return mine.map((p: any) => ({
+    id: p.id, name: p.full_name, email: p.email, status: p.status,
+    levels: Object.fromEntries((pl || []).filter((x: any) => x.participant_id === p.id).map((x: any) => [x.dimension, x.level])),
+  }));
+}
+
+export async function cohortGroups(b: Body) {
+  const c = must(await db.from('cohorts').select(COHORT_COLS).eq('id', String(b.cohort_id || '')).maybeSingle());
+  if (!c) throw new Fail('الدفعة غير موجودة', 404);
+  const [members, groups, links, live] = await Promise.all([
+    cohortMembers(c),
+    db.from('cohort_groups').select('*').eq('cohort_id', c.id).order('sort'),
+    db.from('cohort_group_members').select('participant_id, group_id').eq('cohort_id', c.id),
+    c.program_version_id
+      ? db.from('program_versions').select('data').eq('id', c.program_version_id).single().then((r: any) => r.data?.data?.stages || [])
+      : liveRows(c.program_id).then((r) => r.stages),
+  ]);
+  const gOf = new Map((links.data || []).map((l: any) => [l.participant_id, l.group_id]));
+  return {
+    success: true, cohort: c,
+    stages: (live as any[]).filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort).map((s) => ({ key: s.key, title_ar: s.title_ar })),
+    groups: groups.data || [],
+    members: members.map((m: any) => ({ ...m, group_id: gOf.get(m.id) || null })),
+  };
+}
+
+export async function cohortGroupSave(a: Admin, b: Body) {
+  const c = must(await db.from('cohorts').select('id').eq('id', String(b.cohort_id || '')).maybeSingle());
+  if (!c) throw new Fail('الدفعة غير موجودة', 404);
+  if (b.delete && isUuid(b.id)) {
+    must(await db.from('cohort_groups').delete().eq('id', b.id).eq('cohort_id', c.id));
+    await audit('admin', a.email, 'group.delete', 'cohorts', c.id, null, { group: b.id });
+    return { success: true };
+  }
+  const name = String(b.name || '').trim().slice(0, 80);
+  if (!name) throw new Fail('اسم المجموعة مطلوب');
+  const row = isUuid(b.id)
+    ? must(await db.from('cohort_groups').update({ name }).eq('id', b.id).eq('cohort_id', c.id).select('*').single())
+    : must(await db.from('cohort_groups').insert({ cohort_id: c.id, name, sort: ((await db.from('cohort_groups').select('id', { count: 'exact', head: true }).eq('cohort_id', c.id)).count || 0) + 1 }).select('*').single());
+  await audit('admin', a.email, 'group.save', 'cohorts', c.id, null, { group: row.id, name });
+  return { success: true, group: row };
+}
+
+// نقل مشارك إلى مجموعة، أو إخراجه منها (group_id فارغ)
+export async function cohortGroupAssign(a: Admin, b: Body) {
+  const cid = String(b.cohort_id || ''), pid = String(b.participant_id || '');
+  if (!isUuid(cid) || !isUuid(pid)) throw new Fail('بيانات ناقصة');
+  if (isUuid(b.group_id)) {
+    const g = must(await db.from('cohort_groups').select('id').eq('id', b.group_id).eq('cohort_id', cid).maybeSingle());
+    if (!g) throw new Fail('المجموعة لا تخص هذه الدفعة');
+    must(await db.from('cohort_group_members').upsert({ cohort_id: cid, participant_id: pid, group_id: g.id }));
+  } else {
+    must(await db.from('cohort_group_members').delete().eq('cohort_id', cid).eq('participant_id', pid));
+  }
+  await audit('admin', a.email, 'group.assign', 'participants', pid, null, { cohort: cid, group: b.group_id || null });
+  return { success: true };
+}
+
+// توزيع آلي: يستبدل مجموعات الدفعة بعدد جديد، متقاربة المستوى أو متنوعة
+export async function cohortGroupsAuto(a: Admin, b: Body) {
+  const c = must(await db.from('cohorts').select(COHORT_COLS).eq('id', String(b.cohort_id || '')).maybeSingle());
+  if (!c) throw new Fail('الدفعة غير موجودة', 404);
+  const n = Math.round(Number(b.count));
+  if (!(n >= 1 && n <= 50)) throw new Fail('عدد المجموعات من 1 إلى 50');
+  const members = await cohortMembers(c);
+  if (!members.length) throw new Fail('لا مشاركين في هذه الدفعة بعد');
+  const split = autoGroups(members, n, b.by === 'level' ? 'level' : 'mixed');
+  must(await db.from('cohort_groups').delete().eq('cohort_id', c.id));
+  const groups = must(await db.from('cohort_groups').insert(split.map((_ids, i) => ({ cohort_id: c.id, name: `المجموعة ${i + 1}`, sort: i + 1 }))).select('id, sort')) as any[];
+  const bySort = new Map(groups.map((g) => [g.sort, g.id]));
+  const rows = split.flatMap((ids, i) => ids.map((pid: string) => ({ cohort_id: c.id, participant_id: pid, group_id: bySort.get(i + 1) })));
+  if (rows.length) must(await db.from('cohort_group_members').insert(rows));
+  await audit('admin', a.email, 'group.auto', 'cohorts', c.id, null, { count: n, by: b.by === 'level' ? 'level' : 'mixed', members: rows.length });
+  return { success: true, groups: n, members: rows.length };
+}
+
+// مجموعة المشارك في دفعته الحالية واسمها وعدد أعضائها
+export async function groupOf(participantId: string, cohortId: string | null) {
+  if (!cohortId) return null;
+  const { data: link } = await db.from('cohort_group_members').select('group_id, cohort_groups(name)').eq('cohort_id', cohortId).eq('participant_id', participantId).maybeSingle();
+  if (!link) return null;
+  const { count } = await db.from('cohort_group_members').select('participant_id', { count: 'exact', head: true }).eq('group_id', link.group_id);
+  return { id: link.group_id, name: (link as any).cohort_groups?.name || '', members: count || 1 };
 }

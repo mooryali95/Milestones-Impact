@@ -5,12 +5,13 @@
 // الدفعة: الجهة والبرنامج ونسخته والتواريخ وطريقة تنفيذ كل نشاط.
 // المشارك يتبع دفعة جهته الجارية تلقائيًا، ومن ليس له جهة يتبع الدفعة المفتوحة.
 import React, { useCallback, useEffect, useState } from 'react';
-import { L } from '../leaders.js';
+import { L, LVL } from '../leaders.js';
 import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
 import Form from '../Form.jsx';
 import { CertOverride } from '../cert.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
+import CohortGroups from './Groups.jsx';
 
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
@@ -32,6 +33,7 @@ export default function Programs({ canWrite, onEditJourney }) {
   const [compare, setCompare] = useState(null);
   const [cert, setCert] = useState(null);
   const [schedule, setSchedule] = useState(null);
+  const [groups, setGroups] = useState(null);
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
   useEffect(() => { load(); }, [load]);
@@ -160,14 +162,14 @@ export default function Programs({ canWrite, onEditJourney }) {
               const v = versionOf(c), latest = latestOf(c.program_id);
               return (
                 <tr key={c.id}>
-                  <td><b>{c.name}</b>{c.is_default && <> <small className="la-chip">المفتوحة</small></>}</td>
+                  <td><b>{c.name}</b>{c.is_default && <> <small className="la-chip">المفتوحة</small></>}{c.level_mode === 'uniform' && <> <small className="la-chip">متجانس · {LVL[c.content_level]}</small></>}{c.project_mode === 'group' && <> <small className="la-chip">مشروع جماعي</small></>}</td>
                   <td>{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'}</td>
                   <td>{progName(c.program_id)}</td>
                   <td>{v ? `النسخة ${v.number}` : 'آخر تعديل'}{v && latest && latest.id !== v.id && canWrite && <> <button className="la-link" onClick={() => upgrade(c)}>رقِّ إلى {latest.number}</button></>}</td>
                   <td>{[date(c.starts_on), date(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
                   <td>{COHORT_STATUS[c.status]}</td>
                   <td>{c.enrolled || ''}</td>
-                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button></>}</td>
+                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>المجموعات ونمط العمل</button></>}</td>
                 </tr>
               );
             })}
@@ -205,6 +207,7 @@ export default function Programs({ canWrite, onEditJourney }) {
         </div>
       )}
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
+      {groups && <CohortGroups cohort={groups} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
     </>
   );
