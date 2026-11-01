@@ -6,6 +6,7 @@ import {
 import {
   AUTO_CHECKS, SCOPES, buildJourney, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
+  servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -488,8 +489,9 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
   }
-  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form')
+  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form, anchor_code, min_level')
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
+  if (kind === 'post') qs = await postServed(p, qs);
   // أداة بصيغتين: المبدئي صيغة ثابتة للمشارك، والبعدي الصيغة الأخرى
   if (usesForms(qs)) {
     if (!a.form) {
@@ -527,6 +529,15 @@ export async function assessmentGet(p: any, b: Body = {}) {
   };
 }
 
+// ما يُقدَّم في القياس البعدي: فقرات المستوى حتى المستوى المعتمد في كل بُعد،
+// والتوأم بدل المشترك (أو الأصل لربع المشاركين لتقدير أثر التكرار).
+// العرض والإجابة والإرسال كلها تمر من هنا فتُحسب الدرجة على ما قُدِّم فقط.
+export async function postServed(p: any, qs: any[]) {
+  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
+  const levels = Object.fromEntries(pl.filter((x: any) => x.approved_at).map((x: any) => [x.dimension, x.level]));
+  return servedPost(qs, { levels, repeat: anchorRepeat(p.id) });
+}
+
 // القياس البعدي يُفتح حين يصل المشارك إلى مرحلة التقييم في رحلته
 export async function requirePostOpen(p: any) {
   const st = await mePayload(p);
@@ -546,6 +557,11 @@ export async function assessmentAnswer(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
   const q = must(await db.from('questions').select('*').eq('id', String(b.question_id)).eq('instrument_id', a.instrument_id).maybeSingle());
   if (!q || (q.form && a.form && q.form !== a.form)) throw new Fail(UNEXPECTED_ERROR);
+  const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
+  if (inst?.kind === 'post') {
+    const all = must(await db.from('questions').select('id, code, dimension, anchor_code, min_level').eq('instrument_id', a.instrument_id).eq('active', true)) ?? [];
+    if (!(await postServed(p, all)).some((x: any) => x.id === q.id)) throw new Fail(UNEXPECTED_ERROR);
+  }
   const k = Number(b.k);
   const score = scoreFor(q, k);
   if (!Number.isInteger(k) || score == null) throw new Fail(UNEXPECTED_ERROR);
@@ -568,11 +584,13 @@ export async function assessmentSubmit(p: any, b: Body) {
     db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id),
     db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
   ]);
-  const questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
+  const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
+  let questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
+  // البعدي يُتحقق من اكتماله ويُحسب على المجموعة نفسها التي عُرضت
+  if (inst?.kind === 'post') questions = await postServed(p, questions);
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
-  const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
   // «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم من الممارسة: أكثر من ذلك
@@ -615,7 +633,10 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
   const answers = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k]));
   const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
   if (noBefore) throw new Fail(`بقي تقدير "قبل البرنامج" في ${noBefore} من العبارات`, 400, 'incomplete');
-  const scored = questions.filter((q: any) => q.tier !== 'transfer');
+  const served = questions.filter((q: any) => q.tier !== 'transfer');
+  // فرق القبلي والبعدي على الفقرات العامة وحدها؛ فقرات المستوى تُحفظ منفصلة
+  const scored = served.filter((q: any) => !levelGated(q));
+  const gains: any = levelGains(served, answers);
   const m = model || DEFAULT_MODEL;
   const result = placementFromAnswers(scored, answers, [], m);
   const minBehavior = Number(m.min_behavior_items ?? DEFAULT_MODEL.min_behavior_items);
@@ -639,6 +660,7 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
     behavior_before_pct: before[r.dimension]?.behavior ?? null,
     skill_anchor_pct: split[r.dimension]?.anchor ?? null, skill_form_pct: split[r.dimension]?.form ?? null,
     behavior_common_pct: common[r.dimension]?.post ?? null, behavior_pre_common_pct: common[r.dimension]?.pre ?? null,
+    level_gain_pct: gains[r.dimension]?.pct ?? null, level_gain_n: gains[r.dimension]?.n ?? null, level_gain_level: gains[r.dimension]?.level ?? null,
   }))));
   await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
   await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);

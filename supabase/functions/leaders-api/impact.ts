@@ -8,7 +8,7 @@ import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.
 import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
-  overallChange, pairComparable, pairedStats, practiceEffect, raterPercents, raterProspective,
+  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, raterPercents, raterProspective,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -44,6 +44,7 @@ async function latestResults(ids: string[] | null) {
         behavior_before: num(r.behavior_before_pct), composite: num(r.composite_pct), level: r.level,
         skill_anchor: num(r.skill_anchor_pct), skill_form: num(r.skill_form_pct),
         behavior_common: num(r.behavior_common_pct), behavior_pre_common: num(r.behavior_pre_common_pct),
+        level_gain: num(r.level_gain_pct), level_gain_n: num(r.level_gain_n), level_gain_level: r.level_gain_level ?? null,
       };
     }
   }
@@ -183,6 +184,8 @@ export async function compareFor(ids: string[] | null) {
     out[pid] = {
       pid, baseline_at: x.baseline.submitted_at, post_at: x.post.submitted_at,
       baseline_key: x.baseline.instruments?.key, post_key: x.post.instruments?.key,
+      // «مكتسبات المستوى»: فقرات البعدي الخاصة بالمستوى، خارج فرق القبلي والبعدي
+      level_gains: levelGainReport(results[x.post.id] || {}),
       forms: x.baseline.form || x.post.form ? [x.baseline.form, x.post.form] : null,
       dimensions, overall: overallChange(dimensions, cfg, evidence.has(pid)),
     };

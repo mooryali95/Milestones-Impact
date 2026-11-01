@@ -62,11 +62,62 @@ export function formFor(seed, previous = null) {
 export const usesForms = (questions) => (questions || []).some((q) => q.form);
 export const forForm = (questions, form) => (questions || []).filter((q) => !q.form || q.form === form);
 
-// المواقف المشتركة والخاصة بالصيغة كلٌّ على حدة، لتقدير أثر تكرار الأسئلة
+// ── القياس البعدي: تدرّج المستوى وتوائم المواقف المشتركة ──
+// فقرة لها min_level لا تُقدَّم إلا لمن اعتُمد مستواه في بُعدها عندها أو فوقها،
+// وتُحسب منفصلة («مكتسبات المستوى») فلا تدخل في فرق القبلي والبعدي.
+// التوأم (anchor_code لا يساوي code) فقرة موازية لمشتركة يراها المشارك في
+// المبدئي: يُقدَّم التوأم بدل الأصل لغالبية المشاركين حتى لا يقيس البعدي تذكّر
+// السؤال، ويُبقى الأصل لربعهم (anchorRepeat) فيبقى تقدير أثر التكرار قائمًا.
+export const isTwin = (q) => !!q.anchor_code && q.anchor_code !== q.code;
+export const levelGated = (q) => !!q.min_level;
+export function anchorRepeat(seed) {
+  let h = 7;
+  for (const c of `anchor:${seed}`) h = (h * 33 + c.charCodeAt(0)) >>> 0;
+  return h % 4 === 0;
+}
+export function servedPost(questions, { levels = {}, repeat = false } = {}) {
+  const qs = questions || [];
+  const twinned = new Set(qs.filter(isTwin).map((q) => q.anchor_code));
+  return qs.filter((q) => {
+    if (q.min_level && (LEVEL_RANK[q.min_level] ?? 9) > (LEVEL_RANK[levels[q.dimension]] ?? LEVEL_RANK.beginner)) return false;
+    if (isTwin(q)) return !repeat;
+    if (twinned.has(q.code)) return repeat;
+    return true;
+  });
+}
+// مكتسبات المستوى لكل بُعد: نسبة الدرجة على فقرات المستوى المقدَّمة (معرفة ومواقف معًا)
+export function levelGains(questions, answers) {
+  const acc = {};
+  for (const q of (questions || []).filter(levelGated)) {
+    if (q.active === false || !['knowledge', 'skill'].includes(q.tier)) continue;
+    const t = (acc[q.dimension] ||= { got: 0, max: 0, n: 0, level: q.min_level });
+    const w = Number(q.weight ?? 1);
+    t.max += maxScore(q) * w;
+    if (answers[q.id] != null) { t.got += Math.max(0, scoreFor(q, answers[q.id]) || 0) * w; t.n += 1; }
+    if ((LEVEL_RANK[q.min_level] ?? 0) > (LEVEL_RANK[t.level] ?? 0)) t.level = q.min_level;
+  }
+  return Object.fromEntries(DIMENSIONS.map((d) => {
+    const t = acc[d];
+    return [d, t && t.max > 0 ? { pct: Math.round((t.got / t.max) * 10000) / 100, n: t.n, level: t.level } : null];
+  }));
+}
+
+// تقرير «مكتسبات المستوى» من نتائج البعدي المحفوظة: لكل بُعد نسبته وعدد فقراته
+// ومستواه، أو null إن لم تُقدَّم له فقرات مستوى. لا يمس pre/post ولا الفرق.
+export const LEVEL_GAIN_AR = 'مكتسبات المستوى';
+export function levelGainReport(post) {
+  return Object.fromEntries(DIMENSIONS.map((d) => {
+    const r = post?.[d];
+    return [d, r && r.level_gain != null ? { label_ar: LEVEL_GAIN_AR, pct: r.level_gain, n: r.level_gain_n ?? null, level: r.level_gain_level ?? null } : null];
+  }));
+}
+
+// المواقف المشتركة والخاصة بالصيغة كلٌّ على حدة، لتقدير أثر تكرار الأسئلة.
+// التوأم جديد على المشارك فيُحسب مع الموازية لا مع المشتركة.
 export function skillSplit(questions, answers) {
-  const skill = questions.filter((q) => q.tier === 'skill');
-  const anchor = tierPercents(skill.filter((q) => !q.form), answers);
-  const own = tierPercents(skill.filter((q) => q.form), answers);
+  const skill = questions.filter((q) => q.tier === 'skill' && !levelGated(q));
+  const anchor = tierPercents(skill.filter((q) => !q.form && !isTwin(q)), answers);
+  const own = tierPercents(skill.filter((q) => q.form || isTwin(q)), answers);
   return Object.fromEntries(DIMENSIONS.map((d) => [d, { anchor: anchor[d].skill, form: own[d].skill }]));
 }
 
