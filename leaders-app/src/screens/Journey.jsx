@@ -511,6 +511,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}
       {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
+      {me.final && (
+        <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
+          <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}</div></div>
+      )}
       {approved && <Continuous c={me.continuous} />}
       {approved && <ChooseExpert />}
 

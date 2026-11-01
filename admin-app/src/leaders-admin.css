@@ -615,3 +615,6 @@
 .la-group select { max-width: 130px; }
 .la-big { font-size: 1.4rem; }
 .la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad-dark); font-size: .85rem; }
+.la-adj { display: grid; gap: 4px; min-width: 160px; }
+.la-adj input { width: 100%; }
+.la-adj-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
