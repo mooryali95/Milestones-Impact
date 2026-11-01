@@ -29,6 +29,7 @@ import ExpertOffer from './screens/ExpertOffer.jsx';
 import ExpertPortal from './screens/ExpertPortal.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
+import HallScreen from './screens/Hall.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
@@ -67,6 +68,7 @@ const ICONS = {
   lab: 'M9.5 3.5h5M10.5 3.5v5.5L5 18.5A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2L13.5 9V3.5M7.5 14.5h9',
   capstone: 'M5 3.5h10l4 4v13H5v-17ZM15 3.5v4h4M8.5 12h7M8.5 15.5h7M8.5 8.5h3',
   katon: 'M4 6.5h16M4 12h10M4 17.5h7M17 14.5l2 2 3.5-4',
+  hall: 'M3 20.5h18M5 20.5v-6.5h14v6.5M8 14V9.5M16 14V9.5M12 3.5 4 9.5h16L12 3.5Z',
   impact: 'M4 19.5h16M6.5 16V12M11 16V8.5M15.5 16v-5M20 5.5l-5 4-3.5-2.5L6 10.5',
   profile: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20.5c1.2-3.6 4.2-5.5 7.5-5.5s6.3 1.9 7.5 5.5',
 };
@@ -214,6 +216,7 @@ function Participant() {
     { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'capstone', label: 'مبادرتي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
     { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
     { key: 'profile', label: 'ملفي' },
@@ -231,6 +234,7 @@ function Participant() {
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
   else if (view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
+  else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
   else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} lab={lab?.items} onLab={() => openLab()} />;

@@ -618,3 +618,23 @@
 .la-adj { display: grid; gap: 4px; min-width: 160px; }
 .la-adj input { width: 100%; }
 .la-adj-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
+
+/* القاعة الحية */
+.hall-admin { display: grid; gap: 12px; }
+.hall-code { font-size: .9rem; }
+.hall-code b { font-size: 1.3rem; letter-spacing: .15em; color: var(--gold-text); }
+.hall-stage-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hall-stage-bar .step { all: unset; cursor: pointer; padding: 7px 14px; border-radius: 10px; border: 1px solid var(--st-warn-bg); font-size: .88rem; display: inline-flex; gap: 6px; }
+.hall-stage-bar .step.on { border-color: var(--gold); background: var(--st-warn-bg); font-weight: 600; }
+.hall-stage-bar .step:disabled { opacity: .45; cursor: default; }
+.hall-stage-bar .step:focus-visible { outline: 2px solid var(--gold); }
+.hall-stage-bar .grow { flex: 1; }
+.hall-screen { background: var(--brand-ink-deep); border-radius: 18px; }
+.hall-screen:fullscreen { display: grid; place-items: center; padding: 2vh 2vw; }
+.hall-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 10px; }
+.hall-controls h4 { margin: 0 0 8px; }
+.hall-controls select { width: 100%; margin-bottom: 8px; }
+.la-row.wrap { flex-wrap: wrap; }
+.hall-teams { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .88rem; margin-bottom: 8px; }
+.hall-teams i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-inline-end: 4px; }
+.hall-person { position: sticky; bottom: 12px; }

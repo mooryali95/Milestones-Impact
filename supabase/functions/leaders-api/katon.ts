@@ -6,6 +6,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { cleanSentence, katonPoints, katonScore, katonSummary, KATON_OPTIONS, sentenceDistribution } from './katon.js';
 import { journeyDefinition } from './programs.ts';
+import { hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
@@ -54,7 +55,10 @@ export async function mine(p: any) {
 export async function answer(p: any, b: Body) {
   await approved(p);
   const s = must(await db.from('katon_sentences').select('id, topic_id, katon_topics!inner(status)').eq('id', String(b.sentence_id || '')).maybeSingle()) as any;
-  if (!s || s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
+  if (!s) throw new Fail('الجملة غير متاحة', 404);
+  // في القاعة يفتح الخبير موضوع الجلسة ولو لم يُنشر بعد، ويقفل ما كشف مفتاحه
+  const gate = await hallGate(p, s.id);
+  if (!gate.inHall && s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
   if (!KATON_OPTIONS.some((o) => o.key === b.choice)) throw new Fail('اختر أحد الخيارات الثمانية');
   // بعد كشف المفتاح لا تعديل
   const [{ data: sents }, { data: mineAns }] = await Promise.all([
