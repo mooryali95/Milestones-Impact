@@ -41,10 +41,10 @@ describe('العبارة المعكوسة في الحساب', () => {
     expect(scoreFor(rev, 4)).toBe(0);
     expect(scoreFor(rev, 5)).toBe(-1);
   });
-  it('المذعن (الخيار الخامس في كل العبارات) لا يبلغ 100% في الممارسة', () => {
+  it('المذعن (الخيار الخامس في كل العبارات) لا يبلغ 100% في الممارسة ويُعلَّم مذعنًا', () => {
     const answers = Object.fromEntries(qs.map((q) => [q.id, 4]));
     expect(tierPercents(qs, answers).leadership.behavior).toBe(80);
-    expect(acquiescenceFor(qs, answers).leadership).toBe(false);
+    expect(acquiescenceFor(qs, answers).leadership).toBe(true);
   });
   it('«لا ينطبق» على المعكوسة يستبعدها كغيرها', () => {
     const answers = Object.fromEntries(qs.map((q) => [q.id, q === rev ? 5 : 4]));
@@ -66,5 +66,23 @@ describe('ترحيلا v5', () => {
   });
   it('كل فقرة في الترحيل بمعرّفها من البنك', () => {
     for (const q of BANK) expect(V5_SQL).toContain(q.id);
+  });
+});
+
+import { acquiescenceFor as acqFor, topLabelIndex } from '../../supabase/functions/leaders-api/logic.js';
+describe('الإذعان مع العبارة المعكوسة', () => {
+  const labels = ['نادرًا', 'أقل من النصف', 'النصف', 'أغلب', 'كل المرات'];
+  const fwd = (id) => ({ id, dimension: 'impact', tier: 'behavior', options: [...labels.map((label, i) => ({ label, score: i })), { label: 'لا ينطبق', score: -1 }] });
+  const rev = (id) => ({ id, dimension: 'impact', tier: 'behavior', options: [...labels.map((label, i) => ({ label, score: 4 - i })), { label: 'لا ينطبق', score: -1 }] });
+  const qs = [fwd('a'), fwd('b'), fwd('c'), fwd('d'), rev('r')];
+  it('موضع «أعلى تكرار» واحد في المباشرة والمعكوسة', () => {
+    expect(topLabelIndex(fwd('x'))).toBe(4);
+    expect(topLabelIndex(rev('x'))).toBe(4);
+  });
+  it('من يختار «كل المرات» في كل العبارات يُعلَّم مذعنًا رغم العبارة المعكوسة', () => {
+    expect(acqFor(qs, { a: 4, b: 4, c: 4, d: 4, r: 4 }).impact).toBe(true);
+  });
+  it('من يجيب المعكوسة بصدق لا يُعلَّم', () => {
+    expect(acqFor(qs, { a: 4, b: 4, c: 4, d: 4, r: 0 }).impact).toBe(false);
   });
 });

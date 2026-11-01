@@ -176,6 +176,14 @@ export const PLACEMENT_FLAGS_AR = {
 
 // الموافقة المطلقة: كل عبارات الممارسة في البُعد بأعلى درجة (دون «لا ينطبق»).
 // يُعاد لكل بُعد true/false، وfalse لبُعد بلا عبارات مجابة.
+// موضع تسمية «أعلى تكرار» في عبارة الممارسة: أعلى درجة في العبارة المباشرة،
+// وأدنى درجة غير سالبة في المعكوسة (تسميات بالترتيب نفسه ودرجات مقلوبة)
+export function topLabelIndex(q) {
+  const opts = (q?.options || []).map((o, i) => ({ i, s: Number(o.score) })).filter((o) => o.s >= 0);
+  if (!opts.length) return -1;
+  const reverse = opts[0].s > opts[opts.length - 1].s;
+  return opts.reduce((a, o) => (reverse ? o.s < a.s : o.s > a.s) ? o : a, opts[0]).i;
+}
 export function acquiescenceFor(questions, answers) {
   const by = {};
   for (const q of questions || []) {
@@ -185,7 +193,9 @@ export function acquiescenceFor(questions, answers) {
     if (s != null && s < 0) continue;
     const d = (by[q.dimension] ||= { n: 0, top: 0 });
     d.n += 1;
-    if (s != null && s >= maxScore(q) && maxScore(q) > 0) d.top += 1;
+    // الإذعان يُقرأ من التسمية لا من الدرجة: العبارة المعكوسة تحمل التسميات نفسها
+    // بدرجات مقلوبة، فمن يختار «أعلى تكرار» في كل العبارات يُكشف بها أيضًا.
+    if (s != null && Number(k) === topLabelIndex(q)) d.top += 1;
   }
   return Object.fromEntries(DIMENSIONS.map((d) => [d, !!by[d] && by[d].n > 0 && by[d].top === by[d].n]));
 }
