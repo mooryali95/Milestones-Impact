@@ -38,7 +38,7 @@ export default function RateExpert() {
   return (
     <section className="card stack rx" aria-labelledby="rx-h">
       <div className="row between"><h3 id="rx-h">كيف كانت {it.what} مع {it.expert}؟</h3>{d.items.length > 1 && <small className="muted">{d.items.length} بانتظار تقييمك</small>}</div>
-      <p className="small muted">{new Date(it.when).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' })}{it.title ? ` · ${it.title}` : ''} · تقييمك سري، ولا يرى الخبير إلا المتوسط بعد خمسة تقييمات.</p>
+      <p className="small muted">{new Date(it.when).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' })}{it.title ? ` · ${it.title}` : ''} · تقييمك سري، ولا يرى الخبير إلا المتوسط بعد 5 تقييمات.</p>
       {keys.map((k) => <Stars key={k} label={d.criteria[k]} value={v[k]} onChange={(n) => setV({ ...v, [k]: n })} />)}
       <textarea className="input" rows={2} maxLength={1000} placeholder="كلمة للخبير أو للبرنامج (اختياري)" value={comment} onChange={(e) => setComment(e.target.value)} />
       {msg && <div className="alert err small">{msg}</div>}

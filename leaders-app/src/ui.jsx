@@ -3,6 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 import React from 'react';
 
+// رسالة واحدة لكل نافذة حجبها المتصفح: ما حدث، وكيف تسمح، وماذا تفعل بعدها
+export const POPUP_BLOCKED = 'منع المتصفح فتح النافذة. اسمح بالنوافذ المنبثقة لهذا الموقع من شريط العنوان، ثم اضغط مرة أخرى.';
+
 export function Skel({ h = 16, w = '100%', r = 8, style }) {
   return <span className="skel" style={{ height: h, width: w, borderRadius: r, ...style }} aria-hidden="true" />;
 }
@@ -19,7 +22,7 @@ export function JourneySkeleton() {
 
 export function BookSkeleton() {
   return (
-    <div className="page book" aria-busy="true" aria-label="جارٍ تحميل الكتاب">
+    <div className="page book" aria-busy="true" aria-label="جارٍ تحميل الكتيب">
       <div className="skel-hero"><Skel h={14} w="20%" /><Skel h={30} w="55%" /><Skel h={14} w="70%" /></div>
       <div className="book-grid">
         <div className="card">{[0, 1, 2, 3, 4, 5].map((i) => <Skel key={i} h={14} style={{ marginTop: i ? 12 : 0 }} />)}</div>

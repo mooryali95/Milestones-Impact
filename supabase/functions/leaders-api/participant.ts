@@ -10,6 +10,7 @@ import {
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { evidenceFor, participantItem } from './activities.ts';
 import { journeyDefinition, requirementFor } from './programs.ts';
+import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 
@@ -49,7 +50,7 @@ export async function participantFromToken(token: unknown) {
     .select('id, participant_id, expires_at, revoked_at').eq('token_hash', await hash(token)).maybeSingle();
   if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const p = must(await db.from('participants').select('*').eq('id', s.participant_id).single());
-  if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
+  if (p.status === 'suspended') throw new Fail(`الحساب موقوف. تواصل مع ${CONTACT_EMAIL}.`, 403, 'suspended');
   // الاستعمال يجدد المدة: تنتهي الجلسة بعد sessionDays من آخر نشاط لا من الدخول
   const now = Date.now();
   const touch: Record<string, string> = { last_seen_at: new Date(now).toISOString() };
@@ -129,7 +130,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     const name = String(b.full_name || '').trim();
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
-    if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
+    if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     // التسجيل عبر رابط جهة أو من موقعها: يُنسب المشارك لها تلقائيًا
     const r = await resolveOrg(b);
     pending = {
@@ -166,7 +167,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
       if (ch.attempts >= 5) throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
       if (ch.code_hash !== await hash(String(b.code || '').trim())) {
         await db.from('email_challenges').update({ attempts: ch.attempts + 1 }).eq('id', ch.id);
-        throw new Fail('الرمز غير صحيح', 400, 'code');
+        throw new Fail('الرمز غير صحيح. تأكد من آخر رمز وصلك، أو اطلب رمزًا جديدًا.', 400, 'code');
       }
     }
   }
@@ -176,11 +177,11 @@ export async function authVerify(b: Body, ctx: Ctx) {
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
   const { data: used } = await db.from('email_challenges').update({ consumed_at: new Date().toISOString() })
     .eq('id', ch.id).is('consumed_at', null).select('id');
-  if (!used?.length) throw new Fail('الرابط أو الرمز مستخدم من قبل', 400, 'used');
+  if (!used?.length) throw new Fail('استُخدم هذا الرمز من قبل. اطلب رمزًا جديدًا.', 400, 'used');
 
   let { data: p } = await db.from('participants').select('*').eq('email', email).maybeSingle();
   if (!p) {
-    if (ch.purpose !== 'register' || !ch.pending_profile) throw new Fail('ابدأ التسجيل من جديد', 400, 'restart');
+    if (ch.purpose !== 'register' || !ch.pending_profile) throw new Fail('انتهت صلاحية خطوة التسجيل. ابدأ من جديد.', 400, 'restart');
     p = must(await db.from('participants').insert({
       email, full_name: ch.pending_profile.full_name, phone: ch.pending_profile.phone,
       organization_id: ch.pending_profile.organization_id || null, organization_name: ch.pending_profile.organization_name || null,
@@ -197,10 +198,10 @@ export async function authVerify(b: Body, ctx: Ctx) {
 
 // ── 3. الدخول بحساب Google ──
 // التوقيع يُتحقق منه محليًا بمفاتيح Google العامة (google.ts)، ثم العميل والمُصدر والصلاحية والبريد الموثّق.
-// البريد الموجود يُفتح حسابه، والجديد يُنشأ بالاسم من جوجل ويُكمل ملفه كالمعتاد.
+// البريد الموجود يُفتح حسابه، والجديد يُنشأ بالاسم من Google ويُكمل ملفه كالمعتاد.
 export async function authGoogle(b: Body, ctx: Ctx) {
   const credential = String(b.credential || '');
-  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
+  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بحساب Google، حاول مرة أخرى');
   const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
 
@@ -217,7 +218,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
-  if (p.status === 'suspended') throw new Fail('الحساب موقوف، تواصل مع الإدارة', 403, 'suspended');
+  if (p.status === 'suspended') throw new Fail(`الحساب موقوف. تواصل مع ${CONTACT_EMAIL}.`, 403, 'suspended');
   const token = await issueSession(p.id, 'google', ctx);
   return { success: true, token, ...(await mePayload(p)) };
 }
@@ -398,7 +399,7 @@ export async function profileSave(p: any, b: Body) {
   }
   if ('phone' in f) {
     const phone = f.phone ? normalizePhone(f.phone) : null;
-    if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
+    if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     patch.phone = phone;
   }
   // الجهة المرتبطة مصدر اسمها: لا يُكتب اسم ثانٍ بجانبها
@@ -440,16 +441,16 @@ export async function profileSave(p: any, b: Body) {
 export async function uploadUrl(p: any, b: Body) {
   const purpose = b.purpose === 'cv' ? 'cv' : 'evidence';
   const ext = String(b.ext || '').toLowerCase();
-  if (!['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'].includes(ext)) throw new Fail('نوع الملف غير مدعوم');
+  if (!['pdf', 'docx', 'xlsx', 'pptx', 'png', 'jpg', 'jpeg'].includes(ext)) throw new Fail('نوع الملف غير مدعوم. ارفع PDF أو Word أو Excel أو PowerPoint أو صورة.');
   const path = `${p.id}/${purpose}/${crypto.randomUUID()}.${ext}`;
   const { data, error } = await storage.from(BUCKET).createSignedUploadUrl(path);
-  if (error) throw new Fail('تعذّر تجهيز الرفع', 500);
+  if (error) throw new Fail('تعذّر رفع الملف. حاول مرة أخرى.', 500);
   return { success: true, path, url: data.signedUrl, token: data.token };
 }
 
 export async function cvAttach(p: any, b: Body) {
   const path = String(b.path || '');
-  if (!path.startsWith(`${p.id}/cv/`)) throw new Fail('مسار غير صالح');
+  if (!path.startsWith(`${p.id}/cv/`)) throw new Fail(UNEXPECTED_ERROR);
   const updated = must(await db.from('participants').update({ cv_path: path }).eq('id', p.id).select('*').single());
   return { success: true, ...(await mePayload(updated)) };
 }
@@ -518,7 +519,7 @@ export async function requirePostOpen(p: any) {
 
 async function openAssessment(p: any, id: string) {
   const a = must(await db.from('assessments').select('*').eq('id', id).eq('participant_id', p.id).maybeSingle());
-  if (!a) throw new Fail('القياس غير موجود', 404);
+  if (!a) throw new Fail(UNEXPECTED_ERROR, 404);
   if (a.status !== 'in_progress') throw new Fail('القياس مُرسَل من قبل', 400, 'submitted');
   return a;
 }
@@ -526,15 +527,15 @@ async function openAssessment(p: any, id: string) {
 export async function assessmentAnswer(p: any, b: Body) {
   const a = await openAssessment(p, String(b.assessment_id));
   const q = must(await db.from('questions').select('*').eq('id', String(b.question_id)).eq('instrument_id', a.instrument_id).maybeSingle());
-  if (!q || (q.form && a.form && q.form !== a.form)) throw new Fail('سؤال غير صالح');
+  if (!q || (q.form && a.form && q.form !== a.form)) throw new Fail(UNEXPECTED_ERROR);
   const k = Number(b.k);
   const score = scoreFor(q, k);
-  if (!Number.isInteger(k) || score == null) throw new Fail('إجابة غير صالحة');
+  if (!Number.isInteger(k) || score == null) throw new Fail(UNEXPECTED_ERROR);
   // القياس الرجعي: تقدير "قبل البرنامج" بجانب تقدير الآن، ولا يدخل في الدرجة
   let before: number | null = null;
   if (q.retro && b.before != null) {
     before = Number(b.before);
-    if (!Number.isInteger(before) || scoreFor(q, before) == null) throw new Fail('إجابة غير صالحة');
+    if (!Number.isInteger(before) || scoreFor(q, before) == null) throw new Fail(UNEXPECTED_ERROR);
   }
   must(await db.from('assessment_answers').upsert({
     assessment_id: a.id, question_id: q.id, value: q.retro ? { k, before } : { k }, score, answered_at: new Date().toISOString(),
@@ -625,7 +626,7 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
 // ── 6. متطلبات الرحلة ──
 // المشارك يُنجز ما يخصه فقط، في مرحلته الحالية أو ما قبلها.
 export async function requirementUpdate(p: any, b: Body) {
-  const { r } = await requirementFor(p, b.requirement_id).catch(() => { throw new Fail('متطلب غير موجود', 404); });
+  const { r } = await requirementFor(p, b.requirement_id).catch(() => { throw new Fail(UNEXPECTED_ERROR, 404); });
   if (r.kind === 'auto' || r.kind === 'meeting' || r.code in AUTO_CHECKS) throw new Fail('هذا المتطلب يُحدَّث تلقائيًا أو من المستشار');
   if (VERIFIED_KINDS.includes(r.kind)) throw new Fail('هذا النشاط يُوثَّق بإنجازه الفعلي لا بالتأشير');
   const state = await mePayload(p);
@@ -634,7 +635,7 @@ export async function requirementUpdate(p: any, b: Body) {
   if (!stage.items.some((i: any) => i.id === r.id)) throw new Fail('هذا المتطلب لا يخص مسارك');
 
   const evidence = b.evidence_path ? String(b.evidence_path) : null;
-  if (evidence && !evidence.startsWith(`${p.id}/evidence/`)) throw new Fail('مسار غير صالح');
+  if (evidence && !evidence.startsWith(`${p.id}/evidence/`)) throw new Fail(UNEXPECTED_ERROR);
   if (r.kind === 'upload' && !evidence) throw new Fail('ارفع الملف أولًا');
   const undo = b.undo === true && !r.needs_review;
   const status = undo ? 'pending' : r.needs_review ? 'submitted' : 'done';
@@ -659,7 +660,7 @@ const HANDBOOK_VIEWS_PER_HOUR = 120;
 
 export async function approvedLevels(p: any) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
-  if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح الكتيب بعد اعتماد مسارك', 403, 'locked');
+  if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
   return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
 }
 
@@ -752,7 +753,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
     db.from('learning_models').select('*'),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
-  if (!chapters.length) throw new Fail('لا أبواب في كتابك بعد', 404);
+  if (!chapters.length) throw new Fail('لا أبواب في كتيبك بعد', 404);
   const now = new Date();
   const ref = `MI-BK-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${randomToken(8).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5).padEnd(5, 'X')}`;
   must(await db.from('handbook_exports').insert({ ref, participant_id: p.id, chapters: chapters.length, ip: ctx.ip, user_agent: ctx.ua }));

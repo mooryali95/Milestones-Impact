@@ -1,5 +1,5 @@
 // رحلة المشارك كاملة في منصة القادة: التسجيل بالبريد والرمز، ثم الملف، ثم
-// القياس القبلي والنتيجة المبدئية، ثم الاعتماد والرحلة، ثم الكتاب والنماذج.
+// القياس القبلي والنتيجة المبدئية، ثم الاعتماد والرحلة، ثم الكتيب والنماذج.
 // الخلفية مُحاكاة بحالة واحدة تتقدم مع كل خطوة كما يفعل الخادم.
 import { test, expect } from '@playwright/test';
 
@@ -93,7 +93,7 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await page.getByLabel('البريد الإلكتروني').fill('sara@x.sa');
   await page.getByRole('button', { name: 'متابعة' }).click();
   await page.getByLabel('الاسم الكامل').fill('سارة عبدالله الأحمد');
-  await page.getByRole('button', { name: 'أرسل رابط التأكيد' }).click();
+  await page.getByRole('button', { name: 'أرسل الرمز' }).click();
   await page.getByLabel('رمز التحقق').fill('000000');
   await expect(page.getByText('الرمز غير صحيح')).toBeVisible();
   await page.getByLabel('رمز التحقق').fill('246810');
@@ -117,7 +117,7 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' })).toBeVisible();
   await page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }).click();
 
-  // قبل الاعتماد: النتيجة مبدئية والكتاب مقفل
+  // قبل الاعتماد: النتيجة مبدئية والكتيب مقفل
   await expect(page.getByRole('heading', { name: /نتيجتك قيد المراجعة/ })).toBeVisible();
   await expect(page.getByText('نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن')).toBeVisible();
   await expect(page.getByRole('button', { name: 'افتح كتيبي' })).toHaveCount(0);
@@ -133,7 +133,7 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByRole('heading', { name: /نتيجتك قيد المراجعة/ })).toBeVisible();
 });
 
-test('رحلة المشارك: بعد الاعتماد يفتح الكتاب، ويتم الباب بالاختبار والتأمل، ثم النماذج', async ({ page }) => {
+test('رحلة المشارك: بعد الاعتماد يفتح الكتيب، ويتم الباب بالاختبار والتأمل، ثم النماذج', async ({ page }) => {
   const srv = await mount(page);
   Object.assign(srv.s, { profileDone: true, assessed: true, approved: true });
   await page.addInitScript(() => localStorage.setItem('mi_leaders_session', 'tok-journey-000000000000000000'));
@@ -141,7 +141,7 @@ test('رحلة المشارك: بعد الاعتماد يفتح الكتاب، �
 
   await expect(page.getByRole('heading', { name: /رحلتك مفتوحة/ })).toBeVisible();
   await page.getByRole('button', { name: 'افتح كتيبي' }).click();
-  await expect(page.getByRole('heading', { name: 'كتاب القائد' }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'كتيب القائد' }).first()).toBeVisible();
   await expect(page.getByText('نسخة شخصية مرخصة باسم')).toBeVisible();
 
   await page.getByRole('button', { name: 'ابدأ القراءة' }).click();

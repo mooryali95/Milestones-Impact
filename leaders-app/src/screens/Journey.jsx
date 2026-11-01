@@ -6,7 +6,9 @@
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
-import { LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import { POPUP_BLOCKED } from '../ui.jsx';
+import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import Activity from './Activities.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
@@ -59,7 +61,7 @@ function PasskeyBanner({ onDone }) {
       <span className="ico">🔐</span>
       <div className="grow">
         <b>ادخل المرة القادمة ببصمتك أو وجهك</b>
-        <p className="small muted">مفتاح المرور أسرع وأأمن من رمز البريد، ويبقى على جهازك فقط.</p>
+        <p className="small muted">مفتاح المرور أسرع وأكثر أمانًا من رمز البريد، ويبقى على جهازك.</p>
         {error && <p className="small" style={{ color: 'var(--bad)' }}>{error}</p>}
       </div>
       <div className="row">
@@ -83,7 +85,7 @@ function Competency({ profile }) {
   return (
     <div className="dim overall">
       <div className="row between">
-        <span className="en">MILESTONE · IMPACT · LEADERSHIP</span>
+        <span className="en">{DIMENSIONS.map((d) => d.short).join(' · ')}</span>
         {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
       </div>
       <h3>مستواك: {lvl.title}</h3>
@@ -125,14 +127,14 @@ function TrackCard({ profile, cohort }) {
         )}
         {t.project && (
           <div className="track-col">
-            <h4>مشروعك التطبيقي</h4>
+            <h4>مبادرتك</h4>
             <p>{t.project.replace(/^مشروعك التطبيقي:\s*/, '')}</p>
-            <span className="small muted">تعمل عليه طوال الرحلة، ويُبنى عليه التقييم النهائي.</span>
+            <span className="small muted">تعمل عليها طوال الرحلة، وهي أساس وثيقة مبادرتك.</span>
           </div>
         )}
         {journey.length > 0 && (
           <div className="track-col">
-            <h4>كيف تُوجَّه رحلتك</h4>
+            <h4>ما يميز مسارك</h4>
             <ul className="track-journey">{journey.map((j, i) => {
               const [k, ...rest] = j.split(':');
               return <li key={i}>{rest.length ? <><b>{k}</b>{rest.join(':')}</> : j}</li>;
@@ -148,9 +150,9 @@ const AUTO_HINT = {
   'P-INFO': 'يكتمل بحفظ بياناتك الأساسية.',
   'P-CV': 'يكتمل برفع سيرتك من ملفك الشخصي.',
   'A-DONE': 'يكتمل بإرسال إجابات القياس.',
-  'AP-OK': 'يراجع المستشار نتيجتك ويعتمد مسارك، ويصلك بريد بذلك.',
+  'AP-OK': 'بانتظار اعتماد المستشار.',
   'E-POST': 'يُفتح القياس البعدي حين تصل إلى مرحلة التقييم.',
-  'R-ISSUE': 'يصدر التقرير بعد التقييم النهائي.',
+  'R-ISSUE': 'يصدر التقرير بعد اكتمال مرحلة التقييم.',
 };
 
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
@@ -194,7 +196,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
         {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
         {sys && !verified && item.status !== 'done' && (
-          <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يسجله المستشار بعد الجلسة.' : 'يُنجز تلقائيًا.')}
+          <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يُسجَّل بعد انعقاد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
           </p>
         )}
@@ -261,7 +263,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
               <div className="blocks">
                 {steps.length > 0 && (
                   <div className="blk">
-                    <b>ماذا يتم</b>
+                    <b>ما تفعله فيها</b>
                     <ol className="steps-list">{steps.map((x) => <li key={x}>{x}</li>)}</ol>
                     {stage.mode_note_ar && <p className="mode-note">{mode ? `${mode.title}: ` : ''}{stage.mode_note_ar}</p>}
                   </div>
@@ -282,7 +284,6 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
                 </ul>
               </>
             )}
-            {locked && <p className="small muted" style={{ marginTop: 10 }}>تُفتح هذه المرحلة بعد إكمال ما قبلها.</p>}
           </div>
         )}
       </div>
@@ -307,9 +308,8 @@ function Welcome({ firstName, onClose }) {
       <div className="grow">
         <b>أهلًا {firstName}، هكذا تعمل رحلتك</b>
         <ol className="small">
-          <li>كل مرحلة فيها قائمة تحقق. بعض البنود تنجزها وتؤكدها، وبعضها يُوثَّق تلقائيًا: قراءتك للكتاب، ومشاهدتك للفيديو، وحضورك للورشة برمز QR، وجلسات التوجيه.</li>
-          <li>بعض البنود يراجعها المستشار، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
-          <li>كتيبك الشخصي يُفتح بعد اعتماد مستواك، ويحفظ آخر باب قرأته.</li>
+          <li>كل مرحلة قائمة تحقق: بعض بنودها تؤكدها بنفسك، وبعضها يُوثَّق تلقائيًا من نشاطك.</li>
+          <li>المستشار هو من يراجع ما تسلّمه ويعتمد مسارك، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
         </ol>
       </div>
       <button className="link small" onClick={onClose}>فهمت</button>
@@ -320,12 +320,13 @@ function Welcome({ firstName, onClose }) {
 // شهادة المشاركة: تظهر لمن أنهى البرنامج، وتُفتح في نافذة جاهزة للطباعة
 function CertificateCard() {
   const [cert, setCert] = useState(undefined);
+  const [msg, setMsg] = useState('');
   useEffect(() => { call('certificate').then((r) => setCert(r.success ? r.certificate : null)); }, []);
   if (cert === undefined) return null;
   const open = async () => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
     const { writeCertificate } = await import('../../../src/lib/brand/certificate.js');
-    if (!(await writeCertificate(win, cert))) alert('اسمح بالنوافذ المنبثقة لعرض الشهادة');
+    setMsg(!(await writeCertificate(win, cert)) ? POPUP_BLOCKED : '');
   };
   const share = async () => {
     const { linkedinUrl } = await import('../../../src/lib/brand/certificate.js');
@@ -343,6 +344,7 @@ function CertificateCard() {
           <h2>شهادتك قيد الإصدار</h2>
           <p className="small muted">أنهيت البرنامج، وستظهر شهادتك هنا حين تصدرها الإدارة.</p>
         </>}
+        {msg && <div className="alert err small" role="alert">{msg}</div>}
       </div>
       {cert && <div className="row">
         <button className="btn sm" onClick={open}>اعرض الشهادة</button>
@@ -368,7 +370,7 @@ function PreManager() {
     setBusy(true); setMsg('');
     const res = await call('rater.invite', { ...f, phase: 'pre' });
     setBusy(false);
-    if (res.success) setData(res); else setMsg(res.message || 'تعذر إرسال الدعوة');
+    if (res.success) setData(res); else setMsg(res.message || 'تعذّر إرسال الدعوة. تحقق من البريد وحاول مرة أخرى.');
   };
   return (
     <div className="banner mist">
@@ -379,9 +381,9 @@ function PreManager() {
           ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
           : (
             <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
-              <p className="small" style={{ flexBasis: '100%' }}>خمس دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. مقارنة تقديره اليوم بتقديره بعد البرنامج أقوى دليل على أثرك.</p>
-              <input className="input" placeholder="اسمه" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-              <input className="input ltr" type="email" required placeholder="بريده" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <p className="small" style={{ flexBasis: '100%' }}>5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا.</p>
+              <input className="input" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <input className="input ltr" type="email" required placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
               <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
               {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
             </form>
@@ -432,12 +434,12 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <p className="eyebrow">رحلتك القيادية</p>
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
-            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {journey.length} مراحل</>
+            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : doneCount === journey.length && journey.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
-                : !approved ? `أنجزت ${doneCount} من ${journey.length} مراحل، والخطوة التالية اعتماد مستواك`
-                  : `أنجزت ${doneCount} من ${journey.length} مراحل`}
+                : !approved ? `أنجزت ${doneCount} من ${countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
+                  : `أنجزت ${doneCount} من ${countAr(journey.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
           </p>
-          <div className="phase-rail" aria-label="محاور الرحلة">
+          <div className="phase-rail" aria-label="أطوار الرحلة">
             {PHASES.map((ph) => {
               const st = journey.filter((s) => (s.phase || 'qualification') === ph.key);
               const state = st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '';
@@ -455,9 +457,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <div className="banner gold">
           <span className="ico">⏳</span>
           <div className="grow">
-            <b>نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن</b>
+            <b>ماذا يحدث الآن؟</b>
             <p className="small">
-              {reviewWait ? `تستغرق المراجعة عادةً ${reviewWait}. ` : ''}بعد اعتماد مستواك يُفتح برنامج التأهيل وكتيبك الشخصي، ويصلك بريد بذلك.
+              نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن. {reviewWait ? `تستغرق المراجعة عادةً ${reviewWait}. ` : ''}بعد اعتماد مسارك يُفتح برنامج التأهيل وكتيبك، ويصلك بريد بذلك.
               {' '}للاستفسار: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
             </p>
           </div>
@@ -469,7 +471,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
-          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}
+          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتيب والمختبر */}
       <div className="j-layout">
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading) && (
@@ -486,7 +488,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 <div className="next-card">
                   <span className="k">تابع القراءة</span>
                   <b>{reading.title}</b>
-                  <span className="small muted">كتيبك الشخصي</span>
+                  <span className="small muted">كتيبك</span>
                   <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
                 </div>
               )}
@@ -494,11 +496,11 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           )}
           <div className="j-tools">
             <div className="tool-card">
-              <span className="k">كتيبك الشخصي</span>
-              <b>كتيب مصمم على مستواك</b>
+              <span className="k">كتيبك</span>
+              <b>كتيب القائد</b>
               <p className="small muted">{approved
-                ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك. للقراءة داخل المنصة فقط.'
-                : 'يُفتح بعد اعتماد مستواك.'}</p>
+                ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك.'
+                : 'يُفتح بعد اعتماد مسارك.'}</p>
               <div className="row">{approved
                 ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
                 : <span className="chip">🔒 مقفل</span>}</div>
@@ -507,7 +509,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
               <div className="tool-card">
                 <span className="k">مختبر القائد</span>
                 <b>أدوات عمل ومواقف محاكاة</b>
-                <p className="small muted">تطبّق ما تتعلمه على حالات عملية، وتتخذ قرارات وترى أثرها. أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
+                <p className="small muted">أتقنت {lab.filter((it) => it.progress.best >= MASTERY).length} من {lab.length}.</p>
                 <div className="row"><button className="btn gold sm" onClick={onLab}>افتح المختبر</button></div>
               </div>
             )}
@@ -518,7 +520,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           {profile && (
             <>
               <div className="section-title">
-                <h2>{profile.track?.title ? 'مسارك' : 'ملف كفاءتك'}</h2>
+                <h2>{profile.track?.title ? 'مسارك' : 'نتيجتك'}</h2>
                 <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
               </div>
               {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}

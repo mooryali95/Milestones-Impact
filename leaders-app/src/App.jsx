@@ -203,14 +203,14 @@ function Participant() {
     setView('home');
   };
 
-  // الأقسام المتاحة الآن فقط: الكتاب والأثر بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
+  // الأقسام المتاحة الآن فقط: الكتيب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
   const inJourney = me && stageDone(me, 'profile') && stageDone(me, 'assessment') && !checkin;
   const approved = !!me?.profile?.approved;
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
     // ما لم يُفتح بعد يظهر مقفلًا بسبب فتحه، فيعرف المشارك ما ينتظره ولا يظن المنصة أصغر مما هي
-    { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مستواك' }) },
-    { key: 'capstone', label: 'مشروعي', ...(!approved && { locked: 'يُفتح بعد اعتماد مستواك' }) },
+    { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    { key: 'capstone', label: 'مبادرتي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
     { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
     { key: 'profile', label: 'ملفي' },
@@ -253,7 +253,7 @@ function Participant() {
       </header>
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
-      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact. جميع الحقوق محفوظة، والمحتوى ملكية فكرية لـ MI.</footer>
+      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact</footer>
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>
   );

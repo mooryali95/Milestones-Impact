@@ -33,7 +33,7 @@ export default function ExpertOffer() {
     return (
       <div className="page narrow"><div className="card milestone-card stack">
         <div className="badge"><span>✓</span></div>
-        <h2>{done === 'declined' ? 'شكرًا لك' : 'تم القبول'}</h2>
+        <h2>{done === 'declined' ? 'شكرًا لك' : 'قُبل الطلب'}</h2>
         <p className="muted">{done === 'declined' ? 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.' : 'أُبلغ المشارك باسمك، وتصلك تفاصيله ومواعيد الجلسات.'}</p>
       </div></div>
     );
@@ -41,7 +41,7 @@ export default function ExpertOffer() {
   return (
     <div className="page narrow">
       <div className="card stack xo">
-        <p className="eyebrow" dir="ltr">SERVICE REQUEST</p>
+        <p className="eyebrow">طلب خدمة</p>
         <h2>أهلًا {o.expert}</h2>
         <p className="muted">رشّحك النظام لخدمة مشارك في برنامج القادة، بناءً على تخصصك وسعتك المتاحة.</p>
         <dl className="xo-facts">

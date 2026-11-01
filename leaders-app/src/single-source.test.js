@@ -1,5 +1,5 @@
 // حارس المصدر الواحد: يفشل إن عاد اسم أو رقم معرَّف في مصدره ليُنسخ في ملف آخر.
-// المصادر: leaders-api/labels.js (المسميات)، logic.js (النقاط والمراتب)، lab.js، capstone.js، src/config/constants.js (التواصل).
+// المصادر: leaders-api/labels.js (المسميات)، logic.js (النقاط والمراتب)، lab.js، capstone.js؛ والتواصل في labels.js (CONTACT_EMAIL) وتُقرأ منه src/config/constants.js.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';

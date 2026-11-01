@@ -47,8 +47,8 @@ function Invite({ data, onChange }) {
     <div className="card stack">
       <div>
         <h2 style={{ fontSize: 18 }}>ادعُ مديرك ليقدّر التغير</h2>
-        <p className="small muted">يصله رابط بعبارات الممارسة نفسها بصيغة الغائب، ويقدّر لكل منها: الآن وقبل البرنامج. خمس دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. تقدير المدير يُكمل بند «إفادة المدير المباشر» في رحلتك.</p>
-        {preManager && <p className="small muted">ادعُ المدير نفسه الذي قدّرك قبل البرنامج ({preManager.full_name || preManager.email})، فمقارنة تقديريه هي أقوى دليل على التغير.</p>}
+        <p className="small muted">يقدّر مديرك ممارستك الآن وقبل البرنامج في 5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. يُكمل ذلك بند «إفادة المدير المباشر» في رحلتك.</p>
+        {preManager && <p className="small muted">ادعُ المدير نفسه الذي قدّرك قبل البرنامج: {preManager.full_name || preManager.email}.</p>}
       </div>
       {raters.length > 0 && (
         <ul className="rater-list">
@@ -113,7 +113,7 @@ export default function Impact({ me, onUpdate, onBack }) {
           <>
             <Bars label="المؤشر العام في الأطر الثلاثة" before={s.before} after={s.after} beforeLabel="البداية" afterLabel="الآن" />
             <Bars label="ممارستك كما تقدّرها اليوم" before={s.practice_then} after={s.practice_now} beforeLabel="قبل البرنامج" afterLabel="الآن" />
-            <p className="small muted">نقارن الجوانب المشتركة بين القياسين فقط. ولا نعدّ الفرق تغيرًا حقيقيًا إلا إذا تجاوز هامش خطأ القياس، ويُستكمل الحكم بتقدير مديرك ودليل مشروعك قبل التقرير النهائي.</p>
+            <p className="small muted">نقارن الأسئلة المشتركة بين القياسين فقط، ونعدّ الفرق تغيرًا إذا كان أكبر من تذبذب القياس الطبيعي. يكتمل الحكم بتقدير مديرك ودليل مبادرتك.</p>
           </>
         ) : <p className="muted">أُرسل قياسك البعدي. تظهر المقارنة هنا حين تكتمل نتائج القياسين.</p>}
       </div>

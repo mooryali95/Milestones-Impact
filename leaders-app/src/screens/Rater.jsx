@@ -59,14 +59,15 @@ export default function Rater() {
         <p className="eyebrow">{pre ? 'تقدير الممارسة قبل البرنامج' : 'تقدير تغير الممارسة'}</p>
         <h1 style={{ fontSize: 22 }}>{data.rater ? `أهلًا ${data.rater}، ` : ''}{pre ? `كيف يمارس ${data.participant} عمله اليوم؟` : `كيف تغيّرت ممارسة ${data.participant}؟`}</h1>
         <p className="muted">{pre
-          ? `بصفتك ${data.relation || 'مقيّمًا'}، قدّر كل عبارة كما رأيته في الأشهر الثلاثة الأخيرة. سنطلب منك التقدير نفسه بعد البرنامج لنقارن بين المرتين. اعتمد على ما رأيته فعلًا، واختر «لا أستطيع الحكم» إن لم تشهد الموقف. لا يظهر تقديرك له منفردًا.`
-          : `بصفتك ${data.relation || 'مقيّمًا'}، قدّر لكل عبارة مرتين: كيف يمارسها الآن، وكيف كان يمارسها قبل البرنامج. اعتمد على ما رأيته فعلًا، واختر «لا أستطيع الحكم» إن لم تشهد الموقف. لا يظهر تقديرك له منفردًا.`}</p>
+          ? `بصفتك ${data.relation || 'مقيّمًا'}، قدّر كل عبارة كما رأيتها فعلًا. سنطلب التقدير نفسه بعد البرنامج للمقارنة، ولا يظهر تقديرك له منفردًا.`
+          : `بصفتك ${data.relation || 'مقيّمًا'}، قدّر لكل عبارة مرتين: كيف يمارسها الآن، وكيف كان يمارسها قبل البرنامج. اعتمد على ما رأيته فعلًا، ولا يظهر تقديرك له منفردًا.`}</p>
       </div>
       {data.questions.map((q, i) => (
         <div key={q.id} className="card stack">
           <div className="row small"><span className="chip dark">{dimOf(q.dimension).title}</span><span className="muted">{i + 1} من {data.questions.length}</span></div>
           <p className="q-text">{q.text}</p>
           <p className="retro-label">{pre ? 'في الأشهر الثلاثة الأخيرة' : 'الآن'}</p>
+          {i === 0 && <p className="small muted">اختر «لا أستطيع الحكم» إن لم تشهد الموقف.</p>}
           {scale(q, 'now')}
           {!pre && <p className="retro-label">قبل البرنامج</p>}
           {!pre && scale(q, 'before')}

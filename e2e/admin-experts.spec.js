@@ -64,7 +64,7 @@ test('إضافة خبير بدعوة، والسعر حقل إداري', async ({
   await page.getByRole('button', { name: '+ خبير' }).click();
   await page.getByLabel('الاسم *').fill('منى القحطاني');
   await page.getByLabel('البريد *').fill('m@x.com');
-  await page.locator('.ex-tg', { hasText: 'كوتش' }).click();
+  await page.locator('.ex-tg', { hasText: 'موجّه' }).click();
   await page.getByLabel('سعر الساعة (ريال)').fill('0');
   await page.getByRole('button', { name: 'إضافة وإرسال الدعوة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-save')).toMatchObject({ full_name: 'منى القحطاني', email: 'm@x.com', roles: ['coach'], hourly_rate: '0' });
@@ -115,7 +115,7 @@ test('عرض الخدمة للخبير: القبول برابط الرمز', asy
   await expect(page.locator('.xo-facts')).toContainText('20 ساعة');
   if (SHOT) await page.screenshot({ path: `${SHOT}/offer.png`, fullPage: true });
   await page.getByRole('button', { name: 'أقبل الطلب' }).click();
-  await expect(page.getByRole('heading', { name: 'تم القبول' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'قُبل الطلب' })).toBeVisible();
   expect(sent).toMatchObject({ accept: true });
 });
 
@@ -159,11 +159,11 @@ test('لوحة الخبير: الدخول بالرمز، والرد على عر�
   await expect.poll(() => calls.find((c) => c.action === 'xp.rate')).toMatchObject({ kind: 'session', id: 's1', scores: { ready: 4, engaged: 4, progress: 4 } });
 });
 
-test('لوحة الخبير: زر الدخول بجوجل ظاهر في شاشة الدخول', async ({ page }) => {
+test('لوحة الخبير: زر الدخول بحساب Google ظاهر في شاشة الدخول', async ({ page }) => {
   await page.route(/accounts\.google\.com/, (r) => r.fulfill({ contentType: 'text/javascript', body: "window.google={accounts:{id:{initialize(){},renderButton(el){el.appendChild(document.createElement('div'));}}}};" }));
   await page.goto('http://localhost:4304/x');
   await expect(page.getByRole('heading', { name: 'لوحة الخبير' })).toBeVisible();
-  await expect(page.getByText('بحساب جوجل بالبريد نفسه المسجل في شبكة الخبراء.')).toBeVisible();
+  await expect(page.getByText('بحساب Google بالبريد نفسه المسجل في شبكة الخبراء.')).toBeVisible();
 });
 
 test('قوالب البريد: معرض بعائلاته، ونسخة تجريبية لبريد المدير', async ({ page }) => {

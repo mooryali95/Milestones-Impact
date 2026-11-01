@@ -7,7 +7,7 @@ export const dimOf = (k) => DIMENSIONS.find((d) => d.key === k) || { key: k, sho
 export const LEVEL_SUMMARY = {
   beginner: 'تبني أساسك: لغة مشتركة وأدوات عملية تربط التنفيذ بالأثر والقيادة.',
   intermediate: 'تطبّق بثبات، ورحلتك تعمّق الربط بين إدارة التنفيذ وصناعة الأثر وقيادة الفريق.',
-  advanced: 'تقود بنضج، ورحلتك تنقلك إلى بناء الأنظمة ونقل الخبرة إلى فريقك ومؤسستك.',
+  advanced: 'تقود بنضج، ورحلتك تنقلك إلى بناء الأنظمة ونقل الخبرة إلى فريقك وجهتك.',
 };
 
 export const levelOf = (k) => LEVELS.find((l) => l.key === k) || { key: k, title: k, step: 0 };

@@ -173,13 +173,13 @@ function Coaching({ data, reload, canWrite }) {
   const addManual = async (r) => {
     const [list, ex] = await Promise.all([people || L('admin.participants', {}).then((x) => x.participants || []), L('admin.experts')]);
     setPeople(list);
-    // الخبراء النشطون بدور الكوتش: الجلسة تُنسب للمختار، وفارغ = حسابك إن كان لك ملف خبير بالبريد نفسه
+    // الخبراء النشطون بدور الموجّه: الجلسة تُنسب للمختار، وفارغ = حسابك إن كان لك ملف خبير بالبريد نفسه
     const coaches = (ex.experts || []).filter((e) => e.status === 'active' && e.roles.includes('coach'));
     setForm({
       title: `جلسة يدوية: ${r.title_ar}`,
       fields: [
         { name: 'participant_id', label: 'المشارك', type: 'select', options: Object.fromEntries(list.map((p) => [p.id, `${p.full_name} · ${p.email}`])) },
-        ...(coaches.length ? [{ name: 'expert_id', label: 'الكوتش', type: 'select', empty: 'أنا (بريد حسابي)', options: Object.fromEntries(coaches.map((e) => [e.id, e.full_name])) }] : []),
+        ...(coaches.length ? [{ name: 'expert_id', label: 'الموجّه', type: 'select', empty: 'أنا (بريد حسابي)', options: Object.fromEntries(coaches.map((e) => [e.id, e.full_name])) }] : []),
         { name: 'starts_at', label: 'الموعد', type: 'datetime' },
         { name: 'status', label: 'الحالة', type: 'select', options: { attended: `${COACH_STATUS_ADMIN.attended} (منعقدة)`, booked: `${COACH_STATUS_ADMIN.booked} (قادمة)` } },
         { name: 'join_url', label: 'رابط الاجتماع (اختياري)', dir: 'ltr' },

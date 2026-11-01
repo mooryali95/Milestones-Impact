@@ -10,9 +10,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../../shared/js/brand.js';
 import { call, lastRead } from '../api.js';
-import { BookSkeleton } from '../ui.jsx';
+import { BookSkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { POINTS } from '../../../supabase/functions/leaders-api/logic.js';
+import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { Models, Wins } from './Models.jsx';
 import { ChapterLab } from './Lab.jsx';
 import { COVER_CSS, coverHtml, readingBlocks as parse, writeBook } from '../../../src/lib/brand/book.js';
@@ -132,12 +133,12 @@ function render(canvas, chapter, watermark, cssWidth, meta, logo) {
     ctx.textBaseline = 'alphabetic';
     let y = pad - 14;
 
-    // الترويسة الجارية: الشعار يسارًا، واسم الكتاب والجزء يمينًا
+    // الترويسة الجارية: الشعار يسارًا، واسم الكتيب والجزء يمينًا
     y += 22;
     if (draw) {
       ctx.font = `500 11.5px ${KUFI}`;
       ctx.fillStyle = COLORS.muted;
-      ctx.fillText(`كتاب القائد · ${meta.part}`, right, y);
+      ctx.fillText(`${TERMS.handbook} · ${meta.part}`, right, y);
       if (logo) { const h = 22; const w = (logo.width / logo.height) * h || 48; ctx.drawImage(logo, pad, y - h + 5, w, h); }
       ctx.fillStyle = COLORS.rule;
       ctx.fillRect(pad, y + 12, width, 1);
@@ -248,7 +249,7 @@ function render(canvas, chapter, watermark, cssWidth, meta, logo) {
   pass(true);
 
   // العلامة المائية فوق كل شيء
-  const stamp = `${watermark} · ${new Date().toLocaleDateString('en-GB')}`;
+  const stamp = `${watermark} · ${new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}`;
   ctx.save();
   ctx.globalAlpha = 0.06;
   ctx.fillStyle = COLORS.text;
@@ -328,7 +329,7 @@ const READ_LABEL = { read: 'قراءة مكتملة', skimmed: 'تصفّح سر�
 function ReadMeter({ v }) {
   if (!v) return null;
   return (
-    <div className={`read-meter ${v.state}`} title="يُحتسب الباب في رحلتك حين تقرؤه بتمعن">
+    <div className={`read-meter ${v.state}`}>
       <span>{v.state === 'read' ? '✓ ' : ''}{READ_LABEL[v.state]}</span>
       {v.state !== 'read' && <i><b style={{ width: `${v.pct}%` }} /></i>}
     </div>
@@ -367,7 +368,7 @@ function Review({ data, onDone }) {
           <span className="reflect-q"><b>سؤال للتأمل</b>{data.reflection}</span>
           <textarea className="input" rows={3} value={reflection} onChange={(e) => setReflection(e.target.value)}
             placeholder="اكتب تأملك على عملك الحقيقي. سطران يكفيان." />
-          <small className="muted">التأمل الصادق يمنحك {POINTS.reflection} نقاط إضافية، ويبقى خاصًا بك وبمستشارك.</small>
+          <small className="muted">التأمل يمنحك {countAr(POINTS.reflection, 'نقطة إضافية', 'نقطتين إضافيتين', 'نقاط إضافية', 'نقطة إضافية')}، ويبقى بينك وبين مستشارك.</small>
         </label>
       )}
 
@@ -516,7 +517,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
   }, []);
 
   if (error && !toc) {
-    return <div className="page narrow"><div className="alert err">{error}</div><div className="row" style={{ marginTop: 14 }}><button className="btn sm" onClick={retry}>حاول مرة أخرى</button><button className="btn ghost sm" onClick={onBack}>رجوع للرحلة</button></div></div>;
+    return <div className="page narrow"><div className="alert err">{error}</div><div className="row" style={{ marginTop: 14 }}><button className="btn sm" onClick={retry}>حاول مرة أخرى</button><button className="btn ghost sm" onClick={onBack}>→ رحلتي</button></div></div>;
   }
   if (!toc) return <BookSkeleton />;
 
@@ -538,7 +539,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
     const win = window.open('', '_blank');
     const r = await call('handbook.export');
     if (!r.success) { win?.close(); return setToast(r.message); }
-    if (!writeBook(win, r.book, parts)) setToast('اسمح بالنوافذ المنبثقة لفتح النسخة');
+    if (!writeBook(win, r.book, parts)) setToast(POPUP_BLOCKED);
   };
 
   return (
@@ -546,7 +547,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       <section className="book-hero">
         <div className="book-hero-main">
           <span className="book-eyebrow">The Leader's Book</span>
-          <h1>كتاب القائد</h1>
+          <h1>{TERMS.handbook}</h1>
           <p>نسخة شخصية مرخصة باسم <b>{toc.name || me.participant.full_name}</b>{toc.code ? <> · <span dir="ltr">{toc.code}</span></> : ''}</p>
         </div>
         <div className="book-stats">
@@ -565,15 +566,15 @@ export default function Handbook({ me, lab, onLab, onBack }) {
             <small>{pts.rank.next ? `${pts.rank.next.left} نقطة إلى ${pts.rank.next.title}` : 'أعلى لقب في البرنامج'}</small>
           </div>
         </div>
-        <nav className="book-tabs" aria-label="أقسام الكتاب">
+        <nav className="book-tabs" aria-label="أقسام الكتيب">
           <div className="book-tablist" role="tablist">
-            {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+            {[['read', 'الكتيب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
               <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
           <span className="spacer" />
           <button className="link small book-act" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">⤓ نسخة PDF شخصية</button>
-          <button className="link small book-act book-back" onClick={onBack}>← رجوع للرحلة</button>
+          <button className="link small book-act book-back" onClick={onBack}>→ رحلتي</button>
         </nav>
       </section>
 
@@ -582,7 +583,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
       {tab === 'read' && (
         <div className="book-grid">
-          <nav className="book-toc" aria-label="فهرس الكتاب">
+          <nav className="book-toc" aria-label="فهرس الكتيب">
             <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
               <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
             </button>
@@ -624,7 +625,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
               </div>
             )}
             <div hidden={current === COVER} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
-              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتاب'} />
+              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} />
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
             {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
@@ -634,7 +635,6 @@ export default function Handbook({ me, lab, onLab, onBack }) {
               <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
               <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>
             </div>
-            <p className="small muted" style={{ marginTop: 12 }}>المحتوى ملكية فكرية لـ Milestone Impact، ومرخص لك للقراءة داخل المنصة فقط. كل صفحة تحمل اسمك.</p>
           </div>
         </div>
       )}

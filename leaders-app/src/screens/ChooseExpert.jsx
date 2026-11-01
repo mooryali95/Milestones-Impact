@@ -1,12 +1,13 @@
 // ════════════════════════════════════════════════════════════════
 // اطلب استشارة: متى احتاجها المشارك، خلال البرنامج أو أثناء بناء المبادرة أو تنفيذها
 // ════════════════════════════════════════════════════════════════
-// يختار نوع الدعم والمحور ويصف حاجته، فيرشّح محرك المطابقة ثلاثة خبراء.
+// يختار نوع الدعم والإطار ويصف حاجته، فيرشّح محرك المطابقة ثلاثة خبراء.
 // يرى الاسم والنبذة والتقييم (إن بلغ حدّه) فقط؛ التكلفة والساعات للإدارة.
 // الاختيار يُعرض على الخبير مع وصف الحاجة، فإن اعتذر انتقل للتالي آليًا.
 // الأدوار والمواضع والحالات كلها من الخادم (labels.js).
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js';
 
 export default function ChooseExpert({ context = 'program', note: presetNote = '', dimension: presetDim = '', title = 'اطلب استشارة', open: startOpen = false }) {
   const [d, setD] = useState(null);
@@ -41,7 +42,6 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
           ))}
         </ul>
       )}
-      {!open && !d.requests.length && <p className="small muted">خبراء البرنامج معك متى احتجتهم: خلال البرنامج، أو أثناء بناء مبادرتك، أو أثناء تنفيذها.</p>}
       {msg?.ok && <div className="banner"><span className="ico">✓</span><div className="grow">{msg.ok}</div></div>}
 
       {open && (
@@ -51,9 +51,9 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
               <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                 {d.roles.map((r) => <option key={r.key} value={r.key}>{r.title}: {r.hint}</option>)}
               </select></label>
-            <label className="field"><span>المحور</span>
+            <label className="field"><span>الإطار</span>
               <select className="input" value={form.dimension} onChange={(e) => setForm({ ...form, dimension: e.target.value })}>
-                <option value="">أي محور</option>
+                <option value="">أي إطار</option>
                 {Object.entries(d.dimensions).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
               </select></label>
             <label className="field"><span>متى</span>
@@ -68,7 +68,7 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
             <p className="small muted">لديك طلب {busyRole.role_ar} قائم ({busyRole.status_ar}). اختر نوع دعم آخر، أو انتظر حتى يكتمل.</p>
           ) : d.candidates.length ? (
             <>
-              <p className="small muted">أنسب ثلاثة لحاجتك ومستواك. اختر من تراه الأنسب.</p>
+              <p className="small muted">أنسب 3 خبراء لطلبك ومستواك.</p>
               <div className="cx-grid">
                 {d.candidates.map((e) => (
                   <article key={e.id} className="cx-card stack">
@@ -83,7 +83,7 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
               {!form.note.trim() && <small className="muted">اكتب ما تحتاجه أولًا ليعرف الخبير كيف يستعد.</small>}
             </>
           ) : (
-            <p className="small muted">لا خبير متاح الآن لهذا النوع من الدعم. جرّب نوعًا آخر، أو راسل فريق البرنامج.</p>
+            <p className="small muted">لا خبير متاح الآن لهذا النوع من الدعم. جرّب نوعًا آخر، أو راسل <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
           )}
           {msg?.err && <div className="alert err small">{msg.err}</div>}
           <div className="row"><button className="btn ghost sm" onClick={() => { setOpen(false); setMsg(null); }}>إغلاق</button></div>

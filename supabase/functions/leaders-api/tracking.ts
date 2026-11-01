@@ -97,7 +97,7 @@ export async function save(p: any, b: Body) {
 // ── تأكيد الراعي ──
 function verifyMail(sponsor: string | null, who: string, initiative: string, title: string, link: string) {
   return mailShell(`تأكيد أثر مبادرة: ${initiative}`,
-    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أرسل ${esc(who)} «${esc(title)}» لمبادرة «${esc(initiative)}» التي أيدتها راعيًا لها في جهتكم.`)
+    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أرسل ${esc(who)} «${esc(title)}» لمبادرة «${esc(initiative)}» التي أيدتها راعيًا لها في جهتك.`)
     + mailText('نطلب منك تأكيد الأرقام: هل تعكس قيم المؤشرات وحالة المعالم ما تراه فعلًا في الجهة؟ تقرأها من الرابط، ثم تؤكد أو تعترض بملاحظة.')
     + mailButton(link, 'راجع الأرقام وأكّدها')
     + mailNote(`الرابط خاص بك وصالح ${VERIFY_DAYS} يومًا.`),
@@ -159,8 +159,8 @@ export async function verifySubmit(b: Body) {
   else if (p?.email) {
     sendMail(p.email, 'ملاحظة راعي مبادرتك على مراجعة الأثر', mailShell('ملاحظة الراعي على مراجعة الأثر',
       mailText(`أهلًا ${esc(p.full_name || '')}، راجع راعي مبادرتك أرقام «مراجعة الأثر» وكتب:`) + mailNote(esc(note || ''))
-      + mailText('صحّح التحديث من صفحة «مشروعي» ثم أرسله من جديد، فيصل الراعي رابط آخر.')
-      + mailButton(CONFIG.appUrl, 'افتح مشروعي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
+      + mailText('صحّح التحديث من صفحة «مبادرتي» ثم أرسله من جديد، فيصل الراعي رابط آخر.')
+      + mailButton(CONFIG.appUrl, 'افتح مبادرتي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
   }
   await audit('system', u.verify_email, `tracking.verify-${status}`, 'capstone_updates', u.id, null, {});
   return { success: true, done: true, decision: status };
@@ -204,7 +204,7 @@ export async function reminders() {
     await db.from('capstones').update({ tracking_reminded_at: new Date().toISOString() }).eq('participant_id', c.participant_id);
     await sendMail(p.email, `${title}: ${initiativeOf(c.snapshot)}`, mailShell(title,
       mailText(`أهلًا ${esc(p.full_name || '')}، حان «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}».`)
-      + mailText(s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتكم.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
+      + mailText(s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
       + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
     sent += 1;
   }

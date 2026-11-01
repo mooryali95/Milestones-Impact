@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
+import { POPUP_BLOCKED } from '../ui.jsx';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '·');
 const when = (d) => new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -50,7 +51,7 @@ function SignIn({ onIn }) {
             setBusy(false);
             if (r.success) { xpSession.set(r.token); onIn(); } else setErr(r.message);
           }} />
-          <p className="small muted">بحساب جوجل بالبريد نفسه المسجل في شبكة الخبراء.</p>
+          <p className="small muted">بحساب Google بالبريد نفسه المسجل في شبكة الخبراء.</p>
         </>}
       </form>
     </div>
@@ -116,7 +117,7 @@ function Dashboard({ onOut }) {
       'لا جلسات منعقدة بعد'));
     if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`,
       subtitle: 'برنامج القادة', rows: [['الخبير', e.full_name], ['الساعات', String(d.stats.hours)], ['حتى تاريخ', fmt(new Date())]],
-      closing: 'تُحسب الساعات من الجلسات المنعقدة المسجلة في المنصة وحدها، لحظة إصدار هذه الوثيقة.' }, body)) setMsg('اسمح بالنوافذ المنبثقة لعرض الشهادة');
+      closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) setMsg(POPUP_BLOCKED);
   };
 
   return (

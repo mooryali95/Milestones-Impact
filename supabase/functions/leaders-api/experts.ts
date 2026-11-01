@@ -450,7 +450,7 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
 // الدخول بحساب جوجل: البريد الموثّق من جوجل يجب أن يطابق بريد ملف خبير معتمد. لا إنشاء حساب من هنا
 export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
   const credential = String(b.credential || '');
-  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بجوجل، حاول مرة أخرى');
+  if (credential.length < 100) throw new Fail('لم يكتمل الدخول بحساب Google، حاول مرة أخرى');
   const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
   const { data: e } = await db.from('experts').select('*').eq('email', id.email).maybeSingle();

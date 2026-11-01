@@ -91,7 +91,7 @@ test('مسح رمز الحضور يسجل الحضور', async ({ page }) => {
   expect(calls.find((c) => c.action === 'workshop.checkin').t).toBe('abc.123.def');
   expect(new URL(page.url()).search).toBe('');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/checkin-mobile.png` });
-  await page.getByRole('button', { name: 'إلى رحلتي' }).click();
+  await page.getByRole('button', { name: '→ رحلتي' }).click();
   await expect(page.getByText('مراحل الرحلة')).toBeVisible();
 });
 

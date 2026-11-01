@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// النماذج التعليمية وإنجازاتي داخل كتاب القائد
+// النماذج التعليمية وإنجازاتي داخل كتيب القائد
 // ════════════════════════════════════════════════════════════════
 // كل نموذج أداة عمل يملؤها المشارك على مشروعه الحقيقي: مسودة تُحفظ،
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
@@ -17,7 +17,7 @@ const STATUS = {
   returned: { t: SUBMISSION_STATUS.returned, c: 'bad' },
   reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
 };
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'مشروع التخرج وأثره', tracking: 'متابعة تنفيذ المبادرة' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
 const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
@@ -26,7 +26,7 @@ function Field({ f, value, onChange, locked, initiative, imp }) {
   if (f.bind === 'initiative') {
     return (
       <div className="mf-bound">
-        <input className="input" disabled value={initiative || value || ''} placeholder="يظهر هنا اسم المبادرة من بطاقتها" />
+        <input className="input" disabled value={initiative || value || ''} placeholder="—" />
         {!initiative && <small className="muted">اكتب اسم المبادرة في «بطاقة المبادرة» فيظهر هنا وفي كل نماذجك.</small>}
       </div>
     );
@@ -155,7 +155,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   return (
     <div className="model">
       <button className="link small" onClick={onBack}>→ {backLabel}</button>
-      {d.capstone && <p className="alert info small">هذا فصل في وثيقة مبادرتك (مشروع التخرج){capLocked ? '، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.' : '. ما تكتبه هنا يظهر في الوثيقة كما هو.'}</p>}
+      {d.capstone && <p className="alert info small">هذا فصل في وثيقة مبادرتك{capLocked ? '، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.' : '. ما تكتبه هنا يظهر في الوثيقة كما هو.'}</p>}
       <ol className="mstepper">
         {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
       </ol>
@@ -179,7 +179,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </section>
           <section>
             <span className="mg-cap">علامات النموذج الجيد</span>
-            <p className="muted small">يقيّم المستشار تسليمك بالنجوم وملاحظات مكتوبة، وهذه ما يبحث عنه.</p>
+            <p className="muted small">يقيّم المستشار تسليمك بالنجوم وملاحظات مكتوبة.</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
           {s && s.status !== 'draft' && (
@@ -283,11 +283,11 @@ export function Models({ name, onPoints }) {
                       <span className="chip gold">{m.points} نقطة</span>
                     </span>
                     <b>{m.title_ar}</b>
-                    {m.capstone && <span className="mcard-cap">فصل في مشروع التخرج</span>}
+                    {m.capstone && <span className="mcard-cap">فصل في وثيقة المبادرة</span>}
                     <span className="mcard-sum">{m.summary_ar}</span>
                     <span className="mcard-prog"><span className="bar"><i style={{ width: `${m.submission && m.submission.status !== 'draft' && m.submission.status !== 'returned' ? 100 : p}%` }} /></span><small>{m.fields_n || pr.total} حقول · من {levelOf(m.min_level).title}</small></span>
                     <span className="mcard-foot">
-                      {st ? <span className={`chip ${st.c}`}>{st.t}</span> : <span className="chip">لم تبدأ بعد</span>}
+                      {st ? <span className={`chip ${st.c}`}>{st.t}</span> : <span className="chip">لم تبدأ</span>}
                       {m.submission?.rating ? <span className="stars">{stars(m.submission.rating)}</span> : <span className="mcard-go">افتح ←</span>}
                     </span>
                   </button>
@@ -319,7 +319,13 @@ export function Wins() {
             </li>
           ))}
         </ol>
-        <p className="muted small">النقاط من إتمام الأبواب واختباراتها ({POINTS.chapter} للباب، و{POINTS.perCorrect} لكل إجابة صحيحة، و{POINTS.reflection} للتأمل)، ومن تسليم النماذج التعليمية، وإتقان أدوات المختبر، واعتماد مشروع التخرج ({APPROVAL_POINTS} نقطة)، ومن نقاط التميّز التي يمنحها مستشارك.</p>
+        <ul className="muted small wins-how">
+          <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection}</li>
+          <li>تسليم النموذج التعليمي: حسب النموذج</li>
+          <li>إتقان أداة في المختبر: حسب الأداة</li>
+          <li>اعتماد وثيقة المبادرة: {APPROVAL_POINTS}</li>
+          <li>تميّز يمنحه مستشارك</li>
+        </ul>
       </section>
       <section className="wins-log">
         <h2>سجل نقاطك <span className="muted">{d.total} نقطة</span></h2>
@@ -329,7 +335,7 @@ export function Wins() {
               <li key={i}><span className="wl-pts">+{r.points}</span><div><b>{r.note || SOURCE[r.source]}</b><small>{SOURCE[r.source]} · {date(r.created_at)}</small></div></li>
             ))}
           </ul>
-        ) : <p className="muted">ابدأ بأول باب في الكتاب، وستظهر نقاطك هنا.</p>}
+        ) : <p className="muted">ابدأ بأول باب في الكتيب، وستظهر نقاطك هنا.</p>}
       </section>
     </div>
   );

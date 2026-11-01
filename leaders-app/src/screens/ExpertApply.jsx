@@ -46,7 +46,7 @@ export default function ExpertApply() {
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
           <h2>وصل طلبك</h2>
-          <p className="muted">نراجع طلبات الانضمام خلال خمسة أيام عمل، ونراسلك بالنتيجة على بريدك.</p>
+          <p className="muted">نراجع طلبات الانضمام خلال 5 أيام عمل، ونراسلك بالنتيجة على بريدك.</p>
         </div>
       </div>
     );
@@ -56,7 +56,7 @@ export default function ExpertApply() {
       <form className="card stack xp" onSubmit={submit}>
         <p className="eyebrow" dir="ltr">EXPERT NETWORK</p>
         <h2>انضم إلى شبكة خبراء برنامج القادة</h2>
-        <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون قادة المشاريع كوتشز ومستشارين ومقيّمين. يُراجع كل طلب، ولا يُسند إليك شيء قبل اعتمادك.</p>
+        <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>
 
         <div className="xp-grid">
           <label className="field"><span>الاسم الكامل *</span><input className="input" required value={v.full_name} onChange={set('full_name')} maxLength={120} autoComplete="name" /></label>

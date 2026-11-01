@@ -129,7 +129,7 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
   await expect(page.getByText('مسار البداية').first()).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'التواصل' })).toHaveCount(0);
   // أثر الجهة: أرقام الخادم كما هي، وزر التقرير مع صلاحية التصدير
-  await expect(page.getByRole('heading', { name: 'أثر البرنامج على مشاركيكم' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'أثر البرنامج على مشاركيك' })).toBeVisible();
   await expect(page.locator('.op-impact')).toContainText('+22');
   await expect(page.locator('.op-impact')).toContainText('1 من 1');
   const [doc] = await Promise.all([page.waitForEvent('popup'), page.getByRole('button', { name: 'تقرير الأثر PDF' }).click()]);
