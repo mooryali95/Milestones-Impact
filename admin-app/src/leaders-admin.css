@@ -663,3 +663,10 @@
 .pay-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; }
 .pay-person { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 @media (max-width: 900px) { .pay-hero { grid-template-columns: 1fr; } .pay-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-form { grid-template-columns: 1fr; } }
+.pay-kpis span.warn { border-top-color: var(--st-warn); }
+.org-funnel { display: grid; gap: 10px; margin: 6px 0 16px; }
+.org-funnel div { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 10px; }
+.org-funnel span { grid-column: 1 / -1; height: 8px; border-radius: 99px; background: var(--gold); min-width: 4px; }
+.org-funnel b { font-family: var(--font-en); font-size: 1.1rem; color: var(--petrol-s); }
+.org-funnel small { color: var(--ink-light); }
+.of-check { display: flex; gap: 8px; align-items: center; font-size: .85rem; }
