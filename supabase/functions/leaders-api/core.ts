@@ -318,10 +318,10 @@ async function turnstileOk(token: unknown, ip: string | null) {
 export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }) {
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const dayAgo = new Date(Date.now() - 864e5).toISOString();
-  // الحد يتسع لدفعة تسجّل معًا من شبكة واحدة (قاعة ورشة)، ولا يكفي جهازًا واحدًا لاستنزاف السقف العام
+  // الحد يتسع لقاعة ورشة كاملة (50 مشاركًا وأكثر) على شبكة واحدة؛ والحماية من الإغراق بالتحقق البشري (Turnstile) وحد كل بريد
   if (ctx.ip) {
-    if (await challengeCount(hourAgo, ctx.ip) >= 30) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
-    if (await challengeCount(dayAgo, ctx.ip) >= 60) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+    if (await challengeCount(hourAgo, ctx.ip) >= 150) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
+    if (await challengeCount(dayAgo, ctx.ip) >= 300) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
   }
   if (await challengeCount(dayAgo) >= CONFIG.mailDailyCap) {
     console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
