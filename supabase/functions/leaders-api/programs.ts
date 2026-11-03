@@ -12,7 +12,7 @@ import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, created_at';
+const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, hidden_requirements, created_at';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;
@@ -51,6 +51,9 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   }
   const live = version ? null : await liveRows(programId);
   const def = cohortDefinition({ live, version, cohort });
+  // بنود أخفتها الدفعة: تختفي من رحلة أعضائها فورًا، ولا يُحذف ما أُنجز منها
+  const hidden = new Set(((cohort as any)?.hidden_requirements || []) as string[]);
+  if (hidden.size) def.requirements = def.requirements.filter((r: any) => !hidden.has(r.code));
   if (version) {
     // توفر الموجّه للاتصال الفوري حالة تشغيلية لا جزء من النسخة؛ تُقرأ من البرنامج الحالي
     const ids = def.requirements.filter((r: any) => r.kind === 'coaching').map((r: any) => r.id);
@@ -234,6 +237,9 @@ export async function cohortSave(a: Admin, b: Body) {
     if (prev?.is_default && b.organization_id) throw new Fail('الدفعة المفتوحة لا ترتبط بجهة');
     row.organization_id = isUuid(b.organization_id) ? b.organization_id : null;
     row.track = row.organization_id ? 'institutional' : 'individual';
+  }
+  if ('hidden_requirements' in b) {
+    row.hidden_requirements = (Array.isArray(b.hidden_requirements) ? b.hidden_requirements : []).map((x: any) => String(x).trim()).filter((x: string) => /^[A-Z0-9-]{2,30}$/i.test(x)).slice(0, 100);
   }
   // المستشار الأساسي: خبير معتمد، أو لا أحد
   if ('advisor_expert_id' in b) {

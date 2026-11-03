@@ -4,7 +4,7 @@
 import {
   audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
 import {
-  AUTO_CHECKS, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
@@ -804,6 +804,15 @@ export async function requirementUpdate(p: any, b: Body) {
   if (!stage || stage.status === 'locked') throw new Fail('هذه المرحلة لم تُفتح بعد', 400, 'locked');
   if (!stage.items.some((i: any) => i.id === r.id)) throw new Fail('هذا المتطلب لا يخص مسارك');
 
+  // الاستبانة تكتمل بإجاباتها لا بنقرة، وتُعدَّل ما دامت المرحلة مفتوحة
+  if (r.kind === 'survey') {
+    const s: any = cleanSurvey(r.config, b.answers);
+    if (s.error) throw new Fail(s.error);
+    must(await db.from('participant_requirements').upsert({
+      participant_id: p.id, requirement_id: r.id, status: 'done', answers: s.answers, completed_at: new Date().toISOString(),
+    }));
+    return { success: true, ...(await mePayload(p)) };
+  }
   const evidence = b.evidence_path ? String(b.evidence_path) : null;
   if (evidence && !evidence.startsWith(`${p.id}/evidence/`)) throw new Fail(UNEXPECTED_ERROR);
   if (r.kind === 'upload' && !evidence) throw new Fail('ارفع الملف أولًا');

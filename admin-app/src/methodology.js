@@ -14,7 +14,7 @@ export const PHASE = PHASE_AR;
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
   reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز', curriculum: 'منهج المسار',
-  model: 'نموذج تعليمي', capstone: 'مشروع التخرج',
+  model: 'نموذج تعليمي', capstone: 'مشروع التخرج', survey: 'استبانة',
 };
 // ما يعنيه كل نوع، يظهر تحت اختيار النوع
 export const KIND_HELP = {
@@ -30,6 +30,7 @@ export const KIND_HELP = {
   coaching: 'توجيه أو استشارة فردية. يحجز المشارك من رابط Cal.com أو Calendly، أو يتصل فورًا حين تكون متاحًا، وتؤكد أنت حضوره.',
   model: 'نموذج من «كتيب القائد» يبنيه المشارك في المنصة، فيكتمل المتطلب بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
   capstone: 'وثيقة المبادرة كاملة: يكتمل حين تعتمدها بالمعيار ويؤيدها راعيها. تراجعها من «مشاريع التخرج».',
+  survey: 'أسئلة تكتبها أنت، يكتمل المتطلب بإرسال المشارك إجاباته لا بنقرة. إن أخفيته من دفعة اختفى من رحلات أعضائها وبقيت الإجابات.',
 };
 export const VERIFY = VERIFY_AR;
 export const COACH_MODE = SESSION_MODE_AR;
@@ -112,6 +113,8 @@ export const reqFields = (stages, models = []) => [
   { name: 'cfg_model_key', label: 'النموذج التعليمي', type: 'select', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'model',
     help: () => 'يراه المشارك بمستواه ونطاق عمله. إن لم يكن النموذج متاحًا له حُسب المتطلب منجزًا، فلا يُطالب بما لا يخصه.' },
   { name: 'cfg_accept', label: 'يكتمل', type: 'select', options: ACCEPT, show: (v) => v.kind === 'model' },
+  { name: 'cfg_questions', label: 'أسئلة الاستبانة (سطر لكل سؤال)', type: 'textarea', rows: 6, show: (v) => v.kind === 'survey',
+    help: () => 'كل سطر تقدير من 1 إلى 5. ابدأ السطر بـ «(نص)» لسؤال مفتوح إلزامي، أو «(نص اختياري)» لسؤال مفتوح غير إلزامي.' },
   { name: 'required', label: 'إلزامي لإكمال المرحلة', type: 'check' },
   { name: 'needs_review', label: 'يعتمده المستشار بعد الإنجاز', type: 'check', show: (v) => !VERIFIED.has(v.kind) },
   { name: 'active', label: 'مفعّل', type: 'check' },
@@ -222,6 +225,9 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'ends_on', label: 'تنتهي', type: 'date' },
     { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
     { name: 'capacity', label: 'المقاعد', type: 'number' },
+    { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
+      options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, `${r.code} · ${r.title_ar}`])),
+      help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
     { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
       help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
@@ -251,7 +257,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '' };
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', hidden_requirements: c.hidden_requirements || [] };
   delete v.schedule; delete v.stage_modes;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;

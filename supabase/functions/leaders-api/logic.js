@@ -360,7 +360,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         const status = auto ? (auto(state) ? 'done' : 'pending')
           : act ? (act.done || p.status === 'done' ? 'done' : 'pending')
           : p.status || 'pending';
-        return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, ...(act ? { activity: act } : {}) };
+        return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
       });
     const doneCount = items.filter((i) => i.status === 'done').length;
     return { ...stage, items, done: doneCount, total: items.length };
@@ -764,6 +764,29 @@ export function isoWeek(d = new Date()) {
 // تجاوز يدوي من المستشار (participant_requirements.status = done) يبقى ممكنًا.
 export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum', 'model', 'capstone'];
 
+// أسئلة الاستبانة من إعدادها: سطر لكل سؤال؛ «(نص)» في أوله سؤال مفتوح، و«(نص اختياري)» مفتوح لا يُلزم،
+// وما عداه تقدير من 1 إلى 5. المصدر الواحد للأسئلة للواجهة والخادم معًا.
+export function surveyQuestions(config) {
+  return String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20).map((line, i) => {
+    const m = line.match(/^\((نص(?: اختياري)?)\)\s*(.+)$/);
+    return m ? { key: `q${i + 1}`, label: m[2], type: 'text', required: m[1] === 'نص' } : { key: `q${i + 1}`, label: line, type: 'rating', required: true };
+  });
+}
+export function cleanSurvey(config, raw) {
+  const out = {};
+  for (const q of surveyQuestions(config)) {
+    const v = raw?.[q.key];
+    if (q.type === 'rating') {
+      const n = Math.round(Number(v));
+      if (n >= 1 && n <= 5) out[q.key] = n; else if (q.required) return { error: `أجب عن: ${q.label}` };
+    } else {
+      const t = String(v ?? '').trim().slice(0, 2000);
+      if (t) out[q.key] = t; else if (q.required) return { error: `أجب عن: ${q.label}` };
+    }
+  }
+  return { answers: out };
+}
+
 // ── القراءة ──
 // الباب يُقسم إلى READ_SLICES شريحة متساوية الارتفاع. القراءة الفعلية:
 // وقت نشط لا يقل عن نصف الوقت المتوقع (200 كلمة في الدقيقة)، وأغلب
@@ -887,7 +910,8 @@ export function videoSource(url) {
 
 // ── الورشة الحضورية ──
 // طرق توثيق حضور الجلسات الجماعية، يختارها المشرف لكل متطلب
-export const VERIFY_METHODS = ['qr', 'join', 'manual'];
+// auto: حضور كل أعضاء الدفعة يُحتسب تلقائيًا بانتهاء الجلسة (دفعة جهة تحضر كاملة، والإدارة تستثني يدويًا)
+export const VERIFY_METHODS = ['qr', 'join', 'manual', 'auto'];
 export const SESSION_MODES = ['in_person', 'online'];
 
 export function workshopStatus(config, sessions, attended, now = Date.now()) {
@@ -900,7 +924,7 @@ export function workshopStatus(config, sessions, attended, now = Date.now()) {
       // رابط الاجتماع لا يظهر إلا في نافذة الجلسة
       return {
         id: s.id, title: s.title_ar, mode, location: s.location_ar || null, starts_at: s.starts_at, ends_at: s.ends_at,
-        attended: attended.has(s.id), open, can_join: mode === 'online' && open && !!s.join_url,
+        attended: attended.has(s.id) || (verify === 'auto' && Date.parse(s.ends_at) <= now), open, can_join: mode === 'online' && open && !!s.join_url,
       };
     });
   const need = Math.max(1, Number(config?.sessions_required) || list.length || 1);

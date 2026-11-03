@@ -1266,3 +1266,5 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .adv-answers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 6px 12px; margin: 0; font-size: 14px; }
 .adv-answers dt { color: var(--muted); }
 .adv-answers dd { margin: 0; white-space: pre-wrap; }
+.survey { gap: 10px; margin-top: 6px; }
+.survey-q { display: grid; gap: 4px; }
