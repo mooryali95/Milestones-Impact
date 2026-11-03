@@ -176,6 +176,7 @@ export default function SignIn({ onSignedIn, initialError }) {
           </div>
         )}
         {captchaBox}
+        {step === 'email' && <p className="small muted signin-expert">خبير في شبكة البرنامج؟ <a className="link" href="/x">ادخل إلى لوحة الخبير</a></p>}
       </div>
     </div>
   );
