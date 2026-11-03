@@ -7,7 +7,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -382,13 +382,14 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 // مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
-async function continuousFor(participantId: string, milestones: any[]) {
-  const [hb, subs, rt, lb, kt] = await Promise.all([
+async function continuousFor(participantId: string, milestones: any[], programId: string | null) {
+  const [hb, subs, rt, lb, kt, prog] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
     db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
     db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
     db.from('lab_attempts').select('item_id, pct, finished_at, lab_items(title_ar)').eq('participant_id', participantId).not('finished_at', 'is', null),
     katonEvents(participantId),
+    programId ? db.from('programs').select('final_eval').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   return continuousAssessment({
     quizzes: (hb.data || []).map((q: any) => ({ ...q, title: q.handbook_modules?.title_ar })),
@@ -397,6 +398,7 @@ async function continuousFor(participantId: string, milestones: any[]) {
     milestones: milestones.filter((m: any) => m.done),
     lab: (lb.data || []).map((a: any) => ({ ...a, title: a.lab_items?.title_ar })),
     katon: kt,
+    weights: finalConfig((prog as any).data?.final_eval).sources,
   });
 }
 
@@ -442,7 +444,7 @@ export async function journeyFor(p: any) {
     cohort: def.cohort || {},
   });
   const [group, continuous, fe] = await Promise.all([
-    groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones),
+    groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
     db.from('final_evaluations').select('score, decision, status, decided_at').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
   ]);
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط

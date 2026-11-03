@@ -38,6 +38,13 @@ describe('التقييم المستمر', () => {
     expect(c.index).toBe(80);
   });
 
+  it('أوزان المصادر من إعداد البرنامج: الصفر يستبعد، والوزن يرجّح', () => {
+    const src = { quizzes: [{ quiz_score: 10, quiz_total: 10, completed_at: '2026-01-01' }], models: [{ rating: 1, reviewed_at: '2026-01-02' }] };
+    expect(continuousAssessment(src).index).toBe(50);
+    expect(continuousAssessment({ ...src, weights: { quizzes: 3, models: 1 } }).index).toBe(75);
+    expect(continuousAssessment({ ...src, weights: { quizzes: 1, models: 0 } }).index).toBe(100);
+  });
+
   it('يرفع علامة لمكوّن دون المنتصف', () => {
     const c = continuousAssessment({ quizzes: [{ quiz_score: 2, quiz_total: 10, completed_at: '2026-01-01', title: 'ب' }] });
     expect(c.flags[0]).toContain('اختبارات الكتيب');
