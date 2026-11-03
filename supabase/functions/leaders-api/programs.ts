@@ -12,7 +12,7 @@ import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, created_at';
+const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, created_at';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;
@@ -234,6 +234,15 @@ export async function cohortSave(a: Admin, b: Body) {
     if (prev?.is_default && b.organization_id) throw new Fail('الدفعة المفتوحة لا ترتبط بجهة');
     row.organization_id = isUuid(b.organization_id) ? b.organization_id : null;
     row.track = row.organization_id ? 'institutional' : 'individual';
+  }
+  // المستشار الأساسي: خبير معتمد، أو لا أحد
+  if ('advisor_expert_id' in b) {
+    if (b.advisor_expert_id && !isUuid(b.advisor_expert_id)) throw new Fail('مستشار غير صالح');
+    if (b.advisor_expert_id) {
+      const { data: e } = await db.from('experts').select('status').eq('id', b.advisor_expert_id).maybeSingle();
+      if (!e || !['active', 'paused'].includes(e.status)) throw new Fail('اختر خبيرًا معتمدًا مستشارًا للدفعة');
+    }
+    row.advisor_expert_id = b.advisor_expert_id || null;
   }
   if ('program_id' in b || !prev) {
     const pid = isUuid(b.program_id) ? String(b.program_id) : await defaultProgramId();

@@ -1263,3 +1263,6 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .acct-menu button:hover { background: color-mix(in srgb, var(--gold) 12%, transparent); }
 .read-pct { display: block; height: 3px; margin-top: 4px; border-radius: 99px; background: var(--line); max-width: 220px; }
 .read-pct i { display: block; height: 100%; width: var(--p); border-radius: inherit; background: var(--gold); }
+.adv-answers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 6px 12px; margin: 0; font-size: 14px; }
+.adv-answers dt { color: var(--muted); }
+.adv-answers dd { margin: 0; white-space: pre-wrap; }
