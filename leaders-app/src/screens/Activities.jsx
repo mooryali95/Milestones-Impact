@@ -303,6 +303,13 @@ const CAP_STATUS = STATUS_TITLES;
 function ModelLink({ a, onCapstone }) {
   if (a.na) return <p className="h">لا يخص مستواك أو نطاق عملك، فيُحتسب لك.</p>;
   if (a.locked) return <p className="h">يُفتح بعد اعتماد مسارك.</p>;
+  if (a.sections) return (
+    <div className="act-model">
+      <p className="h">يكتمل حين تحفظ هذه الفصول في وثيقة مبادرتك ({a.saved} من {a.sections.length}):</p>
+      <ul className="act-sections">{a.sections.map((x) => <li key={x.key}>{x.saved ? '✓' : '○'} {x.title}</li>)}</ul>
+      {onCapstone && !a.done && <button className="btn sm" onClick={onCapstone}>افتح وثيقة مبادرتك</button>}
+    </div>
+  );
   const label = a.type === 'capstone'
     ? `${CAP_STATUS[a.status || 'draft']}${a.readiness != null ? ` · الجاهزية ${a.readiness}%` : ''}`
     : `${a.title ? `«${a.title}» · ` : ''}${MODEL_STATUS[a.status] || 'لم يبدأ'}${!a.done && a.status === 'submitted' && a.accept === 'reviewed' ? ' · يكتمل بتقييم المستشار' : ''}`;

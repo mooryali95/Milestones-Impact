@@ -5,8 +5,9 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
-import { journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
+import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
+import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
@@ -117,7 +118,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
                   <li key={r.id} className={r.active ? '' : 'off'}>
                     <span>
-                      <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small>
+                      <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small> <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
                       {r.dimension && <small className="la-chip">{DIM_EN[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
                       {!r.required && <small className="la-chip">اختياري</small>}
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}
