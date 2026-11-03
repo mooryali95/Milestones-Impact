@@ -4,7 +4,7 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
-import { wrongDoor } from './doors.ts';
+import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
@@ -86,7 +86,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
   }));
   await db.from('org_coordinators').update({ last_login_at: new Date().toISOString(), status: 'active' }).eq('id', c.id);
   await audit('coordinator', c.email, 'coordinator.login', 'org_coordinators', c.id);
-  return { success: true, token, ...(await mePayload(c)) };
+  return { success: true, token, ...(await mePayload(c)), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org') };
 }
 
 // ── 2. الجلسة ──
@@ -105,7 +105,7 @@ const mePayload = (c: any) => ({
   coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
   org: { name: c.organizations.name },
 });
-export const me = async (c: any) => ({ success: true, ...mePayload(c) });
+export const me = async (c: any) => ({ success: true, ...mePayload(c), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org') });
 
 export async function logout(sessionId: string) {
   await db.from('coordinator_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId);

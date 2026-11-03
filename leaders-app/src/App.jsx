@@ -28,6 +28,7 @@ import ExpertApply from './screens/ExpertApply.jsx';
 import ExpertOffer from './screens/ExpertOffer.jsx';
 import ExpertPortal from './screens/ExpertPortal.jsx';
 import RoleChoice from './RoleChoice.jsx';
+import AccountSwitch from './AccountSwitch.jsx';
 import Paywall from './screens/Paywall.jsx';
 import { gateDone } from './gates.js';
 import { clearAttribution } from './attribution.js';
@@ -283,6 +284,7 @@ function Participant() {
               <span className="who-name">{me.participant.full_name}</span>
             </button>
           )}
+          {me && <AccountSwitch here="participant" doors={me.switch_to} doSwitch={(to) => call('me.switch', { to })} />}
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>

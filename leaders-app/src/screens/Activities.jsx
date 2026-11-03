@@ -22,8 +22,12 @@ function Bar({ value, label }) {
 const READ_TONE = { read: 'ok', skimmed: 'warn' };
 const READ_CHIP = Object.fromEntries(Object.entries(READ_STATUS).map(([k, t]) => [k, [READ_TONE[k] || '', t]]));
 
+// الإطار يُذكر حين تتكرر عناوين الأبواب (القسم التمهيدي لكل إطار)، والتقدم الجزئي يظهر قبل اكتمال الباب
+const DIM_TITLE = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.title]));
 function Reading({ a, onHandbook }) {
   const skimmed = a.chapters.some((c) => c.state === 'skimmed');
+  const seen = new Set(); const dup = new Set();
+  a.chapters.forEach((c) => { if (seen.has(c.title)) dup.add(c.title); seen.add(c.title); });
   return (
     <div className="act">
       <div className="row between"><b className="small">قرأت {a.count} من {a.total} {a.total === 1 ? 'باب' : 'أبواب'}</b>
@@ -34,7 +38,9 @@ function Reading({ a, onHandbook }) {
           const [cls, t] = READ_CHIP[c.state];
           return (
             <li key={c.id}>
-              <span className="grow">{c.title}</span>
+              <span className="grow">{DIM_TITLE[c.dimension] && dup.has(c.title) && <small className="muted">{DIM_TITLE[c.dimension]} · </small>}{c.title}
+                {c.state !== 'read' && c.pct > 0 && <span className="read-pct" style={{ '--p': `${Math.min(100, c.pct)}%` }} title={`قرأت ${Math.round(c.pct)}%`}><i /></span>}</span>
+              {c.state !== 'read' && c.pct > 0 && <span className="chip">{Math.round(c.pct)}%</span>}
               {c.state === 'read' && a.quiz && !c.quiz && <span className="chip warn">بقي الاختبار</span>}
               <span className={`chip ${cls}`}>{t}</span>
             </li>
@@ -124,7 +130,7 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { COACH_STATUS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;

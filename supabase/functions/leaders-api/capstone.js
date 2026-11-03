@@ -251,7 +251,7 @@ export function costSummary(model, answers) {
 // كل فحص يطبَّق متى وُجد فصلاه في وثيقة المشارك، وإلا يُتجاوز.
 // فحوص حاجبة: لا تُسلَّم وثيقة تخالفها مهما بلغت الجاهزية. هي ما يجعل المبادرة قابلة للاعتماد
 // في أي جهة: راعٍ حقيقي، ومحاسب واحد، وتكلفة ضمن الميزانية، ومنفعة لها مالك، وخطر عالٍ له مالك.
-export const BLOCKING = new Set(['sponsor', 'raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
+export const BLOCKING = new Set(['raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
 export function capstoneChecks(ctx) {
   const M = ctx.models || {}, A = ctx.answers || {};
   const has = (...keys) => keys.every((k) => M[k]);
@@ -265,7 +265,8 @@ export function capstoneChecks(ctx) {
 
   if (has(CHARTER_KEY)) {
     const e = String(A[CHARTER_KEY]?.sponsor_email || '').trim();
-    add('sponsor', 'للمبادرة راعٍ من الجهة ببريد صحيح', /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), 'أضف بريد الراعي في بطاقة المبادرة، فبه يؤيد الوثيقة قبل اعتمادها.');
+    // الراعي اختياري: يقوّي الوثيقة بتأييد من الجهة، ولا يمنع تسليمها (قرار المالك 2026-11-03)
+    if (e) add('sponsor', 'بريد راعي المبادرة صحيح', /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), 'صحّح بريد الراعي في بطاقة المبادرة، أو احذفه إن لم يكن للمبادرة راعٍ.');
   }
   if (has('options-analysis')) {
     const t = table(M['options-analysis'], A['options-analysis'], 'options');
