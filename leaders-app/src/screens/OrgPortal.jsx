@@ -4,6 +4,7 @@
 // كل ما يظهر يأتي من الخادم مصفّى بصلاحيات المنسق؛ لا تعديل هنا.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import OtherDoors from '../Doors.jsx';
+import AccountSwitch from '../AccountSwitch.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
@@ -209,6 +210,7 @@ function Dashboard({ me, onLogout }) {
           <div className="row">
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
+            <AccountSwitch here="org" doors={me.switch_to} doSwitch={(to) => coordCall('coord.switch', { to })} />
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
         </div>

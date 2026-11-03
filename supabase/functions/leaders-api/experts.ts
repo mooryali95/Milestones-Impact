@@ -505,7 +505,8 @@ export async function portalLogout(sessionId: string) {
 // كل ما يراه الخبير في لوحته، من مصادره نفسها (expert_requests وcoaching_sessions وexpert_ratings)
 export async function portalDashboard(e: any) {
   // قبل الاعتماد: الملف وحده (يستكمله المدعو، ويراجعه من قدّم طلبه)
-  if (!portalWorking(e)) return { success: true, onboarding: true, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
+  const switch_to = (await rolesOf(e.email)).filter((d) => d !== 'expert');
+  if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
@@ -529,7 +530,7 @@ export async function portalDashboard(e: any) {
   };
   const stats = expertStats(sessions || [], null);
   return {
-    success: true,
+    success: true, switch_to,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
     stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
     rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: 5 },

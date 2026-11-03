@@ -37,6 +37,7 @@ import * as T from './tracking.ts';
 import * as E from './experts.ts';
 import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
+import { switchTo } from './switch.ts';
 
 type Body = Record<string, any>;
 
@@ -73,7 +74,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
-  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel',
+  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
@@ -89,6 +90,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'pay.checkout': (p, b) => Y.checkout(p, b),
   'sponsor.request': (p, b) => R.request(p, b),
   'sponsor.cancel': (p) => R.cancel(p),
+  'me.switch': (p, b, _s, ctx) => switchTo(p.email, 'participant', b.to, ctx),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
@@ -150,6 +152,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
 const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'xp.dashboard': (e) => E.portalDashboard(e),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
+  'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
@@ -157,6 +160,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'coord.me': (c) => C.me(c),
+  'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
   'coord.dashboard': (c) => C.dashboard(c),
   'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b),
   'coord.logout': (_c, _b, sid) => C.logout(sid),
@@ -311,7 +315,7 @@ Deno.serve(async (req) => {
     if (expert[action]) {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
       // قبل الاعتماد: الملف والخروج فقط
-      if (!E.portalWorking(e) && !['xp.dashboard', 'xp.profile-save', 'xp.logout'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
+      if (!E.portalWorking(e) && !['xp.dashboard', 'xp.profile-save', 'xp.logout', 'xp.switch'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
       return reply(req, await expert[action](e, b, sessionId));
     }
     if (admin[action]) {

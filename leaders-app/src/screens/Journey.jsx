@@ -155,6 +155,9 @@ const AUTO_HINT = {
   'AP-OK': 'بانتظار اعتماد المستشار.',
   'E-POST': 'يُفتح القياس البعدي حين تصل إلى مرحلة التقييم.',
   'R-ISSUE': 'يصدر التقرير بعد اكتمال مرحلة التقييم.',
+  'P-PROJECT': 'يكتمل تلقائيًا حين تكتب اسم مبادرتك ووصفها في «بطاقة المبادرة»، أول صفحة في وثيقة مبادرتك.',
+  'T-360': 'يكتمل تلقائيًا حين يرسل مديرك أو أحد زملائك تقديره. أرسل الدعوة من «ملفي».',
+  'E-360': 'يكتمل تلقائيًا حين يصل تقدير المدير أو الزملاء بعد البرنامج.',
 };
 
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
@@ -199,7 +202,8 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
         {sys && !verified && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يُسجَّل بعد انعقاد الجلسة.' : 'يُنجز تلقائيًا.')}
-            {item.code === 'P-INFO' || item.code === 'P-CV' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
+            {item.code === 'P-INFO' || item.code === 'P-CV' || item.code === 'T-360' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
+            {item.code === 'P-PROJECT' && <> <button className="link" onClick={onCapstone}>اكتب بطاقة مبادرتك</button></>}
           </p>
         )}
         {open && item.code === 'E-POST' && (

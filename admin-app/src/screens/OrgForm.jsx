@@ -150,6 +150,13 @@ function Danger({ org, onDone, onSuspend }) {
   );
 }
 
+// تنبيه لا يمنع: نطاق البريد يختلف عن نطاقات الجهة (خطأ إملائي شائع مثل manozma/manzoma يُضيع الدعوة)
+function domainHint(email, domains) {
+  const d = String(email || '').split('@')[1]?.toLowerCase();
+  if (!d || !domains?.length || domains.some((x) => d === x || d.endsWith(`.${x}`))) return undefined;
+  return `⚠ نطاق البريد «${d}» ليس من نطاقات الجهة (${domains.join('، ')}). تأكد من كتابته، فالدعوة تُرسل إليه.`;
+}
+
 export default function OrgForm({ org, coordinator, onClose }) {
   const { toast, confirm } = useUI();
   const initial = useMemo(() => ({
@@ -304,7 +311,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
             <h4>منسق الجهة</h4>
             <div className="of-grid">
               <Field label="الاسم"><input value={coord.full_name} onChange={setC('full_name')} /></Field>
-              <Field label="البريد" error={err('coord_email')}><input type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
+              <Field label="البريد" error={err('coord_email')} hint={domainHint(coord.email, v.domains)}><input type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
               <Field label="الجوال"><input dir="ltr" inputMode="tel" value={coord.phone} onChange={setC('phone')} /></Field>
               <Field group label="حساب الاطلاع" wide hint={coord.enabled
                 ? (coordinator && coordinator.email === coord.email.trim().toLowerCase() ? 'الحساب قائم. تغيير البريد ينقل الوصول وينهي جلسات البريد القديم.' : 'يُنشأ الحساب ويُرسل للمنسق بريد دعوة عند الحفظ.')

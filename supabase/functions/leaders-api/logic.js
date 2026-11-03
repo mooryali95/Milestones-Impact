@@ -336,6 +336,10 @@ export const AUTO_CHECKS = {
   'AP-OK':   (s) => !!s.placementApproved,
   'E-POST':  (s) => !!s.postSubmitted,
   'R-ISSUE': (s) => !!s.reportIssued,
+  // تكتمل من مصدرها لا بنقرة «أنجزته»: اسم المبادرة في بطاقتها، وتقدير المدير والزملاء حين يصل
+  'P-PROJECT': (s) => !!s.initiativeNamed,
+  'T-360': (s) => !!s.preRated,
+  'E-360': (s) => !!s.postRated,
 };
 
 // يبني الرحلة كما يراها المشارك: كل مرحلة بحالتها ومتطلباتها.

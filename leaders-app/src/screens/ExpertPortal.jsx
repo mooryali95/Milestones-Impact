@@ -5,6 +5,7 @@
 // وساعاته وتقييمه (بعد خمسة تقييمات)، ويقيّم المشارك، ويصدر شهادة ساعات خبرته.
 // لا يرى سعر ساعته ولا تكلفته ولا ملاحظات الإدارة: الخادم لا يرسلها أصلًا.
 import React, { useEffect, useState } from 'react';
+import AccountSwitch from '../AccountSwitch.jsx';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
@@ -25,7 +26,8 @@ function Onboarding({ expert, onOut, reload }) {
   return (
     <div className="page narrow">
       <div className="row between"><p className="eyebrow" dir="ltr">EXPERT PORTAL</p>
-        <button className="link small" onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button></div>
+        <span className="row"><AccountSwitch here="expert" light doors={expert.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
+        <button className="link small" onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button></span></div>
       {edit
         ? <ExpertApply expert={expert} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
         : <div className="card milestone-card stack">
@@ -124,7 +126,7 @@ function Dashboard({ onOut }) {
   useEffect(() => { load(); }, []);
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
-  if (d.onboarding) return <Onboarding expert={d.expert} onOut={onOut} reload={() => { setD(null); load(); }} />;
+  if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
   const e = d.expert;
   const offered = d.requests.filter((x) => x.status === 'offered');
   const mine = d.requests.filter((x) => x.status === 'accepted');
@@ -163,6 +165,7 @@ function Dashboard({ onOut }) {
         </div>
         <div className="row xpp-head-acts">
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate}>شهادة ساعات الخبرة</button>
+          <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
           <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button>
         </div>
       </section>

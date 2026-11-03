@@ -398,7 +398,7 @@ async function continuousFor(participantId: string, milestones: any[]) {
 }
 
 export async function journeyFor(p: any) {
-  const [placements, def, progress, assessments, reports, ovr, msRecs] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
@@ -406,6 +406,8 @@ export async function journeyFor(p: any) {
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
     db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
+    initiativeFor(p.id),
+    db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
   ]);
   const pl = placements.data || [];
   const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
@@ -418,6 +420,9 @@ export async function journeyFor(p: any) {
     placementApproved: approved,
     postSubmitted: submitted('post'),
     reportIssued: (reports.data || []).length > 0,
+    initiativeNamed: !!initiative,
+    preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
+    postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   // المحتوى بمستوى الدفعة الموحد إن كانت متجانسة، وإلا بمستوى المشارك؛ القياس والمسار يبقيان من قياسه
@@ -459,6 +464,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   return {
     // ما يحق للمشارك (الدفع أو الرعاية أو الإعفاء): مصدره payments.access وحده
     access: payAccess,
+    // حسابات البريد الأخرى (خبير، منسق جهة) لزر التبديل
+    switch_to: audience === 'participant' && !p.is_demo ? (await rolesOf(p.email)).filter((d) => d !== 'participant') : [],
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
