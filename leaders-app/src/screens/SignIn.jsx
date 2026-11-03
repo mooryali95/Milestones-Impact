@@ -7,6 +7,7 @@ import { call } from '../api.js';
 import { attribution } from '../attribution.js';
 import Captcha from '../Captcha.jsx';
 import RoleChoice from '../RoleChoice.jsx';
+import OtherDoors from '../Doors.jsx';
 import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
 import logo from '../milestone-impact-inverted.svg';
 
@@ -221,7 +222,7 @@ export default function SignIn({ onSignedIn, initialError }) {
         )}
         {captchaBox}
         </>}
-        {!roles && step === 'email' && <p className="small muted signin-expert">خبير في شبكة البرنامج؟ <a className="link" href="/x">ادخل إلى لوحة الخبير</a></p>}
+        {!roles && step === 'email' && <OtherDoors here="participant" />}
       </div>
     </div>
   );

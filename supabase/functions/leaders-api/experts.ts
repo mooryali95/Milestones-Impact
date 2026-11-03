@@ -8,6 +8,7 @@ import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
+import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -437,7 +438,7 @@ export async function portalStart(b: Body, ctx: Ctx) {
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
   await mailGuard(b, ctx);
   const { data: e } = await db.from('experts').select('id, full_name, status').eq('email', email).maybeSingle();
-  if (!portalOk(e)) return SENT;   // الرد واحد مسجلًا كان البريد أو لا
+  if (!portalOk(e)) { await wrongDoor(email, 'expert'); return SENT; }   // الرد واحد مسجلًا كان البريد أو لا، والدلالة في بريده
   const { count } = await db.from('expert_challenges').select('id', { count: 'exact', head: true }).eq('email', email).gte('created_at', new Date(Date.now() - 36e5).toISOString());
   if ((count ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
   const code = randomCode();
@@ -470,7 +471,11 @@ export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
   const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
   const { data: e } = await db.from('experts').select('*').eq('email', id.email).maybeSingle();
-  if (!portalOk(e)) throw new Fail('لا يوجد ملف خبير لهذا الحساب. ادخل بالبريد المسجل في شبكة الخبراء', 403, 'denied');
+  if (!portalOk(e)) {
+    // الهوية موثقة من Google: يصح أن نعرض لصاحبها بوابته الصحيحة
+    const doors = (await rolesOf(id.email)).filter((d) => d !== 'expert');
+    throw new Fail(doors.length ? `هذا الحساب غير مسجل في شبكة الخبراء، وهو مسجل في ${doors.map((d) => DOOR[d].title).join(' و')}.` : 'لا يوجد ملف خبير لهذا الحساب. ادخل بالبريد المسجل في شبكة الخبراء', 403, doors.length ? `door:${doors.join(',')}` : 'denied');
+  }
   return { success: true, token: await openSession(e, ctx, 'google'), expert: { full_name: e.full_name } };
 }
 

@@ -4,6 +4,7 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
+import { wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
 } from './core.ts';
@@ -33,7 +34,7 @@ export async function authStart(b: Body, ctx: Ctx) {
   // الحارس قبل البحث عن المنسق: الرد واحد لكل بريد، مسجلًا كان أو لا
   await mailGuard(b, ctx);
   const c = await coordinatorByEmail(email);
-  if (!usable(c)) return SENT;
+  if (!usable(c)) { await wrongDoor(email, 'org'); return SENT; }
 
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const { count } = await db.from('coordinator_challenges').select('id', { count: 'exact', head: true })

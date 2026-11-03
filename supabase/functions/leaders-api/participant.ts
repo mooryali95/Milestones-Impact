@@ -16,6 +16,7 @@ import { continuousEvents as katonEvents } from './katon.ts';
 import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
+import { rolesOf } from './doors.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -131,16 +132,7 @@ async function sponsorFor(b: Body, key: string) {
 }
 
 // أدوار البريد الأخرى، تُكشف لصاحبه فقط بعد إثبات ملكيته (رمز أو رابط أو Google)، فلا يُنشأ له حساب مشارك خطأً
-async function otherRoles(email: string) {
-  const [{ data: e }, { data: c }] = await Promise.all([
-    db.from('experts').select('status').eq('email', email).maybeSingle(),
-    db.from('org_coordinators').select('status').eq('email', email).limit(1),
-  ]);
-  const roles: string[] = [];
-  if (e && !['rejected', 'suspended'].includes(e.status)) roles.push('expert');
-  if ((c || []).some((x: any) => x.status !== 'suspended')) roles.push('org');
-  return roles;
-}
+const otherRoles = async (email: string) => (await rolesOf(email)).filter((d) => d !== 'participant');
 
 // المشارك المسجل يضيف رمز جهته الراعية لاحقًا (مرة واحدة: الربط بعدها من الإدارة)
 export async function sponsorCode(p: any, b: Body) {
