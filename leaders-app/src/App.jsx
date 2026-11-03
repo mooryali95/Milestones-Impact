@@ -30,6 +30,7 @@ import ExpertPortal from './screens/ExpertPortal.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
 import HallScreen from './screens/Hall.jsx';
+import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
@@ -131,6 +132,8 @@ function Participant() {
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
   // رمز حضور الورشة من مسح QR: /?checkin=...
+  // رابط العرض من لوحة الإدارة: يُلتقط قبل أي شيء
+  const [demo, setDemo] = useState(() => captureDemoLink() || demoPending());
   const [checkin, setCheckin] = useState(() => {
     const t = new URLSearchParams(location.search).get('checkin');
     if (t) history.replaceState(null, '', '/');
@@ -262,6 +265,7 @@ function Participant() {
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact</footer>
+      {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>
   );

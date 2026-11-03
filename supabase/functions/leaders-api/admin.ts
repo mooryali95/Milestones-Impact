@@ -52,12 +52,13 @@ function funnel(rows: any[]) {
     withdrawn: rows.filter((r) => r.status === 'withdrawn' || r.status === 'suspended').length,
   };
 }
-const orgFilter = (q: any, org: unknown) => (org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q);
+// حساب العرض لا يدخل القوائم ولا الإحصاءات
+const orgFilter = (q: any, org: unknown) => { q = q.eq('is_demo', false); return org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q; };
 
 export async function orgs() {
   const [{ data: list }, { data: ps }] = await Promise.all([
     db.from('organizations').select('*').order('created_at'),
-    all((f, t) => db.from('participants').select('id, status, organization_id, organization_name, last_login_at').order('id').range(f, t)).then((data) => ({ data })),
+    all((f, t) => db.from('participants').select('id, status, organization_id, organization_name, last_login_at').eq('is_demo', false).order('id').range(f, t)).then((data) => ({ data })),
   ]);
   const weekAgo = Date.now() - 7 * 864e5;
   const stats = (rows: any[]) => ({ ...funnel(rows), total: rows.length, active_week: rows.filter((r) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length });
@@ -213,7 +214,7 @@ async function overviewMore(ids: string[] | null) {
 export async function participants(b: Body) {
   let q = db.from('participants')
     .select('id, full_name, email, phone, job_title, organization_id, organization_name, status, created_at, last_login_at, placements(dimension, level, approved_at)')
-    .order('created_at', { ascending: false }).limit(500);
+    .eq('is_demo', false).order('created_at', { ascending: false }).limit(500);
   q = orgFilter(q, b.org);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.search) {

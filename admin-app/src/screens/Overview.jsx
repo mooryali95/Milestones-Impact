@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date } from '../leaders.js';
 import { LVLS } from '../methodology.js';
-import { Spinner } from '../ui.jsx';
+import { Spinner, useUI } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { OrgSelect } from './Participants.jsx';
@@ -96,6 +96,39 @@ function Readiness({ items, onTab }) {
   );
 }
 
+// حساب العرض للورش: يفتح تطبيق المشارك من شاشة الدخول مع جولة الخطوات، ويُعاد إلى البداية بضغطة
+function DemoCard() {
+  const { toast, confirm } = useUI();
+  const [busy, setBusy] = useState(false);
+  const openDemo = async () => {
+    // النافذة تُفتح فورًا بضغطة المستخدم، ثم يُكتب فيها الرابط، فلا يمنعها المتصفح
+    const w = window.open('', '_blank');
+    setBusy(true);
+    const r = await L('admin.demo-open');
+    setBusy(false);
+    if (!r.success) { w?.close(); return toast(r.message); }
+    if (w) w.location.href = r.url; else location.href = r.url;
+  };
+  const reset = async () => {
+    if (!(await confirm('إعادة حساب العرض إلى البداية؟ تُمسح إجاباته وتقدمه، ويبدأ العرض التالي من شاشة الدخول.'))) return;
+    setBusy(true);
+    const r = await L('admin.demo-reset');
+    setBusy(false);
+    toast(r.success ? 'أُعيد حساب العرض إلى البداية' : r.message);
+  };
+  return (
+    <section className="la-card la-demo">
+      <div className="la-row between">
+        <div><b>حساب العرض التوضيحي</b><p className="la-muted">للورش: يفتح المنصة من شاشة الدخول، وجولة بتسع خطوات تشرح الرحلة كاملة. لا يدخل الإحصاءات ولا يصله بريد.</p></div>
+        <span className="la-row">
+          <button className="btn-sm primary" disabled={busy} onClick={openDemo}>افتح حساب العرض</button>
+          <button className="btn-sm ghost" disabled={busy} onClick={reset}>أعِده إلى البداية</button>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
   const [org, setOrg] = useState('');
   const [d, setD] = useState(null);
@@ -126,6 +159,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
   return (
     <>
       <Health h={h} />
+      {canWrite !== false && <DemoCard />}
       {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
       {o.mfa_required && (
         <div className="la-note" role="alert">
