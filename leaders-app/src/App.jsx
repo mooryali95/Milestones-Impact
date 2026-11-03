@@ -30,6 +30,7 @@ import ExpertPortal from './screens/ExpertPortal.jsx';
 import RoleChoice from './RoleChoice.jsx';
 import Paywall from './screens/Paywall.jsx';
 import { gateDone } from './gates.js';
+import { clearAttribution } from './attribution.js';
 import SponsorNote from './SponsorNote.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
@@ -163,7 +164,7 @@ function Participant() {
   const doInstall = async () => { install.prompt(); await install.userChoice; setInstall(null); };
 
   const accept = useCallback((res) => {
-    if (res?.token) session.set(res.token);
+    if (res?.token) { session.set(res.token); clearAttribution(); }
     if (res?.participant) setMe(res);
     // بعد الدخول تظهر الرحلة بتلاشٍ ناعم بدل القفزة من شاشة الانتقال
     if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
