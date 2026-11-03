@@ -109,6 +109,37 @@ async function resolveOrg(b: Body) {
   return byHost ? { org: byHost, via: 'domain' as const } : null;
 }
 
+// ── الجهة الراعية برمز يكتبه المشارك ──
+// الجهة الراعية (organization_id) غير «جهة العمل» (organization_name، نص يكتبه المشارك ولا يُربط بشيء).
+// لا قائمة جهات علنية: الرمز الصحيح وحده يكشف اسم جهته، والخاطئ رده واحد دائمًا، ومحاولاته محدودة.
+const SPONSOR_TRIES_PER_HOUR = 10;
+async function sponsorByCode(code: unknown, key: string) {
+  const c = String(code || '').trim();
+  if (!c) return null;
+  const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('action', 'sponsor.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString());
+  if ((count ?? 0) >= SPONSOR_TRIES_PER_HOUR) throw new Fail('محاولات كثيرة لرمز الجهة، حاول بعد ساعة', 429, 'rate');
+  const org = await orgByCode(c);
+  if (!org) {
+    await audit('system', key, 'sponsor.code-fail', 'organizations', 'none');
+    throw new Fail('تعذّر التحقق من رمز الجهة الراعية. تأكد منه، أو تابع دونه وتربطك الإدارة لاحقًا.', 400, 'sponsor_code');
+  }
+  return { org, via: 'link' as const };   // الرمز المكتوب هو رمز رابط الجهة نفسه
+}
+async function sponsorFor(b: Body, key: string) {
+  return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b));
+}
+
+// المشارك المسجل يضيف رمز جهته الراعية لاحقًا (مرة واحدة: الربط بعدها من الإدارة)
+export async function sponsorCode(p: any, b: Body) {
+  if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
+  const r = await sponsorByCode(b.sponsor_code, `p:${p.id}`);
+  if (!r) throw new Fail('اكتب رمز الجهة الراعية');
+  const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
+  await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
+  return { success: true, ...(await mePayload(saved)) };
+}
+
 // يعرض اسم الجهة في شاشة التسجيل قبل إدخال البريد
 export async function orgInfo(b: Body) {
   const r = await resolveOrg(b);
@@ -135,11 +166,11 @@ export async function authStart(b: Body, ctx: Ctx) {
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
-    // التسجيل عبر رابط جهة أو من موقعها: يُنسب المشارك لها تلقائيًا
-    const r = await resolveOrg(b);
+    // الجهة الراعية: رمز يكتبه المشارك، أو رابط جهة، أو موقعها. جهة العمل يكتبها في ملفه لاحقًا
+    const r = await sponsorFor(b, ctx.ip || email);
     pending = {
       full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
-      ...(r ? { organization_id: r.org.id, organization_name: r.org.name, org_via: r.via } : {}),
+      ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
     };
   }
 
@@ -188,7 +219,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
     if (ch.purpose !== 'register' || !ch.pending_profile) throw new Fail('انتهت صلاحية خطوة التسجيل. ابدأ من جديد.', 400, 'restart');
     p = must(await db.from('participants').insert({
       email, full_name: ch.pending_profile.full_name, phone: ch.pending_profile.phone,
-      organization_id: ch.pending_profile.organization_id || null, organization_name: ch.pending_profile.organization_name || null,
+      organization_id: ch.pending_profile.organization_id || null,
       org_via: ch.pending_profile.org_via || null, campaign: ch.pending_profile.campaign || null, referrer_host: ch.pending_profile.referrer_host || null,
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
@@ -211,11 +242,13 @@ export async function authGoogle(b: Body, ctx: Ctx) {
 
   let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();
   if (!p) {
-    const r = await resolveOrg(b);
+    // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
+    if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '' };
+    const r = await sponsorFor(b, ctx.ip || id.email);
     p = must(await db.from('participants').insert({
       email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
       campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
-      ...(r ? { organization_id: r.org.id, organization_name: r.org.name, org_via: r.via } : {}),
+      ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
       source: r ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
@@ -475,8 +508,6 @@ export async function profileSave(p: any, b: Body) {
     if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     patch.phone = phone;
   }
-  // الجهة المرتبطة مصدر اسمها: لا يُكتب اسم ثانٍ بجانبها
-  if (p.organization_id) delete patch.organization_name;
   if ('work_scope' in f) {
     patch.work_scope = SCOPES.includes(f.work_scope) ? f.work_scope : null;
     // النطاق يحدد فصول وثيقة المبادرة، فلا يتغير وهي عند المراجعة أو معتمدة

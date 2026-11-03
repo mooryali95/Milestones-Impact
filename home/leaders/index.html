@@ -111,6 +111,25 @@
 
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="/assets/program/css/main.css?v=0a47a761" />
+<style>
+/* مداخل البرنامج: مشارك · منسق جهة · خبير — كل باب إلى بوابته في leaders.sunkvalue.com */
+.enter{padding:clamp(56px,8vw,96px) var(--mi-space);background:var(--mi-sand)}
+.enter__in{max-width:1120px;margin:0 auto}
+.enter__eyebrow{text-align:right;font-size:12px;letter-spacing:var(--mi-track);color:var(--mi-gold);margin:0 0 10px}
+.enter__title{font-family:var(--mi-font-ar);font-size:clamp(26px,3.4vw,38px);color:var(--mi-graphite);margin:0 0 10px}
+.enter__lead{color:var(--mi-muted);max-width:62ch;line-height:1.9;margin:0 0 32px}
+.enter__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.enter__card{display:flex;flex-direction:column;gap:10px;padding:26px 24px;background:var(--mi-surface);border:1px solid var(--mi-line);border-top:3px solid var(--mi-gold);text-decoration:none;color:var(--mi-graphite);transition:transform .2s ease,box-shadow .2s ease}
+.enter__card:hover,.enter__card:focus-visible{transform:translateY(-3px);box-shadow:0 14px 34px -18px rgba(11,39,47,.45)}
+.enter__card--main{background:var(--mi-graphite);color:var(--mi-mist);border-top-color:var(--mi-copper)}
+.enter__card h3{font-family:var(--mi-font-ar);font-size:20px;margin:0}
+.enter__card p{margin:0;line-height:1.85;color:inherit;opacity:.82;font-size:15px}
+.enter__card .enter__go{margin-top:auto;padding-top:8px;font-weight:700;color:var(--mi-gold);opacity:1}
+.enter__card--main .enter__go{color:var(--mi-copper)}
+.enter__sub{display:block;font-size:13px;font-weight:400;opacity:.8;margin-top:4px}
+.enter__note{margin:22px 0 0;color:var(--mi-muted);font-size:14px;line-height:1.8}
+@media (max-width:860px){.enter__grid{grid-template-columns:1fr}}
+</style>
 </head>
 <body data-product="MI-LEADERS">
 
@@ -131,6 +150,7 @@
       <a href="#frameworks" class="header__nav-link">المنهجية</a>
       <a href="#tracks" class="header__nav-link">المسارات</a>
       <a href="#roadmap" class="header__nav-link">خارطة التفعيل</a>
+      <a href="#enter" class="header__nav-link">الدخول</a>
     </nav>
     <div class="header__actions">
       <button class="header__cta" onclick="openTypeform()" aria-label="تواصل معنا">تواصل معنا</button>
@@ -157,6 +177,7 @@
       <a href="#frameworks" class="mobile-drawer__link">المنهجية</a>
       <a href="#tracks" class="mobile-drawer__link">المسارات</a>
       <a href="#roadmap" class="mobile-drawer__link">خارطة التفعيل</a>
+      <a href="#enter" class="mobile-drawer__link">الدخول إلى البرنامج</a>
     </div>
     <button class="mobile-drawer__cta" onclick="openTypeform()">طلب موعد</button>
   </nav>
@@ -192,6 +213,10 @@
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
           </button>
+          <a href="#enter" class="btn-text" aria-label="الدخول إلى البرنامج">
+            <span>الدخول إلى البرنامج</span>
+            <span aria-hidden="true">↓</span>
+          </a>
           <a href="#problem" class="btn-text" aria-label="انتقل لقسم المنهجية">
             <span>استكشاف المنهجية</span>
             <span aria-hidden="true">↓</span>
@@ -231,6 +256,33 @@
   </section>
 
   <!-- ═════════════════════════════════════ PROBLEM + PROMISE ═════════════════════════════════════ -->
+  <!-- ═════════════════════════════════════ ENTER ═════════════════════════════════════ -->
+  <section class="enter" id="enter" aria-labelledby="enter-title">
+    <div class="enter__in">
+      <p class="enter__eyebrow" dir="ltr">ENTER THE PROGRAM</p>
+      <h2 class="enter__title" id="enter-title">ادخل إلى البرنامج</h2>
+      <p class="enter__lead">لكل دور في البرنامج بوابته. الدخول بالبريد برمز يصلك، أو بحساب Google، بلا كلمات مرور.</p>
+      <div class="enter__grid">
+        <a class="enter__card enter__card--main" href="https://leaders.sunkvalue.com/">
+          <h3>أنا مشارك</h3>
+          <p>ابدأ بقياس مبدئي يحدد مستواك في المعالم والأثر والقيادة، ثم رحلة تأهيل على مقاسك ومشروع حقيقي من جهتك.</p>
+          <p class="enter__go">ابدأ رحلتك ←<span class="enter__sub">رشّحتك جهة؟ استخدم رابطها أو رمزها عند التسجيل</span></p>
+        </a>
+        <a class="enter__card" href="https://leaders.sunkvalue.com/org">
+          <h3>أنا منسق جهة</h3>
+          <p>تابع مشاركي جهتك وتقدّمهم ومبادراتهم في لوحة الجهة، بحسب الصلاحيات التي يمنحها البرنامج.</p>
+          <p class="enter__go">لوحة الجهة ←</p>
+        </a>
+        <a class="enter__card" href="https://leaders.sunkvalue.com/x">
+          <h3>أنا خبير</h3>
+          <p>رافق القادة موجّهًا ومستشارًا ومقيّمًا. تابع طلباتك وجلساتك وساعات خبرتك من لوحتك.</p>
+          <p class="enter__go">لوحة الخبير ←<span class="enter__sub">لست في الشبكة بعد؟ قدّم طلب الانضمام من leaders.sunkvalue.com/expert</span></p>
+        </a>
+      </div>
+      <p class="enter__note">جهة تريد ترشيح قادتها للبرنامج؟ <a href="#" onclick="openTypeform();return false;">تواصل معنا</a> لإصدار رابط جهتك ورمزها.</p>
+    </div>
+  </section>
+
   <section class="section problem" id="problem" aria-labelledby="problem-title">
     <div class="section__container">
       <div class="reveal">

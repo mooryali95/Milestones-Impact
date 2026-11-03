@@ -72,6 +72,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
+  'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),

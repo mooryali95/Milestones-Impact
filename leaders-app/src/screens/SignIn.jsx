@@ -16,6 +16,8 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [sponsor, setSponsor] = useState('');
+  const [pendingGoogle, setPendingGoogle] = useState(null);   // حساب Google جديد ينتظر تأكيد صاحبه
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
@@ -44,7 +46,8 @@ export default function SignIn({ onSignedIn, initialError }) {
     e?.preventDefault();
     setBusy(true); setError('');
     const res = await call('auth.start', {
-      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined, ...via, captcha,
+      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined,
+      sponsor_code: step === 'name' && sponsor.trim() ? sponsor.trim() : undefined, ...via, captcha,
     });
     setBusy(false);
     // الخادم يطلب التحقق البشري: تظهر الأداة، وتعيد الطلب وحدها حين تكتمل
@@ -83,12 +86,28 @@ export default function SignIn({ onSignedIn, initialError }) {
     setEntering(null); setError(res.message);
   };
 
-  const google = async (credential) => {
+  const google = async (credential, confirm = false) => {
     setError(''); setEntering({ name: firstNameOf(credential) });
-    const res = await call('auth.google', { credential, ...via });
+    const res = await call('auth.google', { credential, ...via, ...(confirm ? { confirm_new: true, sponsor_code: sponsor.trim() || undefined } : {}) });
+    if (res.success && res.confirm_new) { setEntering(null); setPendingGoogle({ credential, name: res.name }); return setStep('google'); }
     if (res.success) return onSignedIn(res);
     setEntering(null); setError(res.message);
   };
+
+  // لحساب جديد فقط: من له لوحة خبير أو جهة لا يحتاج حساب مشارك، ورمز الجهة الراعية اختياري
+  const newcomerExtras = (
+    <>
+      {!org && (
+        <label className="field">
+          <span>رمز الجهة الراعية <em>(اختياري، إن رشّحتك جهة للبرنامج)</em></span>
+          <input className="input ltr" autoComplete="off" spellCheck={false} maxLength={40} value={sponsor} onChange={(e) => setSponsor(e.target.value)} placeholder="ABC-2026" />
+        </label>
+      )}
+      <div className="role-note small">
+        <b>خبير أو منسق جهة؟</b> لا تحتاج حساب مشارك. ادخل من <a className="link" href="/x">لوحة الخبير</a> أو <a className="link" href="/org">لوحة الجهة</a>.
+      </div>
+    </>
+  );
 
   const captchaBox = captchaKey ? (
     <div className="stack">
@@ -151,9 +170,24 @@ export default function SignIn({ onSignedIn, initialError }) {
               <input className="input ltr" type="tel" inputMode="tel" autoComplete="tel" value={phone}
                 onChange={(e) => setPhone(e.target.value)} placeholder="05XXXXXXXX" />
             </label>
+            {newcomerExtras}
             {error && <div className="alert err">{error}</div>}
             <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
             <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+          </form>
+        )}
+
+        {step === 'google' && pendingGoogle && (
+          <form className="stack" onSubmit={(e) => { e.preventDefault(); google(pendingGoogle.credential, true); }}>
+            <div>
+              <p className="eyebrow">تسجيل جديد</p>
+              <h1>{pendingGoogle.name ? `أهلًا ${pendingGoogle.name.split(' ')[0]}` : 'أهلًا بك في البرنامج'}</h1>
+              <p className="muted">ننشئ لك حساب مشارك في برنامج القادة.</p>
+            </div>
+            {newcomerExtras}
+            {error && <div className="alert err">{error}</div>}
+            <button className="btn block" disabled={busy || !!entering}>أنشئ حسابي مشاركًا</button>
+            <button type="button" className="link small" onClick={() => { setStep('email'); setPendingGoogle(null); setError(''); }}>رجوع</button>
           </form>
         )}
 
