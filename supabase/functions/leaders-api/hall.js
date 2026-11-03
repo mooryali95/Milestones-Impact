@@ -46,7 +46,9 @@ export function nextLeader(roles, current, presentIds = null) {
 }
 
 // الاسم المختصر للعرض العام: الاسم الأول فقط
-export const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
+// الاسم الأول للتحية والعرض العام، بعد تخطّي الألقاب (م، د، أ، المهندس، الدكتور…)
+const TITLES = new Set(['م', 'م.', 'د', 'د.', 'أ', 'أ.', 'ا', 'أ.د', 'أ.د.', 'م/', 'د/', 'أ/', 'المهندس', 'مهندس', 'الدكتور', 'دكتور', 'الأستاذ', 'أستاذ', 'الاستاذ', 'استاذ', 'Dr', 'Dr.', 'Eng', 'Eng.', 'Mr', 'Mr.', 'Ms', 'Ms.', 'Prof', 'Prof.']);
+export const firstName = (n) => String(n || '').trim().split(/\s+/).find((w) => w && !TITLES.has(w)) || String(n || '').trim().split(/\s+/)[0] || '';
 
 // حالة القاعة كما يراها طرف: viewer = { kind: 'participant'|'admin', id }
 /** @param {any} args */

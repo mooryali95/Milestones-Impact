@@ -16,7 +16,7 @@ type Ctx = { ip: string | null };
 type Admin = import('./admin.ts').Admin;
 
 const shell = (title: string, body: string, preheader = '') => mailShell(title, body, { family: 'experts', preheader });
-const firstName = (n: string | null) => String(n || '').trim().split(/\s+/)[0] || '';
+import { firstName } from './hall.js';
 
 // ── طلب الانضمام (مفتوح) ──
 // بريد واحد لملف واحد، وحد لكل شبكة في الساعة، ولا يكشف الرد إن كان البريد مسجلًا
@@ -167,12 +167,16 @@ async function needFor(participantId: string, role: string, dimension: string | 
 // الخبراء بحِملهم الحالي، وهل خدموا المشارك من قبل
 async function candidates(need: any, participantId: string, tried: string[] = []) {
   const now = new Date().toISOString();
-  const [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }] = await Promise.all([
+  let [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }, { data: me }] = await Promise.all([
     db.from('experts').select('*').eq('status', 'active').contains('roles', [need.role]),
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
+    db.from('participants').select('email').eq('id', participantId).maybeSingle(),
   ]);
+  // الخبير لا يُرشَّح لنفسه حين يكون مشاركًا بالبريد نفسه
+  const self = String((me as any)?.email || '').toLowerCase();
+  if (self) experts = (experts || []).filter((e: any) => String(e.email || '').toLowerCase() !== self) as any;
   const tally = (rows: any[] | null) => {
     const m: Record<string, number> = {};
     for (const x of rows || []) m[x.expert_id] = (m[x.expert_id] || 0) + 1;
