@@ -29,6 +29,7 @@ import * as G from './programs.ts';
 import * as F from './final.ts';
 import * as KT from './katon.ts';
 import * as H from './hall.ts';
+import * as D from './demo.ts';
 import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
@@ -79,6 +80,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'katon.mine': (p) => KT.mine(p),
   'katon.answer': (p, b) => KT.answer(p, b),
   'hall.state': (p, b) => H.state(p, b),
+  'demo.fill-profile': (p) => D.fillProfile(p),
+  'demo.fill-assessment': (p) => D.fillAssessment(p),
   'hall.join': (p) => H.join(p),
   'hall.hand': (p, b) => H.hand(p, b),
   'hall.pick': (p, b) => H.pick(p, b),
@@ -141,7 +144,7 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
   'coord.logout': (_c, _b, sid) => C.logout(sid),
 };
 
-const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
+const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>> = {
   'admin.health': () => S.health(),
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   'admin.mail-send-test': S.mailSendTest,
@@ -227,6 +230,8 @@ const admin: Record<string, (a: A.Admin, b: Body) => Promise<unknown>> = {
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
   'admin.hall': (_a, b) => H.adminState(b),
+  'admin.demo-open': (a, b, ctx) => A.writer(a, (x, y) => D.open(x, y, ctx), b),
+  'admin.demo-reset': (a, b) => A.writer(a, D.reset, b),
   'admin.hall-open': (a, b) => A.writer(a, H.open, b),
   'admin.hall-step': (a, b) => A.writer(a, H.step, b),
   'admin.hall-split': (a, b) => A.writer(a, H.split, b),
@@ -281,7 +286,7 @@ Deno.serve(async (req) => {
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);
-      return reply(req, await admin[action](a, b));
+      return reply(req, await admin[action](a, b, ctx));
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {

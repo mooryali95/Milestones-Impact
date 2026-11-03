@@ -40,7 +40,8 @@ export async function issueSession(participantId: string, method: string, ctx: C
   }));
   await db.from('participants').update({ last_login_at: new Date().toISOString() }).eq('id', participantId);
   if (isNew) {
-    const { data: p } = await db.from('participants').select('full_name, email').eq('id', participantId).maybeSingle();
+    const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
+    if (p?.is_demo) return token;
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
     if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when)).catch((e) => console.error('new device mail', e));
   }
@@ -405,7 +406,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
-      bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status,
+      bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
@@ -664,16 +665,18 @@ export async function assessmentSubmit(p: any, b: Body) {
   }))));
   // مستوى مبدئي، لا يُكتب فوق مستوى اعتمده المستشار
   const { data: current } = await db.from('placements').select('dimension, approved_at').eq('participant_id', p.id);
+  // حساب العرض: يُعتمد مستواه فورًا فتظهر رحلته في الورشة دون انتظار المستشار
+  const auto = p.is_demo ? { approved_at: now, approved_by: 'عرض توضيحي' } : { approved_at: null, approved_by: null };
   const locked = new Set((current || []).filter((c: any) => c.approved_at).map((c: any) => c.dimension));
   const fresh = result.filter((r: any) => !locked.has(r.dimension));
   if (fresh.length) {
     must(await db.from('placements').upsert(fresh.map((r: any) => ({
       participant_id: p.id, dimension: r.dimension, level: r.level, source: 'assessment',
-      assessment_id: a.id, decided_at: now, approved_at: null, approved_by: null,
+      assessment_id: a.id, decided_at: now, ...auto,
     }))));
   }
   await db.from('assessments').update({ status: 'submitted', submitted_at: now }).eq('id', a.id);
-  const updated = must(await db.from('participants').update({ status: locked.size === 3 ? 'placed' : 'pending_approval' })
+  const updated = must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(updated)) };
