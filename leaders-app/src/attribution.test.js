@@ -34,4 +34,13 @@ describe('attribution', () => {
     expect(mergeAttribution(prev, {}, (KEEP_DAYS - 1) * day)?.org).toBe('safara');
     expect(mergeAttribution(prev, {}, (KEEP_DAYS + 1) * day)).toBeNull();
   });
+  it('clearAttribution forgets the stored org after sign-in', async () => {
+    const store = {};
+    globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = v; }, removeItem: (k) => { delete store[k]; } };
+    const { clearAttribution, attribution } = await import('./attribution.js');
+    store.mi_leaders_ref = JSON.stringify({ org: 'manzoma', at: Date.now() });
+    expect(attribution().org).toBe('manzoma');
+    clearAttribution();
+    expect(attribution()).toEqual({});
+  });
 });

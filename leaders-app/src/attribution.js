@@ -58,6 +58,12 @@ export function captureAttribution() {
   return next;
 }
 
+// بعد أي دخول ناجح يُنسى النسب: أدى غرضه عند التسجيل، وبقاؤه يُظهر «تسجيل عبر جهة» لمن فتح
+// الرابط العام لاحقًا (أو لشخص آخر على الجهاز نفسه) وكأنه جاء برابطها
+export function clearAttribution() {
+  try { localStorage.removeItem(KEY); } catch { /* تصفح خاص */ }
+}
+
 // ما يُرسل للخادم مع التسجيل
 export function attribution() {
   const a = mergeAttribution(read(), {});
