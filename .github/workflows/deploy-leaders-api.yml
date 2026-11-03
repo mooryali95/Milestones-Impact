@@ -41,7 +41,7 @@ jobs:
           version: latest
       - name: Deploy
         if: steps.gate.outputs.skip != 'true'
-        run: supabase functions deploy leaders-api --project-ref "$PROJECT_REF"
+        run: supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
       - name: Verify the live function answers
         if: steps.gate.outputs.skip != 'true'
         run: |
