@@ -656,18 +656,23 @@ export async function submission(b: Body) {
 // تقييم المستشار: يُعتمد التسليم أو يُعاد للتعديل، ومعه تقييم وملاحظات ونقاط تميّز اختيارية
 export async function reviewSubmission(a: Admin, b: Body) {
   requireWrite(a);
+  return reviewSubmissionBy(a.email, 'admin', b);
+}
+
+// التقييم نفسه للإدارة وللمستشار الأساسي من بوابته؛ المقيّم يُسجَّل باسمه (reviewed_by)
+export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'system', b: Body) {
   const status = b.status === 'returned' ? 'returned' : 'reviewed';
   const rating = b.rating ? Math.max(1, Math.min(5, Math.round(Number(b.rating)))) : null;
   const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));
   const s = must(await db.from('model_submissions').update({
     status, rating, bonus, feedback_ar: String(b.feedback || '').slice(0, 4000) || null,
-    reviewed_at: new Date().toISOString(), reviewed_by: a.email,
+    reviewed_at: new Date().toISOString(), reviewed_by: reviewer,
   }).eq('id', String(b.id)).select('id, participant_id, learning_models(title_ar)').single()) as any;
   if (status === 'reviewed' && bonus) {
     await db.from('points_ledger').upsert({ participant_id: s.participant_id, source: 'review', ref_id: s.id, points: bonus, note: `تميّز: ${s.learning_models?.title_ar || ''}` },
       { onConflict: 'participant_id,source,ref_id' });
   }
-  await audit('admin', a.email, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus });
+  await audit(actor, reviewer, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus });
   const { data: who } = await db.from('participants').select('full_name, email').eq('id', s.participant_id).single();
   if (who?.email) {
     sendMail(who.email, status === 'returned' ? 'ملاحظة على نموذجك' : 'اعتُمد نموذجك',

@@ -18,6 +18,7 @@ import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
+import { notifyAdvisor } from './advisor.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -1062,6 +1063,7 @@ export async function modelSave(p: any, b: Body) {
   else if (!prev) row.status = 'draft';
   const saved = must(await db.from('model_submissions').upsert(row, { onConflict: 'participant_id,model_id' }).select('*').single());
   const gained = submit ? await award(p.id, 'model', m.id, m.points, m.title_ar) : 0;
+  if (submit) notifyAdvisor(p, m.title_ar).catch(() => {});
   const pts = await pointsOf(p.id);
   return { success: true, submission: saved, gained, points: { total: pts.total, rank: pts.rank } };
 }

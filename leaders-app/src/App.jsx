@@ -9,6 +9,7 @@
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
 import React, { useCallback, useEffect, useState } from 'react';
+import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
@@ -39,8 +40,8 @@ import HallScreen from './screens/Hall.jsx';
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
-// «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه مع المالك (قرار 2026-11-03)
-const SHOW_KATON = false;
+// «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
+const SHOW_KATON = KATON_ENABLED;
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
 const LOGO_KEY = 'mi_leaders_org_logo';

@@ -7,7 +7,7 @@
 //   models     ← model_submissions.rating (1..5) بعد مراجعة المستشار
 //   experts    ← expert_ratings اتجاه to_participant (1..5) بعد الجلسات والاستشارات
 //   milestones ← participant_milestones.scores (معيار وصفي 1..4) عند اعتماد المعلم
-import { CONTINUOUS_SOURCE_AR, MILESTONE_RUBRIC } from './labels.js';
+import { CONTINUOUS_SOURCE_AR, KATON_ENABLED, MILESTONE_RUBRIC } from './labels.js';
 
 const pct = (v, min, max) => Math.round(((v - min) / (max - min)) * 100);
 const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -37,9 +37,9 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
     const p = rubricPct(m.scores);
     if (p != null) events.push({ source: 'milestones', at: m.done_at, pct: p, label: m.title_ar || 'معلم' });
   }
-  for (const k of katon) if (k.pct != null) events.push({ source: 'katon', at: k.at, pct: k.pct, label: k.title });
+  if (KATON_ENABLED) for (const k of katon) if (k.pct != null) events.push({ source: 'katon', at: k.at, pct: k.pct, label: k.title });
   events.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
-  const components = Object.keys(CONTINUOUS_SOURCE_AR).map((key) => {
+  const components = Object.keys(CONTINUOUS_SOURCE_AR).filter((key) => KATON_ENABLED || key !== 'katon').map((key) => {
     const ev = events.filter((e) => e.source === key);
     const value = ev.length ? Math.round(avg(ev.map((e) => e.pct))) : null;
     return { key, label: CONTINUOUS_SOURCE_AR[key], value, n: ev.length, reason: reasonFor(key, ev, value) };

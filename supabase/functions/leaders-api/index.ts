@@ -38,6 +38,7 @@ import * as E from './experts.ts';
 import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
 import { switchTo } from './switch.ts';
+import * as V2 from './advisor.ts';
 
 type Body = Record<string, any>;
 
@@ -153,6 +154,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.dashboard': (e) => E.portalDashboard(e),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
   'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
+  'xp.reviews': (e) => V2.reviews(e),
+  'xp.review': (e, b) => V2.review(e, b),
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),

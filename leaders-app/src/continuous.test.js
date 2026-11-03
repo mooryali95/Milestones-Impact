@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { cleanRubricScores, continuousAssessment, rubricPct } from '../../supabase/functions/leaders-api/logic.js';
 
 describe('التقييم المستمر', () => {
@@ -16,7 +17,8 @@ describe('التقييم المستمر', () => {
       milestones: [{ scores: { understanding: 4, structure: 2 }, done_at: '2026-01-04', title_ar: 'م1' }],
     });
     const by = Object.fromEntries(c.components.map((x) => [x.key, x.value]));
-    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67, katon: null });
+    // «كاتون» مخفي (KATON_ENABLED) فلا يدخل التقييم حتى يُعاد
+    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67, ...(KATON_ENABLED ? { katon: null } : {}) });
     expect(c.index).toBe(74);
     expect(c.events[0].label).toBe('م1');
     expect(c.trend.dir).toBe('down');

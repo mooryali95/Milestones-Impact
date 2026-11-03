@@ -118,6 +118,55 @@ function RateParticipant({ item, criteria, onDone }) {
   );
 }
 
+
+// المستشار الأساسي: نماذج مشاركي دفعته بانتظار تقييمه، بالمعيار نفسه في لوحة الإدارة
+const showVal = (v) => (Array.isArray(v) ? `جدول (${v.length} صفوف)` : v && typeof v === 'object' ? Object.values(v).filter(Boolean).join(' · ') : String(v ?? ''));
+function AdvisorReviews() {
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [f, setF] = useState({ rating: 0, feedback: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const load = () => xpCall('xp.reviews').then(setD);
+  useEffect(() => { load(); }, []);
+  if (!d?.success || !d.advisor) return null;
+  const pending = d.items.filter((x) => x.status === 'submitted');
+  const done = d.items.filter((x) => x.status !== 'submitted').slice(0, 8);
+  const send = async (x, status) => {
+    setBusy(true); setMsg('');
+    const r = await xpCall('xp.review', { id: x.id, status, rating: f.rating || null, feedback: f.feedback });
+    setBusy(false);
+    if (r.success) { setOpen(null); setF({ rating: 0, feedback: '' }); setMsg(status === 'returned' ? 'أُعيد للمشارك بملاحظتك.' : 'اعتُمد التسليم.'); load(); } else setMsg(r.message);
+  };
+  return (
+    <section className="card stack">
+      <h3>بانتظار تقييمك <small className="muted">· {pending.length}</small></h3>
+      <p className="small muted">أنت المستشار الأساسي لدفعة هؤلاء المشاركين؛ يصلك ما يسلّمونه هنا وبالبريد، والإدارة ترى ما تقيّمه.</p>
+      {msg && <div className="banner"><span className="grow">{msg}</span></div>}
+      {!pending.length && <p className="muted small">لا تسليمات معلّقة الآن.</p>}
+      {pending.map((x) => (
+        <div key={x.id} className="xpp-torate">
+          <div className="row between"><span><b>{x.participants?.full_name}</b> <small className="muted">{x.learning_models?.title_ar} · {fmt(x.submitted_at)}</small></span>
+            {open !== x.id && <button className="btn ghost sm" onClick={() => { setOpen(x.id); setF({ rating: 0, feedback: '' }); }}>قيّم</button>}</div>
+          {open === x.id && (
+            <div className="stack" style={{ gap: 8 }}>
+              <dl className="adv-answers">{(x.learning_models?.fields || []).map((fl) => <React.Fragment key={fl.key}><dt>{fl.label || fl.key}</dt><dd>{showVal(x.answers?.[fl.key]) || '·'}</dd></React.Fragment>)}</dl>
+              <div className="rx-row" role="radiogroup" aria-label="التقدير"><span>التقدير</span>
+                <span className="rx-stars">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={f.rating === n} className={n <= f.rating ? 'on' : ''} onClick={() => setF({ ...f, rating: n })}>★</button>)}</span></div>
+              <textarea className="input" rows={3} maxLength={4000} placeholder="ملاحظاتك المكتوبة للمشارك" value={f.feedback} onChange={(e) => setF({ ...f, feedback: e.target.value })} />
+              <div className="row"><button className="btn sm" disabled={busy || !f.rating} onClick={() => send(x, 'reviewed')}>اعتمد</button>
+                <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>أعده بملاحظة</button>
+                <button className="link small" onClick={() => setOpen(null)}>إلغاء</button></div>
+            </div>
+          )}
+        </div>
+      ))}
+      {done.length > 0 && <details><summary className="small">آخر ما قُيّم</summary>
+        <ul className="small muted">{done.map((x) => <li key={x.id}>{x.participants?.full_name} · {x.learning_models?.title_ar} · {x.status === 'returned' ? 'أُعيد' : `اعتُمد${x.rating ? ` (${x.rating}/5)` : ''}`}{x.reviewed_by ? ` · ${x.reviewed_by}` : ''}</li>)}</ul></details>}
+    </section>
+  );
+}
+
 function Dashboard({ onOut }) {
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
@@ -207,6 +256,8 @@ function Dashboard({ onOut }) {
           )) : <p className="muted small">لا جلسات قادمة.</p>}
         </section>
       </div>
+
+      <AdvisorReviews />
 
       {toRate.length > 0 && (
         <section className="card stack">

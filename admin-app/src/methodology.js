@@ -208,7 +208,7 @@ export const COHORT_STATUS = { planned: 'مخطط لها', open: 'التسجيل
 const INHERIT = 'كما في البرنامج';
 
 // حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, experts = [] }) {
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
     { name: 'name', label: 'اسم الدفعة' },
@@ -222,6 +222,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'ends_on', label: 'تنتهي', type: 'date' },
     { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
     { name: 'capacity', label: 'المقاعد', type: 'number' },
+    { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
+      help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
       help: 'المتجانس يوحّد المحتوى (الرحلة والكتيب والنماذج) للجميع، ويبقى قياس كل مشارك ومساره من نتيجته.' },
     { name: 'content_level', label: 'مستوى المحتوى للدفعة', type: 'select', options: LVL, show: (v) => v.level_mode === 'uniform' },
@@ -249,7 +251,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual' };
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '' };
   delete v.schedule; delete v.stage_modes;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;
