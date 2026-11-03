@@ -16,6 +16,7 @@ import Impact from './Impact.jsx';
 import Capstones from './Capstones.jsx';
 import Programs from './Programs.jsx';
 import KatonBank from './Katon.jsx';
+import Payments from './Payments.jsx';
 import HallScreen from './Hall.jsx';
 import ContentBank from './ContentBank.jsx';
 import Experts from './Experts.jsx';
@@ -26,7 +27,7 @@ import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'],
+  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'],
 ];
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
@@ -36,7 +37,7 @@ const TAB_GROUPS = [
   ['اليومي', ['overview', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels']],
-  ['النتائج', ['impact', 'certs', 'mail']],
+  ['النتائج', ['payments', 'impact', 'certs', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
@@ -82,6 +83,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
+  else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;

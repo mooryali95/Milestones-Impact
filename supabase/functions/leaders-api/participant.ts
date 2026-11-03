@@ -17,6 +17,7 @@ import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
+import { access as accessOf } from './payments.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -433,18 +434,21 @@ export async function journeyFor(p: any) {
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final }, passkeys, cells, org] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final }, passkeys, cells, org, payAccess] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
     p.organization_id
       ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
       : null,
+    accessOf(p),
   ]);
   const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
+    // ما يحق للمشارك (الدفع أو الرعاية أو الإعفاء): مصدره payments.access وحده
+    access: payAccess,
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,

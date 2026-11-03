@@ -638,3 +638,28 @@
 .hall-teams { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .88rem; margin-bottom: 8px; }
 .hall-teams i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-inline-end: 4px; }
 .hall-person { position: sticky; bottom: 12px; }
+
+/* المدفوعات: لوحة الإيرادات */
+.pay-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 24px; align-items: end; padding: 26px 28px; margin-bottom: 14px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--petrol), var(--petrol-mid)); color: var(--off-white); }
+.pay-hero > div:first-child { display: grid; gap: 6px; justify-items: start; }
+.pay-hero .la-muted { color: var(--gold-light); opacity: .85; }
+.pay-eyebrow { font-size: .7rem; letter-spacing: .28em; color: var(--gold-light); margin: 0; }
+.pay-total { font-family: var(--font-en); font-size: 3.2rem; line-height: 1; color: var(--gold-pale); }
+.pay-spark { display: flex; align-items: flex-end; gap: 3px; height: 84px; }
+.pay-spark i { flex: 1; border-radius: 2px 2px 0 0; background: rgba(255, 255, 255, .12); }
+.pay-spark i.on { background: var(--gold-light); }
+.pay-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
+.pay-kpis span { display: grid; padding: 12px 14px; border-radius: 10px; background: var(--sand-light); font-size: .74rem; color: var(--ink-light); border-top: 2px solid var(--gold); }
+.pay-kpis b { font-family: var(--font-en); font-size: 1.7rem; color: var(--petrol-s); }
+.pay-filters { gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.pay-filters .la-search { flex: 1; min-width: 200px; }
+.pay-health { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.pay-health li { display: grid; grid-template-columns: 20px 140px 1fr; gap: 8px; align-items: baseline; }
+.pay-health li.ok b { color: var(--st-ok); }
+.pay-health li.bad b { color: var(--st-bad); }
+.pay-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.pay-form label { display: grid; gap: 4px; font-size: .78rem; color: var(--ink-light); }
+.pay-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; }
+.pay-person { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+@media (max-width: 900px) { .pay-hero { grid-template-columns: 1fr; } .pay-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-form { grid-template-columns: 1fr; } }

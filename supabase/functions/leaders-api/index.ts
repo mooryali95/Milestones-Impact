@@ -35,6 +35,7 @@ import * as L from './lab.ts';
 import * as X from './capstone.ts';
 import * as T from './tracking.ts';
 import * as E from './experts.ts';
+import * as Y from './payments.ts';
 
 type Body = Record<string, any>;
 
@@ -69,10 +70,22 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'xp.auth-google': E.portalGoogle,
 };
 
+// ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
+const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
+  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout',
+  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
+function payGate(action: string, b: Body): 'assessment' | 'program' | null {
+  if (PAY_FREE.has(action)) return null;
+  if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
+  return 'program';
+}
+
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
+  'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
+  'pay.checkout': (p, b) => Y.checkout(p, b),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
@@ -212,6 +225,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.impact': (_a, b) => I.adminReport(b),
   'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),
+  'admin.payments': () => Y.adminOverview(),
+  'admin.payment-settings': Y.adminSettings,
+  'admin.payment-grant': Y.adminGrant,
+  'admin.payment-reconcile': Y.adminReconcile,
   'admin.experts': () => E.adminList(),
   'admin.expert': E.adminGet,
   'admin.expert-save': E.adminSave,
@@ -276,6 +293,9 @@ Deno.serve(async (req) => {
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
+      // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
+      const need = payGate(action, b);
+      if (need) await Y.requireAccess(p, need);
       return reply(req, await participant[action](p, b, sessionId, ctx));
     }
     if (coordinator[action]) {
