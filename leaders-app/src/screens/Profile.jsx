@@ -214,7 +214,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       {!onboarding && (
         <section className="card stack">
           <h3>الدخول بالبصمة</h3>
-          {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه لهذا الجهاز إن لم يكن منها.</p>}
+          {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه للجهاز الذي تستخدمه الآن إن لم يكن منها.</p>}
           <PasskeyBanner settings onDone={() => setPk((n) => n + 1)} />
         </section>
       )}
