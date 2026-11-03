@@ -173,6 +173,19 @@ export default function OrgForm({ org, coordinator, onClose }) {
   const [touched, setTouched] = useState({});
   const [busy, setBusy] = useState(false);
   const [serverErr, setServerErr] = useState('');
+  // جهة جديدة: برنامجها ودفعتها من المصدر الواحد (البرنامج يعرّف الرحلة، والدفعة تخصّصها للجهة)
+  const [programs, setPrograms] = useState([]);
+  const [plan, setPlan] = useState({ cohort: true, program_id: '', starts_on: '' });
+  const [orgCohorts, setOrgCohorts] = useState([]);
+  useEffect(() => {
+    L('admin.programs').then((r) => {
+      if (!r.success) return;
+      const live = (r.programs || []).filter((p) => !p.archived_at);
+      setPrograms(live);
+      setPlan((x) => ({ ...x, program_id: x.program_id || live.find((p) => p.is_default)?.id || live[0]?.id || '' }));
+      if (org?.id) setOrgCohorts((r.cohorts || []).filter((c) => c.organization_id === org.id));
+    });
+  }, [org?.id]);
   const [showNotes, setShowNotes] = useState(!!initial.notes);
   const [globalCert, setGlobalCert] = useState(null);
   useEffect(() => { L('admin.cert-settings').then((r) => r.success && setGlobalCert(r.settings)); }, []);
@@ -207,6 +220,10 @@ export default function OrgForm({ org, coordinator, onClose }) {
     if (!r.success) { setBusy(false); return setServerErr(r.message || 'تعذّر الحفظ'); }
     const orgId = org?.id || r.row?.id || r.id;
     let note = 'تم الحفظ';
+    if (!org && orgId && plan.cohort && plan.program_id) {
+      const c = await L('admin.cohort-save', { name: `دفعة ${row.name}`, organization_id: orgId, program_id: plan.program_id, status: 'open', ...(plan.starts_on ? { starts_on: plan.starts_on } : {}) });
+      if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن دفعتها لم تُنشأ: ${c.message}. أنشئها من «البرامج والدفعات».`); }
+    }
     if (coord.enabled && orgId) {
       const c = await L('admin.coordinator-save', { organization_id: orgId, email: coord.email, full_name: coord.full_name, phone: coord.phone });
       if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن حساب المنسق لم يُحفظ: ${c.message}`); }
@@ -271,6 +288,27 @@ export default function OrgForm({ org, coordinator, onClose }) {
           <section className="of-sec">
             <h4>شهادة الجهة</h4>
             <OrgCertificate org={org} cert={v.cert} global={globalCert} onChange={(cert) => setV({ ...v, cert })} canReissue={!!org && !dirty} />
+          </section>
+
+          <section className="of-sec">
+            <h4>البرنامج والدفعة</h4>
+            {org ? (
+              <p className="la-muted small">{orgCohorts.length
+                ? `دفعات الجهة: ${orgCohorts.map((c) => c.name).join('، ')}. الرحلة والحضور والمستشار والبنود المخفية تُضبط من الدفعة في «البرامج والدفعات».`
+                : 'لا دفعة للجهة بعد، فمشاركوها في الدفعة المفتوحة. أنشئ دفعتها من «البرامج والدفعات» لتخصيص رحلتها وحضورها ومستشارها.'}</p>
+            ) : (
+              <div className="of-grid">
+                <Field label="البرنامج" hint="يعرّف الرحلة: المراحل والمتطلبات">
+                  <select value={plan.program_id} onChange={(e) => setPlan({ ...plan, program_id: e.target.value })}>
+                    {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="تبدأ الدفعة" hint="اختياري؛ يُضبط الجدول منه"><input type="date" value={plan.starts_on} onChange={(e) => setPlan({ ...plan, starts_on: e.target.value })} /></Field>
+                <Field label="دفعة خاصة بالجهة" hint="تُخصَّص منها رحلة الجهة وحضورها ومستشارها، ويُسكَّن فيها مشاركوها تلقائيًا" wide>
+                  <label className="of-check"><input type="checkbox" checked={plan.cohort} onChange={(e) => setPlan({ ...plan, cohort: e.target.checked })} /> أنشئ دفعة للجهة على هذا البرنامج</label>
+                </Field>
+              </div>
+            )}
           </section>
 
           <section className="of-sec">

@@ -9,6 +9,7 @@ import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity from './Activities.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
@@ -160,6 +161,38 @@ const AUTO_HINT = {
   'E-360': 'يكتمل تلقائيًا حين يصل تقدير المدير أو الزملاء بعد البرنامج.',
 };
 
+
+// الاستبانة: تكتمل بإرسال الإجابات (الخادم يتحقق منها)، وتُعدَّل ما دامت المرحلة مفتوحة
+function Survey({ item, open, onUpdate, setToast }) {
+  const qs = surveyQuestions(item.config);
+  const [edit, setEdit] = useState(item.status !== 'done');
+  const [v, setV] = useState(item.answers || {});
+  const [busy, setBusy] = useState(false);
+  if (!qs.length) return null;
+  const ready = qs.every((q) => !q.required || (q.type === 'rating' ? v[q.key] >= 1 : String(v[q.key] || '').trim()));
+  const send = async () => {
+    setBusy(true);
+    const r = await call('requirement.update', { requirement_id: item.id, answers: v });
+    setBusy(false);
+    if (r.success) { onUpdate(r); setEdit(false); setToast('شكرًا، وصلت إجاباتك.'); } else setToast(r.message);
+  };
+  if (!edit) return open ? <div className="actions"><button className="link small" onClick={() => setEdit(true)}>عدّل إجاباتك</button></div> : null;
+  if (!open) return null;
+  return (
+    <div className="survey stack">
+      {qs.map((q) => (
+        <div key={q.key} className="survey-q">
+          <span>{q.label}{!q.required && <small className="muted"> (اختياري)</small>}</span>
+          {q.type === 'rating'
+            ? <span className="rx-stars" role="radiogroup" aria-label={q.label}>{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={v[q.key] === n} aria-label={`${n} من 5`} className={n <= (v[q.key] || 0) ? 'on' : ''} onClick={() => setV({ ...v, [q.key]: n })}>★</button>)}</span>
+            : <textarea className="input" rows={2} maxLength={2000} value={v[q.key] || ''} onChange={(e) => setV({ ...v, [q.key]: e.target.value })} />}
+        </div>
+      ))}
+      <div className="actions"><button className="btn sm" disabled={busy || !ready} onClick={send}>{busy ? 'لحظة…' : 'أرسل إجاباتك'}</button></div>
+    </div>
+  );
+}
+
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
@@ -183,7 +216,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
   };
 
   const verified = !!item.activity;
-  const sys = item.auto || item.kind === 'meeting' || verified;
+  const sys = item.auto || item.kind === 'meeting' || item.kind === 'survey' || verified;
   const canAct = open && !sys && (item.status === 'pending' || item.status === 'returned' || (item.status === 'done' && !item.needs_review));
   const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
 
@@ -200,12 +233,13 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         {item.help_ar && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
         {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
-        {sys && !verified && item.status !== 'done' && (
+        {sys && !verified && item.kind !== 'survey' && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يُسجَّل بعد انعقاد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' || item.code === 'T-360' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
             {item.code === 'P-PROJECT' && <> <button className="link" onClick={onCapstone}>اكتب بطاقة مبادرتك</button></>}
           </p>
         )}
+        {item.kind === 'survey' && <Survey item={item} open={open} onUpdate={onUpdate} setToast={setToast} />}
         {open && item.code === 'E-POST' && (
           <div className="actions">
             <button className={`btn sm${item.status === 'done' ? '' : ' gold'}`} onClick={onImpact}>{item.status === 'done' ? 'اعرض ما تغيّر' : 'ابدأ القياس البعدي'}</button>
