@@ -381,12 +381,13 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
-// مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها
+// مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
 async function continuousFor(participantId: string, milestones: any[]) {
-  const [hb, subs, rt, kt] = await Promise.all([
+  const [hb, subs, rt, lb, kt] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
     db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
     db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
+    db.from('lab_attempts').select('item_id, pct, finished_at, lab_items(title_ar)').eq('participant_id', participantId).not('finished_at', 'is', null),
     katonEvents(participantId),
   ]);
   return continuousAssessment({
@@ -394,6 +395,7 @@ async function continuousFor(participantId: string, milestones: any[]) {
     models: (subs.data || []).map((m: any) => ({ ...m, title: m.learning_models?.title_ar })),
     ratings: (rt.data || []).map((r: any) => ({ ...r, label: r.session_id ? 'جلسة توجيه' : 'استشارة' })),
     milestones: milestones.filter((m: any) => m.done),
+    lab: (lb.data || []).map((a: any) => ({ ...a, title: a.lab_items?.title_ar })),
     katon: kt,
   });
 }

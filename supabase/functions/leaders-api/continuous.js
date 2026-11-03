@@ -7,6 +7,7 @@
 //   models     ← model_submissions.rating (1..5) بعد مراجعة المستشار
 //   experts    ← expert_ratings اتجاه to_participant (1..5) بعد الجلسات والاستشارات
 //   milestones ← participant_milestones.scores (معيار وصفي 1..4) عند اعتماد المعلم
+//   lab        ← lab_attempts.pct لأفضل محاولة منتهية في كل أداة (إتقان الأدوات في المختبر)
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED, MILESTONE_RUBRIC } from './labels.js';
 
 const pct = (v, min, max) => Math.round(((v - min) / (max - min)) * 100);
@@ -27,8 +28,8 @@ export const rubricPct = (scores) => {
 };
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
-/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], katon?: any[] }} [src] */
-export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], katon = [] } = {}) {
+/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[] }} [src] */
+export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], lab = [], katon = [] } = {}) {
   const events = [];
   for (const q of quizzes) if (q.quiz_total > 0) events.push({ source: 'quizzes', at: q.completed_at, pct: Math.round((q.quiz_score / q.quiz_total) * 100), label: q.title || 'اختبار باب' });
   for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: pct(m.rating, 1, 5), label: m.title || 'نموذج' });
@@ -37,6 +38,10 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
     const p = rubricPct(m.scores);
     if (p != null) events.push({ source: 'milestones', at: m.done_at, pct: p, label: m.title_ar || 'معلم' });
   }
+  // المختبر: أفضل محاولة منتهية لكل أداة، فإعادة المحاولة للتعلم لا تُخفض المؤشر
+  const bestLab = new Map();
+  for (const a of lab) if (a.finished_at && a.pct != null && (!bestLab.has(a.item_id) || a.pct > bestLab.get(a.item_id).pct)) bestLab.set(a.item_id, a);
+  for (const a of bestLab.values()) events.push({ source: 'lab', at: a.finished_at, pct: Math.round(Number(a.pct)), label: a.title || 'أداة في المختبر' });
   if (KATON_ENABLED) for (const k of katon) if (k.pct != null) events.push({ source: 'katon', at: k.at, pct: k.pct, label: k.title });
   events.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
   const components = Object.keys(CONTINUOUS_SOURCE_AR).filter((key) => KATON_ENABLED || key !== 'katon').map((key) => {
@@ -62,9 +67,9 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
 }
 
 function reasonFor(key, ev, value) {
-  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', experts: 'لم يقيّمه خبير بعد جلسة أو استشارة', milestones: 'لم يُقيَّم له معلم بالمعيار بعد', katon: 'لم يُتم موضوعًا في «كاتون» بعد' }[key];
+  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', experts: 'لم يقيّمه خبير بعد جلسة أو استشارة', milestones: 'لم يُقيَّم له معلم بالمعيار بعد', lab: 'لم يُتم أداة في المختبر بعد', katon: 'لم يُتم موضوعًا في «كاتون» بعد' }[key];
   const n = ev.length;
   const low = [...ev].sort((a, b) => a.pct - b.pct)[0];
-  const base = { quizzes: `متوسط ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, experts: `متوسط ${n} تقييم خبير`, milestones: `متوسط ${n} معلم بالمعيار`, katon: `يقين صادق في ${n} موضوع` }[key];
+  const base = { quizzes: `متوسط ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, experts: `متوسط ${n} تقييم خبير`, milestones: `متوسط ${n} معلم بالمعيار`, lab: `أفضل محاولة في ${n} أداة`, katon: `يقين صادق في ${n} موضوع` }[key];
   return value < 60 && n > 1 ? `${base}؛ أضعفها «${low.label}» (${low.pct}٪)` : base;
 }

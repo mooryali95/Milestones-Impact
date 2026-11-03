@@ -39,6 +39,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
   const mine = reqs.filter((r) => VERIFIED_KINDS.includes(r.kind) && r.active !== false && requirementApplies(r, levels));
   if (!mine.length) return {};
   const kinds = new Set(mine.map((r) => r.kind));
+  // فصول وثيقة المبادرة في متطلب «capstone» بفصول بعينها تُقرأ من حالة النماذج نفسها
+  const needModels = kinds.has('model') || mine.some((r) => r.kind === 'capstone' && r.config?.sections?.length);
   const ids = mine.map((r) => r.id);
   const none = Promise.resolve({ data: [] as any[] });
   const [mods, reading, quiz, video, ws, att, coach, content, contentProgress, lm, subs, cap] = await Promise.all([
@@ -54,8 +56,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('curriculum') && approved ? db.from('content_items').select(CONTENT_COLS).eq('active', true) : none,
     kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
     // متطلب «نموذج»: حالة تسليم النموذج نفسه في مكتبة النماذج، لا ملف مرفوع
-    kinds.has('model') && approved ? db.from('learning_models').select('id, key, dimension, sort, min_level, active, scopes, title_ar') : none,
-    kinds.has('model') && approved ? db.from('model_submissions').select('model_id, status').eq('participant_id', p.id) : none,
+    needModels && approved ? db.from('learning_models').select('id, key, dimension, sort, min_level, active, scopes, title_ar') : none,
+    needModels && approved ? db.from('model_submissions').select('model_id, status').eq('participant_id', p.id) : none,
     kinds.has('capstone') ? db.from('capstones').select('status, readiness').eq('participant_id', p.id).maybeSingle().then((r: any) => ({ data: r.data ? [r.data] : [] })) : none,
   ]);
   const subBy = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s.status]));

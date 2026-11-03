@@ -122,4 +122,7 @@ export const MILESTONE_RUBRIC = {
 // واستبعاده من التقييم المستمر معًا
 export const KATON_ENABLED = false;
 
-export const CONTINUOUS_SOURCE_AR = { quizzes: 'اختبارات الكتيب', models: 'النماذج التطبيقية', experts: 'تقييم الخبراء بعد الجلسات والاستشارات', milestones: 'المعالم', katon: 'دقة التحليل في «كاتون»' };
+export const CONTINUOUS_SOURCE_AR = { quizzes: 'اختبارات الكتيب', models: 'النماذج التطبيقية', experts: 'تقييم الخبراء بعد الجلسات والاستشارات', milestones: 'المعالم', lab: 'إتقان الأدوات في المختبر', katon: 'دقة التحليل في «كاتون»' };
+
+// كيف يكتمل بند الرحلة (completionSource)
+export const COMPLETION_AR = { auto: 'آلي من حالة المشارك', evidence: 'مرتبط بمكانه ودليله', manual: 'يدوي' };

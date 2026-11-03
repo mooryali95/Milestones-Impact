@@ -342,6 +342,14 @@ export const AUTO_CHECKS = {
   'E-360': (s) => !!s.postRated,
 };
 
+// كيف يكتمل البند، بمصدر واحد يقرؤه محرر الرحلة: يحسمه النظام من حالة المشارك، أو دليل من مكانه
+// (قراءة، مشاهدة، حضور، تسليم نموذج، استبانة)، أو يدوي بنقرة أو ملف يعتمده المستشار
+export function completionSource(r) {
+  if (r?.kind === 'auto' || Object.hasOwn(AUTO_CHECKS, r?.code)) return 'auto';
+  if (VERIFIED_KINDS.includes(r?.kind) || r?.kind === 'survey') return 'evidence';
+  return 'manual';
+}
+
 // يبني الرحلة كما يراها المشارك: كل مرحلة بحالتها ومتطلباتها.
 // المرحلة تكتمل حين تكتمل متطلباتها الإلزامية، والمرحلة الأولى غير
 // المكتملة هي الحالية، وما بعدها مقفل. لا قفز فوق مرحلة.
@@ -1068,7 +1076,11 @@ export function activityFor(req, ev, now = Date.now()) {
     return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
   }
   if (req.kind === 'model') return ev.modelsLocked ? { type: 'model', done: false, locked: true, model_key: c.model_key || null } : modelStatus(c, ev.models || {});
-  if (req.kind === 'capstone') return { type: 'capstone', done: ev.capstone?.status === 'approved', status: ev.capstone?.status || null, readiness: ev.capstone?.readiness ?? null };
+  if (req.kind === 'capstone') {
+    // فصول بعينها من وثيقة المبادرة (خطة التطبيق مثلًا): يكتمل حين تُحفظ كلها، لا باعتماد الوثيقة
+    if (c.sections?.length) return ev.modelsLocked ? { type: 'capstone', done: false, locked: true, sections: [] } : capstoneSectionsStatus(c.sections, ev.models || {});
+    return { type: 'capstone', done: ev.capstone?.status === 'approved', status: ev.capstone?.status || null, readiness: ev.capstone?.readiness ?? null };
+  }
   return null;
 }
 
@@ -1076,6 +1088,12 @@ export function activityFor(req, ev, now = Date.now()) {
 // تسليم المشارك للنموذج نفسه في مكتبة النماذج، أو من تقييم المستشار له.
 // models: نماذج المشارك المتاحة له بمفاتيحها؛ الغائب عنها لا يخص مستواه أو
 // نطاقه، فلا يحبس مرحلته.
+// فصول من الوثيقة: ما لا يخص المشارك (مستواه أو نطاقه) يسقط، والباقي يكتمل بحفظه مرة على الأقل
+export function capstoneSectionsStatus(keys, models) {
+  const sections = keys.filter((k) => k in models).map((k) => ({ key: k, title: models[k]?.title || k, saved: !!models[k]?.status, status: models[k]?.status || null }));
+  return { type: 'capstone', sections, done: sections.every((x) => x.saved), saved: sections.filter((x) => x.saved).length, na: !sections.length };
+}
+
 export function modelStatus(c, models) {
   if (!(c.model_key in models)) return { type: 'model', done: true, na: true, model_key: c.model_key || null };
   const s = models[c.model_key] || null;
@@ -1126,7 +1144,10 @@ export function cleanConfig(kind, cfg, prev = {}) {
     if (!/^[a-z0-9-]{2,60}$/.test(key)) throw new Error('اختر النموذج التعليمي الذي يكتمل به المتطلب');
     return { model_key: key, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
   }
-  if (kind === 'capstone') return {};
+  if (kind === 'capstone') {
+    const sections = [...new Set((Array.isArray(c.sections) ? c.sections : []).map(String).filter((k) => /^[a-z0-9-]{2,60}$/.test(k)))].slice(0, 12);
+    return sections.length ? { sections } : {};
+  }
   if (kind === 'coaching') {
     const out = {
       sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes),
@@ -1258,15 +1279,23 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
 
 // ما يُخصَّص لكل دفعة من إعداد النشاط. الباقي ثابت في البرنامج.
 export const DELIVERY_FIELDS = {
-  workshop: ['verify'],
+  workshop: ['verify', 'format'],
   coaching: ['mode', 'location_ar', 'booking_url', 'instant_url', 'coach_email'],
 };
 
 // تخصيص الدفعة لمتطلب: يُدمج فوق إعداد البرنامج ويمر بالتحقق نفسه.
 // تخصيص غير صالح لا يكسر الرحلة؛ يبقى إعداد البرنامج.
+// صيغ الأيام التدريبية في دفعة: حضورية (الأصل)، أو تدريب ذاتي بالكتيب: كل باب يوم، ويكتمل بقراءة الأبواب واجتياز أسئلتها
+export const WORKSHOP_FORMATS = ['sessions', 'handbook'];
+export const HANDBOOK_DAYS_TITLE = 'الأيام التدريبية بالكتيب: باب لكل يوم ({days:T-ATTEND})';
 export function applyDelivery(req, override) {
   const keys = DELIVERY_FIELDS[req?.kind];
   if (!keys || !override || typeof override !== 'object') return req;
+  if (req.kind === 'workshop' && override.format === 'handbook') {
+    // المتطلب نفسه (المعرّف والرمز) يصير قراءة، فلا يُنشأ محتوى ثانٍ ولا يضيع ما أُنجز
+    return { ...req, kind: 'reading', title_ar: HANDBOOK_DAYS_TITLE.replace('T-ATTEND', req.code),
+      config: { scope: 'all', quiz: true, sessions_required: req.config?.sessions_required || SESSION_DEFAULTS.sessions_required }, delivery: { format: 'handbook' } };
+  }
   const pick = Object.fromEntries(keys.filter((k) => override[k] != null && override[k] !== '').map((k) => [k, override[k]]));
   if (!Object.keys(pick).length) return req;
   try {
@@ -1285,6 +1314,9 @@ export function cleanDelivery(delivery, requirements) {
     const keys = DELIVERY_FIELDS[r?.kind];
     if (!keys || !v || typeof v !== 'object') continue;
     const pick = Object.fromEntries(keys.filter((k) => v[k] != null && String(v[k]).trim() !== '').map((k) => [k, typeof v[k] === 'string' ? v[k].trim() : v[k]]));
+    if (!Object.keys(pick).length) continue;
+    if ('format' in pick && !WORKSHOP_FORMATS.includes(pick.format)) throw new Error('صيغة الأيام التدريبية غير معروفة');
+    if (pick.format === 'sessions') delete pick.format;
     if (!Object.keys(pick).length) continue;
     cleanConfig(r.kind, { ...(r.config || {}), ...pick }, r.config || {}); // يرمي برسالة واضحة إن كانت قيمة غير صالحة
     out[code] = pick;

@@ -18,10 +18,24 @@ describe('التقييم المستمر', () => {
     });
     const by = Object.fromEntries(c.components.map((x) => [x.key, x.value]));
     // «كاتون» مخفي (KATON_ENABLED) فلا يدخل التقييم حتى يُعاد
-    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67, ...(KATON_ENABLED ? { katon: null } : {}) });
+    expect(by).toEqual({ quizzes: 80, models: 100, experts: 50, milestones: 67, lab: null, ...(KATON_ENABLED ? { katon: null } : {}) });
     expect(c.index).toBe(74);
     expect(c.events[0].label).toBe('م1');
     expect(c.trend.dir).toBe('down');
+  });
+
+  it('المختبر مصدر: أفضل محاولة منتهية لكل أداة، والمحاولة الجارية لا تُحسب', () => {
+    const c = continuousAssessment({ lab: [
+      { item_id: 'a', pct: 40, finished_at: '2026-01-01', title: 'أداة أ' },
+      { item_id: 'a', pct: 90, finished_at: '2026-01-02', title: 'أداة أ' },
+      { item_id: 'b', pct: 70, finished_at: '2026-01-03', title: 'أداة ب' },
+      { item_id: 'c', pct: 10, finished_at: null, title: 'جارية' },
+    ] });
+    const lab = c.components.find((x) => x.key === 'lab');
+    expect(lab.value).toBe(80);
+    expect(lab.n).toBe(2);
+    expect(lab.reason).toContain('أفضل محاولة في 2');
+    expect(c.index).toBe(80);
   });
 
   it('يرفع علامة لمكوّن دون المنتصف', () => {
