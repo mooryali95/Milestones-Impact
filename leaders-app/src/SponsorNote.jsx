@@ -16,9 +16,9 @@ export default function SponsorNote({ access, compact = false }) {
       <div>
         <small>برعاية</small>
         <b>{s.name}</b>
-        {!compact && <p>جهتك تغطي رسوم رحلتك كاملة:
-          <span className="sponsor-fee">القياس المبدئي <s dir="ltr">{money(p.assessment, p.currency)}</s> مغطى</span>
-          <span className="sponsor-fee">إكمال البرنامج <s dir="ltr">{money(p.program, p.currency)}</s> مغطى</span></p>}
+        {!compact && (s.value_cents
+          ? <p>قيمة رحلتك <s className="sponsor-fee" dir="ltr">{money(s.value_cents, p.currency)}</s> مغطاة بالكامل من جهتك.</p>
+          : <p>رحلتك مغطاة بالكامل من جهتك: القياس المبدئي وإكمال البرنامج.</p>)}
       </div>
     </div>
   );

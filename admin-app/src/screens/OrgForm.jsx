@@ -22,6 +22,7 @@ export function validateOrg(v, coord) {
   else if (v.name.length > 200) e.name = 'الاسم أطول من 200 حرف';
   if (v.short_name.length > 40) e.short_name = '40 حرفًا على الأكثر';
   if (v.seats !== '' && (!Number.isInteger(Number(v.seats)) || Number(v.seats) < 0)) e.seats = 'عدد صحيح موجب';
+  if (v.contract !== '' && v.contract != null && !(Number(v.contract) >= 0)) e.contract = 'مبلغ صحيح';
   if (v.color && !HEX.test(v.color)) e.color = 'لون بصيغة #RRGGBB';
   if (v.invite_code && !CODE.test(v.invite_code)) e.invite_code = 'أحرف إنجليزية صغيرة وأرقام وشرطة، من 4 إلى 40';
   if (coord.enabled) {
@@ -153,7 +154,8 @@ export default function OrgForm({ org, coordinator, onClose }) {
   const { toast, confirm } = useUI();
   const initial = useMemo(() => ({
     name: org?.name || '', name_en: org?.name_en || '', logo: org?.logo || null, cert_cobrand: org?.cert_cobrand !== false, cert: org?.cert || {}, short_name: org?.short_name || '', sector: org?.sector || '', status: org?.status || 'active',
-    color: org?.color || SWATCHES[0], seats: org?.seats ?? '', invite_code: org?.invite_code || '', domains: domainsOf(org), notes: org?.notes || '',
+    color: org?.color || SWATCHES[0], seats: org?.seats ?? '', contract: org?.contract_cents != null ? String(org.contract_cents / 100) : '', show_value: org?.show_value !== false,
+    contract_starts: org?.contract_starts || '', contract_ends: org?.contract_ends || '', invite_code: org?.invite_code || '', domains: domainsOf(org), notes: org?.notes || '',
   }), [org]);
   const initialCoord = useMemo(() => ({
     enabled: !!coordinator, email: coordinator?.email || org?.contact_email || '', full_name: coordinator?.full_name || org?.contact_name || '',
@@ -188,7 +190,9 @@ export default function OrgForm({ org, coordinator, onClose }) {
     setBusy(true); setServerErr('');
     const row = {
       name: next.name.trim(), name_en: next.name_en.trim() || null, logo: next.logo, cert_cobrand: next.cert_cobrand, cert: next.cert, short_name: next.short_name.trim() || null, sector: next.sector.trim() || null, status: next.status,
-      color: next.color, seats: next.seats === '' ? null : Number(next.seats), domains: next.domains.join(','), notes: next.notes.trim() || null,
+      color: next.color, seats: next.seats === '' ? null : Number(next.seats),
+      contract_cents: next.contract === '' ? null : Math.round(Number(next.contract) * 100), show_value: next.show_value,
+      contract_starts: next.contract_starts || null, contract_ends: next.contract_ends || null, domains: next.domains.join(','), notes: next.notes.trim() || null,
       contact_name: coord.full_name.trim() || null, contact_email: coord.email.trim().toLowerCase() || null, contact_phone: coord.phone.trim() || null,
       ...(next.invite_code || !org ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
     };
@@ -260,6 +264,20 @@ export default function OrgForm({ org, coordinator, onClose }) {
           <section className="of-sec">
             <h4>شهادة الجهة</h4>
             <OrgCertificate org={org} cert={v.cert} global={globalCert} onChange={(cert) => setV({ ...v, cert })} canReissue={!!org && !dirty} />
+          </section>
+
+          <section className="of-sec">
+            <h4>العقد والقيمة</h4>
+            <div className="of-grid">
+              <Field label="السعر التعاقدي للمشارك (USD)" hint="قيمة رحلة المشارك المرعي من هذه الجهة. فارغ = السعر المعلن. تغييره يسري على من يُربط بعده فقط" error={err('contract')}>
+                <input dir="ltr" inputMode="decimal" value={v.contract} onChange={(e) => setV({ ...v, contract: e.target.value.replace(/[^\d.]/g, '') })} placeholder="مثل 1000" />
+              </Field>
+              <Field label="إظهار القيمة للمشارك" hint="إن أُطفئ يرى «رحلتك مغطاة من جهتك» دون رقم">
+                <label className="of-check"><input type="checkbox" checked={v.show_value} onChange={(e) => setV({ ...v, show_value: e.target.checked })} /> اعرض القيمة مشطوبة</label>
+              </Field>
+              <Field label="بداية العقد"><input type="date" value={v.contract_starts} onChange={(e) => setV({ ...v, contract_starts: e.target.value })} /></Field>
+              <Field label="نهاية العقد"><input type="date" value={v.contract_ends} onChange={(e) => setV({ ...v, contract_ends: e.target.value })} /></Field>
+            </div>
           </section>
 
           <section className="of-sec">

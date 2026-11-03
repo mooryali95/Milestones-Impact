@@ -30,11 +30,15 @@ export async function settings() {
 // الرعاية: جهة نشطة مرتبطة تُعفي، ويُثبَّت الإعفاء في السجل أول مرة (sponsor) فيبقى إن أُوقفت الجهة بعدها.
 async function sponsorOf(p: any) {
   if (!p.organization_id) return null;
-  const { data } = await db.from('organizations').select('id, name, short_name, status').eq('id', p.organization_id).maybeSingle();
+  const { data } = await db.from('organizations').select('id, name, short_name, status, contract_cents, show_value').eq('id', p.organization_id).maybeSingle();
   return data && data.status === 'active' ? data : null;
 }
+// القيمة التعاقدية تُثبَّت على بند البرنامج (والقياس صفر)، فمجموع ما للمشارك = سعر جهته لحظة ربطه
 async function pinSponsor(p: any, org: any) {
-  const rows = ITEMS.map((item) => ({ participant_id: p.id, item, source: 'sponsor', organization_id: org.id, granted_by: 'sponsor', note: org.name }));
+  const s: any = await settings();
+  const value = org.contract_cents ?? (s.assessment_cents + s.program_cents);
+  const rows = ITEMS.map((item) => ({ participant_id: p.id, item, source: 'sponsor', organization_id: org.id, granted_by: 'sponsor', note: org.name,
+    value_cents: item === 'program' ? value : 0 }));
   for (const r of rows) {
     const { error } = await db.from('entitlements').insert(r);
     if (error && error.code !== '23505') console.error('pin sponsor', error.message);
@@ -46,18 +50,18 @@ export async function access(p: any) {
   const base = { enabled: !!s.enabled, prices: prices(s) };
   if (p.is_demo) return { ...base, assessment: 'demo', program: 'demo', sponsor: null, request: null };
   const org = await sponsorOf(p);
-  const read = () => db.from('entitlements').select('item, source, organization_id').eq('participant_id', p.id).is('revoked_at', null);
+  const read = () => db.from('entitlements').select('item, source, organization_id, value_cents').eq('participant_id', p.id).is('revoked_at', null);
   let { data } = await read();
   // التثبيت مرة واحدة: حين يرتبط بجهة نشطة وينقصه أحد البندين
   if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) { await pinSponsor(p, org); ({ data } = await read()); }
   const has = (i: Item) => (data || []).find((x: any) => x.item === i)?.source || null;
   // اسم الراعي من الجهة الحية، أو من الإعفاء المثبَّت إن أُوقفت بعد ربطه
   const pinned = (data || []).find((x: any) => x.source === 'sponsor');
-  let sponsor = org ? { name: org.name, short_name: org.short_name || null } : null;
-  if (!sponsor && pinned?.organization_id) {
-    const { data: o } = await db.from('organizations').select('name, short_name').eq('id', pinned.organization_id).maybeSingle();
-    sponsor = o ? { name: o.name, short_name: o.short_name || null } : null;
-  }
+  const src: any = org || (pinned?.organization_id
+    ? (await db.from('organizations').select('name, short_name, show_value').eq('id', pinned.organization_id).maybeSingle()).data : null);
+  // القيمة المعروضة: المثبَّتة للمشارك (لا سعر الجهة الحالي)، وتُخفى إن طلبت الجهة
+  const pinnedValue = (data || []).filter((x: any) => x.source === 'sponsor').reduce((t: number, x: any) => t + (x.value_cents || 0), 0);
+  const sponsor = src ? { name: src.name, short_name: src.short_name || null, value_cents: src.show_value === false ? null : (pinnedValue || null) } : null;
   const { data: req } = sponsor ? { data: null } : await db.from('sponsor_requests').select('typed_name, status, reason').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
   const request = req && req.status !== 'cancelled' ? req : null;
   if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor, request };
@@ -184,7 +188,7 @@ export async function adminOverview() {
   const [{ data: pays }, { data: ents }, { data: evs }, { count: participants }] = await Promise.all([
     db.from('payments').select('id, participant_id, email, item, amount_cents, currency, status, mode, created_at, paid_at, refunded_at, checkout_id, order_id, note, participants(full_name, organization_id)')
       .order('created_at', { ascending: false }).limit(2000),
-    db.from('entitlements').select('id, participant_id, item, source, organization_id, created_at, revoked_at, granted_by, note, participants(full_name, email)').order('created_at', { ascending: false }).limit(5000),
+    db.from('entitlements').select('id, participant_id, item, source, organization_id, value_cents, created_at, revoked_at, granted_by, note, participants(full_name, email)').order('created_at', { ascending: false }).limit(5000),
     db.from('payment_events').select('type, received_at, processed_at, error').order('received_at', { ascending: false }).limit(20),
     db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false),
   ]);
@@ -202,7 +206,7 @@ export async function adminOverview() {
   for (const e of liveEnts.filter((x: any) => x.source === 'sponsor')) {
     const g = (sponsored[e.organization_id || 'none'] ||= { name: e.note || 'جهة', participants: new Set(), cents: 0 });
     g.participants.add(e.participant_id);
-    g.cents += e.item === 'program' ? s.program_cents : s.assessment_cents;
+    g.cents += e.value_cents ?? (e.item === 'program' ? s.program_cents : s.assessment_cents);
   }
   const sponsoredIds = new Set(liveEnts.filter((x: any) => x.source === 'sponsor').map((x: any) => x.participant_id));
   const review = paid.filter((x: any) => sponsoredIds.has(x.participant_id));
@@ -275,4 +279,42 @@ export async function adminReconcile(a: Admin, b: Body) {
   else if (status === 'expired') await db.from('payments').update({ status: 'expired' }).eq('id', pay.id).eq('status', 'pending');
   await audit('admin', a.email, 'payment.reconcile', 'payments', pay.id, null, { status });
   return { success: true, status };
+}
+
+// ── لوحة الجهة: المرعيون ومقاعدهم وقيمتهم وتقدّمهم وتكلفة من أكمل ──
+export async function adminOrgFinance(_a: Admin, b: Body) {
+  const id = String(b.id || '');
+  const org = must(await db.from('organizations').select('id, name, seats, contract_cents, show_value, contract_starts, contract_ends, status').eq('id', id).maybeSingle()) as any;
+  if (!org) throw new Fail('الجهة غير موجودة', 404);
+  const s: any = await settings();
+  const [{ data: ents }, { data: parts }] = await Promise.all([
+    db.from('entitlements').select('participant_id, item, value_cents, created_at, revoked_at').eq('organization_id', id).eq('source', 'sponsor'),
+    db.from('participants').select('id, full_name, email, status, org_via, created_at, certificates(id)').eq('organization_id', id).eq('is_demo', false),
+  ]);
+  const pinned = new Map<string, any>();
+  for (const e of (ents || []).filter((x: any) => !x.revoked_at)) {
+    const g = pinned.get(e.participant_id) || { value: 0, since: e.created_at };
+    g.value += e.value_cents || 0; if (e.created_at < g.since) g.since = e.created_at;
+    pinned.set(e.participant_id, g);
+  }
+  // ترتيب الانضمام يحدد من دخل ضمن المقاعد ومن فوقها
+  const rows = (parts || []).map((p: any) => ({
+    id: p.id, full_name: p.full_name, email: p.email, status: p.status, via: p.org_via, joined: pinned.get(p.id)?.since || p.created_at,
+    value_cents: pinned.get(p.id)?.value ?? null, certified: (p.certificates || []).length > 0,
+  })).sort((x: any, y: any) => String(x.joined).localeCompare(String(y.joined)));
+  rows.forEach((r: any, i: number) => { r.over_seats = org.seats != null && i >= org.seats; });
+  const value = rows.reduce((t: number, r: any) => t + (r.value_cents || 0), 0);
+  const certified = rows.filter((r: any) => r.certified).length;
+  const by = (st: string[]) => rows.filter((r: any) => st.includes(r.status)).length;
+  return {
+    success: true, org,
+    list_cents: s.assessment_cents + s.program_cents,
+    kpis: {
+      participants: rows.length, seats: org.seats, over: rows.filter((r: any) => r.over_seats).length,
+      value_cents: value, per_participant: rows.length ? Math.round(value / rows.length) : null,
+      certified, per_certified: certified ? Math.round(value / certified) : null,
+      funnel: { registered: rows.length, assessed: by(['pending_approval', 'placed', 'enrolled', 'completed']), journey: by(['placed', 'enrolled', 'completed']), certified },
+    },
+    rows,
+  };
 }

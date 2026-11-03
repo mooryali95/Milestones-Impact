@@ -187,6 +187,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.org': (_a, b) => A.org(b),
   'admin.assign-org': A.assignOrg,
   'admin.org-impact': C.orgImpact,
+  'admin.org-finance': Y.adminOrgFinance,
   'admin.coordinator': C.adminGet,
   'admin.coordinator-save': C.adminSave,
   'admin.coordinator-invite': C.adminInvite,

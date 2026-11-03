@@ -434,7 +434,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes'] },
+                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes', 'contract_cents', 'show_value', 'contract_starts', 'contract_ends'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
 };
 

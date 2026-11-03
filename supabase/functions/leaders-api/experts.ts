@@ -113,8 +113,9 @@ async function invite(e: any) {
   const link = `${portalUrl()}#invite=${encodeURIComponent(e.email)}.${code}`;
   await sendMail(e.email, 'دعوة إلى شبكة خبراء برنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
     mailText('يسعدنا أن ندعوك للانضمام إلى شبكة خبراء برنامج القادة، لتقديم خبرتك لقادة المشاريع في مراحل البرنامج.')
-    + mailText('ابدأ باستكمال ملفك كخبير: أدوارك، والأبعاد التي تتقنها، ونبذة عن خبرتك. نراجعه ثم نفعّل لوحتك.')
-    + mailButton(link, 'استكمل ملفك كخبير')
+    + (e.status === 'active'
+      ? mailText('ملفك معتمد في الشبكة. ادخل إلى لوحتك لتتابع طلبات الخدمة وجلساتك وساعات خبرتك.') + mailButton(link, 'ادخل إلى لوحة الخبير')
+      : mailText('ابدأ باستكمال ملفك كخبير: أدوارك، والأبعاد التي تتقنها، ونبذة عن خبرتك. نراجعه ثم نفعّل لوحتك.') + mailButton(link, 'استكمل ملفك كخبير'))
     + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
   await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
 }

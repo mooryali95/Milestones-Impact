@@ -2,6 +2,7 @@
 // الجهات: البطاقات، ولوحة الجهة بمصادرها ومشاركيها وتقريرها
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import OrgFinance from './OrgFinance.jsx';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
@@ -239,6 +240,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       {!isNone && <CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
 
       <Sources d={d} total={all.length} />
+      {!isNone && <OrgFinance id={o.id} onPerson={onPerson} />}
 
       <section className="la-card">
         <h3>توزيع المشاركين على المسارات</h3>
