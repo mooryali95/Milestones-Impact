@@ -28,8 +28,8 @@ export const rubricPct = (scores) => {
 };
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
-/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[] }} [src] */
-export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], lab = [], katon = [] } = {}) {
+/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[], weights?: Record<string, number> | null }} [src] */
+export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], lab = [], katon = [], weights = null } = {}) {
   const events = [];
   for (const q of quizzes) if (q.quiz_total > 0) events.push({ source: 'quizzes', at: q.completed_at, pct: Math.round((q.quiz_score / q.quiz_total) * 100), label: q.title || 'اختبار باب' });
   for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: pct(m.rating, 1, 5), label: m.title || 'نموذج' });
@@ -47,10 +47,13 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
   const components = Object.keys(CONTINUOUS_SOURCE_AR).filter((key) => KATON_ENABLED || key !== 'katon').map((key) => {
     const ev = events.filter((e) => e.source === key);
     const value = ev.length ? Math.round(avg(ev.map((e) => e.pct))) : null;
-    return { key, label: CONTINUOUS_SOURCE_AR[key], value, n: ev.length, reason: reasonFor(key, ev, value) };
+    // وزن المصدر من إعداد البرنامج (final_eval.sources)؛ بلا إعداد: أوزان متساوية
+    const weight = weights && Number.isFinite(Number(weights[key])) ? Math.max(0, Number(weights[key])) : 1;
+    return { key, label: CONTINUOUS_SOURCE_AR[key], value, n: ev.length, weight, reason: reasonFor(key, ev, value) };
   });
-  const have = components.filter((c) => c.value != null);
-  const index = have.length ? Math.round(avg(have.map((c) => c.value))) : null;
+  const have = components.filter((c) => c.value != null && c.weight > 0);
+  const wsum = have.reduce((a, c) => a + c.weight, 0);
+  const index = wsum ? Math.round(have.reduce((a, c) => a + c.value * c.weight, 0) / wsum) : null;
   // الاتجاه: متوسط آخر ثلاثة أحداث مقابل ما قبلها (يحتاج أربعة أحداث على الأقل)
   let trend = null;
   if (events.length >= 4) {

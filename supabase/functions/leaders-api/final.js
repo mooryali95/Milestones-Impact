@@ -27,6 +27,8 @@ export const FINAL_DEFAULTS = {
   committee_size: 3,
   // أقل تغطية (مجموع أوزان المكوّنات الموجودة) يُقبل بها اقتراح قرار
   min_coverage: 50,
+  // أوزان مصادر التقييم المستمر داخل مكوّنه (نسبية؛ صفر يستبعد المصدر). متساوية افتراضًا
+  sources: { quizzes: 1, models: 1, experts: 1, milestones: 1, lab: 1, katon: 1 },
 };
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -44,6 +46,7 @@ export function finalConfig(raw) {
     approval: Object.hasOwn(FINAL_APPROVAL_AR, r.approval) ? r.approval : FINAL_DEFAULTS.approval,
     committee_size: clamp(Math.round(num(r.committee_size) || FINAL_DEFAULTS.committee_size), 2, 9),
     min_coverage: Number.isFinite(num(r.min_coverage)) ? clamp(Math.round(num(r.min_coverage)), 0, 100) : FINAL_DEFAULTS.min_coverage,
+    sources: Object.fromEntries(Object.entries(FINAL_DEFAULTS.sources).map(([k, d]) => [k, Number.isFinite(num(r.sources?.[k])) ? clamp(Math.round(num(r.sources[k])), 0, 10) : d])),
   };
 }
 
@@ -51,6 +54,7 @@ export function finalConfig(raw) {
 export function cleanFinalConfig(raw) {
   const c = finalConfig(raw);
   if (!Object.values(c.weights).some((w) => w > 0)) throw new Error('أعطِ وزنًا لمكوّن واحد على الأقل');
+  if (!Object.values(c.sources).some((w) => w > 0)) throw new Error('أعطِ وزنًا لمصدر واحد على الأقل في التقييم المستمر');
   const t = c.thresholds;
   if (!(t.pass > t.pass_notes && t.pass_notes > t.extend)) throw new Error('حدود القرار تنازلية: الاجتياز > الاجتياز بملاحظات > التمديد');
   return c;

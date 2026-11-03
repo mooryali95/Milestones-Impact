@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, finalConfig } from '../../../supabase/functions/leaders-api/logic.js';
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
@@ -141,6 +142,11 @@ export function FinalConfig({ program, onClose }) {
         <p className="la-muted">الأوزان نسبية (المجموع {total})؛ المكوّن الغائب لا يُحسب صفرًا بل يُعاد توزيع وزنه.</p>
         {Object.entries(FINAL_COMPONENT_AR).map(([k, l]) => (
           <label key={k} className="field"><span>{l}</span><input type="number" min="0" max="100" value={c.weights[k]} onChange={(e) => w(k, e.target.value)} /></label>
+        ))}
+        <h4>مصادر التقييم المستمر</h4>
+        <p className="la-muted">وزن نسبي لكل مصدر داخل «التقييم المستمر» (0 يستبعده، والمتساوية تعني متوسطًا بسيطًا).</p>
+        {Object.entries(CONTINUOUS_SOURCE_AR).filter(([k]) => KATON_ENABLED || k !== 'katon').map(([k, l]) => (
+          <label key={k} className="field"><span>{l}</span><input type="number" min="0" max="10" value={c.sources[k]} onChange={(e) => setC({ ...c, sources: { ...c.sources, [k]: e.target.value } })} /></label>
         ))}
         <h4>حدود القرار</h4>
         <label className="field"><span>اجتاز من</span><input type="number" value={c.thresholds.pass} onChange={(e) => t('pass', e.target.value)} /></label>
