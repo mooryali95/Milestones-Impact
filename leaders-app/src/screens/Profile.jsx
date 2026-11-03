@@ -2,6 +2,7 @@
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
+import { gateDone } from '../gates.js';
 import SponsorNote from '../SponsorNote.jsx';
 import { call, uploadFile } from '../api.js';
 import { countAr, VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -129,8 +130,14 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
     const { full_name, name_en, ...rest } = f;
     const res = await call('profile.save', { fields: p.name_locked ? rest : f });
     setBusy(false);
-    if (res.success) onSaved(res);
-    else setError(res.message);
+    if (!res.success) return setError(res.message);
+    // لا نجاح صامت: إن حُفظ ولم يكتمل الملف قلنا ما بقي بدل أن تبقى الشاشة كما هي
+    if (onboarding && !gateDone(res, 'profile')) {
+      const LABEL = { full_name: 'الاسم الكامل', phone: 'رقم الجوال', job_title: 'المسمى الوظيفي', organization_name: 'جهة العمل', years_experience: 'سنوات الخبرة' };
+      const missing = REQUIRED.filter((k) => res.participant?.[k] == null || String(res.participant[k]).trim() === '').map((k) => LABEL[k]);
+      return setError(`حُفظت بياناتك. ${missing.length ? `بقي: ${missing.join('، ')}.` : 'تعذّر الانتقال الآن، حدّث الصفحة أو تواصل معنا.'}`);
+    }
+    onSaved(res);
   };
 
   return (

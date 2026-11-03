@@ -85,6 +85,9 @@ export function unknownTokens(text, reqs) {
   const codes = new Set((reqs || []).map((r) => r.code));
   return [...String(text || '').matchAll(/\{(?:sessions|minutes|days):([A-Z0-9-]+)\}/g)].map((m) => m[1]).filter((c) => !codes.has(c));
 }
+// شاشة كل مرحلة قبول تُكمل متطلبها وحده (انظر leaders-app/src/gates.js)
+const ONBOARDING_GATE = { profile: 'P-INFO', assessment: 'A-DONE' };
+
 export function journeyCoherence(stages, requirements) {
   const out = [];
   const reqs = (requirements || []).filter((r) => r.active !== false);
@@ -106,6 +109,12 @@ export function journeyCoherence(stages, requirements) {
         out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: مدة الجلسة ${minutesAr(c.minutes)} خارج المعتاد (${range[0]} إلى ${range[1]} دقيقة)` });
       }
       for (const code of [...unknownTokens(r.title_ar, reqs), ...unknownTokens(r.help_ar, reqs)]) out.push({ level: 'error', stage: s.key, req: r.code, msg: `${r.code}: الرمز يشير إلى نشاط غير موجود (${code})` });
+    }
+    // مرحلتا القبول تُكملهما شاشتان مخصصتان؛ متطلب إلزامي آخر فيهما يُكمَل من الرحلة بعدهما لا من الشاشة
+    if (ONBOARDING_GATE[s.key]) {
+      for (const r of reqs.filter((x) => x.stage_key === s.key && x.required !== false && x.code !== ONBOARDING_GATE[s.key])) {
+        out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: متطلب إلزامي في «${s.title_ar}» لا تُكمله شاشة ${s.key === 'profile' ? 'الملف' : 'القياس'}؛ يظهر للمشارك في رحلته بعدها، فاجعله في المرحلة التالية أو اختياريًا إن كان يمنع اكتمال المرحلة` });
+      }
     }
   }
   // قواعد الفتح والاكتمال (تُعرَّف أسفل الملف وتُستدعى وقت التشغيل)
