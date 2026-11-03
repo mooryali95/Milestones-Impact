@@ -28,6 +28,7 @@ import ExpertApply from './screens/ExpertApply.jsx';
 import ExpertOffer from './screens/ExpertOffer.jsx';
 import ExpertPortal from './screens/ExpertPortal.jsx';
 import RoleChoice from './RoleChoice.jsx';
+import Paywall from './screens/Paywall.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
 import HallScreen from './screens/Hall.jsx';
@@ -215,7 +216,9 @@ function Participant() {
   };
 
   // الأقسام المتاحة الآن فقط: الكتيب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
-  const inJourney = me && stageDone(me, 'profile') && stageDone(me, 'assessment') && !checkin;
+  // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ
+  const paidFor = (item) => !me?.access || !!me.access[item];
+  const inJourney = me && stageDone(me, 'profile') && stageDone(me, 'assessment') && paidFor('program') && !checkin;
   const approved = !!me?.profile?.approved;
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
@@ -246,7 +249,9 @@ function Participant() {
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (!stageDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!stageDone(me, 'profile')} onCancel={() => go('home')} />;
-  } else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
+  } else if (!stageDone(me, 'assessment') && !paidFor('assessment')) screen = <Paywall item="assessment" me={me} onUpdate={accept} />;
+  else if (!stageDone(me, 'assessment')) screen = <Assessment me={me} onSubmitted={accept} />;
+  else if (!paidFor('program')) screen = <Paywall item="program" me={me} onUpdate={accept} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
   else if (view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;

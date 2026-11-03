@@ -1228,3 +1228,15 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .role-note { padding: 10px 12px; border-radius: 10px; border-inline-start: 3px solid var(--gold); background: color-mix(in srgb, var(--gold) 8%, transparent); color: var(--muted); line-height: 1.8; }
 .role-note b { color: inherit; font-weight: 700; }
 .signin-expert { text-align: center; margin: 4px 0 0; }
+
+/* بوابة الدفع */
+.pay-card { gap: 14px; }
+.pay-card .spinner { margin: 6px auto; }
+.pay-points { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.pay-points li { padding-inline-start: 22px; position: relative; line-height: 1.8; }
+.pay-points li::before { content: ''; position: absolute; inset-inline-start: 4px; top: .75em; width: 8px; height: 8px; transform: rotate(45deg); background: var(--gold); }
+.pay-price { display: flex; align-items: baseline; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.pay-price b { font-size: 34px; letter-spacing: -.02em; }
+.pay-price span { color: var(--muted); font-size: 13px; }
+.pay-sponsor { display: grid; gap: 6px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.pay-result { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--gold) 8%, transparent); }
