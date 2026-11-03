@@ -6,6 +6,7 @@ import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/br
 import { call } from '../api.js';
 import { attribution } from '../attribution.js';
 import Captcha from '../Captcha.jsx';
+import RoleChoice from '../RoleChoice.jsx';
 import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
 import logo from '../milestone-impact-inverted.svg';
 
@@ -17,7 +18,8 @@ export default function SignIn({ onSignedIn, initialError }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [sponsor, setSponsor] = useState('');
-  const [pendingGoogle, setPendingGoogle] = useState(null);   // حساب Google جديد ينتظر تأكيد صاحبه
+  const [pendingGoogle, setPendingGoogle] = useState(null);
+  const [roles, setRoles] = useState(null);   // أدوار البريد الأخرى بعد التحقق: يختار صاحبه وجهته   // حساب Google جديد ينتظر تأكيد صاحبه
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
@@ -58,10 +60,11 @@ export default function SignIn({ onSignedIn, initialError }) {
     setStep('code'); setCode(''); setWait(RESEND_SECONDS);
   };
 
-  const verify = async (value) => {
+  const verify = async (value, confirm = false) => {
     setBusy(true); setError(''); setEntering({ name: name.split(' ')[0] || '' });
-    const res = await call('auth.verify', { email, code: value });
+    const res = await call('auth.verify', { email, code: value, ...(confirm ? { confirm_new: true } : {}) });
     setBusy(false);
+    if (res.success && res.choose_role) { setEntering(null); setRoles({ list: res.roles, go: () => verify(value, true) }); return; }
     if (res.success) return onSignedIn(res);
     setEntering(null); setError(res.message); setCode('');
   };
@@ -89,7 +92,12 @@ export default function SignIn({ onSignedIn, initialError }) {
   const google = async (credential, confirm = false) => {
     setError(''); setEntering({ name: firstNameOf(credential) });
     const res = await call('auth.google', { credential, ...via, ...(confirm ? { confirm_new: true, sponsor_code: sponsor.trim() || undefined } : {}) });
-    if (res.success && res.confirm_new) { setEntering(null); setPendingGoogle({ credential, name: res.name }); return setStep('google'); }
+    if (res.success && res.confirm_new) {
+      setEntering(null); setPendingGoogle({ credential, name: res.name });
+      if (res.roles?.length) setRoles({ list: res.roles, go: () => { setRoles(null); setStep('google'); } });
+      else setStep('google');
+      return;
+    }
     if (res.success) return onSignedIn(res);
     setEntering(null); setError(res.message);
   };
@@ -126,6 +134,8 @@ export default function SignIn({ onSignedIn, initialError }) {
         </div>
       )}
       <div className="auth card stack">
+        {roles && <RoleChoice roles={roles.list} busy={busy} onParticipant={roles.go} />}
+        {!roles && <>
         {org && (
           <div className="org-ribbon" style={org.color ? { '--org': org.color } : undefined}>
             <span className="org-dot" aria-hidden="true" />
@@ -210,7 +220,8 @@ export default function SignIn({ onSignedIn, initialError }) {
           </div>
         )}
         {captchaBox}
-        {step === 'email' && <p className="small muted signin-expert">خبير في شبكة البرنامج؟ <a className="link" href="/x">ادخل إلى لوحة الخبير</a></p>}
+        </>}
+        {!roles && step === 'email' && <p className="small muted signin-expert">خبير في شبكة البرنامج؟ <a className="link" href="/x">ادخل إلى لوحة الخبير</a></p>}
       </div>
     </div>
   );

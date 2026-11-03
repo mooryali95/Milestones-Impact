@@ -130,6 +130,18 @@ async function sponsorFor(b: Body, key: string) {
   return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b));
 }
 
+// أدوار البريد الأخرى، تُكشف لصاحبه فقط بعد إثبات ملكيته (رمز أو رابط أو Google)، فلا يُنشأ له حساب مشارك خطأً
+async function otherRoles(email: string) {
+  const [{ data: e }, { data: c }] = await Promise.all([
+    db.from('experts').select('status').eq('email', email).maybeSingle(),
+    db.from('org_coordinators').select('status').eq('email', email).limit(1),
+  ]);
+  const roles: string[] = [];
+  if (e && !['rejected', 'suspended'].includes(e.status)) roles.push('expert');
+  if ((c || []).some((x: any) => x.status !== 'suspended')) roles.push('org');
+  return roles;
+}
+
 // المشارك المسجل يضيف رمز جهته الراعية لاحقًا (مرة واحدة: الربط بعدها من الإدارة)
 export async function sponsorCode(p: any, b: Body) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
@@ -209,6 +221,11 @@ export async function authVerify(b: Body, ctx: Ctx) {
   if (!ch || ch.consumed_at || new Date(ch.expires_at) < new Date()) {
     throw new Fail('الرابط أو الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
   }
+  // تسجيل جديد لبريد خبير أو منسق جهة: يختار صاحبه وجهته قبل إنشاء حساب مشارك (الرمز يبقى صالحًا لإعادة الطلب)
+  if (ch.purpose === 'register' && b.confirm_new !== true) {
+    const roles = await otherRoles(email);
+    if (roles.length) return { success: true, choose_role: true, roles };
+  }
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
   const { data: used } = await db.from('email_challenges').update({ consumed_at: new Date().toISOString() })
     .eq('id', ch.id).is('consumed_at', null).select('id');
@@ -243,7 +260,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();
   if (!p) {
     // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
-    if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '' };
+    if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '', roles: await otherRoles(id.email) };
     const r = await sponsorFor(b, ctx.ip || id.email);
     p = must(await db.from('participants').insert({
       email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
