@@ -140,7 +140,7 @@ export default function SignIn({ onSignedIn, initialError }) {
         {org && (
           <div className="org-ribbon" style={org.color ? { '--org': org.color } : undefined}>
             <span className="org-dot" aria-hidden="true" />
-            <div><small>تسجيل عبر</small><b>{org.name}</b></div>
+            <div><small>تسجيل عبر</small><b>{org.name}</b><small>برعاية جهتك: رسوم القياس والبرنامج مغطاة</small></div>
           </div>
         )}
         {step === 'email' && (

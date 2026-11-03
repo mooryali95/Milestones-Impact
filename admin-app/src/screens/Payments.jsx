@@ -10,7 +10,7 @@ import { Spinner, useUI } from '../ui.jsx';
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 const ITEM = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
 const PAY_ST = { paid: ['مدفوع', 'ok'], pending: ['معلّق', 'warn'], refunded: ['مسترد', 'bad'], failed: ['تعذّر', 'bad'], expired: ['انتهى', ''] };
-const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق' };
+const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق', sponsor: 'رعاية جهة' };
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '·');
 
 function Sparkbars({ daily }) {
@@ -128,10 +128,10 @@ export default function Payments({ canWrite, onPerson }) {
       </div>
 
       <div className="la-subtabs">
-        {[['payments', 'العمليات'], ['entitlements', 'الاستحقاقات'], ['settings', 'الإعداد']].map(([key, l]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{l}</button>)}
+        {[['payments', 'العمليات'], ['entitlements', 'الاستحقاقات'], ['sponsors', 'رعاية الجهات'], ['settings', 'الإعداد']].map(([key, l]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{l}</button>)}
       </div>
 
-      {tab !== 'settings' && (
+      {(tab === 'payments' || tab === 'entitlements') && (
         <div className="la-row pay-filters">
           <input className="la-search" placeholder="بحث بالاسم أو البريد أو رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} />
           {tab === 'payments' && <>
@@ -163,9 +163,32 @@ export default function Payments({ canWrite, onPerson }) {
         </section>
       )}
 
+      {tab === 'payments' && d.review?.length > 0 && (
+        <section className="la-card pay-review">
+          <h3>للمراجعة: دفعوا ثم ارتبطوا بجهة راعية <span className="la-chip warn">{d.review.length}</span></h3>
+          <p className="la-muted small">رعاية الجهة تغطي هذه الرسوم. الاسترداد قرارك ويتم من Creem، ويظهر هنا «مسترد» حين يصل إشعاره.</p>
+          <table className="la-table"><tbody>{d.review.map((p) => (
+            <tr key={p.id}><td><button className="la-link" onClick={() => onPerson?.(p.participant_id)}>{p.participants?.full_name || p.email}</button></td>
+              <td>{ITEM[p.item]}</td><td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td><td>{when(p.paid_at)}</td></tr>
+          ))}</tbody></table>
+        </section>
+      )}
+
+      {tab === 'sponsors' && (
+        <section className="la-card">
+          <p className="la-muted small">قيمة الرسوم التي غطّتها كل جهة لمشاركيها، بأسعار اليوم. تفيد في الفوترة وتقارير الجهات.</p>
+          {d.sponsors?.length ? (
+            <table className="la-table">
+              <thead><tr><th>الجهة</th><th>مشاركون مرعيون</th><th>قيمة المغطّى</th></tr></thead>
+              <tbody>{d.sponsors.map((g) => <tr key={g.id}><td>{g.name}</td><td>{g.participants}</td><td dir="ltr">{money(g.cents)}</td></tr>)}</tbody>
+            </table>
+          ) : <p className="la-empty">لا مشاركين مرعيين بعد.</p>}
+        </section>
+      )}
+
       {tab === 'entitlements' && (
         <section className="la-card">
-          <p className="la-muted small">من رعته جهة لا يظهر هنا: حقه يُحسب من ارتباطه بجهته مباشرة. للمنح اليدوي افتح ملف المشارك.</p>
+          <p className="la-muted small">رعاية الجهة تُثبَّت هنا لحظة سريانها فلا تسقط إن أُوقفت الجهة لاحقًا. للمنح اليدوي افتح ملف المشارك.</p>
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>البند</th><th>المصدر</th><th>التاريخ</th><th>الحالة</th><th /></tr></thead>
             <tbody>{ents.slice(0, 500).map((e) => (
