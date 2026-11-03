@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر يأتي من الخادم مصفّى بصلاحيات المنسق؛ لا تعديل هنا.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import OtherDoors from '../Doors.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
@@ -58,6 +59,7 @@ function SignIn({ onIn, initialError }) {
             {error && <div className="alert err">{error}</div>}
             {captchaKey && <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
+            <OtherDoors here="org" />
           </form>
         ) : (
           <div className="stack">

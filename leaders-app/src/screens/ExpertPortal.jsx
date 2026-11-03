@@ -9,6 +9,7 @@ import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import ExpertApply from './ExpertApply.jsx';
+import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 
 // رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة ويُمسح من الشريط، ثم يُتحقق منه بمسار الرمز نفسه
 function takeInvite() {
@@ -47,6 +48,7 @@ function SignIn({ onIn }) {
   const [step, setStep] = useState('email');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [doors, setDoors] = useState([]);
   const send = async (e) => {
     e.preventDefault(); setBusy(true); setErr('');
     const r = await xpCall('xp.auth-start', { email });
@@ -64,11 +66,11 @@ function SignIn({ onIn }) {
       <form className="card stack xpp-in" onSubmit={step === 'email' ? send : verify}>
         <p className="eyebrow" dir="ltr">EXPERT PORTAL</p>
         <h2>لوحة الخبير</h2>
-        <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء.`}</p>
+        <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء. وإن كان مسجلًا في بوابة أخرى، يصلك بريد يدلّك عليها.`}</p>
         {step === 'email'
           ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} /></label>}
-        {err && <div className="alert err" role="alert">{err}</div>}
+        {err && <div className="alert err" role="alert">{err}<DoorButtons doors={doors} /></div>}
         <button className="btn" disabled={busy}>{busy ? 'لحظة…' : step === 'email' ? 'أرسل الرمز' : 'دخول'}</button>
         {step === 'code' && <button type="button" className="link small" onClick={() => { setStep('email'); setCode(''); }}>غيّر البريد</button>}
         {step === 'email' && <>
@@ -77,9 +79,11 @@ function SignIn({ onIn }) {
             setBusy(true); setErr('');
             const r = await xpCall('xp.auth-google', { credential });
             setBusy(false);
-            if (r.success) { xpSession.set(r.token); onIn(); } else setErr(r.message);
+            if (r.success) { xpSession.set(r.token); onIn(); } else { setErr(r.message); setDoors(doorsFromCode(r.code)); }
           }} />
           <p className="small muted">بحساب Google بالبريد نفسه المسجل في شبكة الخبراء.</p>
+          <p className="small muted">لست في الشبكة بعد؟ <a className="link" href="/expert">قدّم طلب الانضمام</a></p>
+          <OtherDoors here="expert" />
         </>}
       </form>
     </div>
