@@ -260,7 +260,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
             <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
-            <dt>الدفع</dt><dd>{p.organization_id ? 'معفى برعاية جهته' : <PersonAccess participantId={p.id} canWrite={canWrite} />}</dd>
+            <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
           {canWrite && (

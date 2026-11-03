@@ -2,6 +2,7 @@
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
+import SponsorNote from '../SponsorNote.jsx';
 import { call, uploadFile } from '../api.js';
 import { countAr, VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -199,7 +200,8 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
-      {!onboarding && !p.organization_linked && <SponsorCode onSaved={onSaved} />}
+      {!onboarding && !p.organization_linked && !me.access?.sponsor && <SponsorCode onSaved={onSaved} />}
+      {!onboarding && me.access?.sponsor && <section className="card stack"><h3>الجهة الراعية</h3><SponsorNote access={me.access} /></section>}
       {!onboarding && <OrgVisibility />}
       {!onboarding && <Devices />}
     </div>

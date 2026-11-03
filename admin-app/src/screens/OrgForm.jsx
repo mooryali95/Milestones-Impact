@@ -276,7 +276,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
                 <input dir="ltr" value={v.invite_code} onChange={(e) => { setV({ ...v, invite_code: e.target.value.toLowerCase() }); setTouched({ ...touched, invite_code: true }); }} placeholder="مثل moe-2026" />
               </Field>
               <div className="of-link wide"><small>رابط الدعوة</small><code dir="ltr">{preview}</code></div>
-              <Field group label="مواقع الجهة" hint="من يصل منها يُنسب للجهة تلقائيًا. اكتب النطاق واضغط Enter." wide>
+              <Field group label="نطاقات الجهة" hint="من يصل من موقعها، أو يسجّل ببريد وظيفي عليها (مثل name@moe.gov.sa)، يُربط بها ويُعفى تلقائيًا. النطاقات العامة كـ gmail لا تربط أحدًا. اكتب النطاق واضغط Enter." wide>
                 <Domains list={v.domains} onChange={(domains) => setV({ ...v, domains })} />
               </Field>
             </div>

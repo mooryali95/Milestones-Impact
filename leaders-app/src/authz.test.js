@@ -12,7 +12,7 @@ const block = index.slice(index.indexOf('const admin:'), index.indexOf('\n};', i
 const actions = [...block.matchAll(/'(admin\.[\w-]+)':\s*([^\n]+)/g)].map((m) => ({ name: m[1], handler: m[2] }));
 // إجراء كتابة إن كان في اسمه فعل تغيير (كلمة كاملة بين الشرطات): admin.coordinator-save ← save
 const VERBS = new Set(['save', 'delete', 'remove', 'approve', 'review', 'issue', 'revoke', 'reissue', 'assign', 'create', 'add', 'update', 'move',
-  'reorder', 'grant', 'set', 'toggle', 'publish', 'restore', 'version', 'available', 'mark', 'reset', 'import', 'send', 'invite', 'archive', 'upgrade', 'close', 'reopen', 'pin', 'waive', 'endorse', 'cancel', 'retry', 'complete']);
+  'reorder', 'grant', 'set', 'decide', 'toggle', 'publish', 'restore', 'version', 'available', 'mark', 'reset', 'import', 'send', 'invite', 'archive', 'upgrade', 'close', 'reopen', 'pin', 'waive', 'endorse', 'cancel', 'retry', 'complete']);
 const isWrite = (name) => name.slice(6).split(/[-.]/).some((w) => VERBS.has(w));
 
 // هل الدالة المستدعاة تتحقق بنفسها؟ نقرأ جسمها من ملفها

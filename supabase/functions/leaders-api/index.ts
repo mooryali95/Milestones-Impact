@@ -36,6 +36,7 @@ import * as X from './capstone.ts';
 import * as T from './tracking.ts';
 import * as E from './experts.ts';
 import * as Y from './payments.ts';
+import * as R from './sponsor.ts';
 
 type Body = Record<string, any>;
 
@@ -72,7 +73,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
-  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout',
+  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel',
   'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
@@ -86,6 +87,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
   'pay.checkout': (p, b) => Y.checkout(p, b),
+  'sponsor.request': (p, b) => R.request(p, b),
+  'sponsor.cancel': (p) => R.cancel(p),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
@@ -226,6 +229,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),
   'admin.payments': () => Y.adminOverview(),
+  'admin.sponsor-requests': () => R.adminList(),
+  'admin.sponsor-decide': R.adminDecide,
   'admin.payment-settings': Y.adminSettings,
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,

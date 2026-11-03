@@ -128,8 +128,18 @@ async function sponsorByCode(code: unknown, key: string) {
   }
   return { org, via: 'link' as const };   // الرمز المكتوب هو رمز رابط الجهة نفسه
 }
-async function sponsorFor(b: Body, key: string) {
-  return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b));
+// ── الربط بنطاق البريد الوظيفي: بريد موثَّق على نطاق مسجل لجهة نشطة يربط صاحبه بها ──
+// نطاقات البريد العامة لا تربط أحدًا أبدًا.
+const PUBLIC_MAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com',
+  'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com', 'yandex.com', 'zoho.com', 'hotmail.co.uk', 'outlook.sa', 'windowslive.com']);
+export async function orgByEmail(email: string) {
+  const dom = String(email || '').split('@')[1]?.toLowerCase() || '';
+  if (!dom || PUBLIC_MAIL.has(dom)) return null;
+  const org = await orgByHost(dom);
+  return org ? { org, via: 'domain' as const } : null;
+}
+async function sponsorFor(b: Body, key: string, email = '') {
+  return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b)) || (await orgByEmail(email));
 }
 
 // أدوار البريد الأخرى، تُكشف لصاحبه فقط بعد إثبات ملكيته (رمز أو رابط أو Google)، فلا يُنشأ له حساب مشارك خطأً
@@ -172,7 +182,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     // الجهة الراعية: رمز يكتبه المشارك، أو رابط جهة، أو موقعها. جهة العمل يكتبها في ملفه لاحقًا
-    const r = await sponsorFor(b, ctx.ip || email);
+    const r = await sponsorFor(b, ctx.ip || email, email);
     pending = {
       full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
       ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
@@ -254,7 +264,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   if (!p) {
     // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
     if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '', roles: await otherRoles(id.email) };
-    const r = await sponsorFor(b, ctx.ip || id.email);
+    const r = await sponsorFor(b, ctx.ip || id.email, id.email);
     p = must(await db.from('participants').insert({
       email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
       campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
@@ -488,6 +498,14 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
 }
 
 export async function me(p: any) {
+  // المسجل قبل تسجيل نطاق جهته: يُربط بها عند دخوله التالي، مرة واحدة ويُسجَّل
+  if (!p.organization_id && !p.is_demo && p.email_verified_at) {
+    const r = await orgByEmail(p.email);
+    if (r) {
+      const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
+      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); p = data; }
+    }
+  }
   return { success: true, ...(await mePayload(p)) };
 }
 

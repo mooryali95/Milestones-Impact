@@ -25,7 +25,7 @@ import { DIM_AR as DIM, DIM_SHORT as DIM_EN, FUNNEL, LEVEL_AR as LVL, PARTICIPAN
 import { SITES } from '../../supabase/functions/_shared/sites.js';
 
 export { DIM, DIM_EN, FUNNEL, LVL, STATUS, REQ };
-export const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'نقل يدوي', none: 'غير محدد' };
+export const VIA = { link: 'رابط الجهة', domain: 'نطاق الجهة (موقعها أو بريدها)', admin: 'نقل يدوي', none: 'غير محدد' };
 export const SUB_ST = Object.fromEntries(Object.entries({ submitted: 'warn', reviewed: 'ok', returned: '', draft: '' }).map(([k, tone]) => [k, [SUBMISSION_STATUS_ADMIN[k], tone]]));
 export const DIMS = Object.keys(DIM);
 const LVLS = Object.keys(LVL);

@@ -10,7 +10,7 @@ import { Spinner, useUI } from '../ui.jsx';
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 const ITEM = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
 const PAY_ST = { paid: ['مدفوع', 'ok'], pending: ['معلّق', 'warn'], refunded: ['مسترد', 'bad'], failed: ['تعذّر', 'bad'], expired: ['انتهى', ''] };
-const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق' };
+const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق', sponsor: 'رعاية جهة' };
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '·');
 
 function Sparkbars({ daily }) {
@@ -128,10 +128,10 @@ export default function Payments({ canWrite, onPerson }) {
       </div>
 
       <div className="la-subtabs">
-        {[['payments', 'العمليات'], ['entitlements', 'الاستحقاقات'], ['settings', 'الإعداد']].map(([key, l]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{l}</button>)}
+        {[['payments', 'العمليات'], ['requests', 'طلبات الرعاية'], ['entitlements', 'الاستحقاقات'], ['sponsors', 'رعاية الجهات'], ['settings', 'الإعداد']].map(([key, l]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{l}</button>)}
       </div>
 
-      {tab !== 'settings' && (
+      {(tab === 'payments' || tab === 'entitlements') && (
         <div className="la-row pay-filters">
           <input className="la-search" placeholder="بحث بالاسم أو البريد أو رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} />
           {tab === 'payments' && <>
@@ -163,9 +163,32 @@ export default function Payments({ canWrite, onPerson }) {
         </section>
       )}
 
+      {tab === 'payments' && d.review?.length > 0 && (
+        <section className="la-card pay-review">
+          <h3>للمراجعة: دفعوا ثم ارتبطوا بجهة راعية <span className="la-chip warn">{d.review.length}</span></h3>
+          <p className="la-muted small">رعاية الجهة تغطي هذه الرسوم. الاسترداد قرارك ويتم من Creem، ويظهر هنا «مسترد» حين يصل إشعاره.</p>
+          <table className="la-table"><tbody>{d.review.map((p) => (
+            <tr key={p.id}><td><button className="la-link" onClick={() => onPerson?.(p.participant_id)}>{p.participants?.full_name || p.email}</button></td>
+              <td>{ITEM[p.item]}</td><td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td><td>{when(p.paid_at)}</td></tr>
+          ))}</tbody></table>
+        </section>
+      )}
+
+      {tab === 'sponsors' && (
+        <section className="la-card">
+          <p className="la-muted small">قيمة الرسوم التي غطّتها كل جهة لمشاركيها، بأسعار اليوم. تفيد في الفوترة وتقارير الجهات.</p>
+          {d.sponsors?.length ? (
+            <table className="la-table">
+              <thead><tr><th>الجهة</th><th>مشاركون مرعيون</th><th>قيمة المغطّى</th></tr></thead>
+              <tbody>{d.sponsors.map((g) => <tr key={g.id}><td>{g.name}</td><td>{g.participants}</td><td dir="ltr">{money(g.cents)}</td></tr>)}</tbody>
+            </table>
+          ) : <p className="la-empty">لا مشاركين مرعيين بعد.</p>}
+        </section>
+      )}
+
       {tab === 'entitlements' && (
         <section className="la-card">
-          <p className="la-muted small">من رعته جهة لا يظهر هنا: حقه يُحسب من ارتباطه بجهته مباشرة. للمنح اليدوي افتح ملف المشارك.</p>
+          <p className="la-muted small">رعاية الجهة تُثبَّت هنا لحظة سريانها فلا تسقط إن أُوقفت الجهة لاحقًا. للمنح اليدوي افتح ملف المشارك.</p>
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>البند</th><th>المصدر</th><th>التاريخ</th><th>الحالة</th><th /></tr></thead>
             <tbody>{ents.slice(0, 500).map((e) => (
@@ -182,8 +205,65 @@ export default function Payments({ canWrite, onPerson }) {
         </section>
       )}
 
+      {tab === 'requests' && <SponsorRequests canWrite={canWrite} onPerson={onPerson} onChange={load} />}
       {tab === 'settings' && <SettingsCard d={d} canWrite={canWrite} reload={load} />}
     </div>
+  );
+}
+
+// طلبات الرعاية: من كتب اسم جهة دون رمز. الاقتراحات للإدارة وحدها، والقرار يصل المشارك ببريد
+const REQ_ST = { pending: ['قيد المراجعة', 'warn'], approved: ['رُبط بجهته', 'ok'], rejected: ['مرفوض', 'bad'], cancelled: ['ألغاه المشارك', ''] };
+function SponsorRequests({ canWrite, onPerson, onChange }) {
+  const { toast, confirm } = useUI();
+  const [d, setD] = useState(null);
+  const [pick, setPick] = useState({});
+  const [all, setAll] = useState(false);
+  const load = useCallback(async () => setD(await L('admin.sponsor-requests')), []);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return <Spinner />;
+  if (!d.success) return <p className="la-err">{d.message}</p>;
+  const list = d.requests.filter((x) => all || x.status === 'pending');
+  const decide = async (x, approve) => {
+    const orgId = pick[x.id] || x.suggestions[0]?.id;
+    let reason = '';
+    if (approve) {
+      const org = d.orgs.find((o) => o.id === orgId);
+      if (!org || !(await confirm(`ربط ${x.participants?.full_name} برعاية «${org.name}» وإعفاؤه من الرسوم؟`))) return;
+    } else {
+      reason = window.prompt('سبب الرفض (يصل المشارك، اختياري)') ?? null;
+      if (reason === null) return;
+    }
+    const r = await L('admin.sponsor-decide', { id: x.id, approve, organization_id: orgId, reason });
+    toast(r.success ? (approve ? 'رُبط بجهته وأُعفي' : 'رُفض الطلب') : r.message);
+    if (r.success) { load(); onChange?.(); }
+  };
+  return (
+    <section className="la-card">
+      <div className="la-row between"><p className="la-muted small">لا يرى المشارك قائمة الجهات: الاقتراحات أدناه لك وحدك، مرتبة بقرب الاسم ونطاق بريده.</p>
+        <label className="small"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> اعرض المنتهية</label></div>
+      {list.length ? (
+        <table className="la-table">
+          <thead><tr><th>المشارك</th><th>الجهة كما كتبها</th><th>أقرب الجهات المسجلة</th><th>الحالة</th><th /></tr></thead>
+          <tbody>{list.map((x) => (
+            <tr key={x.id}>
+              <td><button className="la-link" onClick={() => onPerson?.(x.participant_id)}>{x.participants?.full_name}</button><br /><small className="la-muted" dir="ltr">{x.participants?.email}</small></td>
+              <td><b>{x.typed_name}</b>{x.contact_email && <><br /><small className="la-muted" dir="ltr">منسق: {x.contact_email}</small></>}<br /><small className="la-muted">{when(x.created_at)}</small></td>
+              <td>{x.status === 'pending' ? (
+                <select value={pick[x.id] || x.suggestions[0]?.id || ''} disabled={!canWrite} onChange={(e) => setPick({ ...pick, [x.id]: e.target.value })}>
+                  <option value="">اختر جهة…</option>
+                  {x.suggestions.length > 0 && <optgroup label="الأقرب">{x.suggestions.map((g) => <option key={g.id} value={g.id}>{g.name} · {Math.round(g.score * 100)}%</option>)}</optgroup>}
+                  <optgroup label="كل الجهات">{d.orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</optgroup>
+                </select>
+              ) : x.reason || ''}</td>
+              <td><span className={`la-chip ${REQ_ST[x.status]?.[1] || ''}`}>{REQ_ST[x.status]?.[0]}</span></td>
+              <td>{x.status === 'pending' && canWrite && <div className="la-row">
+                <button className="btn-sm primary" onClick={() => decide(x, true)}>اربط وأعفِ</button>
+                <button className="btn-sm ghost" onClick={() => decide(x, false)}>ارفض</button></div>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      ) : <p className="la-empty">لا طلبات رعاية {all ? '' : 'قيد المراجعة'}.</p>}
+    </section>
   );
 }
 
