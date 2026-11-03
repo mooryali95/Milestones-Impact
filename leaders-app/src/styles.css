@@ -1249,3 +1249,6 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .sponsor-fee s { opacity: .7; margin: 0 4px; }
 .sponsor-mark { width: 10px; height: 10px; margin-top: 6px; transform: rotate(45deg); background: var(--gold); flex: none; }
 .sponsor-note.compact { margin-bottom: 0; }
+.pay-claim-note { display: grid; gap: 4px; padding: 12px 14px; border-radius: 10px; border: 1px dashed var(--gold); font-size: 14px; line-height: 1.8; }
+.pay-claim-note span { color: var(--muted); }
+.pay-claim-note .link { justify-self: start; }

@@ -34,6 +34,15 @@ export default function Paywall({ item, me, onUpdate }) {
   const [err, setErr] = useState('');
   const [confirming, setConfirming] = useState(() => new URLSearchParams(location.search).get('paid') === item);
   const [code, setCode] = useState('');
+  const [claim, setClaim] = useState(null);   // { typed_name, contact_email } حين يفتح «رشّحتني جهة ولا أملك رمزًا»
+  const req = me.access?.request;
+  const reload = async () => { const m = await call('me'); if (m.success) onUpdate(m); };
+  const sendClaim = async (e) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    const r = await call('sponsor.request', claim);
+    setBusy(false);
+    if (r.success) { setClaim(null); reload(); } else setErr(r.message);
+  };
 
   // بعد العودة من Creem: ننتظر إشعار الدفع حتى 45 ثانية
   useEffect(() => {
@@ -90,13 +99,31 @@ export default function Paywall({ item, me, onUpdate }) {
         {err && <div className="alert err" role="alert">{err}</div>}
         <button className="btn gold block" disabled={busy} onClick={pay}>{busy ? 'نفتح صفحة الدفع…' : c.cta}</button>
         <p className="small muted">الدفع عبر Creem بصفحة آمنة باسمك وبريدك، ويصلك الإيصال على {me.participant.email}.</p>
-        {!me.participant.organization_linked && (
+        {req?.status === 'pending' && (
+          <div className="pay-claim-note" role="status">
+            <b>طلب رعاية «{req.typed_name}» قيد المراجعة</b>
+            <span>نتحقق منه خلال يومي عمل ونراسلك. يمكنك الانتظار، أو البدء الآن بالدفع؛ وإن تأكدت رعايتك يُعفى إكمال البرنامج تلقائيًا.</span>
+            <button type="button" className="link small" onClick={async () => { await call('sponsor.cancel'); reload(); }}>ألغِ الطلب</button>
+          </div>
+        )}
+        {req?.status === 'rejected' && <p className="small muted">لم نتمكن من تأكيد رعاية «{req.typed_name}»{req.reason ? `: ${req.reason}` : ''}.</p>}
+        {!me.participant.organization_linked && req?.status !== 'pending' && (
           <form className="pay-sponsor" onSubmit={sponsor}>
             <span className="small">رشّحتك جهة؟ رمزها يعفيك من الرسوم</span>
             <div className="row">
               <input className="input ltr grow" maxLength={40} autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="ABC-2026" aria-label="رمز الجهة الراعية" />
               <button className="btn ghost sm" disabled={busy || code.trim().length < 4}>تحقق</button>
             </div>
+            {!claim && <button type="button" className="link small" onClick={() => setClaim({ typed_name: me.participant.organization_name || '', contact_email: '' })}>رشّحتني جهة ولا أملك رمزًا</button>}
+          </form>
+        )}
+        {claim && (
+          <form className="pay-sponsor" onSubmit={sendClaim}>
+            <span className="small">اكتب اسم الجهة التي رشّحتك، ونتحقق من رعايتها لك.</span>
+            <input className="input" required minLength={2} maxLength={200} value={claim.typed_name} onChange={(e) => setClaim({ ...claim, typed_name: e.target.value })} placeholder="اسم الجهة الراعية" aria-label="اسم الجهة الراعية" />
+            <input className="input ltr" type="email" maxLength={254} value={claim.contact_email} onChange={(e) => setClaim({ ...claim, contact_email: e.target.value })} placeholder="بريد منسق الجهة (اختياري)" aria-label="بريد منسق الجهة" />
+            <div className="row"><button className="btn ghost sm" disabled={busy || claim.typed_name.trim().length < 2}>أرسل طلب التحقق</button>
+              <button type="button" className="link small" onClick={() => setClaim(null)}>إلغاء</button></div>
           </form>
         )}
       </div>

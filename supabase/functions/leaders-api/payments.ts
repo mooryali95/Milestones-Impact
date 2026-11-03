@@ -44,7 +44,7 @@ async function pinSponsor(p: any, org: any) {
 export async function access(p: any) {
   const s = await settings();
   const base = { enabled: !!s.enabled, prices: prices(s) };
-  if (p.is_demo) return { ...base, assessment: 'demo', program: 'demo', sponsor: null };
+  if (p.is_demo) return { ...base, assessment: 'demo', program: 'demo', sponsor: null, request: null };
   const org = await sponsorOf(p);
   const read = () => db.from('entitlements').select('item, source, organization_id').eq('participant_id', p.id).is('revoked_at', null);
   let { data } = await read();
@@ -58,8 +58,10 @@ export async function access(p: any) {
     const { data: o } = await db.from('organizations').select('name, short_name').eq('id', pinned.organization_id).maybeSingle();
     sponsor = o ? { name: o.name, short_name: o.short_name || null } : null;
   }
-  if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor };
-  return { ...base, assessment: has('assessment'), program: has('program'), sponsor };
+  const { data: req } = sponsor ? { data: null } : await db.from('sponsor_requests').select('typed_name, status, reason').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  const request = req && req.status !== 'cancelled' ? req : null;
+  if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor, request };
+  return { ...base, assessment: has('assessment'), program: has('program'), sponsor, request };
 }
 const prices = (s: any) => ({ currency: s.currency, assessment: s.assessment_cents, program: s.program_cents });
 
