@@ -24,8 +24,14 @@ function Pick({ legend, options, value, onChange }) {
   );
 }
 
-export default function ExpertApply() {
-  const [v, setV] = useState({ full_name: '', email: '', phone: '', title: '', linkedin_url: '', years_experience: '', bio: '', roles: [], dimensions: [], levels: [], sectors: '', languages: ['ar'], weekly_hours: '' });
+const EMPTY = { full_name: '', email: '', phone: '', title: '', linkedin_url: '', years_experience: '', bio: '', roles: [], dimensions: [], levels: [], sectors: '', languages: ['ar'], weekly_hours: '' };
+// من ملف قائم (الخبير المدعو في لوحته) إلى قيم النموذج
+const fromExpert = (e) => ({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).filter((k) => e[k] != null).map((k) => [k, e[k]])),
+  sectors: (e.sectors || []).join('، '), years_experience: e.years_experience ?? '', weekly_hours: e.weekly_hours ?? '', languages: e.languages?.length ? e.languages : ['ar'] });
+
+// النموذج نفسه للطلب المفتوح، ولاستكمال المدعو ملفه في لوحة الخبير (expert + onSaved)
+export default function ExpertApply({ expert = null, save = null, onSaved = null }) {
+  const [v, setV] = useState(() => (expert ? fromExpert(expert) : EMPTY));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -35,9 +41,9 @@ export default function ExpertApply() {
     e.preventDefault();
     setError('');
     setBusy(true);
-    const r = await call('expert.apply', v);
+    const r = save ? await save(v) : await call('expert.apply', v);
     setBusy(false);
-    if (r.success) { setDone(true); window.scrollTo({ top: 0 }); } else setError(r.message);
+    if (r.success) { if (onSaved) onSaved(r); else setDone(true); window.scrollTo({ top: 0 }); } else setError(r.message);
   };
 
   if (done) {
@@ -55,12 +61,12 @@ export default function ExpertApply() {
     <div className="page narrow">
       <form className="card stack xp" onSubmit={submit}>
         <p className="eyebrow" dir="ltr">EXPERT NETWORK</p>
-        <h2>انضم إلى شبكة خبراء برنامج القادة</h2>
-        <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>
+        <h2>{expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h2>
+        {expert ? <p className="muted">أدوارك والأبعاد التي تتقنها ونبذة عن خبرتك، ليُسند إليك ما يناسبك. نراجع الملف ثم نفعّل لوحتك.</p> : <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>}
 
         <div className="xp-grid">
           <label className="field"><span>الاسم الكامل *</span><input className="input" required value={v.full_name} onChange={set('full_name')} maxLength={120} autoComplete="name" /></label>
-          <label className="field"><span>البريد الإلكتروني *</span><input className="input" dir="ltr" type="email" required value={v.email} onChange={set('email')} autoComplete="email" /></label>
+          <label className="field"><span>البريد الإلكتروني *</span><input className="input" dir="ltr" type="email" required readOnly={!!expert} value={v.email} onChange={set('email')} autoComplete="email" /></label>
           <label className="field"><span>المسمى المهني</span><input className="input" value={v.title} onChange={set('title')} maxLength={160} placeholder="مثل: مستشار إدارة محافظ، PMP" /></label>
           <label className="field"><span>الجوال</span><input className="input" dir="ltr" value={v.phone} onChange={set('phone')} autoComplete="tel" /></label>
           <label className="field"><span>LinkedIn</span><input className="input" dir="ltr" value={v.linkedin_url} onChange={set('linkedin_url')} placeholder="https://www.linkedin.com/in/…" /></label>
@@ -81,7 +87,7 @@ export default function ExpertApply() {
           <small className="muted">{v.bio.length < 80 ? `${80 - v.bio.length} حرفًا على الأقل بعد` : 'ممتاز'}</small></label>
 
         {error && <div className="alert err" role="alert">{error}</div>}
-        <button className="btn" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل طلب الانضمام'}</button>
+        <button className="btn" disabled={busy}>{busy ? 'جارٍ الإرسال…' : expert ? 'احفظ الملف وأرسله للمراجعة' : 'أرسل طلب الانضمام'}</button>
         <p className="small muted">نستخدم بياناتك لمراجعة طلبك وإسناد الخدمات إليك فقط، ولا تُشارك مع أي جهة.</p>
       </form>
     </div>

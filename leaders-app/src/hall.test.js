@@ -44,3 +44,14 @@ describe('القاعة الحية', () => {
     expect(admin.people[0].name).toBe('مشارك 0 الاسم');
   });
 });
+
+import { firstName } from '../../supabase/functions/leaders-api/logic.js';
+describe('الاسم الأول', () => {
+  it('يتخطى الألقاب', () => {
+    expect(firstName('م عمر عبدالحميد')).toBe('عمر');
+    expect(firstName('د. سارة أحمد')).toBe('سارة');
+    expect(firstName('المهندس خالد')).toBe('خالد');
+    expect(firstName('ريم')).toBe('ريم');
+    expect(firstName('م')).toBe('م');
+  });
+});

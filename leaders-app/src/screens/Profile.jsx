@@ -32,6 +32,30 @@ function OrgVisibility() {
   );
 }
 
+// الجهة الراعية برمز: غير «جهة العمل»، ولا قائمة جهات تظهر هنا. الرمز الصحيح وحده يربط ويكشف اسم جهته
+function SponsorCode({ onSaved }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const send = async (e) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    const r = await call('me.sponsor-code', { sponsor_code: code.trim() });
+    setBusy(false);
+    if (r.success) onSaved(r); else setErr(r.message);
+  };
+  return (
+    <form className="card stack" onSubmit={send} aria-labelledby="sponsor-h">
+      <h3 id="sponsor-h">الجهة الراعية</h3>
+      <p className="muted small">إن رشّحتك جهة للبرنامج وأعطتك رمزًا، اكتبه هنا لترتبط بها. جهة الرعاية قد تختلف عن جهة عملك.</p>
+      <div className="row">
+        <input className="input ltr grow" autoComplete="off" spellCheck={false} maxLength={40} value={code} onChange={(e) => setCode(e.target.value)} placeholder="ABC-2026" aria-label="رمز الجهة الراعية" />
+        <button className="btn ghost" disabled={busy || code.trim().length < 4}>{busy ? 'لحظة…' : 'اربط'}</button>
+      </div>
+      {err && <div className="alert err small" role="alert">{err}</div>}
+    </form>
+  );
+}
+
 // أجهزتك: الجلسات السارية، وإنهاء أي جهاز غير هذا
 function Devices() {
   const [list, setList] = useState(null);
@@ -136,7 +160,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             <input className="input ltr" required type="tel" value={f.phone} onChange={set('phone')} placeholder="05XXXXXXXX" autoComplete="tel" /></label>
           <label className="field"><span>المسمى الوظيفي</span>
             <input className="input" required value={f.job_title} onChange={set('job_title')} autoComplete="organization-title" /></label>
-          <label className="field"><span>جهة العمل</span>
+          <label className="field"><span>جهة العمل <em>(حيث تعمل، وقد تختلف عن الجهة الراعية)</em></span>
             <input className="input" required value={f.organization_name} onChange={set('organization_name')} autoComplete="organization" /></label>
           <label className="field"><span>القطاع <em>(اختياري)</em></span>
             <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
@@ -175,6 +199,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
+      {!onboarding && !p.organization_linked && <SponsorCode onSaved={onSaved} />}
       {!onboarding && <OrgVisibility />}
       {!onboarding && <Devices />}
     </div>

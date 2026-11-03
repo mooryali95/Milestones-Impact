@@ -72,6 +72,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
   'org.logo': (p) => P.orgLogo(p),
+  'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
@@ -132,6 +133,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
 // لوحة الخبير: الجلسة من expert_sessions، والخبير يُشتق منها على الخادم
 const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'xp.dashboard': (e) => E.portalDashboard(e),
+  'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
@@ -282,6 +284,8 @@ Deno.serve(async (req) => {
     }
     if (expert[action]) {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
+      // قبل الاعتماد: الملف والخروج فقط
+      if (!E.portalWorking(e) && !['xp.dashboard', 'xp.profile-save', 'xp.logout'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
       return reply(req, await expert[action](e, b, sessionId));
     }
     if (admin[action]) {

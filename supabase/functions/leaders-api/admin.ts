@@ -114,7 +114,7 @@ export async function assignOrg(a: Admin, b: Body) {
     if (!target) throw new Fail('الجهة غير موجودة', 404);
   }
   // ربط كل من كتب اسمًا معينًا في خانة الجهة دفعة واحدة
-  let q = db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null, ...(target ? { organization_name: target.name } : {}) });
+  let q = db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null });   // جهة العمل يكتبها المشارك ولا تُستبدل
   if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
   else if (ids.length) q = q.in('id', ids);
   else throw new Fail('لم يُحدَّد مشاركون');

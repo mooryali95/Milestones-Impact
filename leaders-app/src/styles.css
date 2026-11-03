@@ -1223,3 +1223,8 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 body:has(.demo-tour) main{padding-bottom:220px}
 .demo-actions .btn:not(.ghost){background:var(--brand-copper);color:var(--brand-graphite);border-color:var(--brand-copper)}
 .demo-actions .btn.ghost{color:var(--brand-cream);border-color:rgba(255,255,255,.35)}
+
+/* تسجيل جديد: تنبيه الأدوار الأخرى، ورابط لوحة الخبير في شاشة الدخول */
+.role-note { padding: 10px 12px; border-radius: 10px; border-inline-start: 3px solid var(--gold); background: color-mix(in srgb, var(--gold) 8%, transparent); color: var(--muted); line-height: 1.8; }
+.role-note b { color: inherit; font-weight: 700; }
+.signin-expert { text-align: center; margin: 4px 0 0; }

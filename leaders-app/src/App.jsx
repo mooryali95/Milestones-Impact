@@ -27,6 +27,7 @@ import Outcome from './screens/Outcome.jsx';
 import ExpertApply from './screens/ExpertApply.jsx';
 import ExpertOffer from './screens/ExpertOffer.jsx';
 import ExpertPortal from './screens/ExpertPortal.jsx';
+import RoleChoice from './RoleChoice.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
 import HallScreen from './screens/Hall.jsx';
@@ -129,6 +130,7 @@ function Participant() {
   const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
   const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');
+  const [linkChoice, setLinkChoice] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
   // رمز حضور الورشة من مسح QR: /?checkin=...
@@ -173,6 +175,8 @@ function Participant() {
         const q = new URLSearchParams(location.search);
         history.replaceState(null, '', '/');
         const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
+        // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
+        if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
         if (res.success) accept(res);
         else setVerifyError(res.message);
         setBooting(false);
@@ -229,6 +233,15 @@ function Participant() {
 
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  else if (!me && linkChoice) screen = (
+    <div className="auth-wrap"><div className="auth card stack">
+      <RoleChoice roles={linkChoice.roles} onParticipant={async () => {
+        const r = await call('auth.verify', { email: linkChoice.email, link: linkChoice.link, confirm_new: true });
+        setLinkChoice(null);
+        if (r.success) accept(r); else setVerifyError(r.message);
+      }} />
+    </div></div>
+  );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (!stageDone(me, 'profile') || view === 'profile') {

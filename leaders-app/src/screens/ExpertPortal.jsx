@@ -8,6 +8,34 @@ import React, { useEffect, useState } from 'react';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
+import ExpertApply from './ExpertApply.jsx';
+
+// رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة ويُمسح من الشريط، ثم يُتحقق منه بمسار الرمز نفسه
+function takeInvite() {
+  const m = location.hash.match(/^#invite=([^.]+@[^#]+?)\.([A-Za-z0-9_-]{20,})$/);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname);
+  return { email: decodeURIComponent(m[1]), code: m[2] };
+}
+
+// قبل الاعتماد: المدعو يستكمل ملفه، ومن أرسله يرى أنه بانتظار المراجعة ويعدّله إن شاء
+function Onboarding({ expert, onOut, reload }) {
+  const [edit, setEdit] = useState(expert.status === 'invited');
+  return (
+    <div className="page narrow">
+      <div className="row between"><p className="eyebrow" dir="ltr">EXPERT PORTAL</p>
+        <button className="link small" onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button></div>
+      {edit
+        ? <ExpertApply expert={expert} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
+        : <div className="card milestone-card stack">
+            <div className="badge"><span>✓</span></div>
+            <h2>ملفك بانتظار الاعتماد</h2>
+            <p className="muted">شكرًا {expert.full_name}. نراجع ملفك ونراسلك على {expert.email} حين تُفعَّل لوحتك، وفيها طلبات الخدمة وجلساتك وساعاتك.</p>
+            <button className="btn ghost" onClick={() => setEdit(true)}>عدّل ملفك</button>
+          </div>}
+    </div>
+  );
+}
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '·');
 const when = (d) => new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -36,7 +64,7 @@ function SignIn({ onIn }) {
       <form className="card stack xpp-in" onSubmit={step === 'email' ? send : verify}>
         <p className="eyebrow" dir="ltr">EXPERT PORTAL</p>
         <h2>لوحة الخبير</h2>
-        <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا لخبير معتمد.`}</p>
+        <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء.`}</p>
         {step === 'email'
           ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} /></label>}
@@ -92,6 +120,7 @@ function Dashboard({ onOut }) {
   useEffect(() => { load(); }, []);
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
+  if (d.onboarding) return <Onboarding expert={d.expert} onOut={onOut} reload={() => { setD(null); load(); }} />;
   const e = d.expert;
   const offered = d.requests.filter((x) => x.status === 'offered');
   const mine = d.requests.filter((x) => x.status === 'accepted');
@@ -190,6 +219,16 @@ function Dashboard({ onOut }) {
 }
 
 export default function ExpertPortal() {
-  const [inside, setInside] = useState(() => !!xpSession.get());
-  return inside ? <Dashboard onOut={() => setInside(false)} /> : <SignIn onIn={() => setInside(true)} />;
+  const [invite] = useState(takeInvite);
+  const [inside, setInside] = useState(() => !invite && !!xpSession.get());
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (!invite) return;
+    xpCall('xp.auth-verify', invite).then((r) => {
+      if (r.success) { xpSession.set(r.token); setInside(true); }
+      else setErr(r.code === 'used' || r.code === 'expired' ? 'رابط الدعوة استُخدم أو انتهى. ادخل ببريدك، ونرسل لك رمزًا.' : r.message);
+    });
+  }, []);
+  if (invite && !inside && !err) return <div className="center-load"><div className="spinner" /></div>;
+  return inside ? <Dashboard onOut={() => setInside(false)} /> : <>{err && <div className="page narrow"><div className="alert err" role="alert">{err}</div></div>}<SignIn onIn={() => setInside(true)} /></>;
 }

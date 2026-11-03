@@ -16,7 +16,7 @@ type Ctx = { ip: string | null };
 type Admin = import('./admin.ts').Admin;
 
 const shell = (title: string, body: string, preheader = '') => mailShell(title, body, { family: 'experts', preheader });
-const firstName = (n: string | null) => String(n || '').trim().split(/\s+/)[0] || '';
+import { firstName } from './hall.js';
 
 // ── طلب الانضمام (مفتوح) ──
 // بريد واحد لملف واحد، وحد لكل شبكة في الساعة، ولا يكشف الرد إن كان البريد مسجلًا
@@ -102,10 +102,19 @@ export async function adminSave(a: Admin, b: Body) {
   return { success: true, expert: saved, invited: b.send_invite !== false };
 }
 
+// الدعوة رابط دخول إلى لوحة الخبير نفسها (لا إلى تطبيق المشارك): رمز طويل صالح سبعة أيام ولمرة واحدة،
+// يمر بمسار التحقق نفسه (expert_challenges)، فيدخل المدعو ويستكمل ملفه بأسئلة الخبير ثم ينتظر الاعتماد.
+const INVITE_DAYS = 7;
+export const portalUrl = () => `${SITES.leaders}/x`;
 async function invite(e: any) {
+  const code = randomToken();
+  must(await db.from('expert_challenges').insert({ expert_id: e.id, email: e.email, code_hash: await hash(code), ip: null, expires_at: new Date(Date.now() + INVITE_DAYS * 864e5).toISOString() }));
+  const link = `${portalUrl()}#invite=${encodeURIComponent(e.email)}.${code}`;
   await sendMail(e.email, 'دعوة إلى شبكة خبراء برنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
     mailText('يسعدنا أن ندعوك للانضمام إلى شبكة خبراء برنامج القادة، لتقديم خبرتك لقادة المشاريع في مراحل البرنامج.')
-    + mailText('ستصلك تفاصيل الدخول إلى لوحة الخبير حين تُفعَّل، ومعها مواعيد الدفعة.')));
+    + mailText('ابدأ باستكمال ملفك كخبير: أدوارك، والأبعاد التي تتقنها، ونبذة عن خبرتك. نراجعه ثم نفعّل لوحتك.')
+    + mailButton(link, 'استكمل ملفك كخبير')
+    + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
   await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
 }
 
@@ -137,7 +146,8 @@ export async function adminSetStatus(a: Admin, b: Body) {
   await audit('admin', a.email, `expert.${to}`, 'experts', e.id, { status: e.status }, { status: to, reason: b.reason || null });
   if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status)) {
     sendMail(e.email, 'اعتُمدت في شبكة خبراء برنامج القادة', shell(`مرحبًا بك ${firstName(e.full_name)}`,
-      mailText('اعتُمد ملفك في شبكة خبراء برنامج القادة. ستصلك طلبات الخدمة المناسبة لأدوارك وتخصصك، ونرسل لك تفاصيل لوحة الخبير قريبًا.'))).catch(() => {});
+      mailText('اعتُمد ملفك في شبكة خبراء برنامج القادة. ستصلك طلبات الخدمة المناسبة لأدوارك وتخصصك، وتتابعها من لوحة الخبير.')
+      + mailButton(portalUrl(), 'افتح لوحة الخبير'))).catch(() => {});
   }
   if (to === 'rejected' && e.status === 'applied') {
     sendMail(e.email, 'بخصوص طلب انضمامك إلى شبكة الخبراء', shell(`شكرًا ${firstName(e.full_name)}`,
@@ -167,12 +177,16 @@ async function needFor(participantId: string, role: string, dimension: string | 
 // الخبراء بحِملهم الحالي، وهل خدموا المشارك من قبل
 async function candidates(need: any, participantId: string, tried: string[] = []) {
   const now = new Date().toISOString();
-  const [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }] = await Promise.all([
+  let [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }, { data: me }] = await Promise.all([
     db.from('experts').select('*').eq('status', 'active').contains('roles', [need.role]),
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
+    db.from('participants').select('email').eq('id', participantId).maybeSingle(),
   ]);
+  // الخبير لا يُرشَّح لنفسه حين يكون مشاركًا بالبريد نفسه
+  const self = String((me as any)?.email || '').toLowerCase();
+  if (self) experts = (experts || []).filter((e: any) => String(e.email || '').toLowerCase() !== self) as any;
   const tally = (rows: any[] | null) => {
     const m: Record<string, number> = {};
     for (const x of rows || []) m[x.expert_id] = (m[x.expert_id] || 0) + 1;
@@ -413,7 +427,9 @@ export async function rateExpert(p: any, b: Body) {
 // يدخل الخبير النشط برمز البريد. يرى نفسه وطلباته وجلساته ومشاركيه المقبولين فقط،
 // ولا يرى سعر ساعته ولا تكلفته ولا ملاحظة الإدارة (expertPublic)، ولا متوسط تقييمه قبل MIN_RATINGS.
 const SESSION_DAYS = 14;
-const portalOk = (e: any) => e && ['active', 'paused'].includes(e.status);
+// الدخول للمعتمد وللمدعو ومن قدّم طلبه؛ العمل (الطلبات والجلسات والتقييم) للمعتمد وحده
+const portalOk = (e: any) => e && ['active', 'paused', 'invited', 'applied'].includes(e.status);
+export const portalWorking = (e: any) => ['active', 'paused'].includes(e?.status);
 const SENT = { success: true, sent: true };
 
 export async function portalStart(b: Body, ctx: Ctx) {
@@ -443,7 +459,7 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
   const { data: used } = await db.from('expert_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', ch.id).is('consumed_at', null).select('id');
   if (!used?.length) throw new Fail('الرمز مستخدم من قبل', 400, 'used');
   const { data: e } = await db.from('experts').select('*').eq('id', ch.expert_id).maybeSingle();
-  if (!portalOk(e) || e.email !== email) throw new Fail('لا يوجد ملف خبير فعّال لهذا البريد', 403, 'denied');
+  if (!portalOk(e) || e.email !== email) throw new Fail('لا يوجد ملف خبير لهذا البريد', 403, 'denied');
   return { success: true, token: await openSession(e, ctx, 'code'), expert: { full_name: e.full_name } };
 }
 
@@ -454,7 +470,7 @@ export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
   const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
   const { data: e } = await db.from('experts').select('*').eq('email', id.email).maybeSingle();
-  if (!portalOk(e)) throw new Fail('لا يوجد ملف خبير معتمد لهذا الحساب. ادخل بالبريد المسجل في شبكة الخبراء', 403, 'denied');
+  if (!portalOk(e)) throw new Fail('لا يوجد ملف خبير لهذا الحساب. ادخل بالبريد المسجل في شبكة الخبراء', 403, 'denied');
   return { success: true, token: await openSession(e, ctx, 'google'), expert: { full_name: e.full_name } };
 }
 
@@ -482,6 +498,8 @@ export async function portalLogout(sessionId: string) {
 
 // كل ما يراه الخبير في لوحته، من مصادره نفسها (expert_requests وcoaching_sessions وexpert_ratings)
 export async function portalDashboard(e: any) {
+  // قبل الاعتماد: الملف وحده (يستكمله المدعو، ويراجعه من قدّم طلبه)
+  if (!portalWorking(e)) return { success: true, onboarding: true, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
@@ -514,6 +532,26 @@ export async function portalDashboard(e: any) {
       participant: x.participants?.full_name, to_rate: x.status === 'attended' && !done.has(x.id) })),
     criteria: RATE_TO_PARTICIPANT,
   };
+}
+
+// الخبير قبل اعتماده يستكمل ملفه بأسئلة الخبير نفسها في طلب الانضمام، فينتقل «مدعو» إلى «بانتظار المراجعة»
+export async function portalProfileSave(e: any, b: Body) {
+  if (portalWorking(e)) throw new Fail('ملفك معتمد؛ تعديله من الإدارة', 409);
+  const fields = cleanExpert(b);
+  if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
+  if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
+  if (!fields.dimensions.length) throw new Fail('اختر بُعدًا واحدًا على الأقل من أبعاد البرنامج');
+  if (!fields.bio || fields.bio.length < 80) throw new Fail('عرّف بخبرتك في 80 حرفًا على الأقل');
+  const phone = b.phone ? normalizePhone(b.phone) : null;
+  if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
+  const first = e.status === 'invited';
+  const saved = must(await db.from('experts').update({ ...fields, phone, status: 'applied', updated_at: new Date().toISOString() }).eq('id', e.id).select('*').single());
+  await audit('system', e.email, 'expert.profile', 'experts', e.id, { status: e.status }, { status: 'applied' });
+  if (first && CONFIG.alertEmail) {
+    sendMail(CONFIG.alertEmail, `خبير مدعو استكمل ملفه: ${fields.full_name}`, shell('ملف خبير جاهز للاعتماد',
+      mailText(`${fields.full_name}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
+  }
+  return { success: true, expert: expertPublic({ ...saved, hourly_rate: undefined, admin_note: undefined }) };
 }
 
 // رد الخبير من لوحته على عرض قائم له (الرابط في البريد يعمل أيضًا)
