@@ -38,6 +38,9 @@ import HallScreen from './screens/Hall.jsx';
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
 import { JourneySkeleton } from './ui.jsx';
 
+// «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه مع المالك (قرار 2026-11-03)
+const SHOW_KATON = false;
+
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
 const LOGO_KEY = 'mi_leaders_org_logo';
 function OrgMark({ org }) {
@@ -227,7 +230,8 @@ function Participant() {
     // ما لم يُفتح بعد يظهر مقفلًا بسبب فتحه، فيعرف المشارك ما ينتظره ولا يظن المنصة أصغر مما هي
     { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'capstone', label: 'مبادرتي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
-    { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    // «كاتون» مخفي حتى يُعاد تصميمه مع المالك (قرار 2026-11-03)
+    SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
     { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
@@ -256,7 +260,7 @@ function Participant() {
   else if (!paidFor('program')) screen = <Paywall item="program" me={me} onUpdate={accept} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
-  else if (view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
+  else if (SHOW_KATON && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
   else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;

@@ -2,6 +2,7 @@
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
+import { PasskeyBanner, PreManager } from './Journey.jsx';
 import { gateDone } from '../gates.js';
 import SponsorNote from '../SponsorNote.jsx';
 import { call, uploadFile } from '../api.js';
@@ -101,6 +102,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
     years_experience: p.years_experience ?? '', work_scope: p.work_scope || '', linkedin_url: p.linkedin_url || '', bio: p.bio || '',
   });
   const [hasCv, setHasCv] = useState(p.has_cv);
+  const [pk, setPk] = useState(me.passkeys || 0);
   const [cvName, setCvName] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -207,8 +209,16 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
         </div>
       </form>
-      {!onboarding && !p.organization_linked && !me.access?.sponsor && <SponsorCode onSaved={onSaved} />}
+      {!onboarding && !p.organization_linked && !me.access?.sponsor && !p.is_demo && <SponsorCode onSaved={onSaved} />}
       {!onboarding && me.access?.sponsor && <section className="card stack"><h3>الجهة الراعية</h3><SponsorNote access={me.access} /></section>}
+      {!onboarding && (
+        <section className="card stack">
+          <h3>الدخول بالبصمة</h3>
+          {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه للجهاز الذي تستخدمه الآن إن لم يكن منها.</p>}
+          <PasskeyBanner settings onDone={() => setPk((n) => n + 1)} />
+        </section>
+      )}
+      {!onboarding && me.participant.status !== 'completed' && <PreManager inSettings />}
       {!onboarding && <OrgVisibility />}
       {!onboarding && <Devices />}
     </div>

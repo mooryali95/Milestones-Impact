@@ -16,7 +16,7 @@ import RateExpert from './RateExpert.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
-function deviceLabel() {
+export function deviceLabel() {
   const ua = navigator.userAgent;
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';
@@ -40,7 +40,7 @@ function Ring({ value }) {
   );
 }
 
-function PasskeyBanner({ onDone }) {
+export function PasskeyBanner({ onDone, settings = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (!browserSupportsWebAuthn()) return null;
@@ -66,7 +66,7 @@ function PasskeyBanner({ onDone }) {
       </div>
       <div className="row">
         <button className="btn sm" onClick={setup} disabled={busy}>{busy ? 'لحظة…' : 'فعّله الآن'}</button>
-        <button className="link small" onClick={later}>لاحقًا</button>
+        {!settings && <button className="link small" onClick={later}>لاحقًا</button>}
       </div>
     </div>
   );
@@ -362,13 +362,17 @@ function CertificateCard() {
 
 // دعوة المدير المباشر قبل البرنامج: تقديره الآن هو خط الأساس الذي يُقارن به
 // تقديره بعد البرنامج، وهو أقوى من سؤاله لاحقًا عن "قبل" بالتذكر.
-function PreManager() {
+// تظهر في الرحلة مرة حتى يُغلقها المشارك، وتبقى دائمًا في «ملفي» (inSettings)
+const PRE_HIDE = 'mi_pre_manager_hidden';
+const preHidden = () => { try { return localStorage.getItem(PRE_HIDE) === '1'; } catch { return false; } };
+export function PreManager({ inSettings = false }) {
+  const [hidden, setHidden] = useState(() => !inSettings && preHidden());
   const [data, setData] = useState(null);
   const [f, setF] = useState({ email: '', full_name: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   useEffect(() => { call('impact.mine').then((r) => setData(r.success ? r : null)); }, []);
-  if (!data?.pre_available) return null;
+  if (hidden || !data?.pre_available) return null;
   const pre = data.raters.find((r) => r.phase === 'pre');
   if (pre?.status === 'submitted') return null;
   const send = async (e) => {
@@ -382,7 +386,8 @@ function PreManager() {
     <div className="banner mist">
       <span className="ico">👥</span>
       <div className="grow stack" style={{ gap: 8 }}>
-        <b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
+        <div className="row between"><b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
+          {!inSettings && <button type="button" className="link small" aria-label="إخفاء" onClick={() => { try { localStorage.setItem(PRE_HIDE, '1'); } catch { /* خاص */ } setHidden(true); }}>إخفاء · تجدها في «ملفي»</button>}</div>
         {pre
           ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
           : (

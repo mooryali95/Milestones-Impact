@@ -7,6 +7,16 @@ import { call } from '../api.js';
 import HallView, { TEAM_AR, TEAM_COLOR, OPT_AR, GLYPH, Q_AR } from '../../../shared/hall/HallView.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 
+// قاعة نموذجية للمعاينة فقط (لا تتصل بالخادم): جولة بفرقها الأربعة وقائدها وشخصيتها الافتراضية
+const PREVIEW_NAMES = ['سارة', 'خالد', 'نورة', 'فهد', 'ريم', 'عبدالله', 'هند', 'ماجد', 'لمى', 'سلطان', 'أمل', 'تركي'];
+const PREVIEW_TEAMS = ['lead', 'support', 'support', 'support', 'guide', 'guide', 'guide', 'eval', 'eval', 'eval', 'support', 'guide'];
+const PREVIEW = {
+  session: { stage: 'round', round: 2 }, revealed: false, answered: 7, total: 12, topic: { title_ar: 'الأثر قبل المخرجات' },
+  people: PREVIEW_NAMES.map((name, i) => ({ id: `p${i}`, name, team: i === 11 ? null : PREVIEW_TEAMS[i], persona: i === 11, leader: i === 0,
+    joined: true, present: true, hand: i === 4, answered: i % 3 !== 0, choice: null, points: null })),
+  teams: { support: { count: 4, present: 4 }, lead: { count: 1, present: 1 }, guide: { count: 3, present: 3 }, eval: { count: 3, present: 3 } },
+};
+
 const OPTS = ['question', 'research', 'true', 'false', 'idea', 'can', 'believe', 'assume'];
 
 export default function Hall({ onBack }) {
@@ -38,6 +48,11 @@ export default function Hall({ onBack }) {
       <div className="page stack">
         <h1>القاعة</h1>
         <div className="card"><p className="muted">لا قاعة مفتوحة لدفعتك الآن. حين يفتحها الخبير تجدها هنا، وتصلك دعوة منه.</p></div>
+        <section className="card stack hall-preview" aria-label="معاينة القاعة">
+          <div><p className="eyebrow">معاينة</p><h3>هكذا تبدو القاعة حين تُفتح</h3>
+            <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
+          <HallView view={PREVIEW} compact />
+        </section>
         <button className="btn ghost" onClick={onBack}>رحلتي</button>
       </div>
     );
