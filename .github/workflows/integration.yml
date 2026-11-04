@@ -1,0 +1,60 @@
+name: Integration (real Supabase)
+
+# المسارات الذهبية على خلفية حقيقية (المرحلة ي): Supabase محلي بـDocker، الترحيلات بالترتيب كما في
+# الإنتاج، الدوال تُقدَّم بـfunctions serve، ثم طلبات حقيقية تمر بالقاعدة وRLS والتوقيعات.
+# اختبارات المتصفح في ci.yml تحاكي الخادم كاملًا؛ هذا السير هو الطبقة الرقيقة التي لا تحاكي شيئًا.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  golden-paths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      API_URL: http://127.0.0.1:54321
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (Postgres, PostgREST, Storage, Auth)
+        run: supabase start -x studio,imgproxy,logflare,vector,realtime,mailpit,inbucket,supavisor 2>&1 | tail -20
+
+      - name: Apply migrations in order (as production)
+        run: bash scripts/integration/apply-migrations.sh
+
+      - name: Serve edge functions
+        run: |
+          supabase functions serve --env-file supabase/functions/ci.env --no-verify-jwt > /tmp/functions.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null -X OPTIONS "$API_URL/functions/v1/leaders-api" && break
+            sleep 2
+          done
+
+      - name: Golden paths
+        run: |
+          eval "$(supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY)=' || true)"
+          export ANON_KEY SERVICE_ROLE_KEY
+          node scripts/integration/golden.mjs
+
+      - name: Function logs
+        if: always()
+        run: tail -120 /tmp/functions.log || true
+
+      - name: Stop
+        if: always()
+        run: supabase stop --no-backup || true

@@ -38,6 +38,9 @@ export const CONFIG = {
   codeMinutes: 15,
 };
 
+// سران إلزاميان: بدونهما لا شيء يعمل، والفشل عند الإقلاع أوضح من فشل صامت لاحقًا (docs/SECRETS.md)
+if (!CONFIG.serviceKey || !CONFIG.pepper) throw new Error('leaders-api: SUPABASE_SERVICE_ROLE_KEY وLEADERS_TOKEN_PEPPER إلزاميان، انظر docs/SECRETS.md');
+
 export const db = createClient(CONFIG.url, CONFIG.serviceKey, {
   db: { schema: 'leaders' },
   auth: { persistSession: false },

@@ -8,7 +8,7 @@
 //   غير ذلك           ← الرحلة
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, useCallback, useEffect, useState } from 'react';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -16,18 +16,18 @@ import SignIn from './screens/SignIn.jsx';
 import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
-import Handbook from './screens/Handbook.jsx';
-import LabScreen from './screens/Lab.jsx';
-import OrgPortal from './screens/OrgPortal.jsx';
-import Verify from './screens/Verify.jsx';
+const Handbook = lazy(() => import('./screens/Handbook.jsx'));
+const LabScreen = lazy(() => import('./screens/Lab.jsx'));
+const OrgPortal = lazy(() => import('./screens/OrgPortal.jsx'));
+const Verify = lazy(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
-import Impact from './screens/Impact.jsx';
-import Rater from './screens/Rater.jsx';
-import Sponsor from './screens/Sponsor.jsx';
-import Outcome from './screens/Outcome.jsx';
-import ExpertApply from './screens/ExpertApply.jsx';
-import ExpertOffer from './screens/ExpertOffer.jsx';
-import ExpertPortal from './screens/ExpertPortal.jsx';
+const Impact = lazy(() => import('./screens/Impact.jsx'));
+const Rater = lazy(() => import('./screens/Rater.jsx'));
+const Sponsor = lazy(() => import('./screens/Sponsor.jsx'));
+const Outcome = lazy(() => import('./screens/Outcome.jsx'));
+const ExpertApply = lazy(() => import('./screens/ExpertApply.jsx'));
+const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
+const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall from './screens/Paywall.jsx';
@@ -35,14 +35,15 @@ import { gateDone, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import SponsorNote from './SponsorNote.jsx';
-import Capstone from './screens/Capstone.jsx';
-import Katon from './screens/Katon.jsx';
-import HallScreen from './screens/Hall.jsx';
+const Capstone = lazy(() => import('./screens/Capstone.jsx'));
+const Katon = lazy(() => import('./screens/Katon.jsx'));
+const HallScreen = lazy(() => import('./screens/Hall.jsx'));
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
-import Legal from './screens/Legal.jsx';
+const Legal = lazy(() => import('./screens/Legal.jsx'));
 import Consent from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
+// الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
 
 // «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
 const SHOW_KATON = KATON_ENABLED;

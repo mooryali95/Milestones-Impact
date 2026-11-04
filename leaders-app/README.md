@@ -1,22 +1,27 @@
 # تطبيق القادة · leaders.sunkvalue.com
 
-تطبيق المشارك في برنامج إدارة المشروعات للقادة: التسجيل بالبريد (رابط ورمز) ومفتاح المرور، الملف الشخصي، تحديد المستوى في الأبعاد الثلاثة، ثم الرحلة بمراحلها وقوائم تحققها. صفحة البرنامج التسويقية تبقى في `home/leaders/` على mi.sunkvalue.com/leaders.
+تطبيق المشارك في برنامج إدارة المشروعات للقادة: الدخول بالبريد (رمز أو رابط) أو Google أو مفتاح المرور، الملف، تحديد المستوى في الأبعاد الثلاثة، ثم الرحلة بمراحلها (الكتيب، النماذج، المختبر، المبادرة، القاعة، الأثر، التقييم الختامي). في المسارات نفسها بوابة الجهة (`/org`)، وبوابة الخبير (`/x`)، والتحقق من الشهادات (`/verify`)، والوثائق القانونية (`/legal`). صفحة البرنامج التسويقية في `home/leaders/`.
 
 ## التشغيل محليًا
 
-```
+```bash
 npm run leaders:dev     # http://localhost:5174
-npm run leaders:build   # يكتب في leaders/
 ```
 
-الخلفية دالة `supabase/functions/leaders-api`، ومنطقها الصافي في `logic.js` مختبر في `src/logic.test.js` (ضمن `npm test`).
+```bash
+npm run leaders:build   # يكتب في leaders/ (مُودع؛ CI يرفض اختلافه عن المصدر)
+```
 
-## النشر على Cloudflare Pages (مشروع mi-leaders)
+الخلفية دالة `supabase/functions/leaders-api`. المنطق النقي في ملفات `.js` هناك (`logic.js` وأخواتها) مختبر بـvitest ضمن `npm test`؛ والأجزاء التي تحتاج Deno (توقيع Google، مفاتيح المرور، توقيع Creem) في `*_test.ts` بـ`deno test`.
 
-المشروع ينشر مجلد `leaders/` في جذر المستودع كما هو (Build output directory: `leaders`، بلا أمر بناء)، وهو ناتج بناء هذا التطبيق مُودعًا في Git. بعد أي تعديل في `leaders-app/` شغّل `npm run leaders:build` وأودع مجلد `leaders/` مع التعديل، والفحص المستمر يفشل إن نسيت.
+## البناء والنشر
 
-## الخلفية: خطوات مرة واحدة
+- الشاشات الثقيلة تُحمَّل كسولًا (`lazy` في `src/App.jsx`) وقطعة React مستقلة (`vite.config.js`)؛ عامل الخدمة `public/sw.js` يسمّي مخزنه ببصمة البناء فيتجدد مع كل نشر.
+- الخطوط مستضافة ذاتيًا في `public/fonts/` (لا طلب إلى Google Fonts)؛ CSP في `public/_headers`.
+- النشر عبر CI: بعد الدمج في `main` تُنشر الدوال ثم يُدفع فرع `release` فتبني Cloudflare Pages (`mi-leaders`، مجلد الإخراج `leaders`). التفاصيل والتراجع في `RUNBOOK.md`.
 
-1. ترحيلات SQL بالترتيب: `server/leaders.sql` ثم `leaders-002-assessment.sql` ثم `leaders-003-journey.sql` ثم `leaders-004-storage.sql` ثم `leaders-005-handbook.sql` ثم `leaders-006-journey-content.sql` ثم `leaders-007-tracks.sql` (المسارات الـ27: تركيبة مستويات الأطر الثلاثة، رمزها مثل M1I1L2) ثم `leaders-008-placement-model.sql` (معيار التسكين المركّب) ثم `leaders-009-organizations.sql` (الجهات الشريكة ورابط دعوة كل جهة) ثم `leaders-010-org-attribution.sql` (النسب التلقائي: الرابط القصير `/j/<invite_code>/<حملة>`، ونطاقات الجهة، وذاكرة 30 يومًا) ثم `leaders-011-book-and-models.sql` (الكتاب التفاعلي: التأمل والاختبار لكل باب، والنماذج التعليمية وتسليماتها وتقييمها، وسجل النقاط والرتب).
-2. أسرار Edge Functions: `LEADERS_TOKEN_PEPPER` (نص عشوائي طويل، إلزامي). اختياري: `LEADERS_APP_URL` و`LEADERS_RP_ID` و`LEADERS_ORIGINS` و`LEADERS_MAIL_FROM`.
-3. نشر الدالة: من لوحة Supabase (Edge Functions ثم Via Editor) بلصق ملف واحد يُولَّد بالأمر `deno bundle --external 'npm:*' -o leaders-api-index.ts supabase/functions/leaders-api/index.ts`، أو عبر CLI: `supabase functions deploy leaders-api`.
+## الخلفية: الإعداد
+
+1. **القاعدة:** الترحيلات في `supabase/migrations/` بالترتيب (الملفات القديمة في `server/` أرشيف لا يُشغَّل، انظر `server/ARCHIVE.md`). سجل ما طُبّق في `leaders.schema_migrations`، وما لم يُطبَّق يظهر في لوحة الإدارة ← النظرة العامة.
+2. **الأسرار:** `LEADERS_TOKEN_PEPPER` إلزامي (الدالة ترفض الإقلاع بدونه)، و`RESEND_API_KEY` للبريد، وبقية المتغيرات واختياريتها في `docs/SECRETS.md`.
+3. **الدالة:** تُنشر من CI (`ci.yml` ← deploy) أو يدويًا من Actions ← «Deploy functions (manual)». محليًا: `supabase start` ثم `supabase functions serve --env-file supabase/functions/ci.env --no-verify-jwt`، والمسارات الذهبية بـ`node scripts/integration/golden.mjs`.

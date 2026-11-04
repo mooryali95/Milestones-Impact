@@ -10,6 +10,7 @@
 // الحي (ليليًا في schema-check.yml) يكشف انحراف الإنتاج عن المستودع.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { DATA_ONLY } from './data-only.mjs';
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
 const OUT = new URL('../../supabase/schema/baseline.sql', import.meta.url);
@@ -40,10 +41,7 @@ const PRELUDE = `create role anon; create role authenticated; create role servic
   create function auth.uid() returns uuid language sql as 'select null::uuid';
   create function auth.role() returns text language sql as 'select null::text';
   create function auth.jwt() returns jsonb language sql as 'select null::jsonb';`;
-// ترحيلات بيانات محضة لا تغيّر البنية وتشترط بيانات حية (تفشل على قاعدة فارغة)؛ تُتخطى في البناء المحلي
-const DATA_ONLY = new Set([
-  '20261102100100_leaders_activate_v5',   // يفعّل أدوات v5 ويشترط وجود فقراتها
-]);
+// ترحيلات بيانات محضة تُتخطى في البناء المحلي: القائمة في data-only.mjs (مشتركة مع سير التكامل)
 async function localQuery() {
   const { PGlite } = await import('@electric-sql/pglite');
   const db = new PGlite();

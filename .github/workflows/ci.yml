@@ -62,8 +62,13 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Typecheck edge functions
-        run: deno check --node-modules-dir=auto supabase/functions/leaders-api/index.ts supabase/functions/creem-webhook/index.ts supabase/functions/leaders-hooks/index.ts
+      - name: Typecheck all edge functions
+        run: deno check --node-modules-dir=auto supabase/functions/*/index.ts
+
+      # اختبارات Deno للوحدات التي لا تختبرها vitest: توقيع Google، مفاتيح المرور، توقيع Creem
+      - name: Deno unit tests
+        # --node-modules-dir=none: لا يكتب في node_modules (الكتابة فيه تكسر Playwright بنسختين من المكتبة)
+        run: deno test --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/
 
       - name: Test
         run: npm test

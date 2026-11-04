@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
-  verifyRegistrationResponse,
+  verifyRegistrationResponse, type WebAuthnCredential,
 } from 'npm:@simplewebauthn/server@13.3.3';
 import { audit, CONFIG, db, Fail, fromBytea, must, toBytea } from './core.ts';
 import { issueSession, mePayload } from './participant.ts';
@@ -27,25 +27,51 @@ async function takeChallenge(challenge: string, purpose: string) {
   return data[0];
 }
 
-function challengeOf(response: any) {
+// ── الجزء النقي (بلا قاعدة): يُختبر في passkeys_test.ts ──
+// التحدي من رد المتصفح: clientDataJSON بترميز base64url
+export function challengeOf(response: any) {
   try {
     const b64 = String(response?.response?.clientDataJSON || '').replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(b64)).challenge as string;
+    const c = JSON.parse(atob(b64)).challenge;
+    if (typeof c !== 'string' || !c) throw new Error('no challenge');
+    return c as string;
   } catch { throw new Fail('رد غير صالح'); }
 }
-
-export async function registerOptions(p: any) {
-  const existing = must(await db.from('passkeys').select('credential_id, transports').eq('participant_id', p.id)) ?? [];
-  const options = await generateRegistrationOptions({
+// خيارات التسجيل: مفتاح مقيم بالنطاق المضبوط، باستثناء المفاتيح المسجلة للمشارك
+export function registrationOptionsFor(p: { id: string; email: string; full_name: string }, existing: { credential_id: string; transports?: string[] | null }[]) {
+  return generateRegistrationOptions({
     rpName: CONFIG.rpName,
     rpID: CONFIG.rpId,
     userName: p.email,
     userDisplayName: p.full_name,
     userID: new TextEncoder().encode(p.id),
     attestationType: 'none',
-    excludeCredentials: existing.map((c: any) => ({ id: c.credential_id, transports: c.transports || undefined })),
+    excludeCredentials: existing.map((c) => ({ id: c.credential_id, transports: (c.transports || undefined) as any })),
     authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
   });
+}
+export const authenticationOptionsFor = () => generateAuthenticationOptions({ rpID: CONFIG.rpId, userVerification: 'preferred' });
+// التحقق من ردّي التسجيل والدخول بالأصول والنطاق المضبوطين؛ أي خلل في الرد = رسالة واحدة للمستخدم
+export async function verifyRegistration(response: any, expectedChallenge: string) {
+  try {
+    return await verifyRegistrationResponse({ response, expectedChallenge, expectedOrigin: CONFIG.origins, expectedRPID: CONFIG.rpId });
+  } catch (e) {
+    console.error(e);
+    throw new Fail('تعذّر التحقق من مفتاح المرور');
+  }
+}
+export async function verifyAuthentication(response: any, expectedChallenge: string, credential: WebAuthnCredential) {
+  try {
+    return await verifyAuthenticationResponse({ response, expectedChallenge, expectedOrigin: CONFIG.origins, expectedRPID: CONFIG.rpId, credential });
+  } catch (e) {
+    console.error(e);
+    throw new Fail('تعذّر التحقق من مفتاح المرور');
+  }
+}
+
+export async function registerOptions(p: any) {
+  const existing = must(await db.from('passkeys').select('credential_id, transports').eq('participant_id', p.id)) ?? [];
+  const options = await registrationOptionsFor(p, existing as any[]);
   await saveChallenge(options.challenge, 'register', p.id);
   return { success: true, options };
 }
@@ -53,15 +79,7 @@ export async function registerOptions(p: any) {
 export async function registerVerify(p: any, b: Body) {
   const ch = await takeChallenge(challengeOf(b.response), 'register');
   if (ch.participant_id !== p.id) throw new Fail('تحدٍّ غير مطابق');
-  let v;
-  try {
-    v = await verifyRegistrationResponse({
-      response: b.response, expectedChallenge: ch.challenge, expectedOrigin: CONFIG.origins, expectedRPID: CONFIG.rpId,
-    });
-  } catch (e) {
-    console.error(e);
-    throw new Fail('تعذّر التحقق من مفتاح المرور');
-  }
+  const v = await verifyRegistration(b.response, ch.challenge);
   if (!v.verified || !v.registrationInfo) throw new Fail('تعذّر التحقق من مفتاح المرور');
   const info = v.registrationInfo;
   must(await db.from('passkeys').insert({
@@ -80,7 +98,7 @@ export async function registerVerify(p: any, b: Body) {
 
 // الدخول بمفتاح المرور: بلا بريد، المتصفح يعرض المفاتيح المحفوظة للنطاق
 export async function authOptions() {
-  const options = await generateAuthenticationOptions({ rpID: CONFIG.rpId, userVerification: 'preferred' });
+  const options = await authenticationOptionsFor();
   await saveChallenge(options.challenge, 'authenticate', null);
   return { success: true, options };
 }
@@ -89,16 +107,7 @@ export async function authVerify(b: Body, ctx: { ip: string | null; ua: string |
   const ch = await takeChallenge(challengeOf(b.response), 'authenticate');
   const pk = must(await db.from('passkeys').select('*').eq('credential_id', String(b.response?.id || '')).maybeSingle());
   if (!pk) throw new Fail('مفتاح المرور غير معروف، ادخل بالبريد', 404, 'unknown_passkey');
-  let v;
-  try {
-    v = await verifyAuthenticationResponse({
-      response: b.response, expectedChallenge: ch.challenge, expectedOrigin: CONFIG.origins, expectedRPID: CONFIG.rpId,
-      credential: { id: pk.credential_id, publicKey: fromBytea(pk.public_key), counter: Number(pk.sign_count), transports: pk.transports || undefined },
-    });
-  } catch (e) {
-    console.error(e);
-    throw new Fail('تعذّر التحقق من مفتاح المرور');
-  }
+  const v = await verifyAuthentication(b.response, ch.challenge, { id: pk.credential_id, publicKey: fromBytea(pk.public_key), counter: Number(pk.sign_count), transports: pk.transports || undefined } as WebAuthnCredential);
   if (!v.verified) throw new Fail('تعذّر التحقق من مفتاح المرور');
   await db.from('passkeys').update({ sign_count: v.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq('id', pk.id);
   const p = must(await db.from('participants').select('*').eq('id', pk.participant_id).single());

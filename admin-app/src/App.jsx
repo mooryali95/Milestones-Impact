@@ -2,16 +2,16 @@
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
 // السياقات: طلبات التواصل وتطبيق القادة ومصفوفة التأثير وزيارات الموقع.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, useCallback, useEffect, useState } from 'react';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
 import { UIProvider } from './ui.jsx';
 import Login from './screens/Login.jsx';
-import Settings from './screens/Settings.jsx';
-import Contacts from './screens/Contacts.jsx';
-import Leaders from './screens/Leaders.jsx';
-import Visits from './screens/Visits.jsx';
-import Matrix from './screens/Matrix.jsx';
+const Settings = lazy(() => import('./screens/Settings.jsx'));
+const Contacts = lazy(() => import('./screens/Contacts.jsx'));
+const Leaders = lazy(() => import('./screens/Leaders.jsx'));
+const Visits = lazy(() => import('./screens/Visits.jsx'));
+const Matrix = lazy(() => import('./screens/Matrix.jsx'));
 import { navigate, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';

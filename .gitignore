@@ -28,3 +28,7 @@ playwright-report/
 
 # ناتج محلي لفحص deno خارج CI؛ CI يحل الاعتماديات بنفسه
 deno.lock
+
+# Supabase المحلي (supabase start)
+supabase/.temp/
+supabase/.branches/

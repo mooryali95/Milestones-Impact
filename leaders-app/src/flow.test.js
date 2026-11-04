@@ -46,7 +46,7 @@ describe('حراس المصدر', () => {
   });
   it('حاجز الأخطاء يلف التطبيق ويُعاد التحميل عند فشل استيراد قطعة بعد النشر', () => {
     const main = read('main.jsx');
-    expect(main).toMatch(/<ErrorBoundary><App \/><\/ErrorBoundary>/);
+    expect(main).toMatch(/<ErrorBoundary><Suspense fallback=\{<Loading \/>\}><App \/><\/Suspense><\/ErrorBoundary>/);
     expect(main).toMatch(/vite:preloadError/);
   });
   it('القاعة لا تدور بلا نهاية عند فشل أول تحميل', () => {
