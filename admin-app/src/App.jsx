@@ -2,7 +2,7 @@
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
 // السياقات: طلبات التواصل وتطبيق القادة ومصفوفة التأثير وزيارات الموقع.
-import React, { lazy, useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
 import { UIProvider } from './ui.jsx';
@@ -59,10 +59,16 @@ function Dashboard({ user, onUser, onLogout }) {
         ))}
       </nav>
 
-      {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+      {/* حد التعليق هنا لا في main.jsx وحده: الإطار (الترويسة والسياقات والبحث الشامل) يظهر فورًا
+          ويستقبل Ctrl+K، وتنتظر منطقة الشاشة وحدها قطعتها الكسولة */}
+      <Suspense fallback={<div className="la-loading">جارٍ التحميل…</div>}>
+        {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+      </Suspense>
 
       <Palette />
-      {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
+      <Suspense fallback={null}>
+        {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
+      </Suspense>
     </div>
   );
 }
