@@ -27,4 +27,6 @@ for f in $(ls supabase/migrations/*.sql | sort); do
   psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$f" > /dev/null
   n=$((n + 1))
 done
+# PostgREST بدأ على مخطط leaders فارغًا (supabase/seeds/leaders-schema.sql)؛ يعيد قراءة البنية بعد امتلائها
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "notify pgrst, 'reload schema';"
 echo "applied $n migrations"

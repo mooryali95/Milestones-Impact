@@ -48,6 +48,8 @@ describe('CI والاختبارات', () => {
     const toml = read('supabase/config.toml');
     expect(toml).toMatch(/schemas = \["public", "graphql_public", "leaders"\]/);
     expect(toml).toMatch(/\[db\.migrations\]\nenabled = false/);   // البدء لا يطبّق الترحيلات: اللقطة أولًا ثم الترحيلات بالترتيب
+    expect(toml).toMatch(/\[db\.seed\]\nenabled = true\nsql_paths = \["\.\/seeds\/leaders-schema\.sql"\]/);   // المخطط المعلن لـPostgREST يوجد قبل بدئه
+    expect(read('supabase/seeds/leaders-schema.sql')).toMatch(/^create schema if not exists leaders;$/m);
     const apply = read('scripts/integration/apply-migrations.sh');
     const at = (needle) => { const i = apply.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
     expect(at('supabase/schema/baseline.sql')).toBeLessThan(at('scripts/integration/seed-reference.sql'));

@@ -15,13 +15,15 @@ max_rows = 1000
 port = 54322
 major_version = 15
 
-# البدء لا يطبّق الترحيلات ولا البذرة: الترحيلات الأولى تفترض جداول سبقتها (عهد server/*.sql)،
+# البدء لا يطبّق الترحيلات: الترحيلات الأولى تفترض جداول سبقتها (عهد server/*.sql)،
 # فسير التكامل يطبّق اللقطة المودعة أولًا ثم الترحيلات بالترتيب (scripts/integration/apply-migrations.sh)
 [db.migrations]
 enabled = false
 
+# البذرة تنشئ مخطط leaders فارغًا قبل بدء الحاويات، وإلا رفض PostgREST البدء لأن المخطط معلن له أعلاه
 [db.seed]
-enabled = false
+enabled = true
+sql_paths = ["./seeds/leaders-schema.sql"]
 
 [studio]
 enabled = false
