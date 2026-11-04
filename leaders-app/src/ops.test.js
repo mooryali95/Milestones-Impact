@@ -51,5 +51,11 @@ describe('بوابة النشر', () => {
     expect(read('.github/workflows/probe.yml')).toMatch(/system\.ping/);
     expect(read('.github/workflows/restore-drill.yml')).toMatch(/pg_restore[\s\S]*leaders\.participants/);
     expect(read('.github/workflows/backup.yml')).toMatch(/backup-storage\.mjs/);
+    // الترحيلات على الحية بقرار المالك: سير يدوي بالأسماء، لا يُشغَّل بغير dispatch
+    const mig = read('.github/workflows/migrate.yml');
+    expect(mig).toMatch(/workflow_dispatch/);
+    expect(mig).not.toMatch(/\n  push:|\n  pull_request:|schedule:/);
+    expect(mig).toMatch(/apply-migration\.mjs \$MIGRATIONS/);
+    expect(read('scripts/db/apply-migration.mjs')).toMatch(/schema_migrations where name = /);
   });
 });
