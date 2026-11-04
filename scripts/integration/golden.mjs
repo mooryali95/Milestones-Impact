@@ -15,7 +15,8 @@ const ORIGIN = ENV.LEADERS_ORIGINS.split(',')[0];
 
 let fails = 0;
 const ok = (cond, msg, extra = '') => { console.log(`${cond ? '✓' : '✗'} ${msg}${cond ? '' : ` ${extra}`}`); if (!cond) fails += 1; };
-const sql = (q) => execFileSync('psql', ['-At', '-v', 'ON_ERROR_STOP=1', DB, '-c', q]).toString().trim();
+// -q: بلا وسم الأمر (INSERT 0 1) بعد الصفوف، وإلا التصق بناتج returning
+const sql = (q) => execFileSync('psql', ['-At', '-q', '-v', 'ON_ERROR_STOP=1', DB, '-c', q]).toString().trim();
 async function call(action, body = {}, token = null) {
   const r = await fetch(`${API}/functions/v1/leaders-api`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(process.env.ANON_KEY ? { apikey: process.env.ANON_KEY, Authorization: `Bearer ${process.env.ANON_KEY}` } : {}) },

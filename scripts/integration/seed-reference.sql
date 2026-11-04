@@ -5,6 +5,20 @@
 -- الترحيلات اللاحقة تغيّره هنا أيضًا بالترتيب. المحتوى الطويل (الكتيب، نصوص المسارات) ليس هنا لأنه
 -- خارج المسارات الذهبية. لا يُشغَّل على الإنتاج؛ يستدعيه scripts/integration/apply-migrations.sh فقط.
 
+-- صلاحيات مخطط leaders (server/leaders.sql): اللقطة لا تحمل الصلاحيات (introspect.sql يستبطن البنية لا ACL)،
+-- والوصول عبر service_role وحده؛ والافتراضية تغطي ما تنشئه الترحيلات بعد هذا الملف بالدور نفسه (postgres)
+revoke all on schema leaders from public, anon, authenticated;
+grant usage on schema leaders to service_role;
+revoke all on all tables    in schema leaders from public, anon, authenticated;
+revoke all on all sequences in schema leaders from public, anon, authenticated;
+revoke all on all functions in schema leaders from public, anon, authenticated;
+grant all on all tables    in schema leaders to service_role;
+grant all on all sequences in schema leaders to service_role;
+alter default privileges in schema leaders revoke all on tables    from public, anon, authenticated;
+alter default privileges in schema leaders revoke all on functions from public, anon, authenticated;
+alter default privileges in schema leaders grant all on tables    to service_role;
+alter default privileges in schema leaders grant all on sequences to service_role;
+
 -- أدوار لوحة الإدارة (العقد في admin-api: super_admin | admin | viewer)
 insert into public.admin_roles (id, name_ar, description) values
   ('super_admin', 'مالك',  'كل الصلاحيات وإدارة المدراء'),

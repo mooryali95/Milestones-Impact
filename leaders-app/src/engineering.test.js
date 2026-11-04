@@ -54,7 +54,10 @@ describe('CI والاختبارات', () => {
     const at = (needle) => { const i = apply.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
     expect(at('supabase/schema/baseline.sql')).toBeLessThan(at('scripts/integration/seed-reference.sql'));
     expect(at('scripts/integration/seed-reference.sql')).toBeLessThan(at('for f in $(ls supabase/migrations/*.sql | sort)'));
-    expect(read('scripts/integration/seed-reference.sql')).toMatch(/insert into leaders\.placement_model \(id\) values \(1\)/);
+    const seed = read('scripts/integration/seed-reference.sql');
+    expect(seed).toMatch(/insert into leaders\.placement_model \(id\) values \(1\)/);
+    expect(seed).toMatch(/grant usage on schema leaders to service_role;/);   // اللقطة بلا صلاحيات؛ الوصول عبر service_role وحده
+    expect(read('scripts/integration/golden.mjs')).toMatch(/\['-At', '-q', '-v', 'ON_ERROR_STOP=1'/);
     for (const f of ['google_test.ts', 'passkeys_test.ts', 'payments_test.ts']) expect(statSync(join(root, `supabase/functions/leaders-api/${f}`)).size).toBeGreaterThan(500);
     expect(read('scripts/db/snapshot.mjs')).toContain("import { DATA_ONLY } from './data-only.mjs'");
   });
