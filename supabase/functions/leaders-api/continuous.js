@@ -8,9 +8,11 @@
 //   milestones ← participant_milestones.scores (معيار وصفي 1..4) عند اعتماد المعلم، بخريطة RUBRIC_PCT
 //   lab        ← lab_attempts.pct: متوسط أول محاولة منتهية وأفضلها في كل أداة (لا الأفضل وحدها)
 //   katon      ← معطّل حتى يُعاد تصميمه
+//   peer       ← peer_answers بحالة confirmed/corrected: إسهام للزملاء أكّده الخبير (كامل) أو صحّحه (جزئي)، بخريطة PEER_PCT
 // تقدير الخبراء بعد الجلسات (انخراط) يُعرض منفصلًا ولا يدخل المؤشر (الملحق 5 §3.2).
 // لا يدخل المصدر المؤشر قبل حد أدنى من الأحداث (min_events، وللاختبارات min_quiz_items سؤالًا) (§3.4).
 import { CONTINUOUS_SOURCE_AR, ENGAGEMENT_AR, KATON_ENABLED, MILESTONE_RUBRIC, RATING_PCT, RUBRIC_PCT } from './labels.js';
+import { peerEvents } from './peer.js';
 
 const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -38,8 +40,8 @@ export const rubricPct = (scores) => {
 export const ratingPct = (n) => (n >= 1 && n <= 5 ? RATING_PCT[Math.round(n)] : null);
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
-/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[], weights?: Record<string, number> | null, min_events?: number, min_quiz_items?: number }} [src] */
-export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], lab = [], katon = [], weights = null, min_events = CONTINUOUS_DEFAULTS.min_events, min_quiz_items = CONTINUOUS_DEFAULTS.min_quiz_items } = {}) {
+/** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[], peer?: any[], weights?: Record<string, number> | null, min_events?: number, min_quiz_items?: number }} [src] */
+export function continuousAssessment({ quizzes = [], models = [], ratings = [], milestones = [], lab = [], katon = [], peer = [], weights = null, min_events = CONTINUOUS_DEFAULTS.min_events, min_quiz_items = CONTINUOUS_DEFAULTS.min_quiz_items } = {}) {
   const events = [];
   let quizItems = 0, quizRight = 0;
   for (const q of quizzes) if (q.quiz_total > 0) {
@@ -60,6 +62,7 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
   }
   for (const s of byItem.values()) events.push({ source: 'lab', at: s.at, pct: Math.round((s.first + s.best) / 2), label: s.title || 'أداة في المختبر', first: Math.round(s.first), best: Math.round(s.best) });
   if (KATON_ENABLED) for (const k of katon) if (k.pct != null) events.push({ source: 'katon', at: k.at, pct: k.pct, label: k.title });
+  for (const e of peerEvents(peer)) events.push({ source: 'peer', ...e });
   events.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
   const components = Object.keys(CONTINUOUS_SOURCE_AR).filter((key) => KATON_ENABLED || key !== 'katon').map((key) => {
     const ev = events.filter((e) => e.source === key);
@@ -96,9 +99,9 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
 }
 
 function reasonFor(key, ev, value, quizItems) {
-  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', milestones: 'لم يُقيَّم له معلم بالمعيار بعد', lab: 'لم يُتم أداة في المختبر بعد', katon: 'لم يُتم موضوعًا في «كاتون» بعد' }[key];
+  if (!ev.length) return { quizzes: 'لم يُجب عن اختبار باب بعد', models: 'لم يُقيَّم له نموذج بعد', milestones: 'لم يُقيَّم له معلم بالمعيار بعد', lab: 'لم يُتم أداة في المختبر بعد', katon: 'لم يُتم موضوعًا في «كاتون» بعد', peer: 'لم يؤكّد الخبير له إسهامًا في طلبات زملائه بعد' }[key];
   const n = ev.length;
   const low = [...ev].sort((a, b) => a.pct - b.pct)[0];
-  const base = { quizzes: `الصواب في ${quizItems} سؤالًا عبر ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, milestones: `متوسط ${n} معلم بالمعيار`, lab: `متوسط أول محاولة وأفضلها في ${n} أداة`, katon: `يقين صادق في ${n} موضوع` }[key];
+  const base = { quizzes: `الصواب في ${quizItems} سؤالًا عبر ${n} اختبار`, models: `متوسط ${n} نموذج مقيَّم`, milestones: `متوسط ${n} معلم بالمعيار`, lab: `متوسط أول محاولة وأفضلها في ${n} أداة`, katon: `يقين صادق في ${n} موضوع`, peer: `${n} إسهام أكّده الخبير أو صحّحه` }[key];
   return value < 60 && n > 1 ? `${base}؛ أضعفها «${low.label}» (${low.pct}٪)` : base;
 }

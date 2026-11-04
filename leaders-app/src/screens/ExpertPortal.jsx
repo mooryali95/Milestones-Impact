@@ -4,13 +4,17 @@
 // يدخل الخبير المعتمد برمز البريد. يرى طلباته ومشاركيه المقبولين وجلساته
 // وساعاته وتقييمه (بعد خمسة تقييمات)، ويقيّم المشارك، ويصدر شهادة ساعات خبرته.
 // لا يرى سعر ساعته ولا تكلفته ولا ملاحظات الإدارة: الخادم لا يرسلها أصلًا.
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import AccountSwitch from '../AccountSwitch.jsx';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import ExpertApply from './ExpertApply.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
+import ExpertFile from './ExpertFile.jsx';
+import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
+
+const HALL_ACTION = { state: 'xp.hall', open: 'xp.hall-open', step: 'xp.hall-step', split: 'xp.hall-split', assign: 'xp.hall-assign', close: 'xp.hall-close' };
 
 // رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة ويُمسح من الشريط، ثم يُتحقق منه بمسار الرمز نفسه
 function takeInvite() {
@@ -167,7 +171,88 @@ function AdvisorReviews() {
   );
 }
 
+// مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
+function MyParticipants({ onOpen }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { xpCall('xp.participants').then(setD); }, []);
+  return (
+    <section className="card stack" aria-labelledby="xp-mine">
+      <h3 id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h3>
+      {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
+        : d.items.map((x) => (
+          <div key={x.id} className="xpp-person">
+            <div className="row between"><b>{x.name}</b>
+              <span className="row">{x.needs > 0 && <span className="chip warn">{x.needs} بانتظارك</span>}{x.late > 0 && <span className="chip bad">{x.late} معلم متأخر</span>}
+                <button className="btn ghost sm" onClick={() => onOpen(x.id)}>افتح الملف</button></span></div>
+            <small className="muted">{[x.cohort ? `دفعة ${x.cohort}` : null, x.advisor ? 'مستشارها' : x.role_ar, x.level_ar ? `${x.level_ar}${x.approved ? '' : ' (مبدئي)'}` : 'بلا قياس بعد', x.stage ? `المرحلة: ${x.stage}` : null, `${x.progress}٪`, x.continuous != null ? `المستمر ${x.continuous}٪` : null].filter(Boolean).join(' · ')}</small>
+          </div>
+        ))}
+    </section>
+  );
+}
+
+// طلبات الأقران في دفعات الخبير (المرحلة 8): يؤكّد أو يصحّح أو يخفي إجابات الزملاء، ويجيب بنفسه
+function PeerQueue({ say }) {
+  const [d, setD] = useState(null);
+  const [note, setNote] = useState({});
+  const [reply, setReply] = useState({});
+  const [busy, setBusy] = useState(false);
+  const load = () => xpCall('xp.peer-list').then(setD);
+  useEffect(() => { load(); }, []);
+  if (!d?.success || !d.advisor) return null;
+  const act = async (action, body, ok) => {
+    setBusy(true);
+    const r = await xpCall(action, body);
+    setBusy(false);
+    if (!r.success) return say(r.message);
+    say(ok); setD(r);
+  };
+  const open = d.items.filter((x) => x.status !== 'confirmed');
+  return (
+    <section className="card stack" aria-labelledby="xp-peer">
+      <h3 id="xp-peer">طلبات الأقران <small className="muted">· {d.pending} إجابة بانتظار تأكيدك</small></h3>
+      <p className="small muted">{d.cohorts.map((c) => `${c.name}: ${c.supervision_ar}`).join(' · ')}. ما تؤكّده يُحسب لصاحبه في التقييم المستمر، وما تصحّحه يُحسب جزئيًا بملاحظتك.</p>
+      {!open.length && <p className="muted small">لا طلبات مفتوحة الآن.</p>}
+      {open.map((r) => (
+        <div key={r.id} className="xpp-torate">
+          <div><b>{r.author}</b> <small className="muted">· {r.cohort} · {r.source_ar} ← {r.target_team_ar} · {fmt(r.at)}</small><p className="small">«{r.text}»</p></div>
+          {r.answers.filter((a) => a.status !== 'hidden').map((a) => (
+            <div key={a.id} className="xf-answer"><span><b>{a.author}</b>: «{a.text}» <small className="muted">{a.status_ar}</small></span>
+              {a.status === 'pending' && <span className="row">
+                <input className="input" aria-label="ملاحظة التصحيح" placeholder="ملاحظة (إلزامية للتصحيح)" value={note[a.id] || ''} onChange={(e) => setNote({ ...note, [a.id]: e.target.value })} />
+                <button className="btn sm" disabled={busy} onClick={() => act('xp.peer-review', { answer_id: a.id, status: 'confirmed', note: note[a.id] || '' }, 'أُكّدت الإجابة ونُسبت لصاحبها.')}>أكّد</button>
+                <button className="btn ghost sm" disabled={busy || (note[a.id] || '').trim().length < 10} onClick={() => act('xp.peer-review', { answer_id: a.id, status: 'corrected', note: note[a.id] }, 'صُحّحت الإجابة بملاحظتك.')}>صحّح</button>
+                <button className="link small" disabled={busy} onClick={() => act('xp.peer-review', { answer_id: a.id, status: 'hidden', note: note[a.id] || '' }, 'أُخفيت الإجابة.')}>أخفِ</button>
+              </span>}
+            </div>
+          ))}
+          <div className="row">
+            <textarea className="input" rows={2} maxLength={2000} aria-label="إجابتك" placeholder="إجابتك أنت (تُؤكَّد فورًا)" value={reply[r.id] || ''} onChange={(e) => setReply({ ...reply, [r.id]: e.target.value })} />
+            <button className="btn sm" disabled={busy || (reply[r.id] || '').trim().length < 10} onClick={() => act('xp.peer-answer', { request_id: r.id, text: reply[r.id] }, 'أُرسلت إجابتك وأُبلغ صاحب الطلب.')}>أجب</button>
+            <button className="link small" disabled={busy} onClick={() => act('xp.peer-close', { request_id: r.id }, 'أُغلق الطلب.')}>أغلق</button>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// القاعة من البوابة (المرحلة 9): دفعات المستشار وحدها، بالمكوّن المشترك مع اللوحة
+function ExpertHall({ cohorts, say }) {
+  const [cid, setCid] = useState(cohorts[0]?.id || '');
+  const call = useCallback((key, body) => xpCall(HALL_ACTION[key], body), []);
+  if (!cohorts.length) return null;
+  return (
+    <section className="card stack" aria-labelledby="xp-hall">
+      <div className="row between"><h3 id="xp-hall">القاعة الحية</h3>
+        <select className="input" aria-label="الدفعة" value={cid} onChange={(e) => setCid(e.target.value)}>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+      <HallControl cohortId={cid} call={call} toast={say} ui={HALL_UI_APP} />
+    </section>
+  );
+}
+
 function Dashboard({ onOut }) {
+  const [view, setView] = useState(null);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [msg, setMsg] = useState('');
@@ -176,9 +261,9 @@ function Dashboard({ onOut }) {
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
+  if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
   const e = d.expert;
   const offered = d.requests.filter((x) => x.status === 'offered');
-  const mine = d.requests.filter((x) => x.status === 'accepted');
   const now = Date.now();
   const upcoming = d.sessions.filter((s) => s.status === 'booked' && Date.parse(s.starts_at) > now).reverse();
   const toRate = [...d.sessions.filter((s) => s.to_rate).map((s) => ({ kind: 'session', id: s.id, who: s.participant, at: s.starts_at, what: 'جلسة توجيه' })),
@@ -240,15 +325,7 @@ function Dashboard({ onOut }) {
       )}
 
       <div className="xpp-cols">
-        <section className="card stack">
-          <h3>مشاركوك</h3>
-          {mine.length ? mine.map((x) => (
-            <div key={x.id} className="xpp-person">
-              <b>{x.participant.name}</b><small className="muted">{x.role_ar}{x.dimension_ar ? ` · ${x.dimension_ar}` : ''}{x.participant.job_title ? ` · ${x.participant.job_title}` : ''}{x.participant.org ? ` · ${x.participant.org}` : ''}</small>
-              <small className="ltr">{x.participant.email}{x.participant.phone ? ` · ${x.participant.phone}` : ''}</small>
-            </div>
-          )) : <p className="muted small">لا مشاركين مسندين إليك الآن.</p>}
-        </section>
+        <MyParticipants onOpen={setView} />
         <section className="card stack">
           <h3>جلساتك القادمة</h3>
           {upcoming.length ? upcoming.map((s) => (
@@ -258,6 +335,8 @@ function Dashboard({ onOut }) {
       </div>
 
       <AdvisorReviews />
+      <PeerQueue say={setMsg} />
+      <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
       {toRate.length > 0 && (
         <section className="card stack">

@@ -1968,6 +1968,7 @@ export * from './continuous.js';
 export * from './final.js';
 export * from './katon.js';
 export * from './hall.js';
+export * from './peer.js';
 import { resolveStages } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════

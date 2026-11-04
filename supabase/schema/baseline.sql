@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261105160000_leaders_katon_cbm
+-- as-of migration: 20261105170000_leaders_peer_requests
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -287,11 +287,13 @@ create table if not exists leaders.cohorts (
   project_mode text default 'individual'::text not null,
   advisor_expert_id uuid,
   hidden_requirements text[] default '{}'::text[] not null,
+  supervision text default 'peers_expert'::text not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
   constraint cohorts_project_mode_check CHECK ((project_mode = ANY (ARRAY['individual'::text, 'group'::text]))),
   constraint cohorts_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'open'::text, 'running'::text, 'closed'::text]))),
+  constraint cohorts_supervision_check CHECK ((supervision = ANY (ARRAY['peers_expert'::text, 'expert_only'::text, 'mixed'::text]))),
   constraint cohorts_track_check CHECK ((track = ANY (ARRAY['individual'::text, 'institutional'::text]))),
   constraint cohorts_uniform_level_check CHECK (((level_mode <> 'uniform'::text) OR (content_level IS NOT NULL))),
   constraint cohorts_pkey PRIMARY KEY (id)
@@ -1083,6 +1085,45 @@ create table if not exists leaders.payments (
   constraint payments_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'refunded'::text, 'failed'::text, 'expired'::text]))),
   constraint payments_pkey PRIMARY KEY (id),
   constraint payments_checkout_id_key UNIQUE (checkout_id)
+);
+
+create table if not exists leaders.peer_answers (
+  id uuid default gen_random_uuid() not null,
+  request_id uuid not null,
+  author_id uuid,
+  expert_id uuid,
+  text text not null,
+  status text default 'pending'::text not null,
+  expert_note text,
+  confirmed_by text,
+  confirmed_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint peer_answers_check CHECK (((author_id IS NOT NULL) OR (expert_id IS NOT NULL))),
+  constraint peer_answers_expert_note_check CHECK ((char_length(expert_note) <= 1000)),
+  constraint peer_answers_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'corrected'::text, 'hidden'::text]))),
+  constraint peer_answers_text_check CHECK (((char_length(text) >= 10) AND (char_length(text) <= 2000))),
+  constraint peer_answers_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.peer_requests (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  cohort_id uuid not null,
+  source text default 'free'::text not null,
+  ref_id uuid,
+  text text not null,
+  target_team text,
+  status text default 'open'::text not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  closed_at timestamp with time zone,
+  closed_by text,
+  constraint peer_requests_source_check CHECK ((source = ANY (ARRAY['sentence'::text, 'milestone'::text, 'capstone'::text, 'free'::text]))),
+  constraint peer_requests_status_check CHECK ((status = ANY (ARRAY['open'::text, 'answered'::text, 'confirmed'::text, 'closed'::text]))),
+  constraint peer_requests_target_team_check CHECK ((target_team = ANY (ARRAY['support'::text, 'lead'::text, 'guide'::text, 'eval'::text]))),
+  constraint peer_requests_text_check CHECK (((char_length(text) >= 10) AND (char_length(text) <= 2000))),
+  constraint peer_requests_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.placement_model (
@@ -2105,6 +2146,26 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_author_id_fkey FOREIGN KEY (author_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_request_id_fkey FOREIGN KEY (request_id) REFERENCES leaders.peer_requests(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_requests add constraint peer_requests_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_requests add constraint peer_requests_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.placements add constraint placements_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
@@ -2462,6 +2523,14 @@ CREATE INDEX IF NOT EXISTS payments_participant ON leaders.payments USING btree 
 
 CREATE INDEX IF NOT EXISTS payments_status ON leaders.payments USING btree (status, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS peer_answers_author_idx ON leaders.peer_answers USING btree (author_id, status);
+
+CREATE INDEX IF NOT EXISTS peer_answers_request_idx ON leaders.peer_answers USING btree (request_id, created_at);
+
+CREATE INDEX IF NOT EXISTS peer_requests_cohort_idx ON leaders.peer_requests USING btree (cohort_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS peer_requests_participant_idx ON leaders.peer_requests USING btree (participant_id);
+
 CREATE INDEX IF NOT EXISTS points_ledger_participant ON leaders.points_ledger USING btree (participant_id);
 
 CREATE INDEX IF NOT EXISTS program_milestones_program_idx ON leaders.program_milestones USING btree (program_id, sort);
@@ -2663,6 +2732,10 @@ alter table leaders.payment_events enable row level security;
 alter table leaders.payment_settings enable row level security;
 
 alter table leaders.payments enable row level security;
+
+alter table leaders.peer_answers enable row level security;
+
+alter table leaders.peer_requests enable row level security;
 
 alter table leaders.placement_model enable row level security;
 

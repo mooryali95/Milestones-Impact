@@ -39,6 +39,8 @@ import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
 import { switchTo } from './switch.ts';
 import * as V2 from './advisor.ts';
+import * as PR from './peer.ts';
+import * as FL from './file.ts';
 
 type Body = Record<string, any>;
 
@@ -108,6 +110,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'katon.mine': (p) => KT.mine(p),
   'katon.answer': (p, b) => KT.answer(p, b),
   'hall.state': (p, b) => H.state(p, b),
+  'peer.list': (p) => PR.list(p),
+  'peer.ask': (p, b) => PR.ask(p, b),
+  'peer.answer': (p, b) => PR.answer(p, b),
+  'peer.close': (p, b) => PR.close(p, b),
   'demo.fill-profile': (p) => D.fillProfile(p),
   'demo.fill-assessment': (p) => D.fillAssessment(p),
   'hall.join': (p) => H.join(p),
@@ -167,6 +173,24 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
+  // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
+  'xp.participants': (e) => FL.participants(e),
+  'xp.participant': (e, b) => FL.participant(e, b),
+  'xp.final-eval': (e, b) => FL.finalGet(e, b),
+  'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
+  'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
+  'xp.milestone': (e, b) => FL.milestone(e, b),
+  'xp.hall': (e, b) => FL.hall(e, b),
+  'xp.hall-open': (e, b) => FL.hallOpen(e, b),
+  'xp.hall-step': (e, b) => FL.hallStep(e, b),
+  'xp.hall-split': (e, b) => FL.hallSplit(e, b),
+  'xp.hall-assign': (e, b) => FL.hallAssign(e, b),
+  'xp.hall-close': (e, b) => FL.hallClose(e, b),
+  // المرحلة 8: طلبات الأقران في دفعاته
+  'xp.peer-list': (e) => PR.expertList(e),
+  'xp.peer-answer': (e, b) => PR.expertAnswer(e, b),
+  'xp.peer-review': (e, b) => PR.expertReview(e, b),
+  'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
@@ -186,7 +210,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.item-analysis': (_a, b) => S.itemReport(b),
   'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
-  'admin.participant': (_a, b) => A.participant(b),
+  'admin.participant': (_a, b) => FL.participantFile(String(b.id || ''), 'admin', { viewer: { email: _a.email } }),
+  'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': () => A.reviews(),
   'admin.evidence-url': (_a, b) => A.evidenceUrl(b),
   'admin.approve': A.approve,

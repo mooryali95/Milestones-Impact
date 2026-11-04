@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KATON_ENABLED, RATING_PCT, RUBRIC_PCT } from '../../supabase/functions/leaders-api/labels.js';
-import { cleanRubricScores, continuousAssessment, rubricPct } from '../../supabase/functions/leaders-api/logic.js';
+import { cleanRubricScores, continuousAssessment, PEER_PCT, rubricPct } from '../../supabase/functions/leaders-api/logic.js';
 
 const quizzes = [
   { quiz_score: 4, quiz_total: 5, completed_at: '2026-01-01', title: 'ب1' },
@@ -24,7 +24,7 @@ describe('التقييم المستمر', () => {
     });
     const by = Object.fromEntries(c.components.map((x) => [x.key, x.value]));
     // الاختبارات: 8 من 10 أسئلة = 80 لا متوسط (80، 100، 67) = 82
-    expect(by).toEqual({ quizzes: 80, models: 50, milestones: 48, lab: null, ...(KATON_ENABLED ? { katon: null } : {}) });
+    expect(by).toEqual({ quizzes: 80, models: 50, milestones: 48, lab: null, peer: null, ...(KATON_ENABLED ? { katon: null } : {}) });
     expect(RATING_PCT[3]).toBe(50);
     expect(RUBRIC_PCT[3]).toBe(75);
     expect(c.index).toBe(59);
@@ -84,5 +84,24 @@ describe('التقييم المستمر', () => {
     expect(rubricPct({ understanding: 4, execution: 1 })).toBe(50);
     expect(rubricPct({ understanding: 3 })).toBe(75);
     expect(rubricPct({})).toBeNull();
+  });
+});
+
+describe('المصدر السادس: الإسهام المؤكَّد في طلبات الأقران (المرحلة 8)', () => {
+  it('المؤكَّد كاملًا والمصحَّح جزئيًا بخريطة صريحة، والمخفي والمعلّق لا يُحسبان', () => {
+    const c = continuousAssessment({ min_events: 1, peer: [
+      { status: 'confirmed', confirmed_at: '2026-02-01' }, { status: 'corrected', confirmed_at: '2026-02-02' },
+      { status: 'hidden', updated_at: '2026-02-03' }, { status: 'pending', updated_at: '2026-02-04' },
+    ] });
+    const peer = c.components.find((x) => x.key === 'peer');
+    expect(PEER_PCT).toEqual({ confirmed: 100, corrected: 60 });
+    expect(peer).toMatchObject({ value: 80, n: 2, in_index: true });
+    expect(peer.reason).toContain('2 إسهام');
+    expect(c.events.filter((e) => e.source === 'peer').map((e) => e.label)).toEqual(['إسهام صحّحه الخبير', 'إسهام أكّده الخبير']);
+  });
+  it('بلا إسهام: سبب معلن ولا يدخل المؤشر', () => {
+    const peer = continuousAssessment({}).components.find((x) => x.key === 'peer');
+    expect(peer.value).toBeNull();
+    expect(peer.reason).toContain('لم يؤكّد الخبير');
   });
 });

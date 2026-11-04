@@ -530,8 +530,11 @@ export async function portalDashboard(e: any) {
     };
   };
   const stats = expertStats(sessions || [], null);
+  const advisorCohorts = (await db.from('cohorts').select('id, name, supervision').eq('advisor_expert_id', e.id).neq('status', 'closed')).data || [];
   return {
     success: true, switch_to,
+    // دفعاته بصفته مستشارها: للقاعة من بوابته (المرحلة 9)
+    advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
     stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
     rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: 5 },

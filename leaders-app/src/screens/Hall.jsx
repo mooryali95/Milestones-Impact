@@ -9,6 +9,7 @@ import { pollPeriod } from '../hallPoll.js';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
+import PeerRequests from './PeerRequests.jsx';
 
 // قاعة نموذجية للمعاينة فقط (لا تتصل بالخادم): جولة بفرقها الأربعة وقائدها وشخصيتها الافتراضية
 const PREVIEW_NAMES = ['سارة', 'خالد', 'نورة', 'فهد', 'ريم', 'عبدالله', 'هند', 'ماجد', 'لمى', 'سلطان', 'أمل', 'تركي'];
@@ -24,6 +25,7 @@ export default function Hall({ onBack }) {
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ask, setAsk] = useState(null);   // اليد المرفوعة أو ملاحظة الجملة تصير طلب توجيه (المرحلة 8)
   const ver = useRef(0);
   const load = useCallback(async (force) => {
     const r = await call('hall.state', { since: force ? 0 : ver.current });
@@ -87,7 +89,10 @@ export default function Hall({ onBack }) {
                 {me?.leader && <span className="chip gold"> ♔ قائد الجولة</span>}
                 {me?.team && <p className="small muted">{(s?.tasks || {})[me.team] || HALL_TEAM_TASK_AR[me.team]}</p>}
               </div>
-              <button className={`btn sm ${me?.hand ? '' : 'ghost'}`} disabled={busy} onClick={() => act('hall.hand', { raised: !me?.hand })} aria-pressed={!!me?.hand}>✋ {me?.hand ? 'أنزل يدك' : 'ارفع يدك'}</button>
+              <span className="row">
+                <button className={`btn sm ${me?.hand ? '' : 'ghost'}`} disabled={busy} onClick={() => act('hall.hand', { raised: !me?.hand })} aria-pressed={!!me?.hand}>✋ {me?.hand ? 'أنزل يدك' : 'ارفع يدك'}</button>
+                {me?.hand && !ask && <button className="link small" onClick={() => setAsk({ source: 'free', text: '', label: 'ما رفعت يدك لأجله' })}>اكتبه طلب توجيه</button>}
+              </span>
             </div>
             {st === 'split' && v.session.split_method === 'choose' && (
               <div className="hall-pick">{Object.keys(HALL_TEAM_TASK_AR).map((t) => (
@@ -102,7 +107,7 @@ export default function Hall({ onBack }) {
               <p className="kt-text">{s.text_ar}</p>
               {/* حكم بثقة مدرَّجة ووسوم موقف (CBM الثلاثي)؛ me.choice هو الحكم وme.confidence درجته */}
               <KatonAnswer compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
-                onAnswer={(a) => act('katon.answer', { sentence_id: s.id, ...a })} />
+                onAnswer={(a) => act('katon.answer', { sentence_id: s.id, ...a })} onAsk={(text) => setAsk({ source: 'sentence', ref_id: s.id, text, label: `جملة «${Q_AR[s.question]}»` })} />
               {v.revealed && (
                 <div className="banner"><span className="ico">{me?.points > 0 ? '✓' : '•'}</span>
                   <div className="grow">المفتاح: <b>{s.key === 'true' ? 'صحيحة' : s.key === 'false' ? 'خاطئة' : 'رأي'}</b>{me?.points != null ? ` · نقاطك ${me.points > 0 ? '+' : ''}${me.points}` : ''}{s.explain_ar ? `. ${s.explain_ar}` : ''}</div></div>
@@ -113,6 +118,8 @@ export default function Hall({ onBack }) {
         </>
       )}
       {err && <ErrorBox message={err} />}
+      {/* سجل النشاط: طلبات التوجيه في الدفعة؛ في المسار الذاتي دائمًا، وفي الحية حين يُرفع طلب */}
+      {v.inside && (ask || !live) && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
       <details className="hall-mini" open={!v.inside}>
         <summary>منظور القاعة</summary>
         <HallView view={v} me={v.me} compact />

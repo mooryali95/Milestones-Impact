@@ -15,6 +15,7 @@ import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
+import PeerRequests from './PeerRequests.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
 export function deviceLabel() {
@@ -481,7 +482,7 @@ function Continuous({ c }) {
         <h3 id="ca-h">تقدمك في التقييم المستمر</h3>
         <b className="ca-index">{c.index}٪</b>
       </div>
-      <p className="small muted">يُجمع من اختبارات الكتيب، ونماذجك، ومعالم مشروعك، وأدوات المختبر؛ ولا يدخل فيه مصدر قبل أن تكتمل له أحداث كافية. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>
+      <p className="small muted">يُجمع من اختبارات الكتيب، ونماذجك، ومعالم مشروعك، وأدوات المختبر، وإسهامك المؤكَّد في طلبات زملائك؛ ولا يدخل فيه مصدر قبل أن تكتمل له أحداث كافية. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>
       {c.trend && <p className="small">{TREND_AR[c.trend.dir]}</p>}
       <ul className="ca-list">{c.components.map((x) => (
         <li key={x.key}><span>{x.label}</span><small className="muted">{x.value != null ? `${x.value}٪ · ${x.reason}` : x.reason}</small></li>
@@ -562,6 +563,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
             {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
       )}
       {approved && <Continuous c={me.continuous} />}
+      {approved && <PeerRequests />}
       {approved && <ChooseExpert />}
 
       {!approved && profile && (

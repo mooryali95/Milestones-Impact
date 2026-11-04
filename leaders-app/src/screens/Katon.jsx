@@ -7,10 +7,11 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { KATON_CONFIDENCE, KATON_FAMILY_AR, KATON_KEY_AR, KATON_QUESTION_AR as Q_AR, KATON_STANCES } from '../../../supabase/functions/leaders-api/katon.js';
+import PeerRequests from './PeerRequests.jsx';
 
 const sign = (n) => (n > 0 ? `+${n}` : `${n}`);
 
-function Sentence({ s, n, points, revealed, onAnswer, busy }) {
+function Sentence({ s, n, points, revealed, onAnswer, onAsk, busy }) {
   const mine = s.mine;
   return (
     <li className={`kt-sent${mine ? ' done' : ''}`}>
@@ -27,7 +28,7 @@ function Sentence({ s, n, points, revealed, onAnswer, busy }) {
           {mine?.stances?.length ? ` · موقفك: ${mine.stances.map((k) => KATON_STANCES.find((x) => x.key === k)?.ar).join('، ')}` : ''}
           {s.key === 'opinion' ? ' · جملة رأي: لا تُسجَّل عليها نقاط' : ''}
         </p>
-      ) : <KatonAnswer mine={mine} points={points} disabled={busy} onAnswer={(a) => onAnswer(s.id, a)} />}
+      ) : <KatonAnswer mine={mine} points={points} disabled={busy} onAnswer={(a) => onAnswer(s.id, a)} onAsk={(text) => onAsk(s, text)} />}
       {revealed && s.explain_ar && <p className="small muted">{s.explain_ar}</p>}
       {Object.keys(s.tasks || {}).length > 0 && (
         <details className="kt-tasks"><summary className="small muted">مهام الفرق في هذه الجملة</summary>
@@ -43,6 +44,7 @@ export default function Katon({ onBack }) {
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ask, setAsk] = useState(null);   // ملاحظة على جملة تُرفع طلب توجيه (المرحلة 8)
   useEffect(() => { call('katon.mine').then(setD); }, []);
   if (!d) return <div className="page"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (!d.success) return <div className="page"><div className="alert err">{d.message}</div></div>;
@@ -117,7 +119,8 @@ export default function Katon({ onBack }) {
               : <p className="small muted">أجبت عن {t.answered} من {t.total}. يُكشف المفتاح بعد آخر جملة، ولا تُعدَّل الإجابات بعده.</p>}
           </div>
           {err && <div className="alert err">{err}</div>}
-          <ol className="kt-list">{t.sentences.map((s, i) => <Sentence key={s.id} s={s} n={i + 1} points={pts} revealed={t.revealed} onAnswer={answer} busy={busy} />)}</ol>
+          {ask && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
+          <ol className="kt-list">{t.sentences.map((s, i) => <Sentence key={s.id} s={s} n={i + 1} points={pts} revealed={t.revealed} onAnswer={answer} onAsk={(sent, text) => { setAsk({ source: 'sentence', ref_id: sent.id, text, label: `جملة «${Q_AR[sent.question]}» في «${t.title_ar}»` }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} busy={busy} />)}</ol>
         </section>
       )}
     </div>

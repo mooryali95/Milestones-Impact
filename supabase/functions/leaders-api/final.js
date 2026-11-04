@@ -48,7 +48,7 @@ export const FINAL_DEFAULTS = {
   // القياس النهائي: الطريقة ودرجات اتجاه المكسب ومحك الإتقان على الاختبار الموضوعي (K+S)
   measure: { mode: 'gain', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 },
   // أوزان مصادر التقييم المستمر داخل مكوّنه (نسبية؛ صفر يستبعد المصدر). متساوية افتراضًا
-  sources: { quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 1 },
+  sources: { quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 1, peer: 1 },
   // التقييم المستمر: لا يدخل المصدر المؤشر قبل هذا العدد من الأحداث (والاختبارات قبل هذا العدد من الأسئلة)
   min_events: 3,
   min_quiz_items: 10,

@@ -1290,3 +1290,35 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .adv-answers dd { margin: 0; white-space: pre-wrap; }
 .survey { gap: 10px; margin-top: 6px; }
 .survey-q { display: grid; gap: 4px; }
+
+/* ── تحكم القاعة من بوابة الخبير (المكوّن المشترك shared/hall/HallControl) ── */
+.hall-admin { display: grid; gap: 12px; }
+.hall-code { font-size: 14px; }
+.hall-code b { font-size: 20px; letter-spacing: .15em; color: var(--accent); }
+.hall-stage-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hall-stage-bar .step { all: unset; cursor: pointer; padding: 7px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; display: inline-flex; gap: 6px; }
+.hall-stage-bar .step.on { border-color: var(--accent); background: var(--brand-cream); font-weight: 600; }
+.hall-stage-bar .step:disabled { opacity: .45; cursor: default; }
+.hall-stage-bar .step:focus-visible { outline: 2px solid var(--accent); }
+.hall-screen { background: var(--graphite); border-radius: 18px; }
+.hall-screen:fullscreen { display: grid; place-items: center; padding: 2vh 2vw; }
+.hall-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 10px; }
+.hall-controls h4 { margin: 0 0 6px; font-size: 14px; }
+.hall-teams { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; margin-bottom: 8px; }
+.hall-teams i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 4px; }
+.hall-person { border-inline-start: 3px solid var(--accent); }
+/* ── ملف المشارك للخبير ── */
+.xf-needs { padding: 12px 14px; border-radius: 10px; background: var(--brand-cream-pale); border: 1px solid var(--line); }
+.xf-needs ul { margin: 6px 0 0; padding-inline-start: 18px; font-size: 14px; }
+.xf-journey li { grid-template-columns: 1fr auto; display: grid; }
+.xf-adj { margin-top: 4px; }
+.xf-adj .input { max-width: 180px; }
+.xf-peer { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.xf-peer > li { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); display: grid; gap: 6px; }
+.xf-answer { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--mist); font-size: 14px; }
+.xf-rubric { margin-top: 8px; }
+/* ── طلبات التوجيه (المشارك) ── */
+.pr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pr-list > li { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); display: grid; gap: 6px; }
+.pr-answer { padding: 8px 10px; border-radius: 8px; background: var(--mist); font-size: 14px; }
+.pr h4 { margin: 10px 0 0; }

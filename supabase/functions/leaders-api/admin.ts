@@ -16,6 +16,8 @@ import { defaultProgramId, journeyDefinition } from './programs.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
+// من يُنفّذ إجراء مشتركًا بين اللوحة وبوابة الخبير: المدير (admin) أو الخبير بهويته (system + بريده في السجل)
+export type Actor = { email: string; actor?: 'admin' | 'system' };
 
 async function sha256hex(s: string) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));

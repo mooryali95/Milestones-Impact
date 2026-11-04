@@ -5,14 +5,14 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanRubricScores, autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
-import type { Admin } from './admin.ts';
+import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, hidden_requirements, created_at';
+const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, hidden_requirements, supervision, created_at';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;
@@ -250,6 +250,8 @@ export async function cohortSave(a: Admin, b: Body) {
     }
     row.advisor_expert_id = b.advisor_expert_id || null;
   }
+  // نمط الإشراف في طلبات الأقران (المرحلة 8): الأقران ويؤكّد الخبير، أو الخبير وحده، أو معًا
+  if ('supervision' in b) row.supervision = cleanSupervision(b.supervision);
   if ('program_id' in b || !prev) {
     const pid = isUuid(b.program_id) ? String(b.program_id) : await defaultProgramId();
     const pr = must(await db.from('programs').select('id, archived_at').eq('id', pid).maybeSingle());
@@ -396,7 +398,7 @@ export async function milestoneDelete(a: Admin, b: Body) {
 }
 
 // لمشارك بعينه: اعتماد إنجاز المعلم أو إلغاؤه، أو تمديد موعده له وحده
-export async function participantMilestone(a: Admin, b: Body) {
+export async function participantMilestone(a: Actor, b: Body) {
   const pid = String(b.participant_id || ''), mid = String(b.milestone_id || '');
   if (!isUuid(pid) || !isUuid(mid)) throw new Fail('بيانات ناقصة');
   const prev = (await db.from('participant_milestones').select('*').eq('participant_id', pid).eq('milestone_id', mid).maybeSingle()).data;
@@ -405,7 +407,7 @@ export async function participantMilestone(a: Admin, b: Body) {
   if ('scores' in b) rec.scores = cleanRubricScores(b.scores);
   if ('due_override' in b) rec.due_override = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due_override || '')) ? b.due_override : null;
   must(await db.from('participant_milestones').upsert({ ...(prev || {}), ...rec }));
-  await audit('admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, scores: rec.scores ?? null, note: rec.note });
+  await audit(a.actor || 'admin', a.email, 'milestone.participant', 'participants', pid, null, { milestone: mid, done: b.done ?? null, due_override: rec.due_override ?? null, scores: rec.scores ?? null, note: rec.note });
   return { success: true };
 }
 

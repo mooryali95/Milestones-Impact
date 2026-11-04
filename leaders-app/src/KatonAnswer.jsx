@@ -7,7 +7,7 @@ import { KATON_CONFIDENCE, KATON_DEFAULT_POINTS, KATON_STANCES, KATON_VERDICT_AR
 
 const sign = (n) => (n > 0 ? `+${n}` : `${n}`);
 
-export default function KatonAnswer({ mine, points = KATON_DEFAULT_POINTS, disabled = false, onAnswer, compact = false }) {
+export default function KatonAnswer({ mine, points = KATON_DEFAULT_POINTS, disabled = false, onAnswer, onAsk = null, compact = false }) {
   const [verdict, setVerdict] = useState(mine?.verdict || null);
   const [confidence, setConfidence] = useState(mine?.confidence || null);
   const [stances, setStances] = useState(mine?.stances || []);
@@ -61,8 +61,11 @@ export default function KatonAnswer({ mine, points = KATON_DEFAULT_POINTS, disab
         </div>
       </div>
       {needNote && !disabled && (
-        <label className="field kt-note"><span>اكتب سؤالك أو فكرتك ليراها خبيرك وفريقك</span>
+        <label className="field kt-note"><span>اكتب سؤالك أو فكرتك؛ يراها خبيرك{onAsk ? '، وترفعها طلب توجيه ليجيب فريقك' : ''}</span>
           <textarea className="input" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (mine?.note || '') && send(verdict, confidence, stances, note)} /></label>
+      )}
+      {needNote && !disabled && onAsk && note.trim().length >= 10 && (
+        <button type="button" className="btn ghost sm" onClick={() => onAsk(note.trim())}>ارفعها طلب توجيه لفريقك</button>
       )}
     </div>
   );

@@ -327,7 +327,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
             <dt>الدفعة</dt><dd>
-              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}
+              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}
               {canWrite && cohorts?.length > 0 && (
                 <span className="la-row">
                   <select aria-label="تسجيل صريح في دفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
@@ -342,6 +342,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
+          {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
           {canWrite && (
             <div className="la-row">
               <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>

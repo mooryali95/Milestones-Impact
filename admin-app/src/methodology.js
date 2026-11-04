@@ -5,7 +5,7 @@
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -232,6 +232,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
       help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
     { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
       help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
+    { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
+      help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
       help: 'المتجانس يوحّد المحتوى (الرحلة والكتيب والنماذج) للجميع، ويبقى قياس كل مشارك ومساره من نتيجته.' },
     { name: 'content_level', label: 'مستوى المحتوى للدفعة', type: 'select', options: LVL, show: (v) => v.level_mode === 'uniform' },
@@ -263,7 +265,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', hidden_requirements: c.hidden_requirements || [] };
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
   delete v.schedule; delete v.stage_modes;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;

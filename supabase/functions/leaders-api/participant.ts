@@ -402,13 +402,15 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 // مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
 async function continuousFor(participantId: string, milestones: any[], programId: string | null) {
-  const [hb, subs, rt, lb, kt, prog] = await Promise.all([
+  const [hb, subs, rt, lb, kt, prog, pa] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
     db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
     db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
     db.from('lab_attempts').select('item_id, pct, finished_at, lab_items(title_ar)').eq('participant_id', participantId).not('finished_at', 'is', null),
     katonEvents(participantId),
     programId ? db.from('programs').select('final_eval').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
+    // إسهامه في طلبات زملائه كما أكّده الخبير أو صحّحه (المرحلة 8)
+    db.from('peer_answers').select('status, confirmed_at, updated_at').eq('author_id', participantId).in('status', ['confirmed', 'corrected']),
   ]);
   const fc = finalConfig((prog as any).data?.final_eval);
   return continuousAssessment({
@@ -418,6 +420,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
     milestones: milestones.filter((m: any) => m.done),
     lab: (lb.data || []).map((a: any) => ({ ...a, title: a.lab_items?.title_ar })),
     katon: kt,
+    peer: pa.data || [],
     weights: fc.sources, min_events: fc.min_events, min_quiz_items: fc.min_quiz_items,
   });
 }
