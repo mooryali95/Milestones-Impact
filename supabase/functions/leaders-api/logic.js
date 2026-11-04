@@ -121,6 +121,18 @@ export function skillSplit(questions, answers) {
   return Object.fromEntries(DIMENSIONS.map((d) => [d, { anchor: anchor[d].skill, form: own[d].skill }]));
 }
 
+// حصة المواقف المشتركة (بلا صيغة وليست توأمًا) من مواقف الصيغة الواحدة في كل بُعد،
+// تُحسب من الأداة لا تُفترض: 3/6 = 0.5 في baseline-v4، و3/8 = 0.375 في baseline-v5.
+// بها يُوزن أثر التكرار (practiceEffect)؛ أداة بلا صيغ حصتها 1 وبلا مواقف 0.5 افتراضًا.
+export function anchorShareOf(questions) {
+  return Object.fromEntries(DIMENSIONS.map((d) => {
+    const skill = (questions || []).filter((q) => q.dimension === d && q.tier === 'skill' && !levelGated(q) && q.active !== false);
+    const shared = skill.filter((q) => !q.form && !isTwin(q)).length;
+    const total = shared + skill.filter((q) => q.form === 'A').length;
+    return [d, total ? Math.round((shared / total) * 1000) / 1000 : 0.5];
+  }));
+}
+
 // الممارسة على العبارات المجابة (دون "لا ينطبق") في القياسين معًا، بمطابقة
 // الرمز، فلا يقارن الفرق بين مجموعتين مختلفتين من العبارات.
 export function commonBehavior(preQs, preAnswers, postQs, postAnswers, { minBehavior = 0 } = {}) {
@@ -274,6 +286,13 @@ export function evaluatePlacement(pcts, model = DEFAULT_MODEL, opts = {}) {
 
 // السبب المخزَّن: سبب المستوى ثم الأعلام، حتى يراها من يقرأ reason_ar وحده
 export const reasonWithFlags = (e) => [e.reason, ...(e.flags || []).map((f) => f.reason_ar)].filter(Boolean).join(' · ');
+
+// تجاوز التسكين: من يعتمد مستوى يخالف المستوى القائم (المحسوب أو المعتمد قبله)
+// يلزمه تعليل مكتوب، كما يلزم تعديل الخبير في الختامي. بلا مستوى قائم لا تعليل.
+export const OVERRIDE_REASON_MIN = 10;
+export function overrideNeedsReason(currentLevel, newLevel, note, min = OVERRIDE_REASON_MIN) {
+  return !!currentLevel && !!newLevel && currentLevel !== newLevel && String(note || '').trim().length < min;
+}
 
 // ── مسافة الأسئلة عن المستوى التالي ──
 // كم سؤالًا يفصل المشارك عن المستوى التالي؟ رقم للمستشار يكمل رقاقة «حدّية».
@@ -1542,7 +1561,8 @@ export function equate(result, form, offsets) {
 
 // أثر التكرار على جانب المواقف بنقاط النسبة: ما زاده كسب المواقف المشتركة
 // (المكررة) على كسب الموازية (الجديدة على المشارك)، مضروبًا في حصة المشترك
-// من المواقف. pairs: [{ pre: { anchor, form }, post: { anchor, form } }]
+// من المواقف (anchorShareOf من الأداة، لا 0.5 افتراضًا).
+// pairs: [{ pre: { anchor, form }, post: { anchor, form } }] من مجموعة التكرار فقط
 export function practiceEffect(pairs, { anchorShare = 0.5 } = {}) {
   const xs = (pairs || []).filter((p) => [p.pre?.anchor, p.pre?.form, p.post?.anchor, p.post?.form].every((x) => x != null))
     .map((p) => (p.post.anchor - p.pre.anchor) - (p.post.form - p.pre.form));
@@ -1690,14 +1710,16 @@ export function pairComparable(baseline, post) {
   return { comparable: true, reason: null };
 }
 
-export function compareAssessments({ pre, post, model, impact, rater, evidence }) {
+// repeat: هل أعاد المشارك المواقف المشتركة في البعدي (مجموعة التكرار، anchorRepeat)؟
+// أثر التكرار يُطرح منه وحده؛ من رأى التوائم لم يكرر شيئًا فلا يُطرح من مكسبه.
+export function compareAssessments({ pre, post, model, impact, rater, evidence, repeat = true }) {
   const cfg = { ...IMPACT_DEFAULTS, ...(impact || {}) };
   return DIMENSIONS.map((dimension) => {
     const a = pre?.[dimension] || {}, b = post?.[dimension] || {};
     const cc = comparableComposite(a, b, model);
     const rel = cfg.reliability?.[dimension] ?? cfg.rci_reliability;
     const sd = cfg.sd?.[dimension] ?? cfg.rci_sd;
-    const points = cfg.practice?.[dimension] ?? cfg.rci_practice;
+    const points = repeat ? (cfg.practice?.[dimension] ?? cfg.rci_practice) : 0;
     const practice = practiceOn(cc.tiers, points, model);
     const rc = reliableChange(cc.pre, cc.post, sd, rel, practice);
     // الاختبار وحده: المعرفة والمواقف، بلا تقدير ذاتي، بثباته وانحرافه إن عُرفا

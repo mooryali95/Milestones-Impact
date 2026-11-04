@@ -80,4 +80,5 @@ export const MIGRATIONS = [
   '20261105120000_leaders_entitlement_currency_indexes',
   '20261105130000_leaders_drop_backup_tables',
   '20261105140000_leaders_consent',
+  '20261105150000_leaders_v5_1_pre_activation',
 ];

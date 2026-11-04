@@ -4,8 +4,9 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
+import { DIM_AR } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor } from './entitlements.ts';
 import { trackProject } from './capstone.js';
@@ -404,6 +405,8 @@ export async function approve(a: Admin, b: Body) {
     const level = levels[d] || old?.level;
     if (!LEVELS.includes(level)) throw new Fail('حدّد مستوى كل بُعد');
     const changed = old && old.level !== level;
+    // مخالفة المستوى القائم (المحسوب أو المعتمد قبله) تلزمها علة مكتوبة تُحفظ في admin_note
+    if (overrideNeedsReason(old?.level, level, b.notes?.[d])) throw new Fail(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_AR[d]} (${OVERRIDE_REASON_MIN} أحرف على الأقل)`, 400, 'override_reason');
     return {
       participant_id: id, dimension: d, level, source: changed || !old ? 'admin' : old.source,
       assessment_id: old?.assessment_id || null, decided_by: changed ? a.email : old?.decided_by || null,

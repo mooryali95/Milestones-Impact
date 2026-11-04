@@ -40,6 +40,18 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const [failed, setFailed] = useState(null);
   const [busy, setBusy] = useState(false);
   const timer = useRef(null);
+  // مؤقت منقضٍ (بالدقائق) منذ بدء الإجابة في هذه الجلسة: يُعرض لا يُفرض
+  const [startedAt, setStartedAt] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (mode !== 'q') return undefined;
+    const t0 = startedAt || Date.now();
+    if (!startedAt) setStartedAt(t0);
+    const tick = () => setElapsed(Math.floor((Date.now() - t0) / 60000));
+    tick();
+    const t = setInterval(tick, 30000);
+    return () => clearInterval(t);
+  }, [mode, startedAt]);
 
   useEffect(() => {
     (async () => {
@@ -135,6 +147,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
         <span className="small muted">{post ? 'القياس البعدي' : 'الخطوة 2 من 3 في القبول'}</span>
         <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         <span className="small"><b>{answered}</b>/{qs.length}</span>
+        {elapsed > 0 && <span className="small muted" aria-label="الوقت المنقضي في هذه الجلسة">· {elapsed} د</span>}
       </div>
       <div className="sections">
         {SECTIONS.map((d, i) => <div key={d.key} className={sectionState(i)}>{d.short}</div>)}
@@ -149,7 +162,8 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <p className="eyebrow">{post ? 'القياس البعدي' : 'تحديد المستوى'}</p>
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
           <p>{data.assessment.intro || 'أسئلة قصيرة في الأطر الثلاثة. نتيجتها تحدد مسارك في كل إطار على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
-          <div className="alert info small">⏱ {data.assessment.est_minutes ? `حوالي ${data.assessment.est_minutes} دقيقة، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
+          {/* الزمن تقدير متوسط لا وعد: لا حد زمني، ويظهر الوقت المنقضي في الرأس أثناء الإجابة */}
+          <div className="alert info small">⏱ {data.assessment.est_minutes ? `نحو ${data.assessment.est_minutes} دقيقة في المتوسط بلا حد زمني، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
           {resumed && <div className="bar"><i style={{ width: `${pct}%` }} /></div>}
           <div className="row">
             <button className="btn gold" onClick={() => setMode('q')}>{resumed ? `تابع (${answered} من ${qs.length})` : 'ابدأ'}</button>

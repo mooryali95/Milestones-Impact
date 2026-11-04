@@ -256,6 +256,8 @@ function Person({ id, canWrite, onBack }) {
   const prof = r.profile;
   const latest = (r.assessments || []).find((a) => a.status === 'submitted');
   const res = (d) => latest?.assessment_results?.find((x) => x.dimension === d);
+  // المستوى القائم في البُعد: المعتمد أو المسجل من القياس، وإلا المحسوب من آخر قياس
+  const currentLevel = (d) => prof?.dimensions?.find((y) => y.dimension === d)?.level || res(d)?.evaluation?.level || null;
   const act = async (action, body, ok) => {
     const d = await L(action, body);
     toast(d.success ? ok : d.message);
@@ -265,6 +267,9 @@ function Person({ id, canWrite, onBack }) {
 
   const approve = async () => {
     if (Object.values(levels).some((v) => !v) || DIMS.some((d) => !levels[d])) return toast('حدّد مستوى كل بُعد');
+    // مخالفة المستوى القائم (المحسوب أو المعتمد قبله) تلزمها علة مكتوبة؛ الخادم يرفض بدونها
+    const bare = DIMS.find((d) => { const cur = currentLevel(d); return cur && levels[d] !== cur && (notes[d] || '').trim().length < 10; });
+    if (bare) return toast(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_EN[bare]} (10 أحرف على الأقل)`);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
     act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
   };
@@ -371,6 +376,7 @@ function Person({ id, canWrite, onBack }) {
               const rr = res(d);
               const ev = rr?.evaluation;
               const x = prof?.dimensions.find((y) => y.dimension === d);
+              const override = canWrite && !!levels[d] && !!currentLevel(d) && levels[d] !== currentLevel(d);
               return (
                 <tr key={d}>
                   <td><b>{DIM_EN[d]}</b><br /><small>{DIM[d]}</small></td>
@@ -390,8 +396,9 @@ function Person({ id, canWrite, onBack }) {
                       </select>
                     ) : LVL[x?.level] || ''}
                     {ev && <><br /><small className="la-muted">المعيار: {LVL[ev.level]}</small></>}
+                    {override && <><br /><span className="la-chip warn">يخالف {LVL[currentLevel(d)]}؛ يلزم تعليل</span></>}
                   </td>
-                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder="اختياري" onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
+                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder={override ? 'سبب المخالفة (إلزامي، 10 أحرف على الأقل)' : 'اختياري'} aria-required={override} onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
                 </tr>
               );
             })}</tbody>

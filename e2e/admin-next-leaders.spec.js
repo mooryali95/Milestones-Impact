@@ -89,9 +89,16 @@ test('ملف المشارك: اعتماد المستويات، وإعادة بن
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
   await expect(page.getByLabel('مستوى Leadership')).toHaveValue('intermediate');
   await page.getByLabel('مستوى Impact').selectOption('advanced');
+  // مخالفة المستوى القائم تلزمها علة مكتوبة: رقاقة تنبيه، ولا إرسال بدونها
+  await expect(page.getByText(/يلزم تعليل/)).toBeVisible();
+  await page.getByRole('button', { name: 'اعتماد المسار وفتح البرنامج' }).click();
+  await expect(page.getByRole('status')).toContainText('سبب مخالفة المستوى المحسوب في Impact');
+  expect(calls.find((c) => c.action === 'admin.approve')).toBeUndefined();
+  await page.getByLabel('ملاحظة Impact').fill('تقاريره الميدانية ومختبره يفوقان المحسوب بوضوح');
   await page.getByRole('button', { name: 'اعتماد المسار وفتح البرنامج' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.approve')?.levels).toEqual({ milestone: 'beginner', impact: 'advanced', leadership: 'intermediate' });
+  expect(calls.find((c) => c.action === 'admin.approve').notes).toMatchObject({ impact: 'تقاريره الميدانية ومختبره يفوقان المحسوب بوضوح' });
 
   await page.getByRole('button', { name: 'إعادة مع ملاحظة' }).click();
   await page.getByRole('dialog').locator('input').fill('أضف المؤشرات');
