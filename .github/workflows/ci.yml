@@ -98,7 +98,7 @@ jobs:
         run: npm run e2e
 
   # ── بوابة النشر: على main وبعد خضرة الفحوص فقط ──
-  # الدوال أولًا (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم مسبار حقيقي،
+  # الدوال الست أولًا (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم مسبار حقيقي لكل دالة تخدم واجهة،
   # ثم يُدفع فرع release فتبني Cloudflare Pages المنصات منه. لا شيء يصل الإنتاج إن احمرّ فحص.
   deploy:
     needs: build-and-test
@@ -127,15 +127,23 @@ jobs:
           supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy admin-api --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy user-api --project-ref "$PROJECT_REF" --yes
       - name: Functions not deployed
         if: env.SUPABASE_ACCESS_TOKEN == ''
         run: echo "::warning::SUPABASE_ACCESS_TOKEN is not set; edge functions were not deployed (see RUNBOOK.md)."
-      - name: Smoke test leaders-api with a real request
+      # كل دالة تخدم واجهة تُسأل طلبًا حقيقيًا يمر بالقاعدة: leaders-api (system.ping) وadmin-api وuser-api (ping)
+      - name: Smoke test the deployed functions with real requests
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |
-          body=$(curl -s -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
-            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
-          echo "$body"
-          echo "$body" | grep -q '"success":true'
+          ping() {
+            body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+              -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1")
+            echo "$1: $body"
+            echo "$body" | grep -q '"success":true'
+          }
+          ping leaders-api system.ping
+          ping admin-api ping
+          ping user-api ping
       - name: Promote to release (Cloudflare Pages production branch)
         run: git push --force origin "$GITHUB_SHA:refs/heads/release"

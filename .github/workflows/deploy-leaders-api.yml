@@ -2,10 +2,10 @@ name: Deploy functions (manual)
 
 # النشر الاعتيادي يتم في ci.yml (الوظيفة deploy) بعد خضرة الفحوص على main.
 # هذا السير للنشر اليدوي أو للتراجع: شغّله من Actions واختر الفرع أو الوسم
-# أو الإيداع القديم في «Use workflow from»، فتُنشر الدوال الأربع من ذلك المرجع.
+# أو الإيداع القديم في «Use workflow from»، فتُنشر الدوال الست من ذلك المرجع.
 # يفعل شيئًا فقط إن وُجد السر SUPABASE_ACCESS_TOKEN (حساب Supabase، Access Tokens).
-# ترحيلات SQL تبقى يدوية: القاعدة الحية بلا سجل ترحيلات، فـ`supabase db push`
-# كان سيعيد تشغيلها كلها.
+# ترحيلات SQL لا تُنشر هنا: تُطبَّق بقرار المالك عبر migrate.yml (بأسمائها، مع سجل
+# leaders.schema_migrations)، ووضعه check يقرأ الجدولة والسجل بلا تغيير.
 
 on:
   workflow_dispatch:
@@ -45,10 +45,17 @@ jobs:
           supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
-      - name: Verify the live function answers a real request
+          supabase functions deploy admin-api --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy user-api --project-ref "$PROJECT_REF" --yes
+      - name: Verify the live functions answer real requests
         if: steps.gate.outputs.skip != 'true'
         run: |
-          body=$(curl -s -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
-            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
-          echo "$body"
-          echo "$body" | grep -q '"success":true'
+          ping() {
+            body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+              -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1")
+            echo "$1: $body"
+            echo "$body" | grep -q '"success":true'
+          }
+          ping leaders-api system.ping
+          ping admin-api ping
+          ping user-api ping
