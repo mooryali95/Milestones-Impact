@@ -7,6 +7,7 @@ import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
+import { pinSponsorFor } from './entitlements.ts';
 import { isEmail, normalizeEmail } from './logic.js';
 import { suggestOrgs } from './sponsor-match.js';
 import { firstName } from './hall.js';
@@ -66,6 +67,7 @@ export async function adminDecide(a: Admin, b: Body) {
     if (!org || org.status !== 'active') throw new Fail('اختر جهة نشطة');
     if (p.organization_id && p.organization_id !== org.id) throw new Fail('المشارك مرتبط بجهة أخرى؛ غيّرها من ملفه', 409);
     must(await db.from('participants').update({ organization_id: org.id, org_via: 'admin' }).eq('id', p.id));
+    await pinSponsorFor(p.id);   // الإعفاء يُثبَّت لحظة القبول
     await db.from('sponsor_requests').update({ status: 'approved', organization_id: org.id, decided_by: a.email, decided_at: now }).eq('id', r.id);
     await audit('admin', a.email, 'sponsor.approve', 'participants', p.id, null, { org: org.id, typed: r.typed_name });
     sendMail(p.email, `تأكدت رعايتك من ${org.name}`, shell(`أهلًا ${firstName(p.full_name)}`,

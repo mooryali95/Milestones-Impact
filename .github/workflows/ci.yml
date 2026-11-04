@@ -43,6 +43,10 @@ jobs:
         run: |
           python3 shared/build-css.py > /dev/null
           git diff --exit-code -- home public src/styles src/assets
+          # قائمة الترحيلات التي يقرؤها فحص الصحة تطابق المجلد
+          node scripts/db/migrations-list.mjs --check
+          # لقطة البنية المودعة = اللقطة + ترحيلاتها (بناء محلي في PGlite)؛ الحية تُفحص ليليًا في schema-check.yml
+          node scripts/db/snapshot.mjs --from-migrations --check
 
       - name: Lint
         run: npm run lint

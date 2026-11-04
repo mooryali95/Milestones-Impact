@@ -147,6 +147,16 @@ export function levelFor(pcts, rules) {
 }
 
 // ── نموذج التسكين المركّب ──
+// قاعدة «المسار معتمد»: ثلاثة تسكينات وكلها معتمدة؛ ومستويات المشارك من تسكيناته.
+// مصدر واحد لكل الخادم (كانت مكتوبة في ستة مواضع).
+export function approvalOf(placements) {
+  const pl = Array.isArray(placements) ? placements : [];
+  return {
+    approved: pl.length === 3 && pl.every((x) => !!x.approved_at),
+    levels: Object.fromEntries(pl.map((x) => [x.dimension, x.level])),
+  };
+}
+
 // المؤشر المركّب = متوسط موزون لجوانب الإطار الثلاثة. الأوزان تعطي
 // المواقف (اختبار الحكم الموقفي) الثقل الأكبر لأنها أصدق تنبؤًا بالأداء،
 // وتعطي الممارسة (تقدير ذاتي) الأقل لأنها تميل إلى التضخم.

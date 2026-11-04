@@ -4,9 +4,10 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { hostOf, orgDomainIssue } from './domains.js';
+import { pinSponsorFor } from './entitlements.ts';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
@@ -96,7 +97,7 @@ export async function org(b: Body) {
     const lv = Object.fromEntries((p.placements || []).map((x: any) => [x.dimension, x.level]));
     const key = trackKey(lv);
     const { placements: _p, ...rest } = p;
-    return { ...rest, track: key, track_title: key ? titles[key] || null : null, approved: (p.placements || []).length === 3 && p.placements.every((x: any) => x.approved_at) };
+    return { ...rest, track: key, track_title: key ? titles[key] || null : null, approved: approvalOf(p.placements).approved };
   });
   const byTrack: Record<string, number> = {};
   // من أين جاؤوا: طريقة الانتساب، والحملة، والموقع
@@ -137,8 +138,11 @@ export async function assignOrg(a: Admin, b: Body) {
     if (target) rv = rv.neq('organization_id', target.id);
     revoked += (must(await rv.select('id')) ?? []).length;
   }
-  await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null, revoked_sponsor: revoked });
-  return { success: true, moved: done.length, revoked_sponsor: revoked };
+  // الجهة الجديدة تثبّت إعفاءها لحظة الربط (لا عند أول دخول للمشارك)
+  let pinned = 0;
+  if (target) for (const id of moved) if (await pinSponsorFor(id)) pinned += 1;
+  await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null, revoked_sponsor: revoked, pinned });
+  return { success: true, moved: done.length, revoked_sponsor: revoked, pinned };
 }
 
 // ── نظرة عامة ──

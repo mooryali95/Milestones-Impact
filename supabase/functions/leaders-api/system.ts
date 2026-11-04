@@ -8,6 +8,7 @@ import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publ
 import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
+import { MIGRATIONS } from './migrations.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
 const MARKERS: [string, string, string][] = [
@@ -43,10 +44,22 @@ export async function ping() {
   return { success: true, db_ms: Date.now() - t0, mail: !!CONFIG.resendKey, at: new Date().toISOString() };
 }
 
-export async function health() {
+// ما لم يُطبَّق من الترحيلات: من سجل leaders.schema_migrations مقارنًا بقائمة المجلد (migrations.js المولَّد).
+// قبل تطبيق ترحيل السجل نفسه يُستدل بأثر الترحيلات القديمة (MARKERS) كما كان.
+async function missingMigrations() {
+  const { data, error } = await db.from('schema_migrations').select('name');
+  if (!error) {
+    const applied = new Set((data || []).map((r: any) => r.name));
+    return { ledger: true, missing: MIGRATIONS.filter((n) => !applied.has(n)) };
+  }
   const checks = await Promise.all(MARKERS.map(async ([file, t, c]) => ({ file, ok: await present(t, c) })));
   const analytics = await present('page_views', 'id', publicDb);
-  const migrations = [...checks, { file: '20261025200000_site_analytics', ok: analytics }];
+  const missing = [...checks, { file: '20261025200000_site_analytics', ok: analytics }].filter((m) => !m.ok).map((m) => m.file);
+  return { ledger: false, missing: [...missing, '20261105110000_leaders_schema_migrations'] };
+}
+
+export async function health() {
+  const mig = await missingMigrations();
   const mail = await mailUsage();   // الرقم نفسه الذي يحكم به حارس البريد
   const secrets = {
     RESEND_API_KEY: !!CONFIG.resendKey,
@@ -58,7 +71,7 @@ export async function health() {
   return {
     success: true,
     readiness: await readiness().catch(() => []),
-    missing_migrations: migrations.filter((m) => !m.ok).map((m) => m.file),
+    missing_migrations: mig.missing, migrations_ledger: mig.ledger,
     missing_secrets: Object.entries(secrets).filter(([, ok]) => !ok).map(([k]) => k),
     mail: { today: mail, cap: CONFIG.mailDailyCap },
   };

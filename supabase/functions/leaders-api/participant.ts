@@ -8,7 +8,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -19,6 +19,7 @@ import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
+import { pinSponsorFor } from './entitlements.ts';
 import { notifyAdvisor } from './advisor.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
@@ -142,6 +143,7 @@ export async function sponsorCode(p: any, b: Body) {
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
+  await pinSponsorFor(p.id);
   return { success: true, ...(await mePayload(saved)) };
 }
 
@@ -234,6 +236,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
+    if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
@@ -262,6 +265,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
       source: r ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
+    if (p.organization_id) await pinSponsorFor(p.id);
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
@@ -404,8 +408,7 @@ export async function journeyFor(p: any) {
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
   ]);
   const pl = placements.data || [];
-  const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
-  const approved = pl.length === 3 && pl.every((x: any) => x.approved_at);
+  const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
   const state = {
     profileCompleted: !!p.profile_completed_at,
@@ -504,7 +507,7 @@ export async function me(p: any) {
     const r = await orgByEmail(p.email);
     if (r) {
       const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
-      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); p = data; }
+      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id); p = data; }
     }
   }
   return { success: true, ...(await mePayload(p)) };
@@ -831,9 +834,9 @@ export async function passkeyDismiss(p: any) {
 const HANDBOOK_VIEWS_PER_HOUR = 120;
 
 export async function approvedLevels(p: any) {
-  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
-  if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
-  return contentLevelsFor(p, Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>);
+  const a = approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? []);
+  if (!a.approved) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
+  return contentLevelsFor(p, a.levels as Record<string, string>);
 }
 
 // نقاط المشارك ولقبه من سجل النقاط

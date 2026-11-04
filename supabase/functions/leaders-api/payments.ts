@@ -8,10 +8,10 @@
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { audit, CONFIG, db, Fail, must } from './core.ts';
 import { requireWrite } from './admin.ts';
+import { ITEMS, pinSponsor, settings, type Item } from './entitlements.ts';
 
 type Body = Record<string, any>;
-type Item = 'assessment' | 'program';
-export const ITEMS: Item[] = ['assessment', 'program'];
+export { ITEMS, settings };
 export const ITEM_AR: Record<Item, string> = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
 
 const secret = (...names: string[]) => names.map((n) => Deno.env.get(n) || '').find(Boolean) || '';
@@ -21,28 +21,13 @@ const hookSecret = () => secret('CREEM_WEBHOOK_SECRET', 'CAREEM_WEBHOOK_SECRET')
 export const modeOf = (k: string) => (k.startsWith('creem_test_') ? 'test' : 'live');
 const apiBase = () => (modeOf(apiKey()) === 'test' ? 'https://test-api.creem.io' : 'https://api.creem.io');
 
-export async function settings() {
-  const { data } = await db.from('payment_settings').select('*').eq('id', true).maybeSingle();
-  return data || { enabled: false, currency: 'USD', assessment_cents: 100, program_cents: 9900 };
-}
-
 // ── ما يحق للمشارك (المصدر الواحد) ──
-// الرعاية: جهة نشطة مرتبطة تُعفي، ويُثبَّت الإعفاء في السجل أول مرة (sponsor) فيبقى إن أُوقفت الجهة بعدها.
+// الرعاية: جهة نشطة مرتبطة تُعفي، ويُثبَّت الإعفاء في السجل لحظة الربط (entitlements.ts) فيبقى إن أُوقفت الجهة بعدها؛
+// والتثبيت هنا احتياط لمن رُبط قبل ذلك.
 async function sponsorOf(p: any) {
   if (!p.organization_id) return null;
   const { data } = await db.from('organizations').select('id, name, short_name, status, contract_cents, show_value').eq('id', p.organization_id).maybeSingle();
   return data && data.status === 'active' ? data : null;
-}
-// القيمة التعاقدية تُثبَّت على بند البرنامج (والقياس صفر)، فمجموع ما للمشارك = سعر جهته لحظة ربطه
-async function pinSponsor(p: any, org: any) {
-  const s: any = await settings();
-  const value = org.contract_cents ?? (s.assessment_cents + s.program_cents);
-  const rows = ITEMS.map((item) => ({ participant_id: p.id, item, source: 'sponsor', organization_id: org.id, granted_by: 'sponsor', note: org.name,
-    value_cents: item === 'program' ? value : 0 }));
-  for (const r of rows) {
-    const { error } = await db.from('entitlements').insert(r);
-    if (error && error.code !== '23505') console.error('pin sponsor', error.message);
-  }
 }
 
 export async function access(p: any) {
@@ -297,15 +282,18 @@ export async function adminOrgFinance(_a: Admin, b: Body) {
   if (!org) throw new Fail('الجهة غير موجودة', 404);
   const s: any = await settings();
   const [{ data: ents }, { data: parts }] = await Promise.all([
-    db.from('entitlements').select('participant_id, item, value_cents, created_at, revoked_at').eq('organization_id', id).eq('source', 'sponsor'),
+    db.from('entitlements').select('participant_id, item, value_cents, currency, created_at, revoked_at').eq('organization_id', id).eq('source', 'sponsor'),
     db.from('participants').select('id, full_name, email, status, org_via, created_at, certificates(id)').eq('organization_id', id).eq('is_demo', false),
   ]);
   const pinned = new Map<string, any>();
   for (const e of (ents || []).filter((x: any) => !x.revoked_at)) {
-    const g = pinned.get(e.participant_id) || { value: 0, since: e.created_at };
+    const g = pinned.get(e.participant_id) || { value: 0, since: e.created_at, currency: e.currency || null };
     g.value += e.value_cents || 0; if (e.created_at < g.since) g.since = e.created_at;
     pinned.set(e.participant_id, g);
   }
+  // عملة الكشف: عملة التثبيت إن اتفقت القيم عليها، وإلا عملة الإعداد الحالية
+  const currencies = new Set([...pinned.values()].map((g: any) => g.currency).filter(Boolean));
+  const currency = currencies.size === 1 ? [...currencies][0] : s.currency || 'USD';
   // ترتيب الانضمام يحدد من دخل ضمن المقاعد ومن فوقها
   const rows = (parts || []).map((p: any) => ({
     id: p.id, full_name: p.full_name, email: p.email, status: p.status, via: p.org_via, joined: pinned.get(p.id)?.since || p.created_at,
@@ -316,7 +304,7 @@ export async function adminOrgFinance(_a: Admin, b: Body) {
   const certified = rows.filter((r: any) => r.certified).length;
   const by = (st: string[]) => rows.filter((r: any) => st.includes(r.status)).length;
   return {
-    success: true, org,
+    success: true, org, currency,
     list_cents: s.assessment_cents + s.program_cents,
     kpis: {
       participants: rows.length, seats: org.seats, over: rows.filter((r: any) => r.over_seats).length,

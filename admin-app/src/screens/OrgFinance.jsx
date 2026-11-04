@@ -7,7 +7,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { csvText, date, download, L, STATUS, VIA } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
 
-const money = (c) => (c == null ? '·' : `$${(c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
+// العملة من الخادم: عملة التثبيت لقيم الجهة (المصدر admin.org-finance)، لا رمز ثابت
+const moneyIn = (currency) => (c) => (c == null ? '·' : `${(c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency || 'USD'}`);
 
 export default function OrgFinance({ id, onPerson }) {
   const [d, setD] = useState(null);
@@ -16,9 +17,10 @@ export default function OrgFinance({ id, onPerson }) {
   if (!d) return <section className="la-card"><Spinner /></section>;
   if (!d.success) return <section className="la-card"><p className="la-err">{d.message}</p></section>;
   const { org: o, kpis: k, rows } = d;
+  const money = moneyIn(d.currency);
   const f = k.funnel;
   const statement = () => download(new Blob([csvText(
-    ['المشارك', 'البريد', 'تاريخ الانضمام', 'طريقة الربط', 'القيمة (USD)', 'الحالة', 'شهادة', 'فوق المقاعد'],
+    ['المشارك', 'البريد', 'تاريخ الانضمام', 'طريقة الربط', `القيمة (${d.currency || 'USD'})`, 'الحالة', 'شهادة', 'فوق المقاعد'],
     rows.map((r) => [r.full_name, r.email, String(r.joined).slice(0, 10), VIA[r.via] || r.via || '', r.value_cents == null ? '' : r.value_cents / 100, STATUS[r.status] || r.status, r.certified ? 'نعم' : '', r.over_seats ? 'نعم' : '']),
   )], { type: 'text/csv;charset=utf-8' }), `كشف-${o.name}-${new Date().toISOString().slice(0, 10)}.csv`);
   const pct = (n) => (f.registered ? `${Math.round((n / f.registered) * 100)}%` : '0%');

@@ -118,12 +118,17 @@ export async function adminState(b: Body) {
 export async function open(a: Admin, b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
   if (await openSession(String(b.cohort_id))) throw new Fail('للدفعة قاعة مفتوحة؛ أغلقها أولًا', 409);
-  const code = String(Math.floor(100000 + Math.random() * 900000));
   const mode = b.mode === 'self' ? 'self' : 'live';
-  must(await db.from('hall_sessions').insert({
-    cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code,
-    stage: mode === 'self' ? 'round' : 'enter', created_by: a.email,
-  }).select(SESSION_COLS).single());
+  // رمز الدخول ستة أرقام عشوائية؛ تصادمه مع قاعة مفتوحة أخرى نادر ويُعاد السحب بدل الفشل
+  for (let tries = 0; ; tries += 1) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const { error } = await db.from('hall_sessions').insert({
+      cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code,
+      stage: mode === 'self' ? 'round' : 'enter', created_by: a.email,
+    }).select(SESSION_COLS).single();
+    if (!error) break;
+    if (error.code !== '23505' || tries >= 4) { console.error(error); throw new Fail('تعذّر فتح القاعة', 500, 'db_error'); }
+  }
   await audit('admin', a.email, 'hall.open', 'cohorts', String(b.cohort_id), null, { mode, topic: b.topic_id || null });
   return adminState({ cohort_id: b.cohort_id });
 }

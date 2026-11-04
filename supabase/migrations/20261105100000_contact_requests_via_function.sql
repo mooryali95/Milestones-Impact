@@ -14,3 +14,6 @@ create index if not exists contact_requests_ip_created_idx on public.contact_req
 
 -- الإدراج المباشر من المتصفح لم يعد مسموحًا: الدالة تُدرج بمفتاح الخدمة
 revoke insert on public.contact_requests from anon;
+
+-- سجل الترحيلات (المرحلة هـ)
+insert into leaders.schema_migrations (name) values ('20261105100000_contact_requests_via_function') on conflict do nothing;

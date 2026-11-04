@@ -6,6 +6,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { cleanSentence, katonPoints, katonScore, katonSummary, KATON_OPTIONS, sentenceDistribution } from './katon.js';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
+import { approvalOf } from './logic.js';
 import { hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
@@ -13,8 +14,8 @@ type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 async function approved(p: any) {
-  const { data } = await db.from('placements').select('approved_at').eq('participant_id', p.id);
-  if (!data || data.length < 3 || data.some((x: any) => !x.approved_at)) throw new Fail('تُفتح «كاتون» بعد اعتماد مسارك', 403, 'locked');
+  const { data } = await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id);
+  if (!approvalOf(data).approved) throw new Fail('تُفتح «كاتون» بعد اعتماد مسارك', 403, 'locked');
 }
 async function pointsFor(p: any) {
   const def = await journeyDefinition(p);
