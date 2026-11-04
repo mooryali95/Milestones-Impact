@@ -8,7 +8,7 @@ import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.
 import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
-  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective,
+  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -399,11 +399,11 @@ export async function adminReport(b: Body) {
     reliable_up: whole.filter((x) => x.overall.direction === 'up').length,
     reliable_down: whole.filter((x) => x.overall.direction === 'down').length,
   };
-  const transfer = await transferStats(paired.map((x) => x.id));
+  const [transfer, reaction] = await Promise.all([transferStats(paired.map((x) => x.id)), scoped && !scoped.length ? null : reactionStats(scoped)]);
   return {
     success: true,
     counts: { participants: list.length, baseline: list.filter((x) => x.baseline_at).length, post: list.filter((x) => x.post_at).length, paired: paired.length },
-    cohort, overall, transfer, config: cfg, participants: list,
+    cohort, overall, transfer, reaction, config: cfg, participants: list,
     // تنبيه منهجي يظهر فوق الأرقام حين تكون الدفعة صغيرة
     caution: paired.length < cfg.min_n
       ? `العدد ${paired.length} أقل من ${cfg.min_n}: الأرقام وصفية لهذه الدفعة ولا تُعمَّم، والثبات المستعمل افتراضي.`
@@ -416,6 +416,19 @@ const avg = (xs: (number | null)[]) => {
   const v = xs.filter((x): x is number => x != null);
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10 : null;
 };
+
+// رد الفعل (كيركباتريك المستوى 1): استبانة «رأيك في أيام التدريب» (T-REACT) مجمّعة لكل سؤال،
+// بأسئلة المتطلب الأكثر إجابة إن تعددت نسخه بين البرامج. كانت تُحفظ ولا تُقرأ في أي تقرير.
+async function reactionStats(ids: string[] | null) {
+  const { data: reqs } = await db.from('stage_requirements').select('id, config').eq('code', 'T-REACT').eq('kind', 'survey');
+  if (!reqs?.length) return null;
+  const rows = await allFor(ids, () => db.from('participant_requirements').select('participant_id, requirement_id, answers')
+    .in('requirement_id', reqs.map((r: any) => r.id)).not('answers', 'is', null).order('participant_id'));
+  const count: Record<string, number> = {};
+  for (const r of rows) count[r.requirement_id] = (count[r.requirement_id] || 0) + 1;
+  const main = [...reqs].sort((a: any, b: any) => (count[b.id] || 0) - (count[a.id] || 0))[0];
+  return surveySummary(main.config, rows.filter((r: any) => r.requirement_id === main.id).map((r: any) => r.answers));
+}
 
 // بنود انتقال التعلم: نسبة الموافقة (أوافق وأوافق بشدة) لكل بند
 async function transferStats(ids: string[]) {

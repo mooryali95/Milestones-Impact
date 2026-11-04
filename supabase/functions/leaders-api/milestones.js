@@ -107,7 +107,8 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
     const due = rec.due_override || milestoneDue(m, ctx);
     const done = !!rec.done_at || (m.complete === 'stage' && m.stage_key && stagesDone.has(m.stage_key));
     let status, late_days = 0;
-    if (done) status = 'done';
+    // المنجز بعد موعده يبقى «منجزًا» ويحمل تأخره (done_at − due) فلا يختفي الخصم بالإنجاز
+    if (done) { status = 'done'; if (rec.done_at && due) late_days = Math.max(0, daysBetween(due, String(rec.done_at).slice(0, 10))); }
     else if (!due) status = 'unscheduled';
     else if (t > due) { status = 'late'; late_days = daysBetween(due, t); }
     else status = daysBetween(t, due) <= 7 ? 'due_soon' : 'on_time';
@@ -116,12 +117,16 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
 }
 
 // ملخص المعالم في سطر: كم أُنجز، وكم تأخر، وأقرب استحقاق
+// مهلة سماح: إنجاز خلال ثلاثة أيام من الموعد لا يُعدّ تأخرًا
+export const MILESTONE_GRACE_DAYS = 3;
 export function milestoneSummary(list) {
   const done = list.filter((m) => m.status === 'done').length;
   const late = list.filter((m) => m.status === 'late');
+  const doneLate = list.filter((m) => m.status === 'done' && m.late_days > MILESTONE_GRACE_DAYS);
   const next = list.find((m) => m.status !== 'done' && m.due);
   return {
     total: list.length, done, late: late.length, max_late: late.reduce((a, m) => Math.max(a, m.late_days), 0),
+    done_late: doneLate.length, max_done_late: doneLate.reduce((a, m) => Math.max(a, m.late_days), 0),
     next: next ? { id: next.id, title: next.title_ar, due: next.due, status: next.status } : null,
     pct: list.length ? Math.round((done / list.length) * 100) : null,
   };

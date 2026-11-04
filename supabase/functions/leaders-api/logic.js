@@ -823,6 +823,25 @@ export function cleanSurvey(config, raw) {
   }
   return { answers: out };
 }
+// تجميع استبانة لدفعة (رد الفعل، كيركباتريك المستوى 1): لكل سؤال تقدير عدده ومتوسطه من 5 وتوزيعه
+// ونسبة أعلى تقديرين، ولكل سؤال نص إجاباته كما كُتبت. لا يُحكم بها على الأفراد.
+export function surveySummary(config, answersList) {
+  const rows = (answersList || []).filter((a) => a && typeof a === 'object');
+  return {
+    n: rows.length,
+    questions: surveyQuestions(config).map((q) => {
+      if (q.type === 'rating') {
+        const v = rows.map((a) => Math.round(Number(a[q.key]))).filter((x) => x >= 1 && x <= 5);
+        const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        for (const x of v) dist[x] += 1;
+        return { key: q.key, label: q.label, type: 'rating', n: v.length, mean: v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null,
+          top2_pct: v.length ? Math.round((v.filter((x) => x >= 4).length / v.length) * 100) : null, dist };
+      }
+      const texts = rows.map((a) => String(a[q.key] ?? '').trim()).filter(Boolean).slice(0, 100);
+      return { key: q.key, label: q.label, type: 'text', n: texts.length, texts };
+    }),
+  };
+}
 
 // ── القراءة ──
 // الباب يُقسم إلى READ_SLICES شريحة متساوية الارتفاع. القراءة الفعلية:

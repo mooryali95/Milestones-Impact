@@ -201,10 +201,18 @@ export function ContinuousCard({ c }) {
       </div>
       {c.flags.length > 0 && <ul className="la-flags">{c.flags.map((f) => <li key={f}>{f}</li>)}</ul>}
       <div className="table-wrap"><table className="la-table">
-        <thead><tr><th>المصدر</th><th>النسبة</th><th>لماذا</th></tr></thead>
+        <thead><tr><th>المصدر</th><th>النسبة</th><th>الأحداث</th><th>لماذا</th></tr></thead>
         <tbody>{c.components.map((x) => (
-          <tr key={x.key}><td>{x.label}</td><td>{x.value != null ? `${x.value}٪` : '—'}</td><td><small className="la-muted">{x.reason}</small></td></tr>
-        ))}</tbody>
+          <tr key={x.key} className={x.value != null && x.in_index === false ? 'la-dim' : ''}>
+            <td>{x.label}{x.value != null && x.in_index === false && <><br /><span className="la-chip">خارج المؤشر</span></>}</td>
+            <td>{x.value != null ? `${x.value}٪` : '—'}{x.se != null && <small className="la-muted"> ±{x.se}</small>}</td>
+            <td>{x.n ?? '—'}{x.items != null ? <small className="la-muted"> ({x.items} سؤالًا)</small> : ''}</td>
+            <td><small className="la-muted">{x.reason}</small></td>
+          </tr>
+        ))}
+        {c.engagement && (
+          <tr className="la-dim"><td>{c.engagement.label}<br /><span className="la-chip">لا يدخل المؤشر</span></td><td>{c.engagement.value != null ? `${c.engagement.value}٪` : '—'}</td><td>{c.engagement.n}</td><td><small className="la-muted">{c.engagement.reason}</small></td></tr>
+        )}</tbody>
       </table></div>
       {c.events.length > 0 && (
         <details><summary>آخر التقييمات ({c.count})</summary>

@@ -410,6 +410,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
     katonEvents(participantId),
     programId ? db.from('programs').select('final_eval').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
+  const fc = finalConfig((prog as any).data?.final_eval);
   return continuousAssessment({
     quizzes: (hb.data || []).map((q: any) => ({ ...q, title: q.handbook_modules?.title_ar })),
     models: (subs.data || []).map((m: any) => ({ ...m, title: m.learning_models?.title_ar })),
@@ -417,7 +418,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
     milestones: milestones.filter((m: any) => m.done),
     lab: (lb.data || []).map((a: any) => ({ ...a, title: a.lab_items?.title_ar })),
     katon: kt,
-    weights: finalConfig((prog as any).data?.final_eval).sources,
+    weights: fc.sources, min_events: fc.min_events, min_quiz_items: fc.min_quiz_items,
   });
 }
 
@@ -463,11 +464,11 @@ export async function journeyFor(p: any) {
   });
   const [group, continuous, fe] = await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
-    db.from('final_evaluations').select('score, decision, status, decided_at').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
+    db.from('final_evaluations').select('score, decision, status, decided_at, adjust').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
   ]);
-  // التقييم الختامي يظهر للمشارك بعد اعتماده فقط
+  // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
   const final = fe.data?.status === 'approved'
-    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at } : null;
+    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at, notes: fe.data.adjust?.notes_to_participant || null } : null;
   return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final };
 }
 
