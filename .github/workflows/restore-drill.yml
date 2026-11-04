@@ -47,7 +47,8 @@ jobs:
           test -n "$run_id"
           echo "backup run $run_id"
           gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --dir dump
-          f=$(find dump -name 'leaders-*.dump.gpg' | head -1)
+          # كل أداة تُنزَّل في مجلد باسمها (leaders-YYYY-MM-DD.dump.gpg/…)، فالبحث عن الملف لا المجلد
+          f=$(find dump -type f -name 'leaders-*.dump.gpg' | head -1)
           test -n "$f"
           gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" -d -o db.dump "$f"
           test -s db.dump
