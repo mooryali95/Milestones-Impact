@@ -69,6 +69,9 @@ export async function fetchRetry(url, init, { tries = 3, delay = 800 } = {}) {
     try {
       const r = await fetch(url, init);
       if (!BUSY_STATUS.includes(r.status) || i >= tries) return r;
+      // الدالة نفسها قد ترد 503 بجسم JSON (حالة عمل لا إقلاع): أجابت، فلا تُعاد
+      const body = typeof r.clone === 'function' ? await r.clone().json().catch(() => null) : null;
+      if (body && typeof body === 'object' && 'success' in body) return r;
     } catch (e) {
       if (i >= tries) throw e;
     }

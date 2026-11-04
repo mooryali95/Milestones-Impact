@@ -11,7 +11,7 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { approvalOf, isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -26,7 +26,8 @@ const MODEL_COLS = 'id, key, dimension, sort, min_level, active, scopes, capston
 
 async function levelsOf(participantId: string) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId)) as any[] ?? [];
-  return { levels: Object.fromEntries(pl.map((x) => [x.dimension, x.level])) as Record<string, string>, approved: pl.length === 3 && pl.every((x) => x.approved_at) };
+  const a = approvalOf(pl);
+  return { levels: a.levels as Record<string, string>, approved: a.approved };
 }
 
 // ── بناء الوثيقة من مصادرها ──
@@ -191,8 +192,8 @@ export async function doc(p: any) {
 
 // ── المستشار ──
 export async function adminList(b: Body) {
-  let q = db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants(full_name, email, organization_name, work_scope)')
-    .order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
+  let q = db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)')
+    .eq('participants.is_demo', false).order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
   const rows = must(await q) as any[] ?? [];
   const ids = rows.map((r) => r.participant_id);

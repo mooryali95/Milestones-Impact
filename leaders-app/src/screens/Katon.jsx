@@ -1,40 +1,34 @@
 // ════════════════════════════════════════════════════════════════
-// «كاتون»: موضوع بست جمل، ولكل جملة ثمانية خيارات، والمفتاح بعد إتمام الموضوع
+// «كاتون»: موضوع بست جمل، حكم بثقة مدرَّجة على كل جملة، ووسوم موقف، والمفتاح بعد إتمام الموضوع
 // ════════════════════════════════════════════════════════════════
-// اليقين يُكافأ إن صدق ويُعاقَب إن خاب، فيتعلّم المشارك أن يقول «تحتاج بحث» حين لا يعرف.
+// الإفصاح الصادق عن الثقة هو ما يكسب: «متيقن» يكسب أكثر إن أصاب ويخسر أكثر إن أخطأ، و«أرجّح» لا يخسر.
 // بعد الإجابة عن جمل الموضوع كلها يُكشف المفتاح والشرح والنقاط، وتُقفل الإجابات.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
-import { KATON_QUESTION_AR as Q_AR } from '../../../supabase/functions/leaders-api/katon.js';
+import KatonAnswer from '../KatonAnswer.jsx';
+import { KATON_CONFIDENCE, KATON_FAMILY_AR, KATON_KEY_AR, KATON_QUESTION_AR as Q_AR, KATON_STANCES } from '../../../supabase/functions/leaders-api/katon.js';
+import PeerRequests from './PeerRequests.jsx';
 
-const KEY_AR = { true: 'صحيحة', false: 'خاطئة', opinion: 'رأي بلا مفتاح' };
-const FAM_AR = { certainty: 'دقة التحليل', curiosity: 'الفضول البحثي', initiative: 'المبادرة', openness: 'الانفتاح الفكري' };
+const sign = (n) => (n > 0 ? `+${n}` : `${n}`);
 
-function Sentence({ s, n, options, revealed, onAnswer, busy }) {
-  const [note, setNote] = useState(s.mine?.note || '');
-  const pick = s.mine?.choice;
-  const opt = (k) => options.find((o) => o.key === k);
+function Sentence({ s, n, points, revealed, onAnswer, onAsk, busy }) {
+  const mine = s.mine;
   return (
-    <li className={`kt-sent${pick ? ' done' : ''}`}>
+    <li className={`kt-sent${mine ? ' done' : ''}`}>
       <div className="kt-head">
         <span className="kt-num">{n}</span>
         <span className="chip">{Q_AR[s.question]}</span>
         {revealed && <span className={`chip ${s.key === 'opinion' ? '' : 'gold'}`}>المفتاح: {KEY_AR[s.key]}</span>}
-        {revealed && s.points != null && <b className={`kt-pts ${s.points < 0 ? 'neg' : ''}`}>{s.points > 0 ? '+' : ''}{s.points}</b>}
+        {revealed && s.points != null && <b className={`kt-pts ${s.points < 0 ? 'neg' : ''}`}>{sign(s.points)}</b>}
       </div>
       <p className="kt-text">{s.text_ar}</p>
-      <div className="kt-opts" role="radiogroup" aria-label={`خيارك في الجملة ${n}`}>
-        {options.map((o) => (
-          <button key={o.key} type="button" role="radio" aria-checked={pick === o.key} disabled={revealed || busy}
-            className={`kt-opt${pick === o.key ? ' on' : ''}`} onClick={() => onAnswer(s.id, o.key, note)} title={`${o.ar} · ${o.key === 'true' || o.key === 'false' ? `±${o.points}` : `+${o.points}`}`}>
-            <i aria-hidden="true">{o.glyph}</i><span>{o.ar}</span>
-          </button>
-        ))}
-      </div>
-      {!revealed && pick && (pick === 'question' || pick === 'research' || pick === 'idea' || pick === 'can') && (
-        <label className="field kt-note"><span>{opt(pick).ar}: اكتبها ليراها خبيرك وفريقك</span>
-          <textarea className="input" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (s.mine?.note || '') && onAnswer(s.id, pick, note)} /></label>
-      )}
+      {revealed ? (
+        <p className="small muted">
+          {mine?.verdict ? `حكمك: ${KEY_AR[mine.verdict]} (${KATON_CONFIDENCE[mine.confidence].ar})` : 'لم تحكم على الجملة'}
+          {mine?.stances?.length ? ` · موقفك: ${mine.stances.map((k) => KATON_STANCES.find((x) => x.key === k)?.ar).join('، ')}` : ''}
+          {s.key === 'opinion' ? ' · جملة رأي: لا تُسجَّل عليها نقاط' : ''}
+        </p>
+      ) : <KatonAnswer mine={mine} points={points} disabled={busy} onAnswer={(a) => onAnswer(s.id, a)} onAsk={(text) => onAsk(s, text)} />}
       {revealed && s.explain_ar && <p className="small muted">{s.explain_ar}</p>}
       {Object.keys(s.tasks || {}).length > 0 && (
         <details className="kt-tasks"><summary className="small muted">مهام الفرق في هذه الجملة</summary>
@@ -43,43 +37,60 @@ function Sentence({ s, n, options, revealed, onAnswer, busy }) {
     </li>
   );
 }
+const KEY_AR = KATON_KEY_AR;
 
 export default function Katon({ onBack }) {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ask, setAsk] = useState(null);   // ملاحظة على جملة تُرفع طلب توجيه (المرحلة 8)
   useEffect(() => { call('katon.mine').then(setD); }, []);
   if (!d) return <div className="page"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (!d.success) return <div className="page"><div className="alert err">{d.message}</div></div>;
 
-  const answer = async (sentence_id, choice, note) => {
+  const answer = async (sentence_id, a) => {
     setBusy(true); setErr('');
-    const r = await call('katon.answer', { sentence_id, choice, note });
+    const r = await call('katon.answer', { sentence_id, ...a });
     setBusy(false);
     if (r.success) setD(r); else setErr(r.message);
   };
   const t = d.topics.find((x) => x.id === open);
   const sm = d.summary;
+  const pts = d.points;
 
   return (
     <div className="page wide stack">
       <div className="row between">
-        <div><p className="eyebrow">نموذج «كاتون»</p><h1>دقة التحليل</h1></div>
+        <div><p className="eyebrow">نموذج «كاتون»</p><h1>دقة التحليل والمعايرة</h1></div>
         <button className="btn ghost sm" onClick={t ? () => setOpen(null) : onBack}>{t ? 'كل المواضيع' : 'رحلتي'}</button>
       </div>
 
       {!t && (
         <>
           <section className="card stack">
-            <p className="muted">لكل جملة اختر ما يصف موقفك منها بصدق. اليقين (صحيحة 100% أو خاطئة 100%) يكسب نقاطه إن أصاب ويخسرها إن أخطأ، فإن لم تكن متأكدًا فاختر «تحتاج بحث» أو «لدي سؤال». يُكشف المفتاح حين تتم جمل الموضوع.</p>
-            <div className="kt-legend">{d.options.map((o) => <span key={o.key}><i>{o.glyph}</i>{o.ar} <small className="muted">{o.key === 'true' || o.key === 'false' ? `±${o.points}` : `+${o.points}`}</small></span>)}</div>
+            <p className="muted">احكم على كل جملة (صحيحة أو خاطئة) بدرجة ثقتك الحقيقية: «أرجّح» لا يخسر، و«واثق» و«متيقن» يكسبان أكثر إن أصبت ويخسران أكثر إن أخطأت، فالصدق عن ثقتك هو ما يربح على المدى. موقفك من الجملة (سؤال، بحث، فكرة…) يُرى ولا يُحسب بالنقاط. يُكشف المفتاح حين تتم جمل الموضوع.</p>
+            <div className="kt-legend">
+              {[1, 2, 3].map((c) => <span key={c}><b>{KATON_CONFIDENCE[c].ar}</b> <small className="muted">{KATON_CONFIDENCE[c].band}: {sign(pts.right[c])} / {sign(pts.wrong[c])}</small></span>)}
+            </div>
           </section>
-          {sm.answered > 0 && (
+          {sm.judged > 0 && (
             <section className="card kt-sum">
-              <div><b className="kt-big">{sm.total > 0 ? '+' : ''}{sm.total}</b><small className="muted">نقاطك في المواضيع المكشوفة</small></div>
-              <div><b className="kt-big">{sm.accuracy != null ? `${sm.accuracy}٪` : '—'}</b><small className="muted">دقة اليقين{sm.sure ? ` (${sm.sure - sm.sure_wrong} من ${sm.sure})` : ''}</small></div>
-              {Object.entries(sm.families).map(([k, v]) => <div key={k}><b>{v}٪</b><small className="muted">{FAM_AR[k]}</small></div>)}
+              <div><b className="kt-big">{sign(sm.total)}</b><small className="muted">نقاطك في المواضيع المكشوفة</small></div>
+              <div><b className="kt-big">{sm.accuracy != null ? `${sm.accuracy}٪` : '—'}</b><small className="muted">الدقة ({sm.judged - sm.wrong} من {sm.judged} حكمًا)</small></div>
+              <div><b className="kt-big">{sm.calibration != null ? `${sm.calibration}٪` : '—'}</b><small className="muted">المعايرة (1 − Brier)</small></div>
+              <div><b className="kt-big">{sm.overconfidence != null ? sign(sm.overconfidence) : '—'}</b><small className="muted">{sm.overconfidence > 5 ? 'ثقتك أعلى من دقتك' : sm.overconfidence < -5 ? 'ثقتك أقل من دقتك' : 'ثقتك تطابق دقتك'}</small></div>
+              <div><b className="kt-big">{sm.abstention != null ? `${sm.abstention}٪` : '—'}</b><small className="muted">امتناع عن الحكم</small></div>
+              {Object.entries(sm.stances.families).map(([k, v]) => <div key={k}><b>{v}٪</b><small className="muted">{KATON_FAMILY_AR[k]}</small></div>)}
+            </section>
+          )}
+          {sm.judged > 0 && (
+            <section className="card stack">
+              <h3>منحنى معايرتك</h3>
+              <ul className="ca-list">{[1, 2, 3].map((c) => (
+                <li key={c}><span>{KATON_CONFIDENCE[c].ar} <small className="muted">(المتوقع {sm.curve[c].expected}٪)</small></span>
+                  <small className="muted">{sm.curve[c].n ? `أصبت ${sm.curve[c].accuracy}٪ من ${sm.curve[c].n}` : 'لم تستعملها بعد'}</small></li>
+              ))}</ul>
             </section>
           )}
           {d.topics.length ? (
@@ -108,7 +119,8 @@ export default function Katon({ onBack }) {
               : <p className="small muted">أجبت عن {t.answered} من {t.total}. يُكشف المفتاح بعد آخر جملة، ولا تُعدَّل الإجابات بعده.</p>}
           </div>
           {err && <div className="alert err">{err}</div>}
-          <ol className="kt-list">{t.sentences.map((s, i) => <Sentence key={s.id} s={s} n={i + 1} options={d.options} revealed={t.revealed} onAnswer={answer} busy={busy} />)}</ol>
+          {ask && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
+          <ol className="kt-list">{t.sentences.map((s, i) => <Sentence key={s.id} s={s} n={i + 1} points={pts} revealed={t.revealed} onAnswer={answer} onAsk={(sent, text) => { setAsk({ source: 'sentence', ref_id: sent.id, text, label: `جملة «${Q_AR[sent.question]}» في «${t.title_ar}»` }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} busy={busy} />)}</ol>
         </section>
       )}
     </div>

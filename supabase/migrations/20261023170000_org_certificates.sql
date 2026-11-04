@@ -12,9 +12,12 @@
 -- 1) الموقّع الواحد في الإعداد العام: عمود واحد بدل مصفوفة
 alter table leaders.certificate_settings
   add column if not exists signatory jsonb check (signatory is null or jsonb_typeof(signatory) = 'object');
-update leaders.certificate_settings
-   set signatory = signatories -> 0
- where signatory is null and jsonb_array_length(signatories) > 0;
+-- التحويل من المصفوفة يُنفَّذ فقط إن كان العمود القديم ما زال موجودًا (إعادة التطبيق فوق لقطة حديثة لا تجده)
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'leaders' and table_name = 'certificate_settings' and column_name = 'signatories') then
+    execute $q$update leaders.certificate_settings set signatory = signatories -> 0 where signatory is null and jsonb_array_length(signatories) > 0$q$;
+  end if;
+end $$;
 alter table leaders.certificate_settings drop column if exists signatories;
 
 -- 2) تخصيص الجهة

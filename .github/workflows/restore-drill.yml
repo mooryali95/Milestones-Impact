@@ -1,0 +1,72 @@
+name: Backup restore drill
+
+# نسخة احتياطية لم تُستعد قط ليست نسخة. شهريًا (أو يدويًا) يُنزَّل آخر ملف من
+# backup.yml ويُفك تشفيره ويُستعاد في قاعدة مؤقتة داخل العامل، ثم تُعدّ الصفوف
+# الأساسية. يفعل شيئًا فقط إن وُجد السر BACKUP_PASSPHRASE.
+
+on:
+  schedule:
+    - cron: '17 3 2 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      GH_TOKEN: ${{ github.token }}
+      PGPASSWORD: drill
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Skip without passphrase
+        id: gate
+        run: |
+          if [ -z "$PASSPHRASE" ]; then
+            echo "::notice::BACKUP_PASSPHRASE is not set; drill skipped."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download the latest nightly dump
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow backup.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')
+          test -n "$run_id"
+          echo "backup run $run_id"
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --dir dump
+          f=$(find dump -name 'leaders-*.dump.gpg' | head -1)
+          test -n "$f"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" -d -o db.dump "$f"
+          test -s db.dump
+          ls -l db.dump
+      - name: Restore into the scratch database
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          # أدوار Supabase التي تشير إليها السياسات، حتى لا تفشل إعادة إنشائها
+          docker run --rm --network host -e PGPASSWORD postgres:17 psql -h localhost -U postgres -v ON_ERROR_STOP=1 \
+            -c "create role anon nologin; create role authenticated nologin; create role service_role nologin;"
+          docker run --rm --network host -e PGPASSWORD -v "$PWD/db.dump:/db.dump:ro" postgres:17 \
+            pg_restore -h localhost -U postgres -d postgres --no-owner --no-privileges /db.dump \
+            || echo "::warning::pg_restore reported errors (objects that depend on Supabase extensions); the row counts below are the real check"
+      - name: Count the rows that matter
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          docker run --rm --network host -e PGPASSWORD postgres:17 psql -h localhost -U postgres -v ON_ERROR_STOP=1 -At \
+            -c "select 'participants=' || count(*) from leaders.participants" \
+            -c "select 'placements=' || count(*) from leaders.placements" \
+            -c "select 'capstones=' || count(*) from leaders.capstones" \
+            -c "select 'certificates=' || count(*) from leaders.certificates" \
+            -c "select 'contact_requests=' || count(*) from public.contact_requests"

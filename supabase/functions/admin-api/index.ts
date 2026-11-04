@@ -87,7 +87,7 @@ function b32dec(s: string): Uint8Array {
   return new Uint8Array(o);
 }
 async function hotp(secret: string, counter: bigint): Promise<string> {
-  const ck = await crypto.subtle.importKey("raw", b32dec(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const ck = await crypto.subtle.importKey("raw", b32dec(secret) as BufferSource, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
   const buf = new ArrayBuffer(8);
   new DataView(buf).setBigUint64(0, counter);
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", ck, buf));
@@ -112,7 +112,9 @@ const otpHtml = (code: string) => mailShell("رمز الدخول إلى لوحة
 ${mailText("أدخل هذا الرمز في صفحة الدخول لإكمال تسجيل دخولك.")}
 ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, ADMIN_MAIL);
 
-type SB = ReturnType<typeof createClient>;
+// بلا أنواع مولَّدة للقاعدة: العميل any كما في send-otp حتى يمر deno check لكل الدوال (المرحلة ي)
+// deno-lint-ignore no-explicit-any
+type SB = any;
 
 async function tooManyFails(sb: SB, email: string): Promise<boolean> {
   const since = new Date(Date.now() - FAIL_WINDOW_MS).toISOString();
@@ -160,7 +162,7 @@ async function authUserId(sb: SB, email: string): Promise<string | null> {
   if (error) console.error("admin-api createUser:", error.message);
   for (let page = 1; page <= 20; page++) {
     const { data: list } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
-    const found = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
+    const found = list?.users?.find((u: any) => (u.email || "").toLowerCase() === email);
     if (found) return found.id;
     if (!list?.users?.length || list.users.length < 1000) break;
   }
@@ -289,7 +291,7 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const action = body.action as string;
-    const sb = createClient(SB_URL, SB_KEY);
+    const sb: SB = createClient(SB_URL, SB_KEY);
 
     // ══ login-send: same reply whether or not the email is an admin ══
     if (action === "login-send") {
@@ -476,7 +478,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       const pks = await myPasskeys();
       return json({
         success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method,
-        passkeys: pks.map(({ credential_id: _c, ...p }) => p),
+        passkeys: pks.map(({ credential_id: _c, ...p }: any) => p),
       });
     }
 
@@ -495,7 +497,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
           userDisplayName: `${session.name || adminEmail} (إدارة)`,
           userID: new TextEncoder().encode(`admin:${session.userId}`),
           attestationType: "none",
-          excludeCredentials: existing.map((c) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
+          excludeCredentials: existing.map((c: any) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
           authenticatorSelection: { residentKey: "required", userVerification: "required" },
         });
         await saveChallenge(sb, options.challenge, "register", String(session.userId));
@@ -541,7 +543,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (session.method !== "passkey") return json(NEED_PASSKEY, 403);
       const id = String(body.id || "");
       const pks = await myPasskeys();
-      const target = pks.find((p) => p.id === id);
+      const target = pks.find((p: any) => p.id === id);
       if (!target) return json({ success: false, message: "المفتاح غير موجود" }, 404);
       if (session.passkeyOnly && pks.length <= 2) {
         return json({ success: false, message: "الدخول بالمفتاح وحده يتطلب مفتاحين على الأقل، أضف مفتاحًا آخر أو عطّل الوضع أولًا" });
@@ -567,7 +569,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       // الجلسات المفتوحة برمز تسقط تلقائيًا في getAdminSession، ونحذفها صراحة أيضًا.
       if (enable) {
         const { data: rows } = await sb.from("api_sessions").select("token_hash, meta").eq("kind", "admin").eq("subject", String(session.userId));
-        const drop = (rows || []).filter((r) => (r.meta as Record<string, unknown>)?.method !== "passkey").map((r) => r.token_hash);
+        const drop = (rows || []).filter((r: any) => (r.meta as Record<string, unknown>)?.method !== "passkey").map((r: any) => r.token_hash);
         if (drop.length) await sb.from("api_sessions").delete().in("token_hash", drop);
       }
       await audit("passkey-only", { enable });
@@ -583,7 +585,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         .eq("kind", "admin").eq("subject", String(session.userId)).gt("expires_at", new Date().toISOString());
       return json({
         success: true,
-        sessions: (data || []).map((r) => {
+        sessions: (data || []).map((r: any) => {
           const m = (r.meta || {}) as Record<string, unknown>;
           return {
             current: r.token_hash === curHash, method: m.method || null, ip: m.ip || null, ua: m.ua || null,

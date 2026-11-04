@@ -173,6 +173,49 @@ function StageOverride({ s, onPick }) {
   );
 }
 
+// حذف مشارك بأثر: ما سيُمحى معه، وما يمنعه (شهادة سارية أو دفع مؤكد)؛ للمدير الأعلى بكتابة البريد
+function PersonDanger({ p, onDeleted }) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [impact, setImpact] = useState(null);
+  const [typed, setTyped] = useState('');
+  useEffect(() => { if (open && !impact) L('admin.participant-impact', { participant_id: p.id }).then(setImpact); }, [open, impact, p.id]);
+  const remove = async () => {
+    const r = await L('admin.participant-delete', { participant_id: p.id, confirm_email: typed });
+    if (r.success) { toast('حُذف المشارك'); onDeleted(); } else toast(r.message);
+  };
+  const c = impact?.counts || {};
+  return (
+    <section className="la-card of-danger">
+      <div className="of-danger-head">
+        <div><b>منطقة الخطر</b><small>الإيقاف (تغيير الحالة) يحفظ البيانات. الحذف نهائي ويمحو ملفاته المرفوعة، وهو للمدير الأعلى.</small></div>
+        <button type="button" className="btn-sm danger" aria-expanded={open} onClick={() => setOpen(!open)}>حذف المشارك…</button>
+      </div>
+      {open && (
+        <div className="of-danger-body">
+          {!impact ? <small>جارٍ حساب الأثر…</small> : !impact.success ? <p className="of-err">{impact.message}</p> : impact.blockers.length ? (
+            <p className="of-err">لا يمكن حذفه الآن: {impact.blockers.join('، ')}.</p>
+          ) : (
+            <>
+              <p>سيُمحى معه: {c.assessments} قياس، و{c.submissions} نموذج، و{c.capstones} وثيقة، و{c.requirements} متطلب، و{c.sessions} جلسة، وكل ملفاته المرفوعة. اكتب بريده للتأكيد:</p>
+              <input dir="ltr" aria-label="اكتب بريد المشارك للتأكيد" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={p.email} />
+              <button type="button" className="btn-sm danger" disabled={typed.trim().toLowerCase() !== p.email} onClick={remove}>حذف نهائي</button>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const EDIT_FIELDS = [
+  { name: 'full_name', label: 'الاسم' },
+  { name: 'email', label: 'البريد', type: 'email', dir: 'ltr', help: 'تغييره يُسقط توثيقه، فيوثّقه المشارك عند دخوله التالي' },
+  { name: 'phone', label: 'الجوال', dir: 'ltr' },
+  { name: 'job_title', label: 'المسمى' },
+  { name: 'organization_name', label: 'جهة العمل (نص يكتبه المشارك)' },
+];
+
 function Person({ id, canWrite, onBack }) {
   const { toast, confirm, prompt } = useUI();
   const [r, setR] = useState(null);
@@ -180,6 +223,13 @@ function Person({ id, canWrite, onBack }) {
   const [levels, setLevels] = useState({});
   const [notes, setNotes] = useState({});
   const [sub, setSub] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [cohorts, setCohorts] = useState(null);   // الدفعات المفتوحة للتسجيل الصريح
+  const [cohortTo, setCohortTo] = useState('');
+  useEffect(() => {
+    if (!canWrite) return;
+    L('admin.programs', {}).then((x) => setCohorts(x.success ? (x.cohorts || []).filter((c) => !c.is_default && c.status !== 'closed') : []));
+  }, [canWrite]);
 
   const load = useCallback(async () => {
     const d = await L('admin.participant', { id });
@@ -206,6 +256,8 @@ function Person({ id, canWrite, onBack }) {
   const prof = r.profile;
   const latest = (r.assessments || []).find((a) => a.status === 'submitted');
   const res = (d) => latest?.assessment_results?.find((x) => x.dimension === d);
+  // المستوى القائم في البُعد: المعتمد أو المسجل من القياس، وإلا المحسوب من آخر قياس
+  const currentLevel = (d) => prof?.dimensions?.find((y) => y.dimension === d)?.level || res(d)?.evaluation?.level || null;
   const act = async (action, body, ok) => {
     const d = await L(action, body);
     toast(d.success ? ok : d.message);
@@ -215,6 +267,9 @@ function Person({ id, canWrite, onBack }) {
 
   const approve = async () => {
     if (Object.values(levels).some((v) => !v) || DIMS.some((d) => !levels[d])) return toast('حدّد مستوى كل بُعد');
+    // مخالفة المستوى القائم (المحسوب أو المعتمد قبله) تلزمها علة مكتوبة؛ الخادم يرفض بدونها
+    const bare = DIMS.find((d) => { const cur = currentLevel(d); return cur && levels[d] !== cur && (notes[d] || '').trim().length < 10; });
+    if (bare) return toast(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_EN[bare]} (10 أحرف على الأقل)`);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
     act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
   };
@@ -238,6 +293,17 @@ function Person({ id, canWrite, onBack }) {
     const d = await L('admin.evidence-url', { path });
     if (d.success) window.open(d.url, '_blank', 'noopener'); else toast(d.message);
   };
+  // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
+  const enroll = async () => {
+    const c = (cohorts || []).find((x) => x.id === cohortTo);
+    if (!(await confirm(`تسجيل ${p.full_name} صراحةً في دفعة «${c?.name}»؟ يُسحب من أي دفعة أخرى سُجّل فيها صراحةً.`))) return;
+    const d = await act('admin.cohort-enroll', { cohort_id: cohortTo, participant_ids: [p.id] }, 'سُجّل في الدفعة');
+    if (d.success) setCohortTo('');
+  };
+  const issueCert = async () => {
+    if (!(await confirm('إصدار شهادة لهذا المشارك الآن؟ تُسجَّل برقم تحقق ويصله بريد بها.'))) return;
+    act('admin.certificate-issue', { participant_id: p.id }, 'صدرت الشهادة');
+  };
 
   const pts = r.points || { total: 0, rank: { title: 'مستكشف' } };
   const book = r.book || [];
@@ -260,9 +326,23 @@ function Person({ id, canWrite, onBack }) {
             <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
             <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
+            <dt>الدفعة</dt><dd>
+              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}
+              {canWrite && cohorts?.length > 0 && (
+                <span className="la-row">
+                  <select aria-label="تسجيل صريح في دفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
+                    <option value="">تسجيل صريح في دفعة…</option>
+                    {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <button className="btn-sm ghost" disabled={!cohortTo} onClick={enroll}>سجّله</button>
+                </span>
+              )}
+            </dd>
+            <dt>الشهادة</dt><dd>{p.status === 'completed' ? (canWrite ? <button className="btn-sm ghost" onClick={issueCert}>إصدار الشهادة يدويًا</button> : 'تُصدر عند الإنهاء') : 'بعد إنهاء البرنامج'}</dd>
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
+          {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
           {canWrite && (
             <div className="la-row">
               <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -270,7 +350,14 @@ function Person({ id, canWrite, onBack }) {
               </select>
               <button className="btn-sm ghost" disabled={status === p.status} onClick={() => act('admin.status', { participant_id: p.id, status }, 'تم التحديث')}>تغيير الحالة</button>
               <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
+              <button className="btn-sm ghost" onClick={() => setEditing(true)}>تعديل البيانات</button>
             </div>
+          )}
+          {editing && (
+            <Form title={`تعديل بيانات ${p.full_name}`} fields={EDIT_FIELDS}
+              values={{ full_name: p.full_name, email: p.email, phone: p.phone || '', job_title: p.job_title || '', organization_name: p.organization_name || '' }}
+              onSave={(fields) => L('admin.participant-save', { participant_id: p.id, fields })}
+              onClose={(saved) => { setEditing(false); if (saved) { toast('حُفظت البيانات'); load(); } }} />
           )}
         </section>
 
@@ -290,6 +377,7 @@ function Person({ id, canWrite, onBack }) {
               const rr = res(d);
               const ev = rr?.evaluation;
               const x = prof?.dimensions.find((y) => y.dimension === d);
+              const override = canWrite && !!levels[d] && !!currentLevel(d) && levels[d] !== currentLevel(d);
               return (
                 <tr key={d}>
                   <td><b>{DIM_EN[d]}</b><br /><small>{DIM[d]}</small></td>
@@ -309,8 +397,9 @@ function Person({ id, canWrite, onBack }) {
                       </select>
                     ) : LVL[x?.level] || ''}
                     {ev && <><br /><small className="la-muted">المعيار: {LVL[ev.level]}</small></>}
+                    {override && <><br /><span className="la-chip warn">يخالف {LVL[currentLevel(d)]}؛ يلزم تعليل</span></>}
                   </td>
-                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder="اختياري" onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
+                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder={override ? 'سبب المخالفة (إلزامي، 10 أحرف على الأقل)' : 'اختياري'} aria-required={override} onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
                 </tr>
               );
             })}</tbody>
@@ -373,6 +462,8 @@ function Person({ id, canWrite, onBack }) {
       <section className="la-card"><h3>السجل</h3><ul className="la-log">
         {(r.history || []).length ? r.history.map((h, i) => <li key={i}><small>{date(h.created_at)}</small> {h.action} <small className="la-muted">{h.actor}</small></li>) : <li className="la-muted">لا شيء</li>}
       </ul></section>
+
+      {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
     </>
   );
 }

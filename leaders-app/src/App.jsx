@@ -8,7 +8,7 @@
 //   غير ذلك           ← الرحلة
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, useCallback, useEffect, useState } from 'react';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -16,29 +16,34 @@ import SignIn from './screens/SignIn.jsx';
 import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
-import Handbook from './screens/Handbook.jsx';
-import LabScreen from './screens/Lab.jsx';
-import OrgPortal from './screens/OrgPortal.jsx';
-import Verify from './screens/Verify.jsx';
+const Handbook = lazy(() => import('./screens/Handbook.jsx'));
+const LabScreen = lazy(() => import('./screens/Lab.jsx'));
+const OrgPortal = lazy(() => import('./screens/OrgPortal.jsx'));
+const Verify = lazy(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
-import Impact from './screens/Impact.jsx';
-import Rater from './screens/Rater.jsx';
-import Sponsor from './screens/Sponsor.jsx';
-import Outcome from './screens/Outcome.jsx';
-import ExpertApply from './screens/ExpertApply.jsx';
-import ExpertOffer from './screens/ExpertOffer.jsx';
-import ExpertPortal from './screens/ExpertPortal.jsx';
+const Impact = lazy(() => import('./screens/Impact.jsx'));
+const Rater = lazy(() => import('./screens/Rater.jsx'));
+const Sponsor = lazy(() => import('./screens/Sponsor.jsx'));
+const Outcome = lazy(() => import('./screens/Outcome.jsx'));
+const ExpertApply = lazy(() => import('./screens/ExpertApply.jsx'));
+const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
+const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall from './screens/Paywall.jsx';
-import { gateDone } from './gates.js';
+import { gateDone, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
+import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import SponsorNote from './SponsorNote.jsx';
-import Capstone from './screens/Capstone.jsx';
-import Katon from './screens/Katon.jsx';
-import HallScreen from './screens/Hall.jsx';
+const Capstone = lazy(() => import('./screens/Capstone.jsx'));
+const Katon = lazy(() => import('./screens/Katon.jsx'));
+const HallScreen = lazy(() => import('./screens/Hall.jsx'));
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
-import { JourneySkeleton } from './ui.jsx';
+const Legal = lazy(() => import('./screens/Legal.jsx'));
+import Consent from './Consent.jsx';
+import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
+import { ErrorBox, JourneySkeleton } from './ui.jsx';
+// الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
 
 // «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
 const SHOW_KATON = KATON_ENABLED;
@@ -68,8 +73,6 @@ function OrgMark({ org }) {
     </span>
   );
 }
-
-const stageOpen = (me, key) => { const st = me?.journey?.find((s) => s.key === key)?.status; return !!st && st !== 'locked'; };
 
 // أيقونات التنقل: خط واحد بسماكة واحدة، تأخذ لون النص
 const ICONS = {
@@ -117,8 +120,12 @@ export default function App() {
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;
+  if (location.pathname === LEGAL_PATH.index || location.pathname.startsWith(`${LEGAL_PATH.index}/`)) return <Shell tag="الخصوصية والشروط"><Legal /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
+
+// رابط الوثائق القانونية في كل تذييل: المشارك والمقيّم والراعي والخبير والمنسق
+const LegalLink = () => <a className="link small" href={LEGAL_PATH.index}>الخصوصية والشروط</a>;
 
 function Shell({ tag, children }) {
   return (
@@ -126,7 +133,7 @@ function Shell({ tag, children }) {
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar"><div className="topbar-in"><img src={logo} alt="Milestone Impact" /><span className="tag">{tag}</span><span className="spacer" /></div></header>
       <main id="main" tabIndex={-1}>{children}</main>
-      <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة.</footer>
+      <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة. <LegalLink /></footer>
     </>
   );
 }
@@ -138,6 +145,7 @@ function Participant() {
   const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
   const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');
+  const [bootError, setBootError] = useState('');   // فشل جلب الرحلة والجلسة باقية: يُعرض بإعادة محاولة لا بشاشة الدخول
   const [linkChoice, setLinkChoice] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
@@ -175,28 +183,34 @@ function Participant() {
     if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
   }, []);
 
-  useEffect(() => {
-    setExpiredHandler(() => setMe(null));
-    (async () => {
-      // رابط البريد: /verify?e=...&t=...
-      if (location.pathname === '/verify') {
-        const q = new URLSearchParams(location.search);
-        history.replaceState(null, '', '/');
-        const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
-        // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
-        if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
-        if (res.success) accept(res);
-        else setVerifyError(res.message);
-        setBooting(false);
-        return;
-      }
-      if (session.get()) {
-        const res = await call('me');
-        if (res.success) accept(res);
-      }
+  // الإقلاع: رابط البريد أو الجلسة المحفوظة. فشل الشبكة أو الخادم لا يُسقط الجلسة الصالحة
+  // (كان يرمي إلى شاشة الدخول صامتًا فيطلب المشارك رمزًا جديدًا بلا داعٍ)
+  const boot = useCallback(async () => {
+    setBootError('');
+    // رابط البريد: /verify?e=...&t=...
+    if (location.pathname === '/verify') {
+      const q = new URLSearchParams(location.search);
+      history.replaceState(null, '', '/');
+      const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
+      // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
+      if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
+      if (res.success) accept(res);
+      else setVerifyError(res.message);
       setBooting(false);
-    })();
+      return;
+    }
+    if (session.get()) {
+      const res = await call('me');
+      if (res.success) accept(res);
+      else if (res.code === 'suspended') { session.clear(); setVerifyError(res.message); }
+      else if (res.code !== 'session') setBootError(res.message || UNEXPECTED_ERROR);   // session: أزالها الحارس في call وأظهر الدخول برسالته
+    }
+    setBooting(false);
   }, [accept]);
+  useEffect(() => {
+    setExpiredHandler(() => { setMe(null); setView('home'); setVerifyError('انتهت جلستك. ادخل مرة أخرى.'); });
+    boot();
+  }, [boot]);
 
   // المختبر قسم مستقل: يظهر مدخله متى فُتح للمشارك أو لجهته شيء منه
   const meId = me?.participant?.id;
@@ -236,7 +250,7 @@ function Participant() {
     SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
-    { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
+    { key: 'impact', label: 'أثري', ...(!(approved && impactOpen(me)) && { locked: 'يُفتح في مرحلة الأثر' }) },
     { key: 'profile', label: 'ملفي' },
   ].filter(Boolean) : [];
   const navView = view === 'lab' && !hasLab ? 'home' : view;
@@ -253,7 +267,15 @@ function Participant() {
       }} />
     </div></div>
   );
+  else if (!me && bootError) screen = (
+    <div className="page narrow stack">
+      <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />
+      <button className="link small" onClick={() => { session.clear(); setBootError(''); }}>ادخل بحساب آخر</button>
+    </div>
+  );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
+  // من سبق تسجيله قبل نشر السياسة يوافق مرة واحدة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)
+  else if (me.participant.consented_at === null && !me.participant.is_demo) screen = <Consent onAccepted={accept} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />;
@@ -289,9 +311,9 @@ function Participant() {
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>
-      {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
+      {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
-      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact</footer>
+      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
       {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>

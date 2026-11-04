@@ -72,6 +72,7 @@ test('المحرر يحمي التعديل: تأكيد قبل الإغلاق، �
 
 test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النتيجة', async ({ page }) => {
   await setup(page);
+  await expect(page.getByRole('button', { name: /^بحث/ })).toBeVisible();   // الإطار حاضر قبل الاختصار
   await page.keyboard.press('Control+k');
   const box = page.getByRole('combobox', { name: 'البحث الشامل' });
   await box.fill('ساره');

@@ -9,7 +9,7 @@ import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
-  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor,
+  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -113,8 +113,9 @@ async function myRequirement(p: any, id: unknown, kind: string, session?: { coho
 
 async function levelsOf(participantId: string, approvedOnly = false) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId)) ?? [];
-  if (approvedOnly && (pl.length < 3 || pl.some((x: any) => !x.approved_at))) throw new Fail('يُفتح هذا بعد اعتماد مسارك', 403, 'locked');
-  return Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>;
+  const a = approvalOf(pl);
+  if (approvedOnly && !a.approved) throw new Fail('يُفتح هذا بعد اعتماد مسارك', 403, 'locked');
+  return a.levels as Record<string, string>;
 }
 
 // ── نبضة القراءة ──

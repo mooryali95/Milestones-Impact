@@ -8,7 +8,7 @@ import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.
 import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
-  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, raterPercents, raterProspective,
+  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -70,9 +70,10 @@ async function impactConfig() {
   // ثبات منخفض جدًا لا يُستعمل: يجعل كل تغير "غير موثوق" ويخفي ضعف الأداة
   const usable = (r: any) => r && r.n >= cfg.min_n && r.alpha != null && r.alpha > 0.3;
   let full: any = { dims: {}, overall: null };
+  let share: Record<string, number> = {};
   if (base) {
     const [qs, sessions] = await Promise.all([
-      all((f, t) => db.from('questions').select('id, dimension, tier, options, form, active').eq('instrument_id', base.id).eq('active', true).range(f, t)),
+      all((f, t) => db.from('questions').select('id, code, dimension, tier, options, form, active, anchor_code, min_level').eq('instrument_id', base.id).eq('active', true).range(f, t)),
       all((f, t) => db.from('assessments').select('id, form').eq('instrument_id', base.id).eq('status', 'submitted').range(f, t)),
     ]);
     const rows: any[] = [];
@@ -82,6 +83,7 @@ async function impactConfig() {
     }
     const forms = Object.fromEntries(sessions.map((x: any) => [x.id, x.form]));
     full = compositeReliability(qs, rows, { forms, model }) as any;
+    share = anchorShareOf(qs);   // حصة المواقف المشتركة من الأداة المفعّلة (3/6 في v4، 3/8 في v5)
     const test: any = compositeReliability(qs, rows, { forms, model, tiers: ['knowledge', 'skill'] });
     for (const d of DIMENSIONS) {
       if (usable(full.dims[d])) { cfg.reliability[d] = Math.min(0.95, full.dims[d].alpha); cfg.sd[d] = full.dims[d].sd; }
@@ -113,8 +115,9 @@ async function impactConfig() {
       pre: { anchor: results[x.baseline.id]?.[d]?.skill_anchor, form: results[x.baseline.id]?.[d]?.skill_form },
       post: { anchor: results[x.post.id]?.[d]?.skill_anchor, form: results[x.post.id]?.[d]?.skill_form },
     }));
-    const pe = practiceEffect(pairs);
+    const pe = practiceEffect(pairs, { anchorShare: share[d] ?? 0.5 });
     cfg.source[d].practice_n = pe.n;
+    cfg.source[d].anchor_share = share[d] ?? 0.5;
     if (pe.n >= cfg.min_n && pe.points != null) cfg.practice[d] = pe.points;
   }
   return { model, cfg, baseline: base };
@@ -163,6 +166,10 @@ export async function compareFor(ids: string[] | null) {
   const [{ pick, results }, { model, cfg }, raters, evidence] = await Promise.all([
     latestResults(ids), impactConfig(), raterData(ids), evidenceDone(ids),
   ]);
+  // أثر التكرار يُطرح ممن أعاد المواقف المشتركة فعلًا: ربع المشاركين (anchorRepeat) على أداة
+  // بعدية ذات توائم، والجميع على أداة بلا توائم (post-v1)
+  const { data: twinRows } = await db.from('questions').select('instrument_id, code, anchor_code').not('anchor_code', 'is', null);
+  const twinned = new Set((twinRows || []).filter((q: any) => q.anchor_code !== q.code).map((q: any) => q.instrument_id));
   const out: Record<string, any> = {};
   for (const [pid, x] of Object.entries(pick)) {
     if (!x.baseline || !x.post) { out[pid] = { pid, baseline_at: x.baseline?.submitted_at || null, post_at: x.post?.submitted_at || null, dimensions: null }; continue; }
@@ -176,14 +183,16 @@ export async function compareFor(ids: string[] | null) {
       continue;
     }
     // معادلة الصيغتين قبل المقارنة: كل نتيجة بصيغتها
+    const repeat = twinned.has(x.post.instrument_id) ? anchorRepeat(pid) : true;
     const dimensions = compareAssessments({
       pre: equate(results[x.baseline.id] || {}, x.baseline.form, cfg.offsets),
       post: equate(results[x.post.id] || {}, x.post.form, cfg.offsets),
-      model, impact: cfg, rater: raters[pid] || null, evidence: evidence.has(pid),
+      model, impact: cfg, rater: raters[pid] || null, evidence: evidence.has(pid), repeat,
     });
     out[pid] = {
       pid, baseline_at: x.baseline.submitted_at, post_at: x.post.submitted_at,
       baseline_key: x.baseline.instruments?.key, post_key: x.post.instruments?.key,
+      repeat_group: repeat,   // أعاد المواقف المشتركة فطُرح منه أثر التكرار (إن قُدّر)
       // «مكتسبات المستوى»: فقرات البعدي الخاصة بالمستوى، خارج فرق القبلي والبعدي
       level_gains: levelGainReport(results[x.post.id] || {}),
       forms: x.baseline.form || x.post.form ? [x.baseline.form, x.post.form] : null,
@@ -223,7 +232,7 @@ export async function mine(p: any) {
 
 async function postInstrument(p: any) {
   const data = await postInstrumentFor(p.id);
-  if (!data) throw new Fail('القياس البعدي لم يُفعَّل بعد', 503, 'no_instrument');
+  if (!data) throw new Fail('القياس البعدي لم يُفعَّل بعد', 409, 'no_instrument');
   return data;
 }
 
@@ -390,11 +399,11 @@ export async function adminReport(b: Body) {
     reliable_up: whole.filter((x) => x.overall.direction === 'up').length,
     reliable_down: whole.filter((x) => x.overall.direction === 'down').length,
   };
-  const transfer = await transferStats(paired.map((x) => x.id));
+  const [transfer, reaction] = await Promise.all([transferStats(paired.map((x) => x.id)), scoped && !scoped.length ? null : reactionStats(scoped)]);
   return {
     success: true,
     counts: { participants: list.length, baseline: list.filter((x) => x.baseline_at).length, post: list.filter((x) => x.post_at).length, paired: paired.length },
-    cohort, overall, transfer, config: cfg, participants: list,
+    cohort, overall, transfer, reaction, config: cfg, participants: list,
     // تنبيه منهجي يظهر فوق الأرقام حين تكون الدفعة صغيرة
     caution: paired.length < cfg.min_n
       ? `العدد ${paired.length} أقل من ${cfg.min_n}: الأرقام وصفية لهذه الدفعة ولا تُعمَّم، والثبات المستعمل افتراضي.`
@@ -407,6 +416,19 @@ const avg = (xs: (number | null)[]) => {
   const v = xs.filter((x): x is number => x != null);
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10 : null;
 };
+
+// رد الفعل (كيركباتريك المستوى 1): استبانة «رأيك في أيام التدريب» (T-REACT) مجمّعة لكل سؤال،
+// بأسئلة المتطلب الأكثر إجابة إن تعددت نسخه بين البرامج. كانت تُحفظ ولا تُقرأ في أي تقرير.
+async function reactionStats(ids: string[] | null) {
+  const { data: reqs } = await db.from('stage_requirements').select('id, config').eq('code', 'T-REACT').eq('kind', 'survey');
+  if (!reqs?.length) return null;
+  const rows = await allFor(ids, () => db.from('participant_requirements').select('participant_id, requirement_id, answers')
+    .in('requirement_id', reqs.map((r: any) => r.id)).not('answers', 'is', null).order('participant_id'));
+  const count: Record<string, number> = {};
+  for (const r of rows) count[r.requirement_id] = (count[r.requirement_id] || 0) + 1;
+  const main = [...reqs].sort((a: any, b: any) => (count[b.id] || 0) - (count[a.id] || 0))[0];
+  return surveySummary(main.config, rows.filter((r: any) => r.requirement_id === main.id).map((r: any) => r.answers));
+}
 
 // بنود انتقال التعلم: نسبة الموافقة (أوافق وأوافق بشدة) لكل بند
 async function transferStats(ids: string[]) {

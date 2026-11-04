@@ -51,6 +51,18 @@ describe('المدة الحرة والمعالم', () => {
     const d = Object.fromEntries(done.map((m) => [m.id, m]));
     expect(d.a.status).toBe('done');
     expect(d.b).toMatchObject({ status: 'late', extended: true, late_days: 5 });
-    expect(milestoneSummary(done)).toMatchObject({ total: 3, done: 1, late: 1, max_late: 5 });
+    expect(milestoneSummary(done)).toMatchObject({ total: 3, done: 1, late: 1, max_late: 5, done_late: 0 });
+  });
+
+  it('المنجز بعد موعده يبقى منجزًا ويحمل تأخره، ويُعدّ متأخرًا بعد مهلة ثلاثة أيام', () => {
+    const ms = [
+      { id: 'b', title_ar: 'تسليم', anchor: 'date', fixed_date: '2026-01-20', complete: 'manual' },
+      { id: 'c', title_ar: 'عرض', anchor: 'date', fixed_date: '2026-01-10', complete: 'manual' },
+    ];
+    const r = milestoneStatuses(ms, { today: '2026-02-01', records: { b: { done_at: '2026-01-30T09:00:00Z' }, c: { done_at: '2026-01-12T09:00:00Z' } } });
+    const by = Object.fromEntries(r.map((m) => [m.id, m]));
+    expect(by.b).toMatchObject({ status: 'done', late_days: 10 });
+    expect(by.c).toMatchObject({ status: 'done', late_days: 2 });
+    expect(milestoneSummary(r)).toMatchObject({ total: 2, done: 2, late: 0, done_late: 1, max_done_late: 10 });
   });
 });

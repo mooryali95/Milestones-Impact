@@ -6,6 +6,7 @@
 // يقيس كل المنافع ويؤكدها راعي المبادرة. الملخص من الخادم وحده.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { useUnsavedGuard } from '../unsaved.js';
 import ChooseExpert from './ChooseExpert.jsx';
 
 const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
@@ -31,6 +32,8 @@ export default function Tracking() {
   const [open, setOpen] = useState(false);
   const apply = (r) => { setD(r); if (r.success) setV(draftFrom(r.tracking, r.current)); };
   useEffect(() => { call('tracking.get').then(apply); }, []);
+  // التحديث الشهري يُحفظ بزر واحد؛ إغلاق الصفحة والنموذج مفتوح يحذّر
+  useUnsavedGuard(open);
 
   if (!d) return <section className="card"><div className="spinner" /></section>;
   if (!d.success) return null;

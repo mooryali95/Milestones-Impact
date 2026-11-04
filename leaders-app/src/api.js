@@ -25,6 +25,16 @@ export const welcomeSeen = local('mi_leaders_welcome_seen');
 let onExpired = () => {};
 export const setExpiredHandler = (fn) => { onExpired = fn; };
 
+// 502/503/504 من بوابة Supabase أثناء إقلاع الدالة بلا جسم مفيد؛ أما ما ترسله الدالة نفسها
+// بهذه الرموز (القياس غير مفعّل، الدفع مطفأ…) فجسمه JSON برسالته ولا يُستبدل بـ«الخادم مشغول»
+const BUSY = { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' };
+export async function parse(r) {
+  const body = await r.json().catch(() => null);
+  if (body && typeof body === 'object') return 'success' in body || !BUSY_STATUS.includes(r.status) ? body : BUSY;
+  if (BUSY_STATUS.includes(r.status)) return BUSY;
+  throw new Error(`bad response ${r.status}`);
+}
+
 export async function call(action, body = {}) {
   let res;
   try {
@@ -33,9 +43,7 @@ export async function call(action, body = {}) {
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: session.get(), ...body }),
     });
-    res = BUSY_STATUS.includes(r.status)
-      ? { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' }
-      : await r.json();
+    res = await parse(r);
   } catch {
     res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
   }
@@ -80,9 +88,7 @@ export async function coordCall(action, body = {}) {
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: coordSession.get(), ...body }),
     });
-    res = BUSY_STATUS.includes(r.status)
-      ? { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' }
-      : await r.json();
+    res = await parse(r);
   } catch {
     res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
   }
@@ -105,7 +111,7 @@ export async function xpCall(action, body = {}) {
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: xpSession.get(), ...body }),
     });
-    res = BUSY_STATUS.includes(r.status) ? { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' } : await r.json();
+    res = await parse(r);
   } catch {
     res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
   }

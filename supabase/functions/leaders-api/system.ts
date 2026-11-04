@@ -4,10 +4,11 @@
 // الترحيلات تُشغَّل يدويًا، فلا سجل لما طُبّق منها. الفحص هنا يسأل القاعدة
 // عن أثر كل ترحيل (جدول أو عمود أنشأه)، فيظهر في اللوحة ما لم يُشغَّل بعد،
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
-import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, publicDb, sendMail } from './core.ts';
+import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
+import { MIGRATIONS } from './migrations.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
 const MARKERS: [string, string, string][] = [
@@ -34,16 +35,50 @@ async function present(table: string, column: string, schema: any = db) {
   return !error;
 }
 
-export async function health() {
+// ── تنظيف دوري (مع التذكير الأسبوعي) ──
+// بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
+// المنتهية أو الملغاة، سجلات التحقق العام من الشهادات، وعناوين مشاهدات الكتيب (يبقى عدّها).
+const RETENTION_DAYS = 90;
+export async function purge() {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 864e5).toISOString();
+  const out: Record<string, number | string> = {};
+  const run = async (key: string, q: any) => {
+    const { data, error } = await q.select('id');
+    out[key] = error ? `error: ${error.message}` : (data || []).length;
+  };
+  for (const t of ['email_challenges', 'coordinator_challenges', 'expert_challenges', 'webauthn_challenges']) await run(t, db.from(t).delete().lt('created_at', cutoff));
+  for (const t of ['auth_sessions', 'coordinator_sessions', 'expert_sessions']) await run(t, db.from(t).delete().lt('expires_at', cutoff));
+  await run('certificate_checks', db.from('certificate_checks').delete().lt('created_at', cutoff));
+  await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
+  return out;
+}
+
+// مسبار خارجي: طلب حقيقي يمر بالقاعدة، للمراقبة ولفحص ما بعد النشر
+// (فحص OPTIONS وحده كان ينجح والدالة معطلة)
+export async function ping() {
+  const t0 = Date.now();
+  const { error } = await db.from('programs').select('id', { head: true, count: 'exact' }).limit(1);
+  if (error) throw new Fail('القاعدة لا تجيب', 503, 'db_down');
+  return { success: true, db_ms: Date.now() - t0, mail: !!CONFIG.resendKey, at: new Date().toISOString() };
+}
+
+// ما لم يُطبَّق من الترحيلات: من سجل leaders.schema_migrations مقارنًا بقائمة المجلد (migrations.js المولَّد).
+// قبل تطبيق ترحيل السجل نفسه يُستدل بأثر الترحيلات القديمة (MARKERS) كما كان.
+async function missingMigrations() {
+  const { data, error } = await db.from('schema_migrations').select('name');
+  if (!error) {
+    const applied = new Set((data || []).map((r: any) => r.name));
+    return { ledger: true, missing: MIGRATIONS.filter((n) => !applied.has(n)) };
+  }
   const checks = await Promise.all(MARKERS.map(async ([file, t, c]) => ({ file, ok: await present(t, c) })));
   const analytics = await present('page_views', 'id', publicDb);
-  const migrations = [...checks, { file: '20261025200000_site_analytics', ok: analytics }];
-  const dayAgo = new Date(Date.now() - 864e5).toISOString();
-  let mail = 0;
-  for (const t of ['email_challenges', 'coordinator_challenges']) {
-    const { count } = await db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', dayAgo);
-    mail += count ?? 0;
-  }
+  const missing = [...checks, { file: '20261025200000_site_analytics', ok: analytics }].filter((m) => !m.ok).map((m) => m.file);
+  return { ledger: false, missing: [...missing, '20261105110000_leaders_schema_migrations'] };
+}
+
+export async function health() {
+  const mig = await missingMigrations();
+  const mail = await mailUsage();   // الرقم نفسه الذي يحكم به حارس البريد
   const secrets = {
     RESEND_API_KEY: !!CONFIG.resendKey,
     LEADERS_TOKEN_PEPPER: !!CONFIG.pepper,
@@ -54,7 +89,7 @@ export async function health() {
   return {
     success: true,
     readiness: await readiness().catch(() => []),
-    missing_migrations: migrations.filter((m) => !m.ok).map((m) => m.file),
+    missing_migrations: mig.missing, migrations_ledger: mig.ledger,
     missing_secrets: Object.entries(secrets).filter(([, ok]) => !ok).map(([k]) => k),
     mail: { today: mail, cap: CONFIG.mailDailyCap },
   };

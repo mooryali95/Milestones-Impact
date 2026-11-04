@@ -670,3 +670,6 @@
 .org-funnel b { font-family: var(--font-en); font-size: 1.1rem; color: var(--petrol-s); }
 .org-funnel small { color: var(--ink-light); }
 .of-check { display: flex; gap: 8px; align-items: center; font-size: .85rem; }
+
+/* صف خارج المؤشر في التقييم المستمر (المرحلة ح) */
+.la-table tr.la-dim td { opacity: .72; }

@@ -11,6 +11,6 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [react()],
-  build: { outDir: '../leaders', emptyOutDir: true, sourcemap: false },
+  build: { outDir: '../leaders', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'] } } } },
   server: { port: 5174 },
 });

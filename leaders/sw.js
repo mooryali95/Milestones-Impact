@@ -1,7 +1,9 @@
 /* رحلة القادة: تثبيت على الجوال وفتح الواجهة دون اتصال */
 // الواجهة وأصولها تُخزّن؛ طلبات الخادم (Supabase) لا تُخزّن أبدًا،
 // فمحتوى الكتيب المحمي لا يبقى على الجهاز، وبيانات المشارك دائمًا حديثة.
-const CACHE = 'mi-leaders-v1';
+// اسم المخزن من بصمة البناء (?v= في رابط التسجيل): كل نشر يفتح مخزنًا جديدًا ويحذف القديم
+const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE = `mi-leaders-${VERSION}`;
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/favicon.svg'];
 
 self.addEventListener('install', (e) => {

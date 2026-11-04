@@ -16,10 +16,9 @@
   const CONFIG = {
     product: document.body.dataset.product || 'MI-LEADERS',
 
-    // Supabase
+    // Supabase: الطلب يمر بإجراء contact في دالة send-otp (تحقق بشري وحدود إغراق على الخادم)
     supabaseUrl:    'https://eormhcupwgwpllhrfxxg.supabase.co',
     supabaseKey:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0',
-    table:          'contact_requests',
 
     // Fallback mailto
     recipientEmail: 'mi@sunkvalue.com',
@@ -252,25 +251,29 @@
     };
 
     const res = await fetch(
-      `${CONFIG.supabaseUrl}/rest/v1/${CONFIG.table}`,
+      `${CONFIG.supabaseUrl}/functions/v1/send-otp`,
       {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
           'apikey':        CONFIG.supabaseKey,
           'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-          'Prefer':        'return=minimal',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ action: 'contact', ...payload, captcha: formData.captcha || undefined }),
       }
     );
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Supabase error ${res.status}: ${err}`);
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (res.ok && data && data.success) { formData.captcha = ''; return true; }
+    // الخادم يطلب التحقق البشري: يُعرض ثم يُعاد الإرسال بالرمز
+    if (data && data.code === 'captcha' && data.site_key) {
+      const err = new Error('captcha');
+      err.code = 'captcha';
+      err.siteKey = data.site_key;
+      throw err;
     }
-
-    return true;
+    throw new Error(`send-otp ${res.status}: ${(data && data.message) || ''}`);
   }
 
   // ──────────────────────────────────────────────
@@ -321,35 +324,13 @@
       currentStep = stepOrder.length - 1;
       goToStep(currentStep);
 
-      // إشعار الأدمن (fire & forget)
-      fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
-        body: JSON.stringify({
-          action: 'notify',
-          name: formData.name || '—', organization: formData.organization || '—',
-          emailContact: formData.email || '—', phone: formData.phone || '—',
-          interest: formData.interest || '—', interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
-          product: CONFIG.product, sourceUrl: window.location.href, submittedAt: new Date().toISOString(),
-        }),
-      }).catch(() => {});
-
-      // إيميل تأكيد للمتقدم (مع حماية rate limit)
-      fetch(`${CONFIG.supabaseUrl}/functions/v1/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` },
-        body: JSON.stringify({
-          action: 'confirm',
-          name: formData.name || '—',
-          email: formData.email || '',
-          product: CONFIG.product,
-          interest: formData.interest || '—',
-          interestLabel: (formData.interestLabel || INTEREST_LABELS[formData.interest]) || '—',
-        }),
-      }).catch(() => {});
-
+      // تنبيه الإدارة وتأكيد المرسل يرسلهما الخادم من الطلب المحفوظ (إجراء contact)
     } catch (err) {
-      console.error('Supabase insert failed:', err);
+      if (err && err.code === 'captcha' && err.siteKey) {
+        showCaptcha(err.siteKey);
+        return;
+      }
+      console.error('Contact submit failed:', err);
       showSubmitError();
     } finally {
       submitting = false;
@@ -377,6 +358,44 @@
     box.querySelector('.tf-submit-error__retry').addEventListener('click', submitForm);
     box.querySelector('.tf-submit-error__mail').addEventListener('click', triggerMailto);
     stepEl.appendChild(box);
+  }
+
+  // ──────────────────────────────────────────────
+  // 🤖 التحقق البشري (Cloudflare Turnstile)
+  // ──────────────────────────────────────────────
+  // لا يُحمَّل شيء من خارج الموقع إلا حين يطلبه الخادم (code: captcha مع site_key).
+  let turnstileLoading = null;
+  function loadTurnstile() {
+    if (window.turnstile) return Promise.resolve(window.turnstile);
+    if (!turnstileLoading) {
+      turnstileLoading = new Promise((ok, no) => {
+        const s = document.createElement('script');
+        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        s.async = true;
+        s.onload = () => ok(window.turnstile);
+        s.onerror = () => { turnstileLoading = null; no(new Error('turnstile')); };
+        document.head.appendChild(s);
+      });
+    }
+    return turnstileLoading;
+  }
+
+  function showCaptcha(siteKey) {
+    hideSubmitError();
+    const stepEl = document.querySelector('.tf-step.active');
+    if (!stepEl) return;
+    const box = document.createElement('div');
+    box.className = 'tf-submit-error tf-captcha';
+    box.setAttribute('role', 'status');
+    box.innerHTML = '<p>أكّدوا أنكم لستم برنامجًا آليًا، ويُرسل طلبكم تلقائيًا بعدها.</p><div class="tf-captcha__box"></div>';
+    stepEl.appendChild(box);
+    loadTurnstile()
+      .then((t) => t.render(box.querySelector('.tf-captcha__box'), {
+        sitekey: siteKey, language: 'ar',
+        callback: (token) => { formData.captcha = token; submitForm(); },
+        'error-callback': () => showSubmitError(),
+      }))
+      .catch(() => showSubmitError());
   }
 
   function resendEmail() {

@@ -38,6 +38,9 @@ export const CONFIG = {
   codeMinutes: 15,
 };
 
+// سران إلزاميان: بدونهما لا شيء يعمل، والفشل عند الإقلاع أوضح من فشل صامت لاحقًا (docs/SECRETS.md)
+if (!CONFIG.serviceKey || !CONFIG.pepper) throw new Error('leaders-api: SUPABASE_SERVICE_ROLE_KEY وLEADERS_TOKEN_PEPPER إلزاميان، انظر docs/SECRETS.md');
+
 export const db = createClient(CONFIG.url, CONFIG.serviceKey, {
   db: { schema: 'leaders' },
   auth: { persistSession: false },
@@ -143,7 +146,12 @@ const shell = (family: MailFamily, title: string, body: string, preheader = '', 
   mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
 const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
 
+// حساب العرض التوضيحي: نطاق بريد لا يستقبل، ولا تُرسل إليه رسالة من أي مسار (الحارس هنا لا في كل موضع)
+export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
+export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().endsWith(`@${DEMO_MAIL_DOMAIN}`);
+
 export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = []) {
+  if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
   if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments }))) {
     throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
@@ -269,6 +277,31 @@ export function healthMail(rows: [string, string][], issues: string[]) {
     issues.length ? `${issues.length} يحتاج تدخلك` : 'لا شيء يحتاج تدخلك', 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 
+// ── تنبيه التشغيل الفوري ──
+// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة كل عشر
+// دقائق لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
+export function alertMail(kind: string, detail: Record<string, unknown>) {
+  const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  return shell('admin', `تنبيه تشغيلي: ${kind}`,
+    mailText(`وقع <b>${esc(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
+    + mailRows(rows)
+    + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
+    `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+}
+const ALERT_WINDOW_MS = 10 * 60e3;
+export async function alertOps(kind: string, detail: Record<string, unknown>) {
+  if (!CONFIG.alertEmail || !CONFIG.resendKey) return false;
+  try {
+    const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
+    const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
+    if ((count ?? 0) > 0) return false;
+    await audit('system', 'alert', 'system.alert', 'system', kind, null, detail);
+    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail));
+    return true;
+  } catch (e) { console.error('alertOps:', e); return false; }
+}
+
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل
 export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; subject: string; html: () => string }[] = [
   { key: 'signin', family: 'access', label: 'رمز دخول المشارك', subject: 'رمز الدخول إلى رحلتك', html: () => signInMail('سارة', '153262', CONFIG.appUrl, false) },
@@ -286,21 +319,42 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },
+  { key: 'ops-alert', family: 'admin', label: 'تنبيه تشغيلي فوري', subject: 'تنبيه: internal في leaders-api', html: () => alertMail('internal', { ref: 'a1b2c3d4', action: 'me', message: 'relation "leaders.x" does not exist' }) },
 ];
 
 // ── حارس رسائل الرموز ──
 // قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام
 // يحمي حصة البريد من الاستنزاف، ثم التحقق البشري إن كان مفعّلًا.
-const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges'];
-async function challengeCount(since: string, ip?: string | null) {
+// التسجيلات الجديدة (بريد لا حساب له) لها نصيب من السقف لا تتجاوزه، فإغراق
+// التسجيل ببريد وهمي لا يحجب رموز الدخول عن أصحاب الحسابات؛ ولها حد لكل شبكة
+// يتسع لقاعة ورشة. ورسائل نموذج التواصل تُحتسب في السقف نفسه لأنها من الحصة نفسها.
+export const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges', 'expert_challenges'];
+const REGISTER_SHARE = 0.7;
+const REGISTER_PER_IP_DAY = 60;
+async function challengeCount(since: string, ip?: string | null, purpose?: 'register' | 'login') {
   let n = 0;
   for (const t of CHALLENGE_TABLES) {
+    if (purpose && t !== 'email_challenges') continue;   // purpose عمود رموز المشاركين وحدها
     let q = db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', since);
     if (ip) q = q.eq('ip', ip);
+    if (purpose) q = q.eq('purpose', purpose);
     const { count } = await q;
     n += count ?? 0;
   }
   return n;
+}
+async function contactMailCount(since: string) {
+  const { count } = await publicDb.from('mail_log').select('id', { count: 'exact', head: true }).gte('created_at', since);
+  return count ?? 0;
+}
+// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد)
+export async function mailUsage(since = new Date(Date.now() - 864e5).toISOString()) {
+  return (await challengeCount(since)) + (await contactMailCount(since).catch(() => 0));
+}
+// الرمز يُحتسب في السقف فقط إن أُرسل فعلًا: فشل الإرسال يحذف صفه ويرفع الخطأ نفسه
+export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string) {
+  try { await sendMail(to, subject, html); }
+  catch (e) { await db.from(table).delete().eq('id', id); throw e; }
 }
 
 async function turnstileOk(token: unknown, ip: string | null) {
@@ -315,17 +369,24 @@ async function turnstileOk(token: unknown, ip: string | null) {
   } catch { return false; }
 }
 
-export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }) {
+export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }, purpose: 'login' | 'register' = 'login') {
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const dayAgo = new Date(Date.now() - 864e5).toISOString();
   // الحد يتسع لقاعة ورشة كاملة (50 مشاركًا وأكثر) على شبكة واحدة؛ والحماية من الإغراق بالتحقق البشري (Turnstile) وحد كل بريد
   if (ctx.ip) {
     if (await challengeCount(hourAgo, ctx.ip) >= 150) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
     if (await challengeCount(dayAgo, ctx.ip) >= 300) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+    if (purpose === 'register' && await challengeCount(dayAgo, ctx.ip, 'register') >= REGISTER_PER_IP_DAY) {
+      throw new Fail('تسجيلات كثيرة اليوم من هذه الشبكة. سجّل بحساب Google، أو حاول غدًا', 429, 'rate');
+    }
   }
-  if (await challengeCount(dayAgo) >= CONFIG.mailDailyCap) {
+  if (await mailUsage(dayAgo) >= CONFIG.mailDailyCap) {
     console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
     throw new Fail('بلغت الرسائل حدها اليومي. ادخل بمفتاح المرور، أو حاول بعد ساعات', 429, 'mail_cap');
+  }
+  if (purpose === 'register' && await challengeCount(dayAgo, null, 'register') >= Math.floor(CONFIG.mailDailyCap * REGISTER_SHARE)) {
+    console.error('leaders-api: registration share of mail cap reached', CONFIG.mailDailyCap);
+    throw new Fail('بلغت تسجيلات اليوم حدها. سجّل بحساب Google، أو حاول بعد ساعات', 429, 'mail_cap');
   }
   if (CONFIG.turnstileSecret && !(await turnstileOk(b.captcha, ctx.ip))) {
     throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });

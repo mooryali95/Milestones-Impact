@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildJourney, cleanSurvey, surveyQuestions } from '../../supabase/functions/leaders-api/logic.js';
+import { buildJourney, cleanSurvey, surveyQuestions, surveySummary } from '../../supabase/functions/leaders-api/logic.js';
 
 const cfg = { questions: 'ما مدى إفادتك؟\n(نص) ما أكثر ما أفادك؟\n(نص اختياري) ما تقترح؟' };
 
@@ -29,5 +29,17 @@ describe('الحضور الآلي لدفعة الجهة', () => {
     const s = [{ id: 'a', starts_at: '2026-11-04T06:00:00Z', ends_at: '2026-11-04T10:00:00Z' }, { id: 'b', starts_at: '2026-11-20T06:00:00Z', ends_at: '2026-11-20T10:00:00Z' }];
     const st = workshopStatus({ verify: 'auto', sessions_required: 2 }, s, new Set(), now);
     expect([st.count, st.done]).toEqual([1, false]);
+  });
+});
+
+describe('تجميع استبانة رد الفعل (كيركباتريك 1)', () => {
+  it('لكل تقدير عدده ومتوسطه وتوزيعه ونسبة أعلى تقديرين، ولكل نص إجاباته', () => {
+    const cfg = { questions: 'أفادتك؟\n(نص) ما أكثر ما أفادك؟\n(نص اختياري) اقتراح' };
+    const s = surveySummary(cfg, [{ q1: 5, q2: 'المثال الحي' }, { q1: 4, q2: 'الورشة', q3: 'وقت أطول' }, { q1: 2, q2: '' }, null]);
+    expect(s.n).toBe(3);
+    expect(s.questions[0]).toMatchObject({ type: 'rating', n: 3, mean: 3.7, top2_pct: 67, dist: { 1: 0, 2: 1, 3: 0, 4: 1, 5: 1 } });
+    expect(s.questions[1]).toMatchObject({ type: 'text', n: 2, texts: ['المثال الحي', 'الورشة'] });
+    expect(s.questions[2].texts).toEqual(['وقت أطول']);
+    expect(surveySummary(cfg, []).questions[0].mean).toBeNull();
   });
 });

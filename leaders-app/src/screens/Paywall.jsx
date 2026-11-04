@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { levelOf } from '../labels.js';
+import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -99,6 +100,8 @@ export default function Paywall({ item, me, onUpdate }) {
         {err && <div className="alert err" role="alert">{err}</div>}
         <button className="btn gold block" disabled={busy} onClick={pay}>{busy ? 'نفتح صفحة الدفع…' : c.cta}</button>
         <p className="small muted">الدفع عبر Creem بصفحة آمنة باسمك وبريدك، ويصلك الإيصال على {me.participant.email}.</p>
+        {/* إفصاح السعر والضريبة والشروط قبل الدفع (نظام التجارة الإلكترونية) */}
+        <p className="small muted">السعر بالدولار الأمريكي. تُحصَّل الضرائب المطبقة (ومنها ضريبة القيمة المضافة في السعودية) عند الدفع عبر Creem بوصفه البائع الرسمي وتظهر في الإيصال. بالدفع توافق على <a className="link" href={LEGAL_PATH.terms} target="_blank" rel="noopener noreferrer">الشروط</a> و<a className="link" href={LEGAL_PATH.refund} target="_blank" rel="noopener noreferrer">سياسة الاسترداد</a>.</p>
         {req?.status === 'pending' && (
           <div className="pay-claim-note" role="status">
             <b>طلب رعاية «{req.typed_name}» قيد المراجعة</b>

@@ -1,65 +1,58 @@
-# Milestone Impact — مصفوفة التأثير
+# Milestone Impact — مصفوفة التأثير وبرنامج القادة
 
-## الدخول إلى لوحة الإدارة
-الدخول يتم عبر **البريد الإلكتروني + رمز تحقق لمرة واحدة (OTP)** أو تطبيق مصادقة (TOTP)،
-ولم يعد هناك اسم مستخدم/كلمة مرور ثابتة في الكود.
+مستودع واحد يغذي خمس منصات، وخلفيتها Supabase (المشروع `eormhcupwgwpllhrfxxg`) بدوال حافة وترحيلات SQL كلها في المستودع. دليل التشغيل اليومي في `RUNBOOK.md`، والأسرار في `docs/SECRETS.md`، وسجل التسليم في `HANDOFF.md` و`docs/journey/`.
 
-- المدراء المصرّح لهم محفوظون في جدول `admin_users` في Supabase.
-- لإضافة مدير جديد: من داخل لوحة الإدارة (يتطلب صلاحية `super_admin`)،
-  أو مباشرة في جدول `admin_users`.
-- كل عمليات الإدارة تمر عبر دالة `admin-api` وتُصادَق بجلسة موقّعة على الخادم.
+## المنصات
 
-> ملاحظة أمنية: المفتاح العام (anon key) الموجود في الكود عام بطبيعته ولا يمنح
-> أي وصول للبيانات — الحماية مفروضة عبر RLS ودوال الحافة (Edge Functions).
+| النطاق | المصدر | المجلد المنشور | مشروع Cloudflare | البناء |
+|---|---|---|---|---|
+| `mi.sunkvalue.com` | `home/` + `shared/` | `home/` | `mi-home` | بلا بناء (`python3 shared/build-css.py` يولّد CSS والأصول المشتركة) |
+| `leaders.sunkvalue.com` | `leaders-app/` (React + Vite) | `leaders/` (ناتج البناء مُودع) | `mi-leaders` | `npm run leaders:build`؛ CI يرفض اختلاف `leaders/` عن مصدره |
+| `admin.sunkvalue.com` | `admin-app/` (React + Vite) | `admin/` (ناتج البناء مُودع) | `mi-admin` | `npm run admin:build`؛ CI يرفض اختلاف `admin/` عن مصدره |
+| `matrix.sunkvalue.com` | الجذر (`src/`، `index.html`، `public/`) | `build/` (لا يُودع) | `mi-matrix` | `npm run build` على Cloudflare |
+| SSPDF | `SSPDF/` (Vite مستقل) | `SSPDF/dist` | `mi-sspdf` | خارج CI؛ قرار صيانته أو تجميده للمالك |
 
----
+## الخلفية
+
+- **الدوال:** `supabase/functions/`: `leaders-api` (برنامج القادة كله)، `creem-webhook` (إشعارات الدفع)، `leaders-hooks` (Cal.com وCalendly)، `send-otp` (نموذج التواصل ورموز الموقع)، `admin-api` (لوحة الإدارة)، `user-api` (مشاركو المصفوفة). المنطق النقي في ملفات `.js` تستوردها الدوال والتطبيقات والاختبارات معًا.
+- **القاعدة:** `supabase/migrations/` بالترتيب، وسجل ما طُبّق في `leaders.schema_migrations`، ولقطة البنية `supabase/schema/baseline.sql` تُبنى من الترحيلات وتُفحص في CI وليليًا على القاعدة الحية. الترحيلات تُطبَّق يدويًا بموافقة المالك (`RUNBOOK.md` §1).
+- **الإعداد المحلي:** `supabase/config.toml` لـ`supabase start` (بلا تطبيق تلقائي للترحيلات)؛ سير `integration.yml` يشغّله في CI، يطبّق اللقطة ثم البذرة المرجعية `scripts/integration/seed-reference.sql` ثم الترحيلات بالترتيب، ويمرّر المسارات الذهبية بطلبات حقيقية.
 
 ## النشر
 
-النشر على **Cloudflare Pages** ويتم تلقائياً عند كل دمج في `main`. AWS Amplify لم يعد مستخدماً.
-المستودع الواحد يغذي خمس منصات مستقلة:
+طلب دمج ← CI (`ci.yml`: المولَّدات متزامنة، lint، أنواع كل الدوال، اختبارات Deno، 600+ اختبار وحدة، البناء، 120+ اختبار متصفح) ← دمج في `main` ← وظيفة `deploy`: الدوال ← مسبار `system.ping` حقيقي ← دفع فرع `release` الذي تبني منه Cloudflare Pages المنصات. لا شيء يصل الإنتاج إن احمرّ فحص. التفاصيل والتراجع في `RUNBOOK.md`.
 
-| النطاق | المجلد | مشروع Cloudflare | البناء |
-|---|---|---|---|
-| `mi.sunkvalue.com` | `home/` | `mi-home` | بلا بناء. يشمل `/leaders/` و`/projects/` و`/governance/` |
-| `leaders.sunkvalue.com` | `leaders/` | `mi-leaders` | منصة القادة (ناتج بناء `leaders-app/` مُودع) |
-| `matrix.sunkvalue.com` | الجذر (`src/` و`index.html` و`public/`) | `mi-matrix` | `npm run build` إلى `build/` |
-| `admin.sunkvalue.com` | `admin/` | `mi-admin` | بلا بناء |
-| SSPDF | `SSPDF/` | `mi-sspdf` | تطبيق Vite مستقل |
-
-كل طلب دمج يحصل على معاينة لكل منصة، ويشغّل فحص `build-and-test` في GitHub Actions.
-
-### قبل الدفع
+## قبل الدفع
 
 ```bash
-npm ci && npm run lint && npm test && npm run build
+npm ci && npm run lint && npm test && npm run build && npm run leaders:build && npm run admin:build
 ```
 
-بعد أي تعديل على CSS أو `shared/` شغّل `python3 shared/build-css.py`، ولا تعدّل `main.css` يدوياً (التفاصيل في `shared/README.md`).
+```bash
+npx playwright test
+```
 
-### تنبيهات
+- بعد أي تعديل على CSS أو `shared/`: `python3 shared/build-css.py` (لا تعدّل `main.css` يدويًا؛ التفاصيل في `shared/README.md`).
+- بعد أي تعديل في `leaders-app/` أو `admin-app/`: أعد البناء وأودع المجلد المنشور مع التعديل.
+- Node 20 (`.nvmrc`)؛ Deno 2 لفحص الدوال واختباراتها: `deno check --node-modules-dir=auto supabase/functions/*/index.ts` و`deno test --node-modules-dir=none --allow-env --allow-read supabase/functions/leaders-api/` (لا تستعمل auto هنا: يكتب في node_modules ويكسر Playwright).
 
-1. محتوى صفحة القادة في `home/leaders/`، والمجلد `leaders/` للتحويل فقط.
-2. لا تفصل نطاق `leaders.sunkvalue.com` عن مشروع `mi-leaders`، فهو يخدم منصة القادة.
-3. ابدأ كل عمل من فرع جديد مأخوذ من `main`، وادمج عبر طلب دمج.
-4. كود الخادم (سياسات RLS ودوال Supabase) غير موجود في المستودع ويُراجع من لوحة Supabase.
+## الدخول إلى لوحة الإدارة
 
-`DEPLOY-CLOUDFLARE.md` و`DEPLOY-MATRIX.md` دليلا الإعداد الأول، وبعض ما فيهما تغيّر (انظر التنبيه أعلى كل منهما).
-
----
+بالبريد الإلكتروني ورمز لمرة واحدة، أو تطبيق مصادقة (TOTP)، أو مفتاح مرور. المدراء في جدول `admin_users`، والإضافة من اللوحة بصلاحية `super_admin`. كل العمليات عبر `admin-api` بجلسة موقّعة على الخادم. المفتاح العام (anon) في الكود عام بطبيعته؛ الحماية بـRLS والدوال.
 
 ## هيكل الملفات
 
 ```
-home/       ← الموقع الأم وصفحات القادة والمشاريع والحوكمة
-leaders/    ← تحويل النطاق القديم فقط
-admin/      ← لوحة الإدارة
-src/        ← تطبيق مصفوفة التأثير (React + Vite)
-SSPDF/      ← منصة SSPDF
-shared/     ← الهوية والأنماط المشتركة وسكربت البناء
+home/            ← الموقع الأم وصفحات القادة والمشاريع والحوكمة (ثابت)
+leaders-app/     ← تطبيق القادة (المصدر)        leaders/  ← ناتج بنائه المنشور
+admin-app/       ← لوحة الإدارة (المصدر)         admin/    ← ناتج بنائها المنشور
+src/             ← تطبيق مصفوفة التأثير
+shared/          ← الهوية والأنماط المشتركة وسكربت البناء والقاعة المشتركة
+supabase/        ← الدوال والترحيلات واللقطة والمحتوى (الأسئلة، الكتيب، كاتون)
+scripts/         ← مولّدات المحتوى ومتحققاته، اللقطة، التكامل، المحاكاة
+docs/            ← التدقيق (audit) والتسليم (journey) والأسرار
+e2e/             ← اختبارات المتصفح (الخلفية مُحاكاة)
 ```
-
----
 
 ## للتواصل
 - ✉ mi@sunkvalue.com

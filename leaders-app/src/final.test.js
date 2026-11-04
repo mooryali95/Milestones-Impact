@@ -1,40 +1,80 @@
 import { describe, expect, it } from 'vitest';
-import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, decisionFor, finalComponents, FINAL_DEFAULTS } from '../../supabase/functions/leaders-api/logic.js';
+import {
+  approvalState, cleanAdjust, cleanFinalConfig, computeFinal, decisionFor, finalComponents, finalConfig, FINAL_DEFAULTS, measureScore, voteBlock,
+} from '../../supabase/functions/leaders-api/logic.js';
 
 const src = {
-  continuous: { index: 80, components: [{ label: 'اختبارات الكتيب', value: 80 }, { label: 'الخبراء', value: 60 }], trend: { dir: 'up' } },
-  milestones: { total: 4, done: 3, late: 1, max_late: 5 },
+  continuous: { index: 80, components: [{ label: 'اختبارات الكتيب', value: 80, in_index: true }, { label: 'النماذج', value: 60, in_index: true }, { label: 'المختبر', value: 30, in_index: false }], trend: { dir: 'up' } },
+  milestones: { total: 4, done: 3, late: 1, max_late: 5, done_late: 1, max_done_late: 10 },
   capstone: { score: 72.4 },
-  post: { pct: 66 },
+  post: { pct: 66, test_pre: 50, test_post: 62, direction: 'up' },
 };
 
 describe('التقييم الختامي', () => {
-  it('يحسب كل مكوّن من مصدره ويشرحه', () => {
+  it('يحسب كل مكوّن من مصدره ويشرحه؛ المنجز بعد موعده يُخصم كالمتأخر', () => {
     const c = finalComponents(src);
     const by = Object.fromEntries(c.map((x) => [x.key, x]));
-    expect(by.milestones.value).toBe(63);
-    expect(by.milestones.reason).toContain('متأخر في 1');
-    expect(by.continuous.reason).toContain('أضعفها الخبراء');
+    expect(by.milestones.value).toBe(50);   // (3 − 0.5 × (1 + 1)) / 4
+    expect(by.milestones.reason).toContain('منها 1 بعد موعده');
+    expect(by.milestones.reason).toContain('متأخر في 1 لم يُنجز');
+    expect(by.continuous.reason).toContain('أضعفها النماذج');
     expect(by.project.value).toBe(72);
+    expect(by.post).toMatchObject({ value: 100 });
+    expect(by.post.reason).toContain('صاعد');
+  });
+
+  it('مكوّن القياس النهائي بطريقة البرنامج: مكسب موثوق، أو إتقان محكّي، أو مستوى', () => {
+    const g = FINAL_DEFAULTS.measure;
+    expect(measureScore({ ...src.post, direction: 'flat' }, g).value).toBe(60);
+    expect(measureScore({ ...src.post, direction: 'down' }, g).value).toBe(20);
+    // أثر السقف: بلغ المحك قبل البرنامج وبقي عليه فيُحسب صاعدًا
+    const ceiling = measureScore({ pct: 85, test_pre: 78, test_post: 74, direction: 'flat' }, g);
+    expect(ceiling.value).toBe(100);
+    expect(ceiling.reason).toContain('أثر السقف');
+    // بلا زوج مقارن: إتقان محكّي بإعلان
+    const noPair = measureScore({ pct: 66, test_post: 56, direction: null }, g);
+    expect(noPair).toMatchObject({ value: 80 });
+    expect(noPair.reason).toContain('لا قياس مبدئي مقارن');
+    expect(measureScore(src.post, { mode: 'mastery', mastery_cut: 70 })).toMatchObject({ value: 89 });
+    expect(measureScore({ pct: 66, test_post: 80 }, { mode: 'mastery', mastery_cut: 70 }).value).toBe(100);
+    expect(measureScore(src.post, { mode: 'level' })).toMatchObject({ value: 66 });
+    expect(measureScore(null, g).value).toBeNull();
   });
 
   it('يجمع بالأوزان ويقترح القرار', () => {
     const r = computeFinal(finalComponents(src), {});
-    // (80*30 + 63*20 + 72*30 + 66*20) / 100 = 71.4
-    expect(r.auto_score).toBe(71);
+    // (80*30 + 50*20 + 72*30 + 100*20) / 100 = 75.6
+    expect(r.auto_score).toBe(76);
     expect(r.coverage).toBe(100);
     expect(r.suggested).toBe('pass');
+    expect(r.config_version).toBe(1);
+    expect(r.large_adjust).toBe(false);
   });
 
-  it('المكوّن الغائب لا يُحسب صفرًا، ويُمنع الاقتراح دون حد التغطية', () => {
+  it('قبل انتهاء الدفعة: الغائب لا يُحسب صفرًا ويُمنع الاقتراح دون حد التغطية', () => {
     const r = computeFinal(finalComponents({ continuous: src.continuous }), {});
     expect(r.auto_score).toBe(80);
     expect(r.coverage).toBe(30);
     expect(r.suggested).toBeNull();
     expect(r.missing.length).toBe(3);
+    expect(r.zeroed).toEqual([]);
   });
 
-  it('تعديل الخبير يحتاج تعليلًا، ومخالفة المقترح تُعلَن', () => {
+  it('بعد انتهاء الدفعة: المشروع والقياس الغائبان صفر بإعلان، و«لم يجتز» لا يُقترح بلا دليل منهما', () => {
+    const r = computeFinal(finalComponents({ continuous: src.continuous, milestones: src.milestones }), {}, {}, { ended: true });
+    expect(r.zeroed).toEqual(['المشروع (وثيقة المبادرة بمعيارها)', 'القياس النهائي']);
+    expect(r.coverage).toBe(100);
+    expect(r.auto_score).toBe(34);   // (80*30 + 50*20 + 0 + 0) / 100
+    expect(r.suggested).toBe('extend');
+    expect(r.fail_blocked).toBe(true);
+    expect(r.components.find((x) => x.key === 'post').reason).toContain('انتهت الدفعة فيُحسب صفرًا');
+    // بدليل من المشروع وتغطية كافية يُقترح «لم يجتز»
+    const f = computeFinal(finalComponents({ ...src, continuous: { index: 20, components: [] }, capstone: { score: 30 }, post: { pct: 40, test_post: 30, direction: 'down' } }), {}, {}, { ended: true });
+    expect(f.suggested).toBe('fail');
+    expect(f.fail_blocked).toBe(false);
+  });
+
+  it('تعديل الخبير يحتاج تعليلًا، ومخالفة المقترح تُعلَن، والتعديل الكبير يحتاج توقيعين', () => {
     const comps = finalComponents(src);
     expect(() => cleanAdjust({ components: { project: { value: 90, reason: '' } } }, comps)).toThrow();
     const adj = cleanAdjust({ components: { project: { value: 40, reason: 'المشروع لم يُطبَّق فعليًا في الجهة' } }, decision: { value: 'pass', reason: 'رأي اللجنة بعد العرض الحي للمبادرة' } }, comps);
@@ -43,20 +83,48 @@ describe('التقييم الختامي', () => {
     expect(r.suggested).toBe('pass_notes');
     expect(r.decision).toBe('pass');
     expect(r.departs).toBe(true);
+    const big = computeFinal(comps, {}, cleanAdjust({ score: { value: 95, reason: 'عرض استثنائي أمام الراعي والجهة' } }, comps));
+    expect(big.large_adjust).toBe(true);
+    expect(approvalState([{ by: 'a', vote: 'approve' }], {}, { largeAdjust: true })).toMatchObject({ done: false, need: 2 });
+    expect(approvalState([{ by: 'a', vote: 'approve' }, { by: 'b', vote: 'approve' }], {}, { largeAdjust: true }).done).toBe(true);
   });
 
-  it('الحدود والإعداد', () => {
+  it('«اجتاز بملاحظات» و«يُمدَّد» و«لم يجتز» تلزمها ملاحظات تصل المشارك', () => {
+    const comps = finalComponents(src);
+    expect(() => cleanAdjust({ decision: { value: 'extend', reason: 'ينقصه تسليم المبادرة كاملة' } }, comps)).toThrow(/ملاحظات تصل المشارك/);
+    const ok = cleanAdjust({ decision: { value: 'extend', reason: 'ينقصه تسليم المبادرة كاملة' }, notes_to_participant: 'سلّم وثيقة المبادرة بمعالمها خلال شهر ثم تُعاد المراجعة' }, comps);
+    expect(ok.notes_to_participant).toContain('سلّم وثيقة');
+    expect(cleanAdjust({}, comps).notes_to_participant).toBeUndefined();   // المقترح «اجتاز» لا يلزمه
+    expect(computeFinal(comps, {}, ok).notes_to_participant).toContain('سلّم');
+  });
+
+  it('الحدود والإعداد وإصدار المعادلة', () => {
     expect(decisionFor(45, FINAL_DEFAULTS.thresholds)).toBe('extend');
     expect(decisionFor(44, FINAL_DEFAULTS.thresholds)).toBe('fail');
     expect(() => cleanFinalConfig({ thresholds: { pass: 50, pass_notes: 60, extend: 40 } })).toThrow();
     expect(() => cleanFinalConfig({ weights: { continuous: 0, milestones: 0, project: 0, post: 0 } })).toThrow();
+    expect(() => cleanFinalConfig({ measure: { gain_scores: { up: 50, flat: 60, down: 20 } } })).toThrow();
+    expect(() => cleanFinalConfig({ approval: 'committee_majority', committee_size: 3, committee: 'a@x.sa, b@x.sa' })).toThrow();
+    const c = cleanFinalConfig({ approval: 'committee_majority', committee_size: 3, committee: 'A@x.sa, b@x.sa,c@x.sa', sources: { experts: 1, quizzes: 2 } }, { version: 3 });
+    expect(c.version).toBe(4);
+    expect(c.effective_from).toMatch(/^\d{4}-/);
+    expect(c.committee).toEqual(['a@x.sa', 'b@x.sa', 'c@x.sa']);
+    expect(c.sources.experts).toBeUndefined();   // الانخراط خارج المؤشر
+    expect(finalConfig({}).measure).toEqual({ mode: 'gain', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 });
+    expect(finalConfig({ measure: { mode: 'mastery', mastery_cut: 65 } }).measure.mode).toBe('mastery');
   });
 
-  it('الاعتماد: خبير، أو لجنة بالأغلبية، أو بالإجماع', () => {
+  it('الاعتماد: خبير، أو لجنة بالأغلبية، أو بالإجماع؛ ولا يعتمد المُعدِّل نفسه ولا غير أعضاء اللجنة', () => {
     const v = (...xs) => xs.map((x, i) => ({ by: `a${i}`, vote: x }));
     expect(approvalState(v('approve'), {}).done).toBe(true);
     expect(approvalState(v('approve'), { approval: 'committee_majority', committee_size: 3 }).done).toBe(false);
     expect(approvalState(v('approve', 'approve'), { approval: 'committee_majority', committee_size: 3 }).done).toBe(true);
     expect(approvalState(v('approve', 'approve', 'return'), { approval: 'committee_unanimous', committee_size: 3 })).toMatchObject({ done: false, returned: true });
+    const rec = { submitted_by: 'x@x.sa', adjust: { components: { project: { value: 40, reason: 'سبب كافٍ للتعديل' } } } };
+    expect(voteBlock('x@x.sa', rec, {})).toMatch(/لا يعتمده بنفسه/);
+    expect(voteBlock('y@x.sa', rec, {})).toBeNull();
+    expect(voteBlock('x@x.sa', { submitted_by: 'x@x.sa', adjust: {} }, {})).toBeNull();
+    expect(voteBlock('y@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toMatch(/أعضاء اللجنة/);
+    expect(voteBlock('a@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toBeNull();
   });
 });

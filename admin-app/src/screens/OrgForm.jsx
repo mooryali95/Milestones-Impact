@@ -5,6 +5,7 @@
 // الحذف لا يتم إلا بعد عرض أثره وكتابة اسم الجهة، والإيقاف هو البديل المقترح.
 import React, { useEffect, useMemo, useState } from 'react';
 import { domainsOf, inviteUrl, L, orgColor } from '../leaders.js';
+import { hostOf, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
 import { useEscape, useUI } from '../ui.jsx';
 import { CertOverride, Field } from '../cert.jsx';
 
@@ -12,9 +13,8 @@ export const SWATCHES = ['#12414E', '#0B272F', '#A97A2E', '#2E7D5B', '#1F5FA8', 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 const CODE = /^[a-z0-9-]{4,40}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const host = (s) => {
-  try { const h = new URL(s.includes('://') ? s : `https://${s}`).hostname.replace(/^www\./, '').toLowerCase(); return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h) ? h : null; } catch { return null; }
-};
+// نطاق الجهة بقواعد الخادم نفسها (domains.js): لا لاحقة عامة ولا بريد عام
+const host = (s) => (orgDomainIssue(s) ? null : hostOf(s));
 
 export function validateOrg(v, coord) {
   const e = {};
@@ -93,9 +93,10 @@ function Domains({ list, onChange }) {
   const add = () => {
     const parts = draft.split(/[\s,،]+/).filter(Boolean);
     const ok = []; let wrong = '';
-    parts.forEach((p) => { const h = host(p); if (h) ok.push(h); else wrong = p; });
+    let why = '';
+    parts.forEach((p) => { const h = host(p); if (h) ok.push(h); else { wrong = p; why = orgDomainIssue(p); } });
     if (ok.length) onChange([...new Set([...list, ...ok])].slice(0, 20));
-    setBad(wrong ? `«${wrong}» ليس نطاقًا صحيحًا` : '');
+    setBad(wrong ? `«${wrong}»: ${why}` : '');
     setDraft(wrong);
   };
   return (

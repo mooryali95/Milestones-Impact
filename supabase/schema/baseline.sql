@@ -5,6 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
+-- as-of migration: 20261105170000_leaders_peer_requests
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -45,6 +46,9 @@ create table if not exists leaders.assessment_results (
   skill_form_pct numeric(5,2),
   behavior_common_pct numeric(5,2),
   behavior_pre_common_pct numeric(5,2),
+  level_gain_pct numeric(5,2),
+  level_gain_n integer,
+  level_gain_level text,
   constraint assessment_results_pkey PRIMARY KEY (assessment_id, dimension)
 );
 
@@ -86,7 +90,7 @@ create table if not exists leaders.auth_sessions (
   last_seen_at timestamp with time zone default now() not null,
   expires_at timestamp with time zone not null,
   revoked_at timestamp with time zone,
-  constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text]))),
+  constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text, 'demo'::text, 'switch'::text]))),
   constraint auth_sessions_pkey PRIMARY KEY (id),
   constraint auth_sessions_token_hash_key UNIQUE (token_hash)
 );
@@ -233,6 +237,33 @@ create table if not exists leaders.coaching_sessions (
   constraint coaching_sessions_external_id_key UNIQUE (external_id)
 );
 
+create table if not exists leaders.cohort_group_members (
+  cohort_id uuid not null,
+  participant_id uuid not null,
+  group_id uuid not null,
+  created_at timestamp with time zone default now() not null,
+  constraint cohort_group_members_pkey PRIMARY KEY (cohort_id, participant_id)
+);
+
+create table if not exists leaders.cohort_groups (
+  id uuid default gen_random_uuid() not null,
+  cohort_id uuid not null,
+  name text not null,
+  sort smallint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint cohort_groups_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80))),
+  constraint cohort_groups_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.cohort_roles (
+  cohort_id uuid not null,
+  participant_id uuid not null,
+  team text not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint cohort_roles_team_check CHECK ((team = ANY (ARRAY['support'::text, 'lead'::text, 'guide'::text, 'eval'::text]))),
+  constraint cohort_roles_pkey PRIMARY KEY (cohort_id, participant_id)
+);
+
 create table if not exists leaders.cohorts (
   id uuid default gen_random_uuid() not null,
   name text not null,
@@ -249,9 +280,22 @@ create table if not exists leaders.cohorts (
   is_default boolean default false not null,
   delivery jsonb default '{}'::jsonb not null,
   notes_ar text,
+  schedule jsonb default '{}'::jsonb not null,
+  level_mode text default 'mixed'::text not null,
+  content_level text,
+  stage_modes jsonb default '{}'::jsonb not null,
+  project_mode text default 'individual'::text not null,
+  advisor_expert_id uuid,
+  hidden_requirements text[] default '{}'::text[] not null,
+  supervision text default 'peers_expert'::text not null,
+  constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
+  constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
+  constraint cohorts_project_mode_check CHECK ((project_mode = ANY (ARRAY['individual'::text, 'group'::text]))),
   constraint cohorts_status_check CHECK ((status = ANY (ARRAY['planned'::text, 'open'::text, 'running'::text, 'closed'::text]))),
+  constraint cohorts_supervision_check CHECK ((supervision = ANY (ARRAY['peers_expert'::text, 'expert_only'::text, 'mixed'::text]))),
   constraint cohorts_track_check CHECK ((track = ANY (ARRAY['individual'::text, 'institutional'::text]))),
+  constraint cohorts_uniform_level_check CHECK (((level_mode <> 'uniform'::text) OR (content_level IS NOT NULL))),
   constraint cohorts_pkey PRIMARY KEY (id)
 );
 
@@ -365,6 +409,25 @@ create table if not exists leaders.enrollments (
   constraint enrollments_status_check CHECK ((status = ANY (ARRAY['nominated'::text, 'accepted'::text, 'active'::text, 'completed'::text, 'withdrawn'::text]))),
   constraint enrollments_pkey PRIMARY KEY (id),
   constraint enrollments_participant_id_cohort_id_key UNIQUE (participant_id, cohort_id)
+);
+
+create table if not exists leaders.entitlements (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  item text not null,
+  source text not null,
+  payment_id uuid,
+  granted_by text,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  revoked_at timestamp with time zone,
+  revoked_by text,
+  organization_id uuid,
+  value_cents integer,
+  currency text,
+  constraint entitlements_item_check CHECK ((item = ANY (ARRAY['assessment'::text, 'program'::text]))),
+  constraint entitlements_source_check CHECK ((source = ANY (ARRAY['paid'::text, 'admin'::text, 'grandfathered'::text, 'sponsor'::text]))),
+  constraint entitlements_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.expert_challenges (
@@ -484,6 +547,25 @@ create table if not exists leaders.experts (
   constraint experts_email_key UNIQUE (email)
 );
 
+create table if not exists leaders.final_evaluations (
+  participant_id uuid not null,
+  program_id uuid not null,
+  adjust jsonb default '{}'::jsonb not null,
+  snapshot jsonb,
+  score smallint,
+  decision text,
+  status text default 'draft'::text not null,
+  votes jsonb default '[]'::jsonb not null,
+  submitted_by text,
+  submitted_at timestamp with time zone,
+  decided_at timestamp with time zone,
+  updated_at timestamp with time zone default now() not null,
+  constraint final_evaluations_decision_check CHECK ((decision = ANY (ARRAY['pass'::text, 'pass_notes'::text, 'extend'::text, 'fail'::text]))),
+  constraint final_evaluations_score_check CHECK (((score >= 0) AND (score <= 100))),
+  constraint final_evaluations_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'pending'::text, 'approved'::text, 'returned'::text]))),
+  constraint final_evaluations_pkey PRIMARY KEY (participant_id, program_id)
+);
+
 create table if not exists leaders.grid_cells (
   dimension text not null,
   level text not null,
@@ -491,6 +573,42 @@ create table if not exists leaders.grid_cells (
   updated_at timestamp with time zone default now() not null,
   path_title_ar text,
   constraint grid_cells_pkey PRIMARY KEY (dimension, level)
+);
+
+create table if not exists leaders.hall_presence (
+  session_id uuid not null,
+  participant_id uuid not null,
+  joined_at timestamp with time zone default now() not null,
+  last_seen timestamp with time zone default now() not null,
+  hand boolean default false not null,
+  constraint hall_presence_pkey PRIMARY KEY (session_id, participant_id)
+);
+
+create table if not exists leaders.hall_sessions (
+  id uuid default gen_random_uuid() not null,
+  cohort_id uuid not null,
+  topic_id uuid,
+  mode text default 'live'::text not null,
+  stage text default 'enter'::text not null,
+  split_method text,
+  sentence_id uuid,
+  revealed uuid[] default '{}'::uuid[] not null,
+  round smallint default 1 not null,
+  leader_id uuid,
+  persona_id uuid,
+  persona_ar text,
+  code text not null,
+  version integer default 1 not null,
+  created_by text,
+  created_at timestamp with time zone default now() not null,
+  closed_at timestamp with time zone,
+  constraint hall_sessions_code_check CHECK ((code ~ '^[0-9]{6}$'::text)),
+  constraint hall_sessions_mode_check CHECK ((mode = ANY (ARRAY['live'::text, 'self'::text]))),
+  constraint hall_sessions_persona_ar_check CHECK ((char_length(persona_ar) <= 200)),
+  constraint hall_sessions_split_method_check CHECK ((split_method = ANY (ARRAY['mixed'::text, 'level'::text, 'choose'::text, 'manual'::text]))),
+  constraint hall_sessions_stage_check CHECK ((stage = ANY (ARRAY['enter'::text, 'train'::text, 'split'::text, 'round'::text, 'reveal'::text, 'closed'::text]))),
+  constraint hall_sessions_pkey PRIMARY KEY (id),
+  constraint hall_sessions_code_key UNIQUE (code)
 );
 
 create table if not exists leaders.handbook_exports (
@@ -573,9 +691,65 @@ create table if not exists leaders.journey_stages (
   mode_note_ar text,
   builds_on_ar text,
   program_id uuid not null,
+  rules jsonb default '{}'::jsonb not null,
   constraint journey_stages_mode_check CHECK ((mode = ANY (ARRAY['in_person'::text, 'online'::text, 'hybrid'::text, 'self'::text]))),
   constraint journey_stages_phase_check CHECK ((phase = ANY (ARRAY['admission'::text, 'qualification'::text, 'impact'::text]))),
   constraint journey_stages_pkey PRIMARY KEY (program_id, key)
+);
+
+create table if not exists leaders.katon_answers (
+  participant_id uuid not null,
+  sentence_id uuid not null,
+  choice text,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  verdict text,
+  confidence smallint,
+  stances text[] default '{}'::text[] not null,
+  constraint katon_answers_choice_check CHECK ((choice = ANY (ARRAY['question'::text, 'research'::text, 'true'::text, 'false'::text, 'idea'::text, 'can'::text, 'believe'::text, 'assume'::text]))),
+  constraint katon_answers_confidence_check CHECK (((confidence >= 1) AND (confidence <= 3))),
+  constraint katon_answers_note_check CHECK ((char_length(note) <= 1000)),
+  constraint katon_answers_stances_check CHECK ((stances <@ ARRAY['question'::text, 'research'::text, 'idea'::text, 'can'::text, 'believe'::text, 'assume'::text])),
+  constraint katon_answers_verdict_check CHECK ((verdict = ANY (ARRAY['true'::text, 'false'::text]))),
+  constraint katon_answers_verdict_confidence_check CHECK (((verdict IS NULL) = (confidence IS NULL))),
+  constraint katon_answers_pkey PRIMARY KEY (participant_id, sentence_id)
+);
+
+create table if not exists leaders.katon_sentences (
+  id uuid default gen_random_uuid() not null,
+  topic_id uuid not null,
+  sort smallint default 0 not null,
+  question text not null,
+  text_ar text not null,
+  key text default 'opinion'::text not null,
+  explain_ar text,
+  tasks jsonb default '{}'::jsonb not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint katon_sentences_explain_ar_check CHECK ((char_length(explain_ar) <= 800)),
+  constraint katon_sentences_key_check CHECK ((key = ANY (ARRAY['true'::text, 'false'::text, 'opinion'::text]))),
+  constraint katon_sentences_question_check CHECK ((question = ANY (ARRAY['why'::text, 'what'::text, 'how'::text, 'absent'::text, 'who'::text, 'when'::text]))),
+  constraint katon_sentences_text_ar_check CHECK (((char_length(text_ar) >= 8) AND (char_length(text_ar) <= 600))),
+  constraint katon_sentences_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.katon_topics (
+  id uuid default gen_random_uuid() not null,
+  key text not null,
+  title_ar text not null,
+  dimension text,
+  layers jsonb default '{}'::jsonb not null,
+  source text,
+  status text default 'draft'::text not null,
+  sort smallint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint katon_topics_dimension_check CHECK ((dimension = ANY (ARRAY['milestone'::text, 'impact'::text, 'leadership'::text]))),
+  constraint katon_topics_key_check CHECK (((char_length(key) >= 2) AND (char_length(key) <= 60))),
+  constraint katon_topics_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
+  constraint katon_topics_title_ar_check CHECK (((char_length(title_ar) >= 2) AND (char_length(title_ar) <= 160))),
+  constraint katon_topics_pkey PRIMARY KEY (id),
+  constraint katon_topics_key_key UNIQUE (key)
 );
 
 create table if not exists leaders.lab_attempts (
@@ -733,8 +907,13 @@ create table if not exists leaders.organizations (
   cert jsonb default '{}'::jsonb not null,
   delivery_default text,
   has_logo boolean generated always as ((logo IS NOT NULL)) stored,
+  contract_cents integer,
+  show_value boolean default true not null,
+  contract_starts date,
+  contract_ends date,
   constraint organizations_cert_check CHECK (((jsonb_typeof(cert) = 'object'::text) AND (pg_column_size(cert) <= 320000))),
   constraint organizations_color_check CHECK (((color IS NULL) OR (color ~ '^#[0-9A-Fa-f]{6}$'::text))),
+  constraint organizations_contract_cents_check CHECK (((contract_cents IS NULL) OR (contract_cents >= 0))),
   constraint organizations_delivery_default_check CHECK (((delivery_default IS NULL) OR (delivery_default = ANY (ARRAY['in_person'::text, 'online'::text])))),
   constraint organizations_logo_check CHECK (((logo IS NULL) OR ((logo ~~ 'data:image/png;base64,%'::text) AND (char_length(logo) <= 600000)))),
   constraint organizations_name_check CHECK ((char_length(name) <= 200)),
@@ -743,6 +922,19 @@ create table if not exists leaders.organizations (
   constraint organizations_short_name_check CHECK (((short_name IS NULL) OR (char_length(short_name) <= 40))),
   constraint organizations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text]))),
   constraint organizations_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.participant_milestones (
+  participant_id uuid not null,
+  milestone_id uuid not null,
+  done_at timestamp with time zone,
+  due_override date,
+  note text,
+  by_email text,
+  updated_at timestamp with time zone default now() not null,
+  scores jsonb default '{}'::jsonb not null,
+  constraint participant_milestones_note_check CHECK ((char_length(note) <= 1000)),
+  constraint participant_milestones_pkey PRIMARY KEY (participant_id, milestone_id)
 );
 
 create table if not exists leaders.participant_requirements (
@@ -754,8 +946,22 @@ create table if not exists leaders.participant_requirements (
   completed_at timestamp with time zone,
   reviewed_by text,
   reviewed_at timestamp with time zone,
+  answers jsonb,
   constraint participant_requirements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'submitted'::text, 'done'::text, 'returned'::text]))),
   constraint participant_requirements_pkey PRIMARY KEY (participant_id, requirement_id)
+);
+
+create table if not exists leaders.participant_stage_overrides (
+  participant_id uuid not null,
+  program_id uuid not null,
+  stage_key text not null,
+  action text not null,
+  note text,
+  by_email text,
+  created_at timestamp with time zone default now() not null,
+  constraint participant_stage_overrides_action_check CHECK ((action = ANY (ARRAY['open'::text, 'complete'::text, 'skip'::text]))),
+  constraint participant_stage_overrides_note_check CHECK ((char_length(note) <= 1000)),
+  constraint participant_stage_overrides_pkey PRIMARY KEY (participant_id, program_id, stage_key)
 );
 
 create table if not exists leaders.participants (
@@ -789,6 +995,10 @@ create table if not exists leaders.participants (
   name_en text,
   name_locked_at timestamp with time zone,
   work_scope text,
+  is_demo boolean default false not null,
+  consented_at timestamp with time zone,
+  consent_version text,
+  org_share_consented_at timestamp with time zone,
   constraint participants_bio_check CHECK ((char_length(bio) <= 2000)),
   constraint participants_campaign_check CHECK (((campaign IS NULL) OR (campaign ~ '^[a-z0-9_-]{1,40}$'::text))),
   constraint participants_email_check CHECK ((char_length(email) <= 254)),
@@ -823,6 +1033,97 @@ create table if not exists leaders.passkeys (
   constraint passkeys_device_label_check CHECK ((char_length(device_label) <= 80)),
   constraint passkeys_pkey PRIMARY KEY (id),
   constraint passkeys_credential_id_key UNIQUE (credential_id)
+);
+
+create table if not exists leaders.payment_events (
+  id uuid default gen_random_uuid() not null,
+  event_id text,
+  type text not null,
+  payload jsonb not null,
+  received_at timestamp with time zone default now() not null,
+  processed_at timestamp with time zone,
+  error text,
+  constraint payment_events_pkey PRIMARY KEY (id),
+  constraint payment_events_event_id_key UNIQUE (event_id)
+);
+
+create table if not exists leaders.payment_settings (
+  id boolean default true not null,
+  enabled boolean default false not null,
+  currency text default 'USD'::text not null,
+  assessment_product text,
+  assessment_cents integer default 100 not null,
+  program_product text,
+  program_cents integer default 9900 not null,
+  updated_by text,
+  updated_at timestamp with time zone default now() not null,
+  constraint payment_settings_assessment_cents_check CHECK ((assessment_cents >= 0)),
+  constraint payment_settings_id_check CHECK (id),
+  constraint payment_settings_program_cents_check CHECK ((program_cents >= 0)),
+  constraint payment_settings_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.payments (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid,
+  email text not null,
+  item text not null,
+  product_id text not null,
+  checkout_id text,
+  order_id text,
+  customer_id text,
+  amount_cents integer,
+  currency text,
+  status text default 'pending'::text not null,
+  mode text default 'live'::text not null,
+  created_at timestamp with time zone default now() not null,
+  paid_at timestamp with time zone,
+  refunded_at timestamp with time zone,
+  note text,
+  constraint payments_item_check CHECK ((item = ANY (ARRAY['assessment'::text, 'program'::text]))),
+  constraint payments_mode_check CHECK ((mode = ANY (ARRAY['test'::text, 'live'::text]))),
+  constraint payments_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'refunded'::text, 'failed'::text, 'expired'::text]))),
+  constraint payments_pkey PRIMARY KEY (id),
+  constraint payments_checkout_id_key UNIQUE (checkout_id)
+);
+
+create table if not exists leaders.peer_answers (
+  id uuid default gen_random_uuid() not null,
+  request_id uuid not null,
+  author_id uuid,
+  expert_id uuid,
+  text text not null,
+  status text default 'pending'::text not null,
+  expert_note text,
+  confirmed_by text,
+  confirmed_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint peer_answers_check CHECK (((author_id IS NOT NULL) OR (expert_id IS NOT NULL))),
+  constraint peer_answers_expert_note_check CHECK ((char_length(expert_note) <= 1000)),
+  constraint peer_answers_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'corrected'::text, 'hidden'::text]))),
+  constraint peer_answers_text_check CHECK (((char_length(text) >= 10) AND (char_length(text) <= 2000))),
+  constraint peer_answers_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.peer_requests (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  cohort_id uuid not null,
+  source text default 'free'::text not null,
+  ref_id uuid,
+  text text not null,
+  target_team text,
+  status text default 'open'::text not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  closed_at timestamp with time zone,
+  closed_by text,
+  constraint peer_requests_source_check CHECK ((source = ANY (ARRAY['sentence'::text, 'milestone'::text, 'capstone'::text, 'free'::text]))),
+  constraint peer_requests_status_check CHECK ((status = ANY (ARRAY['open'::text, 'answered'::text, 'confirmed'::text, 'closed'::text]))),
+  constraint peer_requests_target_team_check CHECK ((target_team = ANY (ARRAY['support'::text, 'lead'::text, 'guide'::text, 'eval'::text]))),
+  constraint peer_requests_text_check CHECK (((char_length(text) >= 10) AND (char_length(text) <= 2000))),
+  constraint peer_requests_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.placement_model (
@@ -890,6 +1191,30 @@ create table if not exists leaders.points_ledger (
   constraint points_ledger_participant_id_source_ref_id_key UNIQUE (participant_id, source, ref_id)
 );
 
+create table if not exists leaders.program_milestones (
+  id uuid default gen_random_uuid() not null,
+  program_id uuid not null,
+  stage_key text,
+  title_ar text not null,
+  description_ar text,
+  anchor text default 'stage_end'::text not null,
+  offset_days smallint default 0 not null,
+  fixed_date date,
+  complete text default 'stage'::text not null,
+  weight smallint,
+  active boolean default true not null,
+  sort smallint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint program_milestones_anchor_check CHECK ((anchor = ANY (ARRAY['stage_end'::text, 'stage_start'::text, 'cohort_start'::text, 'cohort_end'::text, 'date'::text]))),
+  constraint program_milestones_complete_check CHECK ((complete = ANY (ARRAY['stage'::text, 'manual'::text]))),
+  constraint program_milestones_description_ar_check CHECK ((char_length(description_ar) <= 1000)),
+  constraint program_milestones_offset_days_check CHECK (((offset_days >= '-365'::integer) AND (offset_days <= 365))),
+  constraint program_milestones_title_ar_check CHECK (((char_length(title_ar) >= 1) AND (char_length(title_ar) <= 160))),
+  constraint program_milestones_weight_check CHECK (((weight >= 0) AND (weight <= 100))),
+  constraint program_milestones_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.program_versions (
   id uuid default gen_random_uuid() not null,
   program_id uuid not null,
@@ -914,6 +1239,8 @@ create table if not exists leaders.programs (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   cert jsonb default '{}'::jsonb not null,
+  final_eval jsonb default '{}'::jsonb not null,
+  katon_points jsonb default '{}'::jsonb not null,
   constraint programs_check CHECK ((NOT (is_default AND (archived_at IS NOT NULL)))),
   constraint programs_description_ar_check CHECK ((char_length(description_ar) <= 2000)),
   constraint programs_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120))),
@@ -939,8 +1266,10 @@ create table if not exists leaders.questions (
   retro boolean default false not null,
   text_rater_ar text,
   form text,
+  min_level text,
   constraint questions_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
   constraint questions_kind_check CHECK ((kind = ANY (ARRAY['likert'::text, 'choice'::text, 'text'::text]))),
+  constraint questions_min_level_check CHECK ((min_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text]))),
   constraint questions_tier_check CHECK ((tier = ANY (ARRAY['knowledge'::text, 'skill'::text, 'behavior'::text, 'transfer'::text]))),
   constraint questions_pkey PRIMARY KEY (id),
   constraint questions_instrument_id_code_key UNIQUE (instrument_id, code)
@@ -998,6 +1327,29 @@ create table if not exists leaders.reports (
   constraint reports_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.schema_migrations (
+  name text not null,
+  applied_at timestamp with time zone default now() not null,
+  constraint schema_migrations_pkey PRIMARY KEY (name)
+);
+
+create table if not exists leaders.sponsor_requests (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  typed_name text not null,
+  contact_email text,
+  status text default 'pending'::text not null,
+  organization_id uuid,
+  decided_by text,
+  decided_at timestamp with time zone,
+  reason text,
+  created_at timestamp with time zone default now() not null,
+  constraint sponsor_requests_contact_email_check CHECK (((contact_email IS NULL) OR (char_length(contact_email) <= 254))),
+  constraint sponsor_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text]))),
+  constraint sponsor_requests_typed_name_check CHECK (((char_length(typed_name) >= 2) AND (char_length(typed_name) <= 200))),
+  constraint sponsor_requests_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.stage_requirements (
   id uuid default gen_random_uuid() not null,
   stage_key text not null,
@@ -1014,9 +1366,25 @@ create table if not exists leaders.stage_requirements (
   config jsonb default '{}'::jsonb not null,
   program_id uuid not null,
   constraint stage_requirements_check CHECK (((level IS NULL) OR (dimension IS NOT NULL))),
-  constraint stage_requirements_kind_check CHECK ((kind = ANY (ARRAY['check'::text, 'upload'::text, 'form'::text, 'meeting'::text, 'reading'::text, 'auto'::text, 'video'::text, 'workshop'::text, 'coaching'::text, 'curriculum'::text, 'model'::text, 'capstone'::text]))),
+  constraint stage_requirements_kind_check CHECK ((kind = ANY (ARRAY['check'::text, 'upload'::text, 'form'::text, 'meeting'::text, 'reading'::text, 'auto'::text, 'video'::text, 'workshop'::text, 'coaching'::text, 'curriculum'::text, 'model'::text, 'capstone'::text, 'survey'::text]))),
   constraint stage_requirements_pkey PRIMARY KEY (id),
   constraint stage_requirements_program_code_key UNIQUE (program_id, code)
+);
+
+create table if not exists leaders.track_profiles (
+  key text not null,
+  priority_dimension text not null,
+  level text not null,
+  title_ar text not null,
+  title_en text,
+  summary_ar text not null,
+  journey_ar text not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint track_profiles_key_check CHECK ((key = ((priority_dimension || '-'::text) || level))),
+  constraint track_profiles_text_check CHECK (((char_length(summary_ar) <= 1000) AND (char_length(journey_ar) <= 3000))),
+  constraint track_profiles_title_ar_check CHECK (((char_length(title_ar) >= 3) AND (char_length(title_ar) <= 120))),
+  constraint track_profiles_title_en_check CHECK (((title_en IS NULL) OR (char_length(title_en) <= 200))),
+  constraint track_profiles_pkey PRIMARY KEY (key)
 );
 
 create table if not exists leaders.tracks (
@@ -1032,6 +1400,7 @@ create table if not exists leaders.tracks (
   journey_ar text,
   updated_at timestamp with time zone default now() not null,
   title_en text,
+  profile_key text,
   constraint tracks_key_check CHECK ((key ~ '^M[1-3]I[1-3]L[1-3]$'::text)),
   constraint tracks_title_en_check CHECK (((title_en IS NULL) OR (char_length(title_en) <= 200))),
   constraint tracks_pkey PRIMARY KEY (key),
@@ -1194,10 +1563,11 @@ create table if not exists public.contact_requests (
   user_agent text,
   language text,
   status text default 'new'::text not null,
-  constraint contact_requests_email_chk CHECK (((char_length(email) <= 254) AND (email ~* '^[^@\s<>"''();,]+@[^@\s<>"''();,]+\.[a-z]{2,}$'::text))) NOT VALID,
-  constraint contact_requests_len_chk CHECK (((char_length(product) <= 40) AND ((char_length(name) >= 1) AND (char_length(name) <= 120)) AND (char_length(organization) <= 200) AND (char_length(interest) <= 40) AND (COALESCE(char_length(interest_label), 0) <= 200) AND (COALESCE(char_length(context), 0) <= 4000) AND (COALESCE(char_length(source_url), 0) <= 1024) AND (COALESCE(char_length(user_agent), 0) <= 512) AND (COALESCE(char_length(language), 0) <= 35))) NOT VALID,
-  constraint contact_requests_phone_chk CHECK ((phone ~ '^[0-9٠-٩+() -]{0,30}$'::text)) NOT VALID,
-  constraint contact_requests_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'read'::text, 'replied'::text, 'archived'::text]))) NOT VALID,
+  ip inet,
+  constraint contact_requests_email_chk CHECK (((char_length(email) <= 254) AND (email ~* '^[^@\s<>"''();,]+@[^@\s<>"''();,]+\.[a-z]{2,}$'::text))),
+  constraint contact_requests_len_chk CHECK (((char_length(product) <= 40) AND ((char_length(name) >= 1) AND (char_length(name) <= 120)) AND (char_length(organization) <= 200) AND (char_length(interest) <= 40) AND (COALESCE(char_length(interest_label), 0) <= 200) AND (COALESCE(char_length(context), 0) <= 4000) AND (COALESCE(char_length(source_url), 0) <= 1024) AND (COALESCE(char_length(user_agent), 0) <= 512) AND (COALESCE(char_length(language), 0) <= 35))),
+  constraint contact_requests_phone_chk CHECK ((phone ~ '^[0-9٠-٩+() -]{0,30}$'::text)),
+  constraint contact_requests_status_chk CHECK ((status = ANY (ARRAY['new'::text, 'read'::text, 'replied'::text, 'archived'::text]))),
   constraint contact_requests_pkey PRIMARY KEY (id)
 );
 
@@ -1436,11 +1806,11 @@ create table if not exists public.webauthn_challenges (
 );
 
 do $$ begin
-  alter table leaders.assessment_answers add constraint assessment_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES leaders.questions(id);
+  alter table leaders.assessment_answers add constraint assessment_answers_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.assessment_answers add constraint assessment_answers_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE CASCADE;
+  alter table leaders.assessment_answers add constraint assessment_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES leaders.questions(id);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1484,6 +1854,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.coaching_sessions add constraint coaching_sessions_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.coaching_sessions add constraint coaching_sessions_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -1492,11 +1866,31 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.coaching_sessions add constraint coaching_sessions_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+  alter table leaders.cohort_group_members add constraint cohort_group_members_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.cohorts add constraint cohorts_program_version_id_fkey FOREIGN KEY (program_version_id) REFERENCES leaders.program_versions(id) ON DELETE SET NULL;
+  alter table leaders.cohort_group_members add constraint cohort_group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES leaders.cohort_groups(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_group_members add constraint cohort_group_members_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_groups add constraint cohort_groups_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_roles add constraint cohort_roles_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_roles add constraint cohort_roles_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohorts add constraint cohorts_advisor_expert_id_fkey FOREIGN KEY (advisor_expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1508,11 +1902,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.content_progress add constraint content_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.cohorts add constraint cohorts_program_version_id_fkey FOREIGN KEY (program_version_id) REFERENCES leaders.program_versions(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.content_progress add constraint content_progress_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.content_items(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.content_progress add constraint content_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1524,11 +1922,23 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.enrollments add constraint enrollments_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE RESTRICT;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.enrollments add constraint enrollments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.enrollments add constraint enrollments_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE RESTRICT;
+  alter table leaders.entitlements add constraint entitlements_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.entitlements add constraint entitlements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.entitlements add constraint entitlements_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES leaders.payments(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1544,11 +1954,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.expert_ratings add constraint expert_ratings_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.coaching_sessions(id) ON DELETE CASCADE;
+  alter table leaders.expert_ratings add constraint expert_ratings_request_id_fkey FOREIGN KEY (request_id) REFERENCES leaders.expert_requests(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.expert_ratings add constraint expert_ratings_request_id_fkey FOREIGN KEY (request_id) REFERENCES leaders.expert_requests(id) ON DELETE CASCADE;
+  alter table leaders.expert_ratings add constraint expert_ratings_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.coaching_sessions(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1564,6 +1974,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.final_evaluations add constraint final_evaluations_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.final_evaluations add constraint final_evaluations_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.grid_cells add constraint grid_cells_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
@@ -1572,11 +1990,35 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.handbook_exports add constraint handbook_exports_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.hall_presence add constraint hall_presence_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.handbook_modules add constraint handbook_modules_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
+  alter table leaders.hall_presence add constraint hall_presence_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.hall_sessions(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_leader_id_fkey FOREIGN KEY (leader_id) REFERENCES leaders.participants(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_persona_id_fkey FOREIGN KEY (persona_id) REFERENCES leaders.participants(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_sentence_id_fkey FOREIGN KEY (sentence_id) REFERENCES leaders.katon_sentences(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES leaders.katon_topics(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.handbook_exports add constraint handbook_exports_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1584,11 +2026,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.handbook_progress add constraint handbook_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.handbook_modules add constraint handbook_modules_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.handbook_progress add constraint handbook_progress_module_id_fkey FOREIGN KEY (module_id) REFERENCES leaders.handbook_modules(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.handbook_progress add constraint handbook_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1604,15 +2050,23 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.katon_answers add constraint katon_answers_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.katon_answers add constraint katon_answers_sentence_id_fkey FOREIGN KEY (sentence_id) REFERENCES leaders.katon_sentences(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.katon_sentences add constraint katon_sentences_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES leaders.katon_topics(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.lab_attempts add constraint lab_attempts_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.lab_items(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.lab_attempts add constraint lab_attempts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  alter table leaders.lab_grants add constraint lab_grants_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1624,11 +2078,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.lab_items add constraint lab_items_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
+  alter table leaders.lab_grants add constraint lab_grants_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.lab_items add constraint lab_items_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.lab_items add constraint lab_items_min_level_fkey FOREIGN KEY (min_level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1640,11 +2098,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.model_submissions add constraint model_submissions_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.model_submissions add constraint model_submissions_model_id_fkey FOREIGN KEY (model_id) REFERENCES leaders.learning_models(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.model_submissions add constraint model_submissions_model_id_fkey FOREIGN KEY (model_id) REFERENCES leaders.learning_models(id) ON DELETE CASCADE;
+  alter table leaders.model_submissions add constraint model_submissions_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1652,11 +2110,27 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.participant_requirements add constraint participant_requirements_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+  alter table leaders.participant_milestones add constraint participant_milestones_milestone_id_fkey FOREIGN KEY (milestone_id) REFERENCES leaders.program_milestones(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_milestones add constraint participant_milestones_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.participant_requirements add constraint participant_requirements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_requirements add constraint participant_requirements_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_stage_overrides add constraint participant_stage_overrides_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_stage_overrides add constraint participant_stage_overrides_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1668,7 +2142,31 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.placements add constraint placements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
+  alter table leaders.payments add constraint payments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_author_id_fkey FOREIGN KEY (author_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_answers add constraint peer_answers_request_id_fkey FOREIGN KEY (request_id) REFERENCES leaders.peer_requests(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_requests add constraint peer_requests_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.peer_requests add constraint peer_requests_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.placements add constraint placements_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1676,7 +2174,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.placements add constraint placements_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE SET NULL;
+  alter table leaders.placements add constraint placements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1685,6 +2183,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.points_ledger add constraint points_ledger_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.program_milestones add constraint program_milestones_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1700,15 +2202,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.raters add constraint raters_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.raters add constraint raters_instrument_id_fkey FOREIGN KEY (instrument_id) REFERENCES leaders.instruments(id);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.reading_progress add constraint reading_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.raters add constraint raters_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1716,11 +2214,31 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.reports add constraint reports_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+  alter table leaders.reading_progress add constraint reading_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.reports add constraint reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.reports add constraint reports_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.sponsor_requests add constraint sponsor_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.sponsor_requests add constraint sponsor_requests_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.stage_requirements add constraint stage_requirements_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.stage_requirements add constraint stage_requirements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1732,11 +2250,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.stage_requirements add constraint stage_requirements_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
+  alter table leaders.track_profiles add constraint track_profiles_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.stage_requirements add constraint stage_requirements_dimension_fkey FOREIGN KEY (dimension) REFERENCES leaders.dimensions(key);
+  alter table leaders.track_profiles add constraint track_profiles_priority_dimension_fkey FOREIGN KEY (priority_dimension) REFERENCES leaders.dimensions(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1756,11 +2274,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.video_progress add constraint video_progress_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+  alter table leaders.tracks add constraint tracks_profile_key_fkey FOREIGN KEY (profile_key) REFERENCES leaders.track_profiles(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.video_progress add constraint video_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.video_progress add constraint video_progress_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1804,15 +2326,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_links add constraint planner_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table public.planner_links add constraint planner_links_owner_fkey FOREIGN KEY (owner) REFERENCES auth.users(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_master_links add constraint planner_master_links_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+  alter table public.planner_links add constraint planner_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1824,11 +2342,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_plan_summaries add constraint planner_plan_summaries_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+  alter table public.planner_master_links add constraint planner_master_links_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_profiles add constraint planner_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  alter table public.planner_plan_summaries add constraint planner_plan_summaries_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1836,7 +2354,11 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_project_shares add constraint planner_project_shares_shared_with_fkey FOREIGN KEY (shared_with) REFERENCES auth.users(id) ON DELETE CASCADE;
+  alter table public.planner_profiles add constraint planner_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.planner_project_shares add constraint planner_project_shares_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1844,7 +2366,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table public.planner_project_shares add constraint planner_project_shares_project_id_fkey FOREIGN KEY (project_id) REFERENCES planner_projects(id) ON DELETE CASCADE;
+  alter table public.planner_project_shares add constraint planner_project_shares_shared_with_fkey FOREIGN KEY (shared_with) REFERENCES auth.users(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -1859,7 +2381,13 @@ do $$ begin
   alter table public.user_passkeys add constraint user_passkeys_registration_id_fkey FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
+CREATE UNIQUE INDEX IF NOT EXISTS assessments_one_in_progress ON leaders.assessments USING btree (participant_id, instrument_id) WHERE (status = 'in_progress'::text);
+
 CREATE INDEX IF NOT EXISTS assessments_participant_idx ON leaders.assessments USING btree (participant_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS audit_log_actor_idx ON leaders.audit_log USING btree (actor);
+
+CREATE INDEX IF NOT EXISTS audit_log_created_idx ON leaders.audit_log USING btree (created_at DESC);
 
 CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON leaders.audit_log USING btree (entity, entity_id, created_at DESC);
 
@@ -1883,6 +2411,12 @@ CREATE INDEX IF NOT EXISTS coaching_sessions_participant_idx ON leaders.coaching
 
 CREATE INDEX IF NOT EXISTS coaching_sessions_status_idx ON leaders.coaching_sessions USING btree (status, starts_at);
 
+CREATE INDEX IF NOT EXISTS cohort_group_members_group_idx ON leaders.cohort_group_members USING btree (group_id);
+
+CREATE INDEX IF NOT EXISTS cohort_groups_cohort_idx ON leaders.cohort_groups USING btree (cohort_id, sort);
+
+CREATE INDEX IF NOT EXISTS cohorts_advisor ON leaders.cohorts USING btree (advisor_expert_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS cohorts_one_default ON leaders.cohorts USING btree ((true)) WHERE is_default;
 
 CREATE INDEX IF NOT EXISTS cohorts_org_idx ON leaders.cohorts USING btree (organization_id, status);
@@ -1899,9 +2433,17 @@ CREATE INDEX IF NOT EXISTS email_challenges_email_idx ON leaders.email_challenge
 
 CREATE INDEX IF NOT EXISTS email_challenges_ip_created_idx ON leaders.email_challenges USING btree (ip, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS enrollments_cohort_idx ON leaders.enrollments USING btree (cohort_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS entitlements_one_live ON leaders.entitlements USING btree (participant_id, item) WHERE (revoked_at IS NULL);
+
+CREATE INDEX IF NOT EXISTS entitlements_organization_idx ON leaders.entitlements USING btree (organization_id) WHERE (organization_id IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS expert_challenges_email_idx ON leaders.expert_challenges USING btree (email, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS expert_ratings_expert_idx ON leaders.expert_ratings USING btree (expert_id, direction);
+
+CREATE INDEX IF NOT EXISTS expert_ratings_participant_idx ON leaders.expert_ratings USING btree (participant_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS expert_ratings_request_uq ON leaders.expert_ratings USING btree (direction, request_id) WHERE (request_id IS NOT NULL);
 
@@ -1917,9 +2459,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS expert_requests_token_idx ON leaders.expert_re
 
 CREATE INDEX IF NOT EXISTS experts_status_idx ON leaders.experts USING btree (status);
 
+CREATE INDEX IF NOT EXISTS final_evaluations_status_idx ON leaders.final_evaluations USING btree (status);
+
+CREATE INDEX IF NOT EXISTS hall_presence_last_seen_idx ON leaders.hall_presence USING btree (last_seen);
+
+CREATE INDEX IF NOT EXISTS hall_sessions_cohort_idx ON leaders.hall_sessions USING btree (cohort_id, stage);
+
+CREATE UNIQUE INDEX IF NOT EXISTS hall_sessions_one_open ON leaders.hall_sessions USING btree (cohort_id) WHERE (stage <> 'closed'::text);
+
 CREATE INDEX IF NOT EXISTS handbook_exports_participant_idx ON leaders.handbook_exports USING btree (participant_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS handbook_views_participant_idx ON leaders.handbook_views USING btree (participant_id, viewed_at DESC);
+
+CREATE INDEX IF NOT EXISTS katon_answers_sentence_idx ON leaders.katon_answers USING btree (sentence_id);
+
+CREATE INDEX IF NOT EXISTS katon_sentences_topic_idx ON leaders.katon_sentences USING btree (topic_id, sort);
 
 CREATE INDEX IF NOT EXISTS lab_attempts_participant_idx ON leaders.lab_attempts USING btree (participant_id, item_id);
 
@@ -1931,7 +2485,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS lab_grants_target_idx ON leaders.lab_grants US
 
 CREATE INDEX IF NOT EXISTS learning_models_capstone_idx ON leaders.learning_models USING btree (capstone_sort) WHERE (capstone_sort IS NOT NULL);
 
+CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
+
 CREATE INDEX IF NOT EXISTS org_coordinators_email_idx ON leaders.org_coordinators USING btree (email);
+
+CREATE UNIQUE INDEX IF NOT EXISTS org_coordinators_org_email_uniq ON leaders.org_coordinators USING btree (organization_id, lower(email));
 
 CREATE INDEX IF NOT EXISTS org_coordinators_org_idx ON leaders.org_coordinators USING btree (organization_id);
 
@@ -1945,6 +2503,8 @@ CREATE INDEX IF NOT EXISTS participant_requirements_status_idx ON leaders.partic
 
 CREATE UNIQUE INDEX IF NOT EXISTS participants_email_uniq ON leaders.participants USING btree (lower(email));
 
+CREATE UNIQUE INDEX IF NOT EXISTS participants_one_demo ON leaders.participants USING btree ((true)) WHERE is_demo;
+
 CREATE INDEX IF NOT EXISTS participants_org_idx ON leaders.participants USING btree (organization_id);
 
 CREATE INDEX IF NOT EXISTS participants_person_idx ON leaders.participants USING btree (person_id) WHERE (person_id IS NOT NULL);
@@ -1953,13 +2513,41 @@ CREATE INDEX IF NOT EXISTS participants_status_idx ON leaders.participants USING
 
 CREATE INDEX IF NOT EXISTS passkeys_participant_idx ON leaders.passkeys USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS payment_events_time ON leaders.payment_events USING btree (received_at DESC);
+
+CREATE INDEX IF NOT EXISTS payments_email_idx ON leaders.payments USING btree (email);
+
+CREATE INDEX IF NOT EXISTS payments_order ON leaders.payments USING btree (order_id);
+
+CREATE INDEX IF NOT EXISTS payments_participant ON leaders.payments USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS payments_status ON leaders.payments USING btree (status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS peer_answers_author_idx ON leaders.peer_answers USING btree (author_id, status);
+
+CREATE INDEX IF NOT EXISTS peer_answers_request_idx ON leaders.peer_answers USING btree (request_id, created_at);
+
+CREATE INDEX IF NOT EXISTS peer_requests_cohort_idx ON leaders.peer_requests USING btree (cohort_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS peer_requests_participant_idx ON leaders.peer_requests USING btree (participant_id);
+
 CREATE INDEX IF NOT EXISTS points_ledger_participant ON leaders.points_ledger USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS program_milestones_program_idx ON leaders.program_milestones USING btree (program_id, sort);
 
 CREATE UNIQUE INDEX IF NOT EXISTS programs_one_default ON leaders.programs USING btree ((true)) WHERE is_default;
 
 CREATE INDEX IF NOT EXISTS questions_instrument_idx ON leaders.questions USING btree (instrument_id, dimension, sort);
 
 CREATE INDEX IF NOT EXISTS raters_participant_idx ON leaders.raters USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS reports_organization_idx ON leaders.reports USING btree (organization_id);
+
+CREATE INDEX IF NOT EXISTS reports_participant_idx ON leaders.reports USING btree (participant_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sponsor_requests_one_pending ON leaders.sponsor_requests USING btree (participant_id) WHERE (status = 'pending'::text);
+
+CREATE INDEX IF NOT EXISTS sponsor_requests_status ON leaders.sponsor_requests USING btree (status, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS stage_requirements_program_idx ON leaders.stage_requirements USING btree (program_id, stage_key, sort);
 
@@ -1976,6 +2564,8 @@ CREATE INDEX IF NOT EXISTS admin_passkeys_admin_idx ON public.admin_passkeys USI
 CREATE INDEX IF NOT EXISTS api_sessions_expires_idx ON public.api_sessions USING btree (expires_at);
 
 CREATE INDEX IF NOT EXISTS contact_requests_created_idx ON public.contact_requests USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS contact_requests_ip_created_idx ON public.contact_requests USING btree (ip, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON public.admin_audit_log USING btree (action);
 
@@ -2051,6 +2641,12 @@ alter table leaders.certificates enable row level security;
 
 alter table leaders.coaching_sessions enable row level security;
 
+alter table leaders.cohort_group_members enable row level security;
+
+alter table leaders.cohort_groups enable row level security;
+
+alter table leaders.cohort_roles enable row level security;
+
 alter table leaders.cohorts enable row level security;
 
 alter table leaders.content_items enable row level security;
@@ -2067,6 +2663,8 @@ alter table leaders.email_challenges enable row level security;
 
 alter table leaders.enrollments enable row level security;
 
+alter table leaders.entitlements enable row level security;
+
 alter table leaders.expert_challenges enable row level security;
 
 alter table leaders.expert_ratings enable row level security;
@@ -2077,7 +2675,13 @@ alter table leaders.expert_sessions enable row level security;
 
 alter table leaders.experts enable row level security;
 
+alter table leaders.final_evaluations enable row level security;
+
 alter table leaders.grid_cells enable row level security;
+
+alter table leaders.hall_presence enable row level security;
+
+alter table leaders.hall_sessions enable row level security;
 
 alter table leaders.handbook_exports enable row level security;
 
@@ -2090,6 +2694,12 @@ alter table leaders.handbook_views enable row level security;
 alter table leaders.instruments enable row level security;
 
 alter table leaders.journey_stages enable row level security;
+
+alter table leaders.katon_answers enable row level security;
+
+alter table leaders.katon_sentences enable row level security;
+
+alter table leaders.katon_topics enable row level security;
 
 alter table leaders.lab_attempts enable row level security;
 
@@ -2107,17 +2717,33 @@ alter table leaders.org_coordinators enable row level security;
 
 alter table leaders.organizations enable row level security;
 
+alter table leaders.participant_milestones enable row level security;
+
 alter table leaders.participant_requirements enable row level security;
+
+alter table leaders.participant_stage_overrides enable row level security;
 
 alter table leaders.participants enable row level security;
 
 alter table leaders.passkeys enable row level security;
+
+alter table leaders.payment_events enable row level security;
+
+alter table leaders.payment_settings enable row level security;
+
+alter table leaders.payments enable row level security;
+
+alter table leaders.peer_answers enable row level security;
+
+alter table leaders.peer_requests enable row level security;
 
 alter table leaders.placement_model enable row level security;
 
 alter table leaders.placements enable row level security;
 
 alter table leaders.points_ledger enable row level security;
+
+alter table leaders.program_milestones enable row level security;
 
 alter table leaders.program_versions enable row level security;
 
@@ -2131,7 +2757,13 @@ alter table leaders.reading_progress enable row level security;
 
 alter table leaders.reports enable row level security;
 
+alter table leaders.schema_migrations enable row level security;
+
+alter table leaders.sponsor_requests enable row level security;
+
 alter table leaders.stage_requirements enable row level security;
+
+alter table leaders.track_profiles enable row level security;
 
 alter table leaders.tracks enable row level security;
 
@@ -2872,17 +3504,19 @@ CREATE OR REPLACE TRIGGER participants_touch BEFORE UPDATE ON leaders.participan
 
 CREATE OR REPLACE TRIGGER placement_model_touch BEFORE UPDATE ON leaders.placement_model FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
+CREATE OR REPLACE TRIGGER track_profiles_touch BEFORE UPDATE ON leaders.track_profiles FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
 CREATE OR REPLACE TRIGGER tracks_touch BEFORE UPDATE ON leaders.tracks FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
 CREATE OR REPLACE TRIGGER admin_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON public.admin_users FOR EACH ROW EXECUTE FUNCTION admin_owner_guard();
 
 CREATE OR REPLACE TRIGGER contact_requests_guard BEFORE INSERT ON public.contact_requests FOR EACH ROW EXECUTE FUNCTION contact_requests_guard();
 
+CREATE OR REPLACE TRIGGER planner_summaries_notify_wb AFTER INSERT OR UPDATE ON public.planner_plan_summaries FOR EACH ROW EXECUTE FUNCTION planner_notify_workbench();
+
 CREATE OR REPLACE TRIGGER planner_projects_notify_wb AFTER INSERT OR UPDATE OF data, updated, name ON public.planner_projects FOR EACH ROW EXECUTE FUNCTION planner_notify_workbench();
 
 CREATE OR REPLACE TRIGGER planner_projects_owner_guard BEFORE UPDATE ON public.planner_projects FOR EACH ROW EXECUTE FUNCTION planner_guard_owner();
-
-CREATE OR REPLACE TRIGGER planner_summaries_notify_wb AFTER INSERT OR UPDATE ON public.planner_plan_summaries FOR EACH ROW EXECUTE FUNCTION planner_notify_workbench();
 
 CREATE OR REPLACE TRIGGER trg_planner_projects_touch BEFORE UPDATE ON public.planner_projects FOR EACH ROW EXECUTE FUNCTION planner_touch_updated_at();
 

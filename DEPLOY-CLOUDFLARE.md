@@ -1,6 +1,6 @@
 # 🚀 دليل نشر Cloudflare Pages
 
-> **تنبيه (أكتوبر 2026):** هذا دليل الإعداد الأول. منذ دمج #23 صارت صفحة القادة على `mi.sunkvalue.com/leaders/` ومحتواها في `home/leaders/`، ومشروع `mi-leaders` يخدم تحويل 301 فقط من `leaders.sunkvalue.com`. الخريطة الحالية للمنصات في `README.md`.
+> **تنبيه (نوفمبر 2026):** هذا دليل الإعداد الأول ويُحتفظ به للتاريخ. الوضع الحالي: `mi-leaders` ينشر مجلد `leaders/` وهو **منصة القادة** (ناتج بناء `leaders-app/` مُودع)، لا تحويلًا؛ وصفحة البرنامج التسويقية في `home/leaders/` على `mi.sunkvalue.com/leaders/`. المنصات الخمس تُبنى من فرع `release` الذي يدفعه CI بعد خضرة الفحوص (Settings ← Builds & deployments ← Production branch = `release` لكل مشروع). الخريطة الحالية في `README.md`، والتشغيل في `RUNBOOK.md`.
 
 > دليل خطوة بخطوة لربط `home/` و `leaders/` بـ Cloudflare Pages.
 

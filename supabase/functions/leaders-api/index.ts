@@ -17,7 +17,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { clientIp, Fail, preflight, reply } from './core.ts';
+import { alertOps, clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -39,6 +39,8 @@ import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
 import { switchTo } from './switch.ts';
 import * as V2 from './advisor.ts';
+import * as PR from './peer.ts';
+import * as FL from './file.ts';
 
 type Body = Record<string, any>;
 
@@ -47,10 +49,14 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.verify': P.authVerify,
   'auth.google': P.authGoogle,
   'org.info': (b) => P.orgInfo(b),
+  // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
+  'system.ping': () => S.ping(),
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
+    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })),
+      // تنظيف دوري: رموز الدخول والجلسات المنتهية وسجلات التحقق وعناوين IP بعد 90 يومًا
+      purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,
@@ -76,7 +82,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
   'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
-  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
+  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
+// حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
+const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
   if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
@@ -93,6 +101,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'sponsor.cancel': (p) => R.cancel(p),
   'me.switch': (p, b, _s, ctx) => switchTo(p.email, 'participant', b.to, ctx),
   'org.visibility': (p) => P.orgVisibilityFor(p),
+  'consent.accept': (p) => P.consentAccept(p),
+  'org.share-consent': (p, b) => P.orgShareConsent(p, b),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
   'experts.choose': (p, b) => E.myChoose(p, b),
@@ -100,6 +110,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'katon.mine': (p) => KT.mine(p),
   'katon.answer': (p, b) => KT.answer(p, b),
   'hall.state': (p, b) => H.state(p, b),
+  'peer.list': (p) => PR.list(p),
+  'peer.ask': (p, b) => PR.ask(p, b),
+  'peer.answer': (p, b) => PR.answer(p, b),
+  'peer.close': (p, b) => PR.close(p, b),
   'demo.fill-profile': (p) => D.fillProfile(p),
   'demo.fill-assessment': (p) => D.fillAssessment(p),
   'hall.join': (p) => H.join(p),
@@ -159,6 +173,24 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
+  // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
+  'xp.participants': (e) => FL.participants(e),
+  'xp.participant': (e, b) => FL.participant(e, b),
+  'xp.final-eval': (e, b) => FL.finalGet(e, b),
+  'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
+  'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
+  'xp.milestone': (e, b) => FL.milestone(e, b),
+  'xp.hall': (e, b) => FL.hall(e, b),
+  'xp.hall-open': (e, b) => FL.hallOpen(e, b),
+  'xp.hall-step': (e, b) => FL.hallStep(e, b),
+  'xp.hall-split': (e, b) => FL.hallSplit(e, b),
+  'xp.hall-assign': (e, b) => FL.hallAssign(e, b),
+  'xp.hall-close': (e, b) => FL.hallClose(e, b),
+  // المرحلة 8: طلبات الأقران في دفعاته
+  'xp.peer-list': (e) => PR.expertList(e),
+  'xp.peer-answer': (e, b) => PR.expertAnswer(e, b),
+  'xp.peer-review': (e, b) => PR.expertReview(e, b),
+  'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
@@ -178,7 +210,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.item-analysis': (_a, b) => S.itemReport(b),
   'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
-  'admin.participant': (_a, b) => A.participant(b),
+  'admin.participant': (_a, b) => FL.participantFile(String(b.id || ''), 'admin', { viewer: { email: _a.email } }),
+  'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': () => A.reviews(),
   'admin.evidence-url': (_a, b) => A.evidenceUrl(b),
   'admin.approve': A.approve,
@@ -188,6 +221,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.stage-override': A.stageOverride,
   'admin.stage-create': A.stageCreate,
   'admin.create-participant': A.createParticipant,
+  'admin.participant-save': A.participantSave,
+  'admin.participant-impact': (_a, b) => A.participantImpact(b),
+  'admin.participant-delete': A.participantDelete,
   'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
@@ -200,7 +236,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.coordinator-invite': C.adminInvite,
   'admin.coordinator-status': C.adminSetStatus,
   'admin.coordinator-revoke': C.adminRevokeSessions,
-  'admin.coordinator-remove': C.adminRemove,
+  'admin.coordinator-remove': (a, b) => A.superWriter(a, C.adminRemove, b),
   'admin.coordinator-preview': C.adminPreview,
   'admin.book-preview': (_a, b) => A.bookPreview(b),
   'admin.submissions': (_a, b) => A.submissions(b),
@@ -220,7 +256,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
   'admin.certificate-revoke': (a, b) => A.writer(a, Z.revoke, b),
   'admin.certificate-reissue': (a, b) => A.writer(a, Z.reissue, b),
-  'admin.certificate-reissue-org': (a, b) => A.writer(a, Z.reissueOrg, b),
+  'admin.certificate-reissue-org': (a, b) => A.superWriter(a, Z.reissueOrg, b),
   'admin.cert-preview': (_a, b) => Z.preview(b),
   'admin.cert-settings': () => Z.settingsGet(),
   'admin.cert-settings-save': (a, b) => A.writer(a, Z.settingsSave, b),
@@ -239,7 +275,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.payments': () => Y.adminOverview(),
   'admin.sponsor-requests': () => R.adminList(),
   'admin.sponsor-decide': R.adminDecide,
-  'admin.payment-settings': Y.adminSettings,
+  'admin.payment-settings': (a, b) => A.superWriter(a, Y.adminSettings, b),
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,
   'admin.experts': () => E.adminList(),
@@ -257,13 +293,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
   'admin.program-version': (a, b) => A.writer(a, G.programPublish, b),
-  'admin.program-restore': (a, b) => A.writer(a, G.programRestore, b),
+  'admin.program-restore': (a, b) => A.superWriter(a, G.programRestore, b),
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
   'admin.hall': (_a, b) => H.adminState(b),
   'admin.demo-open': (a, b, ctx) => A.writer(a, (x, y) => D.open(x, y, ctx), b),
-  'admin.demo-reset': (a, b) => A.writer(a, D.reset, b),
+  'admin.demo-reset': (a, b) => A.superWriter(a, D.reset, b),
   'admin.hall-open': (a, b) => A.writer(a, H.open, b),
   'admin.hall-step': (a, b) => A.writer(a, H.step, b),
   'admin.hall-split': (a, b) => A.writer(a, H.split, b),
@@ -274,7 +310,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.katon-sentence-save': (a, b) => A.writer(a, KT.sentenceSave, b),
   'admin.katon-sentence-delete': (a, b) => A.writer(a, KT.sentenceDelete, b),
   'admin.katon-points': (a, b) => A.writer(a, KT.pointsSave, b),
-  'admin.final-eval': (_a, b) => F.get(b),
+  'admin.final-eval': (a, b) => F.get(b, a),
   'admin.final-eval-save': (a, b) => A.writer(a, F.save, b),
   'admin.final-eval-vote': (a, b) => A.writer(a, F.vote, b),
   'admin.final-eval-reopen': (a, b) => A.writer(a, F.reopen, b),
@@ -298,14 +334,16 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return preflight(req);
   if (req.method !== 'POST') return reply(req, { success: false, message: 'Method not allowed' }, 405);
+  let action = '';
   try {
     const b: Body = await req.json().catch(() => ({}));
-    const action = String(b.action || '');
+    action = String(b.action || '');
     const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null };
 
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
+      if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
       // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
       const need = payGate(action, b);
       if (need) await Y.requireAccess(p, need);
@@ -327,8 +365,15 @@ Deno.serve(async (req) => {
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
-    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
-    console.error('leaders-api:', e);
-    return reply(req, { success: false, message: 'خطأ داخلي، حاول بعد قليل', code: 'internal' }, 500);
+    if (e instanceof Fail) {
+      // تعطل البريد يوقف الدخول بالرمز، فيُبلَّغ المالك فورًا (مرة كل عشر دقائق)
+      if (['mail_failed', 'mail_unconfigured', 'mail_cap'].includes(e.code)) await alertOps(e.code, { action, message: e.message });
+      return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
+    }
+    // رقم مرجع يراه المستخدم ويُسجَّل مع الخطأ ويصل في التنبيه، فيُربط البلاغ بسجله
+    const ref = crypto.randomUUID().slice(0, 8);
+    console.error(`leaders-api [${ref}] ${action}:`, e);
+    await alertOps('internal', { ref, action, message: String((e as Error)?.message || e).slice(0, 300) });
+    return reply(req, { success: false, message: `خطأ داخلي، حاول بعد قليل (المرجع ${ref})`, code: 'internal', ref }, 500);
   }
 });

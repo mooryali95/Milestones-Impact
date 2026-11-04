@@ -16,15 +16,16 @@ const VERBS = new Set(['save', 'delete', 'remove', 'approve', 'review', 'issue',
 const isWrite = (name) => name.slice(6).split(/[-.]/).some((w) => VERBS.has(w));
 
 // هل الدالة المستدعاة تتحقق بنفسها؟ نقرأ جسمها من ملفها
+// requireSuper أشد من requireWrite (يتضمنه)، فهو حارس مقبول
 function guarded(handler) {
-  if (/\bA\.writer\(|requireWrite\(/.test(handler)) return true;
+  if (/\bA\.(super)?[wW]riter\(|requireWrite\(|requireSuper\(/.test(handler)) return true;
   const m = handler.match(/\b([A-Z])\.(\w+)\b/);
   if (!m) return false;
   const file = src[ALIAS[m[1]]] || '';
   const at = file.search(new RegExp(`export (async )?function ${m[2]}\\b`));
   if (at < 0) return false;
   const body = file.slice(at, file.indexOf('\n}\n', at));
-  return /requireWrite\(|writer\(/.test(body);
+  return /requireWrite\(|requireSuper\(|[wW]riter\(/.test(body);
 }
 
 describe('صلاحيات إجراءات الإدارة', () => {

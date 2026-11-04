@@ -117,6 +117,25 @@ function Transfer({ rows }) {
   );
 }
 
+// رد الفعل (كيركباتريك المستوى 1): «رأيك في أيام التدريب» مجمّعة؛ كانت تُحفظ ولا تُقرأ
+function Reaction({ s }) {
+  if (!s || !s.n) return null;
+  const ratings = s.questions.filter((q) => q.type === 'rating'), texts = s.questions.filter((q) => q.type === 'text' && q.n);
+  return (
+    <section className="la-card" aria-label="رأي المشاركين في أيام التدريب">
+      <h3>رأي المشاركين في أيام التدريب <small className="la-muted">· {s.n} إجابة</small></h3>
+      <table className="la-table" tabIndex={0} aria-label="تقديرات أيام التدريب">
+        <thead><tr><th>السؤال</th><th>العدد</th><th>المتوسط من 5</th><th>4 أو 5</th><th>التوزيع 1→5</th></tr></thead>
+        <tbody>{ratings.map((q) => <tr key={q.key}><td>{q.label}</td><td>{q.n}</td><td>{q.mean ?? '—'}</td><td>{q.top2_pct != null ? `${q.top2_pct}%` : '—'}</td><td dir="ltr">{[1, 2, 3, 4, 5].map((k) => q.dist[k]).join(' · ')}</td></tr>)}</tbody>
+      </table>
+      {texts.map((q) => (
+        <details key={q.key}><summary>{q.label} ({q.n})</summary><ul className="la-reqs">{q.texts.map((t, i) => <li key={i}><span>«{t}»</span></li>)}</ul></details>
+      ))}
+      <p className="la-muted">رد الفعل (Kirkpatrick المستوى 1) يُغذّي تصميم الدفعة التالية ولا يُحكم به على أثر البرنامج.</p>
+    </section>
+  );
+}
+
 function People({ list, onPerson }) {
   const rows = list.filter((p) => p.baseline_at);
   if (!rows.length) return null;
@@ -197,6 +216,7 @@ export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, ca
       {r.counts.paired > 0 ? <Cohort r={r} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
       {r.counts.paired > 0 && <Overall o={r.overall} />}
       <Transfer rows={r.transfer} />
+      <Reaction s={r.reaction} />
       <Outcomes org={org} onOpen={onCapstone} />
       <People list={r.participants} onPerson={onPerson} />
       {catalog?.success && <Settings model={catalog.placement_model?.[0]} canWrite={canWrite} onSaved={() => { reload(); load(); }} />}

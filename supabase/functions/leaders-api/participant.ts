@@ -2,22 +2,24 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
+  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
+import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
-import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
+import { CONTACT_EMAIL, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
+import { pinSponsorFor } from './entitlements.ts';
 import { notifyAdvisor } from './advisor.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
@@ -67,7 +69,9 @@ export async function participantFromToken(token: unknown) {
 }
 
 // ── نسب المشارك لجهته ──
-// الأولوية: رمز الرابط ثم نطاق الموقع الذي جاء منه (أو أحد نطاقاته الأم)
+// ما يربط المشارك بجهة راعية شيئان فقط: رمز رابطها (يكتبه أو يأتي به)، أو نطاق بريده
+// بعد توثيقه. الموقع المُحيل (ref) يرسله المتصفح ويستطيع أي أحد كتابته، فلا يربط أحدًا
+// ويُحفظ للتحليل فقط (referrer_host).
 const ORG_COLS = 'id, name, short_name, color, status';
 const live = (o: any) => (o && o.status !== 'inactive' ? o : null);
 
@@ -78,20 +82,10 @@ async function orgByCode(code: unknown) {
   return live(data);
 }
 
-export function hostOf(ref: unknown) {
-  const s = String(ref || '').trim().toLowerCase();
-  if (!s) return null;
-  try {
-    const h = new URL(s.includes('://') ? s : `https://${s}`).hostname.replace(/^www\./, '');
-    return /^[a-z0-9.-]{3,120}$/.test(h) && h.includes('.') ? h : null;
-  } catch { return null; }
-}
-
 async function orgByHost(host: string | null) {
-  if (!host) return null;
-  // mi.manzoma.sa تطابق mi.manzoma.sa ثم manzoma.sa، والأدق يفوز
-  const parts = host.split('.');
-  const candidates = parts.slice(0, -1).map((_, i) => parts.slice(i).join('.'));
+  // mi.manzoma.sa تطابق mi.manzoma.sa ثم manzoma.sa، والأدق يفوز؛ اللواحق العامة (gov.sa…) لا تدخل المطابقة
+  const candidates = domainCandidates(host);
+  if (!candidates.length) return null;
   const { data } = await db.from('organizations').select(`${ORG_COLS}, domains`).overlaps('domains', candidates);
   for (const c of candidates) {
     const hit = (data || []).find((o: any) => live(o) && (o.domains || []).includes(c));
@@ -107,9 +101,7 @@ const campaignOf = (c: unknown) => {
 
 async function resolveOrg(b: Body) {
   const byCode = await orgByCode(b.org);
-  if (byCode) return { org: byCode, via: 'link' as const };
-  const byHost = await orgByHost(hostOf(b.ref));
-  return byHost ? { org: byHost, via: 'domain' as const } : null;
+  return byCode ? { org: byCode, via: 'link' as const } : null;
 }
 
 // ── الجهة الراعية برمز يكتبه المشارك ──
@@ -130,12 +122,10 @@ async function sponsorByCode(code: unknown, key: string) {
   return { org, via: 'link' as const };   // الرمز المكتوب هو رمز رابط الجهة نفسه
 }
 // ── الربط بنطاق البريد الوظيفي: بريد موثَّق على نطاق مسجل لجهة نشطة يربط صاحبه بها ──
-// نطاقات البريد العامة لا تربط أحدًا أبدًا.
-const PUBLIC_MAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com',
-  'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com', 'yandex.com', 'zoho.com', 'hotmail.co.uk', 'outlook.sa', 'windowslive.com']);
+// نطاقات البريد العامة لا تربط أحدًا أبدًا (القائمة في domains.js).
 export async function orgByEmail(email: string) {
   const dom = String(email || '').split('@')[1]?.toLowerCase() || '';
-  if (!dom || PUBLIC_MAIL.has(dom)) return null;
+  if (!dom || isPublicMail(dom)) return null;
   const org = await orgByHost(dom);
   return org ? { org, via: 'domain' as const } : null;
 }
@@ -153,6 +143,7 @@ export async function sponsorCode(p: any, b: Body) {
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
+  await pinSponsorFor(p.id);
   return { success: true, ...(await mePayload(saved)) };
 }
 
@@ -161,6 +152,30 @@ export async function orgInfo(b: Body) {
   const r = await resolveOrg(b);
   if (!r) return { success: false, message: 'رابط الجهة غير صالح أو منتهٍ', code: 'org' };
   return { success: true, via: r.via, org: { name: r.org.name, short_name: r.org.short_name, color: r.org.color } };
+}
+
+// ── الموافقة على الخصوصية والشروط ──
+// تُسجَّل مع نسخة السياسة لحظة التسجيل (الإشعار يسبق زر التسجيل)، ولمن سبق تسجيله عند أول دخول
+// بعد نشر السياسة. الكتابة متسامحة مع غياب الأعمدة قبل ترحيلها (42703) حتى لا يتعطل التسجيل.
+async function setConsent(participantId: string, fields: Record<string, unknown>) {
+  const { error } = await db.from('participants').update(fields).eq('id', participantId);
+  if (error && error.code !== '42703') console.error('consent:', error.message);
+  return !error;
+}
+const recordConsent = (participantId: string) => setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
+export async function consentAccept(p: any) {
+  await recordConsent(p.id);
+  await audit('participant', p.id, 'participant.consent', 'participants', p.id, null, { version: POLICY_VERSION });
+  const fresh = must(await db.from('participants').select('*').eq('id', p.id).single());
+  return { success: true, ...(await mePayload(fresh)) };
+}
+// موافقة المشارك على اطلاع جهته على مستوياته: بدونها لا تخرج المستويات للجهة ولو مُنح منسقها صلاحيتها
+export async function orgShareConsent(p: any, b: Body) {
+  const share = b.share === true;
+  const ok = await setConsent(p.id, { org_share_consented_at: share ? new Date().toISOString() : null });
+  if (!ok) throw new Fail('تعذّر حفظ اختيارك الآن', 500, 'db_error');
+  await audit('participant', p.id, share ? 'participant.org-share.on' : 'participant.org-share.off', 'participants', p.id);
+  return { success: true, share };
 }
 
 // ── 1. بدء الدخول أو التسجيل ──
@@ -182,7 +197,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
-    // الجهة الراعية: رمز يكتبه المشارك، أو رابط جهة، أو موقعها. جهة العمل يكتبها في ملفه لاحقًا
+    // الجهة الراعية: رمز يكتبه المشارك، أو رمز رابط جهة، أو نطاق بريده (يُثبَّت بعد توثيق البريد). جهة العمل يكتبها في ملفه لاحقًا
     const r = await sponsorFor(b, ctx.ip || email, email);
     pending = {
       full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
@@ -190,15 +205,15 @@ export async function authStart(b: Body, ctx: Ctx) {
     };
   }
 
-  await mailGuard(b, ctx);
+  await mailGuard(b, ctx, existing ? 'login' : 'register');
   const code = randomCode();
   const link = randomToken(24);
-  must(await db.from('email_challenges').insert({
+  const row = must(await db.from('email_challenges').insert({
     email, purpose: existing ? 'login' : 'register', code_hash: await hash(code), link_token_hash: await hash(link),
     pending_profile: pending, ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString(),
-  }));
+  }).select('id').single()) as { id: string };
   const url = `${CONFIG.appUrl}/verify?e=${encodeURIComponent(email)}&t=${link}`;
-  await sendMail(email, existing ? 'رمز الدخول إلى رحلتك' : 'أكمل تسجيلك في برنامج القادة',
+  await sendOrDiscard('email_challenges', row.id, email, existing ? 'رمز الدخول إلى رحلتك' : 'أكمل تسجيلك في برنامج القادة',
     signInMail(existing?.full_name || pending?.full_name || '', code, url, !existing));
   return { success: true, sent: true };
 }
@@ -245,6 +260,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
+    await recordConsent(p.id);   // أكمل التسجيل بعد إشعار الخصوصية والشروط
+    if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
@@ -273,6 +290,8 @@ export async function authGoogle(b: Body, ctx: Ctx) {
       source: r ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
+    await recordConsent(p.id);
+    if (p.organization_id) await pinSponsorFor(p.id);
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
   }
@@ -383,14 +402,17 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
 // مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
 async function continuousFor(participantId: string, milestones: any[], programId: string | null) {
-  const [hb, subs, rt, lb, kt, prog] = await Promise.all([
+  const [hb, subs, rt, lb, kt, prog, pa] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
     db.from('model_submissions').select('rating, reviewed_at, updated_at, learning_models(title_ar)').eq('participant_id', participantId).not('rating', 'is', null),
     db.from('expert_ratings').select('overall, comment, created_at, session_id, request_id').eq('participant_id', participantId).eq('direction', 'to_participant'),
     db.from('lab_attempts').select('item_id, pct, finished_at, lab_items(title_ar)').eq('participant_id', participantId).not('finished_at', 'is', null),
     katonEvents(participantId),
     programId ? db.from('programs').select('final_eval').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
+    // إسهامه في طلبات زملائه كما أكّده الخبير أو صحّحه (المرحلة 8)
+    db.from('peer_answers').select('status, confirmed_at, updated_at').eq('author_id', participantId).in('status', ['confirmed', 'corrected']),
   ]);
+  const fc = finalConfig((prog as any).data?.final_eval);
   return continuousAssessment({
     quizzes: (hb.data || []).map((q: any) => ({ ...q, title: q.handbook_modules?.title_ar })),
     models: (subs.data || []).map((m: any) => ({ ...m, title: m.learning_models?.title_ar })),
@@ -398,7 +420,8 @@ async function continuousFor(participantId: string, milestones: any[], programId
     milestones: milestones.filter((m: any) => m.done),
     lab: (lb.data || []).map((a: any) => ({ ...a, title: a.lab_items?.title_ar })),
     katon: kt,
-    weights: finalConfig((prog as any).data?.final_eval).sources,
+    peer: pa.data || [],
+    weights: fc.sources, min_events: fc.min_events, min_quiz_items: fc.min_quiz_items,
   });
 }
 
@@ -415,8 +438,7 @@ export async function journeyFor(p: any) {
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
   ]);
   const pl = placements.data || [];
-  const levels = Object.fromEntries(pl.map((x: any) => [x.dimension, x.level]));
-  const approved = pl.length === 3 && pl.every((x: any) => x.approved_at);
+  const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
   const state = {
     profileCompleted: !!p.profile_completed_at,
@@ -445,11 +467,11 @@ export async function journeyFor(p: any) {
   });
   const [group, continuous, fe] = await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
-    db.from('final_evaluations').select('score, decision, status, decided_at').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
+    db.from('final_evaluations').select('score, decision, status, decided_at, adjust').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
   ]);
-  // التقييم الختامي يظهر للمشارك بعد اعتماده فقط
+  // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
   const final = fe.data?.status === 'approved'
-    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at } : null;
+    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at, notes: fe.data.adjust?.notes_to_participant || null } : null;
   return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final };
 }
 
@@ -475,6 +497,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
+      // null = لم يوافق بعد (يُعرض الإشعار)؛ غياب الحقل = العمود لم يُرحَّل بعد
+      consented_at: 'consented_at' in p ? p.consented_at : undefined,
+      org_share: 'org_share_consented_at' in p ? !!p.org_share_consented_at : undefined,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
@@ -515,7 +540,7 @@ export async function me(p: any) {
     const r = await orgByEmail(p.email);
     if (r) {
       const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
-      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); p = data; }
+      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id); p = data; }
     }
   }
   return { success: true, ...(await mePayload(p)) };
@@ -526,7 +551,10 @@ export async function orgVisibilityFor(p: any) {
   if (!p.organization_id) return { success: true, org: null };
   const { data } = await db.from('org_coordinators').select('status, expires_at, permissions, organizations(name, status)').eq('organization_id', p.organization_id);
   const org = (data || [])[0]?.organizations as any;
-  return { success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []) };
+  return {
+    success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []),
+    share_consented: 'org_share_consented_at' in p ? !!p.org_share_consented_at : null,   // null = لم يُرحَّل بعد
+  };
 }
 
 export async function orgLogo(p: any) {
@@ -610,7 +638,7 @@ export async function assessmentGet(p: any, b: Body = {}) {
   const kind = b.kind === 'post' ? 'post' : 'baseline';
   if (kind === 'post') await requirePostOpen(p);
   const inst = kind === 'post' ? await postInstrumentFor(p.id) : await activeInstrument(kind);
-  if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 503, 'no_instrument');
+  if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 409, 'no_instrument');
 
   let { data: a } = await db.from('assessments').select('*').eq('participant_id', p.id).eq('instrument_id', inst.id)
     .neq('status', 'void').order('started_at', { ascending: false }).limit(1).maybeSingle();
@@ -842,9 +870,9 @@ export async function passkeyDismiss(p: any) {
 const HANDBOOK_VIEWS_PER_HOUR = 120;
 
 export async function approvedLevels(p: any) {
-  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
-  if (pl.length < 3 || pl.some((x: any) => !x.approved_at)) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
-  return contentLevelsFor(p, Object.fromEntries(pl.map((x: any) => [x.dimension, x.level])) as Record<string, string>);
+  const a = approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? []);
+  if (!a.approved) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
+  return contentLevelsFor(p, a.levels as Record<string, string>);
 }
 
 // نقاط المشارك ولقبه من سجل النقاط

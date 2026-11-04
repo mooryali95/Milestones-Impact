@@ -27,8 +27,9 @@ create table if not exists leaders.programs (
 );
 create unique index if not exists programs_one_default on leaders.programs ((true)) where is_default;
 
-insert into leaders.programs (name, description_ar, is_default)
-select 'برنامج القادة', 'البرنامج الأساسي. يسري على كل من ليس في دفعة برنامج آخر.', true
+-- المعرّف ثابت (معرّف الإنتاج) حتى تجده الترحيلات اللاحقة التي تذكره حرفيًا في أي قاعدة جديدة
+insert into leaders.programs (id, name, description_ar, is_default)
+select '2bb237ac-9e2d-4e75-8cb3-6ea4ade78c78', 'برنامج القادة', 'البرنامج الأساسي. يسري على كل من ليس في دفعة برنامج آخر.', true
 where not exists (select 1 from leaders.programs where is_default);
 
 -- ── 2. المراحل والمتطلبات تنتمي إلى برنامج ──

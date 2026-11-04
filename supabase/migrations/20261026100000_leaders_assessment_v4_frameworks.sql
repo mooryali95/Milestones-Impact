@@ -41,9 +41,14 @@ update leaders.tracks set focus_ar = replace(focus_ar,
   'تثبيت الجدارات في المواقف الصعبة: القيادة نحو الأعلى وعبر الحدود وإدارة الخلاف')
 where focus_ar like '%تثبيت القيادة الموقفية في المواقف الصعبة والخلافات%';
 
-update leaders.tracks set project_ar = replace(project_ar,
-  'إدارة موقف خلافي حقيقي بخطة قيادة موقفية موثقة.',
-  'إدارة خلاف حقيقي مع جهة لا سلطة لك عليها بخطة موثقة، وقياس أثرها في توجيه الفريق ومواءمته والتزامه.')
-where project_ar like '%إدارة موقف خلافي حقيقي بخطة قيادة موقفية موثقة.%';
+-- project_ar أُسقط لاحقًا من tracks؛ التصحيح يُنفَّذ فقط إن كان العمود موجودًا (إعادة التطبيق فوق لقطة حديثة لا تجده)
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema = 'leaders' and table_name = 'tracks' and column_name = 'project_ar') then
+    execute $q$update leaders.tracks set project_ar = replace(project_ar,
+      'إدارة موقف خلافي حقيقي بخطة قيادة موقفية موثقة.',
+      'إدارة خلاف حقيقي مع جهة لا سلطة لك عليها بخطة موثقة، وقياس أثرها في توجيه الفريق ومواءمته والتزامه.')
+    where project_ar like '%إدارة موقف خلافي حقيقي بخطة قيادة موقفية موثقة.%'$q$;
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';

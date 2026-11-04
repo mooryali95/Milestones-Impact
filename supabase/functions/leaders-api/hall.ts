@@ -8,7 +8,7 @@ import { HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } fr
 import { katonPoints } from './katon.js';
 import { overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
-import type { Admin } from './admin.ts';
+import type { Actor } from './admin.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -33,7 +33,7 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     db.from('programs').select('katon_points').eq('id', cohort.program_id).maybeSingle(),
   ]);
   const answers = session.sentence_id
-    ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, note').eq('sentence_id', session.sentence_id)).data || [])
+    ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, verdict, confidence, stances, note').eq('sentence_id', session.sentence_id)).data || [])
     : [];
   const topic = session.topic_id ? (await db.from('katon_topics').select('id, title_ar').eq('id', session.topic_id).maybeSingle()).data : null;
   const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
@@ -103,7 +103,7 @@ export async function hallGate(p: any, sentenceId: string) {
   return { inHall: true };
 }
 
-// ── للخبير (حسابات اللوحة) ──
+// ── للمدير من اللوحة ولمستشار الدفعة من بوابته (التقييد بالدفعة في file.ts) ──
 export async function adminState(b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
   const s = await openSession(String(b.cohort_id));
@@ -115,27 +115,32 @@ export async function adminState(b: Body) {
   return buildState(s, { kind: 'admin' });
 }
 
-export async function open(a: Admin, b: Body) {
+export async function open(a: Actor, b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
   if (await openSession(String(b.cohort_id))) throw new Fail('للدفعة قاعة مفتوحة؛ أغلقها أولًا', 409);
-  const code = String(Math.floor(100000 + Math.random() * 900000));
   const mode = b.mode === 'self' ? 'self' : 'live';
-  must(await db.from('hall_sessions').insert({
-    cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code,
-    stage: mode === 'self' ? 'round' : 'enter', created_by: a.email,
-  }).select(SESSION_COLS).single());
-  await audit('admin', a.email, 'hall.open', 'cohorts', String(b.cohort_id), null, { mode, topic: b.topic_id || null });
+  // رمز الدخول ستة أرقام عشوائية؛ تصادمه مع قاعة مفتوحة أخرى نادر ويُعاد السحب بدل الفشل
+  for (let tries = 0; ; tries += 1) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const { error } = await db.from('hall_sessions').insert({
+      cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code,
+      stage: mode === 'self' ? 'round' : 'enter', created_by: a.email,
+    }).select(SESSION_COLS).single();
+    if (!error) break;
+    if (error.code !== '23505' || tries >= 4) { console.error(error); throw new Fail('تعذّر فتح القاعة', 500, 'db_error'); }
+  }
+  await audit(a.actor || 'admin', a.email, 'hall.open', 'cohorts', String(b.cohort_id), null, { mode, topic: b.topic_id || null });
   return adminState({ cohort_id: b.cohort_id });
 }
 
-async function adminSession(b: Body) {
+export async function adminSession(b: Body) {
   const s = must(await db.from('hall_sessions').select(SESSION_COLS).eq('id', String(b.session_id || '')).maybeSingle()) as any;
   if (!s || s.stage === 'closed') throw new Fail('القاعة غير مفتوحة', 404);
   return s;
 }
 
 // الانتقال بين المراحل، واختيار الجملة المعروضة، والكشف
-export async function step(a: Admin, b: Body) {
+export async function step(a: Actor, b: Body) {
   const s = await adminSession(b);
   const patch: Body = {};
   if (b.stage) {
@@ -165,12 +170,12 @@ export async function step(a: Admin, b: Body) {
     patch.leader_id = nextLeader(roles, s.leader_id, new Set((pres || []).map((x: any) => x.participant_id)));
   }
   const row = await bump(s.id, patch);
-  await audit('admin', a.email, 'hall.step', 'cohorts', s.cohort_id, null, { stage: row.stage, sentence: row.sentence_id, round: row.round });
+  await audit(a.actor || 'admin', a.email, 'hall.step', 'cohorts', s.cohort_id, null, { stage: row.stage, sentence: row.sentence_id, round: row.round });
   return adminState({ cohort_id: s.cohort_id });
 }
 
 // التقسيم: آلي (متنوع أو متقارب) على الحاضرين، أو فتح الاختيار للمشاركين، أو يدوي
-export async function split(a: Admin, b: Body) {
+export async function split(a: Actor, b: Body) {
   const s = await adminSession(b);
   const method = ['mixed', 'level', 'choose', 'manual'].includes(b.method) ? b.method : 'mixed';
   if (method === 'mixed' || method === 'level') {
@@ -186,11 +191,11 @@ export async function split(a: Admin, b: Body) {
   } else {
     await bump(s.id, { stage: 'split', split_method: method });
   }
-  await audit('admin', a.email, 'hall.split', 'cohorts', s.cohort_id, null, { method });
+  await audit(a.actor || 'admin', a.email, 'hall.split', 'cohorts', s.cohort_id, null, { method });
   return adminState({ cohort_id: s.cohort_id });
 }
 
-export async function assign(a: Admin, b: Body) {
+export async function assign(a: Actor, b: Body) {
   const s = await adminSession(b);
   if (!isUuid(b.participant_id)) throw new Fail('اختر المشارك');
   if (b.team) {
@@ -202,13 +207,13 @@ export async function assign(a: Admin, b: Body) {
   if (b.persona === true) { patch.persona_id = b.participant_id; if ('persona_ar' in b) patch.persona_ar = String(b.persona_ar || '').trim().slice(0, 200) || null; }
   if (b.persona === false && s.persona_id === b.participant_id) patch.persona_id = null;
   await bump(s.id, patch);
-  await audit('admin', a.email, 'hall.assign', 'participants', String(b.participant_id), null, { team: b.team || null, leader: !!b.leader, persona: b.persona ?? null });
+  await audit(a.actor || 'admin', a.email, 'hall.assign', 'participants', String(b.participant_id), null, { team: b.team || null, leader: !!b.leader, persona: b.persona ?? null });
   return adminState({ cohort_id: s.cohort_id });
 }
 
-export async function close(a: Admin, b: Body) {
+export async function close(a: Actor, b: Body) {
   const s = await adminSession(b);
   await bump(s.id, { stage: 'closed', closed_at: new Date().toISOString() });
-  await audit('admin', a.email, 'hall.close', 'cohorts', s.cohort_id);
+  await audit(a.actor || 'admin', a.email, 'hall.close', 'cohorts', s.cohort_id);
   return adminState({ cohort_id: s.cohort_id });
 }

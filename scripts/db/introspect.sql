@@ -1,5 +1,6 @@
 -- يولّد بنية leaders وpublic من فهارس النظام: جداول وتسلسلات وقيود وفهارس وسياسات ودوال ومحفزات.
 -- يشغّله scripts/db/snapshot.mjs ويكتب الناتج في supabase/schema/baseline.sql. قراءة فقط.
+-- الترتيب حتمي (المفتاح الثالث فريد لكل سطر) حتى تتطابق اللقطة من أي مصدر؛ و« NOT VALID» يُحذف من القيود لأن البناء المحلي لا يحفظه.
 with t as (
   select c.oid, n.nspname s, c.relname r, c.relrowsecurity rls
   from pg_class c join pg_namespace n on n.oid=c.relnamespace
@@ -14,7 +15,7 @@ cols as (
   left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum group by t.oid
 ),
 cons as (
-  select t.oid, string_agg(format(E',\n  constraint %I %s', co.conname, pg_get_constraintdef(co.oid)), '' order by co.contype, co.conname) body
+  select t.oid, string_agg(format(E',\n  constraint %I %s', co.conname, replace(pg_get_constraintdef(co.oid), ' NOT VALID', '')), '' order by co.contype, co.conname) body
   from t join pg_constraint co on co.conrelid=t.oid and co.contype in ('p','u','c','x') group by t.oid
 )
 select 0 ord, schemaname s, sequencename r, format('create sequence if not exists %I.%I as %s;', schemaname, sequencename, data_type) ddl
@@ -24,7 +25,7 @@ union all
 select 1 ord, s, r, format(E'create table if not exists %I.%I (\n%s%s\n);', s, r, cols.body, coalesce(cons.body,'')) ddl
   from t join cols using (oid) left join cons using (oid)
 union all
-select 2, n.nspname, c.relname, format(E'do $$ begin\n  alter table %I.%I add constraint %I %s;\nexception when duplicate_object then null; end $$;', n.nspname, c.relname, co.conname, pg_get_constraintdef(co.oid))
+select 2, n.nspname, c.relname || '.' || co.conname, format(E'do $$ begin\n  alter table %I.%I add constraint %I %s;\nexception when duplicate_object then null; end $$;', n.nspname, c.relname, co.conname, replace(pg_get_constraintdef(co.oid), ' NOT VALID', ''))
   from pg_constraint co join pg_class c on c.oid=co.conrelid join pg_namespace n on n.oid=c.relnamespace
   where co.contype='f' and n.nspname in ('leaders','public') and c.relname !~ 'backup'
 union all
@@ -40,7 +41,7 @@ select 3, schemaname, indexname, replace(indexdef, 'CREATE UNIQUE INDEX', 'CREAT
 union all
 select 4, s, r, format('alter table %I.%I enable row level security;', s, r) from t where rls
 union all
-select 5, n.nspname, p.proname, regexp_replace(pg_get_functiondef(p.oid), '^CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION') || ';'
+select 5, n.nspname, p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', regexp_replace(pg_get_functiondef(p.oid), '^CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION') || ';'
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname in ('leaders','public') and p.prokind='f'
   and not exists (select 1 from pg_depend d where d.objid=p.oid and d.deptype='e')
@@ -50,7 +51,7 @@ select 6, schemaname, tablename||'.'||policyname, format(E'do $$ begin\n  create
    coalesce(' using ('||qual||')',''), coalesce(' with check ('||with_check||')',''))
   from pg_policies where schemaname in ('leaders','public') and tablename !~ 'backup'
 union all
-select 7, n.nspname, t.tgname, replace(pg_get_triggerdef(t.oid), 'CREATE TRIGGER', 'CREATE OR REPLACE TRIGGER') || ';'
+select 7, n.nspname, c.relname || '.' || t.tgname, replace(pg_get_triggerdef(t.oid), 'CREATE TRIGGER', 'CREATE OR REPLACE TRIGGER') || ';'
   from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace
   where not t.tgisinternal and n.nspname in ('leaders','public') and c.relname !~ 'backup'
 order by 1, 2, 3

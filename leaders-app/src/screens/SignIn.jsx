@@ -10,8 +10,15 @@ import RoleChoice from '../RoleChoice.jsx';
 import OtherDoors from '../Doors.jsx';
 import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
 import logo from '../milestone-impact-inverted.svg';
+import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 
 const RESEND_SECONDS = 45;
+// إشعار الخصوصية والشروط قبل زر التسجيل: إكمال التسجيل بعده موافقة تُسجَّل مع نسخة السياسة
+const ConsentNote = ({ action }) => (
+  <p className="small muted consent-note">
+    بضغطك «{action}» توافق على <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> و<a className="link" href={LEGAL_PATH.terms} target="_blank" rel="noopener noreferrer">شروط برنامج القادة</a>.
+  </p>
+);
 
 export default function SignIn({ onSignedIn, initialError }) {
   const [step, setStep] = useState('email');   // email | name | code
@@ -34,8 +41,9 @@ export default function SignIn({ onSignedIn, initialError }) {
 
   // اسم الجهة يظهر إن جاء الزائر برابطها أو من موقعها
   useEffect(() => {
-    if (!via.org && !via.ref) return;
-    call('org.info', { org: via.org, ref: via.ref }).then((r) => { if (r.success) setOrg(r.org); });
+    // اسم الجهة يظهر لرمز رابطها فقط؛ الموقع المُحيل يُرسل للتحليل ولا يربط بجهة
+    if (!via.org) return;
+    call('org.info', { org: via.org }).then((r) => { if (r.success) setOrg(r.org); });
   }, [via]);
 
   useEffect(() => {
@@ -183,6 +191,7 @@ export default function SignIn({ onSignedIn, initialError }) {
             </label>
             {newcomerExtras}
             {error && <div className="alert err">{error}</div>}
+            <ConsentNote action="أرسل الرمز" />
             <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
             <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
           </form>
@@ -197,6 +206,7 @@ export default function SignIn({ onSignedIn, initialError }) {
             </div>
             {newcomerExtras}
             {error && <div className="alert err">{error}</div>}
+            <ConsentNote action="أنشئ حسابي مشاركًا" />
             <button className="btn block" disabled={busy || !!entering}>أنشئ حسابي مشاركًا</button>
             <button type="button" className="link small" onClick={() => { setStep('email'); setPendingGoogle(null); setError(''); }}>رجوع</button>
           </form>

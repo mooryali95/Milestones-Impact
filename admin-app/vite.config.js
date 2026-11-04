@@ -12,6 +12,6 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: '/',
   plugins: [react()],
-  build: { outDir: '../admin', emptyOutDir: true, sourcemap: false },
+  build: { outDir: '../admin', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'] } } } },
   server: { port: 5175 },
 });

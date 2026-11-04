@@ -6,6 +6,7 @@
 // الوثيقة الاحترافية للطباعة. لا محتوى يُكتب مرتين.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { useUnsavedGuard } from '../unsaved.js';
 import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
@@ -50,6 +51,9 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const [msg, setMsg] = useState(null);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); }, []);
+  // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
+  const summaryDirty = !!d?.success && ['draft', 'returned'].includes(d.capstone.status) && summary !== (d.capstone.summary || '');
+  useUnsavedGuard(summaryDirty, () => call('capstone.summary', { summary }));
 
   if (open) return <div className="page"><ModelView id={open} name={me.participant.full_name} backLabel="وثيقة مبادرتك" onBack={() => { setOpen(null); load(); }} onPoints={() => {}} /></div>;
   if (!d) return <div className="center-load"><div className="spinner" /></div>;

@@ -1,0 +1,55 @@
+# إعداد Supabase المحلي (المرحلة ي): لسير «المسارات الذهبية» في CI ولمن يشغّل supabase start محليًا.
+# الإنتاج يُنشر بـ --project-ref من سير النشر؛ هذا الملف لا يمس مشروع الإنتاج إلا في إعداد verify_jwt
+# لكل دالة، وهو مطابق لرايات النشر الحالية (creem-webhook وleaders-hooks بلا JWT).
+project_id = "milestones-impact"
+
+[api]
+enabled = true
+port = 54321
+# الدوال تقرأ مخطط leaders عبر PostgREST بمفتاح الخدمة، فلا بد من كشفه كما في الإنتاج
+schemas = ["public", "graphql_public", "leaders"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+# البدء لا يطبّق الترحيلات: الترحيلات الأولى تفترض جداول سبقتها (عهد server/*.sql)،
+# فسير التكامل يطبّق اللقطة المودعة أولًا ثم الترحيلات بالترتيب (scripts/integration/apply-migrations.sh)
+[db.migrations]
+enabled = false
+
+# البذرة تنشئ مخطط leaders فارغًا قبل بدء الحاويات، وإلا رفض PostgREST البدء لأن المخطط معلن له أعلاه
+[db.seed]
+enabled = true
+sql_paths = ["./seeds/leaders-schema.sql"]
+
+[studio]
+enabled = false
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5174"
+
+[edge_runtime]
+enabled = true
+
+[analytics]
+enabled = false
+
+[functions.leaders-api]
+verify_jwt = true
+[functions.send-otp]
+verify_jwt = true
+[functions.admin-api]
+verify_jwt = true
+[functions.user-api]
+verify_jwt = true
+[functions.creem-webhook]
+verify_jwt = false
+[functions.leaders-hooks]
+verify_jwt = false

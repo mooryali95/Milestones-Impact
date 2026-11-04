@@ -68,7 +68,9 @@ const otpHtml = (code: string) => mailShell("رمز التحقق إلى مصفو
 ${mailText("أدخل هذا الرمز في الصفحة التي طلبته منها لإكمال الدخول.")}
 ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { family: "access", preheader: `رمزك ${code} · صالح 10 دقائق` });
 
-type SB = ReturnType<typeof createClient>;
+// بلا أنواع مولَّدة للقاعدة: العميل any كما في send-otp حتى يمر deno check لكل الدوال (المرحلة ي)
+// deno-lint-ignore no-explicit-any
+type SB = any;
 
 async function cooldownOk(sb: SB, email: string): Promise<number> {
   const since = new Date(Date.now() - OTP_COOLDOWN_MS).toISOString();
@@ -180,7 +182,7 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const action = body.action as string;
-    const sb = createClient(SB_URL, SB_KEY);
+    const sb: SB = createClient(SB_URL, SB_KEY);
 
     // ── register-send: the code proves ownership of this email, nothing more ──
     if (action === "register-send") {
@@ -313,7 +315,7 @@ Deno.serve(async (req: Request) => {
           userDisplayName: `${regs[0].name || regs[0].email} (المصفوفة)`,
           userID: new TextEncoder().encode(`user:${s.subject}`),
           attestationType: "none",
-          excludeCredentials: (existing || []).map((c) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
+          excludeCredentials: (existing || []).map((c: any) => ({ id: c.credential_id as string, transports: (c.transports as never) || undefined })),
           authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
         });
         await saveChallenge(sb, options.challenge, "register", s.subject);

@@ -29,8 +29,14 @@ export async function notifyAdvisor(p: any, what: string) {
     + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
 }
 
+// دفعات هذا الخبير بصفته مستشارها الأساسي
+export async function advisorCohorts(expertId: string) {
+  const { data } = await db.from('cohorts').select('id, name, supervision, organization_id, is_default, status, starts_on, ends_on').eq('advisor_expert_id', expertId);
+  return data || [];
+}
+
 // مشاركو الدفعات التي هو مستشارها
-async function myParticipantIds(expertId: string) {
+export async function myParticipantIds(expertId: string) {
   const { data: cohorts } = await db.from('cohorts').select('id, organization_id, is_default').eq('advisor_expert_id', expertId);
   if (!cohorts?.length) return [];
   const ids = new Set<string>();

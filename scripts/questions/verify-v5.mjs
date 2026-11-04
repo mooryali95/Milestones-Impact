@@ -10,7 +10,7 @@ import { LIKERT } from './new-v5.mjs';
 const ROOT = new URL('../../', import.meta.url);
 const V42 = JSON.parse(readFileSync(new URL('supabase/content/questions/v4.2/items.json', ROOT), 'utf8'));
 const V5 = JSON.parse(readFileSync(new URL('supabase/content/questions/v5/items.json', ROOT), 'utf8'));
-const HB = new URL('supabase/content/handbook/v2/', ROOT);
+const HB = new URL('supabase/content/handbook/v3/', ROOT);   // الكتيب الحي (v3 منذ 20261102110000)؛ v5.1 يُفحص في verify-v5_1.mjs
 const POS = 'ABCD';
 const DIMS = ['milestone', 'impact', 'leadership'];
 const PAIR = { 'baseline-v5': 'baseline-v4', 'post-v3': 'post-v2' };

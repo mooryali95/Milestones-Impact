@@ -1,0 +1,19 @@
+-- ════════════════════════════════════════════════════════════════
+-- نموذج التواصل عبر الدالة (المرحلة أ، 2026-11-05)
+-- ════════════════════════════════════════════════════════════════
+-- كان الزائر يُدرج طلب التواصل مباشرة في public.contact_requests بالمفتاح العام،
+-- ثم تُرسل send-otp رسالة تأكيد بهوية العلامة إلى أي عنوان كتبه، بلا تحقق بشري
+-- ولا حد لكل شبكة. الآن الإدراج عبر إجراء contact في send-otp (تحقق بشري إن
+-- كان مفعّلًا، وحدود لكل بريد ولكل شبكة وللجميع)، والمسار المباشر يُغلق.
+--
+-- الترتيب: انشر send-otp الجديدة، ثم الموقع (typeform.js v4)، ثم طبّق هذا الترحيل.
+-- (قبل تطبيقه يبقى المسار المباشر يعمل للصفحات المخزّنة مؤقتًا، بحدود الحارس القديم.)
+
+alter table public.contact_requests add column if not exists ip inet;
+create index if not exists contact_requests_ip_created_idx on public.contact_requests (ip, created_at desc);
+
+-- الإدراج المباشر من المتصفح لم يعد مسموحًا: الدالة تُدرج بمفتاح الخدمة
+revoke insert on public.contact_requests from anon;
+
+-- سجل الترحيلات (المرحلة هـ)
+insert into leaders.schema_migrations (name) values ('20261105100000_contact_requests_via_function') on conflict do nothing;
