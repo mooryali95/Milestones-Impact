@@ -1,0 +1,34 @@
+name: Apply migrations (production)
+
+# ترحيلات SQL على القاعدة الحية بقرار المالك: يُشغَّل يدويًا بأسماء الترحيلات بالترتيب، عبر
+# Management API بالسر SUPABASE_ACCESS_TOKEN نفسه الذي ينشر الدوال (RUNBOOK.md §1).
+# المسجّل سلفًا في leaders.schema_migrations يُتخطى، وأول فشل يوقف السلسلة ويُظهر خطأ القاعدة في السجل.
+
+on:
+  workflow_dispatch:
+    inputs:
+      migrations:
+        description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      MIGRATIONS: ${{ inputs.migrations }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Token missing
+        if: env.SUPABASE_ACCESS_TOKEN == ''
+        run: echo "::error::SUPABASE_ACCESS_TOKEN is not set (see RUNBOOK.md §1)" && exit 1
+      - name: Apply in order
+        run: node scripts/db/apply-migration.mjs $MIGRATIONS
