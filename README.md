@@ -16,7 +16,7 @@
 
 - **الدوال:** `supabase/functions/`: `leaders-api` (برنامج القادة كله)، `creem-webhook` (إشعارات الدفع)، `leaders-hooks` (Cal.com وCalendly)، `send-otp` (نموذج التواصل ورموز الموقع)، `admin-api` (لوحة الإدارة)، `user-api` (مشاركو المصفوفة). المنطق النقي في ملفات `.js` تستوردها الدوال والتطبيقات والاختبارات معًا.
 - **القاعدة:** `supabase/migrations/` بالترتيب، وسجل ما طُبّق في `leaders.schema_migrations`، ولقطة البنية `supabase/schema/baseline.sql` تُبنى من الترحيلات وتُفحص في CI وليليًا على القاعدة الحية. الترحيلات تُطبَّق يدويًا بموافقة المالك (`RUNBOOK.md` §1).
-- **الإعداد المحلي:** `supabase/config.toml` لـ`supabase start`؛ سير `integration.yml` يشغّله في CI ويمرّر المسارات الذهبية بطلبات حقيقية.
+- **الإعداد المحلي:** `supabase/config.toml` لـ`supabase start` (بلا تطبيق تلقائي للترحيلات)؛ سير `integration.yml` يشغّله في CI، يطبّق اللقطة ثم البذرة المرجعية `scripts/integration/seed-reference.sql` ثم الترحيلات بالترتيب، ويمرّر المسارات الذهبية بطلبات حقيقية.
 
 ## النشر
 

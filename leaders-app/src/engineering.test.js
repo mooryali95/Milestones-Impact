@@ -45,7 +45,14 @@ describe('CI والاختبارات', () => {
     expect(integ).toContain('supabase start');
     expect(integ).toContain('bash scripts/integration/apply-migrations.sh');
     expect(integ).toContain('node scripts/integration/golden.mjs');
-    expect(read('supabase/config.toml')).toMatch(/schemas = \["public", "graphql_public", "leaders"\]/);
+    const toml = read('supabase/config.toml');
+    expect(toml).toMatch(/schemas = \["public", "graphql_public", "leaders"\]/);
+    expect(toml).toMatch(/\[db\.migrations\]\nenabled = false/);   // البدء لا يطبّق الترحيلات: اللقطة أولًا ثم الترحيلات بالترتيب
+    const apply = read('scripts/integration/apply-migrations.sh');
+    const at = (needle) => { const i = apply.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
+    expect(at('supabase/schema/baseline.sql')).toBeLessThan(at('scripts/integration/seed-reference.sql'));
+    expect(at('scripts/integration/seed-reference.sql')).toBeLessThan(at('for f in $(ls supabase/migrations/*.sql | sort)'));
+    expect(read('scripts/integration/seed-reference.sql')).toMatch(/insert into leaders\.placement_model \(id\) values \(1\)/);
     for (const f of ['google_test.ts', 'passkeys_test.ts', 'payments_test.ts']) expect(statSync(join(root, `supabase/functions/leaders-api/${f}`)).size).toBeGreaterThan(500);
     expect(read('scripts/db/snapshot.mjs')).toContain("import { DATA_ONLY } from './data-only.mjs'");
   });
