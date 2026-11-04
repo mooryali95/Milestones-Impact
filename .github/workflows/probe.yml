@@ -1,0 +1,35 @@
+name: Production probe
+
+# مسبار احتياطي كل ساعة: طلب حقيقي إلى leaders-api يمر بالقاعدة، وصفحات المنصات
+# الثلاث. فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
+# جدولة GitHub قد تتأخر ساعات، فالمراقب الخارجي كل 5 دقائق (RUNBOOK.md) هو الأساس
+# وهذا شبكة أمان له.
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_REF: eormhcupwgwpllhrfxxg
+      SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
+    steps:
+      - name: leaders-api answers a real request
+        run: |
+          body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
+          echo "$body"
+          echo "$body" | grep -q '"success":true'
+      - name: Sites answer
+        run: |
+          for u in https://leaders.sunkvalue.com/ https://mi.sunkvalue.com/ https://admin.sunkvalue.com/; do
+            code=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$u")
+            echo "$u -> $code"
+            test "$code" = 200
+          done

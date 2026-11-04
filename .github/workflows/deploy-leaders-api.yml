@@ -1,23 +1,17 @@
-name: Deploy leaders-api
+name: Deploy functions (manual)
 
-# Deploys the leaders-api edge function from main, replacing the manual
-# paste of the bundle into the Supabase dashboard, together with the two
-# webhook receivers that import its code (creem-webhook, leaders-hooks),
-# which are deployed without JWT verification because Creem, Cal.com and
-# Calendly send no Supabase token (each verifies its own HMAC signature).
-# It does nothing until the repository secret SUPABASE_ACCESS_TOKEN exists
-# (Supabase account, Access Tokens). SQL migrations stay manual: the live
-# database has no migration history, so `supabase db push` would try to
-# re-run them all.
+# النشر الاعتيادي يتم في ci.yml (الوظيفة deploy) بعد خضرة الفحوص على main.
+# هذا السير للنشر اليدوي أو للتراجع: شغّله من Actions واختر الفرع أو الوسم
+# أو الإيداع القديم في «Use workflow from»، فتُنشر الدوال الأربع من ذلك المرجع.
+# يفعل شيئًا فقط إن وُجد السر SUPABASE_ACCESS_TOKEN (حساب Supabase، Access Tokens).
+# ترحيلات SQL تبقى يدوية: القاعدة الحية بلا سجل ترحيلات، فـ`supabase db push`
+# كان سيعيد تشغيلها كلها.
 
 on:
-  push:
-    branches: [main]
-    paths: ['supabase/functions/leaders-api/**', 'supabase/functions/_shared/**', 'supabase/functions/creem-webhook/**', 'supabase/functions/leaders-hooks/**', 'supabase/functions/send-otp/**']
   workflow_dispatch:
 
 concurrency:
-  group: deploy-leaders-api
+  group: deploy-production
   cancel-in-progress: false
 
 permissions:
@@ -29,12 +23,13 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
+      SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
     steps:
       - name: Skip without a token
         id: gate
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "::notice::SUPABASE_ACCESS_TOKEN is not set; paste the bundle by hand as before."
+            echo "::notice::SUPABASE_ACCESS_TOKEN is not set; deploy by hand (RUNBOOK.md)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
@@ -50,11 +45,10 @@ jobs:
           supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
           supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
-      - name: Verify the live function answers
+      - name: Verify the live function answers a real request
         if: steps.gate.outputs.skip != 'true'
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS \
-            -H 'Origin: https://admin.sunkvalue.com' -H 'Access-Control-Request-Method: POST' \
-            "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
-          echo "OPTIONS -> $code"
-          test "$code" = "200"
+          body=$(curl -s -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
+          echo "$body"
+          echo "$body" | grep -q '"success":true'

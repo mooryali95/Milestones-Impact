@@ -1,8 +1,10 @@
 name: CI
 
-# Lint + test + build the matrix React app on every push and PR.
-# Cloudflare Pages only *builds* on deploy; this adds the missing test gate
-# and catches build breaks before they reach a deploy.
+# Lint + test + build on every push and PR, then (on main only) the deploy
+# gate: the edge functions are deployed and the `release` branch is advanced
+# to the tested commit. Cloudflare Pages builds production from `release`
+# (set as the production branch of each project), so a red check never
+# reaches production. Rollback and manual deploys: RUNBOOK.md.
 
 on:
   push:
@@ -78,3 +80,46 @@ jobs:
 
       - name: End-to-end tests
         run: npm run e2e
+
+  # ── بوابة النشر: على main وبعد خضرة الفحوص فقط ──
+  # الدوال أولًا (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم مسبار حقيقي،
+  # ثم يُدفع فرع release فتبني Cloudflare Pages المنصات منه. لا شيء يصل الإنتاج إن احمرّ فحص.
+  deploy:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: eormhcupwgwpllhrfxxg
+      # المفتاح العام (anon) كما في الواجهات؛ الدالة تتحقق من JWT فلا تقبل طلبًا بلا مفتاح
+      SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        with:
+          version: latest
+      - name: Deploy edge functions
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: |
+          supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
+          supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
+          supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
+      - name: Functions not deployed
+        if: env.SUPABASE_ACCESS_TOKEN == ''
+        run: echo "::warning::SUPABASE_ACCESS_TOKEN is not set; edge functions were not deployed (see RUNBOOK.md)."
+      - name: Smoke test leaders-api with a real request
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: |
+          body=$(curl -s -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
+          echo "$body"
+          echo "$body" | grep -q '"success":true'
+      - name: Promote to release (Cloudflare Pages production branch)
+        run: git push --force origin "$GITHUB_SHA:refs/heads/release"

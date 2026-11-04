@@ -269,6 +269,31 @@ export function healthMail(rows: [string, string][], issues: string[]) {
     issues.length ? `${issues.length} يحتاج تدخلك` : 'لا شيء يحتاج تدخلك', 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 
+// ── تنبيه التشغيل الفوري ──
+// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة كل عشر
+// دقائق لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
+export function alertMail(kind: string, detail: Record<string, unknown>) {
+  const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  return shell('admin', `تنبيه تشغيلي: ${kind}`,
+    mailText(`وقع <b>${esc(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
+    + mailRows(rows)
+    + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
+    `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+}
+const ALERT_WINDOW_MS = 10 * 60e3;
+export async function alertOps(kind: string, detail: Record<string, unknown>) {
+  if (!CONFIG.alertEmail || !CONFIG.resendKey) return false;
+  try {
+    const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
+    const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
+    if ((count ?? 0) > 0) return false;
+    await audit('system', 'alert', 'system.alert', 'system', kind, null, detail);
+    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail));
+    return true;
+  } catch (e) { console.error('alertOps:', e); return false; }
+}
+
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل
 export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; subject: string; html: () => string }[] = [
   { key: 'signin', family: 'access', label: 'رمز دخول المشارك', subject: 'رمز الدخول إلى رحلتك', html: () => signInMail('سارة', '153262', CONFIG.appUrl, false) },
@@ -286,6 +311,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },
+  { key: 'ops-alert', family: 'admin', label: 'تنبيه تشغيلي فوري', subject: 'تنبيه: internal في leaders-api', html: () => alertMail('internal', { ref: 'a1b2c3d4', action: 'me', message: 'relation "leaders.x" does not exist' }) },
 ];
 
 // ── حارس رسائل الرموز ──

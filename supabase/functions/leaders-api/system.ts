@@ -34,6 +34,15 @@ async function present(table: string, column: string, schema: any = db) {
   return !error;
 }
 
+// مسبار خارجي: طلب حقيقي يمر بالقاعدة، للمراقبة ولفحص ما بعد النشر
+// (فحص OPTIONS وحده كان ينجح والدالة معطلة)
+export async function ping() {
+  const t0 = Date.now();
+  const { error } = await db.from('programs').select('id', { head: true, count: 'exact' }).limit(1);
+  if (error) throw new Fail('القاعدة لا تجيب', 503, 'db_down');
+  return { success: true, db_ms: Date.now() - t0, mail: !!CONFIG.resendKey, at: new Date().toISOString() };
+}
+
 export async function health() {
   const checks = await Promise.all(MARKERS.map(async ([file, t, c]) => ({ file, ok: await present(t, c) })));
   const analytics = await present('page_views', 'id', publicDb);

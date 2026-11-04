@@ -17,7 +17,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { clientIp, Fail, preflight, reply } from './core.ts';
+import { alertOps, clientIp, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -47,6 +47,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.verify': P.authVerify,
   'auth.google': P.authGoogle,
   'org.info': (b) => P.orgInfo(b),
+  // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
+  'system.ping': () => S.ping(),
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
@@ -298,9 +300,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return preflight(req);
   if (req.method !== 'POST') return reply(req, { success: false, message: 'Method not allowed' }, 405);
+  let action = '';
   try {
     const b: Body = await req.json().catch(() => ({}));
-    const action = String(b.action || '');
+    action = String(b.action || '');
     const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null };
 
     if (open[action]) return reply(req, await open[action](b, ctx));
@@ -327,8 +330,15 @@ Deno.serve(async (req) => {
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
-    if (e instanceof Fail) return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
-    console.error('leaders-api:', e);
-    return reply(req, { success: false, message: 'خطأ داخلي، حاول بعد قليل', code: 'internal' }, 500);
+    if (e instanceof Fail) {
+      // تعطل البريد يوقف الدخول بالرمز، فيُبلَّغ المالك فورًا (مرة كل عشر دقائق)
+      if (['mail_failed', 'mail_unconfigured', 'mail_cap'].includes(e.code)) await alertOps(e.code, { action, message: e.message });
+      return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
+    }
+    // رقم مرجع يراه المستخدم ويُسجَّل مع الخطأ ويصل في التنبيه، فيُربط البلاغ بسجله
+    const ref = crypto.randomUUID().slice(0, 8);
+    console.error(`leaders-api [${ref}] ${action}:`, e);
+    await alertOps('internal', { ref, action, message: String((e as Error)?.message || e).slice(0, 300) });
+    return reply(req, { success: false, message: `خطأ داخلي، حاول بعد قليل (المرجع ${ref})`, code: 'internal', ref }, 500);
   }
 });
