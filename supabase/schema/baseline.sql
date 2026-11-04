@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261105150000_leaders_v5_1_pre_activation
+-- as-of migration: 20261105160000_leaders_katon_cbm
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -698,12 +698,19 @@ create table if not exists leaders.journey_stages (
 create table if not exists leaders.katon_answers (
   participant_id uuid not null,
   sentence_id uuid not null,
-  choice text not null,
+  choice text,
   note text,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  verdict text,
+  confidence smallint,
+  stances text[] default '{}'::text[] not null,
   constraint katon_answers_choice_check CHECK ((choice = ANY (ARRAY['question'::text, 'research'::text, 'true'::text, 'false'::text, 'idea'::text, 'can'::text, 'believe'::text, 'assume'::text]))),
+  constraint katon_answers_confidence_check CHECK (((confidence >= 1) AND (confidence <= 3))),
   constraint katon_answers_note_check CHECK ((char_length(note) <= 1000)),
+  constraint katon_answers_stances_check CHECK ((stances <@ ARRAY['question'::text, 'research'::text, 'idea'::text, 'can'::text, 'believe'::text, 'assume'::text])),
+  constraint katon_answers_verdict_check CHECK ((verdict = ANY (ARRAY['true'::text, 'false'::text]))),
+  constraint katon_answers_verdict_confidence_check CHECK (((verdict IS NULL) = (confidence IS NULL))),
   constraint katon_answers_pkey PRIMARY KEY (participant_id, sentence_id)
 );
 

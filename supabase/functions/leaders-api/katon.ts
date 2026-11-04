@@ -1,10 +1,13 @@
 // ════════════════════════════════════════════════════════════════
-// «كاتون» على الخادم: المشارك يجيب ويرى المفتاح بعد إتمام الموضوع، والأدمن يبني البنك
+// «كاتون» على الخادم: المشارك يحكم بثقة ويضع وسوم موقفه، ويرى المفتاح بعد إتمام الموضوع، والأدمن يبني البنك
 // ════════════════════════════════════════════════════════════════
 // المفتاح والشرح لا يُرسلان للمشارك قبل أن يجيب عن جمل الموضوع كلها، وبعدها تُقفل إجاباته
-// فلا يُعدّل بعد رؤية المفتاح. النقاط من إعداد برنامجه (programs.katon_points).
+// فلا يُعدّل بعد رؤية المفتاح. جدول النقاط الثلاثي من إعداد برنامجه (programs.katon_points) ويُرفض
+// إن لم يكن قاعدة تسجيل سليمة. الأعمدة الجديدة verdict/confidence/stances؛ choice القديم يُقرأ للتوافق.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanSentence, katonPoints, katonScore, katonSummary, KATON_OPTIONS, sentenceDistribution } from './katon.js';
+import {
+  cbmCheck, cleanAnswer, cleanSentence, katonPoints, katonScore, katonSummary, KATON_CONFIDENCE, KATON_STANCES, normalizeAnswer, sentenceDistribution, topicIssues,
+} from './katon.js';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { approvalOf } from './logic.js';
 import { hallGate } from './hall.ts';
@@ -12,6 +15,7 @@ import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
+const ANSWER_COLS = 'sentence_id, choice, verdict, confidence, stances, note, updated_at';
 
 async function approved(p: any) {
   const { data } = await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id);
@@ -29,7 +33,7 @@ export async function mine(p: any) {
   const [tp, ss, ans, pts] = await Promise.all([
     db.from('katon_topics').select('id, key, title_ar, dimension, layers, sort').eq('status', 'published').order('sort'),
     db.from('katon_sentences').select('id, topic_id, sort, question, text_ar, key, explain_ar, tasks').order('sort'),
-    db.from('katon_answers').select('sentence_id, choice, note, updated_at').eq('participant_id', p.id),
+    db.from('katon_answers').select(ANSWER_COLS).eq('participant_id', p.id),
     pointsFor(p),
   ]);
   const mineBy = new Map((ans.data || []).map((a: any) => [a.sentence_id, a]));
@@ -42,15 +46,18 @@ export async function mine(p: any) {
         const a: any = mineBy.get(s.id) || null;
         return {
           id: s.id, sort: s.sort, question: s.question, text_ar: s.text_ar, tasks: s.tasks,
-          mine: a ? { choice: a.choice, note: a.note } : null,
-          ...(done ? { key: s.key, explain_ar: s.explain_ar, points: a ? katonScore(a.choice, s.key, pts) : null } : {}),
+          mine: a ? { ...normalizeAnswer(a), note: a.note } : null,
+          ...(done ? { key: s.key, explain_ar: s.explain_ar, points: a ? katonScore(a, s.key, pts) : null } : {}),
         };
       }),
     };
   });
   const published = new Set(topics.map((t: any) => t.id));
   const revealedSents = (ss.data || []).filter((s: any) => published.has(s.topic_id) && topics.find((t: any) => t.id === s.topic_id)?.revealed);
-  return { success: true, options: KATON_OPTIONS.map((o) => ({ ...o, points: pts[o.key] })), topics, summary: katonSummary(ans.data || [], revealedSents, pts) };
+  return {
+    success: true, points: pts, confidence: KATON_CONFIDENCE, stances: KATON_STANCES, topics,
+    summary: katonSummary(ans.data || [], revealedSents, pts),
+  };
 }
 
 export async function answer(p: any, b: Body) {
@@ -60,18 +67,17 @@ export async function answer(p: any, b: Body) {
   // في القاعة يفتح الخبير موضوع الجلسة ولو لم يُنشر بعد، ويقفل ما كشف مفتاحه
   const gate = await hallGate(p, s.id);
   if (!gate.inHall && s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
-  if (!KATON_OPTIONS.some((o) => o.key === b.choice)) throw new Fail('اختر أحد الخيارات الثمانية');
+  let a;
+  try { a = cleanAnswer(b); } catch (err) { throw new Fail((err as Error).message); }
   // بعد كشف المفتاح لا تعديل
   const [{ data: sents }, { data: mineAns }] = await Promise.all([
     db.from('katon_sentences').select('id').eq('topic_id', s.topic_id),
     db.from('katon_answers').select('sentence_id').eq('participant_id', p.id),
   ]);
-  const have = new Set((mineAns || []).map((a: any) => a.sentence_id));
+  const have = new Set((mineAns || []).map((x: any) => x.sentence_id));
   if ((sents || []).every((x: any) => have.has(x.id))) throw new Fail('أتممت هذا الموضوع وكُشف مفتاحه؛ لا تُعدَّل الإجابات بعده', 409, 'revealed');
-  const now = new Date().toISOString();
   must(await db.from('katon_answers').upsert({
-    participant_id: p.id, sentence_id: s.id, choice: b.choice,
-    note: b.note ? String(b.note).trim().slice(0, 1000) || null : null, updated_at: now,
+    participant_id: p.id, sentence_id: s.id, choice: null, verdict: a.verdict, confidence: a.confidence, stances: a.stances, note: a.note, updated_at: new Date().toISOString(),
   }));
   return mine(p);
 }
@@ -83,23 +89,24 @@ export async function adminList(b: Body) {
   const [tp, ss, ans, prog] = await Promise.all([
     db.from('katon_topics').select('*').order('sort'),
     db.from('katon_sentences').select('*').order('sort'),
-    db.from('katon_answers').select('sentence_id, choice'),
+    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances'),
     programId ? db.from('programs').select('id, name, katon_points').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const bySent = new Map<string, any[]>();
   for (const a of ans.data || []) { if (!bySent.has(a.sentence_id)) bySent.set(a.sentence_id, []); bySent.get(a.sentence_id)!.push(a); }
+  const check = cbmCheck((prog.data as any)?.katon_points);
   return {
     success: true,
-    options: KATON_OPTIONS,
+    stances: KATON_STANCES, confidence: KATON_CONFIDENCE,
     program_id: programId, program_name: (prog.data as any)?.name || null,
-    points: katonPoints((prog.data as any)?.katon_points),
-    topics: (tp.data || []).map((t: any) => ({
-      ...t,
-      sentences: (ss.data || []).filter((s: any) => s.topic_id === t.id).map((s: any) => {
+    points: check.table, points_check: { ok: check.ok, issues: check.issues, thresholds: check.thresholds },
+    topics: (tp.data || []).map((t: any) => {
+      const sentences = (ss.data || []).filter((s: any) => s.topic_id === t.id).map((s: any) => {
         const list = bySent.get(s.id) || [];
         return { ...s, answers: list.length, distribution: sentenceDistribution(list) };
-      }),
-    })),
+      });
+      return { ...t, sentences, issues: topicIssues(sentences) };
+    }),
   };
 }
 
@@ -116,9 +123,11 @@ export async function topicSave(a: Admin, b: Body) {
     updated_at: new Date().toISOString(),
   };
   if (row.status === 'published') {
+    // لا يُنشر موضوع لا يصلح للقياس: جملتان خاطئتان محوّطتان على الأقل وصحيحة حازمة واحدة على الأقل
     const id = isUuid(r.id) ? r.id : null;
-    const n = id ? ((await db.from('katon_sentences').select('id', { count: 'exact', head: true }).eq('topic_id', id)).count || 0) : 0;
-    if (n < 2) throw new Fail('لا يُنشر موضوع بأقل من جملتين');
+    const sents = id ? ((await db.from('katon_sentences').select('key, text_ar').eq('topic_id', id)).data || []) : [];
+    const issues = topicIssues(sents);
+    if (issues.length) throw new Fail(`لا يُنشر الموضوع: ${issues.join('؛ ')}`);
   }
   let saved;
   if (isUuid(r.id)) saved = must(await db.from('katon_topics').update(row).eq('id', r.id).select('*').single());
@@ -156,17 +165,19 @@ export async function sentenceDelete(a: Admin, b: Body) {
   return { success: true };
 }
 
+// جدول النقاط الثلاثي: يُرفض ما ليس قاعدة تسجيل سليمة (حتى لا يصير الكذب عن الثقة مجزيًا)
 export async function pointsSave(a: Admin, b: Body) {
   if (!isUuid(b.program_id)) throw new Fail('اختر البرنامج');
-  const pts = katonPoints(b.points);
-  must(await db.from('programs').update({ katon_points: pts, updated_at: new Date().toISOString() }).eq('id', b.program_id));
-  await audit('admin', a.email, 'katon.points', 'programs', String(b.program_id), null, pts);
-  return { success: true, points: pts };
+  const check = cbmCheck(b.points);
+  if (!check.ok) throw new Fail(`الجدول ليس قاعدة تسجيل سليمة: ${check.issues.join('؛ ')}`);
+  must(await db.from('programs').update({ katon_points: check.table, updated_at: new Date().toISOString() }).eq('id', b.program_id));
+  await audit('admin', a.email, 'katon.points', 'programs', String(b.program_id), null, check.table);
+  return { success: true, points: check.table, thresholds: check.thresholds };
 }
 
-// للتقييم المستمر: دقة اليقين في كل موضوع كُشف مفتاحه
+// للتقييم المستمر: المعايرة (1 − Brier) في كل موضوع كُشف مفتاحه وحُكم فيه على جملة واحدة على الأقل
 export async function continuousEvents(participantId: string) {
-  const { data: ans } = await db.from('katon_answers').select('sentence_id, choice, updated_at').eq('participant_id', participantId);
+  const { data: ans } = await db.from('katon_answers').select(ANSWER_COLS).eq('participant_id', participantId);
   if (!ans?.length) return [];
   const { data: ss } = await db.from('katon_sentences').select('id, topic_id, key, katon_topics(title_ar)').in('id', ans.map((a: any) => a.sentence_id));
   const { data: all } = await db.from('katon_sentences').select('id, topic_id').in('topic_id', [...new Set((ss || []).map((s: any) => s.topic_id))]);
@@ -176,9 +187,9 @@ export async function continuousEvents(participantId: string) {
     if (!(all || []).filter((x: any) => x.topic_id === tid).every((x: any) => have.has(x.id))) continue;
     const mineS = (ss || []).filter((s: any) => s.topic_id === tid);
     const sum = katonSummary(ans, mineS, null);
-    if (sum.accuracy == null) continue;
+    if (sum.calibration == null) continue;
     const at = ans.filter((a: any) => mineS.some((s: any) => s.id === a.sentence_id)).map((a: any) => a.updated_at).sort().pop();
-    out.push({ title: (mineS[0] as any).katon_topics?.title_ar || 'موضوع «كاتون»', pct: sum.accuracy, at });
+    out.push({ title: (mineS[0] as any).katon_topics?.title_ar || 'موضوع «كاتون»', pct: sum.calibration, at });
   }
   return out;
 }

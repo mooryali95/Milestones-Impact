@@ -9,8 +9,15 @@ import React, { useMemo, useState } from 'react';
 export const TEAM_COLOR = { support: '#5fa8a0', lead: '#c79a4b', guide: '#7d93d6', eval: '#c9786b', persona: '#b48ad1' };
 const TEAM_AR = { support: 'فريق الدعم', lead: 'فريق القيادة', guide: 'فريق التوجيه', eval: 'فريق التقييم', persona: 'الشخصية الافتراضية' };
 const LVL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
-const GLYPH = { question: '؟', research: '⌕', true: '✓', false: '✕', idea: '✦', can: '⚙', believe: '←', assume: '«' };
-const OPT_AR = { question: 'لدي سؤال', research: 'تحتاج بحث', true: 'صحيحة 100%', false: 'خاطئة 100%', idea: 'لدي فكرة', can: 'أستطيع تنفيذها', believe: 'آمن بالرأي', assume: 'أفترض' };
+// الحكم (✓/✕ بدرجة ثقة 1..3) ووسوم الموقف بلا نقاط (CBM الثلاثي، المرحلة ط)
+const GLYPH = { true: '✓', false: '✕', none: '•', question: '؟', research: '⌕', idea: '✦', can: '⚙', believe: '←', assume: '«' };
+const OPT_AR = { true: 'صحيحة', false: 'خاطئة', none: 'بلا حكم', question: 'لدي سؤال', research: 'تحتاج بحث', idea: 'لدي فكرة', can: 'أستطيع تنفيذها', believe: 'آمن بالرأي', assume: 'أفترض' };
+const CONF_AR = { 1: 'أرجّح', 2: 'واثق', 3: 'متيقن' };
+// شريط التوزيع: الأحكام مجموعة على درجات الثقة، ثم وسوم الموقف
+const DIST = [
+  ['true', (d) => (d.true1 || 0) + (d.true2 || 0) + (d.true3 || 0)], ['false', (d) => (d.false1 || 0) + (d.false2 || 0) + (d.false3 || 0)], ['none', (d) => d.none || 0],
+  ...['question', 'research', 'idea', 'can', 'believe', 'assume'].map((k) => [k, (d) => d[k] || 0]),
+];
 const Q_AR = { why: 'لماذا', what: 'ماذا', how: 'كيف', absent: 'ماذا لو', who: 'من', when: 'متى' };
 const TABLES = { lead: { x: 800, y: 395, rx: 120, ry: 42 }, support: { x: 470, y: 570, rx: 150, ry: 52 }, guide: { x: 1130, y: 570, rx: 150, ry: 52 }, eval: { x: 800, y: 740, rx: 170, ry: 58 }, persona: { x: 1250, y: 330, rx: 70, ry: 26 } };
 const R = 22;
@@ -78,11 +85,11 @@ export default function HallView({ view, me = null, onPerson, compact = false })
                   : s ? s.text_ar : 'اختر جملة لتبدأ الجولة'}
             </div>
           </foreignObject>
-          {dist && atTables && s && Object.entries(GLYPH).map(([k, g], i) => {
-            const x = 1086 - i * 76, y = 186, hit = view.revealed && s.key === k, miss = view.revealed && (k === 'true' || k === 'false') && s.key !== k;
+          {dist && atTables && s && DIST.map(([k, of], i) => {
+            const x = 1096 - i * 68, y = 186, hit = view.revealed && s.key === k, miss = view.revealed && (k === 'true' || k === 'false') && s.key !== k;
             return (
-              <g key={k}><rect x={x - 34} y={y} width="68" height="30" rx="8" fill={hit ? '#2c5a43' : miss ? '#5a2e2a' : '#1a3139'} stroke="#2a4651" />
-                <text x={x} y={y + 20} textAnchor="middle" fontSize="13" fill="#f3ead9">{g} {dist[k] || 0}<title>{OPT_AR[k]}</title></text></g>
+              <g key={k}><rect x={x - 31} y={y} width="62" height="30" rx="8" fill={hit ? '#2c5a43' : miss ? '#5a2e2a' : '#1a3139'} stroke="#2a4651" />
+                <text x={x} y={y + 20} textAnchor="middle" fontSize="13" fill="#f3ead9">{GLYPH[k]} {of(dist)}<title>{OPT_AR[k]}</title></text></g>
             );
           })}
           <path d="M560,236 L1040,236 L1080,262 L520,262 Z" fill="#203a43" stroke="#2a4651" />
@@ -134,7 +141,8 @@ export default function HallView({ view, me = null, onPerson, compact = false })
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 4 }}>{tip.p.name}</div>
           {(tip.p.title || tip.p.org) && <div style={{ color: '#93a8ad' }}>{[tip.p.title, tip.p.org].filter(Boolean).join(' · ')}</div>}
           {tip.p.level && <div style={{ color: '#93a8ad' }}>المستوى: {LVL_AR[tip.p.level]}</div>}
-          {tip.p.choice && <div>اختياره: {GLYPH[tip.p.choice]} {OPT_AR[tip.p.choice]}</div>}
+          {tip.p.choice && <div>حكمه: {GLYPH[tip.p.choice]} {OPT_AR[tip.p.choice]}{tip.p.confidence ? ` (${CONF_AR[tip.p.confidence]})` : ''}</div>}
+          {tip.p.stances?.length > 0 && <div>موقفه: {tip.p.stances.map((k) => `${GLYPH[k]} ${OPT_AR[k]}`).join('، ')}</div>}
           {!tip.p.present && <div style={{ color: '#93a8ad' }}>{tip.p.joined ? 'خارج القاعة الآن' : 'لم يدخل القاعة بعد'}</div>}
         </div>
       )}
@@ -142,4 +150,4 @@ export default function HallView({ view, me = null, onPerson, compact = false })
   );
 }
 
-export { TEAM_AR, OPT_AR, GLYPH, Q_AR };
+export { TEAM_AR, OPT_AR, GLYPH, Q_AR, CONF_AR };

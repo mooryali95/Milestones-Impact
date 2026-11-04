@@ -26,21 +26,22 @@ describe('القاعة الحية', () => {
   it('لا تظهر اختيارات الزملاء قبل الكشف، وتظهر بنقاطها بعده', () => {
     const session = { id: 's', stage: 'round', revealed: [], round: 1, version: 3, leader_id: 'p00', persona_id: null };
     const sentence = { id: 'x', key: 'false', question: 'when', text_ar: 'جملة', tasks: {} };
-    const answers = [{ participant_id: 'p00', sentence_id: 'x', choice: 'true' }, { participant_id: 'p01', sentence_id: 'x', choice: 'false' }];
+    // p00 حكم متيقنًا بالصحة (خطأ: −6)، وp01 حكم واثقًا بالخطأ مع وسم موقف (صواب: +2)
+    const answers = [{ participant_id: 'p00', sentence_id: 'x', verdict: 'true', confidence: 3, stances: [] }, { participant_id: 'p01', sentence_id: 'x', verdict: 'false', confidence: 2, stances: ['research'] }];
     const now = Date.now();
     const presence = [{ participant_id: 'p00', last_seen: new Date(now).toISOString(), hand: true }];
     const roles = { p00: 'lead', p01: 'support' };
     const before = hallView({ session, sentence, members, roles, presence, answers, viewer: { kind: 'participant', id: 'p01' }, now });
     expect(before.people.find((p) => p.id === 'p00')).toMatchObject({ choice: null, answered: true, present: true, hand: true, leader: true, name: 'مشارك' });
-    expect(before.people.find((p) => p.id === 'p01').choice).toBe('false');
+    expect(before.people.find((p) => p.id === 'p01')).toMatchObject({ choice: 'false', confidence: 2, stances: ['research'] });
     expect(before.distribution).toBeNull();
     expect(before.sentence.key).toBeUndefined();
     const after = hallView({ session: { ...session, stage: 'reveal', revealed: ['x'] }, sentence, members, roles, presence, answers, viewer: { kind: 'participant', id: 'p01' }, now });
-    expect(after.people.find((p) => p.id === 'p00')).toMatchObject({ choice: 'true', points: -6 });
-    expect(after.teams.support.score).toBe(6);
+    expect(after.people.find((p) => p.id === 'p00')).toMatchObject({ choice: 'true', confidence: 3, points: -6 });
+    expect(after.teams.support.score).toBe(2);
     expect(after.sentence.key).toBe('false');
     const admin = hallView({ session, sentence, members, roles, presence, answers, viewer: { kind: 'admin' }, now });
-    expect(admin.distribution.true).toBe(1);
+    expect(admin.distribution).toMatchObject({ true3: 1, false2: 1, research: 1 });
     expect(admin.people[0].name).toBe('مشارك 0 الاسم');
   });
 });

@@ -4,7 +4,7 @@
 // منطق بلا قاعدة بيانات. الخادم يحفظ الحالة، وهذا يقرر من يرى ماذا ومتى:
 // الاختيارات لا تظهر للزملاء قبل الكشف (حتى لا يتأثر أحد بغيره)، وبعده تظهر بنقاطها.
 import { autoGroups } from './groups.js';
-import { katonScore, sentenceDistribution } from './katon.js';
+import { katonScore, normalizeAnswer, sentenceDistribution } from './katon.js';
 
 export const HALL_TEAMS = ['support', 'lead', 'guide', 'eval'];
 export const HALL_TEAM_AR = { support: 'فريق الدعم', lead: 'فريق القيادة', guide: 'فريق التوجيه', eval: 'فريق التقييم' };
@@ -60,6 +60,7 @@ export function hallView({ session, sentence, members, roles, presence, answers,
   const people = (members || []).map((m) => {
     const pr = present.get(m.id);
     const a = ansBy.get(m.id);
+    const na = a ? normalizeAnswer(a) : null;
     const showChoice = revealed || isAdmin || m.id === viewer?.id;
     return {
       id: m.id, name: isAdmin ? m.name : firstName(m.name), level: m.level || null, title: m.title || null, org: m.org || null,
@@ -67,8 +68,9 @@ export function hallView({ session, sentence, members, roles, presence, answers,
       present: !!pr && now - new Date(pr.last_seen).getTime() < HALL_PRESENT_SECONDS * 1000,
       joined: !!pr, hand: !!pr?.hand,
       leader: session.leader_id === m.id, persona: session.persona_id === m.id,
-      answered: !!a, choice: a && showChoice ? a.choice : null,
-      points: a && revealed ? katonScore(a.choice, sentence.key, points) : null,
+      // الحكم (صحيحة/خاطئة) بدرجة ثقته ووسوم الموقف؛ لا تظهر للزملاء قبل الكشف
+      answered: !!a, choice: na && showChoice ? na.verdict : null, confidence: na && showChoice ? na.confidence : null, stances: na && showChoice ? na.stances : [],
+      points: a && revealed ? katonScore(na, sentence.key, points) : null,
       ...(isAdmin && a?.note ? { note: a.note } : {}),
     };
   });

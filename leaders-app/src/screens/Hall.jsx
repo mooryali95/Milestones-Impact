@@ -6,7 +6,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
 import { pollPeriod } from '../hallPoll.js';
-import HallView, { TEAM_AR, TEAM_COLOR, OPT_AR, GLYPH, Q_AR } from '../../../shared/hall/HallView.jsx';
+import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import KatonAnswer from '../KatonAnswer.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 
 // قاعة نموذجية للمعاينة فقط (لا تتصل بالخادم): جولة بفرقها الأربعة وقائدها وشخصيتها الافتراضية
@@ -18,8 +19,6 @@ const PREVIEW = {
     joined: true, present: true, hand: i === 4, answered: i % 3 !== 0, choice: null, points: null })),
   teams: { support: { count: 4, present: 4 }, lead: { count: 1, present: 1 }, guide: { count: 3, present: 3 }, eval: { count: 3, present: 3 } },
 };
-
-const OPTS = ['question', 'research', 'true', 'false', 'idea', 'can', 'believe', 'assume'];
 
 export default function Hall({ onBack }) {
   const [v, setV] = useState(null);
@@ -101,14 +100,9 @@ export default function Hall({ onBack }) {
             <section className="card stack">
               <span className="chip">{Q_AR[s.question]}</span>
               <p className="kt-text">{s.text_ar}</p>
-              <div className="kt-opts" role="radiogroup" aria-label="خيارك في هذه الجملة">
-                {OPTS.map((k) => (
-                  <button key={k} type="button" role="radio" aria-checked={me?.choice === k} disabled={!canAnswer || busy}
-                    className={`kt-opt${me?.choice === k ? ' on' : ''}`} onClick={() => act('katon.answer', { sentence_id: s.id, choice: k })}>
-                    <i aria-hidden="true">{GLYPH[k]}</i><span>{OPT_AR[k]}</span>
-                  </button>
-                ))}
-              </div>
+              {/* حكم بثقة مدرَّجة ووسوم موقف (CBM الثلاثي)؛ me.choice هو الحكم وme.confidence درجته */}
+              <KatonAnswer compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
+                onAnswer={(a) => act('katon.answer', { sentence_id: s.id, ...a })} />
               {v.revealed && (
                 <div className="banner"><span className="ico">{me?.points > 0 ? '✓' : '•'}</span>
                   <div className="grow">المفتاح: <b>{s.key === 'true' ? 'صحيحة' : s.key === 'false' ? 'خاطئة' : 'رأي'}</b>{me?.points != null ? ` · نقاطك ${me.points > 0 ? '+' : ''}${me.points}` : ''}{s.explain_ar ? `. ${s.explain_ar}` : ''}</div></div>

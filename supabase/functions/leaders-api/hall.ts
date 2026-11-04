@@ -33,7 +33,7 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     db.from('programs').select('katon_points').eq('id', cohort.program_id).maybeSingle(),
   ]);
   const answers = session.sentence_id
-    ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, note').eq('sentence_id', session.sentence_id)).data || [])
+    ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, verdict, confidence, stances, note').eq('sentence_id', session.sentence_id)).data || [])
     : [];
   const topic = session.topic_id ? (await db.from('katon_topics').select('id, title_ar').eq('id', session.topic_id).maybeSingle()).data : null;
   const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) : [];

@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
-import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import HallView, { TEAM_AR, TEAM_COLOR, Q_AR, OPT_AR, CONF_AR } from '../../../shared/hall/HallView.jsx';
 import { HALL_SPLIT_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
 const STEPS = ['enter', 'train', 'split', 'round', 'reveal'];
@@ -132,7 +132,9 @@ export default function Hall({ canWrite }) {
               <div className="la-row between"><h3>{person.name}</h3><button className="la-link" onClick={() => setSel(null)}>إغلاق</button></div>
               <p className="la-muted">{[person.title, person.org].filter(Boolean).join(' · ')}</p>
               <p>{person.team ? TEAM_AR[person.team] : 'بلا فريق'}{person.leader ? ' · قائد الجولة ♔' : ''}{person.persona ? ` · يتقمّص: ${sess.persona_ar || ''}` : ''}</p>
-              {person.choice && <p>اختياره: {person.choice}{person.note ? ` · «${person.note}»` : ''}</p>}
+              {(person.choice || person.stances?.length > 0) && <p>
+                {person.choice ? `حكمه: ${person.choice === 'true' ? 'صحيحة' : 'خاطئة'}${person.confidence ? ` (${CONF_AR[person.confidence]})` : ''}` : 'بلا حكم'}
+                {person.stances?.length ? ` · موقفه: ${person.stances.map((k) => OPT_AR[k]).join('، ')}` : ''}{person.note ? ` · «${person.note}»` : ''}</p>}
               {canWrite && <div className="la-row wrap">
                 {Object.keys(TEAM_AR).filter((t) => t !== 'persona').map((t) => (
                   <button key={t} className={`btn-sm ${person.team === t ? 'primary' : 'ghost'}`} onClick={() => act('admin.hall-assign', { session_id: sid, participant_id: person.id, team: t })}>{TEAM_AR[t]}</button>
