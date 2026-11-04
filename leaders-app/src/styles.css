@@ -1242,6 +1242,13 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .pay-sponsor { display: grid; gap: 6px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .pay-result { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--gold) 8%, transparent); }
 
+/* الخصوصية والشروط والاسترداد، وإشعار الموافقة قبل التسجيل */
+.legal h1 { font-size: 24px; }
+.legal h2 { font-size: 17px; margin-top: 22px; }
+.legal p, .legal li { line-height: 1.9; }
+.legal ul { margin: 0; padding-inline-start: 22px; }
+.consent-note { text-align: center; margin: 0; }
+
 /* برعاية جهتك */
 .sponsor-note { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; margin-bottom: 14px; border-radius: 12px; border: 1px solid var(--line); border-inline-start: 4px solid var(--gold); background: color-mix(in srgb, var(--gold) 7%, transparent); }
 .sponsor-note small { display: block; font-size: 11px; color: var(--muted); }

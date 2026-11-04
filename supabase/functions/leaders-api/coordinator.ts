@@ -130,9 +130,11 @@ export async function dashboardFor(c: any) {
   }));
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
+  // المستويات لا تخرج للجهة إلا بموافقة المشارك المسجلة (org_share_consented_at)، فوق صلاحية المنسق
+  const shared = new Set((rows as any[]).filter((r: any) => r.org_share_consented_at).map((r: any) => r.id));
 
   // الأرقام المجمّعة من كل مشاركي الجهة، والصفوف الفردية تمر عبر الصلاحيات (بلا «القائمة» لا صف واحد)
-  const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, levels: levelsBy[p.id] || null }));
+  const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, levels: shared.has(p.id) ? levelsBy[p.id] || null : null }));
   const participants = full.map((p: any) => coordParticipant(p, perms)).filter(Boolean);
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
@@ -158,9 +160,12 @@ export async function impactFor(c: any) {
   const scores = coordPermissions(c.permissions).scores;
   // دون الحد الأدنى تكشف المتوسطات درجة الفرد: تبقى الأعداد وتُحجب المقارنة
   if ((r.counts?.paired ?? 0) < MIN_COHORT) return { counts: r.counts, cohort: null, transfer: null, caution: null, suppressed: MIN_COHORT, participants: [] };
+  // الصفوف بالأسماء لمن وافق على اطلاع جهته على مستوياته فقط (قبل ترحيل العمود: لا أحد)
+  const { data: ok } = await db.from('participants').select('id').eq('organization_id', c.organization_id).not('org_share_consented_at', 'is', null);
+  const shared = new Set((ok || []).map((x: any) => x.id));
   return {
     counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
-    participants: scores ? r.participants.filter((p: any) => p.dimensions).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+    participants: scores ? r.participants.filter((p: any) => p.dimensions && shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
   };
 }
 export async function dashboard(c: any) {

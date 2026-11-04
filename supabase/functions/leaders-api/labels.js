@@ -75,6 +75,10 @@ export const TERMS = {
 export const CONTACT_EMAIL = 'mi@sunkvalue.com';
 // رسالة واحدة لكل خطأ لا يستطيع المستخدم فعل شيء حياله (الخادم يحتفظ برمز HTTP ويسجّل السبب)
 export const UNEXPECTED_ERROR = `حدث خطأ غير متوقع. حدّث الصفحة، وإن تكرر راسل ${CONTACT_EMAIL}.`;
+
+// الخصوصية والشروط: نسخة السياسة النافذة (تُسجَّل مع موافقة كل مشارك) ومساراتها في تطبيق القادة
+export const POLICY_VERSION = '2026-11-05';
+export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
 

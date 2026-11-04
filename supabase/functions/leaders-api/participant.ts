@@ -14,7 +14,7 @@ import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
-import { CONTACT_EMAIL, UNEXPECTED_ERROR } from './labels.js';
+import { CONTACT_EMAIL, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
@@ -154,6 +154,30 @@ export async function orgInfo(b: Body) {
   return { success: true, via: r.via, org: { name: r.org.name, short_name: r.org.short_name, color: r.org.color } };
 }
 
+// ── الموافقة على الخصوصية والشروط ──
+// تُسجَّل مع نسخة السياسة لحظة التسجيل (الإشعار يسبق زر التسجيل)، ولمن سبق تسجيله عند أول دخول
+// بعد نشر السياسة. الكتابة متسامحة مع غياب الأعمدة قبل ترحيلها (42703) حتى لا يتعطل التسجيل.
+async function setConsent(participantId: string, fields: Record<string, unknown>) {
+  const { error } = await db.from('participants').update(fields).eq('id', participantId);
+  if (error && error.code !== '42703') console.error('consent:', error.message);
+  return !error;
+}
+const recordConsent = (participantId: string) => setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
+export async function consentAccept(p: any) {
+  await recordConsent(p.id);
+  await audit('participant', p.id, 'participant.consent', 'participants', p.id, null, { version: POLICY_VERSION });
+  const fresh = must(await db.from('participants').select('*').eq('id', p.id).single());
+  return { success: true, ...(await mePayload(fresh)) };
+}
+// موافقة المشارك على اطلاع جهته على مستوياته: بدونها لا تخرج المستويات للجهة ولو مُنح منسقها صلاحيتها
+export async function orgShareConsent(p: any, b: Body) {
+  const share = b.share === true;
+  const ok = await setConsent(p.id, { org_share_consented_at: share ? new Date().toISOString() : null });
+  if (!ok) throw new Fail('تعذّر حفظ اختيارك الآن', 500, 'db_error');
+  await audit('participant', p.id, share ? 'participant.org-share.on' : 'participant.org-share.off', 'participants', p.id);
+  return { success: true, share };
+}
+
 // ── 1. بدء الدخول أو التسجيل ──
 // بريد واحد يحمل رابطًا ورمزًا. لبريد جديد نطلب الاسم أولًا (needs_profile)،
 // ولا نكشف أبدًا هل البريد مسجل لغير صاحبه: الرد واحد في الحالتين بعد الإرسال.
@@ -236,6 +260,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
+    await recordConsent(p.id);   // أكمل التسجيل بعد إشعار الخصوصية والشروط
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
@@ -265,6 +290,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
       source: r ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
+    await recordConsent(p.id);
     if (p.organization_id) await pinSponsorFor(p.id);
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
@@ -467,6 +493,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
+      // null = لم يوافق بعد (يُعرض الإشعار)؛ غياب الحقل = العمود لم يُرحَّل بعد
+      consented_at: 'consented_at' in p ? p.consented_at : undefined,
+      org_share: 'org_share_consented_at' in p ? !!p.org_share_consented_at : undefined,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
@@ -518,7 +547,10 @@ export async function orgVisibilityFor(p: any) {
   if (!p.organization_id) return { success: true, org: null };
   const { data } = await db.from('org_coordinators').select('status, expires_at, permissions, organizations(name, status)').eq('organization_id', p.organization_id);
   const org = (data || [])[0]?.organizations as any;
-  return { success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []) };
+  return {
+    success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []),
+    share_consented: 'org_share_consented_at' in p ? !!p.org_share_consented_at : null,   // null = لم يُرحَّل بعد
+  };
 }
 
 export async function orgLogo(p: any) {

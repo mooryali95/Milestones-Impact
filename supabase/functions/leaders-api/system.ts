@@ -35,6 +35,24 @@ async function present(table: string, column: string, schema: any = db) {
   return !error;
 }
 
+// ── تنظيف دوري (مع التذكير الأسبوعي) ──
+// بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
+// المنتهية أو الملغاة، سجلات التحقق العام من الشهادات، وعناوين مشاهدات الكتيب (يبقى عدّها).
+const RETENTION_DAYS = 90;
+export async function purge() {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 864e5).toISOString();
+  const out: Record<string, number | string> = {};
+  const run = async (key: string, q: any) => {
+    const { data, error } = await q.select('id');
+    out[key] = error ? `error: ${error.message}` : (data || []).length;
+  };
+  for (const t of ['email_challenges', 'coordinator_challenges', 'expert_challenges', 'webauthn_challenges']) await run(t, db.from(t).delete().lt('created_at', cutoff));
+  for (const t of ['auth_sessions', 'coordinator_sessions', 'expert_sessions']) await run(t, db.from(t).delete().lt('expires_at', cutoff));
+  await run('certificate_checks', db.from('certificate_checks').delete().lt('created_at', cutoff));
+  await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
+  return out;
+}
+
 // مسبار خارجي: طلب حقيقي يمر بالقاعدة، للمراقبة ولفحص ما بعد النشر
 // (فحص OPTIONS وحده كان ينجح والدالة معطلة)
 export async function ping() {

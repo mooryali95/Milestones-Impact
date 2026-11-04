@@ -39,6 +39,9 @@ import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
 import HallScreen from './screens/Hall.jsx';
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
+import Legal from './screens/Legal.jsx';
+import Consent from './Consent.jsx';
+import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
 
 // «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
@@ -116,8 +119,12 @@ export default function App() {
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;
+  if (location.pathname === LEGAL_PATH.index || location.pathname.startsWith(`${LEGAL_PATH.index}/`)) return <Shell tag="الخصوصية والشروط"><Legal /></Shell>;
   return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
 }
+
+// رابط الوثائق القانونية في كل تذييل: المشارك والمقيّم والراعي والخبير والمنسق
+const LegalLink = () => <a className="link small" href={LEGAL_PATH.index}>الخصوصية والشروط</a>;
 
 function Shell({ tag, children }) {
   return (
@@ -125,7 +132,7 @@ function Shell({ tag, children }) {
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar"><div className="topbar-in"><img src={logo} alt="Milestone Impact" /><span className="tag">{tag}</span><span className="spacer" /></div></header>
       <main id="main" tabIndex={-1}>{children}</main>
-      <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة.</footer>
+      <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة. <LegalLink /></footer>
     </>
   );
 }
@@ -266,6 +273,8 @@ function Participant() {
     </div>
   );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
+  // من سبق تسجيله قبل نشر السياسة يوافق مرة واحدة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)
+  else if (me.participant.consented_at === null && !me.participant.is_demo) screen = <Consent onAccepted={accept} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />;
@@ -303,7 +312,7 @@ function Participant() {
       </header>
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
-      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact</footer>
+      <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
       {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>

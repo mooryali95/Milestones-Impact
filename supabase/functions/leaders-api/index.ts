@@ -52,7 +52,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })) };
+    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })),
+      // تنظيف دوري: رموز الدخول والجلسات المنتهية وسجلات التحقق وعناوين IP بعد 90 يومًا
+      purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })) };
   },
   'coord.auth-start': C.authStart,
   'coord.auth-verify': C.authVerify,
@@ -78,7 +80,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
   'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
-  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
+  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
@@ -97,6 +99,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'sponsor.cancel': (p) => R.cancel(p),
   'me.switch': (p, b, _s, ctx) => switchTo(p.email, 'participant', b.to, ctx),
   'org.visibility': (p) => P.orgVisibilityFor(p),
+  'consent.accept': (p) => P.consentAccept(p),
+  'org.share-consent': (p, b) => P.orgShareConsent(p, b),
   'ratings.pending': (p) => E.pendingRatings(p),
   'experts.suggest': (p, b) => E.mySuggestions(p, b),
   'experts.choose': (p, b) => E.myChoose(p, b),
