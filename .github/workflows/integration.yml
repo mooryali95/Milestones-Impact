@@ -27,9 +27,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub بلا توكن فيُرفض بحد المعدل أحيانًا
+      - name: Install Supabase CLI
+        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
 
       - name: Start local Supabase (Postgres, PostgREST, Storage, Auth)
         run: supabase start -x studio,imgproxy,logflare,vector,realtime,mailpit,supavisor
