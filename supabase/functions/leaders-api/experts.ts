@@ -530,7 +530,7 @@ export async function portalDashboard(e: any) {
     };
   };
   const stats = expertStats(sessions || [], null);
-  const advisorCohorts = (await db.from('cohorts').select('id, name, supervision').eq('advisor_expert_id', e.id).neq('status', 'closed')).data || [];
+  const advisorCohorts = ((await db.from('cohorts').select('*').eq('advisor_expert_id', e.id).neq('status', 'closed')).data || []).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision || 'peers_expert' }));
   return {
     success: true, switch_to,
     // دفعاته بصفته مستشارها: للقاعة من بوابته (المرحلة 9)
