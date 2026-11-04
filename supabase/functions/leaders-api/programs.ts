@@ -12,7 +12,9 @@ import { cleanProfile } from './certificates.ts';
 
 type Body = Record<string, any>;
 
-const COHORT_COLS = 'id, name, program_id, program_version_id, organization_id, status, is_default, delivery, schedule, level_mode, content_level, stage_modes, project_mode, starts_on, ends_on, capacity, notes_ar, advisor_expert_id, hidden_requirements, supervision, created_at';
+// كل الأعمدة لا قائمة صريحة: عمود مضاف في ترحيل لم يُطبَّق بعد (مثل supervision) كان يُفشل القراءة كلها (42703)
+// فيفقد كل مشارك دفعته وتختفي الدفعات من اللوحة حتى يُطبَّق الترحيل. الأعمدة الغائبة تُقرأ undefined وتُعامل كافتراضي.
+const COHORT_COLS = '*';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 let defaultId: string | null = null;

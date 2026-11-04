@@ -73,7 +73,9 @@ describe('الحراس: المصدر الواحد لطلبات الأقران و
     expect(mig).toMatch(/supervision text not null default 'peers_expert'/);
     expect(mig).toMatch(/create table if not exists leaders\.peer_requests/);
     expect(mig).toMatch(/create table if not exists leaders\.peer_answers/);
-    expect(read('supabase/functions/leaders-api/programs.ts')).toMatch(/hidden_requirements, supervision, created_at/);
+    const programs = read('supabase/functions/leaders-api/programs.ts');
+    expect(programs).toMatch(/row\.supervision = cleanSupervision\(b\.supervision\)/);
+    expect(programs).toMatch(/const COHORT_COLS = '\*';/);   // عمود لم يُرحَّل بعد لا يُفشل قراءة الدفعات
   });
   it('إجراءات الخبير في المسار الصحيح: الملف والختامي والمعالم والقاعة والأقران على xp.*، والخبير فاعل system في السجل', () => {
     const idx = read('supabase/functions/leaders-api/index.ts');

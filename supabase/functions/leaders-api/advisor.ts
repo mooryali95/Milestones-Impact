@@ -31,7 +31,8 @@ export async function notifyAdvisor(p: any, what: string) {
 
 // دفعات هذا الخبير بصفته مستشارها الأساسي
 export async function advisorCohorts(expertId: string) {
-  const { data } = await db.from('cohorts').select('id, name, supervision, organization_id, is_default, status, starts_on, ends_on').eq('advisor_expert_id', expertId);
+  // كل الأعمدة (لا قائمة صريحة) حتى لا يُفشل عمود لم يُرحَّل بعد القراءة
+  const { data } = await db.from('cohorts').select('*').eq('advisor_expert_id', expertId);
   return data || [];
 }
 
