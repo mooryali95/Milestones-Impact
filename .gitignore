@@ -25,3 +25,6 @@ yarn-error.log*
 test-results/
 playwright-report/
 .probe/
+
+# ناتج محلي لفحص deno خارج CI؛ CI يحل الاعتماديات بنفسه
+deno.lock
