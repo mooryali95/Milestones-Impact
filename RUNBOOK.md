@@ -33,7 +33,7 @@ curl -s -X POST https://api.supabase.com/v1/projects/eormhcupwgwpllhrfxxg/databa
 
 - **مسبار حقيقي:** `POST https://eormhcupwgwpllhrfxxg.supabase.co/functions/v1/leaders-api` بجسم `{"action":"system.ping"}` ورؤوس `apikey`/`Authorization: Bearer <المفتاح العام>` ← `{"success":true,"db_ms":…}`. يمر بالقاعدة فعلًا.
 - **المراقب الخارجي (الأساس):** أضف المسبار أعلاه في UptimeRobot أو Cloudflare Health Checks كل 5 دقائق مع كلمة `"success":true` شرطًا، وصفحات `leaders.sunkvalue.com` و`mi.sunkvalue.com` و`admin.sunkvalue.com` كفحوص 200. (لم يُضبط بعد؛ يحتاج حساب المالك.)
-- **شبكة الأمان:** `probe.yml` كل ساعة يفعل الشيء نفسه؛ فشله يُرسل بريد GitHub عن فشل سير العمل. جدولة GitHub قد تتأخر ساعات.
+- **شبكة الأمان:** `probe.yml` كل ساعة يفعل الشيء نفسه؛ فشله يُرسل بريد GitHub عن فشل سير العمل. جدولة GitHub قد تتأخر ساعات. Cloudflare قد يحجب عناوين مشغّلات GitHub على النطاق بـ403 (حدث في 2026-11-04 لموقع القادة وهو يعمل)؛ المسبار يميّزه (`server: cloudflare`) ويفحص النشر على `pages.dev` بدلًا منه بتحذير. لإلغاء الحجب نهائيًا: Cloudflare ← Security ← WAF ← قاعدة تخطٍّ لوكيل المستخدم `MilestoneImpactProbe/1.0`.
 - **تنبيه فوري من الدالة:** أي خطأ داخلي (500) أو تعطل بريد (`mail_failed`، `mail_cap`، `mail_unconfigured`) أو فشل خطاف Creem أو Cal.com يصل `LEADERS_ALERT_EMAIL` فورًا، مرة كل عشر دقائق لكل نوع، مع رقم مرجع يراه المستخدم في رسالة الخطأ ويظهر في سجل الدالة. السجل: Supabase ← Edge Functions ← leaders-api ← Logs، ابحث بالمرجع.
 - **التقرير الأسبوعي:** يوم الأحد عبر `cron.reminders` (pg_cron). إن لم يصل أحدًا فالجدولة ميتة: `select * from cron.job_run_details order by start_time desc limit 10;`. التشغيلة نفسها تنظّف ما مضى عليه 90 يومًا: رموز الدخول، الجلسات المنتهية، سجلات التحقق من الشهادات، وعناوين الشبكة في مشاهدات الكتيب (`purge` في `system.ts`).
 

@@ -26,10 +26,20 @@ jobs:
             -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
           echo "$body"
           echo "$body" | grep -q '"success":true'
+      # Cloudflare قد يحجب عناوين مشغّلات GitHub على النطاق (403 مع server: cloudflare) وهذا ليس تعطلًا؛
+      # عندها يُفحص النشر نفسه على pages.dev (أصل Cloudflare Pages بلا قواعد النطاق). غير ذلك يُفشل السير.
       - name: Sites answer
         run: |
-          for u in https://leaders.sunkvalue.com/ https://mi.sunkvalue.com/ https://admin.sunkvalue.com/; do
-            code=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$u")
-            echo "$u -> $code"
-            test "$code" = 200
-          done
+          probe() {
+            code=$(curl -s --max-time 20 -o /dev/null -D /tmp/h -A "MilestoneImpactProbe/1.0 (+https://mi.sunkvalue.com)" -w '%{http_code}' "$1")
+            echo "$1 -> $code"
+            if [ "$code" = 200 ]; then return 0; fi
+            if [ "$code" = 403 ] && grep -qi '^server: cloudflare' /tmp/h && [ -n "$2" ]; then
+              echo "::warning::$1 حُجب بـ403 من Cloudflare لعنوان المشغّل (ليس تعطلًا)؛ يُفحص النشر على $2"
+              code2=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$2"); echo "$2 -> $code2"; test "$code2" = 200; return
+            fi
+            return 1
+          }
+          probe https://leaders.sunkvalue.com/ https://mi-leaders.pages.dev/
+          probe https://mi.sunkvalue.com/ https://mi-home.pages.dev/
+          probe https://admin.sunkvalue.com/ https://mi-admin.pages.dev/
