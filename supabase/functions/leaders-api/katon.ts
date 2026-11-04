@@ -5,7 +5,7 @@
 // فلا يُعدّل بعد رؤية المفتاح. النقاط من إعداد برنامجه (programs.katon_points).
 import { audit, db, Fail, must } from './core.ts';
 import { cleanSentence, katonPoints, katonScore, katonSummary, KATON_OPTIONS, sentenceDistribution } from './katon.js';
-import { journeyDefinition } from './programs.ts';
+import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
@@ -77,17 +77,20 @@ export async function answer(p: any, b: Body) {
 
 // ── للأدمن ──
 export async function adminList(b: Body) {
+  // جدول النقاط لكل برنامج: المطلوب أو الافتراضي، ويعود معرّفه كي تحفظ اللوحة عليه
+  const programId = isUuid(b.program_id) ? String(b.program_id) : await defaultProgramId();
   const [tp, ss, ans, prog] = await Promise.all([
     db.from('katon_topics').select('*').order('sort'),
     db.from('katon_sentences').select('*').order('sort'),
     db.from('katon_answers').select('sentence_id, choice'),
-    isUuid(b.program_id) ? db.from('programs').select('id, name, katon_points').eq('id', b.program_id).maybeSingle() : Promise.resolve({ data: null }),
+    programId ? db.from('programs').select('id, name, katon_points').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const bySent = new Map<string, any[]>();
   for (const a of ans.data || []) { if (!bySent.has(a.sentence_id)) bySent.set(a.sentence_id, []); bySent.get(a.sentence_id)!.push(a); }
   return {
     success: true,
     options: KATON_OPTIONS,
+    program_id: programId, program_name: (prog.data as any)?.name || null,
     points: katonPoints((prog.data as any)?.katon_points),
     topics: (tp.data || []).map((t: any) => ({
       ...t,

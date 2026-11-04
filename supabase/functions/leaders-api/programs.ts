@@ -426,7 +426,8 @@ export async function cohortMembers(c: any) {
   const extra = c.organization_id ? ((await db.from('participants').select('id').eq('organization_id', c.organization_id)).data || []).map((r: any) => r.id) : [];
   const all = [...new Set([...ids, ...extra])] as string[];
   if (!all.length) return [];
-  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, organization_name, job_title, status').in('id', all);
+  // حساب العرض ليس عضوًا في أي دفعة: لا يظهر في القاعة ولا المجموعات ولا الحضور
+  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, organization_name, job_title, status').in('id', all).eq('is_demo', false);
   const byP = new Map<string, any[]>();
   for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const mine = (ps || []).filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts: cohorts.data || [], organizationId: p.organization_id }).cohort?.id === c.id);

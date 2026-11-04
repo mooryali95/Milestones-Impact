@@ -191,8 +191,8 @@ export async function doc(p: any) {
 
 // ── المستشار ──
 export async function adminList(b: Body) {
-  let q = db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants(full_name, email, organization_name, work_scope)')
-    .order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
+  let q = db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)')
+    .eq('participants.is_demo', false).order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
   const rows = must(await q) as any[] ?? [];
   const ids = rows.map((r) => r.participant_id);

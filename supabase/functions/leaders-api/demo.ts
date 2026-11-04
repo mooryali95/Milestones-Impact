@@ -4,14 +4,14 @@
 // مشارك حقيقي بعلامة is_demo، يمر بالرحلة نفسها التي يمر بها أي مشارك، لكنه:
 // يُفتح من اللوحة بلا كلمة مرور، ويُعتمد مستواه آليًا، ولا يدخل القوائم ولا الإحصاءات،
 // ولا يصله بريد، ويُعاد إلى البداية بضغطة. أزرار التخطي تعمل له وحده.
-import { audit, CONFIG, db, Fail, must } from './core.ts';
+import { audit, CONFIG, db, DEMO_MAIL_DOMAIN, Fail, must } from './core.ts';
 import { assessmentGet, assessmentSubmit, issueSession, profileSave } from './participant.ts';
 import { scoreFor } from './logic.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null; ua: string | null };
-const DEMO_EMAIL = 'demo@demo.milestone-impact.org';
+const DEMO_EMAIL = `demo@${DEMO_MAIL_DOMAIN}`;   // sendMail لا يرسل إلى هذا النطاق أبدًا
 // رقم وهمي بصيغة صحيحة لإكمال الملف فقط (لا يُتصل به ولا يُنشر)
 const DEMO_PHONE = '05' + '0'.repeat(8);
 

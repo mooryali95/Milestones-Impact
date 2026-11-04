@@ -143,7 +143,12 @@ const shell = (family: MailFamily, title: string, body: string, preheader = '', 
   mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
 const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
 
+// حساب العرض التوضيحي: نطاق بريد لا يستقبل، ولا تُرسل إليه رسالة من أي مسار (الحارس هنا لا في كل موضع)
+export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
+export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().endsWith(`@${DEMO_MAIL_DOMAIN}`);
+
 export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = []) {
+  if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
   if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments }))) {
     throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');

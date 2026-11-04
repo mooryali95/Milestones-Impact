@@ -3,8 +3,8 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { trackProject } from './capstone.js';
@@ -38,6 +38,13 @@ export function requireWrite(a: Admin) {
   if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب الدخول بمفتاح المرور أو تطبيق المصادقة. فعّل أحدهما من الإعدادات ثم ادخل به', 403, 'mfa_required');
 }
 export const writer = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); return fn(a, b); };
+// الإجراءات الخطرة (حذف جهة أو مشارك أو منسق، استرجاع برنامج، إعدادات الدفع، إعادة إصدار
+// شهادات جهة، إعادة ضبط العرض) للمدير الأعلى وحده، بالعامل الثاني نفسه
+export function requireSuper(a: Admin) {
+  requireWrite(a);
+  if (a.role !== 'super_admin') throw new Fail('هذا الإجراء للمدير الأعلى وحده', 403, 'super_required');
+}
+export const superWriter = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); requireSuper(a); return fn(a, b); };
 
 // ── الجهات ──
 // ترتيب الحالة في القمع: سجّل، أكمل الملف، أنهى القياس، اعتُمد، أنهى البرنامج
@@ -282,19 +289,93 @@ export async function participant(b: Body) {
   ]);
   return {
     success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
+    program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
     points: pts, book: book || [], models: subs || [],
   };
 }
 
+// ── تصحيح بيانات المشارك من اللوحة (كان يتطلب تعديل القاعدة يدويًا) ──
+// الحقول الخمسة الأساسية فقط، بتدقيق قبل/بعد للحقول التي تغيّرت. تغيير البريد يُسقط توثيقه فيُوثَّق عند الدخول التالي.
+export async function participantSave(a: Admin, b: Body) {
+  requireWrite(a);
+  const id = String(b.participant_id || '');
+  const p = must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, is_demo').eq('id', id).maybeSingle()) as any;
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  if (p.is_demo) throw new Fail('حساب العرض لا يُعدَّل من هنا', 409);
+  const f = b.fields && typeof b.fields === 'object' ? b.fields : {};
+  const row: Record<string, unknown> = {};
+  if ('full_name' in f) { const v = String(f.full_name || '').trim(); if (v.length < 3) throw new Fail('الاسم مطلوب (3 أحرف على الأقل)'); row.full_name = v.slice(0, 120); }
+  if ('email' in f) { const v = normalizeEmail(f.email); if (!isEmail(v)) throw new Fail('البريد غير صحيح'); if (v !== p.email) { row.email = v; row.email_verified_at = null; } }
+  if ('phone' in f) { const raw = String(f.phone || '').trim(); const v = raw ? normalizePhone(raw) : null; if (raw && !v) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.'); row.phone = v; }
+  if ('job_title' in f) row.job_title = String(f.job_title || '').trim().slice(0, 120) || null;
+  if ('organization_name' in f) row.organization_name = String(f.organization_name || '').trim().slice(0, 200) || null;
+  const changed = Object.keys(row).filter((k) => k !== 'email_verified_at' && row[k] !== p[k]);
+  if (!changed.length) return { success: true, changed: [] };
+  const saved = must(await db.from('participants').update(row).eq('id', id).select('*').single(), 'تعذّر الحفظ؛ قد يكون البريد مسجلًا لمشارك آخر');
+  await audit('admin', a.email, 'participant.edit', 'participants', id,
+    Object.fromEntries(changed.map((k) => [k, p[k]])), Object.fromEntries(changed.map((k) => [k, row[k]])));
+  return { success: true, changed, participant: saved };
+}
+
+// ── حذف مشارك بأثر (طلب محو، أو تسجيل مكرر) ──
+// يُعرض أولًا ما سيُمحى وما يمنع الحذف: شهادة سارية يتحقق منها الناس برقمها، أو دفع مؤكد.
+// الحذف للمدير الأعلى، بكتابة البريد للتأكيد، ويمحو ملفاته من المخزن الخاص، ويترك في السجل
+// المعرّف وبصمة البريد والأعداد دون أي بيانات شخصية.
+async function countRows(t: string, id: string, extra?: (q: any) => any) {
+  let q: any = db.from(t).select('*', { count: 'exact', head: true }).eq('participant_id', id);
+  if (extra) q = extra(q);
+  const { count } = await q;
+  return count ?? 0;
+}
+export async function participantImpact(b: Body) {
+  const id = String(b.participant_id || '');
+  const p = must(await db.from('participants').select('id, full_name, email, is_demo').eq('id', id).maybeSingle()) as any;
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  const [assessments, submissions, capstones, certificates, valid_certificates, payments, paid_payments, requirements, sessions] = await Promise.all([
+    countRows('assessments', id), countRows('model_submissions', id), countRows('capstones', id),
+    countRows('certificates', id), countRows('certificates', id, (q) => q.eq('status', 'valid')),
+    countRows('payments', id), countRows('payments', id, (q) => q.eq('status', 'paid')),
+    countRows('participant_requirements', id), countRows('auth_sessions', id),
+  ]);
+  const blockers: string[] = [];
+  if (p.is_demo) blockers.push('حساب العرض يُعاد ضبطه من النظرة العامة ولا يُحذف من هنا');
+  if (valid_certificates) blockers.push('له شهادة سارية يتحقق منها الناس برقمها؛ ألغِها أولًا، أو أوقف الحساب بدل حذفه');
+  if (paid_payments) blockers.push('له دفع مؤكد، والحذف يفصل المال عن صاحبه؛ أوقف الحساب بدل حذفه');
+  return {
+    success: true, participant: { id, full_name: p.full_name, email: p.email },
+    counts: { assessments, submissions, capstones, certificates, payments, requirements, sessions }, blockers,
+  };
+}
+export async function participantDelete(a: Admin, b: Body) {
+  requireSuper(a);
+  const impact = await participantImpact(b);
+  if (impact.blockers.length) throw new Fail(impact.blockers[0], 409, 'blocked');
+  const { id, email } = impact.participant;
+  if (String(b.confirm_email || '').trim().toLowerCase() !== email) throw new Fail('اكتب بريد المشارك كما هو للتأكيد', 400, 'confirm');
+  // ملفاته في المخزن الخاص: <id>/<الغرض>/<ملف>
+  const { data: folders } = await storage.from(BUCKET).list(id, { limit: 100 });
+  const paths: string[] = [];
+  for (const f of folders || []) {
+    if (f.id) { paths.push(`${id}/${f.name}`); continue; }
+    const { data: files } = await storage.from(BUCKET).list(`${id}/${f.name}`, { limit: 1000 });
+    for (const x of files || []) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
+  }
+  if (paths.length) await storage.from(BUCKET).remove(paths);
+  must(await db.from('participants').delete().eq('id', id), 'تعذّر الحذف');
+  await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, ...impact.counts });
+  return { success: true, files: paths.length };
+}
+
 // قائمة المراجعة: كل ما أرسله المشاركون وينتظر قرار المستشار
 export async function reviews() {
+  // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
   const rows = must(await db.from('participant_requirements')
-    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants(full_name, email), stage_requirements(code, title_ar, stage_key, kind)')
-    .eq('status', 'submitted').limit(200)) ?? [];
+    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo), stage_requirements(code, title_ar, stage_key, kind)')
+    .eq('status', 'submitted').eq('participants.is_demo', false).limit(200)) ?? [];
   const { data: waiting } = await db.from('participants').select('id, full_name, email, organization_name, updated_at')
-    .eq('status', 'pending_approval').order('updated_at', { ascending: true }).limit(200);
+    .eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(200);
   return { success: true, submitted: rows, pending_approval: waiting || [] };
 }
 
@@ -650,8 +731,8 @@ export async function bookPreview(b: Body) {
 
 export async function submissions(b: Body) {
   let q = db.from('model_submissions')
-    .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants(full_name, email, organization_name), learning_models(title_ar, dimension, points)')
-    .neq('status', 'draft').order('submitted_at', { ascending: false }).limit(500);
+    .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants!inner(full_name, email, organization_name, is_demo), learning_models(title_ar, dimension, points)')
+    .neq('status', 'draft').eq('participants.is_demo', false).order('submitted_at', { ascending: false }).limit(500);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.model_id) q = q.eq('model_id', String(b.model_id));
   return { success: true, submissions: must(await q) ?? [] };
@@ -848,6 +929,7 @@ export async function remove(a: Admin, b: Body) {
     if (count) throw new Fail('لهذه المادة تقدم مشاركين؛ أوقفها بدل حذفها حتى لا يضيع', 409);
   }
   if (b.entity === 'organizations') {
+    requireSuper(a);   // حذف جهة نهائي: للمدير الأعلى وحده
     const [{ count: ps }, { count: rs }] = await Promise.all([
       db.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
       db.from('reports').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
@@ -929,7 +1011,7 @@ export async function reminders(b: Record<string, any>) {
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const { data: people } = await db.from('participants')
     .select('id, full_name, email, status')
-    .neq('status', 'suspended')
+    .neq('status', 'suspended').eq('is_demo', false)
     .lt('last_login_at', weekAgo)
     .or(`reminded_at.is.null,reminded_at.lt.${weekAgo}`)
     .limit(200);

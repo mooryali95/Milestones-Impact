@@ -79,6 +79,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
   'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending']);
+// حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
+const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
   if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
@@ -190,6 +192,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.stage-override': A.stageOverride,
   'admin.stage-create': A.stageCreate,
   'admin.create-participant': A.createParticipant,
+  'admin.participant-save': A.participantSave,
+  'admin.participant-impact': (_a, b) => A.participantImpact(b),
+  'admin.participant-delete': A.participantDelete,
   'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
@@ -202,7 +207,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.coordinator-invite': C.adminInvite,
   'admin.coordinator-status': C.adminSetStatus,
   'admin.coordinator-revoke': C.adminRevokeSessions,
-  'admin.coordinator-remove': C.adminRemove,
+  'admin.coordinator-remove': (a, b) => A.superWriter(a, C.adminRemove, b),
   'admin.coordinator-preview': C.adminPreview,
   'admin.book-preview': (_a, b) => A.bookPreview(b),
   'admin.submissions': (_a, b) => A.submissions(b),
@@ -222,7 +227,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
   'admin.certificate-revoke': (a, b) => A.writer(a, Z.revoke, b),
   'admin.certificate-reissue': (a, b) => A.writer(a, Z.reissue, b),
-  'admin.certificate-reissue-org': (a, b) => A.writer(a, Z.reissueOrg, b),
+  'admin.certificate-reissue-org': (a, b) => A.superWriter(a, Z.reissueOrg, b),
   'admin.cert-preview': (_a, b) => Z.preview(b),
   'admin.cert-settings': () => Z.settingsGet(),
   'admin.cert-settings-save': (a, b) => A.writer(a, Z.settingsSave, b),
@@ -241,7 +246,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.payments': () => Y.adminOverview(),
   'admin.sponsor-requests': () => R.adminList(),
   'admin.sponsor-decide': R.adminDecide,
-  'admin.payment-settings': Y.adminSettings,
+  'admin.payment-settings': (a, b) => A.superWriter(a, Y.adminSettings, b),
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,
   'admin.experts': () => E.adminList(),
@@ -259,13 +264,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
   'admin.program-version': (a, b) => A.writer(a, G.programPublish, b),
-  'admin.program-restore': (a, b) => A.writer(a, G.programRestore, b),
+  'admin.program-restore': (a, b) => A.superWriter(a, G.programRestore, b),
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
   'admin.milestones': (_a, b) => G.milestones(b),
   'admin.hall': (_a, b) => H.adminState(b),
   'admin.demo-open': (a, b, ctx) => A.writer(a, (x, y) => D.open(x, y, ctx), b),
-  'admin.demo-reset': (a, b) => A.writer(a, D.reset, b),
+  'admin.demo-reset': (a, b) => A.superWriter(a, D.reset, b),
   'admin.hall-open': (a, b) => A.writer(a, H.open, b),
   'admin.hall-step': (a, b) => A.writer(a, H.step, b),
   'admin.hall-split': (a, b) => A.writer(a, H.split, b),
@@ -309,6 +314,7 @@ Deno.serve(async (req) => {
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
+      if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
       // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
       const need = payGate(action, b);
       if (need) await Y.requireAccess(p, need);

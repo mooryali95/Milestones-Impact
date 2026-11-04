@@ -54,6 +54,13 @@ export default function KatonBank({ canWrite, programId }) {
       tasks: { support: v.t_support, lead: v.t_lead, guide: v.t_guide, eval: v.t_eval } } }),
     onDelete: s.id ? () => L('admin.katon-sentence-delete', { id: s.id }) : undefined,
   });
+  // جدول النقاط «يعدّله الأدمن» (قرار المالك في التصور المعتمد): لكل برنامج، من 0 إلى 20 لكل خيار
+  const editPoints = () => setForm({
+    title: `جدول نقاط «كاتون»${d.program_name ? ` · ${d.program_name}` : ''}`,
+    fields: d.options.map((o) => ({ name: o.key, label: `${o.glyph} ${o.ar}`, type: 'number', help: o.key === 'true' || o.key === 'false' ? 'تُكسب إن وافق المفتاح وتُخصم إن خالفه' : undefined })),
+    values: { ...d.points },
+    onSave: (v) => L('admin.katon-points', { program_id: d.program_id, points: Object.fromEntries(d.options.map((o) => [o.key, Number(v[o.key] ?? d.points[o.key])])) }),
+  });
   const publish = async (t, status) => {
     if (status === 'published' && t.sentences.some((s) => s.key === 'true') && t.sentences.every((s) => s.key === 'true')
       && !(await confirm('كل جمل هذا الموضوع مفتاحها «صحيحة»، فاليقين بالصحة يكسب دائمًا. أضف جملًا خاطئة لتقيس دقة التحليل فعلًا. تنشر على حاله؟'))) return;
@@ -65,7 +72,8 @@ export default function KatonBank({ canWrite, programId }) {
     <>
       <p className="la-muted">كل موضوع ست جمل تجيب عن الأسئلة الست (لماذا، ماذا، كيف، ماذا لو، من، متى). المشارك يختار لكل جملة أحد الخيارات الثمانية، ويُكشف المفتاح بعد إتمامه الموضوع. البنك المستورد من ملف الأسس يبدأ مسودة.</p>
       <div className="la-row between">
-        <div className="la-muted">النقاط: {d.options.map((o) => `${o.glyph} ${o.key === 'true' || o.key === 'false' ? '±' : '+'}${d.points[o.key]}`).join('  ·  ')}</div>
+        <div className="la-muted">النقاط{d.program_name ? ` (${d.program_name})` : ''}: {d.options.map((o) => `${o.glyph} ${o.key === 'true' || o.key === 'false' ? '±' : '+'}${d.points[o.key]}`).join('  ·  ')}
+          {canWrite && d.program_id && <> <button className="la-link" onClick={editPoints}>تعديل النقاط</button></>}</div>
         {canWrite && <button className="btn-sm ghost" onClick={() => editTopic()}>+ موضوع</button>}
       </div>
       {d.topics.map((t) => {
