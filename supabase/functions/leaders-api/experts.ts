@@ -6,7 +6,7 @@
 import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
@@ -443,8 +443,9 @@ export async function portalStart(b: Body, ctx: Ctx) {
   const { count } = await db.from('expert_challenges').select('id', { count: 'exact', head: true }).eq('email', email).gte('created_at', new Date(Date.now() - 36e5).toISOString());
   if ((count ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
   const code = randomCode();
-  must(await db.from('expert_challenges').insert({ expert_id: e!.id, email, code_hash: await hash(code), ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString() }));
-  await sendMail(email, 'رمز الدخول إلى لوحة الخبير', shell('رمز الدخول إلى لوحة الخبير',
+  const row = must(await db.from('expert_challenges').insert({ expert_id: e!.id, email, code_hash: await hash(code), ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString() })
+    .select('id').single()) as { id: string };
+  await sendOrDiscard('expert_challenges', row.id, email, 'رمز الدخول إلى لوحة الخبير', shell('رمز الدخول إلى لوحة الخبير',
     mailText(`أهلًا ${firstName(e!.full_name)}، أدخل الرمز في صفحة الدخول.`) + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)));
   return SENT;
 }

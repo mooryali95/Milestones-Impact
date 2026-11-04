@@ -34,8 +34,9 @@ export default function SignIn({ onSignedIn, initialError }) {
 
   // اسم الجهة يظهر إن جاء الزائر برابطها أو من موقعها
   useEffect(() => {
-    if (!via.org && !via.ref) return;
-    call('org.info', { org: via.org, ref: via.ref }).then((r) => { if (r.success) setOrg(r.org); });
+    // اسم الجهة يظهر لرمز رابطها فقط؛ الموقع المُحيل يُرسل للتحليل ولا يربط بجهة
+    if (!via.org) return;
+    call('org.info', { org: via.org }).then((r) => { if (r.success) setOrg(r.org); });
   }, [via]);
 
   useEffect(() => {

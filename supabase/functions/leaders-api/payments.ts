@@ -142,11 +142,20 @@ export async function webhook(raw: string, headers: Headers) {
   if (!key) throw new Fail('webhook secret missing', 503, 'config');
   const got = (headers.get('creem-signature') || '').trim().toLowerCase();
   if (!got || !same(got, await sign(raw, key))) throw new Fail('bad signature', 401, 'signature');
-  const ev = JSON.parse(raw);
+  let ev: any;
+  try { ev = JSON.parse(raw); } catch { throw new Fail('bad payload', 400, 'payload'); }
+  const id = ev?.id ? String(ev.id) : '';
+  if (!id) throw new Fail('event without id', 400, 'payload');
   const type = String(ev.eventType || ev.type || '');
   const obj = ev.object || ev.data || {};
-  const { error: dup } = await db.from('payment_events').insert({ event_id: ev.id || null, type, payload: ev });
-  if (dup?.code === '23505') return { success: true, duplicate: true };
+  // صف الحدث يُحجز أولًا فلا يُعالَج مرتين. وإن سبق حجزه ولم تكتمل معالجته (فشلت)
+  // تُعاد معالجته حين يعيد Creem الحدث نفسه، بدل الرد بأنه مكرر فيضيع الدفع.
+  const { error: dup } = await db.from('payment_events').insert({ event_id: id, type, payload: ev });
+  if (dup) {
+    if (dup.code !== '23505') throw dup;
+    const { data: prev } = await db.from('payment_events').select('processed_at').eq('event_id', id).maybeSingle();
+    if (prev?.processed_at) return { success: true, duplicate: true };
+  }
   try {
     if (type === 'checkout.completed') {
       const pay = await findPayment(obj);
@@ -160,12 +169,12 @@ export async function webhook(raw: string, headers: Headers) {
         await audit('system', 'creem', 'payment.refunded', 'payments', pay.id);
       }
     }
-    if (ev.id) await db.from('payment_events').update({ processed_at: new Date().toISOString() }).eq('event_id', ev.id);
+    await db.from('payment_events').update({ processed_at: new Date().toISOString(), error: null }).eq('event_id', id);
   } catch (e) {
-    if (ev.id) await db.from('payment_events').update({ error: String((e as Error).message || e).slice(0, 300) }).eq('event_id', ev.id);
+    await db.from('payment_events').update({ error: String((e as Error).message || e).slice(0, 300) }).eq('event_id', id);
     throw e;
   }
-  return { success: true };
+  return { success: true, ...(dup ? { retried: true } : {}) };
 }
 
 async function findPayment(obj: any) {

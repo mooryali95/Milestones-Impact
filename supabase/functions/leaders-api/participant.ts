@@ -2,7 +2,8 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, signInMail, storage, newDeviceMail } from './core.ts';
+  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
+import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -67,7 +68,9 @@ export async function participantFromToken(token: unknown) {
 }
 
 // ── نسب المشارك لجهته ──
-// الأولوية: رمز الرابط ثم نطاق الموقع الذي جاء منه (أو أحد نطاقاته الأم)
+// ما يربط المشارك بجهة راعية شيئان فقط: رمز رابطها (يكتبه أو يأتي به)، أو نطاق بريده
+// بعد توثيقه. الموقع المُحيل (ref) يرسله المتصفح ويستطيع أي أحد كتابته، فلا يربط أحدًا
+// ويُحفظ للتحليل فقط (referrer_host).
 const ORG_COLS = 'id, name, short_name, color, status';
 const live = (o: any) => (o && o.status !== 'inactive' ? o : null);
 
@@ -78,20 +81,10 @@ async function orgByCode(code: unknown) {
   return live(data);
 }
 
-export function hostOf(ref: unknown) {
-  const s = String(ref || '').trim().toLowerCase();
-  if (!s) return null;
-  try {
-    const h = new URL(s.includes('://') ? s : `https://${s}`).hostname.replace(/^www\./, '');
-    return /^[a-z0-9.-]{3,120}$/.test(h) && h.includes('.') ? h : null;
-  } catch { return null; }
-}
-
 async function orgByHost(host: string | null) {
-  if (!host) return null;
-  // mi.manzoma.sa تطابق mi.manzoma.sa ثم manzoma.sa، والأدق يفوز
-  const parts = host.split('.');
-  const candidates = parts.slice(0, -1).map((_, i) => parts.slice(i).join('.'));
+  // mi.manzoma.sa تطابق mi.manzoma.sa ثم manzoma.sa، والأدق يفوز؛ اللواحق العامة (gov.sa…) لا تدخل المطابقة
+  const candidates = domainCandidates(host);
+  if (!candidates.length) return null;
   const { data } = await db.from('organizations').select(`${ORG_COLS}, domains`).overlaps('domains', candidates);
   for (const c of candidates) {
     const hit = (data || []).find((o: any) => live(o) && (o.domains || []).includes(c));
@@ -107,9 +100,7 @@ const campaignOf = (c: unknown) => {
 
 async function resolveOrg(b: Body) {
   const byCode = await orgByCode(b.org);
-  if (byCode) return { org: byCode, via: 'link' as const };
-  const byHost = await orgByHost(hostOf(b.ref));
-  return byHost ? { org: byHost, via: 'domain' as const } : null;
+  return byCode ? { org: byCode, via: 'link' as const } : null;
 }
 
 // ── الجهة الراعية برمز يكتبه المشارك ──
@@ -130,12 +121,10 @@ async function sponsorByCode(code: unknown, key: string) {
   return { org, via: 'link' as const };   // الرمز المكتوب هو رمز رابط الجهة نفسه
 }
 // ── الربط بنطاق البريد الوظيفي: بريد موثَّق على نطاق مسجل لجهة نشطة يربط صاحبه بها ──
-// نطاقات البريد العامة لا تربط أحدًا أبدًا.
-const PUBLIC_MAIL = new Set(['gmail.com', 'googlemail.com', 'hotmail.com', 'outlook.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com',
-  'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'mail.com', 'yandex.com', 'zoho.com', 'hotmail.co.uk', 'outlook.sa', 'windowslive.com']);
+// نطاقات البريد العامة لا تربط أحدًا أبدًا (القائمة في domains.js).
 export async function orgByEmail(email: string) {
   const dom = String(email || '').split('@')[1]?.toLowerCase() || '';
-  if (!dom || PUBLIC_MAIL.has(dom)) return null;
+  if (!dom || isPublicMail(dom)) return null;
   const org = await orgByHost(dom);
   return org ? { org, via: 'domain' as const } : null;
 }
@@ -182,7 +171,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     if (name.length < 3) return { success: true, needs_name: true };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
-    // الجهة الراعية: رمز يكتبه المشارك، أو رابط جهة، أو موقعها. جهة العمل يكتبها في ملفه لاحقًا
+    // الجهة الراعية: رمز يكتبه المشارك، أو رمز رابط جهة، أو نطاق بريده (يُثبَّت بعد توثيق البريد). جهة العمل يكتبها في ملفه لاحقًا
     const r = await sponsorFor(b, ctx.ip || email, email);
     pending = {
       full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
@@ -190,15 +179,15 @@ export async function authStart(b: Body, ctx: Ctx) {
     };
   }
 
-  await mailGuard(b, ctx);
+  await mailGuard(b, ctx, existing ? 'login' : 'register');
   const code = randomCode();
   const link = randomToken(24);
-  must(await db.from('email_challenges').insert({
+  const row = must(await db.from('email_challenges').insert({
     email, purpose: existing ? 'login' : 'register', code_hash: await hash(code), link_token_hash: await hash(link),
     pending_profile: pending, ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString(),
-  }));
+  }).select('id').single()) as { id: string };
   const url = `${CONFIG.appUrl}/verify?e=${encodeURIComponent(email)}&t=${link}`;
-  await sendMail(email, existing ? 'رمز الدخول إلى رحلتك' : 'أكمل تسجيلك في برنامج القادة',
+  await sendOrDiscard('email_challenges', row.id, email, existing ? 'رمز الدخول إلى رحلتك' : 'أكمل تسجيلك في برنامج القادة',
     signInMail(existing?.full_name || pending?.full_name || '', code, url, !existing));
   return { success: true, sent: true };
 }

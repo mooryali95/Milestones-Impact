@@ -59,7 +59,9 @@ test('نموذج التواصل: من الترحيب إلى الشكر، ويح�
   await page.locator('#tfNext').click();
 
   await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
-  const insert = calls.find((c) => c.url.includes('/rest/v1/') && !c.url.includes('page_views'));
+  // الطلب يمر بإجراء contact في الدالة (لا إدراج مباشر في الجدول)
+  expect(calls.some((c) => c.url.includes('/rest/v1/contact_requests'))).toBe(false);
+  const insert = calls.find((c) => c.url.includes('/functions/v1/send-otp') && c.body?.action === 'contact');
   expect(insert?.body).toMatchObject({
     name: 'اختبار آلي',
     organization: 'جهة الاختبار',
@@ -89,7 +91,7 @@ for (const path of ['/', '/projects/']) {
     let fail = true;
     await page.route(SUPABASE, (route) => fail
       ? route.fulfill({ status: 500, body: 'down' })
-      : route.fulfill({ status: 201, contentType: 'application/json', body: '{}' }));
+      : route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' }));
     await page.goto(BASE + path);
     await fillContactForm(page);
     await expect(page.locator('.tf-submit-error')).toBeVisible();

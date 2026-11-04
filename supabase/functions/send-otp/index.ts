@@ -3,19 +3,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
-// send-otp: رسائل نموذج التواصل فقط (تنبيه الإدارة وتأكيد المرسل).
-// النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql).
+// send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
+// النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql)،
+// وعمود contact_requests.ip (supabase/migrations/20261105100000_contact_requests_via_function.sql).
 //
-// لا تُرسل رسالة إلا عن طلب تواصل حقيقي أُدرج في آخر 10 دقائق، ومرة واحدة
-// لكل طلب ونوع. القيم تُقرأ من الجدول لا من جسم الطلب، وتُرمَّز قبل وضعها
-// في HTML، فلا يستطيع أحد إرسال بريد باسمكم بنص من اختياره.
+// الإدراج عبر الدالة لا مباشرة من المتصفح: تحقق بشري (Turnstile) إن كان مفعّلًا،
+// وحدود لكل بريد ولكل شبكة وللجميع، فلا يستطيع أحد إرسال بريد باسمكم إلى عناوين
+// من اختياره. لا تُرسل رسالة إلا عن طلب حقيقي محفوظ، ومرة واحدة لكل طلب ونوع.
+// القيم تُقرأ من الجدول لا من جسم الطلب، وتُرمَّز قبل وضعها في HTML.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
+// التحقق البشري: المفتاح نفسه الذي يستعمله تطبيق القادة (أضف mi.sunkvalue.com إلى نطاقات الأداة في Cloudflare)
+const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
+const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
 const ADMIN_EMAIL = "p.o.m2012@hotmail.com";
 const FROM_EMAIL = MAIL_FROM_DEFAULT;
 const FRESH_MS = 10 * 60 * 1000;
+// حدود الإغراق: لكل بريد في الساعة، ولكل شبكة في الساعة، وللجميع في الساعة
+const PER_EMAIL_HOUR = 3;
+const PER_IP_HOUR = 5;
+const GLOBAL_HOUR = 60;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +36,27 @@ const json = (body: unknown, status = 200) =>
 
 const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND_API_KEY, from: FROM_EMAIL });
 
-type SB = ReturnType<typeof createClient>;
+// عميل بلا أنواع جداول (لا مخطط مولَّد هنا)
+// deno-lint-ignore no-explicit-any
+type SB = any;
+type Row = Record<string, unknown>;
+
+const clientIp = (req: Request) =>
+  req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+const text = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) && s.length <= 254;
+
+async function turnstileOk(token: unknown, ip: string | null) {
+  if (typeof token !== "string" || token.length < 10 || token.length > 4096) return false;
+  const form = new FormData();
+  form.append("secret", TURNSTILE_SECRET);
+  form.append("response", token);
+  if (ip) form.append("remoteip", ip);
+  try {
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form });
+    return !!(await r.json())?.success;
+  } catch { return false; }
+}
 
 // أحدث طلب تواصل بهذا البريد في آخر 10 دقائق، أو لا شيء.
 async function freshContact(sb: SB, email: string) {
@@ -48,6 +77,82 @@ async function claim(sb: SB, kind: "notify" | "confirm", ref: string): Promise<b
   return false;
 }
 
+async function countSince(sb: SB, since: string, filter?: (q: any) => any) {
+  let q: any = sb.from("contact_requests").select("id", { count: "exact", head: true }).gte("created_at", since);
+  if (filter) q = filter(q);
+  const { count, error } = await q;
+  // عمود ip يُضاف بترحيل 20261105100000؛ قبله لا حد لكل شبكة
+  if (error) { if (error.code !== "42703") console.error("contact count:", error); return 0; }
+  return count ?? 0;
+}
+
+const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة" };
+
+async function notifyAdmin(sb: SB, r: Row) {
+  if (!(await claim(sb, "notify", String(r.id)))) return;
+  const pageLabel = PAGE_LABEL[r.product as string] || (r.product as string) || "غير محدد";
+  const dateStr = new Date(r.created_at as string).toLocaleString("ar-SA", {
+    timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+  const html = mailShell(`طلب تواصل جديد من ${r.name}`, `
+${mailText(`${esc(dateStr)} · ${esc(pageLabel)}`)}
+${mailRows([
+  ["الاسم", r.name as string],
+  ["الجهة", (r.organization as string) || "—"],
+  ["البريد", r.email as string, true],
+  ["الجوال", (r.phone as string) || "—", true],
+  ["نوع الطلب", (r.interest_label as string) || (r.interest as string) || "—"],
+  ["المصدر", pageLabel],
+])}
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admin", preheader: "طلب تواصل جديد من الموقع", footnote: "" });
+  await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name as string)} — ${plain(pageLabel)}`, html);
+}
+
+async function confirmSender(sb: SB, r: Row) {
+  if (!(await claim(sb, "confirm", String(r.id)))) return;
+  const isLeaders = r.product === "MI-LEADERS";
+  const homeHtml = mailShell(`وصلتنا رسالتكم، ${r.name}`, `
+${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b>48 ساعة عمل</b>.`)}
+${mailNote(`طلبكم: ${esc((r.interest_label as string) || (r.interest as string) || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
+  const leadersHtml = mailShell(`أهلًا بكم، ${r.name}`, `
+${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b>48 ساعة عمل</b>.`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
+  const subject = isLeaders ? `تأكيد طلبكم — برنامج القادة` : `استلمنا طلبكم — Milestone Impact`;
+  await sendEmail(r.email as string, subject, isLeaders ? leadersHtml : homeHtml);
+}
+
+// ════════ CONTACT ════════
+async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
+  const ip = clientIp(req);
+  const email = text(body.email, 254).toLowerCase();
+  const name = text(body.name, 120);
+  if (name.length < 2) return json({ success: false, code: "invalid", message: "اكتبوا الاسم" }, 400);
+  if (!isEmail(email)) return json({ success: false, code: "invalid", message: "البريد الإلكتروني غير صحيح" }, 400);
+  if (TURNSTILE_SECRET && !(await turnstileOk(body.captcha, ip))) {
+    return json({ success: false, code: "captcha", site_key: TURNSTILE_SITE, message: body.captcha ? "تعذّر التحقق، أعيدوا المحاولة" : "أكّدوا أنكم لستم برنامجًا آليًا" }, 400);
+  }
+  const hourAgo = new Date(Date.now() - 36e5).toISOString();
+  const tooMany = (await countSince(sb, hourAgo, (q) => q.eq("email", email))) >= PER_EMAIL_HOUR
+    || (ip ? (await countSince(sb, hourAgo, (q) => q.eq("ip", ip))) >= PER_IP_HOUR : false)
+    || (await countSince(sb, hourAgo)) >= GLOBAL_HOUR;
+  if (tooMany) return json({ success: false, code: "rate", message: "طلبات كثيرة، حاولوا بعد ساعة أو راسلونا بالبريد" }, 429);
+
+  const row: Row = {
+    product: text(body.product, 40) || "MI-HOME", source_url: text(body.source_url, 500), name, organization: text(body.organization, 200),
+    email, phone: text(body.phone, 40), interest: text(body.interest, 40), interest_label: text(body.interest_label, 120),
+    context: text(body.context, 2000), user_agent: text(body.user_agent, 300), language: text(body.language, 40), status: "new",
+  };
+  let ins = await sb.from("contact_requests").insert({ ...row, ip }).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
+  if (ins.error?.code === "42703") ins = await sb.from("contact_requests").insert(row).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
+  if (ins.error || !ins.data) {
+    console.error("contact insert:", ins.error);
+    return json({ success: false, code: "db", message: "تعذّر حفظ الطلب الآن" }, 500);
+  }
+  // الرسالتان من الصف المحفوظ؛ فشل البريد لا يُفشل الطلب (محفوظ في اللوحة)
+  await notifyAdmin(sb, ins.data as Row).catch((e) => console.error("notify:", e));
+  await confirmSender(sb, ins.data as Row).catch((e) => console.error("confirm:", e));
+  return json({ success: true });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -62,44 +167,17 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, message: "استخدم admin-api" }, 410);
     }
 
-    // ════════ NOTIFY ADMIN ════════
+    if (action === "contact") return await contact(supabase, body, req);
+
+    // notify/confirm: للصفحات المخزّنة قبل v4 التي ما زالت تُدرج مباشرة (حتى يُطبَّق ترحيل الإغلاق)
     if (action === "notify") {
       const r = await freshContact(supabase, String(body.emailContact || body.email || ""));
-      if (!r || !(await claim(supabase, "notify", String(r.id)))) return json({ success: true });
-
-      const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة" };
-      const pageLabel = PAGE_LABEL[r.product as string] || (r.product as string) || "غير محدد";
-      const dateStr = new Date(r.created_at as string).toLocaleString("ar-SA", {
-        timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
-      });
-      const html = mailShell(`طلب تواصل جديد من ${r.name}`, `
-${mailText(`${esc(dateStr)} · ${esc(pageLabel)}`)}
-${mailRows([
-  ["الاسم", r.name],
-  ["الجهة", r.organization || "—"],
-  ["البريد", r.email, true],
-  ["الجوال", r.phone || "—", true],
-  ["نوع الطلب", r.interest_label || r.interest || "—"],
-  ["المصدر", pageLabel],
-])}
-${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admin", preheader: "طلب تواصل جديد من الموقع", footnote: "" });
-      await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name)} — ${plain(pageLabel)}`, html);
+      if (r) await notifyAdmin(supabase, r as Row);
       return json({ success: true });
     }
-
-    // ════════ CONFIRM ════════
     if (action === "confirm") {
       const r = await freshContact(supabase, String(body.email || ""));
-      if (!r || !(await claim(supabase, "confirm", String(r.id)))) return json({ success: true });
-
-      const isLeaders = r.product === "MI-LEADERS";
-      const homeHtml = mailShell(`وصلتنا رسالتكم، ${r.name}`, `
-${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b>48 ساعة عمل</b>.`)}
-${mailNote(`طلبكم: ${esc(r.interest_label || r.interest || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
-      const leadersHtml = mailShell(`أهلًا بكم، ${r.name}`, `
-${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b>48 ساعة عمل</b>.`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
-      const subject = isLeaders ? `تأكيد طلبكم — برنامج القادة` : `استلمنا طلبكم — Milestone Impact`;
-      await sendEmail(r.email as string, subject, isLeaders ? leadersHtml : homeHtml);
+      if (r) await confirmSender(supabase, r as Row);
       return json({ success: true });
     }
 

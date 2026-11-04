@@ -5,7 +5,8 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS } from './logic.js';
-import { hostOf, mePayload, pointsOf } from './participant.ts';
+import { mePayload, pointsOf } from './participant.ts';
+import { hostOf, orgDomainIssue } from './domains.js';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
@@ -119,8 +120,18 @@ export async function assignOrg(a: Admin, b: Body) {
   else if (ids.length) q = q.in('id', ids);
   else throw new Fail('لم يُحدَّد مشاركون');
   const done = must(await q.select('id')) ?? [];
-  await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null });
-  return { success: true, moved: done.length };
+  // النقل أو الفك يُلغي إعفاء الراعي السابق: ما ثُبّت لجهة لا يبقى بعد مغادرتها
+  // (الجهة الجديدة تثبّت إعفاءها عند أول دخول للمشارك، كالمعتاد في access())
+  let revoked = 0;
+  const moved = done.map((x: any) => String(x.id));
+  for (let i = 0; i < moved.length; i += 150) {
+    let rv = db.from('entitlements').update({ revoked_at: new Date().toISOString(), revoked_by: a.email })
+      .in('participant_id', moved.slice(i, i + 150)).eq('source', 'sponsor').is('revoked_at', null);
+    if (target) rv = rv.neq('organization_id', target.id);
+    revoked += (must(await rv.select('id')) ?? []).length;
+  }
+  await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null, revoked_sponsor: revoked });
+  return { success: true, moved: done.length, revoked_sponsor: revoked };
 }
 
 // ── نظرة عامة ──
@@ -762,12 +773,12 @@ export async function save(a: Admin, b: Body) {
     // تخصيص شهادة الجهة: ما لا يُذكر يُورث من الإعداد العام
     if ('cert' in row) row.cert = cleanProfile(row.cert && typeof row.cert === 'object' ? row.cert : {}, true);
     if ('domains' in row) {
-      // يقبل الروابط الكاملة أو النطاقات، مفصولة بفواصل أو أسطر
+      // يقبل الروابط الكاملة أو النطاقات، مفصولة بفواصل أو أسطر؛ ويرفض اللواحق العامة ونطاقات البريد العام (domains.js)
       const raw = Array.isArray(row.domains) ? row.domains : String(row.domains || '').split(/[\s,،]+/);
       const list = [...new Set(raw.map((d: unknown) => String(d || '').trim()).filter(Boolean).map((d: string) => {
-        const h = hostOf(d);
-        if (!h) throw new Fail(`نطاق غير صحيح: ${d}`);
-        return h;
+        const why = orgDomainIssue(d);
+        if (why) throw new Fail(`${why}: ${d}`);
+        return hostOf(d) as string;
       }))].slice(0, 20) as string[];
       if (list.length) {
         const { data: taken } = await db.from('organizations').select('id, name, domains').overlaps('domains', list);

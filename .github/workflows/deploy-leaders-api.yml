@@ -1,15 +1,19 @@
 name: Deploy leaders-api
 
 # Deploys the leaders-api edge function from main, replacing the manual
-# paste of the bundle into the Supabase dashboard. It does nothing until
-# the repository secret SUPABASE_ACCESS_TOKEN exists (Supabase account,
-# Access Tokens). SQL migrations stay manual: the live database has no
-# migration history, so `supabase db push` would try to re-run them all.
+# paste of the bundle into the Supabase dashboard, together with the two
+# webhook receivers that import its code (creem-webhook, leaders-hooks),
+# which are deployed without JWT verification because Creem, Cal.com and
+# Calendly send no Supabase token (each verifies its own HMAC signature).
+# It does nothing until the repository secret SUPABASE_ACCESS_TOKEN exists
+# (Supabase account, Access Tokens). SQL migrations stay manual: the live
+# database has no migration history, so `supabase db push` would try to
+# re-run them all.
 
 on:
   push:
     branches: [main]
-    paths: ['supabase/functions/leaders-api/**', 'supabase/functions/_shared/**']
+    paths: ['supabase/functions/leaders-api/**', 'supabase/functions/_shared/**', 'supabase/functions/creem-webhook/**', 'supabase/functions/leaders-hooks/**', 'supabase/functions/send-otp/**']
   workflow_dispatch:
 
 concurrency:
@@ -41,7 +45,11 @@ jobs:
           version: latest
       - name: Deploy
         if: steps.gate.outputs.skip != 'true'
-        run: supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
+        run: |
+          supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
+          supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
+          supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
       - name: Verify the live function answers
         if: steps.gate.outputs.skip != 'true'
         run: |

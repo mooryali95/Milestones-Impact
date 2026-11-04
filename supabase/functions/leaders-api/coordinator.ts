@@ -6,7 +6,7 @@
 import { journeyFor } from './participant.ts';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
-  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail,
+  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard,
 } from './core.ts';
 import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
@@ -43,11 +43,11 @@ export async function authStart(b: Body, ctx: Ctx) {
 
   const code = randomCode();
   const link = randomToken(24);
-  must(await db.from('coordinator_challenges').insert({
+  const row = must(await db.from('coordinator_challenges').insert({
     coordinator_id: c.id, email, code_hash: await hash(code), link_token_hash: await hash(link), ip: ctx.ip,
     expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString(),
-  }));
-  await sendMail(email, 'رمز الدخول إلى لوحة الجهة',
+  }).select('id').single()) as { id: string };
+  await sendOrDiscard('coordinator_challenges', row.id, email, 'رمز الدخول إلى لوحة الجهة',
     coordinatorSignInMail(c.full_name, code, `${CONFIG.appUrl}/org/verify?e=${encodeURIComponent(email)}&t=${link}`));
   return SENT;
 }

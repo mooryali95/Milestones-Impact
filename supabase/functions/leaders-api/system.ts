@@ -4,7 +4,7 @@
 // الترحيلات تُشغَّل يدويًا، فلا سجل لما طُبّق منها. الفحص هنا يسأل القاعدة
 // عن أثر كل ترحيل (جدول أو عمود أنشأه)، فيظهر في اللوحة ما لم يُشغَّل بعد،
 // ومعه الأسرار الناقصة واستهلاك البريد اليوم.
-import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, publicDb, sendMail } from './core.ts';
+import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
@@ -38,12 +38,7 @@ export async function health() {
   const checks = await Promise.all(MARKERS.map(async ([file, t, c]) => ({ file, ok: await present(t, c) })));
   const analytics = await present('page_views', 'id', publicDb);
   const migrations = [...checks, { file: '20261025200000_site_analytics', ok: analytics }];
-  const dayAgo = new Date(Date.now() - 864e5).toISOString();
-  let mail = 0;
-  for (const t of ['email_challenges', 'coordinator_challenges']) {
-    const { count } = await db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', dayAgo);
-    mail += count ?? 0;
-  }
+  const mail = await mailUsage();   // الرقم نفسه الذي يحكم به حارس البريد
   const secrets = {
     RESEND_API_KEY: !!CONFIG.resendKey,
     LEADERS_TOKEN_PEPPER: !!CONFIG.pepper,

@@ -291,16 +291,36 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
 // ── حارس رسائل الرموز ──
 // قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام
 // يحمي حصة البريد من الاستنزاف، ثم التحقق البشري إن كان مفعّلًا.
-const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges'];
-async function challengeCount(since: string, ip?: string | null) {
+// التسجيلات الجديدة (بريد لا حساب له) لها نصيب من السقف لا تتجاوزه، فإغراق
+// التسجيل ببريد وهمي لا يحجب رموز الدخول عن أصحاب الحسابات؛ ولها حد لكل شبكة
+// يتسع لقاعة ورشة. ورسائل نموذج التواصل تُحتسب في السقف نفسه لأنها من الحصة نفسها.
+export const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges', 'expert_challenges'];
+const REGISTER_SHARE = 0.7;
+const REGISTER_PER_IP_DAY = 60;
+async function challengeCount(since: string, ip?: string | null, purpose?: 'register' | 'login') {
   let n = 0;
   for (const t of CHALLENGE_TABLES) {
+    if (purpose && t !== 'email_challenges') continue;   // purpose عمود رموز المشاركين وحدها
     let q = db.from(t).select('id', { count: 'exact', head: true }).gte('created_at', since);
     if (ip) q = q.eq('ip', ip);
+    if (purpose) q = q.eq('purpose', purpose);
     const { count } = await q;
     n += count ?? 0;
   }
   return n;
+}
+async function contactMailCount(since: string) {
+  const { count } = await publicDb.from('mail_log').select('id', { count: 'exact', head: true }).gte('created_at', since);
+  return count ?? 0;
+}
+// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد)
+export async function mailUsage(since = new Date(Date.now() - 864e5).toISOString()) {
+  return (await challengeCount(since)) + (await contactMailCount(since).catch(() => 0));
+}
+// الرمز يُحتسب في السقف فقط إن أُرسل فعلًا: فشل الإرسال يحذف صفه ويرفع الخطأ نفسه
+export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string) {
+  try { await sendMail(to, subject, html); }
+  catch (e) { await db.from(table).delete().eq('id', id); throw e; }
 }
 
 async function turnstileOk(token: unknown, ip: string | null) {
@@ -315,17 +335,24 @@ async function turnstileOk(token: unknown, ip: string | null) {
   } catch { return false; }
 }
 
-export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }) {
+export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }, purpose: 'login' | 'register' = 'login') {
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const dayAgo = new Date(Date.now() - 864e5).toISOString();
   // الحد يتسع لقاعة ورشة كاملة (50 مشاركًا وأكثر) على شبكة واحدة؛ والحماية من الإغراق بالتحقق البشري (Turnstile) وحد كل بريد
   if (ctx.ip) {
     if (await challengeCount(hourAgo, ctx.ip) >= 150) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
     if (await challengeCount(dayAgo, ctx.ip) >= 300) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+    if (purpose === 'register' && await challengeCount(dayAgo, ctx.ip, 'register') >= REGISTER_PER_IP_DAY) {
+      throw new Fail('تسجيلات كثيرة اليوم من هذه الشبكة. سجّل بحساب Google، أو حاول غدًا', 429, 'rate');
+    }
   }
-  if (await challengeCount(dayAgo) >= CONFIG.mailDailyCap) {
+  if (await mailUsage(dayAgo) >= CONFIG.mailDailyCap) {
     console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
     throw new Fail('بلغت الرسائل حدها اليومي. ادخل بمفتاح المرور، أو حاول بعد ساعات', 429, 'mail_cap');
+  }
+  if (purpose === 'register' && await challengeCount(dayAgo, null, 'register') >= Math.floor(CONFIG.mailDailyCap * REGISTER_SHARE)) {
+    console.error('leaders-api: registration share of mail cap reached', CONFIG.mailDailyCap);
+    throw new Fail('بلغت تسجيلات اليوم حدها. سجّل بحساب Google، أو حاول بعد ساعات', 429, 'mail_cap');
   }
   if (CONFIG.turnstileSecret && !(await turnstileOk(b.captcha, ctx.ip))) {
     throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });
