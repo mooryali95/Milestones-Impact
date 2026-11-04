@@ -31,14 +31,15 @@ import ExpertPortal from './screens/ExpertPortal.jsx';
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall from './screens/Paywall.jsx';
-import { gateDone } from './gates.js';
+import { gateDone, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
+import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import SponsorNote from './SponsorNote.jsx';
 import Capstone from './screens/Capstone.jsx';
 import Katon from './screens/Katon.jsx';
 import HallScreen from './screens/Hall.jsx';
 import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
-import { JourneySkeleton } from './ui.jsx';
+import { ErrorBox, JourneySkeleton } from './ui.jsx';
 
 // «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
 const SHOW_KATON = KATON_ENABLED;
@@ -68,8 +69,6 @@ function OrgMark({ org }) {
     </span>
   );
 }
-
-const stageOpen = (me, key) => { const st = me?.journey?.find((s) => s.key === key)?.status; return !!st && st !== 'locked'; };
 
 // أيقونات التنقل: خط واحد بسماكة واحدة، تأخذ لون النص
 const ICONS = {
@@ -138,6 +137,7 @@ function Participant() {
   const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
   const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');
+  const [bootError, setBootError] = useState('');   // فشل جلب الرحلة والجلسة باقية: يُعرض بإعادة محاولة لا بشاشة الدخول
   const [linkChoice, setLinkChoice] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
@@ -175,28 +175,34 @@ function Participant() {
     if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
   }, []);
 
-  useEffect(() => {
-    setExpiredHandler(() => setMe(null));
-    (async () => {
-      // رابط البريد: /verify?e=...&t=...
-      if (location.pathname === '/verify') {
-        const q = new URLSearchParams(location.search);
-        history.replaceState(null, '', '/');
-        const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
-        // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
-        if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
-        if (res.success) accept(res);
-        else setVerifyError(res.message);
-        setBooting(false);
-        return;
-      }
-      if (session.get()) {
-        const res = await call('me');
-        if (res.success) accept(res);
-      }
+  // الإقلاع: رابط البريد أو الجلسة المحفوظة. فشل الشبكة أو الخادم لا يُسقط الجلسة الصالحة
+  // (كان يرمي إلى شاشة الدخول صامتًا فيطلب المشارك رمزًا جديدًا بلا داعٍ)
+  const boot = useCallback(async () => {
+    setBootError('');
+    // رابط البريد: /verify?e=...&t=...
+    if (location.pathname === '/verify') {
+      const q = new URLSearchParams(location.search);
+      history.replaceState(null, '', '/');
+      const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
+      // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
+      if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
+      if (res.success) accept(res);
+      else setVerifyError(res.message);
       setBooting(false);
-    })();
+      return;
+    }
+    if (session.get()) {
+      const res = await call('me');
+      if (res.success) accept(res);
+      else if (res.code === 'suspended') { session.clear(); setVerifyError(res.message); }
+      else if (res.code !== 'session') setBootError(res.message || UNEXPECTED_ERROR);   // session: أزالها الحارس في call وأظهر الدخول برسالته
+    }
+    setBooting(false);
   }, [accept]);
+  useEffect(() => {
+    setExpiredHandler(() => { setMe(null); setView('home'); setVerifyError('انتهت جلستك. ادخل مرة أخرى.'); });
+    boot();
+  }, [boot]);
 
   // المختبر قسم مستقل: يظهر مدخله متى فُتح للمشارك أو لجهته شيء منه
   const meId = me?.participant?.id;
@@ -236,7 +242,7 @@ function Participant() {
     SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
-    { key: 'impact', label: 'أثري', ...(!(approved && stageOpen(me, 'impact')) && { locked: 'يُفتح في مرحلة الأثر' }) },
+    { key: 'impact', label: 'أثري', ...(!(approved && impactOpen(me)) && { locked: 'يُفتح في مرحلة الأثر' }) },
     { key: 'profile', label: 'ملفي' },
   ].filter(Boolean) : [];
   const navView = view === 'lab' && !hasLab ? 'home' : view;
@@ -252,6 +258,12 @@ function Participant() {
         if (r.success) accept(r); else setVerifyError(r.message);
       }} />
     </div></div>
+  );
+  else if (!me && bootError) screen = (
+    <div className="page narrow stack">
+      <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />
+      <button className="link small" onClick={() => { session.clear(); setBootError(''); }}>ادخل بحساب آخر</button>
+    </div>
   );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
@@ -289,7 +301,7 @@ function Participant() {
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>
-      {!online && <div className="offline-bar" role="status">أنت دون اتصال. ما تراه آخر نسخة محفوظة، وسيُحدَّث عند عودة الشبكة.</div>}
+      {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact</footer>
       {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}

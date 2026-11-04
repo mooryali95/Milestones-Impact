@@ -5,6 +5,7 @@
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { useUnsavedGuard } from '../unsaved.js';
 import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -129,6 +130,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
     }, 2500);
     return () => clearTimeout(t);
   }, [answers, dirty, auto, d]);
+  // مغادرة الشاشة قبل أن يلحقها الحفظ التلقائي تدفع المسودة، وإغلاق الصفحة يحذّر
+  useUnsavedGuard(dirty && !!auto, () => call('models.save', { id: d.model.id, answers, submit: false }));
 
   if (!d) return msg ? <div className="alert err">{msg.err}</div> : <div className="center-load"><div className="spinner" /></div>;
   const m = d.model;

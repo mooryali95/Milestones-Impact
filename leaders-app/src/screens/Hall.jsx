@@ -1,9 +1,11 @@
 // ════════════════════════════════════════════════════════════════
 // القاعة من جوال المشارك: الدخول، فريقي ومهمتي، والجملة، والخيارات الثمانية، ورفع اليد
 // ════════════════════════════════════════════════════════════════
-// التحديث كل ثلاث ثوانٍ بسؤال خفيف. اختيارات الزملاء لا تظهر قبل الكشف.
+// التحديث بسؤال خفيف بفاصل يتبع حال القاعة (hallPoll.js). اختيارات الزملاء لا تظهر قبل الكشف.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
+import { ErrorBox } from '../ui.jsx';
+import { pollPeriod } from '../hallPoll.js';
 import HallView, { TEAM_AR, TEAM_COLOR, OPT_AR, GLYPH, Q_AR } from '../../../shared/hall/HallView.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 
@@ -31,7 +33,9 @@ export default function Hall({ onBack }) {
     ver.current = r.session?.version || 0;
     setV(r);
   }, []);
-  useEffect(() => { load(true); const t = setInterval(() => { if (!document.hidden) load(); }, 3000); return () => clearInterval(t); }, [load]);
+  const period = pollPeriod(v);
+  useEffect(() => { load(true); }, [load]);
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) load(); }, period); return () => clearInterval(t); }, [load, period]);
 
   const act = async (action, body) => {
     setBusy(true); setErr('');
@@ -42,7 +46,8 @@ export default function Hall({ onBack }) {
     ver.current = r.session?.version || 0; setV(r);
   };
 
-  if (!v) return <div className="page"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  // فشل أول تحميل يُعرض بإعادة محاولة لا دوّارة بلا نهاية
+  if (!v) return <div className="page">{err ? <ErrorBox message={err} onRetry={() => { setErr(''); load(true); }} /> : <div className="spinner" aria-label="جارٍ التحميل" />}</div>;
   if (!v.session) {
     return (
       <div className="page stack">
@@ -113,7 +118,7 @@ export default function Hall({ onBack }) {
           )}
         </>
       )}
-      {err && <div className="alert err">{err}</div>}
+      {err && <ErrorBox message={err} />}
       <details className="hall-mini" open={!v.inside}>
         <summary>منظور القاعة</summary>
         <HallView view={v} me={v.me} compact />

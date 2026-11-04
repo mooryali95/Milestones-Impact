@@ -223,7 +223,7 @@ export async function mine(p: any) {
 
 async function postInstrument(p: any) {
   const data = await postInstrumentFor(p.id);
-  if (!data) throw new Fail('القياس البعدي لم يُفعَّل بعد', 503, 'no_instrument');
+  if (!data) throw new Fail('القياس البعدي لم يُفعَّل بعد', 409, 'no_instrument');
   return data;
 }
 

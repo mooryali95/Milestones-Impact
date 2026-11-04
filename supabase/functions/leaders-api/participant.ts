@@ -599,7 +599,7 @@ export async function assessmentGet(p: any, b: Body = {}) {
   const kind = b.kind === 'post' ? 'post' : 'baseline';
   if (kind === 'post') await requirePostOpen(p);
   const inst = kind === 'post' ? await postInstrumentFor(p.id) : await activeInstrument(kind);
-  if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 503, 'no_instrument');
+  if (!inst) throw new Fail(kind === 'post' ? 'القياس البعدي لم يُفعَّل بعد، وسيصلك إشعار حين يُتاح' : 'القياس غير متاح حاليًا', 409, 'no_instrument');
 
   let { data: a } = await db.from('assessments').select('*').eq('participant_id', p.id).eq('instrument_id', inst.id)
     .neq('status', 'void').order('started_at', { ascending: false }).limit(1).maybeSingle();

@@ -14,3 +14,10 @@ export function gateDone(me, key) {
   const it = items(me).find((i) => i.code === GATE_CODE[key]);
   return it ? it.status === 'done' : stageDone(me, key);
 }
+
+// قسم «أثري» يُفتح حين تُفتح المرحلة التي فيها القياس البعدي (E-POST)، بالحكم نفسه الذي
+// يطبقه الخادم في requirePostOpen: الأثر طور لا مرحلة، فلا يُبحث عن مرحلة باسمه
+export function impactOpen(me) {
+  const stage = (me?.journey || []).find((s) => (s.items || []).some((i) => i.code === 'E-POST'));
+  return !stage || stage.status !== 'locked';
+}

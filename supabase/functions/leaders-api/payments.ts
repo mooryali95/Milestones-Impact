@@ -82,7 +82,7 @@ export async function checkout(p: any, b: Body) {
   if (item === 'program' && !a.assessment) throw new Fail('ابدأ بالقياس المبدئي أولًا', 409);
   const s: any = await settings();
   const product = item === 'program' ? s.program_product : s.assessment_product;
-  if (!product || !apiKey()) throw new Fail('الدفع غير متاح الآن، حاول لاحقًا', 503, 'pay_off');
+  if (!product || !apiKey()) throw new Fail('الدفع غير متاح الآن، حاول لاحقًا', 409, 'pay_off');
   // حد معقول: لا أكثر من خمس صفحات دفع في الساعة لكل مشارك
   const { count } = await db.from('payments').select('id', { count: 'exact', head: true }).eq('participant_id', p.id).gte('created_at', new Date(Date.now() - 36e5).toISOString());
   if ((count ?? 0) >= 5) throw new Fail('محاولات دفع كثيرة، حاول بعد ساعة', 429, 'rate');
