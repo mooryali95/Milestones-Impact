@@ -4,14 +4,14 @@
 // (التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md)
 
 export const VIDEO = {
-  file: 'intro-v1',            // /media/intro-v1.mp4 و.webm و.vtt في تطبيق القادة
-  seconds: 90,
+  file: 'intro-v3',            // /media/intro-v3.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
+  seconds: 447,
   fps: 24,
   width: 1280,
   height: 720,
-  maxBytes: 4 * 1024 * 1024,   // سقف الحجم المتفق عليه (القرار 2)
+  maxBytes: 24 * 1024 * 1024,  // سقف الحجم: تحت حد Cloudflare Pages للملف الواحد (25 ميجابايت)
   label: 'شاهد كيف تعمل المنصة',
-  duration_ar: 'دقيقة ونصف',
+  duration_ar: 'سبع دقائق ونصف',
   title: 'كيف تعمل رحلتك في برنامج القادة',
 };
 

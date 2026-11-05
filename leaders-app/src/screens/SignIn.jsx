@@ -176,7 +176,7 @@ export default function SignIn({ onSignedIn, initialError }) {
         )}
 
         {step === 'name' && (
-          <form className="stack" onSubmit={start}>
+          <form className="stack" data-tour="doors" onSubmit={start}>
             <div>
               <p className="eyebrow">تسجيل جديد</p>
               <h1>أهلًا بك في البرنامج</h1>
@@ -215,7 +215,7 @@ export default function SignIn({ onSignedIn, initialError }) {
         )}
 
         {step === 'code' && (
-          <div className="stack">
+          <div className="stack" data-tour="doors">
             <div>
               <p className="eyebrow">تحقّق من بريدك</p>
               <h1>أرسلنا لك رابطًا ورمزًا</h1>

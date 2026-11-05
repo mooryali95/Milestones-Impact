@@ -3,7 +3,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { onboardingStep, ONBOARDING_STEPS } from './Onboarding.jsx';
-import { SCENES, VIDEO } from '../../shared/video/scenes.js';
+import { VIDEO } from '../../shared/video/scenes.js';
+import { TOUR_STEPS } from './tour-steps.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -42,20 +43,24 @@ describe('اشتقاق خطوة المعالج', () => {
 });
 
 describe('الفيديو التعريفي', () => {
-  it('الملفات الثلاثة والغلاف موجودة وتحت سقف الحجم، والمدة ≤ 120 ثانية', () => {
-    for (const ext of ['mp4', 'webm', 'vtt', 'jpg']) {
+  it('الملفات الأربعة المسجَّلة من الواجهة موجودة وتحت سقف الحجم، والمدة تحت تسع دقائق', () => {
+    for (const ext of ['mp4', 'webm', 'vtt', 'jpg', 'json']) {
       const p = join(root, `leaders-app/public/media/${VIDEO.file}.${ext}`);
       expect(existsSync(p), p).toBe(true);
       expect(statSync(p).size).toBeLessThanOrEqual(VIDEO.maxBytes);
     }
-    expect(VIDEO.seconds).toBeLessThanOrEqual(120);
-    expect(SCENES.at(-1).to).toBe(VIDEO.seconds);
+    const meta = JSON.parse(read(`leaders-app/public/media/${VIDEO.file}.json`));
+    expect(meta.seconds).toBeLessThanOrEqual(540);
+    expect(VIDEO.seconds).toBe(meta.seconds);
+    expect(meta.marks).toHaveLength(TOUR_STEPS.length);
   });
-  it('المشاهد متصلة بلا فجوات، والترجمة من نص المشاهد نفسه', () => {
-    for (let i = 1; i < SCENES.length; i++) expect(SCENES[i].from).toBe(SCENES[i - 1].to);
+  it('الترجمة من نص الجولة الحيّة نفسه (المصدر الواحد)، ومتصلة بالترتيب', () => {
     const vtt = read(`leaders-app/public/media/${VIDEO.file}.vtt`);
     expect(vtt.startsWith('WEBVTT')).toBe(true);
-    for (const s of SCENES) for (const [, , text] of s.captions) expect(vtt).toContain(text);
+    for (const s of TOUR_STEPS) expect(vtt).toContain(s.d);
+    const times = [...vtt.matchAll(/(\d\d:\d\d:\d\d\.\d{3}) --> (\d\d:\d\d:\d\d\.\d{3})/g)].map((m) => m.slice(1, 3));
+    expect(times).toHaveLength(TOUR_STEPS.length);
+    for (let i = 1; i < times.length; i++) expect(times[i][0] >= times[i - 1][1]).toBe(true);
   });
   it('المشغّل في شاشة الدخول وبطاقة الرحلة والترحيب، والصفحة الأم تحمّل الملف نفسه بسماح CSP', () => {
     expect(read('leaders-app/src/screens/SignIn.jsx')).toMatch(/<IntroVideo \/>/);

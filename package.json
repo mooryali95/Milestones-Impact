@@ -2,7 +2,9 @@
   "name": "milestone-impact",
   "version": "5.0.0",
   "private": true,
-  "engines": { "node": ">=20 <23" },
+  "engines": {
+    "node": ">=20 <23"
+  },
   "description": "Milestone Impact — مصفوفة التأثير • هندسة اجتماعية",
   "dependencies": {
     "@simplewebauthn/browser": "13.3.0",
@@ -18,13 +20,15 @@
     "preview": "vite preview",
     "leaders:dev": "vite --config leaders-app/vite.config.js",
     "video:build": "node shared/video/generate.mjs",
+    "video:record": "node shared/video/record.mjs",
     "leaders:build": "vite build --config leaders-app/vite.config.js",
     "admin:dev": "vite --config admin-app/vite.config.js",
     "admin:build": "vite build --config admin-app/vite.config.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\" \"leaders-app/src/**/*.{js,jsx}\" \"admin-app/src/**/*.{js,jsx}\"",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "video:audio": "node shared/video/cut-audio.mjs"
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.29.7",

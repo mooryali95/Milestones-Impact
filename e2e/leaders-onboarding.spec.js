@@ -1,6 +1,7 @@
 // الفيديو التعريفي ومعالج البداية: المشغّل من شاشة الدخول، ثم ترحيب المشارك الجديد بالفيديو،
 // ثم رأس الخطوات فوق الملف والقياس، ثم بطاقة «ما بعد ذلك» في الرحلة حتى الاعتماد.
 import { test, expect } from '@playwright/test';
+import { VIDEO } from '../shared/video/scenes.js';
 
 const APP = 'http://localhost:4304/';
 
@@ -47,12 +48,12 @@ test('شاشة الدخول: زر الفيديو يفتح مشغّلًا داخ�
   await expect(dialog).toBeVisible();
   const video = dialog.locator('video');
   await expect(video).toHaveAttribute('controls', '');
-  await expect(video.locator('source[type="video/mp4"]')).toHaveAttribute('src', '/media/intro-v1.mp4');
-  await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/intro-v1.vtt');
+  await expect(video.locator('source[type="video/mp4"]')).toHaveAttribute('src', `/media/${VIDEO.file}.mp4`);
+  await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', `/media/${VIDEO.file}.vtt`);
   // الملف نفسه يُخدم فعلًا من التطبيق المبني
-  const res = await page.request.get(APP + 'media/intro-v1.mp4');
+  const res = await page.request.get(APP + `media/${VIDEO.file}.mp4`);
   expect(res.status()).toBe(200);
-  expect(Number(res.headers()['content-length'])).toBeLessThan(4 * 1024 * 1024);
+  expect(Number(res.headers()['content-length'])).toBeLessThan(VIDEO.maxBytes);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(btn).toBeFocused();
