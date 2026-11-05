@@ -153,7 +153,7 @@ export default function SignIn({ onSignedIn, initialError }) {
           </div>
         )}
         {step === 'email' && (
-          <form className="stack" onSubmit={start}>
+          <form className="stack" data-tour="doors" onSubmit={start}>
             <div>
               <p className="eyebrow">برنامج إدارة المشروعات للقادة</p>
               <h1>ابدأ رحلتك القيادية</h1>

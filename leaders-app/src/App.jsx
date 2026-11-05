@@ -40,7 +40,7 @@ import SponsorNote from './SponsorNote.jsx';
 const Capstone = lazy(() => import('./screens/Capstone.jsx'));
 const Katon = lazy(() => import('./screens/Katon.jsx'));
 const HallScreen = lazy(() => import('./screens/Hall.jsx'));
-import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
+import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
 const Legal = lazy(() => import('./screens/Legal.jsx'));
 import Consent from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
@@ -96,7 +96,7 @@ function Nav({ items, view, onGo, className }) {
   return (
     <nav className={className} aria-label="أقسام المنصة">
       {items.map((it) => (
-        <button key={it.key} type="button" className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
+        <button key={it.key} type="button" data-tour={`nav-${it.key}`} className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
           disabled={it.locked} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined} onClick={() => onGo(it.key)}>
           <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true">🔒</i>}</span>
         </button>
@@ -321,7 +321,7 @@ function Participant() {
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
-      {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
+      {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>
   );

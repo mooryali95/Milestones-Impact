@@ -455,7 +455,7 @@ const msDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('ar', { day: 
 function Milestones({ list, summary }) {
   if (!list?.length) return null;
   return (
-    <section className="card stack ms-card" aria-labelledby="ms-h">
+    <section className="card stack ms-card" data-tour="milestones" aria-labelledby="ms-h">
       <div className="row between">
         <h3 id="ms-h">معالمك</h3>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
@@ -480,7 +480,7 @@ const TREND_AR = { up: 'أداؤك يتحسن في آخر تقييماتك', dow
 function Continuous({ c }) {
   if (!c || c.index == null) return null;
   return (
-    <section className="card stack" aria-labelledby="ca-h">
+    <section className="card stack" data-tour="continuous" aria-labelledby="ca-h">
       <div className="row between">
         <h3 id="ca-h">تقدمك في التقييم المستمر</h3>
         <b className="ca-index">{c.index}٪</b>
@@ -537,7 +537,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
   return (
     <div className="page wide">
-      <section className="hero">
+      <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
@@ -595,7 +595,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       <div className="j-layout">
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading) && (
-            <div className="next-grid j-next">
+            <div className="next-grid j-next" data-tour="next-step">
               {next && (
                 <div className="next-card">
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
@@ -636,7 +636,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </aside>
 
-        <div className="j-main">
+        <div className="j-main" data-tour="stages">
           {profile && (
             <>
               <div className="section-title">

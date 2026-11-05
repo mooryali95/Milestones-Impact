@@ -151,7 +151,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       )}
 
       <div className="cp-grid">
-        <section className="card cp-sections">
+        <section className="card cp-sections" data-tour="capstone-sections">
           <h2>فصول الوثيقة</h2>
           <p className="muted small">كل فصل نموذج من مكتبة النماذج، يُحفظ تلقائيًا ويُحسب في نقاطك. ابدأ ببطاقة المبادرة: منها يأخذ كل فصل اسمها.</p>
           <ol className="cp-list">

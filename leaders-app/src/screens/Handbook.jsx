@@ -589,7 +589,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
       {tab === 'read' && (
         <div className="book-grid">
-          <nav className="book-toc" aria-label="فهرس الكتيب">
+          <nav className="book-toc" data-tour="handbook-toc" aria-label="فهرس الكتيب">
             <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
               <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
             </button>

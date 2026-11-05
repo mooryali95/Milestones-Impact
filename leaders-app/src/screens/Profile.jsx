@@ -164,7 +164,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           <div className="bar"><i style={{ width: `${20 + (filled / REQUIRED.length) * 80}%` }} /></div>
         </div>
       )}
-      <form className="card stack" onSubmit={save}>
+      <form className="card stack" data-tour="profile-form" onSubmit={save}>
         <div>
           <h1 style={{ fontSize: 22 }}>{onboarding ? `أهلًا ${p.full_name.split(' ')[0]}، عرّفنا بك` : 'ملفي الشخصي'}</h1>
           {onboarding && <p className="muted">هذه البيانات تساعد المستشار على فهم سياقك قبل اعتماد مسارك. تستغرق دقيقتين.</p>}
@@ -222,7 +222,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       {!onboarding && !p.organization_linked && !me.access?.sponsor && !p.is_demo && <SponsorCode onSaved={onSaved} />}
       {!onboarding && me.access?.sponsor && <section className="card stack"><h3>الجهة الراعية</h3><SponsorNote access={me.access} /></section>}
       {!onboarding && (
-        <section className="card stack">
+        <section className="card stack" data-tour="security">
           <h3>الدخول بالبصمة</h3>
           {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه للجهاز الذي تستخدمه الآن إن لم يكن منها.</p>}
           <PasskeyBanner settings onDone={() => setPk((n) => n + 1)} />
