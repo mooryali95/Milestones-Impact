@@ -32,3 +32,7 @@ deno.lock
 # Supabase المحلي (supabase start)
 supabase/.temp/
 supabase/.branches/
+
+# مجلدات التسجيل المؤقتة لمسجّل الفيديو (shared/video/record.mjs)
+leaders-app/public/media/.rec-*/
+leaders/media/.rec-*/
