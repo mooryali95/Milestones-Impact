@@ -5,7 +5,7 @@
 // إلى leaders-app/public/media/. التشغيل: node shared/video/record.mjs [--out=dir] [--port=4312] [--audio=dir] [--quick]
 // مع --audio تُعرض كل بطاقة بطول كلامها، وتأتي الكتابة والضغط أثناء الجملة التي تصفها (atWord)، ويُدمج الصوت في الناتج.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
@@ -27,6 +27,10 @@ const SEGS = AUDIO ? JSON.parse(fs.readFileSync(path.join(AUDIO, 'segments.json'
 if (SEGS && (SEGS.length !== TOUR_STEPS.length || SEGS.some((x) => !(x.speech > 0)))) throw new Error(`segments.json: يلزم ${TOUR_STEPS.length} مقطعًا لكل منها speech`);
 fs.mkdirSync(OUT, { recursive: true });
 const W = 1920, H = 1080;
+// شريط أسفل الإطار يحمل لون الخطوة الجارية: تسجيل Playwright لا يطابق ساعة الحائط (يتمدد ثوانيَ عند الكتابة الكثيفة)،
+// فتُقرأ لحظة ظهور كل بطاقة من الإطارات نفسها، ويُقصّ الشريط من الناتج النهائي
+const STRIP = 16;
+const markRGB = (n) => [40 + n * 10, 0, 200];
 
 // ── خادم المعاينة للتطبيق المبني ──
 const waitPort = (port, ms = 30000) => new Promise((resolve, reject) => {
@@ -55,6 +59,7 @@ const overlay = `
   #mi-chip{position:fixed;z-index:9001;pointer-events:none;top:58px;right:24px;background:rgba(11,39,47,.9);color:#C79A4B;border:1px solid rgba(199,154,75,.5);border-radius:999px;padding:6px 16px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s}
   #mi-cursor{position:fixed;z-index:9002;pointer-events:none;width:30px;height:30px;border-radius:50%;border:3px solid #C79A4B;background:rgba(199,154,75,.25);transform:translate(-50%,-50%);transition:left .55s cubic-bezier(.2,.8,.2,1),top .55s cubic-bezier(.2,.8,.2,1),transform .15s;opacity:0}
   #mi-cursor.click{transform:translate(-50%,-50%) scale(.7);background:rgba(199,154,75,.6)}
+  #mi-mark{position:fixed;left:0;right:0;bottom:0;height:${STRIP}px;z-index:9999;pointer-events:none;background:#000}
   #mi-full{position:fixed;inset:0;z-index:9003;pointer-events:none;background:radial-gradient(ellipse at 15% 110%,#12414E 0%,#0B272F 45%,#061318 100%);color:#EFE7D8;display:flex;flex-direction:column;justify-content:center;padding:0 160px;opacity:0;transition:opacity .6s ease}
   #mi-full .fr{position:absolute;inset:36px;border:1px solid rgba(199,154,75,.35)}
   #mi-full img{height:64px;align-self:flex-start;margin-bottom:34px}
@@ -65,7 +70,7 @@ const overlay = `
   \`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   const ov = document.createElement('div'); ov.id = 'mi-ov';
-  ov.innerHTML = '<div id="mi-dim"></div><div id="mi-conn"></div><div id="mi-card"></div><div id="mi-chip"></div><div id="mi-cursor"></div><div id="mi-full"><div class="fr"></div><img src="${logo}"><p class="e"></p><h1></h1><div class="rule"></div><p class="t"></p></div>';
+  ov.innerHTML = '<div id="mi-mark"></div><div id="mi-dim"></div><div id="mi-conn"></div><div id="mi-card"></div><div id="mi-chip"></div><div id="mi-cursor"></div><div id="mi-full"><div class="fr"></div><img src="${logo}"><p class="e"></p><h1></h1><div class="rule"></div><p class="t"></p></div>';
   document.body.appendChild(ov);
   const $ = (id) => document.getElementById(id);
   let anchorSel = null, anchorEl = null, follow = null;
@@ -88,6 +93,7 @@ const overlay = `
   };
   window.__mi = {
     show(sel, n, total, title, text) {
+      $('mi-mark').style.background = 'rgb(' + (40 + n * 10) + ',0,200)';
       anchorSel = sel || null; anchorEl = sel ? document.querySelector('[data-tour="' + sel + '"]') : null;
       const card = $('mi-card'); card.innerHTML = '<p class="k"><span><i></i>' + title + '</span><span>' + n + ' / ' + total + '</span></p><h3>' + title + '</h3><p>' + text + '</p>';
       $('mi-chip').textContent = 'الخطوة ' + n + ' من ' + total; $('mi-chip').style.opacity = 1;
@@ -96,12 +102,12 @@ const overlay = `
       card.style.opacity = 1; card.style.transform = 'translateY(0)';
       clearInterval(follow); follow = setInterval(place, 120);
     },
-    hide() { clearInterval(follow); anchorSel = null; anchorEl = null; $('mi-dim').style.opacity = 0; $('mi-conn').style.opacity = 0; const c = $('mi-card'); c.style.opacity = 0; c.style.transform = 'translateY(10px)'; $('mi-chip').style.opacity = 0; },
+    hide() { clearInterval(follow); anchorSel = null; anchorEl = null; $('mi-mark').style.background = '#000'; $('mi-dim').style.opacity = 0; $('mi-conn').style.opacity = 0; const c = $('mi-card'); c.style.opacity = 0; c.style.transform = 'translateY(10px)'; $('mi-chip').style.opacity = 0; },
     cursor(x, y) { const c = $('mi-cursor'); c.style.opacity = 1; c.style.left = x + 'px'; c.style.top = y + 'px'; },
     click() { const c = $('mi-cursor'); c.classList.add('click'); setTimeout(() => c.classList.remove('click'), 180); },
     cursorHide() { $('mi-cursor').style.opacity = 0; },
-    full(eyebrow, title, text) { const f = $('mi-full'); f.querySelector('.e').textContent = eyebrow; f.querySelector('h1').textContent = title; f.querySelector('.t').textContent = text; f.style.opacity = 1; },
-    fullHide() { $('mi-full').style.opacity = 0; },
+    full(eyebrow, title, text, n) { $('mi-mark').style.background = 'rgb(' + (40 + n * 10) + ',0,200)'; const f = $('mi-full'); f.querySelector('.e').textContent = eyebrow; f.querySelector('h1').textContent = title; f.querySelector('.t').textContent = text; f.style.opacity = 1; },
+    fullHide() { $('mi-mark').style.background = '#000'; $('mi-full').style.opacity = 0; },
   };
   }; if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
 })();`;
@@ -110,7 +116,7 @@ const overlay = `
 const srv = createMockServer();
 const browser = await chromium.launch(fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {});
 const tmpVid = fs.mkdtempSync(path.join(OUT, '.rec-'));
-const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, locale: 'ar-SA', recordVideo: { dir: tmpVid, size: { width: W, height: H } } });
+const context = await browser.newContext({ viewport: { width: W, height: H + STRIP }, deviceScaleFactor: 1, locale: 'ar-SA', recordVideo: { dir: tmpVid, size: { width: W, height: H + STRIP } } });
 const page = await context.newPage();
 await page.route(/functions\/v1\/leaders-api/, async (route) => { const b = JSON.parse(route.request().postData() || '{}'); await route.fulfill({ json: srv.reply(b) }); });
 await page.addInitScript(() => localStorage.setItem('mi_leaders_welcome_seen', 'true'));
@@ -133,7 +139,7 @@ const begin = async (idx, anchorOverride) => {
   cur = { idx, from: now(), text: st.d, full: false };
 };
 const fullBegin = async (eyebrow, title, text, idx) => {
-  await page.evaluate(([e, t, x]) => window.__mi.full(e, t, x), [eyebrow, title, text]);
+  await page.evaluate(([e, t, x, n]) => window.__mi.full(e, t, x, n), [eyebrow, title, text, idx + 1]);
   cur = { idx, from: now(), text: TOUR_STEPS[idx].d, full: true };
 };
 // ينتظر حتى تُقال كلمة بعينها من نص الخطوة (بموضعها النسبي في النص) ليأتي الفعل مع الجملة التي تصفه
@@ -274,7 +280,6 @@ await end(800);
 await fullBegin('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', 17);
 await end(2000);
 
-const seconds = Math.ceil(now());
 await context.close();
 await browser.close();
 preview.kill();
@@ -283,27 +288,44 @@ preview.kill();
 const webmIn = fs.readdirSync(tmpVid).map((f) => path.join(tmpVid, f)).find((f) => f.endsWith('.webm'));
 const run = (args) => new Promise((resolve, reject) => { const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' }); p.on('exit', (c) => (c === 0 ? resolve() : reject(new Error(`ffmpeg ${c}`)))); });
 const base = path.join(OUT, VIDEO.file);
+const FPS = 24;
+// لحظات الخطوات من الإطارات: متوسط لون الشريط في كل إطار (بالمعدل نفسه الذي يُرمَّز به الناتج)، وأول إطار يحمل لون الخطوة هو ظهورها
+const strip = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', webmIn, '-vf', `fps=${FPS},crop=${W}:${STRIP}:0:${H},scale=1:1:flags=area`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 1 << 26 });
+const frames = strip.length / 3;
+const onsets = [], offsets = [];
+let expect = 1, inside = false;
+for (let f = 0; f < frames; f++) {
+  const r = strip[f * 3], g = strip[f * 3 + 1], b = strip[f * 3 + 2];
+  const lit = b > 120 && g < 70, n = lit ? Math.round((r - 40) / 10) : 0;
+  if (!inside && lit && n === expect) { onsets.push(f / FPS); inside = true; }
+  else if (inside && !lit) { offsets.push(f / FPS); inside = false; expect++; }
+}
+if (inside) { offsets.push(frames / FPS); expect++; }
+if (onsets.length !== TOUR_STEPS.length) throw new Error(`قراءة شريط الخطوات: ${onsets.length} من ${TOUR_STEPS.length}`);
+const seconds = Math.ceil(frames / FPS);
+const FADE = 0.3;   // الصوت يبدأ حين تكتمل البطاقة
+const cues = onsets.map((t, i) => [t, Math.min(offsets[i], i + 1 < onsets.length ? onsets[i + 1] - 0.2 : frames / FPS), TOUR_STEPS[i].d]);
 // الصوت: كل مقطع يبدأ مع بداية خطوته المسجَّلة (marks)، ثم يُدمج مع الصورة
 let audioArgs = [], audioMap = [];
 if (SEGS) {
   const inputs = [], delays = [];
-  SEGS.forEach((_, i) => { inputs.push('-i', path.join(AUDIO, `${String(i + 1).padStart(2, '0')}.mp3`)); delays.push(`[${i + 1}]adelay=${Math.round(marks[i][0] * 1000)}|${Math.round(marks[i][0] * 1000)}[a${i}]`); });
-  const mix = `${delays.join(';')};${SEGS.map((_, i) => `[a${i}]`).join('')}amix=inputs=${SEGS.length}:normalize=0:dropout_transition=0,aresample=48000[aout]`;
+  SEGS.forEach((_, i) => { inputs.push('-i', path.join(AUDIO, `${String(i + 1).padStart(2, '0')}.mp3`)); const ms = Math.round((onsets[i] + FADE) * 1000); delays.push(`[${i + 1}]adelay=${ms}|${ms}[a${i}]`); });
+  const mix = `${delays.join(';')};${SEGS.map((_, i) => `[a${i}]`).join('')}amix=inputs=${SEGS.length}:normalize=0:dropout_transition=0,aresample=48000,apad[aout]`;
   audioArgs = [...inputs, '-filter_complex', mix, '-map', '0:v', '-map', '[aout]'];
   audioMap = ['-shortest'];
 }
-await Promise.all([run(['-i', webmIn, ...audioArgs, '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-r', '24', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'aac', '-b:a', '128k'] : []), ...audioMap, '-movflags', '+faststart', `${base}.mp4`]),
-  run(['-i', webmIn, ...audioArgs, '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '38', '-r', '24', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'libopus', '-b:a', '96k'] : []), ...audioMap, `${base}.webm`])]);
+await Promise.all([run(['-i', webmIn, ...audioArgs, '-vf', `fps=${FPS},crop=${W}:${H}:0:0`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'aac', '-b:a', '128k'] : []), ...audioMap, '-movflags', '+faststart', `${base}.mp4`]),
+  run(['-i', webmIn, ...audioArgs, '-vf', `fps=${FPS},crop=${W}:${H}:0:0`, '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '38', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'libopus', '-b:a', '96k'] : []), ...audioMap, `${base}.webm`])]);
 await run(['-ss', '3', '-i', `${base}.mp4`, '-frames:v', '1', '-q:v', '4', `${base}.jpg`]);
 fs.rmSync(tmpVid, { recursive: true, force: true });
 const ts = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = (s % 60).toFixed(3).padStart(6, '0'); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${x}`; };
 const vtt = ['WEBVTT', ''];
-marks.forEach(([a, b, text], i) => vtt.push(String(i + 1), `${ts(a)} --> ${ts(b)}`, text, ''));
+cues.forEach(([a, b, text], i) => vtt.push(String(i + 1), `${ts(a)} --> ${ts(b)}`, text, ''));
 fs.writeFileSync(`${base}.vtt`, vtt.join('\n'));
-fs.writeFileSync(`${base}.json`, JSON.stringify({ seconds, marks: marks.map(([a, b]) => [Number(a.toFixed(2)), Number(b.toFixed(2))]) }, null, 2));
+fs.writeFileSync(`${base}.json`, JSON.stringify({ seconds, marks: cues.map(([a, b]) => [Number(a.toFixed(2)), Number(b.toFixed(2))]), wall: marks.map(([a, b]) => [Number(a.toFixed(2)), Number(b.toFixed(2))]) }, null, 2));
 for (const ext of ['mp4', 'webm']) {
   const size = fs.statSync(`${base}.${ext}`).size;
   console.log(`${VIDEO.file}.${ext}: ${(size / 1024 / 1024).toFixed(2)} ميجابايت`);
   if (size > VIDEO.maxBytes) { console.error(`✗ تجاوز السقف ${(VIDEO.maxBytes / 1024 / 1024).toFixed(0)} ميجابايت`); process.exit(1); }
 }
-console.log(`✓ ${seconds} ثانية، ${marks.length} ترجمة، ${OUT}`);
+console.log(`✓ ${seconds} ثانية، ${cues.length} خطوة من الإطارات (فرق ساعة الحائط ${(marks[marks.length - 1][0] - onsets[onsets.length - 1]).toFixed(1)} ث)، ${OUT}`);
