@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // التحديث بسؤال خفيف بفاصل يتبع حال القاعة (hallPoll.js). اختيارات الزملاء لا تظهر قبل الكشف.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
 import { pollPeriod } from '../hallPoll.js';
@@ -54,7 +55,7 @@ export default function Hall({ onBack }) {
       <div className="page stack">
         <h1>القاعة</h1>
         <div className="card"><p className="muted">لا قاعة مفتوحة لدفعتك الآن. حين يفتحها الخبير تجدها هنا، وتصلك دعوة منه.</p></div>
-        <section className="card stack hall-preview" aria-label="معاينة القاعة">
+        <section className="card stack hall-preview" data-tour="hall" aria-label="معاينة القاعة">
           <div><p className="eyebrow">معاينة</p><h3>هكذا تبدو القاعة حين تُفتح</h3>
             <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
           <HallView view={PREVIEW} compact />
@@ -69,7 +70,12 @@ export default function Hall({ onBack }) {
   const canAnswer = s && !v.revealed && (st === 'round' || !live);
 
   return (
-    <div className="page wide stack hall-page">
+    <div className="page wide stack hall-page" data-tour="hall">
+      <FirstOpen id="hall" icon="🏛️" title="القاعة حيّة داخل المنصة" lines={[
+        'حين يفتح الخبير جلسة تجد فريقك ودورك والجولة الحالية هنا دون أن تحدّث الصفحة.',
+        'كل تفاعل في الجولة يُحتسب في تقييمك المستمر، فشارك باسمك.',
+        'سؤال لم تجد إجابته؟ اطرحه على أقرانك من «طلبات التوجيه» ويؤكد الخبير الإجابة.',
+      ]} />
       <div className="row between">
         <div><p className="eyebrow">{live ? 'القاعة الحية' : 'المسار الذاتي'} · {v.cohort.name}</p><h1>{v.topic?.title_ar || 'القاعة'}</h1></div>
         <span className="chip gold">{HALL_STAGE_AR[st]}{live && st !== 'enter' ? ` · الجولة ${v.session.round}` : ''}</span>

@@ -40,3 +40,7 @@
   Cache-Control: no-cache
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+
+# الفيديو التعريفي باسم بإصدار (intro-v1)، فيُخزَّن طويلًا ويتغير الاسم عند إعادة التوليد
+/media/*
+  Cache-Control: public, max-age=31536000, immutable

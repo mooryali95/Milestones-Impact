@@ -8,6 +8,7 @@
 //   • لا طباعة ولا قائمة سياق ولا سحب، وتُحجب الصفحة حين تفقد التركيز
 //     (أغلب أدوات التصوير تسرق التركيز) أو عند مفاتيح التصوير والطباعة
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import FirstOpen from '../FirstOpen.jsx';
 import { BRAND } from '../../../shared/js/brand.js';
 import { call, lastRead } from '../api.js';
 import { BookSkeleton, POPUP_BLOCKED } from '../ui.jsx';
@@ -544,6 +545,11 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
   return (
     <div className="page book">
+      <FirstOpen id="handbook" icon="📘" title="كتيبك على مستواك" lines={[
+        'الأبواب مرتبة بمستواك في كل إطار؛ ابدأ بالباب المعلّم «التالي».',
+        'في نهاية كل باب سؤال تأمل واختبار قصير يوثّقان قراءتك في رحلتك تلقائيًا.',
+        'يحفظ الكتيب موضعك، فتعود إليه من حيث توقفت على أي جهاز.',
+      ]} />
       <section className="book-hero">
         <div className="book-hero-main">
           <span className="book-eyebrow">The Leader's Book</span>
@@ -583,7 +589,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
       {tab === 'read' && (
         <div className="book-grid">
-          <nav className="book-toc" aria-label="فهرس الكتيب">
+          <nav className="book-toc" data-tour="handbook-toc" aria-label="فهرس الكتيب">
             <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
               <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
             </button>

@@ -10,6 +10,7 @@ import RoleChoice from '../RoleChoice.jsx';
 import OtherDoors from '../Doors.jsx';
 import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
 import logo from '../milestone-impact-inverted.svg';
+import IntroVideo from '../IntroVideo.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 
 const RESEND_SECONDS = 45;
@@ -152,11 +153,12 @@ export default function SignIn({ onSignedIn, initialError }) {
           </div>
         )}
         {step === 'email' && (
-          <form className="stack" onSubmit={start}>
+          <form className="stack" data-tour="doors" onSubmit={start}>
             <div>
               <p className="eyebrow">برنامج إدارة المشروعات للقادة</p>
               <h1>ابدأ رحلتك القيادية</h1>
               <p className="muted">ادخل بحسابك في Google بضغطة، أو ببريدك ونرسل لك رمزًا. لا كلمات مرور.</p>
+              <IntroVideo />
             </div>
             <GoogleButton onCredential={google} disabled={busy || !!entering} />
             <div className="divider">أو بالبريد</div>

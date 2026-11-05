@@ -34,19 +34,31 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.gate.outputs.skip != 'true'
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v4
         if: steps.gate.outputs.skip != 'true'
         with:
-          version: latest
+          node-version: '20'
+      # CLI من npm لا من GitHub Releases (كما في ci.yml وintegration.yml)
+      - name: Install Supabase CLI
+        if: steps.gate.outputs.skip != 'true'
+        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
       - name: Deploy
         if: steps.gate.outputs.skip != 'true'
         run: |
-          supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
-          supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
-          supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy admin-api --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy user-api --project-ref "$PROJECT_REF" --yes
+          # نشر كل دالة بثلاث محاولات: واجهة Supabase ترد أحيانًا 401 أو 5xx عابرة وسط السلسلة (حدث في 2026-11-05)
+          deploy() {
+            for i in 1 2 3; do
+              if supabase functions deploy "$@" --project-ref "$PROJECT_REF" --yes; then return 0; fi
+              echo "::warning::فشل نشر $1 (محاولة $i من 3)"; sleep $((i * 10))
+            done
+            return 1
+          }
+          deploy leaders-api
+          deploy creem-webhook --no-verify-jwt
+          deploy leaders-hooks --no-verify-jwt
+          deploy send-otp
+          deploy admin-api
+          deploy user-api
       - name: Verify the live functions answer real requests
         if: steps.gate.outputs.skip != 'true'
         run: |

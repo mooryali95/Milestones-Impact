@@ -5,7 +5,9 @@
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
-import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
+import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
+import IntroVideo from '../IntroVideo.jsx';
+import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
@@ -356,6 +358,7 @@ function Welcome({ firstName, onClose }) {
           <li>كل مرحلة قائمة تحقق: بعض بنودها تؤكدها بنفسك، وبعضها يُوثَّق تلقائيًا من نشاطك.</li>
           <li>المستشار هو من يراجع ما تسلّمه ويعتمد مسارك، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
         </ol>
+        <IntroVideo className="link small" />
       </div>
       <button className="link small" onClick={onClose}>فهمت</button>
     </div>
@@ -452,7 +455,7 @@ const msDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('ar', { day: 
 function Milestones({ list, summary }) {
   if (!list?.length) return null;
   return (
-    <section className="card stack ms-card" aria-labelledby="ms-h">
+    <section className="card stack ms-card" data-tour="milestones" aria-labelledby="ms-h">
       <div className="row between">
         <h3 id="ms-h">معالمك</h3>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
@@ -477,7 +480,7 @@ const TREND_AR = { up: 'أداؤك يتحسن في آخر تقييماتك', dow
 function Continuous({ c }) {
   if (!c || c.index == null) return null;
   return (
-    <section className="card stack" aria-labelledby="ca-h">
+    <section className="card stack" data-tour="continuous" aria-labelledby="ca-h">
       <div className="row between">
         <h3 id="ca-h">تقدمك في التقييم المستمر</h3>
         <b className="ca-index">{c.index}٪</b>
@@ -501,6 +504,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   const [passkey, setPasskey] = useState(me.prompt_passkey);
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
   const closeWelcome = () => { welcomeSeen.set(true); setWelcome(false); };
+  // الخطوة الأخيرة من معالج البداية: بعد إرسال القياس وحتى الاعتماد، مرة واحدة
+  const [nextCard, setNextCard] = useState(() => !nextSeen.get());
+  const closeNext = () => { nextSeen.set(true); setNextCard(false); };
   const next = nextStep(journey);
   const goTo = (key) => {
     setExpanded((s) => new Set(s).add(key));
@@ -531,7 +537,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
   return (
     <div className="page wide">
-      <section className="hero">
+      <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
@@ -579,7 +585,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
       )}
       {participant.status !== 'completed' && <PreManager />}
-      {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
+      {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
+      {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
 
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
@@ -588,7 +595,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       <div className="j-layout">
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading) && (
-            <div className="next-grid j-next">
+            <div className="next-grid j-next" data-tour="next-step">
               {next && (
                 <div className="next-card">
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
@@ -629,7 +636,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </aside>
 
-        <div className="j-main">
+        <div className="j-main" data-tour="stages">
           {profile && (
             <>
               <div className="section-title">

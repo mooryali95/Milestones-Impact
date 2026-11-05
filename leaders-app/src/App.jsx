@@ -13,6 +13,8 @@ import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
+import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
+import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
@@ -38,7 +40,7 @@ import SponsorNote from './SponsorNote.jsx';
 const Capstone = lazy(() => import('./screens/Capstone.jsx'));
 const Katon = lazy(() => import('./screens/Katon.jsx'));
 const HallScreen = lazy(() => import('./screens/Hall.jsx'));
-import DemoTour, { captureDemoLink, demoPending } from './DemoTour.jsx';
+import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
 const Legal = lazy(() => import('./screens/Legal.jsx'));
 import Consent from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
@@ -94,7 +96,7 @@ function Nav({ items, view, onGo, className }) {
   return (
     <nav className={className} aria-label="أقسام المنصة">
       {items.map((it) => (
-        <button key={it.key} type="button" className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
+        <button key={it.key} type="button" data-tour={`nav-${it.key}`} className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
           disabled={it.locked} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined} onClick={() => onGo(it.key)}>
           <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true">🔒</i>}</span>
         </button>
@@ -240,6 +242,10 @@ function Participant() {
   // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ
   const paidFor = (item) => !me?.access || !!me.access[item];
   const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !checkin;
+  // معالج البداية: خطوته من البوابات نفسها (Onboarding.jsx)؛ الرأس يظهر فوق شاشات القبول، والخطوة 4 بطاقة في الرحلة
+  const [onbTick, setOnbTick] = useState(0);
+  const onb = me && !checkin ? onboardingStep(me, { assessmentPaywall: !paidFor('assessment') }) : null;
+  const rail = onb && onb.key !== 'next' && onbTick >= 0 ? <OnboardingRail step={onb} /> : null;
   const approved = !!me?.profile?.approved;
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
@@ -277,10 +283,11 @@ function Participant() {
   // من سبق تسجيله قبل نشر السياسة يوافق مرة واحدة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)
   else if (me.participant.consented_at === null && !me.participant.is_demo) screen = <Consent onAccepted={accept} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
+  else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
-    screen = <Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />;
-  } else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <Paywall item="assessment" me={me} onUpdate={accept} />;
-  else if (!gateDone(me, 'assessment')) screen = <>{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
+    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} /></>;
+  } else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
+  else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
   else if (!paidFor('program')) screen = <Paywall item="program" me={me} onUpdate={accept} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
@@ -314,7 +321,7 @@ function Participant() {
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
-      {!booting && (demo || me?.participant?.is_demo) && <DemoTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
+      {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>
   );

@@ -40,13 +40,19 @@ describe('بوابة النشر', () => {
     expect(deploy).toMatch(/system\.ping/);
     expect(deploy).toMatch(/refs\/heads\/release/);
     // الدوال قبل دفع release
-    expect(deploy.indexOf('functions deploy leaders-api')).toBeLessThan(deploy.indexOf('refs/heads/release'));
+    expect(deploy.indexOf('deploy leaders-api')).toBeLessThan(deploy.indexOf('refs/heads/release'));
   });
   it('الدوال الست كلها خلف البوابة، ولكل دالة تخدم واجهة مسبار حقيقي (المرحلة ل0)', () => {
     const deploy = ci.slice(ci.indexOf('\n  deploy:'));
     for (const fn of ['leaders-api', 'creem-webhook', 'leaders-hooks', 'send-otp', 'admin-api', 'user-api']) {
-      expect(deploy).toContain(`functions deploy ${fn} `);
-      expect(deploy.indexOf(`functions deploy ${fn} `)).toBeLessThan(deploy.indexOf('refs/heads/release'));
+      expect(deploy).toMatch(new RegExp(`\\n\\s+deploy ${fn}( --no-verify-jwt)?\\n`));
+      expect(deploy.indexOf(`deploy ${fn}`)).toBeLessThan(deploy.indexOf('refs/heads/release'));
+    }
+    // النشر بثلاث محاولات لكل دالة، والـCLI من npm لا من setup-cli (504 وحد المعدل)
+    for (const text of [deploy, read('.github/workflows/deploy-leaders-api.yml')]) {
+      expect(text).toMatch(/for i in 1 2 3; do[\s\S]*supabase functions deploy "\$@"/);
+      expect(text).toMatch(/npm i -g supabase@/);
+      expect(text).not.toMatch(/uses: supabase\/setup-cli/);
     }
     const manual = read('.github/workflows/deploy-leaders-api.yml');
     const probe = read('.github/workflows/probe.yml');

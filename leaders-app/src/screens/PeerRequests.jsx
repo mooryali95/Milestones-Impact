@@ -21,6 +21,8 @@ export default function PeerRequests({ preset = null, onDone }) {
   const [msg, setMsg] = useState(null);
   const load = () => call('peer.list').then(setD);
   useEffect(() => { load(); }, []);
+  // الجولة الحيّة تطرح سؤالًا تجريبيًا من لوحتها، فتعيد القائمة التحميل عند إشارتها
+  useEffect(() => { const on = () => load(); window.addEventListener('mi-tour-refresh', on); return () => window.removeEventListener('mi-tour-refresh', on); }, []);
   useEffect(() => { if (preset) { setOpen(true); setText(preset.text || ''); } }, [preset]);
   // رد غير متوقع (أو خلفية لا تعرف الإجراء بعد): لا بطاقة، لا تعطيل للصفحة
   if (!d?.success || !Array.isArray(d.items) || !d.teams) return null;
@@ -41,7 +43,7 @@ export default function PeerRequests({ preset = null, onDone }) {
   const forMe = d.items.filter((x) => !x.mine && x.status !== 'closed');
 
   return (
-    <section className="card stack pr" aria-labelledby="pr-h">
+    <section className="card stack pr" data-tour="peer" aria-labelledby="pr-h">
       <div className="row between">
         <h3 id="pr-h">طلبات التوجيه</h3>
         {!open && <button className="btn sm" onClick={() => setOpen(true)}>اطلب توجيهًا</button>}

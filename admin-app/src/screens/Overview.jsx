@@ -119,7 +119,7 @@ function DemoCard() {
   return (
     <section className="la-card la-demo">
       <div className="la-row between">
-        <div><b>حساب العرض التوضيحي</b><p className="la-muted">للورش: يفتح المنصة من شاشة الدخول، وجولة بتسع خطوات تشرح الرحلة كاملة. لا يدخل الإحصاءات ولا يصله بريد.</p></div>
+        <div><b>حساب العرض التوضيحي</b><p className="la-muted">للورش: يفتح المنصة من شاشة الدخول، وجولة حيّة بثماني عشرة خطوة تضيء كل عنصر وتشرح المنظومة كاملة. لا يدخل الإحصاءات ولا يصله بريد.</p></div>
         <span className="la-row">
           <button className="btn-sm primary" disabled={busy} onClick={openDemo}>افتح حساب العرض</button>
           <button className="btn-sm ghost" disabled={busy} onClick={reset}>أعِده إلى البداية</button>

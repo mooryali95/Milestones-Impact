@@ -158,7 +158,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   if (mode === 'intro') {
     return (
       <div className="page quiz">
-        <div className="card stack">
+        <div className="card stack" data-tour="assessment">
           <p className="eyebrow">{post ? 'القياس البعدي' : 'تحديد المستوى'}</p>
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
           <p>{data.assessment.intro || 'أسئلة قصيرة في الأطر الثلاثة. نتيجتها تحدد مسارك في كل إطار على حدة، فتبدأ من حيث أنت فعلًا.'}</p>

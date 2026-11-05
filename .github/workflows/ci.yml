@@ -116,19 +116,31 @@ jobs:
       SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
     steps:
       - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v4
         if: env.SUPABASE_ACCESS_TOKEN != ''
         with:
-          version: latest
+          node-version: '20'
+      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub فيفشل عند 504 أو حد المعدل (كما في integration.yml)
+      - name: Install Supabase CLI
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
       - name: Deploy edge functions
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |
-          supabase functions deploy leaders-api --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy creem-webhook --project-ref "$PROJECT_REF" --no-verify-jwt --yes
-          supabase functions deploy leaders-hooks --project-ref "$PROJECT_REF" --no-verify-jwt --yes
-          supabase functions deploy send-otp --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy admin-api --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy user-api --project-ref "$PROJECT_REF" --yes
+          # نشر كل دالة بثلاث محاولات: واجهة Supabase ترد أحيانًا 401 أو 5xx عابرة وسط السلسلة (حدث في 2026-11-05)
+          deploy() {
+            for i in 1 2 3; do
+              if supabase functions deploy "$@" --project-ref "$PROJECT_REF" --yes; then return 0; fi
+              echo "::warning::فشل نشر $1 (محاولة $i من 3)"; sleep $((i * 10))
+            done
+            return 1
+          }
+          deploy leaders-api
+          deploy creem-webhook --no-verify-jwt
+          deploy leaders-hooks --no-verify-jwt
+          deploy send-otp
+          deploy admin-api
+          deploy user-api
       - name: Functions not deployed
         if: env.SUPABASE_ACCESS_TOKEN == ''
         run: echo "::warning::SUPABASE_ACCESS_TOKEN is not set; edge functions were not deployed (see RUNBOOK.md)."
