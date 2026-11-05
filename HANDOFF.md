@@ -75,7 +75,7 @@ python3 shared/build-css.py
 مستضافة في `home/assets/fonts/` (Noto Kufi Arabic وNoto Sans وCormorant Garamond، خطوط متغيرة بترخيص OFL، مجموعات العربية واللاتينية فقط). عند تعديل `fonts.css` ارفع رقم `?v=` في روابط الصفحات لأن المجلد مخزّن مؤقتًا لسنة.
 
 ### عرض ورشة الأطر الثلاثة
-`docs/workshop/الأطر-الثلاثة-ورشة.pptx` (18 شريحة بالهوية، RTL، ملاحظات المتحدث داخله) ونسخة PDF بجواره. المولّد `docs/workshop/build-deck.mjs` (pptxgenjs) يعيد بناءه من نصه: `npm i pptxgenjs@3.12.0` في مجلد مؤقت ثم `NODE_PATH=<node_modules> node docs/workshop/build-deck.mjs <المخرج>`. المحتوى مأخوذ من الكتيب v3 (الرسائل الخمس لكل إطار، السلاسل الخماسية، الجدارات الست) وصفحة `/leaders/`.
+النسخة المعتمدة للورشة `docs/workshop/الأطر-الثلاثة-ورشة-v2.pptx` (15 شريحة عامة، كل شريحة تركيب بصري بالهوية، RTL، ملاحظات المتحدث داخله) ونسخة PDF بجوارها؛ مولّدها `docs/workshop/build-deck-v2.mjs`. النسخة الأولى الأكثر تفصيلًا `الأطر-الثلاثة-ورشة.pptx` بمولّدها `build-deck.mjs` تبقى للرجوع. إعادة البناء (pptxgenjs): `npm i pptxgenjs@3.12.0` في مجلد مؤقت ثم `NODE_PATH=<node_modules> node docs/workshop/build-deck.mjs <المخرج>`. المحتوى مأخوذ من الكتيب v3 (الرسائل الخمس لكل إطار، السلاسل الخماسية، الجدارات الست) وصفحة `/leaders/`.
 
 ### الفيديو التعريفي
 نص المشاهد في `shared/video/scenes.js` (نسخة مقروءة في `docs/journey/2026-11-05-نص-الفيديو-التعريفي-v1.md`). بعد أي تعديل ارفع الإصدار في `VIDEO.file` (مثل `intro-v2`) وشغّل `npm run video:build` (يحتاج ffmpeg ومتصفح Playwright)، ثم `npm run leaders:build` وأودع `leaders-app/public/media/` و`leaders/media/`، وحدّث اسم الملف في `home/leaders/index.html`.
