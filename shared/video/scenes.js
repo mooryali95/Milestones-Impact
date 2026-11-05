@@ -5,7 +5,7 @@
 
 export const VIDEO = {
   file: 'intro-v3',            // /media/intro-v3.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
-  seconds: 509,
+  seconds: 447,
   fps: 24,
   width: 1280,
   height: 720,
