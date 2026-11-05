@@ -13,6 +13,7 @@ import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
+import { privateFile } from './guards.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -287,15 +288,14 @@ export async function participant(b: Body) {
       }),
     };
   });
-  let cvUrl = null;
-  if (p.cv_path) cvUrl = (await storage.from(BUCKET).createSignedUrl(p.cv_path, 600)).data?.signedUrl || null;
+  // السيرة لا تُوقَّع هنا لكل من يفتح الملف: تُفتح بطلب صريح عبر admin.evidence-url (للمدير، ويُسجَّل الفتح)
   const [pts, { data: book }, { data: subs }] = await Promise.all([
     pointsOf(p.id),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, reflection, completed_at, handbook_modules(title_ar, dimension)').eq('participant_id', p.id),
     db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
   ]);
   return {
-    success: true, participant: p, cv_url: cvUrl, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
+    success: true, participant: p, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
@@ -386,10 +386,16 @@ export async function reviews() {
   return { success: true, submitted: rows, pending_approval: waiting || [] };
 }
 
-export async function evidenceUrl(b: Body) {
-  const path = String(b.path || '');
-  const { data } = await storage.from(BUCKET).createSignedUrl(path, 600);
+// الملفات الخاصة (السيرة والأدلة): للمدير وحده لا للمراقب، بمسار على شكل مسارات الرفع يبدأ بمعرّف
+// المشارك المطلوب نفسه (guards.js)، وكل فتح يُسجَّل قبل أن يُسلَّم الرابط المؤقت (الملحق 4، R7)
+export async function evidenceUrl(a: Admin, b: Body) {
+  if (!canWrite(a)) throw new Fail('فتح الملفات الخاصة للمدير وحده، لا للمراقب', 403, 'forbidden');
+  const pid = String(b.participant_id || '');
+  const file = privateFile(b.path, pid);
+  if (!file) throw new Fail('مسار الملف لا يخص هذا المشارك', 400, 'bad_path');
+  const { data } = await storage.from(BUCKET).createSignedUrl(file.path, 600);
   if (!data) throw new Fail('الملف غير موجود', 404);
+  await audit('admin', a.email, 'admin.file-open', 'participants', pid, null, { path: file.path, kind: file.kind });
   return { success: true, url: data.signedUrl };
 }
 

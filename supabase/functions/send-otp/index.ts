@@ -15,7 +15,8 @@ import { SITES } from "../_shared/sites.js";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
-// التحقق البشري: المفتاح نفسه الذي يستعمله تطبيق القادة (أضف mi.sunkvalue.com إلى نطاقات الأداة في Cloudflare)
+// التحقق البشري: المفتاح نفسه الذي يستعمله تطبيق القادة (أضف mi.sunkvalue.com إلى نطاقات الأداة في Cloudflare).
+// إلزامي منذ المرحلة ل1: بلا المفتاحين يُرفض النموذج (والصفحة تعرض بديل البريد المباشر) بدل أن يُفتح للإغراق
 const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
 const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
 const ADMIN_EMAIL = "p.o.m2012@hotmail.com";
@@ -127,7 +128,11 @@ async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
   const name = text(body.name, 120);
   if (name.length < 2) return json({ success: false, code: "invalid", message: "اكتبوا الاسم" }, 400);
   if (!isEmail(email)) return json({ success: false, code: "invalid", message: "البريد الإلكتروني غير صحيح" }, 400);
-  if (TURNSTILE_SECRET && !(await turnstileOk(body.captcha, ip))) {
+  if (!TURNSTILE_SECRET || !TURNSTILE_SITE) {
+    console.error("send-otp: Turnstile keys missing; the contact form is closed");
+    return json({ success: false, code: "captcha_unconfigured", message: "النموذج متوقف مؤقتًا، راسلونا على البريد مباشرة" }, 503);
+  }
+  if (!(await turnstileOk(body.captcha, ip))) {
     return json({ success: false, code: "captcha", site_key: TURNSTILE_SITE, message: body.captcha ? "تعذّر التحقق، أعيدوا المحاولة" : "أكّدوا أنكم لستم برنامجًا آليًا" }, 400);
   }
   const hourAgo = new Date(Date.now() - 36e5).toISOString();

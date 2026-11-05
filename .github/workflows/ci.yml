@@ -124,6 +124,11 @@ jobs:
       - name: Install Supabase CLI
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
+      # منذ المرحلة ل1 يفشل التحقق البشري مغلقًا: نشر الدوال بلا مفتاحَي Turnstile (أو بلا الفلفل أو مفتاح البريد)
+      # يوقف الدخول برمز البريد، فيتوقف النشر هنا برسالة واضحة قبل أن يمس الإنتاج. الأسماء فقط، لا قيم.
+      - name: Sign-in secrets are set on the project (names only)
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: node scripts/ops/function-secrets.mjs --require=signin
       - name: Deploy edge functions
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |

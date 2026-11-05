@@ -17,13 +17,16 @@ let fails = 0;
 const ok = (cond, msg, extra = '') => { console.log(`${cond ? '✓' : '✗'} ${msg}${cond ? '' : ` ${extra}`}`); if (!cond) fails += 1; };
 // -q: بلا وسم الأمر (INSERT 0 1) بعد الصفوف، وإلا التصق بناتج returning
 const sql = (q) => execFileSync('psql', ['-At', '-q', '-v', 'ON_ERROR_STOP=1', DB, '-c', q]).toString().trim();
-async function call(action, body = {}, token = null) {
-  const r = await fetch(`${API}/functions/v1/leaders-api`, {
+async function fn(name, body) {
+  const r = await fetch(`${API}/functions/v1/${name}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(process.env.ANON_KEY ? { apikey: process.env.ANON_KEY, Authorization: `Bearer ${process.env.ANON_KEY}` } : {}) },
-    body: JSON.stringify({ action, ...body, ...(token ? { token } : {}) }),
+    body: JSON.stringify(body),
   });
   return { status: r.status, ...(await r.json().catch(() => ({}))) };
 }
+const call = (action, body = {}, token = null) => fn('leaders-api', { action, ...body, ...(token ? { token } : {}) });
+// مفتاحا Cloudflare Turnstile للاختبار في ci.env يقبلان هذا الرمز الوهمي وحده؛ الحقيقي يُرفض بهما
+const HUMAN = 'XXXX.DUMMY.TOKEN.XXXX';
 const hash = (v) => createHash('sha256').update(`${PEPPER}:${v}`).digest('hex');
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
@@ -39,13 +42,33 @@ async function seed(email, name) {
 const ping = await call('system.ping');
 ok(ping.success === true && typeof ping.db_ms === 'number', 'system.ping يمر بالقاعدة', JSON.stringify(ping));
 
-// 2) التسجيل: رمز يُحفظ هاشًا بالفلفل مع الملف المعلّق، والبريد التجريبي لا يُرسل
+// 2) التسجيل (المرحلة ل1): الحدود والتحقق البشري قبل أي رد يفرّق بين بريد مسجل وجديد، ثم الاسم بتصريح
+// يحمل التحقق فلا يُحل التحدي مرتين، ثم رمز يُحفظ هاشًا بالفلفل مع الملف المعلّق، والبريد التجريبي لا يُرسل
 const email = `golden-${Date.now()}@demo.milestone-impact.org`;
-const start = await call('auth.start', { email, full_name: 'مشارك المسار الذهبي' });
-ok(start.success === true && start.sent === true, 'auth.start لمسجّل جديد يرسل الرمز', JSON.stringify(start));
+const bare = await call('auth.start', { email });
+ok(bare.code === 'captcha' && !!bare.site_key && bare.needs_name !== true, 'بريد جديد بلا تحقق بشري: يُطلب التحقق ولا يُكشف أنه جديد', JSON.stringify(bare));
+const human = await call('auth.start', { email, captcha: HUMAN });
+ok(human.success === true && human.needs_name === true && /^\d{13}\.[0-9a-f]{64}$/.test(human.pass || ''), 'بعد التحقق البشري: يُطلب الاسم مع تصريح', JSON.stringify(human));
+const borrowed = await call('auth.start', { email: `other-${email}`, full_name: 'منتحل التصريح', pass: human.pass });
+ok(borrowed.code === 'captcha', 'التصريح مربوط ببريده: لا يصلح لبريد آخر', JSON.stringify(borrowed));
+const start = await call('auth.start', { email, full_name: 'مشارك المسار الذهبي', pass: human.pass });
+ok(start.success === true && start.sent === true, 'auth.start لمسجّل جديد يرسل الرمز بالتصريح بلا تحدٍّ ثانٍ', JSON.stringify(start));
 const ch = sql(`select code_hash, pending_profile->>'full_name' from leaders.email_challenges where email = ${q(email)} order by created_at desc limit 1`).split('|');
 ok(/^[0-9a-f]{64}$/.test(ch[0] || ''), 'الرمز محفوظ هاشًا (64 hex) لا نصًا');
 ok(ch[1] === 'مشارك المسار الذهبي', 'الملف المعلّق محفوظ مع التحدي', ch[1]);
+// محاولات الرمز ذرية (M2): عشرون تخمينًا متزامنًا لا يُقيَّم منها إلا خمسة، والبقية تُرفض قبل المقارنة
+// (رموز من غير ست خانات فلا تصيب الرمز الحقيقي مصادفة)
+const guesses = await Promise.all(Array.from({ length: 20 }, (_, i) => call('auth.verify', { email, code: `x${i}` })));
+const judged = guesses.filter((g) => g.code === 'code').length;
+const refused = guesses.filter((g) => g.code === 'attempts').length;
+const tries = Number(sql(`select attempts from leaders.email_challenges where email = ${q(email)} order by created_at desc limit 1`));
+ok(judged === 5 && refused === 15 && tries === 5, `20 تخمينًا متزامنًا: قُيّم ${judged} ورُفض ${refused} والعداد ${tries}`, JSON.stringify(guesses.map((g) => g.code)));
+// نموذج التواصل في الموقع (send-otp): التحقق البشري إلزامي قبل أي إدراج، والرمز الوهمي يمر
+const visitor = { action: 'contact', name: 'زائر المسار الذهبي', email: `contact-${Date.now()}@demo.milestone-impact.org`, product: 'MI-HOME' };
+const contactBare = await fn('send-otp', visitor);
+ok(contactBare.status === 400 && contactBare.code === 'captcha', 'نموذج التواصل بلا تحقق بشري يُرفض', JSON.stringify(contactBare));
+const contactHuman = await fn('send-otp', { ...visitor, captcha: HUMAN });
+ok(contactHuman.success === true, 'نموذج التواصل بالتحقق البشري يُقبل', JSON.stringify(contactHuman));
 const bogus = await call('me', {}, 'not-a-real-token');
 ok(bogus.success !== true, 'رمز جلسة مزيّف يُرفض', JSON.stringify(bogus));
 

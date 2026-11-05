@@ -16,8 +16,9 @@ export default function ReqQueue({ rows, canWrite, onPerson, onDone }) {
   if (!rows.length) return null;
   const all = picked.size === rows.length;
   const toggle = (k) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  const evidence = async (path) => {
-    const r = await L('admin.evidence-url', { path });
+  // الدليل يُفتح بطلب صريح يُسجَّل، للمدير وحده
+  const evidence = async (x) => {
+    const r = await L('admin.evidence-url', { participant_id: x.participant_id, path: x.evidence_path });
     if (r.success) window.open(r.url, '_blank', 'noopener'); else toast(r.message);
   };
   const approve = async () => {
@@ -52,7 +53,9 @@ export default function ReqQueue({ rows, canWrite, onPerson, onDone }) {
             {canWrite && <input type="checkbox" aria-label={`تحديد ${x.stage_requirements?.title_ar} لـ ${x.participants?.full_name}`} checked={picked.has(k)} onChange={() => toggle(k)} />}
             <button className="la-link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button>
             <span className="la-chip">{x.stage_requirements?.title_ar}</span>
-            {x.evidence_path && <button className="la-link" onClick={() => evidence(x.evidence_path)}>الدليل</button>}
+            {x.evidence_path && (canWrite
+              ? <button className="la-link" onClick={() => evidence(x)}>الدليل</button>
+              : <small className="la-muted">دليل مرفق</small>)}
             <small>{date(x.completed_at)}</small>
           </li>
         );

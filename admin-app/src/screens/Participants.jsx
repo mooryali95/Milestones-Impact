@@ -289,8 +289,9 @@ function Person({ id, canWrite, onBack }) {
     if (note === null) return;
     act('admin.stage-override', { participant_id: p.id, stage_key: s.key, action, note }, 'تم');
   };
+  // الملفات الخاصة تُفتح بطلب صريح يُسجَّل في السجل، للمدير وحده (الخادم يرفض غيره)
   const evidence = async (path) => {
-    const d = await L('admin.evidence-url', { path });
+    const d = await L('admin.evidence-url', { participant_id: p.id, path });
     if (d.success) window.open(d.url, '_blank', 'noopener'); else toast(d.message);
   };
   // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
@@ -324,7 +325,9 @@ function Person({ id, canWrite, onBack }) {
             <dt>الخبرة</dt><dd>{p.years_experience != null ? `${p.years_experience} سنة` : ''}</dd>
             <dt>النطاق</dt><dd>{SCOPE[p.work_scope] || 'لم يحدد'}</dd>
             <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
-            <dt>السيرة</dt><dd>{r.cv_url ? <a href={r.cv_url} target="_blank" rel="noopener noreferrer">تنزيل (رابط مؤقت)</a> : 'لم تُرفع'}</dd>
+            <dt>السيرة</dt><dd>{!p.cv_path ? 'لم تُرفع' : canWrite
+              ? <button className="la-link" onClick={() => evidence(p.cv_path)}>فتح (رابط مؤقت، يُسجَّل الفتح)</button>
+              : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
             <dt>الدفعة</dt><dd>
               {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}
@@ -428,7 +431,9 @@ function Person({ id, canWrite, onBack }) {
                 <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>
                   <ActivitySummary a={it.activity} /></span>
                 <span className="la-row">
-                  {it.evidence_path && <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>}
+                  {it.evidence_path && (canWrite
+                    ? <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>
+                    : <small className="la-muted">ملف مرفق</small>)}
                   {canWrite && !it.auto && s.status !== 'locked' && <>
                     {it.status !== 'done' && <button className="btn-sm primary" onClick={() => review(it.id, 'done')}>اعتماد</button>}
                     {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => review(it.id, 'returned')}>إعادة مع ملاحظة</button>}

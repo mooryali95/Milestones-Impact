@@ -6,7 +6,7 @@
 import { journeyFor } from './participant.ts';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
-  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard,
+  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
 import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
@@ -63,11 +63,9 @@ export async function authVerify(b: Body, ctx: Ctx) {
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
     ch = data;
     if (ch) {
-      if (ch.attempts >= 5) throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
-      if (ch.code_hash !== await hash(String(b.code || '').trim())) {
-        await db.from('coordinator_challenges').update({ attempts: ch.attempts + 1 }).eq('id', ch.id);
-        throw new Fail('الرمز غير صحيح', 400, 'code');
-      }
+      // المحاولة تُحجز ذريًا قبل المقارنة (الملحق 1، M2)
+      await reserveCodeAttempt('coordinator_challenges', ch);
+      if (ch.code_hash !== await hash(String(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
     }
   }
   if (!ch || ch.consumed_at || new Date(ch.expires_at) < new Date()) throw new Fail('الرابط أو الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
