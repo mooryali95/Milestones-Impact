@@ -5,13 +5,13 @@
 
 export const VIDEO = {
   file: 'intro-v3',            // /media/intro-v3.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
-  seconds: 299,
+  seconds: 509,
   fps: 24,
   width: 1280,
   height: 720,
   maxBytes: 24 * 1024 * 1024,  // سقف الحجم: تحت حد Cloudflare Pages للملف الواحد (25 ميجابايت)
   label: 'شاهد كيف تعمل المنصة',
-  duration_ar: 'خمس دقائق',
+  duration_ar: 'ثماني دقائق ونصف',
   title: 'كيف تعمل رحلتك في برنامج القادة',
 };
 

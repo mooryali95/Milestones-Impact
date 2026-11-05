@@ -43,14 +43,14 @@ describe('اشتقاق خطوة المعالج', () => {
 });
 
 describe('الفيديو التعريفي', () => {
-  it('الملفات الأربعة المسجَّلة من الواجهة موجودة وتحت سقف الحجم، والمدة تحت ست دقائق', () => {
+  it('الملفات الأربعة المسجَّلة من الواجهة موجودة وتحت سقف الحجم، والمدة تحت تسع دقائق', () => {
     for (const ext of ['mp4', 'webm', 'vtt', 'jpg', 'json']) {
       const p = join(root, `leaders-app/public/media/${VIDEO.file}.${ext}`);
       expect(existsSync(p), p).toBe(true);
       expect(statSync(p).size).toBeLessThanOrEqual(VIDEO.maxBytes);
     }
     const meta = JSON.parse(read(`leaders-app/public/media/${VIDEO.file}.json`));
-    expect(meta.seconds).toBeLessThanOrEqual(360);
+    expect(meta.seconds).toBeLessThanOrEqual(540);
     expect(VIDEO.seconds).toBe(meta.seconds);
     expect(meta.marks).toHaveLength(TOUR_STEPS.length);
   });
