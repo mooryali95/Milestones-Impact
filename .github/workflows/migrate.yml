@@ -3,13 +3,23 @@ name: Apply migrations (production)
 # ترحيلات SQL على القاعدة الحية بقرار المالك: يُشغَّل يدويًا بأسماء الترحيلات بالترتيب، عبر
 # Management API بالسر SUPABASE_ACCESS_TOKEN نفسه الذي ينشر الدوال (RUNBOOK.md §1).
 # المسجّل سلفًا في leaders.schema_migrations يُتخطى، وأول فشل يوقف السلسلة ويُظهر خطأ القاعدة في السجل.
+# الوضع check قراءة فقط: يطبع الجدولة الحية (cron.job وآخر تشغيلاتها) وأسماء أسرار Vault بلا قيم
+# وسجل الترحيلات، ولا يغيّر شيئًا (RUNBOOK.md §3).
 
 on:
   workflow_dispatch:
     inputs:
-      migrations:
-        description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)'
+      mode:
+        description: 'apply = تطبيق الترحيلات المسمّاة · check = قراءة الجدولة والسجل فقط'
         required: true
+        type: choice
+        default: apply
+        options:
+          - apply
+          - check
+      migrations:
+        description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)؛ تُهمل في وضع check'
+        required: false
         type: string
 
 permissions:
@@ -21,6 +31,7 @@ jobs:
     timeout-minutes: 10
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      MODE: ${{ inputs.mode }}
       MIGRATIONS: ${{ inputs.migrations }}
     steps:
       - uses: actions/checkout@v4
@@ -30,5 +41,12 @@ jobs:
       - name: Token missing
         if: env.SUPABASE_ACCESS_TOKEN == ''
         run: echo "::error::SUPABASE_ACCESS_TOKEN is not set (see RUNBOOK.md §1)" && exit 1
+      - name: Check the live schedule and ledger (read only)
+        if: env.MODE == 'check'
+        run: node scripts/db/apply-migration.mjs --check
+      - name: Nothing to apply
+        if: env.MODE == 'apply' && env.MIGRATIONS == ''
+        run: echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations" && exit 1
       - name: Apply in order
+        if: env.MODE == 'apply' && env.MIGRATIONS != ''
         run: node scripts/db/apply-migration.mjs $MIGRATIONS

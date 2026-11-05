@@ -31,7 +31,7 @@
 
 | السر | من يقرؤه | الغرض |
 |---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال، وقراءة بنية القاعدة الحية |
+| `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال الست، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
 | `SUPABASE_DB_URL` | `backup.yml`، `restore-drill.yml` | النسخ الليلي وتمرين الاستعادة |
 | `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | تشفير النسخة وفكّها |
 | `SUPABASE_SERVICE_ROLE_KEY` (اختياري) | `backup.yml` | نسخ دلو الملفات `leaders-private` |

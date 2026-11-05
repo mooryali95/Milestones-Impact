@@ -1,7 +1,7 @@
 name: Production probe
 
-# مسبار احتياطي كل ساعة: طلب حقيقي إلى leaders-api يمر بالقاعدة، وصفحات المنصات
-# الثلاث. فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
+# مسبار احتياطي كل ساعة: طلب حقيقي إلى كل دالة تخدم واجهة (leaders-api وadmin-api وuser-api)
+# يمر بالقاعدة، وصفحات المنصات الثلاث. فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
 # جدولة GitHub قد تتأخر ساعات، فالمراقب الخارجي كل 5 دقائق (RUNBOOK.md) هو الأساس
 # وهذا شبكة أمان له.
 
@@ -20,12 +20,17 @@ jobs:
       PROJECT_REF: eormhcupwgwpllhrfxxg
       SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
     steps:
-      - name: leaders-api answers a real request
+      - name: The functions answer real requests
         run: |
-          body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
-            -H 'Origin: https://leaders.sunkvalue.com' -d '{"action":"system.ping"}' "https://$PROJECT_REF.supabase.co/functions/v1/leaders-api")
-          echo "$body"
-          echo "$body" | grep -q '"success":true'
+          ping() {
+            body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
+              -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1")
+            echo "$1: $body"
+            echo "$body" | grep -q '"success":true'
+          }
+          ping leaders-api system.ping
+          ping admin-api ping
+          ping user-api ping
       # Cloudflare قد يحجب عناوين مشغّلات GitHub على النطاق (403 مع server: cloudflare) وهذا ليس تعطلًا؛
       # عندها يُفحص النشر نفسه على pages.dev (أصل Cloudflare Pages بلا قواعد النطاق). غير ذلك يُفشل السير.
       - name: Sites answer

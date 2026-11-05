@@ -184,6 +184,14 @@ Deno.serve(async (req: Request) => {
     const action = body.action as string;
     const sb: SB = createClient(SB_URL, SB_KEY);
 
+    // ── ping: مسبار النشر والمراقبة (RUNBOOK.md §1 و§3)؛ طلب مفتوح يمر بالقاعدة فعلًا ولا يكشف شيئًا ──
+    if (action === "ping") {
+      const t0 = Date.now();
+      const { error } = await sb.from("api_sessions").select("id").limit(1);
+      if (error) throw error;
+      return json({ success: true, fn: "user-api", db_ms: Date.now() - t0 });
+    }
+
     // ── register-send: the code proves ownership of this email, nothing more ──
     if (action === "register-send") {
       const name = String(body.name || "").trim();

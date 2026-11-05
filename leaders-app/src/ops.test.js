@@ -42,6 +42,40 @@ describe('بوابة النشر', () => {
     // الدوال قبل دفع release
     expect(deploy.indexOf('functions deploy leaders-api')).toBeLessThan(deploy.indexOf('refs/heads/release'));
   });
+  it('الدوال الست كلها خلف البوابة، ولكل دالة تخدم واجهة مسبار حقيقي (المرحلة ل0)', () => {
+    const deploy = ci.slice(ci.indexOf('\n  deploy:'));
+    for (const fn of ['leaders-api', 'creem-webhook', 'leaders-hooks', 'send-otp', 'admin-api', 'user-api']) {
+      expect(deploy).toContain(`functions deploy ${fn} `);
+      expect(deploy.indexOf(`functions deploy ${fn} `)).toBeLessThan(deploy.indexOf('refs/heads/release'));
+    }
+    const manual = read('.github/workflows/deploy-leaders-api.yml');
+    const probe = read('.github/workflows/probe.yml');
+    for (const text of [deploy, manual, probe]) {
+      expect(text).toMatch(/ping leaders-api system\.ping/);
+      expect(text).toMatch(/ping admin-api ping/);
+      expect(text).toMatch(/ping user-api ping/);
+    }
+    for (const fn of ['admin-api', 'user-api']) {
+      const src = read(`supabase/functions/${fn}/index.ts`);
+      const at = src.indexOf('action === "ping"');
+      expect(at).toBeGreaterThan(0);
+      // المسبار قبل أي بوابة جلسة، ويمر بالقاعدة فعلًا
+      expect(at).toBeLessThan(src.indexOf('انتهت الجلسة'));
+      expect(src.slice(at, at + 400)).toMatch(/from\("api_sessions"\)[\s\S]*db_ms/);
+    }
+  });
+  it('وضع check في migrate.yml قراءة فقط: الجدولة وأسماء الأسرار بلا قيم (المرحلة ل0)', () => {
+    const mig = read('.github/workflows/migrate.yml');
+    expect(mig).toMatch(/type: choice[\s\S]*- apply\n\s+- check/);
+    expect(mig).toMatch(/apply-migration\.mjs --check/);
+    const script = read('scripts/db/apply-migration.mjs');
+    expect(script).toMatch(/from cron\.job order by jobid/);
+    expect(script).toMatch(/cron\.job_run_details/);
+    expect(script).toMatch(/select name from vault\.secrets/);
+    expect(script).not.toMatch(/decrypted_secrets|select secret/);
+    expect(script).toMatch(/leaders-weekly-reminders[\s\S]*leaders-expert-offers/);
+    expect(script).toMatch(/leaders_cron_secret/);
+  });
   it('سير النشر اليدوي لا يعمل عند الدفع', () => {
     const manual = read('.github/workflows/deploy-leaders-api.yml');
     expect(manual).toMatch(/workflow_dispatch/);
