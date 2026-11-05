@@ -5,7 +5,9 @@
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
 import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
-import { call, lastRead, uploadFile, welcomeSeen } from '../api.js';
+import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
+import IntroVideo from '../IntroVideo.jsx';
+import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
@@ -356,6 +358,7 @@ function Welcome({ firstName, onClose }) {
           <li>كل مرحلة قائمة تحقق: بعض بنودها تؤكدها بنفسك، وبعضها يُوثَّق تلقائيًا من نشاطك.</li>
           <li>المستشار هو من يراجع ما تسلّمه ويعتمد مسارك، وتصلك ملاحظته هنا إن احتاج تعديلًا.</li>
         </ol>
+        <IntroVideo className="link small" />
       </div>
       <button className="link small" onClick={onClose}>فهمت</button>
     </div>
@@ -501,6 +504,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   const [passkey, setPasskey] = useState(me.prompt_passkey);
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
   const closeWelcome = () => { welcomeSeen.set(true); setWelcome(false); };
+  // الخطوة الأخيرة من معالج البداية: بعد إرسال القياس وحتى الاعتماد، مرة واحدة
+  const [nextCard, setNextCard] = useState(() => !nextSeen.get());
+  const closeNext = () => { nextSeen.set(true); setNextCard(false); };
   const next = nextStep(journey);
   const goTo = (key) => {
     setExpanded((s) => new Set(s).add(key));
@@ -579,7 +585,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
       )}
       {participant.status !== 'completed' && <PreManager />}
-      {welcome && <Welcome firstName={firstName} onClose={closeWelcome} />}
+      {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
+      {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
 
       {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 

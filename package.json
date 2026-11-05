@@ -17,6 +17,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "leaders:dev": "vite --config leaders-app/vite.config.js",
+    "video:build": "node shared/video/generate.mjs",
     "leaders:build": "vite build --config leaders-app/vite.config.js",
     "admin:dev": "vite --config admin-app/vite.config.js",
     "admin:build": "vite build --config admin-app/vite.config.js",

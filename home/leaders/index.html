@@ -118,6 +118,9 @@
 .enter__eyebrow{text-align:right;font-size:12px;letter-spacing:var(--mi-track);color:var(--mi-gold);margin:0 0 10px}
 .enter__title{font-family:var(--mi-font-ar);font-size:clamp(26px,3.4vw,38px);color:var(--mi-graphite);margin:0 0 10px}
 .enter__lead{color:var(--mi-muted);max-width:62ch;line-height:1.9;margin:0 0 32px}
+.enter__video{margin:0 0 36px;max-width:860px}
+.enter__video video{display:block;width:100%;aspect-ratio:16/9;background:var(--mi-graphite);border:1px solid var(--mi-line);border-top:3px solid var(--mi-gold)}
+.enter__video figcaption{margin-top:10px;font-size:14px;color:var(--mi-muted);line-height:1.8}
 .enter__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
 .enter__card{display:flex;flex-direction:column;gap:10px;padding:26px 24px;background:var(--mi-surface);border:1px solid var(--mi-line);border-top:3px solid var(--mi-gold);text-decoration:none;color:var(--mi-graphite);transition:transform .2s ease,box-shadow .2s ease}
 .enter__card:hover,.enter__card:focus-visible{transform:translateY(-3px);box-shadow:0 14px 34px -18px rgba(11,39,47,.45)}
@@ -262,6 +265,14 @@
       <p class="enter__eyebrow" dir="ltr">ENTER THE PROGRAM</p>
       <h2 class="enter__title" id="enter-title">ادخل إلى البرنامج</h2>
       <p class="enter__lead">لكل دور في البرنامج بوابته. الدخول بالبريد برمز يصلك، أو بحساب Google، بلا كلمات مرور.</p>
+      <figure class="enter__video">
+        <video controls playsinline preload="none" poster="https://leaders.sunkvalue.com/media/intro-v1.jpg" aria-label="كيف تعمل رحلتك في برنامج القادة">
+          <source src="https://leaders.sunkvalue.com/media/intro-v1.webm" type="video/webm">
+          <source src="https://leaders.sunkvalue.com/media/intro-v1.mp4" type="video/mp4">
+          <track kind="captions" srclang="ar" label="العربية" src="https://leaders.sunkvalue.com/media/intro-v1.vtt" default>
+        </video>
+        <figcaption>كيف تعمل رحلتك في دقيقة ونصف: الدخول، والأطوار الثلاثة، وقائمة التحقق، وما يُفتح بعد الاعتماد</figcaption>
+      </figure>
       <div class="enter__grid">
         <a class="enter__card enter__card--main" href="https://leaders.sunkvalue.com/">
           <h3>أنا مشارك</h3>

@@ -1322,3 +1322,28 @@ body:has(.demo-tour) main{padding-bottom:220px}
 .pr-list > li { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); display: grid; gap: 6px; }
 .pr-answer { padding: 8px 10px; border-radius: 8px; background: var(--mist); font-size: 14px; }
 .pr h4 { margin: 10px 0 0; }
+
+/* ── الفيديو التعريفي ومعالج البداية (2026-11-05) ── */
+.intro-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-weight: 600; }
+.intro-video { width: 100%; aspect-ratio: 16 / 9; background: var(--graphite); border-radius: 10px; display: block; }
+.vdialog-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(6, 19, 24, .78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.vdialog { width: min(960px, 100%); background: var(--surface); border-radius: var(--radius); padding: 14px 16px 16px; box-shadow: var(--shadow); }
+.vdialog-head h2 { font-size: 16px; margin: 0; }
+.vdialog-head { margin-bottom: 10px; }
+.onb { max-width: 760px; margin: 0 auto 6px; padding: 14px 16px 0; }
+.onb ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; counter-reset: none; }
+.onb li { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 8px 4px; border-top: 3px solid var(--line); color: var(--muted); font-size: 13px; }
+.onb li.on { border-top-color: var(--gold); color: var(--fg); font-weight: 700; }
+.onb li.done { border-top-color: var(--graphite); color: var(--fg); }
+.onb-dot { width: 26px; height: 26px; border-radius: 50%; background: var(--mist); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+.onb li.on .onb-dot { background: var(--gold); color: #fff; }
+.onb li.done .onb-dot { background: var(--graphite); color: #fff; }
+.onb-count { text-align: center; margin: 6px 0 0; }
+.onb-welcome h1 { font-size: 24px; }
+.onb-list { margin: 4px 0 0; padding-inline-start: 20px; line-height: 1.9; }
+.onb-next ol, .first-open ol { margin: 8px 0 0; padding-inline-start: 20px; line-height: 1.9; }
+@media (max-width: 560px) {
+  .onb-min { display: none; }
+  .onb li { font-size: 12px; }
+  .vdialog { padding: 10px; }
+}

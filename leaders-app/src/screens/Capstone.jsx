@@ -5,6 +5,7 @@
 // فتجد العمل ذاته. الصفحة تجمعها، وتفحص اتساقها، وتسلّمها للمستشار، وتصدر
 // الوثيقة الاحترافية للطباعة. لا محتوى يُكتب مرتين.
 import React, { useEffect, useState } from 'react';
+import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { useUnsavedGuard } from '../unsaved.js';
 import { dimOf, levelOf } from '../labels.js';
@@ -91,6 +92,11 @@ export default function Capstone({ me, onEditProfile, onBack }) {
 
   return (
     <div className="page capstone">
+      <FirstOpen id="capstone" icon="🧭" title="مبادرتك على عملك الحقيقي" lines={[
+        'اختر مشروعًا من عملك، وفصول الوثيقة تتبع نطاق ما تقوده كما حددته في ملفك.',
+        'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تسلّمها.',
+        'ملاحظات المستشار تعيد الوثيقة إليك هنا مع ما يحتاج تعديلًا، ثم تعتمد.',
+      ]} />
       <section className="cp-hero">
         <div className="cp-hero-main">
           <span className="book-eyebrow">{TERMS.capstoneEyebrow}</span>
