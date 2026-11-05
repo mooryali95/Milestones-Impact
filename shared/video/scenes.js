@@ -11,7 +11,7 @@ export const VIDEO = {
   height: 720,
   maxBytes: 24 * 1024 * 1024,  // سقف الحجم: تحت حد Cloudflare Pages للملف الواحد (25 ميجابايت)
   label: 'شاهد كيف تعمل المنصة',
-  duration_ar: 'ثماني دقائق ونصف',
+  duration_ar: 'سبع دقائق ونصف',
   title: 'كيف تعمل رحلتك في برنامج القادة',
 };
 
