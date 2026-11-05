@@ -4,12 +4,12 @@
 // (التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md)
 
 export const VIDEO = {
-  file: 'intro-v1',            // /media/intro-v1.mp4 و.webm و.vtt في تطبيق القادة
+  file: 'intro-v2',            // /media/intro-v2.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
   seconds: 90,
   fps: 24,
   width: 1280,
   height: 720,
-  maxBytes: 4 * 1024 * 1024,   // سقف الحجم المتفق عليه (القرار 2)
+  maxBytes: 24 * 1024 * 1024,  // سقف الحجم: تحت حد Cloudflare Pages للملف الواحد (25 ميجابايت)
   label: 'شاهد كيف تعمل المنصة',
   duration_ar: 'دقيقة ونصف',
   title: 'كيف تعمل رحلتك في برنامج القادة',
