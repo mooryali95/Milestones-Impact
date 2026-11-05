@@ -11,7 +11,7 @@ const OUT = process.argv[2] || path.join(here, 'الأطر-الثلاثة-ورش
 // ── الهوية ──
 const K = { graphite: '0B272F', ink: '061318', slate: '12414E', gold: 'A97A2E', copper: 'C79A4B', mist: 'EAF0F0', sand: 'EFE7D8', white: 'FFFFFF', muted: '4A6A72', goldDeep: '8E6524', sandDeep: 'E3D7C0', dim: 'C9D6D8' };
 const THEME = {
-  name: 'Milestone Impact', headFontFace: 'Noto Kufi Arabic', bodyFontFace: 'Noto Kufi Arabic',
+  name: 'Milestone Impact', headFontFace: 'Almarai', bodyFontFace: 'Almarai',
   colors: { dk1: K.graphite, lt1: K.white, dk2: K.slate, lt2: K.sand, accent1: K.gold, accent2: K.copper, accent3: K.muted, accent4: K.mist, accent5: K.ink, accent6: K.goldDeep, hlink: K.gold, folHlink: K.goldDeep },
 };
 const pres = new pptxgen();
