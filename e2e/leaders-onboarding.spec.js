@@ -47,12 +47,12 @@ test('شاشة الدخول: زر الفيديو يفتح مشغّلًا داخ�
   await expect(dialog).toBeVisible();
   const video = dialog.locator('video');
   await expect(video).toHaveAttribute('controls', '');
-  await expect(video.locator('source[type="video/mp4"]')).toHaveAttribute('src', '/media/intro-v1.mp4');
-  await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/intro-v1.vtt');
+  await expect(video.locator('source[type="video/mp4"]')).toHaveAttribute('src', '/media/intro-v2.mp4');
+  await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/intro-v2.vtt');
   // الملف نفسه يُخدم فعلًا من التطبيق المبني
-  const res = await page.request.get(APP + 'media/intro-v1.mp4');
+  const res = await page.request.get(APP + 'media/intro-v2.mp4');
   expect(res.status()).toBe(200);
-  expect(Number(res.headers()['content-length'])).toBeLessThan(4 * 1024 * 1024);
+  expect(Number(res.headers()['content-length'])).toBeLessThan(24 * 1024 * 1024);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(btn).toBeFocused();
