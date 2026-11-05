@@ -19,6 +19,9 @@ const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=
 const OUT = path.resolve(root, arg('out', 'leaders-app/public/media'));
 const PORT = Number(arg('port', 4312));
 const QUICK = process.argv.includes('--quick');   // تجربة سريعة: بلا انتظار قراءة
+// الصوت: مجلد فيه segments.json (مدة مقطع كل خطوة بالثواني) وملفات 01.mp3 إلى 18.mp3؛ مدة عرض كل خطوة = مدة مقطعها، ويُدمج الصوت في الناتج
+const AUDIO = arg('audio', '');
+const SEGS = AUDIO ? JSON.parse(fs.readFileSync(path.join(AUDIO, 'segments.json'), 'utf8')) : null;
 fs.mkdirSync(OUT, { recursive: true });
 const W = 1920, H = 1080;
 
@@ -113,7 +116,7 @@ const t0 = Date.now();
 const marks = [];   // للترجمة VTT: [من، إلى، النص]
 const now = () => (Date.now() - t0) / 1000;
 const sleep = (ms) => page.waitForTimeout(QUICK ? Math.min(ms, 400) : ms);
-const readTime = (text) => Math.max(5000, Math.min(16000, text.split(/\s+/).length * 330));
+const readTime = (text, idx = -1) => (SEGS && idx >= 0 ? Math.round(SEGS[idx].dur * 1000) + 900 : Math.max(5000, Math.min(16000, text.split(/\s+/).length * 330)));
 const ev = (code) => page.evaluate(code);
 const say = async (idx, anchorOverride) => {
   const st = TOUR_STEPS[idx], total = TOUR_STEPS.length, anchor = anchorOverride === undefined ? st.anchor : anchorOverride;
@@ -122,7 +125,7 @@ const say = async (idx, anchorOverride) => {
   await sleep(500);
   await page.evaluate(([a, n, t, title, text]) => window.__mi.show(a, n, t, title, text), [anchor, idx + 1, total, st.t, st.d]);
   const from = now();
-  await sleep(readTime(st.d));
+  await sleep(readTime(st.d, idx));
   marks.push([from, now(), st.d]);
 };
 const hide = async () => { await ev('window.__mi.hide()'); await sleep(350); };
@@ -133,14 +136,14 @@ const moveTo = async (locator) => {
 };
 const click = async (locator) => { await moveTo(locator); await ev('window.__mi.click()'); await locator.click(); await sleep(450); };
 const type = async (locator, text) => { await click(locator); await locator.fill(''); await locator.pressSequentially(text, { delay: QUICK ? 5 : 55 }); await sleep(350); };
-const fullCard = async (eyebrow, title, text, ms) => { await page.evaluate(([e, t, x]) => window.__mi.full(e, t, x), [eyebrow, title, text]); const from = now(); await sleep(ms); marks.push([from, now(), text]); await ev('window.__mi.fullHide()'); await sleep(700); };
+const fullCard = async (eyebrow, title, text, ms, idx = -1) => { if (idx >= 0) ms = readTime(text, idx); await page.evaluate(([e, t, x]) => window.__mi.full(e, t, x), [eyebrow, title, text]); const from = now(); await sleep(ms); marks.push([from, now(), text]); await ev('window.__mi.fullHide()'); await sleep(700); };
 
 await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.getByLabel('البريد الإلكتروني').waitFor();
 await sleep(600);
 
 // 1 الترحيب (بطاقة كاملة فوق شاشة الدخول)
-await fullCard('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', TOUR_STEPS[0].d, readTime(TOUR_STEPS[0].d));
+await fullCard('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', TOUR_STEPS[0].d, readTime(TOUR_STEPS[0].d), 0);
 
 // 2 أبواب الدخول: شرح ثم دخول فعلي بالبريد والاسم والرمز
 await say(1);
@@ -243,8 +246,8 @@ await say(15);
 await hide();
 
 // 17 البوابتان (بطاقة كاملة) و18 الختام (بطاقة كاملة)
-await fullCard('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', TOUR_STEPS[16].d, readTime(TOUR_STEPS[16].d));
-await fullCard('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', readTime(TOUR_STEPS[17].d) + 1500);
+await fullCard('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', TOUR_STEPS[16].d, readTime(TOUR_STEPS[16].d), 16);
+await fullCard('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', readTime(TOUR_STEPS[17].d) + 1500, 17);
 
 const seconds = Math.ceil(now());
 await context.close();
@@ -255,8 +258,17 @@ preview.kill();
 const webmIn = fs.readdirSync(tmpVid).map((f) => path.join(tmpVid, f)).find((f) => f.endsWith('.webm'));
 const run = (args) => new Promise((resolve, reject) => { const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' }); p.on('exit', (c) => (c === 0 ? resolve() : reject(new Error(`ffmpeg ${c}`)))); });
 const base = path.join(OUT, VIDEO.file);
-await run(['-i', webmIn, '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-r', '24', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', `${base}.mp4`]);
-await run(['-i', webmIn, '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '38', '-r', '24', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p', `${base}.webm`]);
+// الصوت: كل مقطع يبدأ مع بداية خطوته المسجَّلة (marks)، ثم يُدمج مع الصورة
+let audioArgs = [], audioMap = [];
+if (SEGS) {
+  const inputs = [], delays = [];
+  SEGS.forEach((_, i) => { inputs.push('-i', path.join(AUDIO, `${String(i + 1).padStart(2, '0')}.mp3`)); delays.push(`[${i + 1}]adelay=${Math.round(marks[i][0] * 1000)}|${Math.round(marks[i][0] * 1000)}[a${i}]`); });
+  const mix = `${delays.join(';')};${SEGS.map((_, i) => `[a${i}]`).join('')}amix=inputs=${SEGS.length}:normalize=0:dropout_transition=0,aresample=48000[aout]`;
+  audioArgs = [...inputs, '-filter_complex', mix, '-map', '0:v', '-map', '[aout]'];
+  audioMap = ['-shortest'];
+}
+await run(['-i', webmIn, ...audioArgs, '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-r', '24', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'aac', '-b:a', '128k'] : []), ...audioMap, '-movflags', '+faststart', `${base}.mp4`]);
+await run(['-i', webmIn, ...audioArgs, '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '38', '-r', '24', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p', ...(SEGS ? ['-c:a', 'libopus', '-b:a', '96k'] : []), ...audioMap, `${base}.webm`]);
 await run(['-ss', '3', '-i', `${base}.mp4`, '-frames:v', '1', '-q:v', '4', `${base}.jpg`]);
 fs.rmSync(tmpVid, { recursive: true, force: true });
 const ts = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = (s % 60).toFixed(3).padStart(6, '0'); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${x}`; };

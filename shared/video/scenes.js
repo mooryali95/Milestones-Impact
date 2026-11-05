@@ -4,7 +4,7 @@
 // (التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md)
 
 export const VIDEO = {
-  file: 'intro-v2',            // /media/intro-v2.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
+  file: 'intro-v3',            // /media/intro-v3.mp4 و.webm و.vtt في تطبيق القادة (مسجَّل من الواجهة الحقيقية بـrecord.mjs)
   seconds: 299,
   fps: 24,
   width: 1280,
