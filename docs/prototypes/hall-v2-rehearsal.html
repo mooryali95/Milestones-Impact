@@ -1,0 +1,869 @@
+<title>بروفة القاعة الحية</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;700&family=Noto+Sans:wght@400;600&display=swap">
+<!--
+  مصدر صفحة «بروفة القاعة الحية» (المرحلة ق0 في docs/journey/2026-11-06-تصور-القاعة-والمختبر-v2.md).
+  نموذج تفاعلي للقاعة v2 بمشاركين محاكين وبمحتوى كاتون الحقيقي (موضوع «وثيقة المشروع» من
+  supabase/content/katon/v1/topics.json)، ودليل البروفة بخمسة مستخدمين، وسجل نتائج SUS في مخزن الصفحة.
+  الأدوار الأربعة تقرأ من حالة واحدة في الصفحة، كما ستقرأ الأجهزة من الخادم في ق1.
+-->
+<style>
+/* التخطيط: شريط تبويبات، ثم في «النموذج» ثلاث نوافذ متزامنة (جوال المشارك، جوال الخبير، الشاشة الكبيرة) تتكدس على الجوال */
+:root{
+  --ink:#061318; --graphite:#0B272F; --slate:#12414E; --gold:#A97A2E; --copper:#C79A4B; --mist:#EAF0F0; --sand:#EFE7D8;
+  --bg:#EEF2F1; --surface:#FFFFFF; --surface-2:#F6F8F7; --fg:#0B272F; --muted:#4A6A72; --line:rgba(11,39,47,.14);
+  --accent:#8A6424; --accent-fill:#A97A2E; --on-accent:#FFFFFF; --ok:#2F7A55; --bad:#A6402F; --warn:#8A6424;
+  --screen-bg:#0B272F; --screen-2:#12414E; --screen-fg:#EAF0F0; --screen-muted:#9FB6BA; --screen-line:rgba(234,240,240,.14);
+  --t-support:#5fa8a0; --t-lead:#c79a4b; --t-guide:#7d93d6; --t-eval:#c9786b;
+  --font:"Noto Kufi Arabic","Noto Sans Arabic","Noto Sans",system-ui,sans-serif; --font-latin:"Noto Sans",system-ui,sans-serif;
+  --r:12px; --r-sm:8px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#08191E; --surface:#0F2A31; --surface-2:#12333B; --fg:#EAF0F0; --muted:#9FB6BA; --line:rgba(234,240,240,.14);
+  --accent:#D9B270; --accent-fill:#C79A4B; --on-accent:#061318; --ok:#6FBF8C; --bad:#E08C7C; --warn:#D9B270; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#08191E; --surface:#0F2A31; --surface-2:#12333B; --fg:#EAF0F0; --muted:#9FB6BA; --line:rgba(234,240,240,.14);
+  --accent:#D9B270; --accent-fill:#C79A4B; --on-accent:#061318; --ok:#6FBF8C; --bad:#E08C7C; --warn:#D9B270; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.75;direction:rtl;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+h1,h2,h3,h4{margin:0;line-height:1.45;text-wrap:balance}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent-fill);outline-offset:2px}
+.wrap{max-width:1320px;margin:0 auto}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding-block:22px 14px}
+.brand{display:flex;flex-direction:column;gap:2px}
+.eyebrow{font-family:var(--font-latin);font-size:11px;letter-spacing:.24em;color:var(--accent);text-transform:uppercase}
+.brand h1{font-size:clamp(22px,3vw,30px);font-weight:700}
+.brand p{color:var(--muted);font-size:14px;max-width:62ch}
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px}
+.tabs button{border:0;background:none;border-radius:999px;padding:7px 16px;font-size:14px;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--graphite);color:var(--mist)}
+:root[data-theme="dark"] .tabs button[aria-selected="true"]{background:var(--accent-fill);color:var(--on-accent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tabs button[aria-selected="true"]{background:var(--accent-fill);color:var(--on-accent)}}
+.view[hidden]{display:none!important}
+
+/* شريط التحكم في البروفة */
+.sim{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:14px}
+.sim .lbl{font-size:12px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12.5px;background:var(--surface-2);white-space:nowrap}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{border:0;background:none;padding:4px 11px;font-size:12.5px;color:var(--muted);font-family:var(--font-latin)}
+.seg button[aria-pressed="true"]{background:var(--accent-fill);color:var(--on-accent)}
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.toggle input{width:18px;height:18px;accent-color:var(--accent-fill)}
+.btn{border:1px solid var(--line);background:var(--surface-2);border-radius:var(--r-sm);padding:7px 14px;font-size:14px}
+.btn.primary{background:var(--graphite);border-color:var(--graphite);color:var(--mist)}
+.btn.gold{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.spacer{flex:1}
+
+/* اختيار الدور على الجوال */
+.roles{display:none;gap:6px;margin-bottom:12px;overflow-x:auto}
+.roles button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:13.5px}
+.roles button[aria-pressed="true"]{background:var(--graphite);color:var(--mist);border-color:var(--graphite)}
+
+.stage{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr) minmax(0,300px);gap:16px;align-items:start}
+.pane{min-width:0;display:flex;flex-direction:column;gap:8px}
+.pane-h{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+.pane-h b{color:var(--fg);font-weight:600}
+@media (max-width:1100px){
+  .roles{display:flex}
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .pane{display:none}
+  .pane.on{display:flex}
+}
+
+/* جوال */
+.phone{background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:10px;box-shadow:0 18px 50px -30px rgba(11,39,47,.5);max-width:360px;width:100%;margin-inline:auto}
+.screen-ph{border-radius:20px;background:var(--surface-2);min-height:600px;display:flex;flex-direction:column;overflow:hidden}
+.ph-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.ph-top .t{font-size:12.5px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-body{padding:14px;display:flex;flex-direction:column;gap:12px;flex:1}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.sentence{font-size:16.5px;font-weight:500;line-height:1.9}
+.qtag{font-size:12px;color:var(--accent);font-weight:700}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.xs{font-size:12px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.between{justify-content:space-between}
+.verdicts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.verdicts button,.conf button{border:1.5px solid var(--line);background:var(--surface);border-radius:var(--r-sm);padding:10px 8px;font-size:15px}
+.verdicts button[aria-pressed="true"]{border-color:var(--graphite);background:var(--graphite);color:var(--mist)}
+:root[data-theme="dark"] .verdicts button[aria-pressed="true"]{border-color:var(--accent-fill);background:var(--accent-fill);color:var(--on-accent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .verdicts button[aria-pressed="true"]{border-color:var(--accent-fill);background:var(--accent-fill);color:var(--on-accent)}}
+.conf{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.conf button{font-size:13px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:0}
+.conf button span{font-size:10.5px;color:var(--muted)}
+.conf button[aria-pressed="true"]{border-color:var(--accent-fill);background:color-mix(in oklab,var(--accent-fill) 16%,var(--surface))}
+.stances{display:flex;flex-wrap:wrap;gap:6px}
+.stances button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:12.5px}
+.stances button[aria-pressed="true"]{border-color:var(--accent-fill);color:var(--accent)}
+.receipt{display:flex;align-items:center;gap:8px;border-radius:var(--r-sm);padding:9px 12px;background:color-mix(in oklab,var(--ok) 14%,var(--surface));color:var(--ok);font-weight:600;font-size:14px}
+.timer{display:flex;align-items:center;gap:10px}
+.ring{--p:1;width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--accent-fill) calc(var(--p)*360deg),var(--line) 0);display:grid;place-items:center;flex:none}
+.ring b{width:36px;height:36px;border-radius:50%;background:var(--surface);display:grid;place-items:center;font-family:var(--font-latin);font-size:13px;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent-fill);border-radius:999px}
+.team-pill{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.team-pill i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.key{font-weight:700}
+.key.true{color:var(--ok)} .key.false{color:var(--bad)}
+.pts{font-family:var(--font-latin);font-weight:600;font-variant-numeric:tabular-nums}
+.pts.pos{color:var(--ok)} .pts.neg{color:var(--bad)}
+.notes{display:flex;flex-direction:column;gap:6px;max-height:190px;overflow:auto}
+.note{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 10px;font-size:13px}
+.note b{font-weight:600}
+.input{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);padding:8px 10px}
+textarea.input{resize:vertical;min-height:64px}
+.mini-room{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.mini-room .tb{border-radius:var(--r-sm);padding:6px 8px;background:var(--surface-2);border:1px solid var(--line);font-size:12px}
+.seats{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.seat{width:14px;height:14px;border-radius:50%;border:1.5px solid currentColor;display:inline-block}
+.seat.ans{background:currentColor}
+.seat.me{outline:2px dashed var(--accent-fill);outline-offset:1px}
+.seat.remote{border-style:dashed}
+.steps{display:flex;flex-direction:column;gap:6px;padding:0;margin:0;list-style:none}
+.steps li{display:flex;gap:8px;align-items:baseline;font-size:13.5px}
+.steps li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent-fill);flex:none;transform:translateY(-2px)}
+
+/* الخبير */
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ctl .btn{padding:13px 8px;font-size:15px;font-weight:600}
+.ctl .wide{grid-column:1/-1}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-variant-numeric:tabular-nums}
+
+/* الشاشة الكبيرة */
+.big{background:var(--screen-bg);color:var(--screen-fg);border-radius:18px;padding:18px;min-height:520px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--screen-line)}
+.big .muted{color:var(--screen-muted)}
+.big-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.big-sent{font-size:clamp(20px,2.4vw,32px);font-weight:500;line-height:1.7;text-wrap:balance}
+.big-timer{font-family:var(--font-latin);font-size:clamp(22px,2.6vw,34px);font-variant-numeric:tabular-nums;color:var(--copper)}
+.tables{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.table{border:1px solid var(--screen-line);border-radius:14px;padding:10px 12px;background:var(--screen-2);display:flex;flex-direction:column;gap:6px;min-width:0}
+.table h4{font-size:15px;display:flex;align-items:center;gap:8px}
+.table h4 i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.table .seats .seat{width:18px;height:18px}
+.table .tnote{font-size:13px;color:var(--screen-muted);border-top:1px solid var(--screen-line);padding-top:6px;min-height:22px}
+.dist{display:flex;flex-direction:column;gap:6px}
+.dist .r{display:grid;grid-template-columns:110px 1fr 52px;gap:8px;align-items:center;font-size:14px}
+.dist .bar{background:var(--screen-line)}
+.dist .bar i{background:var(--copper)}
+.big .key.true{color:#8fd1a8} .big .key.false{color:#f0a493}
+.scores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.score{border-radius:14px;padding:12px;background:var(--screen-2);border:1px solid var(--screen-line);text-align:center}
+.score b{display:block;font-family:var(--font-latin);font-size:28px;font-variant-numeric:tabular-nums}
+@media (max-width:640px){.scores{grid-template-columns:repeat(2,minmax(0,1fr))}.tables{grid-template-columns:minmax(0,1fr)}}
+
+/* الدليل والنتائج */
+.doc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.doc{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h2{font-size:18px}
+.panel h3{font-size:15px}
+.panel ol,.panel ul{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px}
+.measure{max-width:68ch}
+table.t{width:100%;border-collapse:collapse;font-size:13.5px}
+table.t th,table.t td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:right;vertical-align:top}
+table.t th{color:var(--muted);font-weight:500;font-size:12.5px}
+table.t td.num{font-family:var(--font-latin);font-variant-numeric:tabular-nums}
+.tscroll{overflow-x:auto}
+.sus{display:flex;flex-direction:column;gap:8px}
+.sus .q{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13.5px;border-bottom:1px dashed var(--line);padding-bottom:6px}
+.likert{display:inline-flex;gap:3px}
+.likert label{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--line);border-radius:6px;font-family:var(--font-latin);font-size:13px;cursor:pointer}
+.likert input{position:absolute;opacity:0;width:1px;height:1px}
+.likert input:checked+span{color:var(--on-accent)}
+.likert label:has(input:checked){background:var(--accent-fill);border-color:var(--accent-fill)}
+.likert label:has(input:focus-visible){outline:3px solid var(--accent-fill);outline-offset:2px}
+.gate{display:flex;align-items:center;gap:10px;border-radius:var(--r-sm);padding:10px 12px;font-weight:600}
+.gate.ok{background:color-mix(in oklab,var(--ok) 15%,var(--surface));color:var(--ok)}
+.gate.no{background:color-mix(in oklab,var(--bad) 13%,var(--surface));color:var(--bad)}
+.gate.wait{background:var(--surface-2);color:var(--muted)}
+.big-num{font-family:var(--font-latin);font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px}
+.sev-crit{color:var(--bad);font-weight:600}
+.empty{color:var(--muted);font-size:13.5px;padding:10px;border:1px dashed var(--line);border-radius:var(--r-sm)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <p class="sr" id="live" role="status" aria-live="polite"></p>
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">Milestone Impact · Leaders · Hall v2</span>
+      <h1>بروفة القاعة الحية</h1>
+      <p>نموذج تفاعلي للقاعة كما اعتُمد تصورها: المشارك في القاعة وعن بعد، والخبير من جواله، والشاشة الكبيرة، كلها تقرأ من حالة واحدة. المحتوى من بنك كاتون الحقيقي، والحضور محاكون.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="أقسام الصفحة">
+      <button role="tab" id="tab-proto" aria-selected="true" aria-controls="v-proto">النموذج</button>
+      <button role="tab" id="tab-guide" aria-selected="false" aria-controls="v-guide">دليل البروفة</button>
+      <button role="tab" id="tab-results" aria-selected="false" aria-controls="v-results">النتائج</button>
+    </div>
+  </header>
+
+  <!-- ═══ النموذج ═══ -->
+  <section class="view" id="v-proto" role="tabpanel" aria-labelledby="tab-proto">
+    <div class="sim" aria-label="التحكم في البروفة">
+      <span class="chip"><span class="dot" aria-hidden="true"></span>وضع البروفة: <b id="sim-count">23</b> مشاركًا محاكًى</span>
+      <span class="lbl">السرعة</span>
+      <span class="seg" role="group" aria-label="سرعة الوقت">
+        <button type="button" data-speed="1" aria-pressed="false">1×</button>
+        <button type="button" data-speed="3" aria-pressed="true">3×</button>
+        <button type="button" data-speed="6" aria-pressed="false">6×</button>
+      </span>
+      <label class="toggle"><input type="checkbox" id="autopilot"> طيار آلي كامل</label>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="restart">ابدأ من جديد</button>
+    </div>
+
+    <div class="roles" role="group" aria-label="اختر ما تعرضه">
+      <button type="button" data-role="participant" aria-pressed="true">المشارك</button>
+      <button type="button" data-role="expert" aria-pressed="false">الخبير</button>
+      <button type="button" data-role="screen" aria-pressed="false">الشاشة الكبيرة</button>
+    </div>
+
+    <div class="stage">
+      <div class="pane on" data-pane="participant">
+        <div class="pane-h"><b>جوال المشارك</b>
+          <span class="seg" role="group" aria-label="مكان المشارك">
+            <button type="button" data-place="hall" aria-pressed="true">في القاعة</button>
+            <button type="button" data-place="remote" aria-pressed="false">عن بعد</button>
+          </span>
+        </div>
+        <div class="phone"><div class="screen-ph">
+          <div class="ph-top"><span class="t" id="p-top">القاعة</span><span class="chip xs" id="p-conn"><span class="dot" aria-hidden="true"></span>لحظي</span></div>
+          <div class="ph-body" id="p-body"></div>
+        </div></div>
+      </div>
+
+      <div class="pane" data-pane="screen">
+        <div class="pane-h"><b>الشاشة الكبيرة في القاعة</b><span class="xs">عرض بلا صلاحيات</span></div>
+        <div class="big" id="big"></div>
+      </div>
+
+      <div class="pane" data-pane="expert">
+        <div class="pane-h"><b>جوال الخبير</b><span class="xs">نصف آلي افتراضيًا</span></div>
+        <div class="phone"><div class="screen-ph">
+          <div class="ph-top"><span class="t">لوحة الخبير · دفعة تجريبية</span><span class="chip xs"><span class="dot" aria-hidden="true"></span>متصل</span></div>
+          <div class="ph-body" id="x-body"></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ الدليل ═══ -->
+  <section class="view" id="v-guide" role="tabpanel" aria-labelledby="tab-guide" hidden>
+    <div class="doc">
+      <div class="panel measure">
+        <h2>هدف البروفة</h2>
+        <p>نتحقق قبل بناء التزامن (ق1) أن تجربة القاعة مفهومة وسهلة لمن يستعملها. البوابة: متوسط SUS لخمسة مختبرين 75 فأكثر، ولا مشكلة حرجة واحدة. تُجرى البروفة على هذه الصفحة من جوال المختبر.</p>
+        <h3>من يختبر</h3>
+        <ul>
+          <li>ثلاثة مشاركين بمستويات مختلفة، أحدهم عن بعد (زر «عن بعد» أعلى جوال المشارك).</li>
+          <li>خبير واحد يدير جولة من جواله.</li>
+          <li>منسق جهة واحد يجرب دور المشارك ويعلّق على ما يرى من الحضور.</li>
+        </ul>
+        <h3>تجهيز الجلسة (لكل مختبر 30 دقيقة)</h3>
+        <ol>
+          <li>اضغط «ابدأ من جديد»، واترك السرعة 3×، وأطفئ الطيار الآلي ليبقى الانتقال بيد الخبير كما في الواقع.</li>
+          <li>اطلب من المختبر أن يفكر بصوت مسموع، ولا تساعده إلا إن توقف دقيقتين.</li>
+          <li>سجّل لكل مهمة: نجح، أو نجح بصعوبة، أو لم ينجح، والملاحظات بكلماته.</li>
+          <li>بعد المهام يجيب عن استبانة SUS في تبويب «النتائج».</li>
+        </ol>
+      </div>
+      <div class="panel measure">
+        <h2>المهام الخمس للمشارك</h2>
+        <ol>
+          <li><b>الدخول:</b> ادخل القاعة وانتظر البدء. الهدف أقل من 30 ثانية من فتح الرابط إلى غرفة الانتظار.</li>
+          <li><b>الجولة التجريبية:</b> احكم على الجملة بصحيحة أو خاطئة، واختر درجة ثقتك، وأرسل.</li>
+          <li><b>الجولة الأولى:</b> اعرف فريقك وطاولتك ومهمة فريقك، وأجب قبل نهاية الوقت.</li>
+          <li><b>بعد الكشف:</b> افهم لماذا حصلت على نقاطك، وأضف ملاحظة في لوحة الطاولة، ثم طبّق الجملة على مبادرتك أو تخطَّ.</li>
+          <li><b>الخلاصة:</b> اعرف درجتك ومعايرتك وخطوتك التالية.</li>
+        </ol>
+        <h3>مهام الخبير</h3>
+        <ol>
+          <li>ابدأ الجلسة من غرفة الانتظار.</li>
+          <li>مدّد وقت الإجابة 30 ثانية، ثم اكشف المفتاح.</li>
+          <li>انتقل إلى النقاش، ثم إلى الجولة التالية، ثم أنهِ الجلسة.</li>
+        </ol>
+        <h3>تصنيف المشكلات</h3>
+        <ul>
+          <li><b class="sev-crit">حرجة:</b> تمنع إكمال مهمة أو تُضيّع إجابة.</li>
+          <li><b>كبيرة:</b> تؤخر المهمة أو تربك المختبر حتى يسأل.</li>
+          <li><b>صغيرة:</b> ملاحظة لا تعيق.</li>
+        </ul>
+      </div>
+      <div class="panel measure">
+        <h2>ما يحاكيه النموذج وما لا يحاكيه</h2>
+        <ul>
+          <li>يحاكي: مراحل الجلسة كما في التصور، ومؤقتًا واحدًا لكل الأجهزة، وكشفًا آليًا حين يجيب الجميع، ونقاط Gardner-Medwin (الصواب 1 و2 و3، والخطأ 0 و−2 و−6)، ولوحة الطاولة، و«طبّقها على مبادرتك»، والخلاصة الخاصة بالفرد.</li>
+          <li>لا يحاكي: الشبكة الحقيقية والأجهزة المتعددة، والحضور إلى سجل الورشة، وربط الموضوع بباب الكتيب ونموذج المبادرة (ينتظر ضبط بنك كاتون).</li>
+          <li>المحتوى: موضوع «وثيقة المشروع» من بنك كاتون الحالي، ست جمل بأسئلتها ومفاتيحها.</li>
+        </ul>
+      </div>
+      <div class="panel measure">
+        <h2>بعد البروفة</h2>
+        <p>تُجمع النتائج في تبويب «النتائج» تلقائيًا لصاحب الصفحة ومحرريها. إن اجتازت البوابة يبدأ ق1 (الجولة والتزامن) بما تعلمناه، وإن لم تجتز تُعدَّل التجربة في النموذج وتُعاد البروفة على المهام التي تعثرت.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ النتائج ═══ -->
+  <section class="view" id="v-results" role="tabpanel" aria-labelledby="tab-results" hidden>
+    <div class="doc">
+      <div class="panel">
+        <h2>بوابة ق0</h2>
+        <div class="stats">
+          <div class="stat"><div class="xs muted">متوسط SUS</div><div class="big-num" id="r-avg">—</div></div>
+          <div class="stat"><div class="xs muted">المختبرون</div><div class="big-num" id="r-n">0 من 5</div></div>
+          <div class="stat"><div class="xs muted">مشكلات حرجة</div><div class="big-num" id="r-crit">0</div></div>
+        </div>
+        <div class="gate wait" id="r-gate">بانتظار نتائج المختبرين الخمسة</div>
+        <div class="tscroll"><table class="t" id="r-table">
+          <thead><tr><th>المختبر</th><th>الدور</th><th>SUS</th><th>المهام</th><th>المشكلات</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <p class="empty" id="r-empty">لا نتائج بعد. سجّل أول مختبر من النموذج المجاور بعد انتهاء مهامه.</p>
+        <p class="xs muted" id="r-store">النتائج محفوظة في مخزن الصفحة، ويراها صاحبها ومحرروها وحدهم.</p>
+      </div>
+      <form class="panel" id="r-form" novalidate>
+        <h2>تسجيل مختبر</h2>
+        <div class="row">
+          <label class="small" for="f-code">رمز المختبر</label>
+          <select class="input" id="f-code" style="width:auto">
+            <option>م1</option><option>م2</option><option>م3</option><option>م4</option><option>م5</option><option>م6</option>
+          </select>
+          <label class="small" for="f-role">الدور</label>
+          <select class="input" id="f-role" style="width:auto">
+            <option value="hall">مشارك في القاعة</option><option value="remote">مشارك عن بعد</option><option value="expert">خبير</option><option value="org">منسق جهة</option>
+          </select>
+        </div>
+        <h3>نتيجة المهام</h3>
+        <div class="tscroll"><table class="t" id="f-tasks"><tbody></tbody></table></div>
+        <h3>استبانة سهولة الاستخدام (SUS)</h3>
+        <p class="xs muted">1 لا أوافق بشدة، و5 أوافق بشدة.</p>
+        <div class="sus" id="f-sus"></div>
+        <h3>المشكلات المرصودة</h3>
+        <div class="row">
+          <select class="input" id="f-sev" style="width:auto" aria-label="درجة المشكلة">
+            <option value="crit">حرجة</option><option value="major" selected>كبيرة</option><option value="minor">صغيرة</option>
+          </select>
+          <input class="input" id="f-issue" placeholder="ماذا حدث، وفي أي مهمة" style="flex:1;min-width:180px">
+          <button type="button" class="btn" id="f-add">أضف</button>
+        </div>
+        <ul id="f-issues" class="small"></ul>
+        <div class="row between">
+          <span class="small">درجة SUS: <b class="pts" id="f-score">—</b></span>
+          <button type="submit" class="btn primary" id="f-save">احفظ نتيجة المختبر</button>
+        </div>
+        <p class="xs" id="f-msg" role="status"></p>
+      </form>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  // ── المحتوى: موضوع «وثيقة المشروع» (basics-2) من supabase/content/katon/v1/topics.json ──
+  const TOPIC = { title: 'وثيقة المشروع', competencies: ['الأثر', 'الرؤية الكلية'] };
+  const SENTENCES = [
+    { q: 'why', key: 'true', text: 'يحدد مخطط المشروع أهدافه بوضوح ويبيّن الغرض منه ونتائجه المتوقعة.' },
+    { q: 'what', key: 'true', text: 'يشمل مخطط المشروع جداول زمنية تفصيلية لترتيب المهام والأنشطة، ويساعد في تحديد مواعيد بدء الأنشطة وانتهائها ومدة كل نشاط.' },
+    { q: 'who', key: 'false', text: 'في أغلب المشاريع يحمل فريق التنفيذ المسؤولية الرئيسية عن تحقيق أهداف المشروع، ويبقى دور مدير المشروع استشاريًا في الغالب.' },
+    { q: 'when', key: 'false', text: 'غالبًا ما يُعدّ مخطط المشروع بعد انطلاق التنفيذ، حين تتضح الصورة الفعلية للعمل وتقلّ الافتراضات.' },
+  ];
+  const Q_AR = { why: 'لماذا', what: 'ماذا', how: 'كيف', absent: 'ماذا لو', who: 'من', when: 'متى' };
+  const TASKS = { support: 'اشرحوا الجملة لزملائكم', lead: 'أديروا النقاش بالتشاور مع الخبير', guide: 'فكروا في تطبيقها داخل منظمتكم', eval: 'جهزوا سؤال تقييم عليها' };
+  const TEAMS = [
+    { key: 'support', ar: 'فريق الدعم' }, { key: 'lead', ar: 'فريق القيادة' },
+    { key: 'guide', ar: 'فريق التوجيه' }, { key: 'eval', ar: 'فريق التقييم' },
+  ];
+  const TEAM_AR = Object.fromEntries(TEAMS.map((t) => [t.key, t.ar]));
+  const CONF = { 1: { ar: 'أرجّح', band: 'دون 67%' }, 2: { ar: 'واثق', band: 'من 67% إلى 80%' }, 3: { ar: 'متيقن', band: 'فوق 80%' } };
+  const POINTS = { right: { 1: 1, 2: 2, 3: 3 }, wrong: { 1: 0, 2: -2, 3: -6 } };
+  const STANCES = [['question', 'لدي سؤال'], ['research', 'تحتاج بحث'], ['idea', 'لدي فكرة'], ['can', 'أستطيع تنفيذها'], ['believe', 'آمن بالرأي'], ['assume', 'أفترض']];
+  const NAMES = ['سارة', 'خالد', 'نورة', 'فهد', 'ريم', 'عبدالله', 'منى', 'يوسف', 'هند', 'ماجد', 'لمى', 'تركي', 'أمل', 'سلمان', 'جود', 'بدر', 'رهف', 'فيصل', 'دانة', 'نايف', 'شهد', 'عمر', 'غادة'];
+  const NOTE_BANK = ['الهدف الواضح يختصر نصف النقاش', 'نحتاج مثالًا من مشروع حقيقي', 'المسؤولية الرئيسية على مدير المشروع', 'المخطط يسبق التنفيذ لا يتبعه', 'سؤال التقييم: ما الذي يتغير لو غاب المخطط؟', 'نطبقها على مبادرة الأرشفة الرقمية'];
+  const DUR = { rules: 12, answer: 90, trialAnswer: 60, reveal: 0, discuss: 180, apply: 40, split: 8 };
+  const fmt = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+
+  // ── الحالة الواحدة: كل ما تعرضه النوافذ الثلاث يُشتق منها ──
+  let S;
+  function fresh() {
+    seed = 7;
+    const people = NAMES.map((name, i) => ({
+      id: `b${i}`, name, bot: true, remote: i % 5 === 4,
+      acc: 0.55 + rnd() * 0.33, joinAt: 1 + rnd() * 9, team: null, table: null,
+    }));
+    people.push({ id: 'me', name: 'أنت', bot: false, remote: false, acc: 0, joinAt: 0, team: null, table: null });
+    return {
+      stage: 'lobby', t: 0, endsAt: null, paused: false, roundIdx: -1, trial: true, started: false,
+      people, answers: {}, notes: { support: [], lead: [], guide: [], eval: [] }, applications: [], waiting: false,
+      me: { verdict: null, conf: null, stances: [], sent: false, applied: null, extraTime: false },
+      totals: {}, history: [], extended: {},
+    };
+  }
+  let speed = 3, autopilot = false, place = 'hall';
+
+  const present = () => S.people.filter((p) => p.joinAt <= S.t);
+  const sentence = () => (S.trial ? SENTENCES[0] : SENTENCES[S.roundIdx + 1]);
+  const scoredRounds = SENTENCES.length - 1;
+  const ansFor = (i) => S.answers[i] || {};
+  const left = () => (S.endsAt == null ? null : S.endsAt - S.t);
+
+  function setStage(stage, dur) {
+    S.stage = stage; S.endsAt = dur ? S.t + dur : null; S.waiting = false;
+  }
+  function assignTeams() {
+    const ps = present().slice().sort((a, b) => (a.id === 'me') - (b.id === 'me') || b.acc - a.acc);
+    ps.forEach((p, i) => { p.team = TEAMS[i % 4].key; });
+    const me = S.people.find((p) => p.id === 'me'); me.team = 'lead';
+    S.people.forEach((p) => { if (!p.team) p.team = TEAMS[Math.floor(rnd() * 4)].key; });
+  }
+  function startAnswer() {
+    const key = S.trial ? 'trial' : S.roundIdx;
+    S.answers[key] = {};
+    S.me = { ...S.me, verdict: null, conf: null, stances: [], sent: false, applied: null };
+    // كل محاكى يقرر متى يجيب وبماذا وبأي ثقة؛ دقته ومعايرته من صفاته
+    for (const p of present()) {
+      if (p.id === 'me') continue;
+      const right = rnd() < p.acc;
+      const k = sentence().key;
+      const verdict = right ? k : (k === 'true' ? 'false' : 'true');
+      const c = p.acc > 0.78 ? (rnd() < 0.6 ? 3 : 2) : p.acc > 0.66 ? (rnd() < 0.55 ? 2 : 1) : (rnd() < 0.6 ? 1 : 2);
+      p.plan = { at: S.t + 6 + rnd() * ((S.trial ? DUR.trialAnswer : DUR.answer) - 14), verdict, conf: c };
+    }
+    setStage(S.trial ? 'trial' : 'answer', S.trial ? DUR.trialAnswer : DUR.answer);
+  }
+  function answeredCount() { const a = S.answers[S.trial ? 'trial' : S.roundIdx] || {}; return Object.keys(a).length; }
+  function reveal() {
+    const key = S.trial ? 'trial' : S.roundIdx;
+    const k = sentence().key;
+    for (const [pid, a] of Object.entries(S.answers[key] || {})) {
+      a.points = a.verdict ? (a.verdict === k ? POINTS.right[a.conf] : POINTS.wrong[a.conf]) : 0;
+      if (!S.trial) S.totals[pid] = (S.totals[pid] || 0) + a.points;
+    }
+    if (!S.trial && S.answers[key].me) S.history.push({ ...S.answers[key].me, key: k, q: sentence().q });
+    setStage('reveal', null);
+    S.waiting = true;
+  }
+  function next() {
+    if (S.stage === 'lobby') { S.started = true; setStage('rules', DUR.rules); return; }
+    if (S.stage === 'rules') { startAnswer(); return; }
+    if (S.stage === 'trial' || S.stage === 'answer') { reveal(); return; }
+    if (S.stage === 'reveal' && S.trial) { S.trial = false; assignTeams(); setStage('split', DUR.split); return; }
+    if (S.stage === 'split') { S.roundIdx = 0; startAnswer(); return; }
+    if (S.stage === 'reveal') { setStage('discuss', DUR.discuss); return; }
+    if (S.stage === 'discuss') { setStage('apply', DUR.apply); return; }
+    if (S.stage === 'apply') {
+      if (S.roundIdx + 1 < scoredRounds) { S.roundIdx += 1; startAnswer(); } else { setStage('summary', null); }
+      return;
+    }
+    if (S.stage === 'summary') { setStage('closed', null); }
+  }
+
+  // ── الساعة: الوقت يتقدم بالسرعة المختارة، والمؤقت واحد لكل النوافذ ──
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.5, (now - last) / 1000); last = now;
+    if (!S.paused) {
+      S.t += dt * speed;
+      const key = S.trial ? 'trial' : S.roundIdx;
+      if (S.stage === 'trial' || S.stage === 'answer') {
+        for (const p of present()) if (p.plan && !S.answers[key][p.id] && S.t >= p.plan.at) S.answers[key][p.id] = { verdict: p.plan.verdict, conf: p.plan.conf };
+        const all = answeredCount() >= present().length;
+        if (!all && left() <= 0 && S.me.extraTime && !S.answers[key].me && !S.extended[key]) { S.extended[key] = true; S.endsAt += 30; }
+        else if (all || left() <= 0) reveal();
+      } else if (S.stage === 'discuss') {
+        const bots = present().filter((p) => p.bot);
+        if (rnd() < dt * speed * 0.05) {
+          const p = bots[Math.floor(rnd() * bots.length)];
+          if (p && S.notes[p.team].length < 4) S.notes[p.team].push({ by: p.name, text: NOTE_BANK[Math.floor(rnd() * NOTE_BANK.length)] });
+        }
+        if (left() <= 0) next();
+      } else if (S.endsAt != null && left() <= 0) {
+        next();
+      }
+      if (S.stage === 'lobby' && autopilot && present().length === S.people.length) next();
+      if (S.waiting && autopilot) next();
+    }
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  // ── العرض: ثلاث نوافذ من الحالة نفسها ──
+  const teamColor = (k) => `var(--t-${k})`;
+  function ring(remain, total) {
+    remain = Math.max(0, Math.ceil(remain));
+    const p = total ? Math.max(0, Math.min(1, remain / total)) : 0;
+    return `<span class="ring" style="--p:${p.toFixed(3)}"><b>${fmt(remain)}</b></span>`;
+  }
+  function seatsHtml(list, key) {
+    return `<span class="seats">${list.map((p) => `<span class="seat${S.answers[key] && S.answers[key][p.id] ? ' ans' : ''}${p.id === 'me' ? ' me' : ''}${p.remote || (p.id === 'me' && place === 'remote') ? ' remote' : ''}" style="color:${teamColor(p.team || 'lead')}" title="${esc(p.name)}"></span>`).join('')}</span>`;
+  }
+  function myPoints() { return S.totals.me || 0; }
+  function teamTotals() {
+    const out = { support: 0, lead: 0, guide: 0, eval: 0 };
+    for (const p of S.people) if (p.team) out[p.team] += S.totals[p.id] || 0;
+    return out;
+  }
+  function stageAr() {
+    return { lobby: 'غرفة الانتظار', rules: 'التهيئة', trial: 'الجولة التجريبية', split: 'التقسيم', answer: 'الإجابة', reveal: 'الكشف', discuss: 'النقاش', apply: 'التطبيق على المبادرة', summary: 'الخلاصة', closed: 'مغلقة' }[S.stage];
+  }
+
+  let lastP = '', lastX = '', lastB = '', lastStage = '';
+  const announce = (t) => { $('live').textContent = t; };
+  function render() {
+    if (S.stage !== lastStage) { lastStage = S.stage; announce(`المرحلة: ${stageAr()}`); }
+    const p = participantHtml(), x = expertHtml(), b = bigHtml();
+    if (p !== lastP) { patch($('p-body'), p); lastP = p; }
+    if (x !== lastX) { patch($('x-body'), x); lastX = x; }
+    if (b !== lastB) { $('big').innerHTML = b; lastB = b; }
+    $('p-top').textContent = `${TOPIC.title} · ${stageAr()}`;
+    $('sim-count').textContent = String(S.people.length - 1);
+  }
+  // يحفظ التركيز وما يكتبه المستخدم عند إعادة الرسم
+  function patch(el, html) {
+    const a = document.activeElement; const id = a && el.contains(a) ? a.id : null;
+    const sel = id && 'selectionStart' in a ? [a.selectionStart, a.selectionEnd] : null;
+    const vals = {}; el.querySelectorAll('input,textarea').forEach((i) => { if (i.id) vals[i.id] = i.value; });
+    el.innerHTML = html;
+    Object.entries(vals).forEach(([k, v]) => { const i = el.querySelector(`#${k}`); if (i) i.value = v; });
+    if (id) { const n = el.querySelector(`#${id}`); if (n) { n.focus(); if (sel && n.setSelectionRange) try { n.setSelectionRange(sel[0], sel[1]); } catch { /* حقل بلا تحديد */ } } }
+  }
+
+  function participantHtml() {
+    const me = S.people.find((q) => q.id === 'me');
+    const remote = place === 'remote';
+    const key = S.trial ? 'trial' : S.roundIdx;
+    const mini = remote && S.stage !== 'lobby' && S.stage !== 'rules' ? miniRoom(key) : '';
+    const placeTag = `<span class="chip xs">${remote ? 'حضور عن بعد' : 'حضور في القاعة'}</span>`;
+    switch (S.stage) {
+      case 'lobby': return `
+        <div class="card"><h3>أنت في غرفة الانتظار</h3>
+          <p class="small muted">تبدأ الجلسة حين يضغط الخبير «ابدأ». يصلك كل شيء على جوالك${remote ? '، والغرفة كاملة معروضة لك هنا' : '، والغرفة على الشاشة الكبيرة'}.</p>
+          <div class="row between"><span class="small">الحاضرون الآن</span><b class="pts">${present().length}</b></div>
+          <div class="bar" aria-hidden="true"><i style="width:${pct(present().length, S.people.length)}%"></i></div>
+          <div class="row">${placeTag}${remote ? '<button type="button" class="btn" style="font-size:13px;padding:4px 10px">افتح رابط الصوت</button>' : ''}</div>
+        </div>
+        <div class="card"><h3>موضوع اليوم: ${esc(TOPIC.title)}</h3><p class="small muted">الكفاءتان: ${TOPIC.competencies.join(' و')}</p></div>`;
+      case 'rules': return `
+        <div class="card"><h3>قبل أن نبدأ</h3>
+          <ul class="steps"><li>تحكم على كل جملة: صحيحة أو خاطئة، وتختار درجة ثقتك.</li><li>الثقة الصادقة أنفع لك: الخطأ بثقة عالية يكلف أكثر.</li><li>بعد الكشف يناقش فريقك الجملة، ثم تطبقها على مبادرتك إن شئت.</li></ul>
+          <div class="row between small"><span class="muted">تبدأ جولة تجريبية لا تُحتسب</span>${ring(left(), DUR.rules)}</div>
+        </div>`;
+      case 'trial': case 'answer': return answerCard(true, key) + mini;
+      case 'split': return `
+        <div class="card"><h3>فريقك وطاولتك</h3>
+          <div class="team-pill"><i style="background:${teamColor(me.team)}"></i>${TEAM_AR[me.team]} · الطاولة ${TEAMS.findIndex((t) => t.key === me.team) + 1}</div>
+          <p class="small muted">مع ${S.people.filter((q) => q.team === me.team && q.id !== 'me').slice(0, 4).map((q) => q.name).join('، ')} وغيرهم. مهمة فريقك في كل جولة تظهر بعد الكشف.</p>
+          ${placeTag}
+        </div>` + mini;
+      case 'reveal': return revealCard(key) + mini;
+      case 'discuss': return discussCard() + mini;
+      case 'apply': return applyCard();
+      case 'summary': case 'closed': return summaryCard();
+      default: return '';
+    }
+  }
+  function miniRoom(key) {
+    return `<div class="card"><div class="row between"><b class="small">الغرفة الآن</b><span class="xs muted">${answeredCount()} أجابوا</span></div>
+      <div class="mini-room">${TEAMS.map((t) => `<div class="tb"><span class="team-pill xs"><i style="background:${teamColor(t.key)}"></i>${t.ar}</span>${seatsHtml(S.people.filter((p) => p.team === t.key && p.joinAt <= S.t), key)}</div>`).join('')}</div></div>`;
+  }
+  function answerCard(_x, key) {
+    const s = sentence(); const total = S.trial ? DUR.trialAnswer : DUR.answer;
+    const sent = S.me.sent;
+    return `<div class="card">
+      <div class="row between"><span class="qtag">${S.trial ? 'جولة تجريبية · ' : `الجولة ${S.roundIdx + 1} من ${scoredRounds} · `}${Q_AR[s.q]}</span>${ring(left(), total)}</div>
+      <p class="sentence">${esc(s.text)}</p>
+      ${sent ? `<div class="receipt" role="status">✓ استُلمت إجابتك</div><p class="small muted">${S.me.verdict === 'true' ? 'صحيحة' : 'خاطئة'} · ${CONF[S.me.conf].ar}. بانتظار البقية: ${answeredCount()} من ${present().length}. يُكشف المفتاح حين يجيب الجميع أو ينتهي الوقت.</p>` : `
+      <div class="verdicts" role="group" aria-label="حكمك على الجملة">
+        <button type="button" data-act="verdict" data-v="true" aria-pressed="${S.me.verdict === 'true'}">صحيحة</button>
+        <button type="button" data-act="verdict" data-v="false" aria-pressed="${S.me.verdict === 'false'}">خاطئة</button>
+      </div>
+      <div class="conf" role="group" aria-label="درجة ثقتك">${[1, 2, 3].map((c) => `<button type="button" data-act="conf" data-c="${c}" aria-pressed="${S.me.conf === c}">${CONF[c].ar}<span>${CONF[c].band}</span></button>`).join('')}</div>
+      <details class="small"><summary>موقفك من الجملة (اختياري، بلا نقاط)</summary><div class="stances" style="margin-top:6px">${STANCES.map(([k, ar]) => `<button type="button" data-act="stance" data-k="${k}" aria-pressed="${S.me.stances.includes(k)}">${ar}</button>`).join('')}</div></details>
+      <button type="button" class="btn gold" data-act="send" ${S.me.verdict && S.me.conf ? '' : 'disabled'}>أرسل إجابتي</button>
+      ${S.me.verdict && !S.me.conf ? '<p class="xs muted">اختر درجة ثقتك لترسل.</p>' : ''}`}
+    </div>`;
+  }
+  function revealCard(key) {
+    const s = sentence(); const mine = ansFor(key).me;
+    const team = S.people.find((q) => q.id === 'me').team;
+    const tl = S.trial ? null : teamDist(key, team);
+    return `<div class="card">
+      <span class="qtag">${S.trial ? 'الجولة التجريبية' : `الجولة ${S.roundIdx + 1}`} · الكشف</span>
+      <p class="sentence">${esc(s.text)}</p>
+      <p>المفتاح: <span class="key ${s.key}">${s.key === 'true' ? 'صحيحة' : 'خاطئة'}</span></p>
+      ${mine ? `<p class="small">حكمك: ${mine.verdict === 'true' ? 'صحيحة' : 'خاطئة'} بثقة «${CONF[mine.conf].ar}» = <b class="pts ${mine.points > 0 ? 'pos' : mine.points < 0 ? 'neg' : ''}">${mine.points > 0 ? '+' : ''}${mine.points}</b>${S.trial ? ' (لا تُحتسب)' : ''}</p>
+        <p class="xs muted">${mine.verdict === s.key ? (mine.conf === 3 ? 'ثقتك العالية كانت في محلها.' : 'أصبت؛ لو كنت أوثق لربحت أكثر.') : (mine.conf === 1 ? 'أخطأت بثقة منخفضة، فلم تخسر.' : 'الخطأ بثقة عالية يكلف أكثر؛ اختر «أرجّح» حين تتردد.')}</p>` : '<p class="small muted">لم تُرسل إجابة في هذه الجولة.</p>'}
+      ${tl ? `<div class="small">فريقك: ${tl.right} من ${tl.n} أصابوا</div><div class="bar" aria-hidden="true"><i style="width:${pct(tl.right, tl.n)}%"></i></div>` : ''}
+      <p class="xs muted">${S.trial ? 'بعدها يقسّم الخبير الحاضرين إلى الفرق.' : 'ينتقل الخبير إلى النقاش بعد أن يرى الكشف.'}</p>
+    </div>`;
+  }
+  function teamDist(key, team) {
+    const a = S.answers[key] || {}; const k = sentence().key;
+    const ids = S.people.filter((p) => p.team === team).map((p) => p.id);
+    const got = ids.filter((id) => a[id]);
+    return { n: got.length, right: got.filter((id) => a[id].verdict === k).length };
+  }
+  function discussCard() {
+    const me = S.people.find((q) => q.id === 'me');
+    const notes = S.notes[me.team];
+    return `<div class="card">
+      <div class="row between"><span class="qtag">نقاش الطاولة</span>${ring(left(), DUR.discuss)}</div>
+      <div class="team-pill small"><i style="background:${teamColor(me.team)}"></i>مهمة ${TEAM_AR[me.team]}: ${TASKS[me.team]}</div>
+      <p class="xs muted">قائد الطاولة يدوّن الخلاصة هنا، وتظهر على الشاشة الكبيرة${place === 'remote' ? ' ولزملائك في القاعة' : ''}.</p>
+      <div class="notes" aria-label="لوحة الطاولة">${notes.length ? notes.map((n) => `<div class="note"><b>${esc(n.by)}:</b> ${esc(n.text)}</div>`).join('') : '<p class="xs muted">لا ملاحظات بعد.</p>'}</div>
+      <div class="row"><input class="input" id="p-note" placeholder="أضف ملاحظة للطاولة" aria-label="ملاحظة للطاولة" style="flex:1;min-width:0"><button type="button" class="btn" data-act="note">أضف</button></div>
+    </div>`;
+  }
+  function applyCard() {
+    const s = sentence();
+    return `<div class="card">
+      <div class="row between"><span class="qtag">طبّقها على مبادرتك (اختياري)</span>${ring(left(), DUR.apply)}</div>
+      <p class="small muted">${esc(s.text)}</p>
+      ${S.me.applied != null ? `<div class="receipt" role="status">✓ ${S.me.applied ? 'حُفظ في مبادرتك تحت «من القاعة»' : 'تخطيت هذه الجولة'}</div>` : `
+      <label class="small" for="p-apply">سطر واحد: كيف تظهر هذه الفكرة في مبادرتك؟</label>
+      <textarea class="input" id="p-apply" maxlength="240" placeholder="مثلًا: نكتب أهداف مرحلة الأرشفة في وثيقة المبادرة قبل الإطلاق"></textarea>
+      <div class="row"><button type="button" class="btn gold" data-act="apply">احفظ في مبادرتي</button><button type="button" class="btn" data-act="skip">تخطَّ</button></div>`}
+      <p class="xs muted">يظهر ما تكتبه في قسم المبادرة، وفي ملفك عند المستشار، وفي خلاصتك: نص واحد في مكان واحد.</p>
+    </div>`;
+  }
+  function summaryCard() {
+    const h = S.history; const right = h.filter((x) => x.verdict === x.key).length;
+    const byConf = [1, 2, 3].map((c) => { const xs = h.filter((x) => x.conf === c); return { c, n: xs.length, r: xs.filter((x) => x.verdict === x.key).length }; });
+    return `<div class="card"><h3>خلاصتك</h3>
+      <div class="row between"><span class="small">نقاطك في ${scoredRounds} جولات</span><b class="pts ${myPoints() >= 0 ? 'pos' : 'neg'}" style="font-size:22px">${myPoints() > 0 ? '+' : ''}${myPoints()}</b></div>
+      <p class="small">أصبت ${right} من ${h.length}.</p>
+      <div class="small"><b>معايرتك</b> <span class="xs muted">(هل كانت ثقتك على قدر صوابك؟)</span></div>
+      ${byConf.map((x) => `<div class="row between xs"><span>${CONF[x.c].ar} (${CONF[x.c].band})</span><span class="pts">${x.n ? `${x.r} من ${x.n}` : '—'}</span></div>`).join('')}
+      <p class="xs muted">درجتك ومعايرتك لك وحدك؛ الشاشة الكبيرة تعرض الفرق فقط.</p>
+    </div>
+    <div class="card"><h3>خطوتك التالية</h3>
+      <ul class="steps"><li>اقرأ باب الكتيب المرتبط بالموضوع.</li><li>أكمل بند المختبر من الكفاءة نفسها.</li><li>${S.applications.length ? `راجع ما طبقته في مبادرتك (${S.applications.length})` : 'طبّق جملة واحدة على مبادرتك'}.</li></ul>
+      <p class="xs muted">في المنصة تُشتق الروابط من ربط الموضوع بالباب والنموذج، وهو قيد الإعداد مع بنك كاتون.</p>
+    </div>
+    <div class="card"><label class="small" for="p-reflect">تأمل قصير: ما الذي غيّر رأيك اليوم؟</label><textarea class="input" id="p-reflect"></textarea></div>`;
+  }
+
+  function expertHtml() {
+    const key = S.trial ? 'trial' : S.roundIdx;
+    const n = present().length;
+    const timer = S.endsAt != null ? `${fmt(left())}${S.paused ? ' (موقوف)' : ''}` : '—';
+    const can = {
+      start: S.stage === 'lobby', pause: S.endsAt != null, extend: ['trial', 'answer', 'discuss'].includes(S.stage),
+      reveal: S.stage === 'trial' || S.stage === 'answer', next: !['lobby', 'trial', 'answer', 'closed'].includes(S.stage),
+    };
+    const nextLabel = { rules: 'ابدأ التجريبية', reveal: S.trial ? 'قسّم الفرق' : 'إلى النقاش', split: 'ابدأ الجولة 1', discuss: 'إلى التطبيق', apply: S.roundIdx + 1 < scoredRounds ? 'الجولة التالية' : 'إلى الخلاصة', summary: 'أنهِ الجلسة' }[S.stage] || 'التالي';
+    return `
+      <div class="card"><div class="row between"><b>${stageAr()}</b><span class="pts">${timer}</span></div>
+        <dl class="kv">
+          <dt>الحاضرون</dt><dd>${n} من ${S.people.length} · ${S.people.filter((p) => p.joinAt <= S.t && p.remote).length + (place === 'remote' ? 1 : 0)} عن بعد</dd>
+          <dt>أجابوا</dt><dd>${['trial', 'answer'].includes(S.stage) ? `${answeredCount()} من ${n}` : '—'}</dd>
+          <dt>الجولة</dt><dd>${S.trial ? 'تجريبية' : S.roundIdx >= 0 ? `${S.roundIdx + 1} من ${scoredRounds}` : '—'}</dd>
+        </dl>
+        ${S.waiting && !autopilot ? '<p class="xs" style="color:var(--accent)">الكشف تم. الانتقال بضغطتك.</p>' : ''}
+      </div>
+      <div class="ctl">
+        <button type="button" class="btn primary wide" data-act="x-start" ${can.start ? '' : 'disabled'}>ابدأ الجلسة</button>
+        <button type="button" class="btn" data-act="x-pause" ${can.pause ? '' : 'disabled'}>${S.paused ? 'استأنف' : 'أوقف'}</button>
+        <button type="button" class="btn" data-act="x-extend" ${can.extend ? '' : 'disabled'}>مدّد 30 ث</button>
+        <button type="button" class="btn gold" data-act="x-reveal" ${can.reveal ? '' : 'disabled'}>اكشف الآن</button>
+        <button type="button" class="btn primary" data-act="x-next" ${can.next ? '' : 'disabled'}>${nextLabel}</button>
+      </div>
+      ${S.stage === 'discuss' ? `<div class="card"><b class="small">لوحات الطاولات</b>${TEAMS.map((t) => `<div class="xs"><span class="team-pill"><i style="background:${teamColor(t.key)}"></i>${t.ar}</span>: ${S.notes[t.key].length ? esc(S.notes[t.key][S.notes[t.key].length - 1].text) : '<span class="muted">لم يُكتب بعد</span>'}</div>`).join('')}</div>` : ''}
+      <div class="card"><b class="small">إمكانية الوصول</b><label class="toggle small"><input type="checkbox" data-act="x-extra" ${S.me.extraTime ? 'checked' : ''}> وقت ممدد للمشارك «أنت»</label><p class="xs muted">إن لم يُجب عند نهاية الوقت تُمدد الإجابة له 30 ثانية مرة واحدة في الجولة.</p></div>`;
+  }
+
+  function bigHtml() {
+    const key = S.trial ? 'trial' : S.roundIdx;
+    const s = (S.stage === 'lobby' || S.stage === 'rules') ? null : sentence();
+    const timer = S.endsAt != null ? `<span class="big-timer">${fmt(left())}</span>` : '';
+    const head = `<div class="big-top"><div><div class="eyebrow" style="color:var(--copper)">${esc(TOPIC.title)} · ${stageAr()}</div></div>${timer}</div>`;
+    const tables = `<div class="tables">${TEAMS.map((t, i) => {
+      const ppl = S.people.filter((p) => p.team === t.key && p.joinAt <= S.t);
+      const notes = S.notes[t.key];
+      return `<div class="table"><h4><i style="background:${teamColor(t.key)}"></i>${t.ar} · الطاولة ${i + 1}</h4>${seatsHtml(ppl, key)}${S.stage === 'discuss' || S.stage === 'apply' ? `<div class="tnote">${notes.length ? esc(notes[notes.length - 1].text) : 'بانتظار خلاصة الطاولة'}</div>` : ''}</div>`;
+    }).join('')}</div>`;
+    switch (S.stage) {
+      case 'lobby': return `${head}<div class="big-sent">مرحبًا بكم في القاعة</div><p class="muted">ادخلوا من تبويب «القاعة» في المنصة، أو امسحوا رمز الدعوة. الحاضرون الآن: <b>${present().length}</b></p>
+        <div class="seats">${present().map((p) => `<span class="seat ans${p.remote ? ' remote' : ''}" style="color:var(--screen-muted)"></span>`).join('')}</div>`;
+      case 'rules': return `${head}<div class="big-sent">قواعد القاعة</div><ul class="steps" style="font-size:18px"><li>حكم وثقة على جوالك</li><li>الثقة الصادقة أنفع</li><li>نقاش الطاولة ثم التطبيق على مبادراتكم</li></ul>`;
+      case 'split': return `${head}<div class="big-sent">الفرق والطاولات</div>${tables}`;
+      case 'trial': case 'answer': return `${head}<div class="muted">${S.trial ? 'جولة تجريبية' : `الجولة ${S.roundIdx + 1} من ${scoredRounds}`} · ${Q_AR[s.q]}</div><div class="big-sent">${esc(s.text)}</div><div class="muted">أجاب ${answeredCount()} من ${present().length}</div>${S.trial ? '' : tables}`;
+      case 'reveal': {
+        const a = S.answers[key] || {}; const vals = Object.values(a);
+        const t = vals.filter((v) => v.verdict === 'true').length, f = vals.filter((v) => v.verdict === 'false').length;
+        return `${head}<div class="big-sent">${esc(s.text)}</div><div style="font-size:22px">المفتاح: <span class="key ${s.key}">${s.key === 'true' ? 'صحيحة' : 'خاطئة'}</span></div>
+          <div class="dist"><div class="r"><span>صحيحة</span><span class="bar"><i style="width:${pct(t, vals.length)}%"></i></span><span class="pts">${pct(t, vals.length)}%</span></div>
+          <div class="r"><span>خاطئة</span><span class="bar"><i style="width:${pct(f, vals.length)}%"></i></span><span class="pts">${pct(f, vals.length)}%</span></div></div>
+          ${S.trial ? '' : `<div class="scores">${TEAMS.map((tm) => { const d = teamDist(key, tm.key); return `<div class="score"><span class="team-pill"><i style="background:${teamColor(tm.key)}"></i>${tm.ar}</span><b>${pct(d.right, d.n)}%</b><span class="muted xs">أصابوا</span></div>`; }).join('')}</div>`}`;
+      }
+      case 'discuss': case 'apply': return `${head}<div class="muted">${S.stage === 'discuss' ? 'نقاش الطاولات' : 'التطبيق على المبادرات'}</div><div class="big-sent" style="font-size:clamp(18px,2vw,26px)">${esc(s.text)}</div>${tables}`;
+      case 'summary': case 'closed': {
+        const tt = teamTotals();
+        return `${head}<div class="big-sent">${S.stage === 'closed' ? 'انتهت الجلسة. شكرًا لكم' : 'خلاصة الجلسة'}</div><div class="scores">${TEAMS.map((tm) => `<div class="score"><span class="team-pill"><i style="background:${teamColor(tm.key)}"></i>${tm.ar}</span><b>${tt[tm.key] > 0 ? '+' : ''}${tt[tm.key]}</b><span class="muted xs">نقاط الفريق</span></div>`).join('')}</div><p class="muted">الدرجات الفردية والمعايرة على أجهزة المشاركين وحدهم.</p>`;
+      }
+      default: return head;
+    }
+  }
+
+  // ── التفاعل ──
+  function onAct(e) {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act; const key = S.trial ? 'trial' : S.roundIdx;
+    if (act === 'verdict') S.me.verdict = b.dataset.v;
+    else if (act === 'conf') S.me.conf = Number(b.dataset.c);
+    else if (act === 'stance') { const k = b.dataset.k; S.me.stances = S.me.stances.includes(k) ? S.me.stances.filter((x) => x !== k) : [...S.me.stances, k]; }
+    else if (act === 'send' && S.me.verdict && S.me.conf) { S.answers[key].me = { verdict: S.me.verdict, conf: S.me.conf, stances: S.me.stances }; S.me.sent = true; announce('استُلمت إجابتك'); }
+    else if (act === 'note') { const i = $('p-note'); const v = i && i.value.trim(); if (v) { S.notes[S.people.find((q) => q.id === 'me').team].push({ by: 'أنت', text: v.slice(0, 160) }); i.value = ''; } }
+    else if (act === 'apply') { const i = $('p-apply'); const v = i && i.value.trim(); if (v) { S.applications.push({ round: S.roundIdx, text: v }); S.me.applied = true; } }
+    else if (act === 'skip') S.me.applied = false;
+    else if (act === 'x-start' || act === 'x-next') next();
+    else if (act === 'x-pause') S.paused = !S.paused;
+    else if (act === 'x-extend' && S.endsAt != null) S.endsAt += 30;
+    else if (act === 'x-reveal') reveal();
+    else if (act === 'x-extra') { S.me.extraTime = b.checked; }
+    lastP = lastX = lastB = '';
+    render();
+  }
+  document.addEventListener('click', onAct);
+  document.addEventListener('change', (e) => { if (e.target.matches('[data-act="x-extra"]')) onAct(e); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'p-note') { e.preventDefault(); onAct({ target: document.querySelector('[data-act="note"]') }); } });
+
+  document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
+    speed = Number(b.dataset.speed);
+    document.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  $('autopilot').addEventListener('change', (e) => { autopilot = e.target.checked; });
+  $('restart').addEventListener('click', () => { S = fresh(); lastP = lastX = lastB = ''; render(); });
+  document.querySelectorAll('[data-place]').forEach((b) => b.addEventListener('click', () => {
+    place = b.dataset.place;
+    document.querySelectorAll('[data-place]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('p-conn').innerHTML = `<span class="dot" aria-hidden="true"></span>${place === 'remote' ? 'لحظي · عن بعد' : 'لحظي'}`;
+    lastP = ''; render();
+  }));
+  document.querySelectorAll('[data-role]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-role]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('on', p.dataset.pane === b.dataset.role));
+  }));
+
+  // ── التبويبات (تُحفظ في عنوان الصفحة ليُرسل رابط الدليل أو النتائج مباشرة) ──
+  const TABS = { proto: 'tab-proto', guide: 'tab-guide', results: 'tab-results' };
+  function showTab(name) {
+    if (!TABS[name]) name = 'proto';
+    for (const [k, id] of Object.entries(TABS)) {
+      $(id).setAttribute('aria-selected', String(k === name));
+      $(`v-${k}`).hidden = k !== name;
+    }
+  }
+  Object.entries(TABS).forEach(([k, id]) => $(id).addEventListener('click', () => { showTab(k); location.hash = k; }));
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+  showTab(location.hash.slice(1));
+
+  S = fresh();
+  requestAnimationFrame(tick);
+
+  // ═══ النتائج: SUS والمهام والمشكلات في مخزن الصفحة (db) ═══
+  const SUS_Q = [
+    'أظن أنني سأرغب في استخدام هذه القاعة كثيرًا.',
+    'وجدت القاعة معقدة أكثر مما يلزم.',
+    'وجدت القاعة سهلة الاستخدام.',
+    'أظن أنني سأحتاج مساعدة شخص متخصص لأستخدمها.',
+    'وجدت أجزاء القاعة متكاملة على نحو جيد.',
+    'وجدت في القاعة تناقضًا كثيرًا.',
+    'أتوقع أن معظم الناس سيتعلمون استخدامها بسرعة.',
+    'وجدت القاعة مرهقة في الاستخدام.',
+    'شعرت بثقة كبيرة وأنا أستخدمها.',
+    'احتجت أن أتعلم أشياء كثيرة قبل أن أستخدمها.',
+  ];
+  const TASK_LIST = ['الدخول وانتظار البدء', 'الجولة التجريبية', 'الجولة الأولى: الفريق والطاولة والإجابة', 'بعد الكشف: النقاط ولوحة الطاولة والتطبيق', 'الخلاصة: الدرجة والمعايرة والخطوة التالية'];
+  const OUT = [['ok', 'نجح'], ['hard', 'بصعوبة'], ['fail', 'لم ينجح']];
+  const ROLE_AR = { hall: 'مشارك في القاعة', remote: 'مشارك عن بعد', expert: 'خبير', org: 'منسق جهة' };
+  const SEV_AR = { crit: 'حرجة', major: 'كبيرة', minor: 'صغيرة' };
+  let issues = [];
+  $('f-sus').innerHTML = SUS_Q.map((q, i) => `<div class="q"><span>${i + 1}. ${q}</span><span class="likert" role="radiogroup" aria-label="البند ${i + 1}">${[1, 2, 3, 4, 5].map((v) => `<label><input type="radio" name="sus${i}" id="sus${i}-${v}" value="${v}"><span>${v}</span></label>`).join('')}</span></div>`).join('');
+  $('f-tasks').querySelector('tbody').innerHTML = TASK_LIST.map((t, i) => `<tr><td>${i + 1}. ${t}</td><td><select class="input" id="task${i}" aria-label="نتيجة المهمة ${i + 1}" style="width:auto">${OUT.map(([v, ar]) => `<option value="${v}">${ar}</option>`).join('')}</select></td></tr>`).join('');
+  function susScore(vals) {
+    if (vals.some((v) => !v)) return null;
+    return vals.reduce((s, v, i) => s + (i % 2 === 0 ? v - 1 : 5 - v), 0) * 2.5;
+  }
+  function readSus() { return SUS_Q.map((_, i) => { const c = document.querySelector(`input[name="sus${i}"]:checked`); return c ? Number(c.value) : 0; }); }
+  $('f-sus').addEventListener('change', () => { const s = susScore(readSus()); $('f-score').textContent = s == null ? '—' : String(s); });
+  function drawIssues() { $('f-issues').innerHTML = issues.map((x, i) => `<li><span class="${x.sev === 'crit' ? 'sev-crit' : ''}">${SEV_AR[x.sev]}:</span> ${esc(x.text)} <button type="button" class="btn" data-del="${i}" style="padding:0 8px;font-size:12px">احذف</button></li>`).join(''); }
+  $('f-add').addEventListener('click', () => { const t = $('f-issue').value.trim(); if (!t) return; issues.push({ sev: $('f-sev').value, text: t.slice(0, 300) }); $('f-issue').value = ''; drawIssues(); });
+  $('f-issues').addEventListener('click', (e) => { const b = e.target.closest('[data-del]'); if (!b) return; issues.splice(Number(b.dataset.del), 1); drawIssues(); });
+
+  let rows = [];
+  let db = null, canWrite = false;
+  function drawResults() {
+    const tb = $('r-table').querySelector('tbody');
+    $('r-empty').hidden = rows.length > 0;
+    tb.innerHTML = rows.map((r) => `<tr><td>${esc(r.code)}</td><td>${esc(ROLE_AR[r.role] || r.role)}</td><td class="num">${r.sus}</td><td class="num">${(r.tasks || []).filter((t) => t === 'ok').length} من ${(r.tasks || []).length}</td><td>${(r.issues || []).map((x) => `<div class="${x.sev === 'crit' ? 'sev-crit' : ''}">${SEV_AR[x.sev]}: ${esc(x.text)}</div>`).join('') || '<span class="muted">—</span>'}</td><td>${canWrite ? `<button type="button" class="btn" data-rm="${esc(r.id)}" style="padding:2px 8px;font-size:12px">احذف</button>` : ''}</td></tr>`).join('');
+    const n = rows.length; const avg = n ? rows.reduce((s, r) => s + Number(r.sus || 0), 0) / n : null;
+    const crit = rows.reduce((s, r) => s + (r.issues || []).filter((x) => x.sev === 'crit').length, 0);
+    $('r-avg').textContent = avg == null ? '—' : avg.toFixed(1);
+    $('r-n').textContent = `${n} من 5`;
+    $('r-crit').textContent = String(crit);
+    const g = $('r-gate');
+    if (n < 5) { g.className = 'gate wait'; g.textContent = `بانتظار ${5 - n} ${5 - n === 1 ? 'مختبر' : 'مختبرين'} لتُحسم البوابة`; }
+    else if (avg >= 75 && crit === 0) { g.className = 'gate ok'; g.textContent = 'اجتازت البوابة: SUS 75 فأكثر ولا مشكلة حرجة. يبدأ ق1.'; }
+    else { g.className = 'gate no'; g.textContent = avg < 75 ? `لم تجتز: متوسط SUS ${avg.toFixed(1)} دون 75` : `لم تجتز: ${crit} مشكلة حرجة`; }
+  }
+  drawResults();
+
+  (async () => {
+    try {
+      db = await window.claude?.use?.('db');
+      const user = await window.claude?.use?.('user');
+      canWrite = !!(user && (user.canEdit?.() || user.isOwner?.()));
+    } catch { db = null; }
+    if (!db) { $('r-store').textContent = 'المخزن غير متاح في هذا العرض: تُحسب الدرجة هنا ولا تُحفظ. افتح الصفحة من حسابك في Claude لحفظ النتائج.'; return; }
+    if (!canWrite) $('r-store').textContent = 'تُحفظ النتائج لصاحب الصفحة ومحرريها؛ حسابك يعرض الدرجة ولا يحفظها.';
+    const timer = setTimeout(() => { $('r-store').textContent = 'تأخر المخزن في الرد؛ حدّث الصفحة بعد قليل.'; }, 10000);
+    db.collection('trials').orderBy('at').onSnapshot((snap) => {
+      clearTimeout(timer);
+      rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      drawResults();
+    }, () => { clearTimeout(timer); $('r-store').textContent = 'تعذّر قراءة النتائج المحفوظة.'; });
+  })();
+  $('r-table').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-rm]'); if (!b || !db) return;
+    b.disabled = true;
+    try { await db.collection('trials').doc(b.dataset.rm).delete(); } catch { b.disabled = false; }
+  });
+  $('r-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const sus = susScore(readSus());
+    if (sus == null) { $('f-msg').textContent = 'أجب عن بنود SUS العشرة كلها.'; return; }
+    const row = { code: $('f-code').value, role: $('f-role').value, sus, answers: readSus(), tasks: TASK_LIST.map((_, i) => $(`task${i}`).value), issues, at: new Date().toISOString() };
+    if (!db || !canWrite) { $('f-msg').textContent = `درجة SUS لهذا المختبر ${sus}. لم تُحفظ: الحفظ لصاحب الصفحة ومحرريها.`; return; }
+    $('f-save').disabled = true; $('f-msg').textContent = 'جارٍ الحفظ…';
+    try {
+      await db.collection('trials').add(row);
+      $('f-msg').textContent = `حُفظت نتيجة ${row.code}: SUS ${sus}.`;
+      e.target.reset(); issues = []; drawIssues(); $('f-score').textContent = '—';
+    } catch (err) {
+      $('f-msg').textContent = err && err.code === 'quota_exceeded' ? 'امتلأ المخزن؛ احذف نتائج قديمة ثم أعد المحاولة.' : 'تعذّر الحفظ؛ أعد المحاولة بعد لحظة.';
+    } finally { $('f-save').disabled = false; }
+  });
+})();
+</script>
