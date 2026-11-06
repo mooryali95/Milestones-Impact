@@ -15,6 +15,12 @@ export function gateDone(me, key) {
   return it ? it.status === 'done' : stageDone(me, key);
 }
 
+// المرحلة التي فيها متطلب البوابة، وإلا المرحلة بالمفتاح نفسه: منها تُقرأ مدة الخطوة كما يعرضها الخادم
+export function gateStage(me, key) {
+  const journey = me?.journey || [];
+  return journey.find((s) => (s.items || []).some((i) => i.code === GATE_CODE[key])) || journey.find((s) => s.key === key) || null;
+}
+
 // قسم «أثري» يُفتح حين تُفتح المرحلة التي فيها القياس البعدي (E-POST)، بالحكم نفسه الذي
 // يطبقه الخادم في requirePostOpen: الأثر طور لا مرحلة، فلا يُبحث عن مرحلة باسمه
 export function impactOpen(me) {

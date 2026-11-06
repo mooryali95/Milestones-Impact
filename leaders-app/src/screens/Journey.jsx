@@ -158,7 +158,7 @@ const AUTO_HINT = {
   'A-DONE': 'يكتمل بإرسال إجابات القياس.',
   'AP-OK': 'بانتظار اعتماد المستشار.',
   'E-POST': 'يُفتح القياس البعدي حين تصل إلى مرحلة التقييم.',
-  'R-ISSUE': 'يصدر التقرير بعد اكتمال مرحلة التقييم.',
+  'R-ISSUE': 'يكتمل حين يُعتمد تقييمك الختامي، فتصلك نتيجته مفصّلة في رحلتك.',
   'P-PROJECT': 'يكتمل تلقائيًا حين تكتب اسم مبادرتك ووصفها في «بطاقة المبادرة»، أول صفحة في وثيقة مبادرتك.',
   'T-360': 'يكتمل تلقائيًا حين يرسل مديرك أو أحد زملائك تقديره. أرسل الدعوة من «ملفي».',
   'E-360': 'يكتمل تلقائيًا حين يصل تقدير المدير أو الزملاء بعد البرنامج.',
@@ -457,11 +457,11 @@ function Milestones({ list, summary }) {
   return (
     <section className="card stack ms-card" data-tour="milestones" aria-labelledby="ms-h">
       <div className="row between">
-        <h3 id="ms-h">معالمك</h3>
+        <h2 id="ms-h" className="as-h3">معالمك</h2>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
       </div>
       {summary.late > 0 && <div className="banner"><span className="ico">⏰</span><div className="grow">لديك {summary.late === 1 ? 'معلم متأخر' : `${summary.late} معالم متأخرة`}، أقصاها {summary.max_late} يومًا. ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
-      <div className="ms-bar" role="progressbar" aria-valuenow={summary.pct || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${summary.pct || 0}%` }} /></div>
+      <div className="ms-bar" role="progressbar" aria-label="نسبة إنجاز معالمك" aria-valuetext={`${summary.done} من ${summary.total} منجزة`} aria-valuenow={summary.pct || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${summary.pct || 0}%` }} /></div>
       <ol className="ms-list">{list.map((m) => (
         <li key={m.id} className={m.status}>
           <div className="grow"><b>{m.title_ar}</b>{m.description_ar && <p className="small muted">{m.description_ar}</p>}</div>
@@ -482,7 +482,7 @@ function Continuous({ c }) {
   return (
     <section className="card stack" data-tour="continuous" aria-labelledby="ca-h">
       <div className="row between">
-        <h3 id="ca-h">تقدمك في التقييم المستمر</h3>
+        <h2 id="ca-h" className="as-h3">تقدمك في التقييم المستمر</h2>
         <b className="ca-index">{c.index}٪</b>
       </div>
       <p className="small muted">يُجمع من اختبارات الكتيب، ونماذجك، ومعالم مشروعك، وأدوات المختبر، وإسهامك المؤكَّد في طلبات زملائك؛ ولا يدخل فيه مصدر قبل أن تكتمل له أحداث كافية. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>

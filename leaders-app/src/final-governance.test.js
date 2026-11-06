@@ -24,7 +24,7 @@ describe('الختامي على الخادم', () => {
   });
   it('المشارك يرى ملاحظات خبيره مع القرار، والتقييم المستمر بحدّي أحداثه من الإعداد', () => {
     const p = api('participant.ts');
-    expect(p).toMatch(/notes: fe\.data\.adjust\?\.notes_to_participant \|\| null/);
+    expect(p).toMatch(/notes: fe\.adjust\?\.notes_to_participant \|\| null/);
     expect(p).toMatch(/min_events: fc\.min_events, min_quiz_items: fc\.min_quiz_items/);
   });
 });

@@ -1,4 +1,6 @@
 # لا فهرسة لأي استجابة من التطبيق، صفحةً كانت أو ملفًا أو بيانات (robots.txt يشرح لماذا يُسمح بالزحف)
+# سياسة المحتوى تسمح بتحليلات Cloudflare (بلا ملفات تعريف، كلوحة الإدارة) ولا تسمح بأي سكربت مضمّن: سكربت كشف الروبوتات
+# الذي تحقنه Cloudflare في الصفحة يُحجب عمدًا (Cloudflare نفسها لا توصي بـunsafe-inline)، والتحقق البشري صريح بـTurnstile عند الدخول
 /*
   X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
@@ -6,7 +8,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), publickey-credentials-get=(self), publickey-credentials-create=(self)
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://www.youtube.com https://s.ytimg.com https://challenges.cloudflare.com; frame-src https://accounts.google.com https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://cal.com https://app.cal.com https://calendly.com; media-src 'self' https:; style-src 'self' 'unsafe-inline' https://accounts.google.com; font-src 'self'; img-src 'self' data: blob: https://i.ytimg.com https://*.googleusercontent.com; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://accounts.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://www.youtube.com https://s.ytimg.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; frame-src https://accounts.google.com https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://cal.com https://app.cal.com https://calendly.com; media-src 'self' https:; style-src 'self' 'unsafe-inline' https://accounts.google.com; font-src 'self'; img-src 'self' data: blob: https://i.ytimg.com https://*.googleusercontent.com; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://accounts.google.com https://cloudflareinsights.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; upgrade-insecure-requests
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
@@ -43,6 +45,9 @@
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
-# الفيديو التعريفي باسم بإصدار (intro-v1)، فيُخزَّن طويلًا ويتغير الاسم عند إعادة التوليد
+# الفيديو التعريفي باسم بإصدار (intro-v3)، فيُخزَّن طويلًا ويتغير الاسم عند إعادة التوليد
+# وصفحة البرنامج في الموقع العام تعرضه بترجمته: الفيديو هناك بـcrossorigin="anonymous" فيُطلب هو وترجمته بـCORS.
+# الإذن عام (*) لأن الملفات عامة وتُطلب بلا بيانات اعتماد؛ حصره في نطاق واحد يوقف تشغيل الفيديو من أي نطاق آخر للموقع (mi-home.pages.dev مثلًا)
 /media/*
   Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *

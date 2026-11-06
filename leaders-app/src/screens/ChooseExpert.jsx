@@ -31,7 +31,7 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
   return (
     <section className="card stack rx" aria-labelledby="cx-h">
       <div className="row between">
-        <h3 id="cx-h">{title}</h3>
+        <h2 id="cx-h" className="as-h3">{title}</h2>
         {!open && <button className="btn sm" onClick={() => setOpen(true)}>اطلب الآن</button>}
       </div>
       {d.requests.length > 0 && (

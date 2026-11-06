@@ -14,6 +14,7 @@ import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
+import { tabFromSearch } from './deeplink.js';
 import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
 import Assessment from './screens/Assessment.jsx';
@@ -143,7 +144,13 @@ function Shell({ tag, children }) {
 function Participant() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [view, setView] = useState('home');   // home | profile | handbook | impact | lab
+  // home | profile | handbook | capstone | hall | impact | lab؛ ورابط البريد /?tab=profile يفتح قسمه مباشرة (deeplink.js)
+  const [view, setView] = useState(() => {
+    const link = tabFromSearch(location.search);
+    if (!link) return 'home';
+    history.replaceState(null, '', location.pathname + link.search + location.hash);
+    return link.view;
+  });
   const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
   const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');

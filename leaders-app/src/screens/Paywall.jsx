@@ -6,13 +6,14 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { levelOf } from '../labels.js';
+import { stepTitle } from '../Onboarding.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
 const COPY = {
   assessment: {
-    eyebrow: 'الخطوة 2 من 3 في القبول',
+    eyebrow: stepTitle('assessment'),   // اسم الخطوة من معالج البداية؛ العدّاد في الرأس فوق الشاشة
     title: 'القياس المبدئي',
     lead: 'قياس معاير في المعالم والأثر والقيادة، يحدد مستواك في كل بُعد ويبني عليه مسارك من بين مسارات البرنامج.',
     points: ['نتيجة فورية بمستواك في الأبعاد الثلاثة', 'ملف تعريف يشرح نقاط قوتك وأولويتك', 'رسم رمزي يؤكد جدّية التسجيل'],
