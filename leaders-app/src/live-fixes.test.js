@@ -36,7 +36,6 @@ describe('الموقع العام فاتح دائمًا (العيب 2)', () => {
 
 describe('صفحة البرنامج: الفيديو بغلافه وترجمته، وتباين قسم الدخول (العيبان 1 و9)', () => {
   const page = read('home/leaders/index.html');
-  const homeOrigin = read('home/index.html').match(/<link rel="canonical" href="(https:\/\/[^/"]+)\//)[1];
   const leadersOrigin = 'https://leaders.sunkvalue.com';
 
   it('الفيديو من مصدره الواحد: الاسم والمدة من scenes.js، ويُطلب بـCORS ليحمّل ملف الترجمة', () => {
@@ -46,12 +45,13 @@ describe('صفحة البرنامج: الفيديو بغلافه وترجمته�
     expect(page.match(/<figcaption>([^<]+)<\/figcaption>/)[1]).toContain(VIDEO.duration_ar);
   });
 
-  it('سياسة الموقع تسمح بالغلاف والوسائط من منصة القادة، ومنصة القادة تسمح للموقع بقراءة ملفات الوسائط', () => {
+  it('سياسة الموقع تسمح بالغلاف والوسائط من منصة القادة، ومنصة القادة تسمح بقراءة ملفات الوسائط العامة من أي نطاق للموقع', () => {
     const policy = csp(read('home/_headers'));
     expect(directive(policy, 'img-src')).toContain(leadersOrigin);
     expect(directive(policy, 'media-src')).toContain(leadersOrigin);
+    // الفيديو بـcrossorigin يُطلب كله بـCORS: إذن بنطاق واحد يوقف تشغيله من نطاقات الموقع الأخرى، والملفات عامة بلا بيانات اعتماد
     for (const h of ['leaders-app/public/_headers', 'leaders/_headers']) {
-      expect(read(h), h).toMatch(new RegExp(`^/media/\\*\\n(?: {2}.+\\n)*? {2}Access-Control-Allow-Origin: ${homeOrigin.replace(/\./g, '\\.')}$`, 'm'));
+      expect(read(h), h).toMatch(/^\/media\/\*\n(?: {2}.+\n)*? {2}Access-Control-Allow-Origin: \*$/m);
     }
   });
 

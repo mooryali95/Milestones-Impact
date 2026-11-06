@@ -46,7 +46,8 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # الفيديو التعريفي باسم بإصدار (intro-v3)، فيُخزَّن طويلًا ويتغير الاسم عند إعادة التوليد
-# وصفحة البرنامج في الموقع العام تعرضه بترجمته: ملف الترجمة من أصل آخر لا يُحمَّل إلا بـCORS (الفيديو هناك بـcrossorigin="anonymous")
+# وصفحة البرنامج في الموقع العام تعرضه بترجمته: الفيديو هناك بـcrossorigin="anonymous" فيُطلب هو وترجمته بـCORS.
+# الإذن عام (*) لأن الملفات عامة وتُطلب بلا بيانات اعتماد؛ حصره في نطاق واحد يوقف تشغيل الفيديو من أي نطاق آخر للموقع (mi-home.pages.dev مثلًا)
 /media/*
   Cache-Control: public, max-age=31536000, immutable
-  Access-Control-Allow-Origin: https://mi.sunkvalue.com
+  Access-Control-Allow-Origin: *
