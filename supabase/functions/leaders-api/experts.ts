@@ -6,7 +6,7 @@
 import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
@@ -454,11 +454,9 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
   const email = normalizeEmail(b.email);
   const { data: ch } = await db.from('expert_challenges').select('*').eq('email', email).is('consumed_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (!ch || new Date(ch.expires_at) < new Date()) throw new Fail('الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
-  if (ch.attempts >= 5) throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
-  if (ch.code_hash !== await hash(String(b.code || '').trim())) {
-    await db.from('expert_challenges').update({ attempts: ch.attempts + 1 }).eq('id', ch.id);
-    throw new Fail('الرمز غير صحيح', 400, 'code');
-  }
+  // المحاولة تُحجز ذريًا قبل المقارنة (الملحق 1، M2)
+  await reserveCodeAttempt('expert_challenges', ch);
+  if (ch.code_hash !== await hash(String(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
   const { data: used } = await db.from('expert_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', ch.id).is('consumed_at', null).select('id');
   if (!used?.length) throw new Fail('الرمز مستخدم من قبل', 400, 'used');
   const { data: e } = await db.from('experts').select('*').eq('id', ch.expert_id).maybeSingle();

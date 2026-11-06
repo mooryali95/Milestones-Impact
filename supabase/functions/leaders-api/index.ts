@@ -213,7 +213,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participant': (_a, b) => FL.participantFile(String(b.id || ''), 'admin', { viewer: { email: _a.email } }),
   'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': () => A.reviews(),
-  'admin.evidence-url': (_a, b) => A.evidenceUrl(b),
+  'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
   'admin.approve': A.approve,
   'admin.status': A.setStatus,
   'admin.reset-assessment': A.resetAssessment,
@@ -366,8 +366,11 @@ Deno.serve(async (req) => {
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
     if (e instanceof Fail) {
-      // تعطل البريد يوقف الدخول بالرمز، فيُبلَّغ المالك فورًا (مرة كل عشر دقائق)
-      if (['mail_failed', 'mail_unconfigured', 'mail_cap'].includes(e.code)) await alertOps(e.code, { action, message: e.message });
+      // تعطل البريد أو غياب مفتاحَي التحقق البشري يوقف الدخول بالرمز، وتعذّر السجل يُفشل العمليات؛
+      // فيُبلَّغ المالك فورًا (مرة كل عشر دقائق لكل نوع)
+      if (['mail_failed', 'mail_unconfigured', 'mail_cap', 'captcha_unconfigured', 'audit_failed'].includes(e.code)) {
+        await alertOps(e.code, { action, message: e.message, ...e.extra });
+      }
       return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
     }
     // رقم مرجع يراه المستخدم ويُسجَّل مع الخطأ ويصل في التنبيه، فيُربط البلاغ بسجله

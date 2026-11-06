@@ -4,7 +4,7 @@ name: Apply migrations (production)
 # Management API بالسر SUPABASE_ACCESS_TOKEN نفسه الذي ينشر الدوال (RUNBOOK.md §1).
 # المسجّل سلفًا في leaders.schema_migrations يُتخطى، وأول فشل يوقف السلسلة ويُظهر خطأ القاعدة في السجل.
 # الوضع check قراءة فقط: يطبع الجدولة الحية (cron.job وآخر تشغيلاتها) وأسماء أسرار Vault بلا قيم
-# وسجل الترحيلات، ولا يغيّر شيئًا (RUNBOOK.md §3).
+# وسجل الترحيلات وأسماء أسرار الدوال (ومنها مفتاحا Turnstile)، ولا يغيّر شيئًا (RUNBOOK.md §3).
 
 on:
   workflow_dispatch:
@@ -44,6 +44,10 @@ jobs:
       - name: Check the live schedule and ledger (read only)
         if: env.MODE == 'check'
         run: node scripts/db/apply-migration.mjs --check
+      # أسماء أسرار الدوال فقط (لا قيم)، ويفشل إن غاب سرّ يحتاجه الدخول بالرمز؛ يعمل ولو فشلت الخطوة السابقة
+      - name: Function secrets the sign-in needs (names only)
+        if: ${{ !cancelled() && env.MODE == 'check' }}
+        run: node scripts/ops/function-secrets.mjs --require=signin
       - name: Nothing to apply
         if: env.MODE == 'apply' && env.MIGRATIONS == ''
         run: echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations" && exit 1

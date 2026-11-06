@@ -36,6 +36,9 @@ export default function SignIn({ onSignedIn, initialError }) {
   const codeRef = useRef(null);
   const [org, setOrg] = useState(null);
   const [captchaKey, setCaptchaKey] = useState(null);
+  // تسجيل جديد: التصريح الذي يعيده الخادم بعد التحقق البشري يحمله إلى خطوة الاسم وإعادة الإرسال فلا يُحل التحدي مرتين
+  const [pass, setPass] = useState('');
+  const [registering, setRegistering] = useState(false);
   const [via] = useState(attribution);
   // شاشة الانتقال: تظهر فور اكتمال الدخول من جهة المستخدم، وتبقى حتى تُفتح رحلته
   const [entering, setEntering] = useState(null);
@@ -57,16 +60,18 @@ export default function SignIn({ onSignedIn, initialError }) {
   const start = async (e, captcha) => {
     e?.preventDefault();
     setBusy(true); setError('');
+    const asNew = step === 'name' || (step === 'code' && registering);
     const res = await call('auth.start', {
-      email, full_name: step === 'name' ? name : undefined, phone: step === 'name' ? phone : undefined,
-      sponsor_code: step === 'name' && sponsor.trim() ? sponsor.trim() : undefined, ...via, captcha,
+      email, full_name: asNew ? name : undefined, phone: asNew ? phone : undefined,
+      sponsor_code: asNew && sponsor.trim() ? sponsor.trim() : undefined, ...via, captcha,
+      ...(asNew && pass ? { pass } : {}),
     });
     setBusy(false);
     // الخادم يطلب التحقق البشري: تظهر الأداة، وتعيد الطلب وحدها حين تكتمل
     if (res.code === 'captcha') { setCaptchaKey(res.site_key || ''); return setError(res.site_key ? '' : res.message); }
     setCaptchaKey(null);
     if (!res.success) return setError(res.message);
-    if (res.needs_name) return setStep('name');
+    if (res.needs_name) { setPass(res.pass || ''); setRegistering(true); return setStep('name'); }
     setStep('code'); setCode(''); setWait(RESEND_SECONDS);
   };
 
@@ -195,7 +200,7 @@ export default function SignIn({ onSignedIn, initialError }) {
             {error && <div className="alert err">{error}</div>}
             <ConsentNote action="أرسل الرمز" />
             <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
-            <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+            <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); setPass(''); setRegistering(false); }}>تغيير البريد</button>
           </form>
         )}
 
@@ -225,7 +230,7 @@ export default function SignIn({ onSignedIn, initialError }) {
               aria-label="رمز التحقق" value={code} onChange={(e) => onCode(e.target.value)} placeholder="••••••" disabled={busy} />
             {error && <div className="alert err">{error}</div>}
             <div className="row between small">
-              <button className="link" onClick={() => { setStep('email'); setError(''); }}>بريد آخر</button>
+              <button className="link" onClick={() => { setStep('email'); setError(''); setPass(''); setRegistering(false); }}>بريد آخر</button>
               {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>
                 : <button className="link" onClick={start} disabled={busy}>أعد إرسال الرمز</button>}
             </div>

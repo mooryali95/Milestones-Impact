@@ -12,14 +12,15 @@
 | `RESEND_API_KEY` | نعم للبريد | `core.ts`، `_shared/mail.ts`، `admin-api`، `user-api`، `send-otp` | إرسال رموز الدخول والإشعارات؛ غيابه = `mail_unconfigured` وتنبيه فوري | من لوحة Resend |
 | `LEADERS_MAIL_FROM` | لا (افتراضي في `_shared/mail.ts`) | `core.ts` | عنوان المرسل | مع النطاق الموثّق في Resend |
 | `LEADERS_MAIL_DAILY_CAP` | لا (80) | `core.ts` | سقف رسائل الرموز يوميًا؛ التسجيلات تقف عند 70% منه | بحسب خطة Resend |
+| `LEADERS_REGISTER_PER_IP_DAY` | لا (60) | `core.ts` | التسجيلات الجديدة من شبكة واحدة في اليوم؛ يتسع لقاعة ورشة | يُرفع قبل ورشتين أو أكثر على شبكة واحدة في اليوم نفسه، ثم يُعاد |
 | `LEADERS_APP_URL` | لا (`SITES.leaders`) | `core.ts` | روابط البريد والتحقق | عند تغيير النطاق |
 | `LEADERS_RP_ID` | لا (`leaders.sunkvalue.com`) | `core.ts` ← `passkeys.ts` | نطاق مفاتيح المرور للمشاركين | تغييره يُبطل مفاتيح المرور المسجلة |
 | `LEADERS_ORIGINS` | لا (`SITES.leaders`) | `core.ts` | أصول CORS ومفاتيح المرور (قائمة بفواصل) | عند إضافة نطاق |
 | `LEADERS_ADMIN_ORIGINS` | لا (`SITES.admin`) | `core.ts` | لوحة الإدارة في CORS فقط | عند إضافة نطاق |
 | `LEADERS_CRON_SECRET` | نعم للجدولة | `core.ts` ← `cron.reminders` | يرسله pg_cron (من Vault) لتشغيل التذكيرات والتقرير والتنظيف | يُدوَّر في Vault والدالة معًا |
 | `LEADERS_ALERT_EMAIL` | موصى به | `core.ts` ← `alertOps`، التقرير الأسبوعي | بريد المالك للتنبيه الفوري والتقرير | عند تغيير المسؤول |
-| `LEADERS_TURNSTILE_SECRET` | لا (بدونه لا تحقق بشري) | `core.ts`، `send-otp` | التحقق من رمز Cloudflare Turnstile قبل إرسال أي رمز | من لوحة Cloudflare مع `SITE_KEY` |
-| `LEADERS_TURNSTILE_SITE_KEY` | مع السر | `core.ts`، `send-otp` | المفتاح العام للأداة في الواجهة (يُرسل للمتصفح) | مع السر |
+| `LEADERS_TURNSTILE_SECRET` | **نعم** منذ المرحلة ل1 (بدونه يتوقف الدخول برمز البريد ونموذج التواصل: `captcha_unconfigured` وتنبيه فوري، وبوابة النشر ترفض النشر) | `core.ts`، `send-otp` | التحقق من رمز Cloudflare Turnstile قبل إرسال أي رمز وقبل أي رد يفرّق بين بريد مسجل وجديد | من لوحة Cloudflare مع `SITE_KEY`؛ ضبط الجديد قبل حذف القديم |
+| `LEADERS_TURNSTILE_SITE_KEY` | **نعم** مع السر | `core.ts`، `send-otp` | المفتاح العام للأداة في الواجهة (يُرسل للمتصفح) | مع السر |
 | `LEADERS_CALCOM_SECRET` | لا | `core.ts` ← `leaders-hooks` | توقيع خطاف Cal.com | من لوحة Cal.com |
 | `LEADERS_CALENDLY_KEY` | لا | `core.ts` ← `leaders-hooks` | مفتاح توقيع Calendly | من لوحة Calendly |
 | `CREEM_API_KEY` (أو `CAREEM_SECRET_KEY`) | نعم للدفع | `payments.ts` | إنشاء صفحات الدفع؛ البادئة `creem_test_` = وضع الاختبار | من لوحة Creem؛ الاسم البديل يبقى مقبولًا حتى تُوحَّد الأسماء في اللوحة |
@@ -40,7 +41,7 @@
 
 - المفتاح العام `anon` في الواجهات وسير النشر والمسبار: عام بطبيعته، الحماية بـRLS والدوال.
 - `GOOGLE_CLIENT_ID` في `_shared/sites.js`: معرّف عميل، والنطاقات المسموحة في Google Cloud Console.
-- `supabase/functions/ci.env`: قيم وهمية لسير التكامل المحلي، لا تصلح لأي بيئة حية.
+- `supabase/functions/ci.env`: قيم وهمية لسير التكامل المحلي، لا تصلح لأي بيئة حية. ومنها مفتاحا Turnstile للاختبار من Cloudflare (`1x0000000000000000000000000000000AA` و`1x00000000000000000000AA`)، يقبلان الرمز الوهمي `XXXX.DUMMY.TOKEN.XXXX` وحده؛ وهما ما يُضبط في أي تشغيل محلي للدوال، لأن الدخول برمز البريد لا يعمل بلا مفتاحين.
 
 ## القواعد
 

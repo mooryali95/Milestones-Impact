@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
+  audit, BUCKET, CONFIG, db, Fail, hash, humanGate, issuePass, mailGuard, must, networkGuard, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
@@ -179,8 +179,9 @@ export async function orgShareConsent(p: any, b: Body) {
 }
 
 // ── 1. بدء الدخول أو التسجيل ──
-// بريد واحد يحمل رابطًا ورمزًا. لبريد جديد نطلب الاسم أولًا (needs_profile)،
-// ولا نكشف أبدًا هل البريد مسجل لغير صاحبه: الرد واحد في الحالتين بعد الإرسال.
+// بريد واحد يحمل رابطًا ورمزًا. لبريد جديد نطلب الاسم أولًا (needs_name)، لكن بعد حدود الشبكة
+// والتحقق البشري لا قبلهما: الرد الذي يفرّق بين بريد مسجل وجديد لا يصل إلا من اجتاز التحدي (الملحق 1، M1)،
+// فلا يُستعلم آليًا عمّن سُجّل في البرنامج. والتصريح (pass) يحمل التحقق إلى خطوة الاسم فلا يُحل التحدي مرتين.
 export async function authStart(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
@@ -189,12 +190,14 @@ export async function authStart(b: Body, ctx: Ctx) {
   const { count: perEmail } = await db.from('email_challenges').select('id', { count: 'exact', head: true })
     .eq('email', email).gte('created_at', hourAgo);
   if ((perEmail ?? 0) >= 5) throw new Fail('طلبات كثيرة لهذا البريد، حاول بعد ساعة', 429, 'rate');
+  await networkGuard(ctx);
+  await humanGate(b, ctx, email);
 
   const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
   let pending: Body | null = null;
   if (!existing) {
     const name = String(b.full_name || '').trim();
-    if (name.length < 3) return { success: true, needs_name: true };
+    if (name.length < 3) return { success: true, needs_name: true, pass: await issuePass(email) };
     const phone = b.phone ? normalizePhone(b.phone) : null;
     if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     // الجهة الراعية: رمز يكتبه المشارك، أو رمز رابط جهة، أو نطاق بريده (يُثبَّت بعد توثيق البريد). جهة العمل يكتبها في ملفه لاحقًا
@@ -205,7 +208,7 @@ export async function authStart(b: Body, ctx: Ctx) {
     };
   }
 
-  await mailGuard(b, ctx, existing ? 'login' : 'register');
+  await mailGuard(b, ctx, existing ? 'login' : 'register', { checked: true });
   const code = randomCode();
   const link = randomToken(24);
   const row = must(await db.from('email_challenges').insert({
@@ -230,9 +233,9 @@ export async function authVerify(b: Body, ctx: Ctx) {
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
     ch = data;
     if (ch) {
-      if (ch.attempts >= 5) throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
+      // المحاولة تُحجز ذريًا قبل المقارنة: خمس محاولات للرمز ولو تزامنت الطلبات (الملحق 1، M2)
+      await reserveCodeAttempt('email_challenges', ch);
       if (ch.code_hash !== await hash(String(b.code || '').trim())) {
-        await db.from('email_challenges').update({ attempts: ch.attempts + 1 }).eq('id', ch.id);
         throw new Fail('الرمز غير صحيح. تأكد من آخر رمز وصلك، أو اطلب رمزًا جديدًا.', 400, 'code');
       }
     }

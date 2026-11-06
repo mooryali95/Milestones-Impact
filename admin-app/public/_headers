@@ -1,4 +1,6 @@
+# لوحة الإدارة لا تُفهرس أي استجابة منها (robots.txt يمنع الزحف أصلًا)
 /*
+  X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

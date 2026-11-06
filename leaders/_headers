@@ -1,4 +1,6 @@
+# لا فهرسة لأي استجابة من التطبيق، صفحةً كانت أو ملفًا أو بيانات (robots.txt يشرح لماذا يُسمح بالزحف)
 /*
+  X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

@@ -4,6 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { deliver, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, type MailFamily } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
+import { passOk, reserveAttempt, signPass } from './guards.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -26,13 +27,15 @@ export const CONFIG = {
   calcomSecret: env('LEADERS_CALCOM_SECRET'),
   calendlyKey: env('LEADERS_CALENDLY_KEY'),
   mailFrom: env('LEADERS_MAIL_FROM', MAIL_FROM_DEFAULT),
-  // التحقق البشري (Cloudflare Turnstile) قبل إرسال أي رمز: يعمل حين يُضبط السر
-  // تقرير الصحة الأسبوعي يصل إلى هذا البريد (المالك)
+  // تقرير الصحة الأسبوعي والتنبيه الفوري يصلان إلى هذا البريد (المالك)
   alertEmail: env('LEADERS_ALERT_EMAIL'),
+  // التحقق البشري (Cloudflare Turnstile) قبل كل رمز بالبريد: إلزامي، وبلا المفتاحين يفشل مغلقًا (المرحلة ل1)
   turnstileSecret: env('LEADERS_TURNSTILE_SECRET'),
   turnstileSite: env('LEADERS_TURNSTILE_SITE_KEY'),
   // سقف يومي لرسائل الرموز من هذه الدالة، فيبقى من حصة البريد ما يكفي للإدارة
   mailDailyCap: Number(env('LEADERS_MAIL_DAILY_CAP', '80')) || 80,
+  // تسجيلات جديدة من شبكة واحدة في اليوم: يتسع لقاعة ورشة؛ يُرفع قبل ورشتين على شبكة واحدة
+  registerPerIpDay: Number(env('LEADERS_REGISTER_PER_IP_DAY', '60')) || 60,
   // الجلسة تتجدد بالاستعمال، وتنتهي بعد أسبوعين من آخر نشاط
   sessionDays: 14,
   codeMinutes: 15,
@@ -133,9 +136,15 @@ export async function allFor(ids: string[] | null, make: () => any, col = 'parti
   return out;
 }
 
+// السجل ليس اختياريًا: إن تعذّر إدراج الأثر فشلت العملية برمز audit_failed ويُبلَّغ المالك فورًا،
+// بدل أن يضيع الأثر بصمت (الملحق 4، R6). من يعدّ الأثر ثانويًا يلتقط الخطأ صراحةً (award، alertOps).
 export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coordinator', actor: string | null, action: string,
   entity: string, entityId: string | null, before: unknown = null, after: unknown = null) {
-  await db.from('audit_log').insert({ actor_type: actorType, actor, action, entity, entity_id: entityId, before, after });
+  const { error } = await db.from('audit_log').insert({ actor_type: actorType, actor, action, entity, entity_id: entityId, before, after });
+  if (error) {
+    console.error('leaders-api: audit insert failed', action, error.message);
+    throw new Fail('تعذّر تسجيل العملية في السجل، فلم تكتمل. حاول بعد قليل.', 500, 'audit_failed', { action });
+  }
 }
 
 // ── البريد ──
@@ -289,14 +298,19 @@ export function alertMail(kind: string, detail: Record<string, unknown>) {
     `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 const ALERT_WINDOW_MS = 10 * 60e3;
+// تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
+const lastAlert = new Map<string, number>();
 export async function alertOps(kind: string, detail: Record<string, unknown>) {
   if (!CONFIG.alertEmail || !CONFIG.resendKey) return false;
+  if ((lastAlert.get(kind) ?? 0) > Date.now() - ALERT_WINDOW_MS) return false;
   try {
     const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
-    const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
       .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
-    if ((count ?? 0) > 0) return false;
-    await audit('system', 'alert', 'system.alert', 'system', kind, null, detail);
+    if (!error && (count ?? 0) > 0) return false;
+    lastAlert.set(kind, Date.now());
+    // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
+    await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
     await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail));
     return true;
   } catch (e) { console.error('alertOps:', e); return false; }
@@ -323,14 +337,13 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
 ];
 
 // ── حارس رسائل الرموز ──
-// قبل كل رمز يُرسل بالبريد: حدود لكل جهاز في الساعة واليوم، وسقف يومي عام
-// يحمي حصة البريد من الاستنزاف، ثم التحقق البشري إن كان مفعّلًا.
+// قبل كل رمز يُرسل بالبريد: حدود لكل شبكة في الساعة واليوم، وسقف يومي عام
+// يحمي حصة البريد من الاستنزاف، ثم التحقق البشري، وهو إلزامي يفشل مغلقًا بلا مفتاحيه (المرحلة ل1).
 // التسجيلات الجديدة (بريد لا حساب له) لها نصيب من السقف لا تتجاوزه، فإغراق
 // التسجيل ببريد وهمي لا يحجب رموز الدخول عن أصحاب الحسابات؛ ولها حد لكل شبكة
 // يتسع لقاعة ورشة. ورسائل نموذج التواصل تُحتسب في السقف نفسه لأنها من الحصة نفسها.
 export const CHALLENGE_TABLES = ['email_challenges', 'coordinator_challenges', 'expert_challenges'];
 const REGISTER_SHARE = 0.7;
-const REGISTER_PER_IP_DAY = 60;
 async function challengeCount(since: string, ip?: string | null, purpose?: 'register' | 'login') {
   let n = 0;
   for (const t of CHALLENGE_TABLES) {
@@ -369,16 +382,42 @@ async function turnstileOk(token: unknown, ip: string | null) {
   } catch { return false; }
 }
 
-export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }, purpose: 'login' | 'register' = 'login') {
+// التحقق البشري إلزامي ويفشل مغلقًا: بلا مفتاحَي Turnstile يتوقف الدخول برمز البريد ويُبلَّغ المالك فورًا
+// (captcha_unconfigured)، بدل أن تسقط الحماية بصمت إن حُذف سر (الملحق 1، H2). بوابة النشر في ci.yml
+// تمنع أصلًا نشر الدوال بلا المفتاحين. الدخول بحساب Google وبمفتاح المرور لا يمر من هنا فيبقى متاحًا.
+export async function requireHuman(b: Record<string, any>, ctx: { ip: string | null }) {
+  if (!CONFIG.turnstileSecret || !CONFIG.turnstileSite) {
+    console.error('leaders-api: Turnstile keys missing; email-code sign-in is closed');
+    throw new Fail('الدخول برمز البريد متوقف مؤقتًا. ادخل بحساب Google أو بمفتاح المرور، أو حاول بعد قليل.', 503, 'captcha_unconfigured');
+  }
+  if (!(await turnstileOk(b.captcha, ctx.ip))) {
+    throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });
+  }
+}
+
+// تصريح خطوة الاسم (guards.js): من تحقق عند البريد لا يُطلب منه التحدي ثانية عند الاسم
+export const issuePass = (email: string) => signPass(CONFIG.pepper, email);
+export async function humanGate(b: Record<string, any>, ctx: { ip: string | null }, email: string) {
+  if (b.pass && await passOk(CONFIG.pepper, b.pass, email)) return;
+  await requireHuman(b, ctx);
+}
+
+// حدود الشبكة في الساعة واليوم: تتسع لقاعة ورشة كاملة (50 مشاركًا وأكثر) على شبكة واحدة
+export async function networkGuard(ctx: { ip: string | null }) {
+  if (!ctx.ip) return;
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const dayAgo = new Date(Date.now() - 864e5).toISOString();
-  // الحد يتسع لقاعة ورشة كاملة (50 مشاركًا وأكثر) على شبكة واحدة؛ والحماية من الإغراق بالتحقق البشري (Turnstile) وحد كل بريد
-  if (ctx.ip) {
-    if (await challengeCount(hourAgo, ctx.ip) >= 150) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
-    if (await challengeCount(dayAgo, ctx.ip) >= 300) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
-    if (purpose === 'register' && await challengeCount(dayAgo, ctx.ip, 'register') >= REGISTER_PER_IP_DAY) {
-      throw new Fail('تسجيلات كثيرة اليوم من هذه الشبكة. سجّل بحساب Google، أو حاول غدًا', 429, 'rate');
-    }
+  if (await challengeCount(hourAgo, ctx.ip) >= 150) throw new Fail('طلبات كثيرة، حاول بعد قليل', 429, 'rate');
+  if (await challengeCount(dayAgo, ctx.ip) >= 300) throw new Fail('طلبات كثيرة اليوم من هذه الشبكة، حاول غدًا', 429, 'rate');
+}
+
+// opts.checked: حدود الشبكة والتحقق البشري جرت سلفًا في الطلب نفسه (authStart يجريهما قبل أي إفصاح)،
+// ورمز Turnstile لمرة واحدة فلا يُتحقق منه مرتين
+export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null }, purpose: 'login' | 'register' = 'login', opts: { checked?: boolean } = {}) {
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  if (!opts.checked) await networkGuard(ctx);
+  if (purpose === 'register' && ctx.ip && await challengeCount(dayAgo, ctx.ip, 'register') >= CONFIG.registerPerIpDay) {
+    throw new Fail('تسجيلات كثيرة اليوم من هذه الشبكة. سجّل بحساب Google، أو حاول غدًا', 429, 'rate');
   }
   if (await mailUsage(dayAgo) >= CONFIG.mailDailyCap) {
     console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
@@ -388,7 +427,26 @@ export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null
     console.error('leaders-api: registration share of mail cap reached', CONFIG.mailDailyCap);
     throw new Fail('بلغت تسجيلات اليوم حدها. سجّل بحساب Google، أو حاول بعد ساعات', 429, 'mail_cap');
   }
-  if (CONFIG.turnstileSecret && !(await turnstileOk(b.captcha, ctx.ip))) {
-    throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });
-  }
+  // التحقق البشري آخرًا: لا يُستهلك رمز Turnstile على طلب سترفضه الحدود
+  if (!opts.checked) await requireHuman(b, ctx);
+}
+
+// ── محاولات الرمز في البوابات الثلاث (المشارك والجهة والخبير) ──
+// تُحجز المحاولة ذريًا قبل المقارنة (guards.js): لا تتجاوز خمسًا ولو تزامنت الطلبات (الملحق 1، M2)
+export async function reserveCodeAttempt(table: string, ch: { id: string; attempts: number }) {
+  const r = await reserveAttempt({
+    cas: async (n: number) => {
+      const { data, error } = await db.from(table).update({ attempts: n + 1 })
+        .eq('id', ch.id).eq('attempts', n).is('consumed_at', null).select('id');
+      if (error) throw new Fail('تعذّر التحقق الآن، حاول بعد قليل', 500, 'db_error');
+      return !!data?.length;
+    },
+    read: async () => {
+      const { data } = await db.from(table).select('attempts, consumed_at').eq('id', ch.id).maybeSingle();
+      return data ? { attempts: data.attempts, consumed: !!data.consumed_at } : null;
+    },
+  }, ch.attempts);
+  if (r.ok) return;
+  if (r.reason === 'gone') throw new Fail('الرمز مستخدم أو منتهٍ، اطلب رمزًا جديدًا', 400, 'expired');
+  throw new Fail('محاولات كثيرة، اطلب رمزًا جديدًا', 429, 'attempts');
 }
