@@ -31,6 +31,7 @@
   --gold-deep:      var(--mi-gold);      /* رسمي #A97A2E */
   --gold:           var(--mi-copper);    /* رسمي #C79A4B */
   --gold-text:      #8A6424;             /* ذهبي للنصوص الصغيرة على الخلفيات الفاتحة: تباين 5:1 */
+  --gold-text-sand: color-mix(in oklab, var(--gold-text) 90%, var(--mi-graphite)); /* مشتق للنصوص الصغيرة على الرملي #EFE7D8: تباين 4.9:1 */
   --gold-light:     #D9A85A;             /* رسمي goldLight من brand-tokens.json */
   --gold-pale:      #EBD9B4;             /* لا مقابل رسمي — أبقيَ كما هو */
 

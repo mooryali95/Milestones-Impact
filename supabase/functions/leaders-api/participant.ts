@@ -429,7 +429,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
 }
 
 export async function journeyFor(p: any) {
-  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
@@ -439,7 +439,10 @@ export async function journeyFor(p: any) {
     db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
     initiativeFor(p.id),
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
+    // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
+    db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust').eq('participant_id', p.id),
   ]);
+  const fe = (finals.data || []).find((r: any) => r.program_id === def.program_id) || null;
   const pl = placements.data || [];
   const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
@@ -449,7 +452,8 @@ export async function journeyFor(p: any) {
     baselineSubmitted: submitted('baseline'),
     placementApproved: approved,
     postSubmitted: submitted('post'),
-    reportIssued: (reports.data || []).length > 0,
+    // التقرير النهائي يُستلم حين يُعتمد التقييم الختامي فتظهر نتيجته المفصلة (وتعود عند إعادة فتحه)، أو بتقرير صادر في جدوله
+    reportIssued: (reports.data || []).length > 0 || fe?.status === 'approved',
     initiativeNamed: !!initiative,
     preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
     postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
@@ -468,13 +472,12 @@ export async function journeyFor(p: any) {
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  const [group, continuous, fe] = await Promise.all([
+  const [group, continuous] = await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
-    db.from('final_evaluations').select('score, decision, status, decided_at, adjust').eq('participant_id', p.id).eq('program_id', def.program_id).maybeSingle(),
   ]);
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
-  const final = fe.data?.status === 'approved'
-    ? { score: fe.data.score, decision: fe.data.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.data.decision], decided_at: fe.data.decided_at, notes: fe.data.adjust?.notes_to_participant || null } : null;
+  const final = fe?.status === 'approved'
+    ? { score: fe.score, decision: fe.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.decision], decided_at: fe.decided_at, notes: fe.adjust?.notes_to_participant || null } : null;
   return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final };
 }
 

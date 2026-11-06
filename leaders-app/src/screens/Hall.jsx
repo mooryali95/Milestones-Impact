@@ -56,7 +56,7 @@ export default function Hall({ onBack }) {
         <h1>القاعة</h1>
         <div className="card"><p className="muted">لا قاعة مفتوحة لدفعتك الآن. حين يفتحها الخبير تجدها هنا، وتصلك دعوة منه.</p></div>
         <section className="card stack hall-preview" data-tour="hall" aria-label="معاينة القاعة">
-          <div><p className="eyebrow">معاينة</p><h3>هكذا تبدو القاعة حين تُفتح</h3>
+          <div><p className="eyebrow">معاينة</p><h2 className="as-h3">هكذا تبدو القاعة حين تُفتح</h2>
             <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
           <HallView view={PREVIEW} compact />
         </section>

@@ -37,7 +37,7 @@ function Onboarding({ expert, onOut, reload }) {
         ? <ExpertApply expert={expert} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
         : <div className="card milestone-card stack">
             <div className="badge"><span>✓</span></div>
-            <h2>ملفك بانتظار الاعتماد</h2>
+            <h1 className="as-h2">ملفك بانتظار الاعتماد</h1>
             <p className="muted">شكرًا {expert.full_name}. نراجع ملفك ونراسلك على {expert.email} حين تُفعَّل لوحتك، وفيها طلبات الخدمة وجلساتك وساعاتك.</p>
             <button className="btn ghost" onClick={() => setEdit(true)}>عدّل ملفك</button>
           </div>}
@@ -76,7 +76,7 @@ function SignIn({ onIn }) {
     <div className="page narrow">
       <form className="card stack xpp-in" onSubmit={step === 'email' ? send : verify}>
         <p className="eyebrow" dir="ltr">EXPERT PORTAL</p>
-        <h2>لوحة الخبير</h2>
+        <h1 className="as-h2">لوحة الخبير</h1>
         <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء. وإن كان مسجلًا في بوابة أخرى، يصلك بريد يدلّك عليها.`}</p>
         {step === 'email'
           ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
@@ -150,7 +150,7 @@ function AdvisorReviews() {
   };
   return (
     <section className="card stack">
-      <h3>بانتظار تقييمك <small className="muted">· {pending.length}</small></h3>
+      <h2 className="as-h3">بانتظار تقييمك <small className="muted">· {pending.length}</small></h2>
       <p className="small muted">أنت المستشار الأساسي لدفعة هؤلاء المشاركين؛ يصلك ما يسلّمونه هنا وبالبريد، والإدارة ترى ما تقيّمه.</p>
       {msg && <div className="banner"><span className="grow">{msg}</span></div>}
       {!pending.length && <p className="muted small">لا تسليمات معلّقة الآن.</p>}
@@ -183,7 +183,7 @@ function MyParticipants({ onOpen }) {
   useEffect(() => { xpCall('xp.participants').then(setD); }, []);
   return (
     <section className="card stack" aria-labelledby="xp-mine">
-      <h3 id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h3>
+      <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
         : d.items.map((x) => (
           <div key={x.id} className="xpp-person">
@@ -216,7 +216,7 @@ function PeerQueue({ say }) {
   const open = d.items.filter((x) => x.status !== 'confirmed');
   return (
     <section className="card stack" aria-labelledby="xp-peer">
-      <h3 id="xp-peer">طلبات الأقران <small className="muted">· {d.pending} إجابة بانتظار تأكيدك</small></h3>
+      <h2 className="as-h3" id="xp-peer">طلبات الأقران <small className="muted">· {d.pending} إجابة بانتظار تأكيدك</small></h2>
       <p className="small muted">{d.cohorts.map((c) => `${c.name}: ${c.supervision_ar}`).join(' · ')}. ما تؤكّده يُحسب لصاحبه في التقييم المستمر، وما تصحّحه يُحسب جزئيًا بملاحظتك.</p>
       {!open.length && <p className="muted small">لا طلبات مفتوحة الآن.</p>}
       {open.map((r) => (
@@ -250,7 +250,7 @@ function ExpertHall({ cohorts, say }) {
   if (!cohorts.length) return null;
   return (
     <section className="card stack" aria-labelledby="xp-hall">
-      <div className="row between"><h3 id="xp-hall">القاعة الحية</h3>
+      <div className="row between"><h2 className="as-h3" id="xp-hall">القاعة الحية</h2>
         <select className="input" aria-label="الدفعة" value={cid} onChange={(e) => setCid(e.target.value)}>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
       <HallControl cohortId={cid} call={call} toast={say} ui={HALL_UI_APP} />
     </section>
@@ -320,7 +320,7 @@ function Dashboard({ onOut }) {
 
       {offered.length > 0 && (
         <section className="card stack">
-          <h3>طلبات بانتظار ردك</h3>
+          <h2 className="as-h3">طلبات بانتظار ردك</h2>
           {offered.map((x) => (
             <div key={x.id} className="xpp-offer">
               <div><b>{x.role_ar}</b> للقائد {x.participant.name}<small className="muted">{[x.dimension_ar, x.level_ar ? `مستوى ${x.level_ar}` : null].filter(Boolean).join(' · ')} · يبقى {left(x.expires_at)}</small></div>
@@ -333,7 +333,7 @@ function Dashboard({ onOut }) {
       <div className="xpp-cols">
         <MyParticipants onOpen={setView} />
         <section className="card stack">
-          <h3>جلساتك القادمة</h3>
+          <h2 className="as-h3">جلساتك القادمة</h2>
           {upcoming.length ? upcoming.map((s) => (
             <div key={s.id} className="xpp-person"><b>{s.participant}</b><small className="muted">{when(s.starts_at)}</small>{s.join_url && <a className="link small" href={s.join_url} target="_blank" rel="noopener noreferrer">رابط الجلسة</a>}</div>
           )) : <p className="muted small">لا جلسات قادمة.</p>}
@@ -346,7 +346,7 @@ function Dashboard({ onOut }) {
 
       {toRate.length > 0 && (
         <section className="card stack">
-          <h3>قيّم مشاركيك <small className="muted">· {toRate.length}</small></h3>
+          <h2 className="as-h3">قيّم مشاركيك <small className="muted">· {toRate.length}</small></h2>
           <p className="small muted">تقييمك يساعد البرنامج في متابعة تقدّم القائد، ولا يدخل في درجته الرسمية ولا يراه.</p>
           {toRate.map((it) => (
             <div key={it.kind + it.id} className="xpp-torate">

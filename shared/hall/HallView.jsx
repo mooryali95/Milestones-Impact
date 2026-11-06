@@ -50,6 +50,13 @@ function layout(people, stage) {
   return pos;
 }
 
+// ما تعرضه بطاقة الشخص عند المرور يصل قارئ الشاشة في اسمه: الفريق والقيادة والحكم والحضور.
+// الشخص زر حين يكون لاختياره أثر (لوحة الميسّر)، وإلا صورة موسومة تُبلغ بالتركيز كما تُبلغ بالمرور
+function personLabel(p, team) {
+  return [p.name, team && TEAM_AR[team], p.leader && 'قائد الجولة', p.choice && `حكمه: ${OPT_AR[p.choice]}`,
+    !p.present && (p.joined ? 'خارج القاعة الآن' : 'لم يدخل القاعة بعد')].filter(Boolean).join('، ');
+}
+
 export default function HallView({ view, me = null, onPerson, compact = false }) {
   const [tip, setTip] = useState(null);
   const people = view?.people || [];
@@ -61,7 +68,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
 
   return (
     <div className="hv-wrap" style={{ position: 'relative' }}>
-      <svg className="hv" viewBox="0 0 1600 900" role="img" aria-label="منظور القاعة والفرق" style={{ width: '100%', display: 'block', borderRadius: 18 }}>
+      <svg className="hv" viewBox="0 0 1600 900" role="group" aria-label="منظور القاعة والفرق" style={{ width: '100%', display: 'block', borderRadius: 18 }}>
         <defs>
           <linearGradient id="hvFloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1b3640" /><stop offset="1" stopColor="#10232a" /></linearGradient>
           <linearGradient id="hvScreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#22414b" /><stop offset="1" stopColor="#162c34" /></linearGradient>
@@ -113,8 +120,8 @@ export default function HallView({ view, me = null, onPerson, compact = false })
           const col = atTables && team ? TEAM_COLOR[team] : '#93a8ad';
           const mine = me && p.id === me;
           return (
-            <g key={p.id} tabIndex={0} role="button" aria-label={`${p.name}${team ? `، ${TEAM_AR[team]}` : ''}`}
-              style={{ transform: `translate(${at.x}px,${at.y}px)`, transition: 'transform .9s cubic-bezier(.6,.05,.25,1)', cursor: 'pointer', opacity: p.present || stage === 'enter' ? 1 : 0.45 }}
+            <g key={p.id} tabIndex={0} role={onPerson ? 'button' : 'img'} aria-label={personLabel(p, team)}
+              style={{ transform: `translate(${at.x}px,${at.y}px)`, transition: 'transform .9s cubic-bezier(.6,.05,.25,1)', cursor: onPerson ? 'pointer' : 'default', opacity: p.present || stage === 'enter' ? 1 : 0.45 }}
               onMouseEnter={() => setTip({ p, at })} onMouseLeave={() => setTip(null)} onFocus={() => setTip({ p, at })} onBlur={() => setTip(null)}
               onClick={() => onPerson?.(p)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPerson?.(p); } }}>
               {mine && <circle r={R + 7} fill="none" stroke="#e6c78d" strokeWidth="2" strokeDasharray="4 4" />}

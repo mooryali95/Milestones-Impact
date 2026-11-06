@@ -29,7 +29,7 @@ function OrgVisibility() {
   const share = async (on) => { setBusy(true); setD((x) => ({ ...x, share_consented: on })); const r = await call('org.share-consent', { share: on }); setBusy(false); if (!r.success) load(); };   // تفاؤلي، ويُرجَع عند الفشل
   return (
     <section className="card stack org-see" aria-labelledby="org-see-h">
-      <h3 id="org-see-h">ماذا ترى جهتك</h3>
+      <h2 id="org-see-h" className="as-h3">ماذا ترى جهتك</h2>
       {!v.viewers ? <p className="muted">لا أحد من {d.org} يطّلع على رحلتك الآن.</p> : <>
         <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
         {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{v.scores && k === 'scores' ? (d.share_consented ? `${h}؛ بموافقتك` : 'طلبت جهتك الاطلاع عليها ولا تصلها إلا بموافقتك أدناه') : h}</small></li>)}</ul>}
@@ -58,7 +58,7 @@ function SponsorCode({ onSaved }) {
   };
   return (
     <form className="card stack" onSubmit={send} aria-labelledby="sponsor-h">
-      <h3 id="sponsor-h">الجهة الراعية</h3>
+      <h2 id="sponsor-h" className="as-h3">الجهة الراعية</h2>
       <p className="muted small">إن رشّحتك جهة للبرنامج وأعطتك رمزًا، اكتبه هنا لترتبط بها. جهة الرعاية قد تختلف عن جهة عملك.</p>
       <div className="row">
         <input className="input ltr grow" autoComplete="off" spellCheck={false} maxLength={40} value={code} onChange={(e) => setCode(e.target.value)} placeholder="ABC-2026" aria-label="رمز الجهة الراعية" />
@@ -157,7 +157,6 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       {onboarding && (
         <div className="stack" style={{ marginBottom: 18 }}>
           <div className="row between small">
-            <span className="eyebrow">الخطوة 1 من 3 في القبول</span>
             <span className="muted">{filled} من {REQUIRED.length} حقول أساسية</span>
           </div>
           {/* تقدّم ممنوح: التسجيل نفسه خطوة منجزة، فلا يبدأ الشريط من الصفر */}
@@ -220,10 +219,10 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
         </div>
       </form>
       {!onboarding && !p.organization_linked && !me.access?.sponsor && !p.is_demo && <SponsorCode onSaved={onSaved} />}
-      {!onboarding && me.access?.sponsor && <section className="card stack"><h3>الجهة الراعية</h3><SponsorNote access={me.access} /></section>}
+      {!onboarding && me.access?.sponsor && <section className="card stack"><h2 className="as-h3">الجهة الراعية</h2><SponsorNote access={me.access} /></section>}
       {!onboarding && (
         <section className="card stack" data-tour="security">
-          <h3>الدخول بالبصمة</h3>
+          <h2 className="as-h3">الدخول بالبصمة</h2>
           {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه للجهاز الذي تستخدمه الآن إن لم يكن منها.</p>}
           <PasskeyBanner settings onDone={() => setPk((n) => n + 1)} />
         </section>

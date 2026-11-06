@@ -144,7 +144,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const header = (
     <>
       <div className="quiz-head">
-        <span className="small muted">{post ? 'القياس البعدي' : 'الخطوة 2 من 3 في القبول'}</span>
+        <span className="small muted">{post ? 'القياس البعدي' : 'القياس المبدئي'}</span>
         <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         <span className="small"><b>{answered}</b>/{qs.length}</span>
         {elapsed > 0 && <span className="small muted" aria-label="الوقت المنقضي في هذه الجلسة">· {elapsed} د</span>}

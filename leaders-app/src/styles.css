@@ -41,6 +41,9 @@ body {
 button, input, textarea, select { font: inherit; color: inherit; }
 a { color: var(--slate); }
 h1, h2, h3, h4 { line-height: 1.4; margin: 0; }
+/* مستوى العنوان يتبع بنية الصفحة (لقارئ الشاشة)، وحجمه يبقى كما صُمم: عنوان قسم بمستوى 2 بحجم 3، وعنوان صفحة بمستوى 1 بحجم 2 */
+.as-h3 { font-size: 1.17em; }
+.as-h2 { font-size: 1.5em; }
 p { margin: 0; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
@@ -1006,7 +1009,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .cp-flow li.past span { background: rgba(199,154,75,.25); color: #fff; }
 .cp-alert { margin-bottom: 14px; }
 .cp-brief p { margin: 6px 0 0; line-height: 1.9; }
-.cp-review { margin-bottom: 14px; } .cp-review h3 { margin: 0 0 6px; font-size: 16px; }
+.cp-review { margin-bottom: 14px; } .cp-review h2, .cp-review h3 { margin: 0 0 6px; font-size: 16px; }
 .cp-review.bad { box-shadow: inset 3px 0 0 var(--bad); } .cp-review.ok { box-shadow: inset 3px 0 0 var(--ok); }
 .cp-review ul { margin: 6px 0; padding-inline-start: 18px; line-height: 1.9; font-size: 14px; }
 .cp-score b { font-size: 28px; }

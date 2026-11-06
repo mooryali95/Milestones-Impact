@@ -125,10 +125,10 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       {d.track?.brief && <div className="card cp-brief"><span className="mg-cap">توجيه مسارك</span><p>{d.track.brief}</p></div>}
 
       {c.status === 'returned' && (c.sponsor?.status === 'declined' ? (
-        <div className="card cp-review bad"><h3>ملاحظات راعي المبادرة</h3><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التسليم.</small></div>
+        <div className="card cp-review bad"><h2>ملاحظات راعي المبادرة</h2><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التسليم.</small></div>
       ) : c.review && (
         <div className="card cp-review bad">
-          <h3>ملاحظات المستشار</h3>
+          <h2>ملاحظات المستشار</h2>
           {c.review.note && <p>{c.review.note}</p>}
           {Object.keys(c.review.notes || {}).length > 0 && (
             <ul>{d.rubric.filter((r) => c.review.notes[r.key]).map((r) => <li key={r.key}><b>{r.title}:</b> {c.review.notes[r.key]}</li>)}</ul>
@@ -138,7 +138,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       ))}
       {c.status === 'approved' && (
         <div className="card cp-review ok">
-          <h3>اعتُمدت وثيقة مبادرتك</h3>
+          <h2>اعتُمدت وثيقة مبادرتك</h2>
           {c.review?.score != null && <p className="cp-score"><b>{c.review.score}</b> من 100 في معيار المستشار</p>}
           {c.sponsor?.status === 'endorsed' && <p>أيّدها راعيها{c.sponsor.name ? ` ${c.sponsor.name}` : ''}{c.sponsor.note ? `: «${c.sponsor.note}»` : '.'}</p>}
           {c.review?.note && <p className="muted">{c.review.note}</p>}
@@ -183,9 +183,10 @@ export default function Capstone({ me, onEditProfile, onBack }) {
           </section>
 
           <section className="card">
-            <h3>الملخص التنفيذي</h3>
-            <p className="muted small">رسالتك لصانع القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
-            <textarea className="input" rows={6} maxLength={3000} disabled={!editable} value={summary} onChange={(e) => setSummary(e.target.value)} />
+            <h3 id="cp-summary-h">الملخص التنفيذي</h3>
+            <p className="muted small" id="cp-summary-hint">رسالتك لصانع القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
+            <textarea className="input" rows={6} maxLength={3000} disabled={!editable} value={summary} onChange={(e) => setSummary(e.target.value)}
+              aria-labelledby="cp-summary-h" aria-describedby="cp-summary-hint" />
             {editable && <button className="btn ghost sm" disabled={!!busy} onClick={saveSummary}>{busy === 'summary' ? 'لحظة…' : 'حفظ الملخص'}</button>}
           </section>
 
