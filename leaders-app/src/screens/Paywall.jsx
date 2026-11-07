@@ -194,3 +194,18 @@ export function businessDays(from, n) {
   while (left > 0) { d.setDate(d.getDate() + 1); if (![5, 6].includes(d.getDay())) left -= 1; }
   return d;
 }
+
+// رعاية بانتظار الاعتماد (D20): سجّل برعاية جهته بعد امتلاء مقاعد العقد أو خارج مدته. لا بوابة دفع،
+// ولا ما يكشف بيانات الجهة، وملفه وقياسه محفوظان حتى يُحسم القرار خلال يومي عمل.
+export const seatHold = (me) => me?.access?.request?.status === 'pending' && ['seats', 'contract'].includes(me.access.request.kind);
+export function SponsorshipPending() {
+  return (
+    <div className="page narrow">
+      <div className="card stack pay-card" role="status">
+        <p className="eyebrow">الرعاية</p>
+        <h1>رعايتك بانتظار الاعتماد</h1>
+        <p className="muted">سجّلت برعاية جهتك، ونستكمل اعتماد رعايتك مع منسقها خلال يومي عمل، ونراسلك بالنتيجة. ملفك وقياسك محفوظان، ولا يُطلب منك دفع في هذه الأثناء.</p>
+      </div>
+    </div>
+  );
+}

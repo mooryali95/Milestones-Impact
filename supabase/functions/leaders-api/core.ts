@@ -310,7 +310,9 @@ export function coordinatorWeeklyMail(name: string | null, org: string, k: Recor
   return shell('organization', `ملخص ${org} الأسبوعي`,
     mailText(`${hello(name)} هذا ملخص مشاركي جهتك في برنامج القادة.`)
     + mailRows([['المشاركون', k.total], ['انضموا هذا الأسبوع', k.joined_week], ['نشطون هذا الأسبوع', k.active_week],
-      ['اعتُمد مسارهم', k.approved], ['أنهوا البرنامج', k.completed], ['متوسط الإنجاز', `${k.avg_progress}%`]])
+      ['اعتُمد مسارهم', k.approved], ['أنهوا البرنامج', k.completed], ['متوسط الإنجاز', `${k.avg_progress}%`],
+      ...(k.seats ? [['مقاعد العقد', `${k.seats_used} من ${k.seats}`] as [string, unknown]] : []),
+      ...(k.seats_waiting ? [['بانتظار قرار الرعاية', k.seats_waiting] as [string, unknown]] : [])])
     + mailButton(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة'),
     `${k.active_week} نشطون · متوسط الإنجاز ${k.avg_progress}%`, 'يصلك هذا الملخص كل أسبوع، ويمكن للإدارة إيقافه متى طلبت.');
 }

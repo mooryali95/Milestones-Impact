@@ -86,4 +86,5 @@ export const MIGRATIONS = [
   '20261107100000_leaders_content_provenance',
   '20261107110000_sspdf_freeze',
   '20261107120000_leaders_mail_events',
+  '20261107130000_leaders_sponsor_seats',
 ];

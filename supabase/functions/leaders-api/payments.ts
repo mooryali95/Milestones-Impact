@@ -8,7 +8,7 @@
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, Fail, must, payReminderMail, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { ITEMS, pinSponsor, programPaymentDue, settings, type Item } from './entitlements.ts';
+import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, settings, type Item } from './entitlements.ts';
 
 type Body = Record<string, any>;
 export { ITEMS, settings };
@@ -38,16 +38,24 @@ export async function access(p: any) {
   const read = () => db.from('entitlements').select('item, source, organization_id, value_cents').eq('participant_id', p.id).is('revoked_at', null);
   let { data } = await read();
   // التثبيت مرة واحدة: حين يرتبط بجهة نشطة وينقصه أحد البندين
-  if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) { await pinSponsor(p, org); ({ data } = await read()); }
+  let seat: string | null = null;
+  if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) { seat = await pinSponsor(p, org); ({ data } = await read()); }
+  // D20: مقعد مرفوض (العقد ممتلئ أو خارج مدته) لا يجعل الجهة راعية بعد؛ يبقى الطلب بانتظار القرار
+  const held = !!seat && SEAT_BLOCKED.includes(seat as any) && !(data || []).some((x: any) => x.source === 'sponsor');
   const has = (i: Item) => (data || []).find((x: any) => x.item === i)?.source || null;
   // اسم الراعي من الجهة الحية، أو من الإعفاء المثبَّت إن أُوقفت بعد ربطه
   const pinned = (data || []).find((x: any) => x.source === 'sponsor');
-  const src: any = org || (pinned?.organization_id
+  const src: any = held ? null : org || (pinned?.organization_id
     ? (await db.from('organizations').select('name, short_name, show_value').eq('id', pinned.organization_id).maybeSingle()).data : null);
   // القيمة المعروضة: المثبَّتة للمشارك (لا سعر الجهة الحالي)، وتُخفى إن طلبت الجهة
   const pinnedValue = (data || []).filter((x: any) => x.source === 'sponsor').reduce((t: number, x: any) => t + (x.value_cents || 0), 0);
   const sponsor = src ? { name: src.name, short_name: src.short_name || null, value_cents: src.show_value === false ? null : (pinnedValue || null) } : null;
-  const { data: req } = sponsor ? { data: null } : await db.from('sponsor_requests').select('typed_name, status, reason').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  const lastReq = (cols: string) => db.from('sponsor_requests').select(cols).eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  let req: any = null;
+  if (!sponsor) {
+    const r1: any = await lastReq('typed_name, status, reason, kind');
+    req = r1.error ? (await lastReq('typed_name, status, reason')).data : r1.data;   // kind قبل ترحيل 20261107130000
+  }
   const request = req && req.status !== 'cancelled' ? req : null;
   if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor, request };
   return { ...base, assessment: has('assessment'), program: has('program'), sponsor, request };

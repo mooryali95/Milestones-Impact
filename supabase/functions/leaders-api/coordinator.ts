@@ -136,6 +136,12 @@ export async function dashboardFor(c: any) {
   const participants = full.map((p: any) => coordParticipant(p, perms)).filter(Boolean);
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
+  // استهلاك مقاعد العقد (D20): من ثبتت رعايته، ومن ينتظر قرار الرعاية لامتلائها أو لخروجه عن مدة العقد
+  const [{ data: seated }, { count: waiting }] = await Promise.all([
+    db.from('entitlements').select('participant_id').eq('organization_id', c.organization_id).eq('source', 'sponsor').is('revoked_at', null),
+    db.from('sponsor_requests').select('id', { count: 'exact', head: true }).eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { count: 0 } : r)),
+  ]);
+  const seatsUsed = new Set((seated || []).map((e: any) => e.participant_id)).size;
   return {
     success: true,
     org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector },
@@ -147,6 +153,7 @@ export async function dashboardFor(c: any) {
       // عدد مجمّع من الصفوف الأصلية: يظهر ولو لم تُمنح صلاحية النشاط الفردي
       active_week: (rows as any[]).filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
       approved: d.funnel.approved, completed: d.funnel.completed, avg_progress: avg,
+      seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting ?? 0,
     },
     participants,
   };

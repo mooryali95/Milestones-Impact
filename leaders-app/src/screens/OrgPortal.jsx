@@ -214,7 +214,8 @@ function Dashboard({ me, onLogout }) {
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
         </div>
-        <div className="op-seats"><b>{kpis.total}</b><small>{org.seats ? `من ${org.seats} مقعد` : 'مشارك'}</small></div>
+        {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
+        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${org.seats} مقعد${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
       </section>
 
       <div className="op-kpis">

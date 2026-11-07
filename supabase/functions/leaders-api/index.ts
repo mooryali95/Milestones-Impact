@@ -48,7 +48,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.start': P.authStart,
   'auth.verify': P.authVerify,
   'auth.google': P.authGoogle,
-  'org.info': (b) => P.orgInfo(b),
+  'org.info': (b, ctx) => P.orgInfo(b, ctx),
   // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
   'system.ping': () => S.ping(),
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها

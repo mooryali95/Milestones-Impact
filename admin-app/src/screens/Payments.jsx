@@ -224,9 +224,14 @@ function SponsorRequests({ canWrite, onPerson, onChange }) {
   if (!d.success) return <p className="la-err">{d.message}</p>;
   const list = d.requests.filter((x) => all || x.status === 'pending');
   const decide = async (x, approve) => {
-    const orgId = pick[x.id] || x.suggestions[0]?.id;
+    const held = x.kind === 'seats' || x.kind === 'contract';
+    const orgId = held ? x.organization_id : pick[x.id] || x.suggestions[0]?.id;
     let reason = '';
-    if (approve) {
+    if (approve && x.kind === 'seats') {
+      // D20: القبول مقعد يُضاف إلى عقد الجهة، بتعليل مكتوب يُحفظ في السجل
+      reason = window.prompt(`اكتملت مقاعد «${x.typed_name}». سبب إضافة مقعد إلى العقد لـ ${x.participants?.full_name}:`) ?? null;
+      if (reason === null) return;
+    } else if (approve) {
       const org = d.orgs.find((o) => o.id === orgId);
       if (!org || !(await confirm(`ربط ${x.participants?.full_name} برعاية «${org.name}» وإعفاؤه من الرسوم؟`))) return;
     } else {
@@ -248,7 +253,7 @@ function SponsorRequests({ canWrite, onPerson, onChange }) {
             <tr key={x.id}>
               <td><button className="la-link" onClick={() => onPerson?.(x.participant_id)}>{x.participants?.full_name}</button><br /><small className="la-muted" dir="ltr">{x.participants?.email}</small></td>
               <td><b>{x.typed_name}</b>{x.contact_email && <><br /><small className="la-muted" dir="ltr">منسق: {x.contact_email}</small></>}<br /><small className="la-muted">{when(x.created_at)}</small></td>
-              <td>{x.status === 'pending' ? (
+              <td>{x.kind === 'seats' || x.kind === 'contract' ? <span className="la-chip warn">{x.kind === 'seats' ? 'اكتملت مقاعد العقد' : 'خارج مدة العقد'}</span> : x.status === 'pending' ? (
                 <select value={pick[x.id] || x.suggestions[0]?.id || ''} disabled={!canWrite} onChange={(e) => setPick({ ...pick, [x.id]: e.target.value })}>
                   <option value="">اختر جهة…</option>
                   {x.suggestions.length > 0 && <optgroup label="الأقرب">{x.suggestions.map((g) => <option key={g.id} value={g.id}>{g.name} · {Math.round(g.score * 100)}%</option>)}</optgroup>}
@@ -257,8 +262,8 @@ function SponsorRequests({ canWrite, onPerson, onChange }) {
               ) : x.reason || ''}</td>
               <td><span className={`la-chip ${REQ_ST[x.status]?.[1] || ''}`}>{REQ_ST[x.status]?.[0]}</span></td>
               <td>{x.status === 'pending' && canWrite && <div className="la-row">
-                <button className="btn-sm primary" onClick={() => decide(x, true)}>اربط وأعفِ</button>
-                <button className="btn-sm ghost" onClick={() => decide(x, false)}>ارفض</button></div>}</td>
+                <button className="btn-sm primary" onClick={() => decide(x, true)}>{x.kind === 'seats' ? 'أضف مقعدًا وأعفِ' : x.kind === 'contract' ? 'اعتمد بعد تعديل العقد' : 'اربط وأعفِ'}</button>
+                <button className="btn-sm ghost" onClick={() => decide(x, false)}>{x.kind === 'seats' || x.kind === 'contract' ? 'دفع فردي' : 'ارفض'}</button></div>}</td>
             </tr>
           ))}</tbody>
         </table>
