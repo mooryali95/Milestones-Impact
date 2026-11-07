@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, missingColumn, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR } from './labels.js';
@@ -14,6 +14,7 @@ import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { privateFile } from './guards.js';
+import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -788,15 +789,7 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
   return { success: true };
 }
 
-async function instrumentLocked(instrumentId: string) {
-  const { count } = await db.from('assessments').select('id', { count: 'exact', head: true })
-    .eq('instrument_id', instrumentId).eq('status', 'submitted');
-  return (count ?? 0) > 0;
-}
 
-// تغيير الدرجات أو الخيارات أو الحذف في أداة استُخدمت يُفسد نتائج من سبق.
-// تعديل الصياغة والترتيب مسموح، وما عداه يحتاج إصدارًا جديدًا.
-const SAFE_QUESTION_FIELDS = new Set(['text_ar', 'help_ar', 'sort', 'text_rater_ar']);
 
 export async function save(a: Admin, b: Body) {
   requireWrite(a);
@@ -811,17 +804,17 @@ export async function save(a: Admin, b: Body) {
     if (isNew) row.program_id = b.row.program_id;
   }
 
-  if (b.entity === 'questions') {
-    if (row.options && (!Array.isArray(row.options) || row.options.length < 2
-      || row.options.some((o: any) => !o?.label || !Number.isFinite(Number(o.score))))) {
-      throw new Fail('كل سؤال يحتاج خيارين على الأقل، لكل منهما نص ودرجة');
-    }
-    const instrumentId = row.instrument_id || (isNew ? null : (await db.from('questions').select('instrument_id').eq('id', b.row.id).single()).data?.instrument_id);
-    if (instrumentId && await instrumentLocked(instrumentId)) {
-      const unsafe = isNew || Object.keys(row).some((k) => !SAFE_QUESTION_FIELDS.has(k));
-      if (unsafe) throw new Fail('هذه الأداة لها نتائج سابقة. أنشئ إصدارًا جديدًا لتعديل الخيارات أو الدرجات أو إضافة أسئلة', 409, 'locked');
-    }
+  // الصف المخزن: لقفل المحتوى المُقاس (D01)، وللقيمة السابقة في السجل
+  let current: Body | null = null;
+  if (!isNew) {
+    let cq = db.from(e.table).select('*');
+    for (const k of e.key) cq = cq.eq(k, b.row[k]);
+    current = (await cq.maybeSingle()).data || null;
   }
+  const lock = lockedChanges(b.entity, row, current);
+  if (lock.length) throw new Fail(lock[0].msg, 409, 'content_locked', { fields: lock.map((x) => x.field) });
+
+
 
   // رقم جلسات أو مدة مكتوب نصًا في وصف الرحلة يتباعد عن إعداد النشاط؛ يُكتب برمز يُملأ من مصدره
   if (b.entity === 'journey_stages' || b.entity === 'stage_requirements') {
@@ -914,22 +907,32 @@ export async function save(a: Admin, b: Body) {
     row.updated_at = new Date().toISOString();
   }
 
-  let saved;
-  if (isNew) {
-    saved = must(await db.from(e.table).insert(row).select('*').single(), 'تعذّر الحفظ، تأكد من عدم تكرار الرمز');
-  } else {
-    let q = db.from(e.table).update(row);
+  // ختم المصدر (20261107100000_leaders_content_provenance): بريد المشرف ووقت الحفظ. قبل الترحيل
+  // لا عمود updated_by، فيُعاد الحفظ بلا ختم (قراءة متسامحة)
+  const stamp: Body = STAMPED.has(b.entity) ? { updated_at: new Date().toISOString(), updated_by: a.email } : {};
+  const write = (extra: Body) => {
+    if (isNew) return db.from(e.table).insert({ ...row, ...extra }).select('*').single();
+    let q = db.from(e.table).update({ ...row, ...extra });
     for (const k of e.key) q = q.eq(k, b.row[k]);
-    saved = must(await q.select('*').single(), 'تعذّر الحفظ');
-  }
-  await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), null, row);
+    return q.select('*').single();
+  };
+  let res = await write(stamp);
+  if (res.error && Object.keys(stamp).length && missingColumn(res.error)) res = await write({ updated_at: row.updated_at ?? stamp.updated_at });
+  if (res.error && missingColumn(res.error)) res = await write({});
+  const saved = must(res, isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
+  const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
+  await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
   return { success: true, row: saved };
 }
+
+// جداول المحتوى التي تحمل updated_at وupdated_by
+const STAMPED = new Set(['handbook_modules', 'questions', 'instruments', 'learning_models', 'content_items', 'tracks', 'grid_cells', 'journey_stages', 'stage_requirements']);
 
 export async function remove(a: Admin, b: Body) {
   requireWrite(a);
   const e = ENTITIES[b.entity];
   if (!e || e.key[0] !== 'id') throw new Fail('لا يمكن حذف هذا النوع، عطّله بدل حذفه');
+  if (removeLocked(b.entity)) throw new Fail(`لا يُحذف هذا من اللوحة: ${REPO_EDIT_AR}`, 409, 'content_locked');
   if (b.entity === 'learning_models') {
     const { count } = await db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('model_id', b.id);
     if (count) throw new Fail('لهذا النموذج أعمال مشاركين؛ أوقفه بدل حذفه حتى لا تضيع أعمالهم', 409);
@@ -950,10 +953,6 @@ export async function remove(a: Admin, b: Body) {
       db.from('reports').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
     ]);
     if (ps || rs) throw new Fail(`للجهة ${ps || 0} مشارك و${rs || 0} تقرير؛ انقلهم أولًا أو أوقف الجهة بدل حذفها`, 409, 'org_in_use');
-  }
-  if (b.entity === 'questions') {
-    const q = (await db.from('questions').select('instrument_id').eq('id', b.id).single()).data;
-    if (q && await instrumentLocked(q.instrument_id)) throw new Fail('لا يُحذف سؤال له إجابات سابقة، عطّله بدل ذلك', 409, 'locked');
   }
   const { error } = await db.from(e.table).delete().eq('id', b.id);
   if (error) throw new Fail('لا يمكن حذفه لارتباطه ببيانات مشاركين، عطّله بدل ذلك', 409);
@@ -977,30 +976,17 @@ export async function reorder(a: Admin, b: Body) {
 }
 
 // إصدار جديد من أداة القياس: نسخة كاملة من الأسئلة تصبح هي الفعالة
-export async function cloneInstrument(a: Admin, b: Body) {
+// D01 وD03: الإصدار من مولّد المستودع (scripts/questions) والتفعيل بترحيل محروس. كان الإجراء ينسخ الأداة أو يفعّلها
+// من اللوحة، فيتخطى حارس ما قبل التفعيل ويطفئ أداة بعدية يحتاجها من بدأ على المبدئي السابق.
+export async function cloneInstrument(a: Admin, _b: Body) {
   requireWrite(a);
-  const src = must(await db.from('instruments').select('*').eq('id', String(b.id)).single());
-  const base = src.key.replace(/-v\d+$/, '');
-  const version = (src.version || 1) + 1;
-  const copy = must(await db.from('instruments').insert({
-    key: `${base}-v${version}`, title_ar: src.title_ar, kind: src.kind, intro_ar: src.intro_ar,
-    est_minutes: src.est_minutes, version, active: false,
-  }).select('*').single(), 'يوجد إصدار بهذا الرقم');
-  const qs = must(await db.from('questions').select('*').eq('instrument_id', src.id)) ?? [];
-  if (qs.length) {
-    must(await db.from('questions').insert(qs.map(({ id: _id, instrument_id: _i, ...q }: any) => ({ ...q, instrument_id: copy.id }))));
-  }
-  await audit('admin', a.email, 'instrument.clone', 'instruments', copy.id, null, { from: src.key });
-  return { success: true, instrument: copy };
+  throw new Fail(`إصدار أداة القياس يُبنى في المستودع: ${REPO_EDIT_AR}`, 409, 'content_locked');
 }
 
-export async function activateInstrument(a: Admin, b: Body) {
+// كما في cloneInstrument: التفعيل بترحيل محروس
+export async function activateInstrument(a: Admin, _b: Body) {
   requireWrite(a);
-  const inst = must(await db.from('instruments').select('*').eq('id', String(b.id)).single());
-  await db.from('instruments').update({ active: false }).eq('kind', inst.kind).neq('id', inst.id);
-  await db.from('instruments').update({ active: true }).eq('id', inst.id);
-  await audit('admin', a.email, 'instrument.activate', 'instruments', inst.id);
-  return { success: true };
+  throw new Fail('تفعيل أداة القياس بترحيل محروس بعد توقيع لجنة القياس (D03)، لا من اللوحة', 409, 'content_locked');
 }
 
 // إضافة مشارك يدويًا (ترشيح جهة، أو تحويل طلب تواصل)

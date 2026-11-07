@@ -4,6 +4,7 @@
 // الثوابت وحقول النماذج وحاسبة التسكين وإعادة الترتيب، مفصولة عن الشاشات
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
+import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
@@ -151,8 +152,11 @@ export const Q_FIELDS = [
   { name: 'text_rater_ar', label: 'صيغة الغائب لتقدير المدير', type: 'textarea', rows: 2 },
   { name: 'active', label: 'مفعّل', type: 'check' },
 ];
-// إصدار له نتائج: الصياغة فقط، فلا تختل درجات من أجاب
-export const Q_SAFE = Q_FIELDS.filter((f) => ['text_ar', 'help_ar', 'text_rater_ar'].includes(f.name));
+// D01: نص الفقرة وخياراتها ودرجاتها محتوى مُقاس يُعدَّل من المستودع؛ اللوحة تحرر التلميح وحده (والترتيب بالأسهم)
+export const Q_SAFE = Q_FIELDS.filter((f) => CONTENT_LOCK.questions.editable.includes(f.name));
+export const QUESTIONS_LOCK_AR = `${REPO_EDIT_AR}. تحرر اللوحة التلميح والترتيب، والإصدار والتفعيل بترحيل محروس بعد توقيع لجنة القياس.`;
+// رمز المتطلب ثابت بعد إنشائه (D01): الرحلة والتقارير تقرأ التقدم به
+export const lockReqCode = (fields) => fields.map((f) => (f.name === 'code' ? { ...f, readOnly: true, label: 'الرمز (ثابت بعد الإنشاء)' } : f));
 
 export const INST_FIELDS = [
   { name: 'title_ar', label: 'العنوان' },

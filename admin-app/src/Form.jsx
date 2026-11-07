@@ -59,7 +59,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
         <h3>{title}</h3>
         {fields.filter((f) => !f.show || f.show(v)).map((f) => {
           const id = `f-${f.name}`;
-          const common = { id, name: f.name, value: v[f.name], onChange: set(f.name), dir: f.dir };
+          const common = { id, name: f.name, value: v[f.name], onChange: set(f.name), dir: f.dir, readOnly: f.readOnly || undefined };
           if (f.type === 'check') {
             return (
               <label key={f.name} htmlFor={id} className="la-check">
@@ -105,7 +105,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               <span>{f.label}</span>
               {help && <small className="la-muted">{help}</small>}
               {f.type === 'select' ? (
-                <select {...common}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                <select {...common} disabled={f.readOnly || undefined}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               ) : f.type === 'textarea' ? <textarea {...common} rows={f.rows || 3} />
                 : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : f.type === 'datetime' ? 'datetime-local' : f.type === 'date' ? 'date' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
             </label>

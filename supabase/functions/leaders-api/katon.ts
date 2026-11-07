@@ -4,12 +4,13 @@
 // المفتاح والشرح لا يُرسلان للمشارك قبل أن يجيب عن جمل الموضوع كلها، وبعدها تُقفل إجاباته
 // فلا يُعدّل بعد رؤية المفتاح. جدول النقاط الثلاثي من إعداد برنامجه (programs.katon_points) ويُرفض
 // إن لم يكن قاعدة تسجيل سليمة. الأعمدة الجديدة verdict/confidence/stances؛ choice القديم يُقرأ للتوافق.
-import { audit, db, Fail, must } from './core.ts';
+import { audit, db, Fail, missingColumn, must } from './core.ts';
 import {
   cbmCheck, cleanAnswer, cleanSentence, katonPoints, katonScore, katonSummary, KATON_CONFIDENCE, KATON_STANCES, normalizeAnswer, sentenceDistribution, topicIssues,
 } from './katon.js';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { approvalOf } from './logic.js';
+import { REPO_EDIT_AR } from './content-lock.js';
 import { hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
@@ -110,6 +111,14 @@ export async function adminList(b: Body) {
   };
 }
 
+// حفظ بختم المصدر (20261107100000_leaders_content_provenance)، ويُعاد بلا updated_by قبل الترحيل
+async function stamped(a: Admin, run: (by: Record<string, string>) => PromiseLike<{ data: any; error: any }>) {
+  const by = { updated_at: new Date().toISOString(), updated_by: a.email };
+  let res = await run(by);
+  if (res.error && missingColumn(res.error)) res = await run({ updated_at: by.updated_at });
+  return must(res);
+}
+
 export async function topicSave(a: Admin, b: Body) {
   const r = b.row || {};
   const title_ar = String(r.title_ar || '').trim().slice(0, 160);
@@ -129,12 +138,10 @@ export async function topicSave(a: Admin, b: Body) {
     const issues = topicIssues(sents);
     if (issues.length) throw new Fail(`لا يُنشر الموضوع: ${issues.join('؛ ')}`);
   }
-  let saved;
-  if (isUuid(r.id)) saved = must(await db.from('katon_topics').update(row).eq('id', r.id).select('*').single());
-  else {
-    const { data: last } = await db.from('katon_topics').select('sort').order('sort', { ascending: false }).limit(1);
-    saved = must(await db.from('katon_topics').insert({ ...row, key: `t-${Date.now().toString(36)}`, sort: (last?.[0]?.sort || 0) + 1, status: 'draft' }).select('*').single());
-  }
+  const { data: last } = isUuid(r.id) ? { data: null } : await db.from('katon_topics').select('sort').order('sort', { ascending: false }).limit(1);
+  const saved = await stamped(a, (by) => (isUuid(r.id)
+    ? db.from('katon_topics').update({ ...row, ...by }).eq('id', r.id).select('*').single()
+    : db.from('katon_topics').insert({ ...row, ...by, key: `t-${Date.now().toString(36)}`, sort: (last?.[0]?.sort || 0) + 1, status: 'draft' }).select('*').single()));
   await audit('admin', a.email, 'katon.topic', 'katon_topics', saved.id, null, { title_ar, status: saved.status });
   return { success: true, row: saved };
 }
@@ -144,15 +151,21 @@ export async function sentenceSave(a: Admin, b: Body) {
   let row;
   try { row = cleanSentence(r); } catch (err) { throw new Fail((err as Error).message); }
   let saved;
+  let before: Record<string, unknown> | null = null;
   if (isUuid(r.id)) {
-    // مفتاح جملة أُجيب عنها يغيّر نقاط من أجاب؛ يُسمح ويُعلَن في السجل
-    saved = must(await db.from('katon_sentences').update({ ...row, updated_at: new Date().toISOString() }).eq('id', r.id).select('*').single());
+    // D01: مفتاح جملة أُجيب عنها ونصها وسؤالها محتوى مُقاس، فلا يتغير من اللوحة (كان يُسمح ويغيّر نقاط من أجاب)
+    const { data: cur } = await db.from('katon_sentences').select('key, question, text_ar').eq('id', r.id).maybeSingle();
+    const { count } = await db.from('katon_answers').select('sentence_id', { count: 'exact', head: true }).eq('sentence_id', r.id);
+    const changed = cur ? (['key', 'question', 'text_ar'] as const).filter((f) => String((row as any)[f] ?? '') !== String((cur as any)[f] ?? '')) : [];
+    if (count && changed.length) throw new Fail(`لهذه الجملة ${count} إجابة، فمفتاحها ونصها وسؤالها لا تتغير من اللوحة: ${REPO_EDIT_AR}`, 409, 'content_locked');
+    before = cur ? Object.fromEntries(changed.map((f) => [f, (cur as any)[f]])) : null;
+    saved = await stamped(a, (by) => db.from('katon_sentences').update({ ...row, ...by }).eq('id', r.id).select('*').single());
   } else {
     if (!isUuid(r.topic_id)) throw new Fail('اختر الموضوع');
     const { data: last } = await db.from('katon_sentences').select('sort').eq('topic_id', r.topic_id).order('sort', { ascending: false }).limit(1);
-    saved = must(await db.from('katon_sentences').insert({ ...row, topic_id: r.topic_id, sort: (last?.[0]?.sort || 0) + 1 }).select('*').single());
+    saved = await stamped(a, (by) => db.from('katon_sentences').insert({ ...row, ...by, topic_id: r.topic_id, sort: (last?.[0]?.sort || 0) + 1 }).select('*').single());
   }
-  await audit('admin', a.email, 'katon.sentence', 'katon_sentences', saved.id, null, { key: row.key, question: row.question });
+  await audit('admin', a.email, 'katon.sentence', 'katon_sentences', saved.id, before, { key: row.key, question: row.question });
   return { success: true, row: saved };
 }
 
@@ -168,6 +181,9 @@ export async function sentenceDelete(a: Admin, b: Body) {
 // جدول النقاط الثلاثي: يُرفض ما ليس قاعدة تسجيل سليمة (حتى لا يصير الكذب عن الثقة مجزيًا)
 export async function pointsSave(a: Admin, b: Body) {
   if (!isUuid(b.program_id)) throw new Fail('اختر البرنامج');
+  // D01: جدول النقاط مُقاس؛ بعد أول حكم بثقة يغيّر نقاط من أجاب، فيُثبَّت
+  const { count } = await db.from('katon_answers').select('sentence_id', { count: 'exact', head: true }).not('confidence', 'is', null);
+  if (count) throw new Fail(`في كاتون ${count} حكم بثقة، فجدول النقاط ثابت: ${REPO_EDIT_AR}`, 409, 'content_locked');
   const check = cbmCheck(b.points);
   if (!check.ok) throw new Fail(`الجدول ليس قاعدة تسجيل سليمة: ${check.issues.join('؛ ')}`);
   must(await db.from('programs').update({ katon_points: check.table, updated_at: new Date().toISOString() }).eq('id', b.program_id));

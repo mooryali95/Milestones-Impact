@@ -106,17 +106,21 @@ test('الرحلة: متطلب جديد بمربعات الاختيار، وتر
   await expect.poll(() => calls.find((c) => c.action === 'admin.reorder')).toMatchObject({ entity: 'stage_requirements', ids: ['r2', 'r1'] });
 });
 
-test('القياس: تحرير خيارات السؤال ودرجاتها', async ({ page }) => {
+test('القياس: الفقرة وخياراتها ودرجاتها من المستودع، واللوحة تحرر التلميح وحده (D01)', async ({ page }) => {
   const calls = await setup(page);
   await tab(page, 'أسئلة القياس');
   await expect(page.getByText('ما المعلم؟')).toBeVisible();
+  await expect(page.getByRole('note').filter({ hasText: 'يُعدَّل من المستودع' })).toBeVisible();
+  for (const name of ['إصدار جديد', 'تفعيل هذا الإصدار', /^\+ سؤال في/]) await expect(page.getByRole('button', { name })).toHaveCount(0);
   await page.getByRole('button', { name: 'تحرير', exact: true }).click();
-  await page.getByLabel('الخيار 1', { exact: true }).fill('موعد');
-  await page.getByRole('button', { name: '+ خيار' }).click();
-  await page.getByLabel('الخيار 3', { exact: true }).fill('أداة قيادة');
-  await page.getByLabel('درجة الخيار 3').fill('3');
-  await page.getByRole('button', { name: 'حفظ' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row.options).toEqual([{ label: 'موعد', score: 0 }, { label: 'نقطة قرار', score: 2 }, { label: 'أداة قيادة', score: 3 }]);
+  const form = page.getByRole('dialog', { name: /^سؤال / });
+  await expect(form.getByLabel('الخيار 1', { exact: true })).toHaveCount(0);
+  await expect(form.getByLabel('نص السؤال')).toHaveCount(0);
+  await expect(form.getByRole('button', { name: 'حذف' })).toHaveCount(0);
+  await form.getByLabel('تلميح يظهر تحته').fill('فكّر في آخر مشروع');
+  await form.getByRole('button', { name: 'حفظ' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row.help_ar).toBe('فكّر في آخر مشروع');
+  expect(Object.keys(calls.find((c) => c.action === 'admin.save').row).sort()).toEqual(['help_ar', 'id']);
 });
 
 test('المستويات: حاسبة التسكين وحفظ المعيار', async ({ page }) => {

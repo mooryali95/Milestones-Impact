@@ -9,7 +9,7 @@ import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
-  CELL_FIELDS, INST_FIELDS, KIND, LVLS, MODE, MODEL_DEFAULT, PHASE, Q_FIELDS, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
+  CELL_FIELDS, INST_FIELDS, KIND, LVLS, lockReqCode, MODE, MODEL_DEFAULT, PHASE, QUESTIONS_LOCK_AR, Q_SAFE, stageFields, stageToForm, formToStage, TIER,
   evaluate, formToReq, reorderIds, reqFields, reqToForm,
 } from '../methodology.js';
 import Form from '../Form.jsx';
@@ -125,7 +125,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                     </span>
                     <span className="la-row">
                       <Move {...mv} entity="stage_requirements" id={r.id} />
-                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: reqFields(stages, catalog.learning_models || []), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => edit({ title: 'تحرير متطلب', fields: lockReqCode(reqFields(stages, catalog.learning_models || [])), values: reqToForm(r), onSave: (v) => save('stage_requirements', { id: r.id })(formToReq(v)), onDelete: del('stage_requirements', r.id) })}>تحرير</button>}
                     </span>
                   </li>
                 ))}
@@ -148,7 +148,6 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
 
 // ══ أسئلة القياس ══
 export function Assessment({ catalog, reload, canWrite }) {
-  const { toast, confirm } = useUI();
   const [edit, editor] = useEditor(reload);
   const insts = [...catalog.instruments].sort((a, b) => (a.kind + b.version).localeCompare(b.kind + a.version));
   const [instId, setInstId] = useState(() => (insts.find((i) => i.active && i.kind === 'baseline') || insts[0])?.id);
@@ -160,17 +159,6 @@ export function Assessment({ catalog, reload, canWrite }) {
   const qs = catalog.questions.filter((q) => q.instrument_id === inst.id && q.dimension === dim).sort((a, b) => a.sort - b.sort);
   const count = (d) => catalog.questions.filter((q) => q.instrument_id === inst.id && q.dimension === d && q.active).length;
 
-  const clone = async () => {
-    if (!(await confirm('إنشاء إصدار جديد غير مفعّل بنسخة من كل الأسئلة؟'))) return;
-    const r = await L('admin.clone-instrument', { id: inst.id });
-    if (!r.success) return toast(r.message);
-    setInstId(r.instrument.id); toast('أُنشئ الإصدار. عدّله ثم فعّله'); reload();
-  };
-  const activate = async () => {
-    if (!(await confirm('تفعيل هذا الإصدار للمشاركين الجدد؟ من بدأ القياس يكمل على إصداره.'))) return;
-    const r = await L('admin.activate-instrument', { id: inst.id });
-    toast(r.success ? 'فُعّل' : r.message); if (r.success) reload();
-  };
 
   return (
     <>
@@ -180,13 +168,11 @@ export function Assessment({ catalog, reload, canWrite }) {
         </select>
         {canWrite && <>
           <button className="btn-sm ghost" onClick={() => edit({ title: 'أداة القياس', fields: INST_FIELDS, values: inst, onSave: save('instruments', { id: inst.id }) })}>المقدمة والمدة</button>
-          <button className="btn-sm ghost" onClick={clone}>إصدار جديد</button>
-          {!inst.active && <button className="btn-sm primary" onClick={activate}>تفعيل هذا الإصدار</button>}
         </>}
         <button className="btn-sm ghost" aria-pressed={quality} onClick={() => setQuality(!quality)}>جودة الأسئلة</button>
       </div>
       {quality && <ItemQuality instrumentId={inst.id} />}
-      {locked && <div className="la-note">لهذا الإصدار نتائج سابقة، فيُسمح بتعديل الصياغة والترتيب فقط. لتغيير الخيارات أو الدرجات أو إضافة أسئلة أنشئ إصدارًا جديدًا ثم فعّله؛ النتائج القديمة تبقى سليمة.</div>}
+      <div className="la-note" role="note">{QUESTIONS_LOCK_AR}{locked ? ' ولهذا الإصدار نتائج سابقة.' : ''}</div>
       <nav className="la-subtabs" aria-label="الأطر">
         {DIMS.map((d) => <button key={d} className={dim === d ? 'on' : ''} aria-current={dim === d ? 'true' : undefined} onClick={() => setDim(d)}>{DIM_EN[d]} <small>{count(d)}</small></button>)}
       </nav>
@@ -201,8 +187,8 @@ export function Assessment({ catalog, reload, canWrite }) {
                   <span className="la-row">
                     <Move catalog={catalog} reload={reload} canWrite={canWrite} entity="questions" id={q.id} />
                     {canWrite && <button className="la-link" onClick={() => edit({
-                      title: `سؤال ${q.code}`, fields: locked ? Q_SAFE : Q_FIELDS, values: q,
-                      onSave: save('questions', { id: q.id }), onDelete: locked ? null : del('questions', q.id),
+                      title: `سؤال ${q.code}`, fields: Q_SAFE, values: q,
+                      onSave: save('questions', { id: q.id }), onDelete: null,
                     })}>تحرير</button>}
                   </span>
                 </div>
@@ -212,12 +198,6 @@ export function Assessment({ catalog, reload, canWrite }) {
           </ol>
         </React.Fragment>
       ))}
-      {canWrite && !locked && (
-        <button className="btn-sm primary" onClick={() => edit({
-          title: `سؤال جديد في ${DIM_EN[dim]}`, fields: Q_FIELDS, values: { tier: 'knowledge', kind: 'choice', weight: 1, active: true },
-          onSave: save('questions', { instrument_id: inst.id, dimension: dim, sort: catalog.questions.filter((x) => x.instrument_id === inst.id).length + 1 }),
-        })}>+ سؤال في {DIM_EN[dim]}</button>
-      )}
       {editor}
     </>
   );
