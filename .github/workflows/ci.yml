@@ -54,6 +54,17 @@ jobs:
           # بنك «كاتون»: الترحيل مولَّد من مصدره، والبنك يجتاز حارس الصياغة
           node scripts/katon/build-cbm-migration.mjs > /tmp/katon_cbm.sql && diff -q /tmp/katon_cbm.sql supabase/migrations/20261105160000_leaders_katon_cbm.sql
           node scripts/katon/verify.mjs > /dev/null 2>&1
+          # الكتاب v3: ترحيله مولَّد من ملفاته، والأبواب تجتاز متحقق الكتيب (كتل المستوى والاختبارات والأمثلة والتأمل)
+          node scripts/handbook/build-migration.mjs > /dev/null && git diff --exit-code --stat -- supabase/migrations/20261102110000_leaders_handbook_v3.sql
+          node scripts/handbook/verify.mjs > /dev/null
+
+      # لا مفتاح خدمة ولا رمز وصول ولا مفتاح خاص في أي ملف مودع (مفتاح anon العام وحده مسموح)
+      - name: No secrets in tracked files
+        run: node scripts/ops/secrets-scan.mjs
+
+      # ثغرات حزم الإنتاج وحدها (حزم التطوير لا تصل المستخدم)
+      - name: Production dependencies audit
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
         run: npm run lint
@@ -129,6 +140,11 @@ jobs:
       - name: Sign-in secrets are set on the project (names only)
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: node scripts/ops/function-secrets.mjs --require=signin
+      # لا تُنشر دالة قبل ترحيل تعتمد عليه: كل ترحيل في المستودع غير مطبّق في الإنتاج يوقف النشر
+      # ما لم يوسم tolerant أو deferred في سطوره الأولى (scripts/ops/pending-migrations.mjs). قراءة فقط.
+      - name: Pending migrations block deploy
+        if: env.SUPABASE_ACCESS_TOKEN != ''
+        run: node scripts/ops/pending-migrations.mjs
       - name: Deploy edge functions
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |

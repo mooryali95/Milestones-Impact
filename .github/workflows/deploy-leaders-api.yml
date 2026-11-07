@@ -42,6 +42,11 @@ jobs:
       - name: Install Supabase CLI
         if: steps.gate.outputs.skip != 'true'
         run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
+      # كما في ci.yml: ترحيل حاجب غير مطبّق يوقف النشر. التراجع إلى إيداع أقدم يمر لأن ترحيلاته مطبّقة،
+      # والإيداعات السابقة لهذه البوابة بلا السكربت فتُتخطى.
+      - name: Pending migrations block deploy
+        if: steps.gate.outputs.skip != 'true'
+        run: if [ -f scripts/ops/pending-migrations.mjs ]; then node scripts/ops/pending-migrations.mjs; fi
       - name: Deploy
         if: steps.gate.outputs.skip != 'true'
         run: |

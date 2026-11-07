@@ -28,6 +28,8 @@
     "test:watch": "vitest",
     "lint": "eslint --no-eslintrc -c .eslintrc.ci.json \"src/**/*.{js,jsx}\" \"leaders-app/src/**/*.{js,jsx}\" \"admin-app/src/**/*.{js,jsx}\"",
     "e2e": "playwright test",
+    "verify": "node scripts/ops/verify.mjs",
+    "since-release": "node scripts/ops/since-release.mjs",
     "video:audio": "node shared/video/cut-audio.mjs"
   },
   "devDependencies": {
