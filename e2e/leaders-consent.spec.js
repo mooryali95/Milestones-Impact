@@ -77,3 +77,41 @@ test('مشاركة المستويات مع الجهة: مفتاح في «ملف�
   await expect(box).not.toBeChecked();
   expect(sent.filter((b) => b.action === 'org.share-consent').map((b) => b.share)).toEqual([true, false]);
 });
+
+test('D18: من وافق على نسخة أقدم يرى ما تغيّر، ويؤجل فتبقى رحلته بشريط، ثم يجدد', async ({ page }) => {
+  const sent = [];
+  let version = '2026-11-06';
+  const consentOf = (v) => (v < '2026-11-07'
+    ? { needed: 'renew', notice: false, version: v, changes: [{ version: '2026-11-07', material: true, items: ['مكان البيانات: قاعدة البيانات والملفات لدى Supabase على خوادم AWS في مومباي بالهند.'] }] }
+    : { needed: null, notice: false, version: v, changes: [] });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    sent.push(b.action);
+    if (b.action === 'consent.accept') version = '2026-11-07';
+    const me = { ...base, participant: { ...base.participant, consented_at: '2026-11-06T09:00:00Z', consent: consentOf(version) } };
+    const r = { me, 'consent.accept': me, certificate: { success: true, certificate: null } }[b.action];
+    await route.fulfill({ json: r ?? { success: true } });
+  });
+  await signedIn(page);
+  await page.goto(APP);
+  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية وشروط البرنامج' })).toBeVisible();
+  await expect(page.getByText('وافقت على النسخة 2026-11-06')).toBeVisible();
+  await expect(page.getByText('مومباي بالهند', { exact: false })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'سجل التغييرات' })).toHaveAttribute('href', '/legal/changes');
+  await page.getByRole('button', { name: 'لاحقًا' }).click();
+  await expect(page.getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
+  const bar = page.getByRole('status').filter({ hasText: 'تحديثًا جوهريًا' });
+  await expect(bar).toBeVisible();
+  await bar.getByRole('button', { name: 'راجع ووافق' }).click();
+  await page.getByRole('button', { name: 'أوافق وأتابع' }).click();
+  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية وشروط البرنامج' })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'تحديثًا جوهريًا' })).toHaveCount(0);
+  expect(sent).toContain('consent.accept');
+});
+
+test('D18: سجل التغييرات صفحة عامة بنسخها', async ({ page }) => {
+  await page.goto(APP + 'legal/changes');
+  await expect(page.getByRole('heading', { name: 'سجل تغييرات الوثائق' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'النسخة 2026-11-07 · جوهرية' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'سجل التغييرات' }).first()).toHaveAttribute('aria-current', 'page');
+});

@@ -43,7 +43,7 @@ const Katon = lazy(() => import('./screens/Katon.jsx'));
 const HallScreen = lazy(() => import('./screens/Hall.jsx'));
 import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
 const Legal = lazy(() => import('./screens/Legal.jsx'));
-import Consent from './Consent.jsx';
+import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
@@ -251,6 +251,7 @@ function Participant() {
   const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !checkin;
   // معالج البداية: خطوته من البوابات نفسها (Onboarding.jsx)؛ الرأس يظهر فوق شاشات القبول، والخطوة 4 بطاقة في الرحلة
   const [onbTick, setOnbTick] = useState(0);
+  const [consentLater, setConsentLater] = useState(false);   // D18: أجّل تجديد الموافقة في هذه الجلسة
   const onb = me && !checkin ? onboardingStep(me, { assessmentPaywall: !paidFor('assessment') }) : null;
   const rail = onb && onb.key !== 'next' && onbTick >= 0 ? <OnboardingRail step={onb} /> : null;
   const approved = !!me?.profile?.approved;
@@ -269,6 +270,7 @@ function Participant() {
   const navView = view === 'lab' && !hasLab ? 'home' : view;
   const onNav = (k) => (k === 'lab' ? openLab() : go(k));
 
+  const consentNeed = me?.participant?.consent ? me.participant.consent.needed : me?.participant?.consented_at === null ? 'first' : null;
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   else if (!me && linkChoice) screen = (
@@ -287,8 +289,10 @@ function Participant() {
     </div>
   );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
-  // من سبق تسجيله قبل نشر السياسة يوافق مرة واحدة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)
-  else if (me.participant.consented_at === null && !me.participant.is_demo) screen = <Consent onAccepted={accept} />;
+  // D18: من لم يوافق قط يوافق مرة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)، ومن وافق قبل آخر
+  // نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل. الخادم الأقدم بلا حالة: يُكتفى بغياب الموافقة كما كان
+  else if (consentNeed === 'first' && !me.participant.is_demo) screen = <Consent consent={me.participant.consent} onAccepted={accept} />;
+  else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
@@ -328,7 +332,10 @@ function Participant() {
         </div>
       </header>
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
-      <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>{screen}</main>
+      <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
+        {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onRenew={() => setConsentLater(false)} />}
+        {screen}
+      </main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
       {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}

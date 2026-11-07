@@ -5,11 +5,13 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107150000_leaders_rubric_scale
+-- as-of migration: 20261107160000_leaders_consent_events
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
 create schema if not exists leaders;
+
+create sequence if not exists leaders.consent_events_id_seq as bigint;
 
 create sequence if not exists leaders.mail_events_id_seq as bigint;
 
@@ -299,6 +301,22 @@ create table if not exists leaders.cohorts (
   constraint cohorts_track_check CHECK ((track = ANY (ARRAY['individual'::text, 'institutional'::text]))),
   constraint cohorts_uniform_level_check CHECK (((level_mode <> 'uniform'::text) OR (content_level IS NOT NULL))),
   constraint cohorts_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.consent_events (
+  id bigint default nextval('leaders.consent_events_id_seq'::regclass) not null,
+  created_at timestamp with time zone default now() not null,
+  subject text not null,
+  subject_id text not null,
+  kind text not null,
+  version text not null,
+  text_digest text,
+  constraint consent_events_kind_check CHECK ((kind = ANY (ARRAY['accept'::text, 'renew'::text, 'org_share_on'::text, 'org_share_off'::text]))),
+  constraint consent_events_subject_check CHECK ((subject = ANY (ARRAY['participant'::text, 'coordinator'::text, 'expert'::text, 'rater'::text]))),
+  constraint consent_events_subject_id_check CHECK ((char_length(subject_id) <= 64)),
+  constraint consent_events_text_digest_check CHECK ((text_digest ~ '^[0-9a-f]{64}$'::text)),
+  constraint consent_events_version_check CHECK ((version ~ '^\d{4}-\d{2}-\d{2}$'::text)),
+  constraint consent_events_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.content_items (
@@ -2479,6 +2497,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS cohorts_one_default ON leaders.cohorts USING b
 
 CREATE INDEX IF NOT EXISTS cohorts_org_idx ON leaders.cohorts USING btree (organization_id, status);
 
+CREATE INDEX IF NOT EXISTS consent_events_subject ON leaders.consent_events USING btree (subject, subject_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS content_items_order_idx ON leaders.content_items USING btree (dimension, sort);
 
 CREATE INDEX IF NOT EXISTS coordinator_challenges_email_idx ON leaders.coordinator_challenges USING btree (email, created_at DESC);
@@ -2715,6 +2735,8 @@ alter table leaders.cohort_roles enable row level security;
 
 alter table leaders.cohorts enable row level security;
 
+alter table leaders.consent_events enable row level security;
+
 alter table leaders.content_items enable row level security;
 
 alter table leaders.content_progress enable row level security;
@@ -2898,6 +2920,15 @@ alter table public.totp_attempts enable row level security;
 alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
+
+CREATE OR REPLACE FUNCTION leaders.consent_events_frozen()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  raise exception 'سجل الموافقات لا يُعدَّل ولا يُحذف' using errcode = '42501';
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION leaders.content_provenance()
  RETURNS trigger
@@ -3610,6 +3641,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 CREATE OR REPLACE TRIGGER cohorts_touch BEFORE UPDATE ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER consent_events_frozen BEFORE DELETE OR UPDATE ON leaders.consent_events FOR EACH ROW EXECUTE FUNCTION leaders.consent_events_frozen();
+
+CREATE OR REPLACE TRIGGER consent_events_no_truncate BEFORE TRUNCATE ON leaders.consent_events FOR EACH STATEMENT EXECUTE FUNCTION leaders.consent_events_frozen();
 
 CREATE OR REPLACE TRIGGER content_items_provenance BEFORE INSERT OR UPDATE ON leaders.content_items FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 

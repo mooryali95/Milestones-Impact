@@ -89,4 +89,5 @@ export const MIGRATIONS = [
   '20261107130000_leaders_sponsor_seats',
   '20261107140000_leaders_certificate_suspended',
   '20261107150000_leaders_rubric_scale',
+  '20261107160000_leaders_consent_events',
 ];

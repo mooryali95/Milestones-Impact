@@ -76,9 +76,36 @@ export const CONTACT_EMAIL = 'mi@sunkvalue.com';
 // رسالة واحدة لكل خطأ لا يستطيع المستخدم فعل شيء حياله (الخادم يحتفظ برمز HTTP ويسجّل السبب)
 export const UNEXPECTED_ERROR = `حدث خطأ غير متوقع. حدّث الصفحة، وإن تكرر راسل ${CONTACT_EMAIL}.`;
 
-// الخصوصية والشروط: نسخة السياسة النافذة (تُسجَّل مع موافقة كل مشارك) ومساراتها في تطبيق القادة
-export const POLICY_VERSION = '2026-11-06';
-export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund' };
+// الخصوصية والشروط (D18): سجل النسخ مصدر واحد، أحدثها أولًا. النسخة النافذة أولها، وآخر نسخة جوهرية
+// هي التي تُعاد عندها الموافقة. الجوهري بتعريف مكتوب (MATERIAL_CHANGE_AR) يقرره المالك أو مسؤول حماية البيانات
+// الذي يسميه. كل تغيير في نص الوثائق يحتاج نسخة جديدة هنا، وبصمته في policy-digest.js (scripts/legal/policy-digest.mjs).
+export const MATERIAL_CHANGE_AR = 'غرض جديد، أو فئة بيانات جديدة، أو معالج أو موقع معالجة أو نقل جديد، أو اطلاع جهة جديدة على بياناتك، أو إطالة مدة الاحتفاظ';
+export const POLICY_CHANGES = Object.freeze([
+  { version: '2026-11-07', material: true, items: Object.freeze([
+    'مكان البيانات: قاعدة البيانات والملفات لدى Supabase على خوادم AWS في مومباي بالهند، وصار لكل معالج مكانه في السياسة.',
+    'النسخ الاحتياطية: نسخة يومية مشفّرة بمفتاح لا يملكه المعالج، لدى Cloudflare R2، تُحفظ اليومية 30 يومًا والشهرية سنة.',
+    'سجل البريد: نسجل لكل رسالة نوعها ونطاق المستلم وحالتها بلا نصها ولا عنوانه الكامل، ويُحذف بعد 180 يومًا.',
+    'المقيّمون: من تدعوه لتقدير أثرك يصله إشعار خصوصية، ونحفظ حالة التحقق منه بنطاق جهتك أو بتأكيد المنسق أو المستشار.',
+    'مقاعد الجهة: إن سجلت برعاية جهة بلغ عقدها حده، يُخطَر منسقها بطلب مقعد بلا اسمك، ويقرر البرنامج أن يضيف مقعدًا أو تتابع بدفع فردي.',
+    'القاعة وكاتون: إجاباتك فيهما للتعلم، ولا تدخل تقييمك الختامي.',
+    'الشهادة: «شهادة إتمام بنجاح» من تقييم ختامي معتمد، تُعلَّق إن أُعيد فتحه وتُلغى إن استُردت رسوم البرنامج.',
+  ]) },
+  { version: '2026-11-06', material: true, items: Object.freeze(['أول نشر لسياسة الخصوصية وشروط برنامج القادة وسياسة الاسترداد.']) },
+]);
+export const POLICY_VERSION = POLICY_CHANGES[0].version;
+export const POLICY_MATERIAL_VERSION = POLICY_CHANGES.find((c) => c.material).version;
+// حالة موافقة صاحب الحساب: first لم يوافق قط، وrenew وافق قبل آخر نسخة جوهرية (يرى ما تغيّر منذ موافقته)،
+// وnotice وافق بعدها وصدرت نسخة غير جوهرية (شريط بلا حجب)، وnull لا شيء. النسخ تواريخ ISO فتُقارن نصًا.
+export function consentState(version, consentedAt) {
+  if (!consentedAt) return { needed: 'first', notice: false, version: null, changes: [] };
+  const v = String(version || '');
+  const changes = POLICY_CHANGES.filter((c) => c.version > v).map((c) => ({ version: c.version, material: c.material, items: c.items }));
+  const needed = v < POLICY_MATERIAL_VERSION ? 'renew' : null;
+  return { needed, notice: !needed && v < POLICY_VERSION, version: v || null, changes };
+}
+// ما يعتمد على أغراض النسخة الجوهرية وحدها: يُحجب عمن لم يجدد موافقته، وتبقى رحلته بأساس العقد
+export const CONSENT_GATED = Object.freeze(['rater.invite', 'sponsor.request', 'me.sponsor-code']);
+export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund', changes: '/legal/changes' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
 
