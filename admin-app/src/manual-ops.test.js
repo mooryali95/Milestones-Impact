@@ -17,10 +17,10 @@ describe('العمليات اليدوية صارت إجراءات على الخ�
     expect(admin).toMatch(/export async function participantSave[\s\S]*requireWrite\(a\)[\s\S]*audit\('admin', a\.email, 'participant\.edit'/);
     expect(ui).toMatch(/L\('admin\.participant-save'/);
   });
-  it('التسجيل الصريح في دفعة وإصدار الشهادة لهما واجهة', () => {
+  it('التسجيل الصريح في دفعة له واجهة، والشهادة لا تُصدر يدويًا (D05)', () => {
     expect(ui).toMatch(/L\('admin\.programs'/);
     expect(ui).toMatch(/act\('admin\.cohort-enroll'/);
-    expect(ui).toMatch(/act\('admin\.certificate-issue'/);
+    expect(ui).not.toMatch(/admin\.certificate-issue/);
   });
   it('حذف المشارك بأثر: عرض الأثر، موانع، تأكيد بالبريد، للمدير الأعلى', () => {
     expect(index).toMatch(/'admin\.participant-impact'/);

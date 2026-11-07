@@ -9,6 +9,9 @@
 | `SUPABASE_URL` | تحقنه Supabase | كل الدوال | عنوان المشروع | لا يُدوَّر |
 | `SUPABASE_SERVICE_ROLE_KEY` | تحقنه Supabase | كل الدوال (`core.ts`، `admin-api`، `user-api`، `send-otp`) | عميل الخدمة الذي يتجاوز RLS؛ لا يغادر الخادم | من لوحة Supabase عند أي اشتباه؛ تُعاد قراءته تلقائيًا |
 | `LEADERS_TOKEN_PEPPER` | **نعم** (الدالة ترفض الإقلاع بدونه) | `leaders-api/core.ts` | ملح هاش رموز الدخول والجلسات، فلا يكفي تسريب القاعدة وحده | تدويره يُبطل كل الجلسات والرموز الجارية؛ يُفعل خارج ساعات الورش |
+| `LEADERS_CERT_SIGNING_KEY` | نعم قبل أول شهادة | `certificates.ts` | مفتاح توقيع الشهادات، مستقل عن الفلفل (D05)، 32 حرفًا على الأقل. بلاه لا تصدر شهادة، وتظهر في فحص الصحة | `openssl rand -hex 32`، ولا يُدوَّر إلا بإبقاء السابق في `LEADERS_CERT_PREVIOUS_KEYS` |
+| `LEADERS_CERT_KEY_ID` | لا (k1) | `certificates.ts` | معرّف المفتاح الحالي، يُكتب أمام كل توقيع (`k1:...`) | يُغيَّر مع كل تدوير (k2 ثم k3) |
+| `LEADERS_CERT_PREVIOUS_KEYS` | لا | `certificates.ts` | المفاتيح السابقة للتحقق وحده، بصيغة `{"k1":"..."}`، فيبقى ما صدر صحيحًا بعد التدوير | يُضاف إليه المفتاح الخارج عند كل تدوير |
 | `RESEND_API_KEY` | نعم للبريد | `core.ts`، `_shared/mail.ts`، `admin-api`، `user-api`، `send-otp` | إرسال رموز الدخول والإشعارات؛ غيابه = `mail_unconfigured` وتنبيه فوري | من لوحة Resend |
 | `LEADERS_MAIL_FROM` | لا (افتراضي في `_shared/mail.ts`) | `core.ts` | عنوان المرسل | مع النطاق الموثّق في Resend |
 | `LEADERS_MAIL_DAILY_CAP` | لا (80) | `core.ts`، و`user-api` و`admin-api` و`send-otp` | السقف الموحد لكل بريد في 24 ساعة (D15، `leaders.mail_events`): نصفه على الأقل لرموز الدخول، والتسجيلات تقف عند 70% منه، ومصفوفة التأثير لا تتجاوز خُمسه | ضعف الدفعة على الأقل دون تجاوز خطة Resend المدفوعة |

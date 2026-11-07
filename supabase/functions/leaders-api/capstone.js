@@ -103,27 +103,8 @@ export function cleanRubric(scores, notes) {
   return { scores: s, notes: n };
 }
 
-// ── نتيجة القائد في تقريره (لا في الشهادة) ──
-// الأوزان المعتمدة: اختبارات الأبواب 25، أدوات المختبر 30، مشروع التخرج 30،
-// المشاركة في الرحلة 15. الجزء الغائب لا يُحتسب صفرًا، بل يُعاد توزيع وزنه.
-// مشروع التخرج أصدق دليل على الأداء فوزنه الأكبر، والباقي متساوٍ. صوت الراعي داخل فيه أصلًا: لا تُعتمد الوثيقة دون تأييده.
-export const LEADER_WEIGHTS = { quizzes: 20, lab: 20, capstone: 40, participation: 20 };
-// مشروع التخرج إلزامي في النتيجة: بلا درجته لا تُحسب نتيجة القائد، فلا يُعاد توزيع وزنه على غيره
-export function leaderComposite(parts) {
-  if (parts?.capstone == null || !Number.isFinite(Number(parts.capstone))) {
-    return { score: null, parts: {}, weights: LEADER_WEIGHTS, complete: false, pending: 'capstone' };
-  }
-  let got = 0, w = 0;
-  const used = {};
-  for (const [k, weight] of Object.entries(LEADER_WEIGHTS)) {
-    const v = parts?.[k];
-    if (v == null || !Number.isFinite(Number(v))) continue;
-    got += weight * Math.max(0, Math.min(100, Number(v)));
-    w += weight;
-    used[k] = Math.round(Number(v));
-  }
-  return { score: w ? Math.round((got / w) * 10) / 10 : null, parts: used, weights: LEADER_WEIGHTS, complete: w === 100 };
-}
+// ── نتيجة القائد ──
+// D05: لا حساب موازٍ هنا. النتيجة من التقييم الختامي وحده (computeFinal في final.js)، ومنها الشهادة.
 
 // ── الفصول ──
 // نماذج الوثيقة كما تخص المشارك: نماذج capstone_sort المتاحة بمستواه ونطاقه

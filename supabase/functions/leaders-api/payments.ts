@@ -8,6 +8,7 @@
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, Fail, must, payReminderMail, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
+import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, settings, type Item } from './entitlements.ts';
 
 type Body = Record<string, any>;
@@ -199,6 +200,8 @@ export async function webhook(raw: string, headers: Headers) {
       if (pay) {
         await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: type }).eq('id', pay.id);
         await revokeFor(pay, 'creem');
+        // D05 وسياسة الاسترداد: استرداد رسم البرنامج يلغي الشهادة
+        if (pay.item === 'program' && pay.participant_id) await revokeForRefund(pay.participant_id);
         await audit('system', 'creem', 'payment.refunded', 'payments', pay.id);
       }
     }

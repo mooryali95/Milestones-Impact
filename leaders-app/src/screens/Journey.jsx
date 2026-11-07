@@ -381,16 +381,16 @@ function CertificateCard() {
     window.open(linkedinUrl(cert), '_blank', 'noopener');
   };
   return (
-    <section className="card cert-card" aria-label="شهادة المشاركة">
+    <section className="card cert-card" aria-label="شهادة الإتمام">
       <span className="cert-mark" aria-hidden="true" />
       <div className="grow stack">
-        <p className="eyebrow">شهادة المشاركة</p>
+        <p className="eyebrow">شهادة الإتمام بنجاح</p>
         {cert ? <>
           <h2>مبارك، صدرت شهادتك</h2>
           <p className="small muted">رقمها <span className="ltr">{cert.serial}</span>، ولها رابط تحقق عام يثبت صحتها لمن تشاركها معه.</p>
         </> : <>
           <h2>شهادتك قيد الإصدار</h2>
-          <p className="small muted">أنهيت البرنامج، وستظهر شهادتك هنا حين تصدرها الإدارة.</p>
+          <p className="small muted">تصدر شهادتك آليًا حين يُعتمد تقييمك الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»، وتظهر هنا.</p>
         </>}
         {msg && <div className="alert err small" role="alert">{msg}</div>}
       </div>

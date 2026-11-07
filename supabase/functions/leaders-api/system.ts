@@ -9,6 +9,7 @@ import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATIONS } from './migrations.js';
+import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
@@ -90,6 +91,8 @@ export async function health() {
     LEADERS_CRON_SECRET: !!CONFIG.cronSecret,
     LEADERS_ALERT_EMAIL: !!CONFIG.alertEmail,
     LEADERS_TURNSTILE_SECRET: !!CONFIG.turnstileSecret && !!CONFIG.turnstileSite,
+    // D05: بلا مفتاح التوقيع المستقل لا تصدر شهادة
+    LEADERS_CERT_SIGNING_KEY: certKeys().key.length >= 32,
   };
   return {
     success: true,

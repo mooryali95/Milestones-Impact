@@ -239,6 +239,24 @@ export function approvedMail(name: string, pay = false) {
       'ملف كفاءتك ومرحلتك الأولى بانتظارك');
 }
 
+// بريد كل قرار ختامي بخطوته التالية (D05)
+export const FINAL_MAIL_SUBJECT: Record<string, string> = {
+  pass: 'اجتزت برنامج القادة', pass_notes: 'اجتزت برنامج القادة بملاحظات', extend: 'تقييمك الختامي: خطوتك التالية', fail: 'نتيجة تقييمك الختامي',
+};
+export function finalDecisionMail(name: string, decision: string, notes: string | null) {
+  const next: Record<string, string> = {
+    pass: 'اعتُمد تقييمك الختامي بقرار «اجتاز». تصلك شهادة الإتمام بنجاح في رسالة مستقلة، وتجدها في رحلتك.',
+    pass_notes: 'اعتُمد تقييمك الختامي بقرار «اجتاز بملاحظات». تصلك شهادة الإتمام بنجاح في رسالة مستقلة، وملاحظات المقيّم أدناه لتطويرك بعد البرنامج.',
+    extend: 'اعتُمد تقييمك الختامي بقرار «يُمدَّد». لا تصدر الشهادة الآن، ويُفتح لك ما ينقصك لتستكمله، وتجد أدناه ما يلزم. يُعاد تقييمك حين تستكمله.',
+    fail: 'اعتُمد تقييمك الختامي بقرار «لم يجتز». لا تصدر شهادة إتمام. يمكنك طلب مراجعة القرار من لجنة لم تشارك فيه بالرد على هذه الرسالة خلال عشرة أيام عمل، ولجهتك أن تطلب إفادة بساعات حضورك.',
+  };
+  return shell('journey', FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي',
+    mailText(`${hello(name)} ${next[decision] || 'اعتُمد تقييمك الختامي.'}`)
+    + (notes ? mailNote(esc(notes)) : '')
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+    FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي');
+}
+
 // تذكير من اعتُمد مساره ولم يُكمل التسجيل، بعد 3 أيام ثم 7 (D04)
 export function payReminderMail(name: string, days: number) {
   return shell('journey', 'مسارك المعتمد بانتظارك',
@@ -248,8 +266,8 @@ export function payReminderMail(name: string, days: number) {
 }
 
 export function certificateMail(name: string, url: string) {
-  return shell('journey', 'مبارك، صدرت شهادة مشاركتك',
-    mailText(`${hello(name)} أتممت متطلبات برنامج القادة، وصدرت شهادة مشاركتك باسمك.`)
+  return shell('journey', 'مبارك، صدرت شهادة إتمامك بنجاح',
+    mailText(`${hello(name)} اعتُمد تقييمك الختامي، وصدرت باسمك «شهادة إتمام بنجاح» لبرنامج القادة.`)
     + mailText('تجدها في رحلتك جاهزة للطباعة والحفظ PDF، ولها رابط تحقق عام يمكنك مشاركته أو إضافته إلى ملفك في LinkedIn.')
     + mailButton(url, 'اعرض شهادتي'),
     'شهادتك جاهزة برابط تحقق عام');
@@ -378,7 +396,9 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
   { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
-  { key: 'certificate', family: 'journey', label: 'صدور الشهادة', subject: 'شهادة مشاركتك في برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
+  { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
+  { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
+  { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },
   { key: 'rater', family: 'journey', label: 'طلب تقدير 360', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },

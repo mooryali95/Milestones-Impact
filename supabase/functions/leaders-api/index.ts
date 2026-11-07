@@ -257,7 +257,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.certificates': (_a, b) => Z.list(b),
   'admin.certificate': (_a, b) => Z.get(b),
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),
-  'admin.certificate-revoke': (a, b) => A.writer(a, Z.revoke, b),
+  // D05: التعليق والإلغاء اليدويان للمدير الأعلى وحده بتعليل
+  'admin.certificate-revoke': (a, b) => A.superWriter(a, Z.revoke, b),
   'admin.certificate-reissue': (a, b) => A.writer(a, Z.reissue, b),
   'admin.certificate-reissue-org': (a, b) => A.superWriter(a, Z.reissueOrg, b),
   'admin.cert-preview': (_a, b) => Z.preview(b),

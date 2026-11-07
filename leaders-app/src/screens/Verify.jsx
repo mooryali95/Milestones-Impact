@@ -7,8 +7,10 @@ import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 
+// D05: غير السارية تُعرض حالتها وحدها؛ الخادم لا يرسل لقطتها، فلا اسم ولا تفاصيل شخصية
 const STATE = {
   valid: 'شهادة صحيحة وسارية',
+  suspended: 'شهادة معلّقة حتى يُستكمل اعتماد التقييم الختامي',
   revoked: 'شهادة ملغاة',
   replaced: 'استُبدلت بإصدار أحدث',
   invalid: `بيانات الشهادة لا تطابق توقيعها. لا تعتمد عليها، وراسل ${CONTACT_EMAIL} للتأكد.`,
@@ -54,6 +56,7 @@ export default function Verify() {
           <p className={`vf-state ${state}`}><i aria-hidden="true" />{STATE[state]}</p>
           {state === 'replaced' && r.replacement && <p className="small"><a href={`/v/${r.replacement}`}>اعرض الإصدار الأحدث</a></p>}
           {c && <>
+            {c.kind === 'completion_success' && <p className="small muted">شهادة إتمام بنجاح</p>}
             <p className="vf-name">{c.name_ar}</p>
             {c.name_en && <p className="vf-en">{c.name_en}</p>}
             <dl>
