@@ -27,6 +27,8 @@ curl -s -X POST https://api.supabase.com/v1/projects/eormhcupwgwpllhrfxxg/databa
 - **ما دُمج منذ آخر نشر:** `git fetch origin main release && npm run since-release` يسرد إيداعات `main` التي لم تصل `release` بما يمسه كل منها، والترحيلات الجديدة بوسمها. يراجعه المالك قبل استئناف النشر.
 - **لا نشر من وكيل:** `.claude/settings.json` يمنع `supabase functions deploy` و`db push` والدفع إلى `release`. النشر من CI أو بمسار الطوارئ أدناه بيد المالك.
 
+- **ملكية المحتوى (D01):** المستودع أصل المحتوى المُقاس، واللوحة تحرر غير المُقاس وحده (`content-lock.js`). المصالحة وكشف الانحراف: `SUPABASE_ACCESS_TOKEN=... node scripts/content/export-live.mjs [--check]`، والتفصيل في `docs/content/ملكية-المحتوى-ودليل-التحرير-v1.md`.
+
 ### مسار الطوارئ (Actions موقوفة)
 
 لا يُسلك إلا بإذن المالك المكتوب الذي يسمي الإيداع وسبب الطوارئ، ويُسجَّل في HANDOFF. من جهاز المالك، وعلى شجرة نظيفة عند الإيداع المأذون:

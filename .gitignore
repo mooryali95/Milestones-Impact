@@ -36,3 +36,5 @@ supabase/.branches/
 # مجلدات التسجيل المؤقتة لمسجّل الفيديو (shared/video/record.mjs)
 leaders-app/public/media/.rec-*/
 leaders/media/.rec-*/
+# تصدير المحتوى الحي للمقارنة (scripts/content/export-live.mjs)
+.content-live/
