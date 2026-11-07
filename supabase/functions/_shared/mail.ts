@@ -7,6 +7,8 @@
 // جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
 // كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML.
 
+import { crossesAlert, domainOf, mailDecision } from './mail-budget.js';
+
 // ألوان البريد من ألوان الهوية (shared/js/brand.js) بالقيم نفسها؛ دوال الحافة لا تستورد من خارج
 // supabase/functions، فتُنسخ هنا ويطابقها single-source.test.js. القيم مكتوبة لأن برامج البريد لا تقرأ متغيرات CSS.
 export const MAIL = {
@@ -94,8 +96,8 @@ ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;m
 // المرسل من نطاق العلامة نفسها (mail.sunkvalue.com موثّق في Resend بـ SPF وDKIM وDMARC)، والردود إلى بريد التواصل العام
 export const MAIL_FROM_DEFAULT = 'Milestone Impact <no-reply@mail.sunkvalue.com>';
 export const MAIL_REPLY_TO = 'mi@sunkvalue.com';
-// احتياط: إن رفض Resend النطاق الجديد (مفتاح مقيّد بالنطاق القديم مثلًا) لا تضيع الرسالة
-const MAIL_FROM_FALLBACK = 'Milestone Impact <milestoneimpact@basserh.com>';
+// لا مرسل احتياطي من نطاق آخر (D15): رفض Resend للنطاق (403 أو 422) عطل يُنبَّه إليه فورًا عبر قناة غير البريد،
+// لا رسالة تخرج باسم نطاق لا تحرسه سجلات SPF وDKIM وDMARC الخاصة بالمنصة.
 
 // نسخة نصية من القالب: فلاتر البريد تثق بالرسالة التي تحمل الصيغتين، وبعض البرامج تعرض النص وحده
 export function plainText(html: string) {
@@ -110,22 +112,75 @@ export function plainText(html: string) {
 
 // attachments: ملفات مرفقة بمحتواها base64 (مثل دعوة التقويم .ics)
 export type MailAttachment = { filename: string; content: string; content_type?: string };
-export async function deliver(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT, attachments = [] as MailAttachment[] } = {}) {
-  if (!key) { console.error('RESEND_API_KEY missing; mail to', to, 'not sent'); return false; }
-  const send = (sender: string) => fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: sender, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO, ...(attachments.length ? { attachments } : {}) }),
-  });
+type DeliverOpts = { key?: string; from?: string; attachments?: MailAttachment[] };
+export async function deliverResult(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT, attachments = [] }: DeliverOpts = {}) {
+  if (!key) { console.error('RESEND_API_KEY missing; mail to', to, 'not sent'); return { ok: false, status: 0, unconfigured: true }; }
   try {
-    let res = await send(from);
-    if (!res.ok && (res.status === 403 || res.status === 422) && from !== MAIL_FROM_FALLBACK) {
-      console.error('mail sender rejected, retrying with fallback', res.status, await res.text());
-      res = await send(MAIL_FROM_FALLBACK);
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO, ...(attachments.length ? { attachments } : {}) }),
+    });
+    const text = await res.text();
+    if (!res.ok) { console.error('mail failed', res.status, text.slice(0, 300)); return { ok: false, status: res.status, rejected: res.status === 403 || res.status === 422 }; }
+    let id: string | null = null;
+    try { id = JSON.parse(text)?.id ?? null; } catch { /* رد بلا معرّف */ }
+    return { ok: true, status: res.status, id };
+  } catch (e) { console.error('mail failed', e); return { ok: false, status: 0 }; }
+}
+export const deliver = async (to: string, subject: string, html: string, opts: DeliverOpts = {}) => (await deliverResult(to, subject, html, opts)).ok;
+
+// تنبيه المالك عبر قناة غير البريد (D15): رابط ويب (Slack أو Teams أو Telegram أو غيرها) في LEADERS_ALERT_WEBHOOK.
+// حين يكون العطل في البريد نفسه لا يصل تنبيه بالبريد، فهذه القناة لا تعتمد عليه.
+export async function alertWebhook(kind: string, detail: Record<string, unknown>) {
+  const url = Deno.env.get('LEADERS_ALERT_WEBHOOK') || '';
+  if (!url) { console.error('alert (no webhook):', kind, JSON.stringify(detail)); return false; }
+  try {
+    const text = `[Milestone Impact] ${kind}: ${JSON.stringify(detail)}`;
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text, kind, detail }) });
+    return r.ok;
+  } catch (e) { console.error('alertWebhook:', e); return false; }
+}
+
+// ── العداد الموحد (D15): كل بريد يمر من هنا، وسجله في leaders.mail_events بلا متن ولا رمز ──
+export type MailKind = 'code' | 'alert' | 'notify' | 'bulk' | 'contact';
+export type SendOutcome = { ok: boolean; reason?: 'mail_cap' | 'mail_share' | 'mail_kind' | 'mail_failed' | 'mail_unconfigured'; id?: string | null };
+// deno-lint-ignore no-explicit-any
+type Client = any;
+const eventsOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('mail_events');
+
+export async function mailCounts(client: Client, since = new Date(Date.now() - 864e5).toISOString()) {
+  const base = () => eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').gte('created_at', since);
+  const [all, non] = await Promise.all([base(), base().not('kind', 'in', '(code,alert)')]);
+  if (all.error || non.error) return null;   // قبل ترحيل 20261107120000: لا عداد بعد
+  return { sent: all.count ?? 0, nonCode: non.count ?? 0 };
+}
+
+// sourceShare: نصيب مصدر واحد من السقف (مصفوفة التأثير مثلًا)، فلا تستنزف بوابة عامة رموز دخول غيرها
+export async function sendCounted(client: Client, to: string, subject: string, html: string,
+  { kind, source, ref = null, cap, sourceShare, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number }): Promise<SendOutcome> {
+  const counts = await mailCounts(client);
+  if (counts && sourceShare != null) {
+    const { count, error } = await eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').eq('source', source)
+      .gte('created_at', new Date(Date.now() - 864e5).toISOString());
+    if (!error && (count ?? 0) >= Math.floor(cap * sourceShare)) {
+      await eventsOf(client).insert({ kind, source, ref, status: 'blocked', to_domain: domainOf(to) });
+      return { ok: false, reason: 'mail_share' };
     }
-    if (!res.ok) { console.error('mail failed', res.status, await res.text()); return false; }
-    return true;
-  } catch (e) { console.error('mail failed', e); return false; }
+  }
+  const log = (status: string, resend_id: string | null = null) => counts
+    ? eventsOf(client).insert({ kind, source, ref, status, resend_id, to_domain: domainOf(to) }).then(({ error }: { error: unknown }) => { if (error) console.error('mail_events insert:', error); })
+    : Promise.resolve();
+  if (counts) {
+    const d = mailDecision(kind, counts, cap);
+    if (!d.ok) { await log('blocked'); return { ok: false, reason: d.reason as SendOutcome['reason'] }; }
+  }
+  const r = await deliverResult(to, subject, html, opts);
+  await log(r.ok ? 'sent' : 'failed', r.ok ? (r.id ?? null) : null);
+  if (!r.ok && r.rejected) await alertWebhook('mail_rejected', { source, kind, status: r.status, from: opts.from || MAIL_FROM_DEFAULT });
+  if (r.ok && counts && crossesAlert(counts.sent, cap)) await alertWebhook('mail_quota_70', { sent: counts.sent + 1, cap, source });
+  if (r.ok) return { ok: true, id: r.id ?? null };
+  return { ok: false, reason: r.unconfigured ? 'mail_unconfigured' : 'mail_failed' };
 }
 
 // دعوة تقويم (iCalendar) لموعد واحد: تُضاف إلى أي تقويم بنقرة. النصوص تُهرَّب حسب RFC 5545

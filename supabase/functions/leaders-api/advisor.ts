@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المصدر الواحد: cohorts.advisor_expert_id. الدفعة تُعرف من المشارك (cohortOf)، فتغيير المستشار
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
-import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
+import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { db, Fail, sendMail } from './core.ts';
 import { cohortOf } from './programs.ts';
@@ -25,7 +25,7 @@ export async function notifyAdvisor(p: any, what: string) {
   const adv = await advisorOf(p);
   if (!adv) return;
   await sendMail(adv.email, `تسليم جديد بانتظار تقييمك: ${what}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-    mailText(`سلّم ${p.full_name} «${what}»، وهو بانتظار تقييمك بصفتك المستشار الأساسي لدفعته.`)
+    mailText(`سلّم ${esc(p.full_name)} «${esc(what)}»، وهو بانتظار تقييمك بصفتك المستشار الأساسي لدفعته.`)
     + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
 }
 

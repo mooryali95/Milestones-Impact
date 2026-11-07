@@ -9,6 +9,7 @@ import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATIONS } from './migrations.js';
+import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 
 // [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
 const MARKERS: [string, string, string][] = [
@@ -50,6 +51,10 @@ export async function purge() {
   for (const t of ['auth_sessions', 'coordinator_sessions', 'expert_sessions']) await run(t, db.from(t).delete().lt('expires_at', cutoff));
   await run('certificate_checks', db.from('certificate_checks').delete().lt('created_at', cutoff));
   await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
+  // سجل الإرسال 180 يومًا (D15، نسب استجابة المقيّمين عبر الدفعة)، والطابور بعد إرساله أو تركه 30 يومًا
+  await run('mail_events', db.from('mail_events').delete().lt('created_at', new Date(Date.now() - MAIL_RETENTION_DAYS * 864e5).toISOString()));
+  const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();
+  await run('mail_queue', db.from('mail_queue').delete().or(`sent_at.lt.${monthAgo},gave_up_at.lt.${monthAgo}`));
   return out;
 }
 

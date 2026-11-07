@@ -4,7 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { esc, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
@@ -106,7 +106,11 @@ function totpUri(secret: string, email: string): string {
 }
 
 // البريد بالقالب الموحّد (_shared/mail.ts)
-const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
+// كل رسالة بالعداد الموحد (D15): رمز الدخول code، والتنبيه الأمني alert، وما سواهما notify
+const MAIL_CAP = Number(Deno.env.get("LEADERS_MAIL_DAILY_CAP") || "80") || 80;
+const counter = createClient(SB_URL, SB_KEY);
+const sendEmail = async (to: string, subject: string, html: string, kind: MailKind = "notify") =>
+  (await sendCounted(counter, to, subject, html, { kind, source: "admin-api", cap: MAIL_CAP, key: RESEND, from: FROM })).ok;
 const ADMIN_MAIL = { family: "access" as const };
 const otpHtml = (code: string) => mailShell("رمز الدخول إلى لوحة الإدارة", `
 ${mailText("أدخل هذا الرمز في صفحة الدخول لإكمال تسجيل دخولك.")}
@@ -213,7 +217,7 @@ async function securityMail(to: string, title: string, rows: [string, string][])
   const html = mailShell(title, `
 ${mailRows(rows.concat([["الوقت", when]]).map(([k, v]) => [k, v, /^[\x00-\x7F]*$/.test(v)] as [string, string, boolean]))}
 ${mailNote("إن لم تكن أنت، ادخل فورًا وأنهِ الجلسات الأخرى واحذف أي مفتاح لا تعرفه.")}`, { ...ADMIN_MAIL, footnote: "" });
-  if (!(await sendEmail(to, `تنبيه أمني: ${plain(title)} — ${APP}`, html))) console.error("admin-api securityMail failed");
+  if (!(await sendEmail(to, `تنبيه أمني: ${plain(title)} — ${APP}`, html, "alert"))) console.error("admin-api securityMail failed");
 }
 
 // ── WebAuthn ──
@@ -318,7 +322,7 @@ Deno.serve(async (req: Request) => {
         const { error } = await sb.from("email_otps")
           .insert({ email, otp_code: await otpHash(email, code), verified: false, expires_at: exp });
         if (error) throw error;
-        await sendEmail(email, `رمز الدخول: ${code} — ${APP}`, otpHtml(code));
+        await sendEmail(email, `رمز الدخول: ${code} — ${APP}`, otpHtml(code), "code");
       }
       return json({ success: true, message: SENT_MSG });
     }

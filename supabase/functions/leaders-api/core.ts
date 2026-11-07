@@ -2,7 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { deliver, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailNote, mailRows, mailShell, mailText, type MailFamily } from '../_shared/mail.ts';
+import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 
@@ -162,12 +162,42 @@ const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(nam
 export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
 export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().endsWith(`@${DEMO_MAIL_DOMAIN}`);
 
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = []) {
+// كل بريد يمر بالعداد الموحد (D15): kind يحدد نصيبه من السقف، وref الكيان المرتبط (مشارك أو مقيّم) بلا عنوان.
+// الجماعي (bulk) حين تُحجب حصته يدخل الطابور ولا يفشل، وتفرغه المهمة الساعية (drainMailQueue).
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null }: { kind?: MailKind; ref?: string | null } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  if (!(await deliver(to, subject, html, { key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments }))) {
-    throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments });
+  if (r.ok) return;
+  if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
+    if (kind === 'bulk' && !attachments.length && await enqueueMail(to, subject, html, ref)) return;
+    throw new Fail('بلغت الرسائل حدها اليومي، وتصل بعد ساعات', 429, 'mail_cap');
   }
+  throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
+}
+
+async function enqueueMail(to: string, subject: string, html: string, ref: string | null) {
+  const { error } = await db.from('mail_queue').insert({ to_email: to, subject, html, ref, kind: 'bulk' });
+  if (error) { console.error('mail_queue insert:', error); return false; }
+  return true;
+}
+
+// من المهمة الساعية: يرسل المعلّق بالترتيب ما دامت الحصة تسمح، ويكتب العلامة بعد نجاح الإرسال وحده
+export const QUEUE_MAX_ATTEMPTS = 5;
+export async function drainMailQueue(limit = 40) {
+  const { data, error } = await db.from('mail_queue').select('id, to_email, subject, html, ref, attempts')
+    .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit);
+  if (error) return { sent: 0, pending: null };
+  let sent = 0;
+  for (const m of data || []) {
+    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom });
+    if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
+    if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
+    const attempts = (m.attempts || 0) + 1;
+    await db.from('mail_queue').update({ attempts, last_error: r.reason, ...(attempts >= QUEUE_MAX_ATTEMPTS ? { gave_up_at: new Date().toISOString() } : {}) }).eq('id', m.id);
+  }
+  const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
+  return { sent, pending: count ?? 0 };
 }
 
 // ── الدخول ──
@@ -304,7 +334,6 @@ const ALERT_WINDOW_MS = 10 * 60e3;
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
 export async function alertOps(kind: string, detail: Record<string, unknown>) {
-  if (!CONFIG.alertEmail || !CONFIG.resendKey) return false;
   if ((lastAlert.get(kind) ?? 0) > Date.now() - ALERT_WINDOW_MS) return false;
   try {
     const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
@@ -314,7 +343,10 @@ export async function alertOps(kind: string, detail: Record<string, unknown>) {
     lastAlert.set(kind, Date.now());
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
-    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail));
+    // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه
+    const hooked = await alertWebhook(kind, detail);
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return hooked;
+    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail), [], { kind: 'alert' });
     return true;
   } catch (e) { console.error('alertOps:', e); return false; }
 }
@@ -363,13 +395,16 @@ async function contactMailCount(since: string) {
   const { count } = await publicDb.from('mail_log').select('id', { count: 'exact', head: true }).gte('created_at', since);
   return count ?? 0;
 }
-// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد)
+// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد): العداد الموحد leaders.mail_events (D15)،
+// وقبل ترحيله الصيغة القديمة (الرموز ونموذج التواصل وحدهما)
 export async function mailUsage(since = new Date(Date.now() - 864e5).toISOString()) {
+  const c = await mailCounts(db, since);
+  if (c) return c.sent;
   return (await challengeCount(since)) + (await contactMailCount(since).catch(() => 0));
 }
 // الرمز يُحتسب في السقف فقط إن أُرسل فعلًا: فشل الإرسال يحذف صفه ويرفع الخطأ نفسه
 export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string) {
-  try { await sendMail(to, subject, html); }
+  try { await sendMail(to, subject, html, [], { kind: 'code' }); }
   catch (e) { await db.from(table).delete().eq('id', id); throw e; }
 }
 

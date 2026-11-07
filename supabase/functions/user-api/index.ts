@@ -4,7 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { deliver, MAIL_FROM_DEFAULT, mailCode, mailShell, mailText } from "../_shared/mail.ts";
+import { MAIL_FROM_DEFAULT, mailButton, mailCode, mailRows, mailShell, mailText, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
@@ -34,6 +34,19 @@ const FRESH_MS = 10 * 60 * 1000;             // adding a passkey needs a recent 
 
 const BAD_CODE_MSG = "رمز التحقق غير صحيح أو منتهي الصلاحية";
 
+// ── حصة البريد والتحقق البشري (D15 وD14) ──
+// رموز المصفوفة تمر بالعداد الموحد بنصيب لا يتجاوز خُمس السقف، فلا تستنزف بوابة عامة رموز دخول القادة.
+// register-send وresume-send بتحقق بشري (Turnstile، يفشل مغلقًا كما في leaders-api) وحد لكل شبكة في اليوم.
+const MAIL_CAP = Number(Deno.env.get("LEADERS_MAIL_DAILY_CAP") || "80") || 80;
+const USER_MAIL_SHARE = 0.2;
+const OTP_PER_IP_DAY = Number(Deno.env.get("USER_OTP_PER_IP_DAY") || "60") || 60;
+const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
+const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
+// إشعار الخطة المقدَّمة (D14): بدل Lambda في us-east-1، من هنا وبأقل بيانات
+const NOTIFY_EMAIL = Deno.env.get("MATRIX_NOTIFY_EMAIL") || Deno.env.get("LEADERS_ALERT_EMAIL") || "";
+const ADMIN_URL = SITES.admin;
+const clientIp = (req: Request) => (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim() || null;
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
@@ -62,8 +75,9 @@ function randomCode(): string {
 }
 const otpHash = (email: string, code: string) => sha256hex(`user-otp:${email}:${code}`);
 
-// البريد بالقالب الموحّد (_shared/mail.ts)
-const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND, from: FROM });
+// البريد بالقالب الموحّد (_shared/mail.ts)، وكل رسالة بالعداد الموحد (D15)
+const sendEmail = (sb: SB, to: string, subject: string, html: string, kind: "code" | "notify", ref: string | null = null) =>
+  sendCounted(sb, to, subject, html, { kind, source: "user-api", ref, cap: MAIL_CAP, sourceShare: USER_MAIL_SHARE, key: RESEND, from: FROM });
 const otpHtml = (code: string) => mailShell("رمز التحقق إلى مصفوفة التأثير", `
 ${mailText("أدخل هذا الرمز في الصفحة التي طلبته منها لإكمال الدخول.")}
 ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { family: "access", preheader: `رمزك ${code} · صالح 10 دقائق` });
@@ -88,13 +102,58 @@ async function failsExceeded(sb: SB, key: string): Promise<boolean> {
   return (count ?? 0) >= MAX_FAILS;
 }
 
-async function issueOtp(sb: SB, email: string) {
+// يعيد null عند الإرسال، أو رد الرفض. الرمز الذي لم يُرسل يُحذف فلا يُحتسب في حد الشبكة
+async function issueOtp(sb: SB, email: string, ip: string | null): Promise<Response | null> {
   const code = randomCode();
   const exp = new Date(Date.now() + OTP_TTL_MS).toISOString();
-  const { error } = await sb.from("email_otps")
-    .insert({ email, otp_code: await otpHash(email, code), verified: false, expires_at: exp });
-  if (error) throw error;
-  await sendEmail(email, `رمز التحقق: ${code} — مصفوفة التأثير`, otpHtml(code));
+  const row = { email, otp_code: await otpHash(email, code), verified: false, expires_at: exp };
+  let ins = await sb.from("email_otps").insert({ ...row, ip }).select("id").limit(1);
+  if (ins.error && (ins.error.code === "PGRST204" || ins.error.code === "42703")) ins = await sb.from("email_otps").insert(row).select("id").limit(1);   // قبل ترحيل 20261107120000
+  if (ins.error) throw ins.error;
+  const r = await sendEmail(sb, email, `رمز التحقق: ${code} — مصفوفة التأثير`, otpHtml(code), "code");
+  if (r.ok) return null;
+  if (ins.data?.[0]?.id) await sb.from("email_otps").delete().eq("id", ins.data[0].id);
+  return r.reason === "mail_cap" || r.reason === "mail_share"
+    ? json({ success: false, code: "mail_cap", message: "بلغت رسائل اليوم حدها. ادخل بمفتاح المرور، أو حاول بعد ساعات" }, 429)
+    : json({ success: false, code: "mail_failed", message: "تعذّر إرسال الرمز، حاول بعد قليل" }, 502);
+}
+
+// التحقق البشري: يفشل مغلقًا بلا مفتاحيه، ويعيد site_key ليعرض الموقع التحدي
+async function humanCheck(body: Record<string, unknown>, ip: string | null): Promise<Response | null> {
+  if (!TURNSTILE_SECRET || !TURNSTILE_SITE) {
+    console.error("user-api: Turnstile keys missing; code sign-in is closed");
+    return json({ success: false, code: "captcha_unconfigured", message: "الإرسال برمز البريد متوقف مؤقتًا. ادخل بمفتاح المرور، أو حاول بعد قليل." }, 503);
+  }
+  const token = body.captcha;
+  let ok = false;
+  if (typeof token === "string" && token.length >= 10 && token.length <= 4096) {
+    const form = new FormData();
+    form.append("secret", TURNSTILE_SECRET);
+    form.append("response", token);
+    if (ip) form.append("remoteip", ip);
+    try { ok = !!(await (await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form })).json())?.success; } catch { ok = false; }
+  }
+  return ok ? null : json({ success: false, code: "captcha", site_key: TURNSTILE_SITE, message: token ? "تعذّر التحقق، أعد المحاولة" : "أكّد أنك لست برنامجًا آليًا" }, 400);
+}
+
+// حد الشبكة في اليوم: يتسع لقاعة ورشة، ويضبطه المالك بـ USER_OTP_PER_IP_DAY
+async function networkLimit(sb: SB, ip: string | null): Promise<Response | null> {
+  if (!ip) return null;
+  const since = new Date(Date.now() - 864e5).toISOString();
+  const { count, error } = await sb.from("email_otps").select("id", { count: "exact", head: true }).eq("ip", ip).gte("created_at", since);
+  if (error || (count ?? 0) < OTP_PER_IP_DAY) return null;
+  return json({ success: false, code: "rate", message: "طلبات كثيرة اليوم من هذه الشبكة. ادخل بمفتاح المرور، أو حاول غدًا" }, 429);
+}
+
+// إشعار المستشار بخطة مقدَّمة (D14): معرّف الحدث ونوعه والاسم والبريد ورابط اللوحة، بلا جوال ولا تفاصيل الخطة
+async function notifyPlanSubmitted(sb: SB, reg: { id: string; name: string; email: string }) {
+  if (!NOTIFY_EMAIL) { console.error("user-api: MATRIX_NOTIFY_EMAIL missing; plan notification skipped"); return; }
+  const html = mailShell("خطة مقدَّمة في مصفوفة التأثير", `
+${mailText("قدّم مشارك خطته النهائية في مصفوفة التأثير، وهي بانتظار مراجعتك.")}
+${mailRows([["الحدث", "plan_submitted", true], ["المعرّف", reg.id, true], ["الاسم", reg.name], ["البريد", reg.email, true]])}
+${mailButton(`${ADMIN_URL}/#/matrix`, "افتح الخطة في لوحة الإدارة")}`, { family: "admin", preheader: "خطة مقدَّمة بانتظار مراجعتك", footnote: "" });
+  const r = await sendEmail(sb, NOTIFY_EMAIL, "خطة مقدَّمة في مصفوفة التأثير", html, "notify", `registration:${reg.id}`);
+  if (!r.ok) console.error("user-api: plan notification not sent", r.reason);
 }
 
 async function checkOtp(sb: SB, email: string, otp: string): Promise<boolean> {
@@ -200,9 +259,13 @@ Deno.serve(async (req: Request) => {
       if (!name || name.length > 80) return json({ success: false, message: "الاسم غير صالح" }, 400);
       if (!validPhone(phone)) return json({ success: false, message: "رقم الجوال غير صالح" }, 400);
       if (!validEmail(email)) return json({ success: false, message: "البريد غير صالح" }, 400);
+      const ip = clientIp(req);
+      const blocked = await networkLimit(sb, ip) || await humanCheck(body, ip);
+      if (blocked) return blocked;
       const wait = await cooldownOk(sb, email);
       if (wait > 0) return json({ success: false, message: `يرجى الانتظار ${wait} ثانية قبل إعادة الإرسال` }, 429);
-      await issueOtp(sb, email);
+      const failed = await issueOtp(sb, email, ip);
+      if (failed) return failed;
       // مسجّل أم جديد يُعرف بعد التحقق فقط، فلا يكشف هذا الرد شيئًا.
       return json({ success: true, mode: "new" });
     }
@@ -211,11 +274,16 @@ Deno.serve(async (req: Request) => {
     if (action === "resume-send") {
       const phone = String(body.phone || "").replace(/\s/g, "");
       if (!validPhone(phone)) return json({ success: false, message: "رقم الجوال غير صالح" }, 400);
+      // الحد والتحقق قبل البحث عن الجوال، فلا يكشف الرد شيئًا ولا يُرسل بلا تحقق
+      const ip = clientIp(req);
+      const blocked = await networkLimit(sb, ip) || await humanCheck(body, ip);
+      if (blocked) return blocked;
       const email = await emailForPhone(sb, phone);
       if (email) {
         const wait = await cooldownOk(sb, email);
         if (wait > 0) return json({ success: false, message: `يرجى الانتظار ${wait} ثانية قبل إعادة الإرسال` }, 429);
-        await issueOtp(sb, email);
+        const failed = await issueOtp(sb, email, ip);
+        if (failed) return failed;
       }
       return json({ success: true });
     }
@@ -375,8 +443,13 @@ Deno.serve(async (req: Request) => {
       for (const k of SAVE_FIELDS) if (k in fields) updates[k] = fields[k];
       if (!Object.keys(updates).length) return json({ success: false, message: "لا توجد حقول للحفظ" }, 400);
       if (JSON.stringify(updates).length > 100_000) return json({ success: false, message: "البيانات أكبر من المسموح" }, 413);
+      const { data: before } = await sb.from("registrations").select("id, name, email, submitted").eq("id", subject).limit(1);
       const { error } = await sb.from("registrations").update(updates).eq("id", subject);
       if (error) throw error;
+      // أول تقديم للخطة: إشعار المستشار من الخادم (D14)، ولا يوقف الرد إن تعذّر
+      if (updates.submitted === true && before?.[0] && !before[0].submitted) {
+        await notifyPlanSubmitted(sb, before[0]).catch((e) => console.error("user-api: plan notification", e));
+      }
       return json({ success: true });
     }
 

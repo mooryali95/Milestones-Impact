@@ -11,7 +11,10 @@
 | `LEADERS_TOKEN_PEPPER` | **نعم** (الدالة ترفض الإقلاع بدونه) | `leaders-api/core.ts` | ملح هاش رموز الدخول والجلسات، فلا يكفي تسريب القاعدة وحده | تدويره يُبطل كل الجلسات والرموز الجارية؛ يُفعل خارج ساعات الورش |
 | `RESEND_API_KEY` | نعم للبريد | `core.ts`، `_shared/mail.ts`، `admin-api`، `user-api`، `send-otp` | إرسال رموز الدخول والإشعارات؛ غيابه = `mail_unconfigured` وتنبيه فوري | من لوحة Resend |
 | `LEADERS_MAIL_FROM` | لا (افتراضي في `_shared/mail.ts`) | `core.ts` | عنوان المرسل | مع النطاق الموثّق في Resend |
-| `LEADERS_MAIL_DAILY_CAP` | لا (80) | `core.ts` | سقف رسائل الرموز يوميًا؛ التسجيلات تقف عند 70% منه | بحسب خطة Resend |
+| `LEADERS_MAIL_DAILY_CAP` | لا (80) | `core.ts`، و`user-api` و`admin-api` و`send-otp` | السقف الموحد لكل بريد في 24 ساعة (D15، `leaders.mail_events`): نصفه على الأقل لرموز الدخول، والتسجيلات تقف عند 70% منه، ومصفوفة التأثير لا تتجاوز خُمسه | ضعف الدفعة على الأقل دون تجاوز خطة Resend المدفوعة |
+| `LEADERS_ALERT_WEBHOOK` | لا | `_shared/mail.ts` | تنبيه المالك عبر قناة غير البريد (Slack أو Teams أو Telegram): رفض النطاق، وبلوغ 70% من الحصة، وكل تنبيه من alertOps | رابط الويب الذي تعطيه القناة |
+| `USER_OTP_PER_IP_DAY` | لا (60) | `user-api` | رموز مصفوفة التأثير من شبكة واحدة في اليوم | يُرفع قبل ورشة كبيرة على شبكة واحدة |
+| `MATRIX_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `user-api` | من يُخطَر بخطة مقدَّمة في المصفوفة (D14، بدل Lambda) | بريد المستشار |
 | `LEADERS_REGISTER_PER_IP_DAY` | لا (60) | `core.ts` | التسجيلات الجديدة من شبكة واحدة في اليوم؛ يتسع لقاعة ورشة | يُرفع قبل ورشتين أو أكثر على شبكة واحدة في اليوم نفسه، ثم يُعاد |
 | `LEADERS_APP_URL` | لا (`SITES.leaders`) | `core.ts` | روابط البريد والتحقق | عند تغيير النطاق |
 | `LEADERS_RP_ID` | لا (`leaders.sunkvalue.com`) | `core.ts` ← `passkeys.ts` | نطاق مفاتيح المرور للمشاركين | تغييره يُبطل مفاتيح المرور المسجلة |

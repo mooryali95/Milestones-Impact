@@ -277,9 +277,10 @@ export async function invite(p: any, b: Body) {
   if (prev?.status === 'submitted') throw new Fail('أرسل هذا المقيّم تقديره من قبل');
   if (prev && Date.now() - new Date(prev.invited_at).getTime() < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
   if (prev) must(await db.from('raters').update(row).eq('id', prev.id));
-  else must(await db.from('raters').insert(row));
+  const saved = prev ? { id: prev.id } : must(await db.from('raters').insert(row).select('id').single()) as { id: string };
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
-  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase));
+  // ref المقيّم: منه نسب استجابة المقيّمين في سجل الإرسال (D15)
+  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { ref: `rater:${saved.id}` });
   await audit('participant', p.id, 'rater.invite', 'raters', null, null, { email, relation, phase });
   return mine(p);
 }

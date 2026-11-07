@@ -17,7 +17,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, clientIp, Fail, preflight, reply } from './core.ts';
+import { alertOps, clientIp, drainMailQueue, Fail, preflight, reply } from './core.ts';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -73,7 +73,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
   // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
-  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders() }),
+  // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
+  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(),
+    mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,

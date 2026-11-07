@@ -5,11 +5,13 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107110000_sspdf_freeze
+-- as-of migration: 20261107120000_leaders_mail_events
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
 create schema if not exists leaders;
+
+create sequence if not exists leaders.mail_events_id_seq as bigint;
 
 create sequence if not exists public.admin_audit_log_id_seq as bigint;
 
@@ -851,6 +853,43 @@ create table if not exists leaders.levels (
   constraint levels_pkey PRIMARY KEY (key)
 );
 
+create table if not exists leaders.mail_events (
+  id bigint default nextval('leaders.mail_events_id_seq'::regclass) not null,
+  created_at timestamp with time zone default now() not null,
+  kind text not null,
+  source text not null,
+  status text not null,
+  resend_id text,
+  to_domain text,
+  ref text,
+  constraint mail_events_kind_check CHECK ((kind = ANY (ARRAY['code'::text, 'alert'::text, 'notify'::text, 'bulk'::text, 'contact'::text]))),
+  constraint mail_events_ref_check CHECK ((char_length(ref) <= 100)),
+  constraint mail_events_resend_id_check CHECK ((char_length(resend_id) <= 100)),
+  constraint mail_events_source_check CHECK ((char_length(source) <= 40)),
+  constraint mail_events_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'failed'::text, 'blocked'::text]))),
+  constraint mail_events_to_domain_check CHECK ((char_length(to_domain) <= 255)),
+  constraint mail_events_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.mail_queue (
+  id uuid default gen_random_uuid() not null,
+  created_at timestamp with time zone default now() not null,
+  kind text default 'bulk'::text not null,
+  to_email text not null,
+  subject text not null,
+  html text not null,
+  ref text,
+  attempts integer default 0 not null,
+  last_error text,
+  sent_at timestamp with time zone,
+  gave_up_at timestamp with time zone,
+  constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
+  constraint mail_queue_ref_check CHECK ((char_length(ref) <= 100)),
+  constraint mail_queue_subject_check CHECK ((char_length(subject) <= 300)),
+  constraint mail_queue_to_email_check CHECK ((char_length(to_email) <= 254)),
+  constraint mail_queue_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.model_submissions (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -1594,6 +1633,7 @@ create table if not exists public.email_otps (
   created_at timestamp with time zone default now(),
   expires_at timestamp with time zone default (now() + '00:10:00'::interval),
   verified boolean default false,
+  ip text,
   constraint email_otps_pkey PRIMARY KEY (id)
 );
 
@@ -2501,6 +2541,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS lab_grants_target_idx ON leaders.lab_grants US
 
 CREATE INDEX IF NOT EXISTS learning_models_capstone_idx ON leaders.learning_models USING btree (capstone_sort) WHERE (capstone_sort IS NOT NULL);
 
+CREATE INDEX IF NOT EXISTS mail_events_ref ON leaders.mail_events USING btree (ref) WHERE (ref IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS mail_events_window ON leaders.mail_events USING btree (created_at DESC, status, kind);
+
+CREATE INDEX IF NOT EXISTS mail_queue_pending ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
+
 CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
 
 CREATE INDEX IF NOT EXISTS org_coordinators_email_idx ON leaders.org_coordinators USING btree (email);
@@ -2582,6 +2628,8 @@ CREATE INDEX IF NOT EXISTS api_sessions_expires_idx ON public.api_sessions USING
 CREATE INDEX IF NOT EXISTS contact_requests_created_idx ON public.contact_requests USING btree (created_at DESC);
 
 CREATE INDEX IF NOT EXISTS contact_requests_ip_created_idx ON public.contact_requests USING btree (ip, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS email_otps_ip_day ON public.email_otps USING btree (ip, created_at) WHERE (ip IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON public.admin_audit_log USING btree (action);
 
@@ -2726,6 +2774,10 @@ alter table leaders.lab_items enable row level security;
 alter table leaders.learning_models enable row level security;
 
 alter table leaders.levels enable row level security;
+
+alter table leaders.mail_events enable row level security;
+
+alter table leaders.mail_queue enable row level security;
 
 alter table leaders.model_submissions enable row level security;
 

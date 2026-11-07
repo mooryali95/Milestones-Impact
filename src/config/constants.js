@@ -4,8 +4,7 @@
 
 import { CONTACT_EMAIL } from '../../supabase/functions/leaders-api/labels.js';
 
-// AWS Lambda used only for the (optional, best-effort) consultant notify email.
-export const API_URL = 'https://wmfbw7ff71.execute-api.us-east-1.amazonaws.com';
+// لا طرف خارجي للإشعار: إشعار الخطة المقدَّمة من user-api (D14). كان يُرسل إلى Lambda في us-east-1.
 
 // ألوان الهوية الرسمية — معايَرة على حزمة الهوية (07_WEB/mi-patterns.css).
 // تُستعمل في الأنماط المضمّنة داخل JS حيث لا تصل متغيرات CSS.
