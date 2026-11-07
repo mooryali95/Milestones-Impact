@@ -12,7 +12,7 @@ import {
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
-import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { RUBRIC_SCALE, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -419,8 +419,10 @@ export function Submission({ id, canWrite, onClose }) {
         <div className="hb-ed-out"><div className="hb-ed-cap">عمل المشارك</div><article className="hb-page mp"><ModelForm m={m} answers={x.answers || {}} /></article></div>
         <aside className="sub-review">
           <h4>تقييمك</h4>
-          <div className="sub-stars" role="radiogroup" aria-label="التقييم">{[1, 2, 3, 4, 5].map((n) => (
-            <label key={n} className={n <= rating ? 'on' : ''}><input type="radio" name="rating" value={n} aria-label={`${n} من 5`} checked={rating === n} disabled={!canWrite} onChange={() => setRating(n)} /><span>★</span></label>
+          {/* D08: السلّم الرباعي الواحد بأسمائه ومراسيه من labels.js، بدل النجوم الخمس */}
+          <div className="sub-scale" role="radiogroup" aria-label="التقييم">{RUBRIC_SCALE.levels.map((l) => (
+            <label key={l.n} className={rating === l.n ? 'on' : ''}><input type="radio" name="rating" value={l.n} checked={rating === l.n} disabled={!canWrite} onChange={() => setRating(l.n)} />
+              <b>{l.ar}</b><small>{l.anchor_ar}</small></label>
           ))}</div>
           <label>ملاحظاتك للمشارك<textarea rows={7} readOnly={!canWrite} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="ما الذي أجاده، وما الذي يطوّره في هذا النموذج؟" /></label>
           <label>نقاط تميّز إضافية (اختياري)<input type="number" min="0" max="100" readOnly={!canWrite} value={bonus} onChange={(e) => setBonus(e.target.value)} /></label>
@@ -494,7 +496,7 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
                 <b>{m.title_ar}{!m.active && <small className="la-chip"> موقوف</small>}</b>
                 <span className="hb-meta"><span className={`la-lvl ${m.min_level}`}>من {LVL[m.min_level]}</span><span>{m.points} نقطة</span><span>{(m.fields || []).length} حقول</span>
                   {x.submitted || x.reviewed || x.draft
-                    ? <span className="hb-stat">مسودات {x.draft || 0} · مسلّمة {x.submitted || 0} · مقيّمة {x.reviewed || 0}{x.rated ? ` · ${(x.rating / x.rated).toFixed(1)}★` : ''}</span>
+                    ? <span className="hb-stat">مسودات {x.draft || 0} · مسلّمة {x.submitted || 0} · مقيّمة {x.reviewed || 0}{x.rated ? ` · متوسط ${(x.rating / x.rated).toFixed(1)} من ${RUBRIC_SCALE.levels.length}` : ''}</span>
                     : <span>لا أعمال بعد</span>}</span>
               </button>
               <span className="hb-acts"><Move rows={list} entity="learning_models" id={m.id} reload={reload} canWrite={canWrite} />

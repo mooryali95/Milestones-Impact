@@ -502,7 +502,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mcard-top, .mcard-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .mcard-sum { font-size: 13px; color: var(--muted); line-height: 1.8; }
 .mcard-foot { margin-top: 4px; }
-.stars { color: var(--gold); letter-spacing: 1px; }
+.mcard-level { color: var(--gold-text); font-weight: 700; font-size: 13px; }
 .model-icon { width: 54px; height: 54px; flex: none; display: grid; place-items: center; border-radius: 14px; font-size: 24px; color: var(--copper); background: linear-gradient(135deg, var(--brand-slate), var(--brand-graphite)); box-shadow: inset 0 0 0 1px rgba(199,154,75,.45); }
 .model-icon.sm { width: 40px; height: 40px; font-size: 18px; border-radius: 11px; }
 .model-hero { display: flex; gap: 18px; align-items: flex-start; margin: 12px 0 18px; padding: 22px; border-radius: 18px; color: #fff; background: radial-gradient(120% 160% at 100% 0%, var(--st-info) 0%, var(--brand-slate) 40%, var(--brand-graphite) 100%); }
@@ -517,7 +517,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .model-guide p, .model-guide ol { margin: 0; }
 .model-guide ol { padding-inline-start: 18px; }
 .model-src { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; font-style: italic; }
-.model-rate span { color: var(--gold); font-size: 18px; letter-spacing: 2px; }
+.model-rate span { color: var(--gold-text); font-weight: 700; }
 .model-rate b { display: block; color: var(--ok); }
 .model-fb { margin: 0; padding: 10px 12px; background: var(--brand-cream); border-inline-start: 3px solid var(--gold); border-radius: 8px; }
 .model-fb b { display: block; font-size: 12px; color: var(--accent); }
@@ -1360,3 +1360,9 @@ body:has(.tour) main{padding-bottom:260px}
   .onb li { font-size: 12px; }
   .vdialog { padding: 10px; }
 }
+
+/* السلّم الرباعي الواحد (D08): أربعة خيارات بأسمائها ومراسيها */
+.rx-scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.rx-scale button { display: grid; gap: 4px; text-align: start; padding: 10px 12px; border: 1px solid var(--brand-line-strong); border-radius: 8px; background: none; cursor: pointer; font: inherit; color: inherit; }
+.rx-scale button small { color: var(--brand-muted, inherit); line-height: 1.6; }
+.rx-scale button.on, .rx-scale button[aria-checked="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }

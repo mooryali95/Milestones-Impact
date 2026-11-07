@@ -673,3 +673,10 @@
 
 /* صف خارج المؤشر في التقييم المستمر (المرحلة ح) */
 .la-table tr.la-dim td { opacity: .72; }
+
+/* السلّم الرباعي الواحد (D08) في أداة المراجع */
+.sub-scale { display: grid; gap: 8px; }
+.sub-scale label { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px; cursor: pointer; }
+.sub-scale label small { opacity: .8; line-height: 1.6; }
+.sub-scale label.on { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.sub-scale input { position: absolute; opacity: 0; pointer-events: none; }

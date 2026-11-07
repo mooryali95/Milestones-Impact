@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
+import { RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { useUI, Spinner } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
@@ -55,7 +56,7 @@ function Review({ d, canWrite, onSaved }) {
             <div className="cps-anchors" role="radiogroup" aria-label={r.title}>
               {r.anchors.map((a, i) => (
                 <button key={i} type="button" role="radio" aria-checked={scores[r.key] === i + 1} className={scores[r.key] === i + 1 ? 'on' : ''}
-                  onClick={() => setScores({ ...scores, [r.key]: i + 1 })}><b>{i + 1}</b><span>{a}</span></button>
+                  onClick={() => setScores({ ...scores, [r.key]: i + 1 })}><b>{i + 1}. {RUBRIC_LEVEL_AR[i + 1]}</b><span>{a}</span></button>
               ))}
             </div>
             <textarea rows={2} placeholder="ملاحظتك على هذا البعد (تصل المشارك)" value={notes[r.key] || ''} onChange={(e) => setNotes({ ...notes, [r.key]: e.target.value })} />

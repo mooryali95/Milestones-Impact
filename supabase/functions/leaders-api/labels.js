@@ -130,10 +130,25 @@ export const KATON_ENABLED = false;
 // فيُعرض منفصلًا (ENGAGEMENT_AR) ولا يدخل المؤشر (الملحق 5 §3.2)
 export const CONTINUOUS_SOURCE_AR = { quizzes: 'اختبارات الكتيب', models: 'النماذج التطبيقية', milestones: 'المعالم', lab: 'إتقان الأدوات في المختبر', katon: 'دقة التحليل في «كاتون»', peer: 'الإسهام المؤكَّد في طلبات الأقران' };
 export const ENGAGEMENT_AR = 'الانخراط بتقدير الخبراء بعد الجلسات والاستشارات';
-// توحيد المقاييس قبل الجمع (الملحق 5 §3.1): خريطة صريحة «مستوى ← نسبة» يقررها المالك، لا تحويلًا خطيًا ضمنيًا.
-// تقدير النموذج 1..5: 1 لم يتحقق، 3 مقبول، 5 نموذجي. معيار المعلم 1..4: المستوى 3 «اكتمل كما خُطط» = حد الاستيفاء (75).
-export const RATING_PCT = { 1: 0, 2: 25, 3: 50, 4: 75, 5: 100 };
-export const RUBRIC_PCT = { 1: 0, 2: 40, 3: 75, 4: 100 };
+// السلّم الرباعي الواحد (D08): لكل ما يقيّمه إنسان من عمل المشارك، أي النماذج والتمارين ومعيار المعلم ومعيار الوثيقة.
+// الأسماء والنسب وحد الاستيفاء والإصدار هنا وحدها، يقرؤها الخادم والواجهتان. «يُعاد للتطوير» حالة returned لا درجة.
+// المراسي العامة مسودة يوقعها خبراء المحتوى قبل الإطلاق، ومراسي النماذج الـ22 قبل أول تسليم يُقيَّم.
+export const RUBRIC_SCALE = Object.freeze({
+  version: 1, pass: 3,
+  levels: Object.freeze([
+    { n: 1, key: 'below', ar: 'دون المطلوب', pct: 0, anchor_ar: 'لا يستوفي الحد الأدنى: عناصر جوهرية غائبة أو غير صحيحة' },
+    { n: 2, key: 'acceptable', ar: 'مقبول', pct: 40, anchor_ar: 'يستوفي جزءًا: العناصر حاضرة وبعضها سطحي أو لا يرتبط بعمله' },
+    { n: 3, key: 'proficient', ar: 'متقن', pct: 75, anchor_ar: 'يستوفي المطلوب: مكتمل ومرتبط بعمله الحقيقي وقابل للتطبيق' },
+    { n: 4, key: 'distinguished', ar: 'متميز', pct: 100, anchor_ar: 'يتجاوز المطلوب: عميق ومسوَّغ بأدلة ويصلح مرجعًا لغيره' },
+  ]),
+});
+// توحيد المقاييس قبل الجمع (الملحق 5 §3.1): خريطة صريحة «مستوى ← نسبة» من السلّم نفسه، لا تحويلًا خطيًا ضمنيًا
+export const RUBRIC_PCT = Object.freeze(Object.fromEntries(RUBRIC_SCALE.levels.map((l) => [l.n, l.pct])));
+export const RUBRIC_LEVEL_AR = Object.freeze(Object.fromEntries(RUBRIC_SCALE.levels.map((l) => [l.n, l.ar])));
+// اسم الدرجة لتقدير نموذج مخزّن؛ 5 من السلّم الخماسي السابق تُقرأ «متميز» حتى يُطبَّق التحويل
+export const rubricLevelAr = (n) => RUBRIC_LEVEL_AR[Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(n)))] || null;
+// تقييمات الخبراء للمشارك بعد الجلسات (expert_ratings.overall من 1 إلى 5) وحدها بخريطة خماسية، انخراطًا لا جدارة
+export const EXPERT_RATING_PCT = Object.freeze({ 1: 0, 2: 25, 3: 50, 4: 75, 5: 100 });
 
 // كيف يكتمل بند الرحلة (completionSource)
 export const COMPLETION_AR = { auto: 'آلي من حالة المشارك', evidence: 'مرتبط بمكانه ودليله', manual: 'يدوي' };

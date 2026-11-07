@@ -10,7 +10,7 @@ import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
-import { SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { rubricLevelAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
 const STATUS = {
   draft: { t: SUBMISSION_STATUS.draft, c: 'warn' },
@@ -19,7 +19,6 @@ const STATUS = {
   reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
 };
 const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
-const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
 function Field({ f, value, onChange, locked, initiative, imp }) {
@@ -188,7 +187,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           {s && s.status !== 'draft' && (
             <section className="mg-status">
               <div className={`chip ${STATUS[s.status].c}`}>{STATUS[s.status].t}</div>
-              {s.rating && <div className="model-rate"><span>{stars(s.rating)}</span>{s.bonus ? <b>+{s.bonus} نقطة تميّز</b> : null}</div>}
+              {s.rating && <div className="model-rate"><span>{rubricLevelAr(s.rating)}</span>{s.bonus ? <b>+{s.bonus} نقطة تميّز</b> : null}</div>}
               {s.feedback_ar && <blockquote className="model-fb"><b>ملاحظات المستشار</b>{s.feedback_ar}</blockquote>}
             </section>
           )}
@@ -291,7 +290,7 @@ export function Models({ name, onPoints }) {
                     <span className="mcard-prog"><span className="bar"><i style={{ width: `${m.submission && m.submission.status !== 'draft' && m.submission.status !== 'returned' ? 100 : p}%` }} /></span><small>{m.fields_n || pr.total} حقول · من {levelOf(m.min_level).title}</small></span>
                     <span className="mcard-foot">
                       {st ? <span className={`chip ${st.c}`}>{st.t}</span> : <span className="chip">لم تبدأ</span>}
-                      {m.submission?.rating ? <span className="stars">{stars(m.submission.rating)}</span> : <span className="mcard-go">افتح ←</span>}
+                      {m.submission?.rating ? <span className="mcard-level">{rubricLevelAr(m.submission.rating)}</span> : <span className="mcard-go">افتح ←</span>}
                     </span>
                   </button>
                 );

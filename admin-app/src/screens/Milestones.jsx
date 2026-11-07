@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useUI } from '../ui.jsx';
-import { MILESTONE_RUBRIC } from '../../../supabase/functions/leaders-api/labels.js';
+import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDue,
 } from '../../../supabase/functions/leaders-api/logic.js';
@@ -135,7 +135,7 @@ export function CohortSchedule({ cohort, onClose }) {
 const rubricFields = [
   ...Object.entries(MILESTONE_RUBRIC).map(([k, r]) => ({
     name: `r_${k}`, label: r.title, type: 'select', empty: 'بلا تقييم',
-    options: Object.fromEntries(r.levels.map((t, i) => [String(i + 1), `${i + 1}. ${t}`])),
+    options: Object.fromEntries(r.levels.map((t, i) => [String(i + 1), `${i + 1}. ${RUBRIC_LEVEL_AR[i + 1]}: ${t}`])),
   })),
   { name: 'note', label: 'ملاحظة للسجل', type: 'textarea', rows: 2 },
 ];
