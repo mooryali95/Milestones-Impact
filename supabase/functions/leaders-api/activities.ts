@@ -4,7 +4,7 @@
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail } from './core.ts';
-import { contentLevelsFor, requirementFor } from './programs.ts';
+import { contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -61,9 +61,12 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('capstone') ? db.from('capstones').select('status, readiness').eq('participant_id', p.id).maybeSingle().then((r: any) => ({ data: r.data ? [r.data] : [] })) : none,
   ]);
   const subBy = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s.status]));
+  const rel = kinds.has('reading') ? await releaseOf(p).catch(() => null) : null;
+  const inRelease = rel?.modules?.length ? new Set(rel.modules) : null;
   const ev = {
     // body_md لا يُجلب هنا؛ الأبواب المصفاة غير فارغة أصلًا
-    chapters: handbookModulesFor((mods.data || []).map((m: any) => ({ ...m, body_md: '1' })), levels),
+    // D02: بند القراءة على أبواب إصدار الدفعة، فلا يتغير مطلوبها بباب يُضاف أثناءها
+    chapters: handbookModulesFor((mods.data || []).filter((m: any) => !inRelease || inRelease.has(m.id)).map((m: any) => ({ ...m, body_md: '1' })), levels),
     reading: Object.fromEntries((reading.data || []).map((r: any) => [r.module_id, r])),
     quizzes: Object.fromEntries((quiz.data || []).map((r: any) => [r.module_id, true])),
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),

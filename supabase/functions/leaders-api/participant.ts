@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
+  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, missingColumn, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
@@ -12,7 +12,7 @@ import {
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
-import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
+import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
 import { CONTACT_EMAIL, consentState, POLICY_CHANGES, POLICY_MATERIAL_VERSION, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
@@ -1045,7 +1045,15 @@ export async function handbookComplete(p: any, b: Body) {
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
-  else must(await db.from('handbook_progress').insert({ participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection }));
+  else {
+    // D02: إصدار الدفعة وبصمة الاختبار والإجابات نصًا (السؤال والخيار المختار)، لتصويب عادل لا ينقص أحدًا
+    const row = { participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection };
+    const stamp = { content_release: (await releaseOf(p).catch(() => null))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
+      quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
+    const { error } = await db.from('handbook_progress').insert({ ...row, ...stamp });
+    if (error && missingColumn(error)) must(await db.from('handbook_progress').insert(row));
+    else if (error) must({ data: null, error });
+  }
   const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
   const pts = await pointsOf(p.id);
   return { success: true, ...g, first: !prev, counted: prev || { quiz_score: g.score, quiz_total: g.total }, gained, points: { total: pts.total, rank: pts.rank } };

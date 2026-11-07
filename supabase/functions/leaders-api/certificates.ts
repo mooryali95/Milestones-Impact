@@ -157,8 +157,10 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string, final: Fi
     cohort: cohort && !cohort.is_default ? cohort.name : null,
     org, profile,
   });
+  // D02: إصدار المحتوى الذي أتم عليه البرنامج، في اللقطة لا في التوقيع
+  const release = { content_release: (cohort as any)?.content_release ?? null };
   // D05: نوع الشهادة وقرار الختامي وإصدار معادلته وبرنامجه
-  return final ? { ...snap, kind: 'completion_success', decision: final.decision, formula_version: final.formula_version ?? null, program_id: final.program_id } : snap;
+  return final ? { ...snap, ...release, kind: 'completion_success', decision: final.decision, formula_version: final.formula_version ?? null, program_id: final.program_id } : { ...snap, ...release };
 }
 
 export type FinalRef = { decision: string; formula_version?: number | null; program_id: string };

@@ -31,6 +31,10 @@ export const QUERIES = {
   katon_topics: 'select to_jsonb(t) as r from leaders.katon_topics t order by sort',
   katon_sentences: `select to_jsonb(s) || jsonb_build_object('topic_key', t.key) as r
     from leaders.katon_sentences s join leaders.katon_topics t on t.id = s.topic_id order by t.sort, s.sort`,
+  // لبيان إصدار الدفعة (D02، scripts/content/release.mjs): المختبر والإعدادات المُقاسة كما هي على الإنتاج
+  lab_items: 'select to_jsonb(l) as r from leaders.lab_items l order by key',
+  placement_model: 'select to_jsonb(m) as r from leaders.placement_model m',
+  programs: 'select jsonb_build_object(\'id\', p.id, \'final_eval\', p.final_eval) as r from leaders.programs p order by p.id',
 };
 
 async function query(sql) {

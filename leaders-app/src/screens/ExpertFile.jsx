@@ -172,7 +172,7 @@ export default function ExpertFile({ id, onBack }) {
       <section className="card stack">
         <div className="row between">
           <div><p className="eyebrow">ملف المشارك</p><h1>{p.full_name}</h1>
-            <p className="muted small">{[p.job_title, p.organization_name, d.cohort?.name ? `دفعة ${d.cohort.name}` : null, d.team_ar].filter(Boolean).join(' · ')}</p>
+            <p className="muted small">{[p.job_title, p.organization_name, d.cohort?.name ? `دفعة ${d.cohort.name}` : null, d.team_ar, d.cohort?.content_release ? `إصدار المحتوى ${d.cohort.content_release}` : null].filter(Boolean).join(' · ')}</p>
             <p className="small ltr">{p.email}{p.phone ? ` · ${p.phone}` : ''}</p></div>
           <span className="chip gold">{advisor ? 'أنت مستشار دفعته' : 'مسند إليك بطلب خدمة'}</span>
         </div>
