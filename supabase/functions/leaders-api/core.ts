@@ -226,11 +226,25 @@ export function reminderMail(name: string, open: number) {
     `${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك`);
 }
 
-export function approvedMail(name: string) {
-  return shell('journey', 'اعتُمد مستواك، ورحلتك مفتوحة الآن',
-    mailText(`${hello(name)} راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.`)
-    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
-    'ملف كفاءتك ومرحلتك الأولى بانتظارك');
+// pay: يبقى رسم البرنامج (D04)، فيحمل البريد رابط الدفع وصفحته تعرض المسار المعتمد والسعر وسياسة الاسترداد
+export function approvedMail(name: string, pay = false) {
+  return pay
+    ? shell('journey', 'اعتُمد مسارك، وبقيت خطوة واحدة',
+      mailText(`${hello(name)} راجع المستشار نتيجتك واعتمد مسارك في البرنامج. تجد في الصفحة مسارك المعتمد بأبوابه ونماذجه وساعاته، ومعه رسم البرنامج وسياسة الاسترداد.`)
+      + mailButton(CONFIG.appUrl, 'راجع مسارك وأكمل التسجيل'),
+      'مسارك المعتمد ورسم البرنامج بانتظارك')
+    : shell('journey', 'اعتُمد مستواك، ورحلتك مفتوحة الآن',
+      mailText(`${hello(name)} راجع المستشار نتيجتك واعتمد مستواك في البرنامج. تجد ملف كفاءتك ومرحلتك الأولى بانتظارك.`)
+      + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+      'ملف كفاءتك ومرحلتك الأولى بانتظارك');
+}
+
+// تذكير من اعتُمد مساره ولم يُكمل التسجيل، بعد 3 أيام ثم 7 (D04)
+export function payReminderMail(name: string, days: number) {
+  return shell('journey', 'مسارك المعتمد بانتظارك',
+    mailText(`${hello(name)} اعتُمد مسارك قبل ${days} أيام، وبقي إكمال التسجيل لتُفتح رحلتك. إن كان لديك سؤال عن المسار أو الرسم فرُدّ على هذه الرسالة.`)
+    + mailButton(CONFIG.appUrl, 'أكمل التسجيل'),
+    'خطوة واحدة تفتح رحلتك');
 }
 
 export function certificateMail(name: string, url: string) {
@@ -357,6 +371,8 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'register', family: 'access', label: 'إكمال التسجيل', subject: 'أكمل تسجيلك في برنامج القادة', html: () => signInMail('سارة', '153262', CONFIG.appUrl, true) },
   { key: 'coord-signin', family: 'access', label: 'رمز دخول لوحة الجهة', subject: 'رمز الدخول إلى لوحة الجهة', html: () => coordinatorSignInMail('خالد', '820417', `${CONFIG.appUrl}/org`) },
   { key: 'approved', family: 'journey', label: 'اعتماد المستوى', subject: 'اعتُمد مستواك في برنامج القادة', html: () => approvedMail('سارة') },
+  { key: 'approved-pay', family: 'journey', label: 'اعتماد المسار مع رابط الدفع', subject: 'اعتُمد مسارك في برنامج القادة', html: () => approvedMail('سارة', true) },
+  { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
   { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },

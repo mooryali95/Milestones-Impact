@@ -75,6 +75,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
   // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
   'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(),
+    pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,

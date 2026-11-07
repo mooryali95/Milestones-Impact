@@ -33,7 +33,7 @@ const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
 const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
-import Paywall from './screens/Paywall.jsx';
+import Paywall, { AwaitingApproval } from './screens/Paywall.jsx';
 import { gateDone, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
@@ -295,7 +295,8 @@ function Participant() {
     screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} /></>;
   } else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
   else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
-  else if (!paidFor('program')) screen = <Paywall item="program" me={me} onUpdate={accept} />;
+  // D04: رسم البرنامج بعد اعتماد المسار؛ قبله حالة انتظار مؤرخة بلا بوابة دفع
+  else if (!paidFor('program')) screen = me.profile?.approved ? <Paywall item="program" me={me} onUpdate={accept} /> : <AwaitingApproval me={me} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
   else if (SHOW_KATON && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;

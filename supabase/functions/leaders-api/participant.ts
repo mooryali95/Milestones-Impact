@@ -478,11 +478,13 @@ export async function journeyFor(p: any) {
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
   const final = fe?.status === 'approved'
     ? { score: fe.score, decision: fe.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.decision], decided_at: fe.decided_at, notes: fe.adjust?.notes_to_participant || null } : null;
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final };
+  // متى أنهى القياس المبدئي: منه موعد اعتماد المسار المعلن (يوما عمل، D04)
+  const baselineAt = (assessments.data || []).filter((a: any) => a.status === 'submitted' && a.instruments?.kind === 'baseline').map((a: any) => a.submitted_at).filter(Boolean).sort().at(-1) || null;
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final, baselineAt };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final }, passkeys, cells, org, payAccess] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt }, passkeys, cells, org, payAccess] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -535,6 +537,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     // الدفعة: اسمها وتواريخها للمشارك، ومصدرها والبرنامج ونسخته للإدارة
     cohort: !def.cohort || def.cohort.is_default ? null : { name: def.cohort.name, starts_on: def.cohort.starts_on, ends_on: def.cohort.ends_on },
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
+    baseline_submitted_at: baselineAt,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
   };

@@ -8,7 +8,7 @@ import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODE
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
-import { pinSponsorFor } from './entitlements.ts';
+import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile, issueOnCompletion } from './certificates.ts';
@@ -426,7 +426,8 @@ export async function approve(a: Admin, b: Body) {
   must(await db.from('placements').upsert(rows));
   await db.from('participants').update({ status: 'placed' }).eq('id', id);
   await audit('admin', a.email, 'placement.approve', 'participants', id, before, rows);
-  sendMail(p.email, 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name)).catch((e) => console.error(e));
+  const pay = await programPaymentDue(id).catch(() => false);
+  sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
   return { success: true };
 }
 

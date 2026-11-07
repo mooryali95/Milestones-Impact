@@ -47,3 +47,17 @@ export async function pinSponsorFor(participantId: string) {
     return true;
   } catch (e) { console.error('pinSponsorFor:', e); return false; }
 }
+
+// يبقى على المشارك رسم البرنامج؟ (D04) الدفع مفعّل، ولا جهة نشطة ترعاه، ولا حق حي في البرنامج
+export async function programPaymentDue(participantId: string) {
+  const s: any = await settings();
+  if (!s.enabled) return false;
+  const { data: p } = await db.from('participants').select('id, organization_id, is_demo').eq('id', participantId).maybeSingle();
+  if (!p || p.is_demo) return false;
+  if (p.organization_id) {
+    const { data: org } = await db.from('organizations').select('status').eq('id', p.organization_id).maybeSingle();
+    if (org?.status === 'active') return false;
+  }
+  const { count } = await db.from('entitlements').select('participant_id', { count: 'exact', head: true }).eq('participant_id', participantId).eq('item', 'program').is('revoked_at', null);
+  return !count;
+}
