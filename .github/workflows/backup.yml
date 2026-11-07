@@ -50,7 +50,7 @@ jobs:
       - name: Dump, encrypt at the source, and upload to R2
         if: steps.gate.outputs.skip != 'true'
         run: bash scripts/ops/backup.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.gate.outputs.skip != 'true'
         with:
           name: backup-${{ github.run_id }}
