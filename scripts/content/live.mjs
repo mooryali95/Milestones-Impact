@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { loadChapters, ROOT } from '../handbook/content.mjs';
 
 // أحدث مصدر في المستودع لكل أداة حية
-export const QUESTION_SOURCES = { 'baseline-v4': 'v4.2', 'post-v2': 'v4.2', 'baseline-v5': 'v5.1', 'post-v3': 'v5.1' };
+export const QUESTION_SOURCES = { 'baseline-v4': 'v4.2', 'post-v2': 'v4.2', 'baseline-v5': 'v5.2', 'post-v3': 'v5.2' };   // v5.2 بعد طبقة الموازنة (D03): قبل تطبيق ترحيلها يظهر الفرق متوقعًا
 // حقول الفقرة المقارنة؛ المُقاس منها لا يُعدَّل من اللوحة (content-lock.js)
 export const QUESTION_FIELDS = ['code', 'dimension', 'tier', 'kind', 'weight', 'text_ar', 'help_ar', 'text_rater_ar', 'options', 'anchor_code', 'retro', 'form', 'competency_ar', 'chapter_key'];
 export const HANDBOOK_FIELDS = ['body_md', 'quiz_md', 'reflection_ar'];

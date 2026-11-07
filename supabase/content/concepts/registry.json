@@ -66,8 +66,10 @@
     {
       "id": "M-C07",
       "dimension": "milestone",
-      "label_ar": "مواءمة متطلبات المانح",
-      "aliases_ar": [],
+      "label_ar": "مواءمة متطلبات الجهة الممولة",
+      "aliases_ar": [
+        "مواءمة متطلبات المانح"
+      ],
       "chapters": [
         "ch2"
       ],
@@ -79,7 +81,7 @@
       "label_ar": "قرار البوابة",
       "aliases_ar": [],
       "chapters": [
-        "ch3"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -89,7 +91,7 @@
       "label_ar": "ضبط تغيير النطاق",
       "aliases_ar": [],
       "chapters": [
-        "ch3"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -99,7 +101,7 @@
       "label_ar": "الاستجابة للمخاطر",
       "aliases_ar": [],
       "chapters": [
-        "ch3"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -109,7 +111,7 @@
       "label_ar": "البوابة والمعلم",
       "aliases_ar": [],
       "chapters": [
-        "ch3"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -289,7 +291,7 @@
       "label_ar": "النتائج الرئيسية ومؤشرات الأداء",
       "aliases_ar": [],
       "chapters": [
-        "ch4"
+        "ch3"
       ],
       "status": "draft"
     },
@@ -309,7 +311,7 @@
       "label_ar": "نظرية التغيير",
       "aliases_ar": [],
       "chapters": [
-        "ch3"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -319,7 +321,7 @@
       "label_ar": "المنافع السلبية",
       "aliases_ar": [],
       "chapters": [
-        "ch2"
+        "ch4"
       ],
       "status": "draft"
     },
@@ -379,7 +381,7 @@
       "label_ar": "إدارة أصحاب المصلحة",
       "aliases_ar": [],
       "chapters": [
-        "ch4"
+        "ch5"
       ],
       "status": "draft"
     },

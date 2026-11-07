@@ -125,6 +125,10 @@ A.push('  end if;');
 A.push("  if not exists (select 1 from leaders.schema_migrations where name = '20261105150000_leaders_v5_1_pre_activation') then");
 A.push("    raise exception 'v5: طبّق 20261105150000_leaders_v5_1_pre_activation.sql (إصلاحات ما قبل التفعيل) أولًا';");
 A.push('  end if;');
+// طبقة الموازنة (v5.2، D03) تسبق التفعيل كذلك، بعد توقيع لجنة المحتوى عليها
+A.push("  if not exists (select 1 from leaders.schema_migrations where name = '20261107190000_leaders_v5_2_balance') then");
+A.push("    raise exception 'v5: طبّق 20261107190000_leaders_v5_2_balance.sql (طبقة الموازنة، D03) أولًا';");
+A.push('  end if;');
 A.push('end $$;');
 A.push("update leaders.instruments set active = (key = 'baseline-v5') where kind = 'baseline';");
 A.push("update leaders.instruments set active = (key in ('post-v3', 'post-v2')) where kind = 'post';");
