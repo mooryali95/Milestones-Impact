@@ -1,4 +1,4 @@
-// تحقق الكتاب v3 قبل الترحيل
+// تحقق الكتاب v3 قبل الترحيل، ويجري في CI وفي npm run verify
 //   node scripts/handbook/verify.mjs [handbook.json] [questions-live.json]
 // 1) لا أخطاء في كتل المستوى ولا في الاختبار لكل باب ولكل مستوى، وسؤالان على
 //    الأقل لكل مستوى ونطاق، ومثال في متن ch1/ch3/ch5/ch6 لكل مستوى، وتأمل مفتوح
@@ -8,15 +8,17 @@ import { existsSync, readFileSync } from 'node:fs';
 import { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz } from '../../supabase/functions/leaders-api/logic.js';
 import { loadChapters } from './content.mjs';
 
-const SCRATCH = '/tmp/claude-0/-home-user-Milestones-Impact/8bc368f8-82f3-5621-b1cb-c646b839f6d1/scratchpad/audit';
-const OLD = process.argv[2] || `${SCRATCH}/handbook.json`;
-const BANK = process.argv[3] || `${SCRATCH}/questions-live.json`;
+// التفريغان اختياريان (تصدير قراءة من الإنتاج). بدونهما يجري الفحص (1) كاملًا ويُتخطى ما يحتاجهما.
+const OLD = process.argv[2] || '';
+const BANK = process.argv[3] || '';
 const LEVELS = ['beginner', 'intermediate', 'advanced'];
 const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 
 const chapters = loadChapters();
 const old = existsSync(OLD) ? JSON.parse(readFileSync(OLD, 'utf8')) : [];
-const minOf = Object.fromEntries(old.map((r) => [`${r.dimension}/${r.chapter_key}`, r.min_level]));
+// مستوى الباب: من ترويسة ملفه (min_level) إن وُجد، وإلا من التفريغ، وإلا التأسيسي (الأشد فحصًا)
+const minOf = { ...Object.fromEntries(old.map((r) => [`${r.dimension}/${r.chapter_key}`, r.min_level])),
+  ...Object.fromEntries(chapters.filter((c) => c.min_level).map((c) => [`${c.dimension}/${c.chapter_key}`, c.min_level])) };
 const oldOf = Object.fromEntries(old.map((r) => [`${r.dimension}/${r.chapter_key}`, r]));
 let failed = 0;
 const fail = (msg) => { failed++; console.error(`✗ ${msg}`); };
@@ -84,7 +86,7 @@ if (existsSync(BANK)) {
     const before = parseQuiz(filterHandbookMd(oldOf[id]?.quiz_md, 'advanced'))[i];
     if (before && before.q === qz.q) fail(`${code}: السؤال لم يُستبدل`);
   }
-} else console.warn(`! لم يُعثر على ${BANK}، فتُخطّى فحص التداخل`);
+} else console.warn(`! ${BANK ? `لم يُعثر على ${BANK}` : 'بلا تفريغ لبنك الإنتاج'}، فتُخطّى فحص التداخل`);
 
 // ── 4) سؤال DIRECT في leadership/ch4: تطبيق لا استدعاء ──
 {

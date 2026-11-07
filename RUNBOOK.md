@@ -1,6 +1,6 @@
 # دليل التشغيل (RUNBOOK)
 
-صفحة واحدة لمن يشغّل المنظومة: كيف يصل التغيير إلى الإنتاج، وكيف يُرجَع، وما يراقبه، وكيف يستعيد. آخر تحديث: 2026-11-04 (المرحلة ب).
+صفحة واحدة لمن يشغّل المنظومة: كيف يصل التغيير إلى الإنتاج، وكيف يُرجَع، وما يراقبه، وكيف يستعيد. آخر تحديث: 2026-11-07 (الحزمة 1: التحقق المحلي وبوابة الترحيلات ومسار الطوارئ).
 
 ## 1. مسار النشر
 
@@ -21,6 +21,23 @@ python3 -c "import json;print(json.dumps({'query':open('supabase/migrations/<fil
 curl -s -X POST https://api.supabase.com/v1/projects/eormhcupwgwpllhrfxxg/database/query \
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d @/tmp/q.json
 ```
+
+- **بوابة الترحيلات قبل النشر (الحزمة 1):** قبل نشر أي دالة يقرأ `scripts/ops/pending-migrations.mjs` سجل `leaders.schema_migrations` قراءةً، ويوقف النشر إن بقي في المستودع ترحيل غير مطبّق. يُستثنى ما يحمل في سطوره الأولى `-- deploy-gate: tolerant` (الدوال تقرؤه قراءة متسامحة) أو `-- deploy-gate: deferred <القرار>` (مؤجل بقرار ولا تعتمد عليه الدوال، مثل تفعيل v5). لقائمة فقط: `node scripts/ops/pending-migrations.mjs --list`.
+- **التحقق المحلي (D16):** `npm run verify` يجري خطوات `build-and-test` في `ci.yml` نفسها بترتيبها، ويحرس تطابقهما `verify-parity.test.js`، ويطبع ملخصًا برقم الإيداع يُلصق في طلب الدمج. ما دامت Actions موقوفة لا يُدمج طلب إلا بهذا الملخص كاملًا بلا تخطٍّ وبشجرة نظيفة. ويحتاج محليًا `deno` و`python3` ومتصفح Playwright.
+- **ما دُمج منذ آخر نشر:** `git fetch origin main release && npm run since-release` يسرد إيداعات `main` التي لم تصل `release` بما يمسه كل منها، والترحيلات الجديدة بوسمها. يراجعه المالك قبل استئناف النشر.
+- **لا نشر من وكيل:** `.claude/settings.json` يمنع `supabase functions deploy` و`db push` والدفع إلى `release`. النشر من CI أو بمسار الطوارئ أدناه بيد المالك.
+
+### مسار الطوارئ (Actions موقوفة)
+
+لا يُسلك إلا بإذن المالك المكتوب الذي يسمي الإيداع وسبب الطوارئ، ويُسجَّل في HANDOFF. من جهاز المالك، وعلى شجرة نظيفة عند الإيداع المأذون:
+
+1. `npm ci && npm run verify`، ولا يُكمل إن فشلت خطوة أو تُخطيت.
+2. `SUPABASE_ACCESS_TOKEN=... node scripts/ops/pending-migrations.mjs`. إن ظهر ترحيل حاجب يُطبَّق أولًا: `SUPABASE_ACCESS_TOKEN=... node scripts/db/apply-migration.mjs <الاسم>` بعد نسخة احتياطية ناجحة (§4).
+3. `SUPABASE_ACCESS_TOKEN=... node scripts/ops/function-secrets.mjs --require=signin`.
+4. نشر الدوال الست بالأوامر نفسها في `ci.yml` (`supabase functions deploy <الدالة> --project-ref eormhcupwgwpllhrfxxg`، ومعها `--no-verify-jwt` لـ `creem-webhook` و`leaders-hooks`).
+5. المسبار للدوال الثلاث (§3)، ولا يُكمل إن فشل.
+6. `git push --force origin <الإيداع>:refs/heads/release` فتُبنى المنصات منه.
+7. صف في HANDOFF: الإيداع، والإذن، والترحيلات المطبقة، ونتيجة المسبار.
 
 ## 2. التراجع
 
@@ -43,7 +60,7 @@ curl -s -X POST https://api.supabase.com/v1/projects/eormhcupwgwpllhrfxxg/databa
 
 - **ليليًا** (`backup.yml`، 00:30 UTC): dump مشفّر لمخططي `leaders` و`public` (30 يومًا)، ومع `SUPABASE_SERVICE_ROLE_KEY` نسخة من دلو `leaders-private` (السير الذاتية والأدلة) كملف ثانٍ.
 - **تمرين الاستعادة** (`restore-drill.yml`): شهريًا وعند الطلب، يستعيد آخر dump في قاعدة مؤقتة ويعدّ الصفوف. استعادة لم تُجرَّب ليست نسخة.
-- النسخ في حساب GitHub نفسه؛ نسخة خارجه (دلو R2 أو جهاز المالك) قرار لاحق.
+- النسخ في حساب GitHub نفسه؛ النسخة خارجه قرار D09 (دلو R2 بتشفير عند المصدر) وتُبنى في الحزمة 3.
 
 ## 5. الأسرار (أين تُضبط)
 

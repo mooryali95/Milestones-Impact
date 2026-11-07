@@ -1,9 +1,13 @@
 {
   "permissions": {
-    "allow": [
+    "deny": [
       "Bash(npx -y supabase@latest functions deploy:*)",
-      "Bash(npx supabase functions deploy:*)"
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(supabase functions deploy:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(supabase db push:*)",
+      "Bash(git push origin *:refs/heads/release)",
+      "Bash(git push --force origin *:refs/heads/release)"
     ]
   }
 }
-

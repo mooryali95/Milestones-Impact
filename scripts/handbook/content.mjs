@@ -18,7 +18,8 @@ export function parseChapter(text, file = '') {
   const [quiz, reflection] = rest.split(/^---REFLECTION---$/m);
   if (reflection === undefined) throw new Error(`${file}: فاصل ---REFLECTION--- مفقود`);
   if (!meta.chapter_key || !meta.dimension) throw new Error(`${file}: chapter_key و dimension مطلوبان`);
-  return { file, chapter_key: meta.chapter_key, dimension: meta.dimension, body_md: body.trim(), quiz_md: quiz.trim(), reflection_ar: reflection.trim() };
+  if (meta.min_level && !['beginner', 'intermediate', 'advanced'].includes(meta.min_level)) throw new Error(`${file}: min_level غير صالح`);
+  return { file, chapter_key: meta.chapter_key, dimension: meta.dimension, min_level: meta.min_level || null, body_md: body.trim(), quiz_md: quiz.trim(), reflection_ar: reflection.trim() };
 }
 
 export const loadChapters = (ver = VERSION) => { const dir = dirOf(ver); return readdirSync(dir).filter((f) => f.endsWith('.md')).sort()

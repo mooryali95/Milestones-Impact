@@ -8,7 +8,8 @@ export default defineConfig({
   workers: 2,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
-  use: { locale: 'ar-SA', trace: 'retain-on-failure' },
+  // PW_CHROMIUM: مسار متصفح مثبت سلفًا حين لا يطابق إصدار Playwright المثبت في المشروع (بيئات التطوير السحابية)؛ CI لا يضبطه
+  use: { locale: 'ar-SA', trace: 'retain-on-failure', launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {} },
   webServer: [
     { command: 'python3 -m http.server 4301 --directory home', port: 4301, reuseExistingServer: !process.env.CI },
     { command: 'python3 -m http.server 4303 --directory admin', port: 4303, reuseExistingServer: !process.env.CI },
