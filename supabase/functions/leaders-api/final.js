@@ -45,10 +45,12 @@ export const FINAL_DEFAULTS = {
   zero_after_end: ['project', 'post'],
   // تعديل الدرجة النهائية بفرق عن الآلية يتجاوز هذا يحتاج توقيعين ولو كان الاعتماد بخبير واحد
   large_adjust: 15,
-  // القياس النهائي: الطريقة ودرجات اتجاه المكسب ومحك الإتقان على الاختبار الموضوعي (K+S)
-  measure: { mode: 'gain', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 },
+  // القياس النهائي: الطريقة ودرجات اتجاه المكسب ومحك الإتقان على الاختبار الموضوعي (K+S).
+  // D06: في الدفعة الأولى الإتقان المحكّي بمحك مؤقت 70، والمكسب الفردي لا يدخل الدرجة بل يُعرض وصفًا
+  measure: { mode: 'mastery', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 },
   // أوزان مصادر التقييم المستمر داخل مكوّنه (نسبية؛ صفر يستبعد المصدر). متساوية افتراضًا
-  sources: { quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 1, peer: 1 },
+  // D17: كاتون خارج الدرجة في الدفعة الأولى بوزن صفر صريح، لا اعتمادًا على KATON_ENABLED
+  sources: { quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 0, peer: 1 },
   // التقييم المستمر: لا يدخل المصدر المؤشر قبل هذا العدد من الأحداث (والاختبارات قبل هذا العدد من الأسئلة)
   min_events: 3,
   min_quiz_items: 10,
@@ -129,8 +131,10 @@ export function measureScore(post, measure = FINAL_DEFAULTS.measure) {
     const f = mastery();
     return f.value == null ? f : { value: f.value, reason: `لا قياس مبدئي مقارن فلا يُقدَّر المكسب؛ احتُسب الإتقان المحكّي: ${f.reason}` };
   }
+  // أثر السقف (D06): من بلغ المحك قبل البرنامج وبقي عليه بلا تغير موثوق يُحسب صاعدًا. أما التراجع الموثوق
+  // فيبقى تراجعًا ولو بقي فوق المحك (كان يُحوَّل إلى 100)
   const ceiling = post.test_pre != null && post.test_post != null && Number(post.test_pre) >= cut && Number(post.test_post) >= cut;
-  if (ceiling && post.direction !== 'up') return { value: g.up, reason: `بلغ محك الإتقان ${cut}٪ قبل البرنامج (${Math.round(post.test_pre)}٪) وبقي عليه (${Math.round(post.test_post)}٪)؛ أثر السقف فيُحسب صاعدًا` };
+  if (ceiling && post.direction === 'flat') return { value: g.up, reason: `بلغ محك الإتقان ${cut}٪ قبل البرنامج (${Math.round(post.test_pre)}٪) وبقي عليه (${Math.round(post.test_post)}٪)؛ أثر السقف فيُحسب صاعدًا` };
   return { value: g[post.direction] ?? null, reason: `تغير موثوق ${dirAr[post.direction] || post.direction} على المؤشر الكلي (RCI)` };
 }
 
@@ -158,7 +162,9 @@ export function finalComponents(src = {}, config = null) {
       key: 'project', value: cap?.score != null ? Math.round(Number(cap.score)) : null, source: 'وثيقة المبادرة',
       reason: cap?.score != null ? 'درجة المستشار على معيار المبادرة' : cap ? 'سُلّمت المبادرة ولم تُقيَّم بعد' : 'لم تُسلَّم المبادرة بعد',
     },
-    { key: 'post', value: measured.value, source: 'القياس النهائي', reason: measured.reason },
+    // تعذر الحساب (D06): المقارنة فشلت، فلا يُستعاض باختبار خام غير معادل، ويُحجب اقتراح القرار
+    post?.failed ? { key: 'post', value: null, failed: true, source: 'القياس النهائي', reason: 'تعذر حساب القياس النهائي (المقارنة بالمبدئي)، فلا يُقترح قرار حتى يُصلح' }
+      : { key: 'post', value: measured.value, source: 'القياس النهائي', reason: measured.reason },
   ].map((x) => ({ ...x, label: FINAL_COMPONENT_AR[x.key] }));
 }
 
@@ -186,7 +192,8 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   const coverage = Math.round((wsum / total) * 100);
   const so = adjust?.score;
   const score = so && Number.isFinite(num(so.value)) ? clamp(Math.round(num(so.value)), 0, 100) : auto_score;
-  let suggested = coverage >= cfg.min_coverage ? decisionFor(score, cfg.thresholds) : null;
+  const failed = rows.filter((x) => x.failed).map((x) => x.label);
+  let suggested = coverage >= cfg.min_coverage && !failed.length ? decisionFor(score, cfg.thresholds) : null;
   // «لم يجتز» لا يُقترح إلا بتغطية عالية وبدليل حاضر فعلًا من المشروع أو القياس النهائي (لا صفر معلن)
   const evidence = rows.some((x) => ['project', 'post'].includes(x.key) && x.value != null && !x.zeroed && x.weight > 0);
   const fail_blocked = suggested === 'fail' && !(coverage >= cfg.fail_min_coverage && evidence);
@@ -200,7 +207,7 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   return {
     components: rows.map((x) => ({ ...x, share: x.value != null && x.weight > 0 && wsum ? Math.round((x.weight / wsum) * 100) : 0 })),
     auto_score, score, score_adjusted: score !== auto_score, coverage, missing, zeroed, ended,
-    suggested, fail_blocked, decision: dec, departs, large_adjust,
+    suggested, fail_blocked, decision: dec, departs, large_adjust, failed,
     notes_to_participant: adjust?.notes_to_participant || null,
     config: cfg, config_version: cfg.version,
   };

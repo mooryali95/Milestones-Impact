@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { alertOps, audit, db, Fail, finalDecisionMail, FINAL_MAIL_SUBJECT, must, sendMail } from './core.ts';
 import { onFinalApproved, suspendForReopen } from './certificates.ts';
+import { runningCohort } from './programs.ts';
 import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, voteBlock } from './final.js';
 import { DEFAULT_MODEL } from './logic.js';
 import { mePayload } from './participant.ts';
@@ -23,8 +24,9 @@ async function sources(p: any) {
     db.from('assessments').select('id, submitted_at, instruments!inner(kind), assessment_results(composite_pct, knowledge_pct, skill_pct)')
       .eq('participant_id', p.id).eq('status', 'submitted').eq('instruments.kind', 'post').order('submitted_at', { ascending: false }).limit(1),
     db.from('final_evaluations').select('*').eq('participant_id', p.id).eq('program_id', programId).maybeSingle(),
-    // المكسب الموثوق (اتجاه RCI الكلي) والاختبار الموضوعي قبل وبعد، من تقرير الأثر نفسه
-    compareFor([p.id]).catch(() => ({ rows: {} as Record<string, any> })),
+    // المكسب الموثوق (اتجاه RCI الكلي) والاختبار الموضوعي قبل وبعد، من تقرير الأثر نفسه.
+    // D06: فشل المقارنة يُوسم «تعذر الحساب» ولا يُبتلع فيسقط إلى اختبار خام غير معادل
+    compareFor([p.id]).catch((e) => { console.error('final: compareFor', e); return { rows: {} as Record<string, any>, failed: true }; }),
   ]);
   const last = (post.data || [])[0];
   const results: any[] = last?.assessment_results || [];
@@ -38,6 +40,7 @@ async function sources(p: any) {
     milestones: state.milestone_summary,
     capstone: cap.data || null,
     post: last ? {
+      failed: !!(cmp as any).failed,
       pct: mean(results.map((r: any) => Number(r.composite_pct))), submitted_at: last.submitted_at,
       test_pre: mean(dims.map((d: any) => d.test_pre)), test_post: mean(dims.map((d: any) => d.test_post)) ?? objective,
       direction: row?.overall?.direction ?? null,
@@ -137,10 +140,16 @@ export async function reopen(a: Actor, b: Body) {
 // حفظ الإعداد يرفع إصدار المعادلة؛ التقييمات المرفوعة تبقى بلقطة إصدارها
 export async function config(a: Actor, b: Body) {
   if (!isUuid(b.program_id)) throw new Fail('اختر البرنامج');
+  // D06 وD02: يُحفظ الإعداد مرة قبل القياس المبدئي ويُقفل أثناء دفعة جارية. الاستثناء نقطة القرار المعلنة مسبقًا
+  // (خفض وزن القياس عند إغلاق المبدئي)، بصلاحية المدير الأعلى وتعليل مكتوب يُحفظ في السجل
+  const running = await runningCohort(String(b.program_id));
+  if (running && ((a as any).role !== 'super_admin' || String(b.reason || '').trim().length < 10)) {
+    throw new Fail(`للبرنامج دفعة جارية (${running}). إعداد التقييم الختامي مقفل أثناءها إلا للمدير الأعلى بتعليل مكتوب`, 409, 'cohort_running');
+  }
   const prev = (await db.from('programs').select('final_eval').eq('id', b.program_id).maybeSingle()).data?.final_eval;
   let cfg;
   try { cfg = cleanFinalConfig(b.config, prev); } catch (err) { throw new Fail((err as Error).message); }
   must(await db.from('programs').update({ final_eval: cfg, updated_at: new Date().toISOString() }).eq('id', b.program_id));
-  await audit('admin', a.email, 'program.final-eval', 'programs', String(b.program_id), prev || null, cfg);
+  await audit('admin', a.email, 'program.final-eval', 'programs', String(b.program_id), prev || null, { ...cfg, ...(running ? { reason: String(b.reason).trim().slice(0, 500), cohort: running } : {}) });
   return { success: true, config: cfg };
 }

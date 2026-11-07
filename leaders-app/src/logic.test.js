@@ -46,6 +46,9 @@ function answer(qs, plan) {
   return a;
 }
 
+// آلية التسكين بأرضية 40 صريحة (قبل D07)، فتبقى اختباراتها شاهدة على الآلية لا على القيمة الافتراضية
+const M40 = { ...DEFAULT_MODEL, floor_intermediate: 40 };
+
 describe('scoring', () => {
   it('scores by original option index and rejects unknown indexes', () => {
     const q = choice('q', 'milestone', 'knowledge', 2);
@@ -223,11 +226,12 @@ describe('evaluatePlacement', () => {
     expect(r.borderline).toBe(false);
   });
   it('is borderline only when both the composite gap and the floor gap are within the margin', () => {
-    expect(ev(60, 50, 45).borderline).toBe(true);     // المؤشر 52.8 يبعد 2.2، وكل جانب فوق 40
-    expect(ev(100, 35, 100).borderline).toBe(true);   // المؤشر 67.5، والمواقف تبعد 5 عن 40
-    expect(ev(100, 20, 100).borderline).toBe(false);  // المؤشر كافٍ لكن المواقف تبعد 20
-    expect(ev(45, 45, 45).borderline).toBe(false);    // كل جانب فوق الأرضية لكن المؤشر يبعد 10
-    expect(ev(100, 100, 100).borderline).toBe(false); // احترافي لا يكون حدّيًا
+    // الآلية بأرضية 40 صريحة؛ الافتراضي 50 (D07) في اختباره أدناه
+    expect(ev(60, 50, 45, M40).borderline).toBe(true);     // المؤشر 52.8 يبعد 2.2، وكل جانب فوق 40
+    expect(ev(100, 35, 100, M40).borderline).toBe(true);   // المؤشر 67.5، والمواقف تبعد 5 عن 40
+    expect(ev(100, 20, 100, M40).borderline).toBe(false);  // المؤشر كافٍ لكن المواقف تبعد 20
+    expect(ev(45, 45, 45, M40).borderline).toBe(false);    // كل جانب فوق الأرضية لكن المؤشر يبعد 10
+    expect(ev(100, 100, 100, M40).borderline).toBe(false); // احترافي لا يكون حدّيًا
   });
   it('places intermediate and advanced by composite', () => {
     expect(ev(75, 50, 50).level).toBe('intermediate');
@@ -275,9 +279,15 @@ describe('evaluatePlacement', () => {
     expect(ev(75, 25, 69, { ...DEFAULT_MODEL, min_intermediate: 45, floor_intermediate: 25 }).level).toBe('intermediate');
   });
   it('keeps a weak tested tier above chance (25%) out of intermediate', () => {
-    expect(ev(70, 35, 70).level).toBe('beginner');
-    expect(ev(35, 70, 70).level).toBe('beginner');
-    expect(ev(70, 45, 70).level).toBe('intermediate');
+    expect(ev(70, 35, 70, M40).level).toBe('beginner');
+    expect(ev(35, 70, 70, M40).level).toBe('beginner');
+    expect(ev(70, 45, 70, M40).level).toBe('intermediate');
+  });
+  it('D07: الأرضية الافتراضية 50 مؤقتة للدفعة الأولى، على المعرفة والمواقف معًا', () => {
+    expect(DEFAULT_MODEL.floor_intermediate).toBe(50);
+    expect(ev(70, 45, 70).level).toBe('beginner');
+    expect(ev(45, 70, 70).level).toBe('beginner');
+    expect(ev(70, 55, 70).level).toBe('intermediate');
   });
   it('ignores missing tiers', () => {
     expect(evaluatePlacement({ knowledge: 80, skill: 80, behavior: null }).composite).toBe(80);
@@ -285,7 +295,7 @@ describe('evaluatePlacement', () => {
 });
 
 describe('itemsToFlip', () => {
-  const flip = (k, s, b, m) => itemsToFlip({ knowledge: k, skill: s, behavior: b, ...evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m) }, m);
+  const flip = (k, s, b, m = M40) => itemsToFlip({ knowledge: k, skill: s, behavior: b, ...evaluatePlacement({ knowledge: k, skill: s, behavior: b }, m) }, m);
   it('counts whole questions: a knowledge or skill question is 4 of 24, a practice statement 4 of 16', () => {
     // المواقف 25 → 41.67 بسؤال واحد، فيبلغ المؤشر 57.4 وتعبر الأرضية: سؤال واحد
     expect(flip(75, 25, 69)).toBe(1);
@@ -297,7 +307,7 @@ describe('itemsToFlip', () => {
   it('must clear the floors too, not only the composite threshold', () => {
     // المؤشر 62.5 لكن المواقف 25: سؤال مواقف واحد (25 → 41.67) يعبر أرضية المتوسط 40
     expect(flip(100, 25, 100)).toBe(1);
-    expect(evaluatePlacement({ knowledge: 100, skill: 41.67, behavior: 100 }).level).toBe('intermediate');
+    expect(evaluatePlacement({ knowledge: 100, skill: 41.67, behavior: 100 }, M40).level).toBe('intermediate');
     // الممارسة لا أرضية لها: المؤشر 90 والممارسة 20 احترافي أصلًا
     expect(flip(100, 100, 20)).toBeNull();
   });

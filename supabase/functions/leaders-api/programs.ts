@@ -520,3 +520,12 @@ export async function groupOf(participantId: string, cohortId: string | null) {
   const { count } = await db.from('cohort_group_members').select('participant_id', { count: 'exact', head: true }).eq('group_id', link.group_id);
   return { id: link.group_id, name: (link as any).cohort_groups?.name || '', members: count || 1 };
 }
+
+// دفعة جارية في البرنامج: بدأت ولم تنتهِ (يُقفل أثناءها ما يُقاس به)
+export async function runningCohort(programId: string | null) {
+  const today = new Date().toISOString().slice(0, 10);
+  let q = db.from('cohorts').select('name, starts_on, ends_on').lte('starts_on', today).or(`ends_on.is.null,ends_on.gte.${today}`).limit(1);
+  if (programId) q = q.eq('program_id', programId);
+  const { data } = await q;
+  return data?.[0]?.name || null;
+}

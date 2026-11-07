@@ -12,7 +12,7 @@ import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
-import { defaultProgramId, journeyDefinition } from './programs.ts';
+import { defaultProgramId, journeyDefinition, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 
@@ -821,6 +821,15 @@ export async function save(a: Admin, b: Body) {
     for (const k of e.key) cq = cq.eq(k, b.row[k]);
     current = (await cq.maybeSingle()).data || null;
   }
+  // D07: معيار التسكين لا يُعدَّل أثناء دفعة جارية إلا للمدير الأعلى بتعليل مكتوب (ويُثبَّت في لقطة الدفعة)
+  let runningReason: string | null = null;
+  if (b.entity === 'placement_model' && !isNew) {
+    const running = await runningCohort(null);
+    if (running && (a.role !== 'super_admin' || String(b.reason || '').trim().length < 10)) {
+      throw new Fail(`دفعة «${running}» جارية. معيار التسكين مقفل أثناءها إلا للمدير الأعلى بتعليل مكتوب`, 409, 'cohort_running');
+    }
+    if (running) runningReason = `${running}: ${String(b.reason).trim().slice(0, 500)}`;
+  }
   const lock = lockedChanges(b.entity, row, current);
   if (lock.length) throw new Fail(lock[0].msg, 409, 'content_locked', { fields: lock.map((x) => x.field) });
 
@@ -933,6 +942,7 @@ export async function save(a: Admin, b: Body) {
   const saved = must(res, isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
   const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
+  if (runningReason) await audit('admin', a.email, 'placement_model.running-change', 'placement_model', '1', before, { reason: runningReason });
   return { success: true, row: saved };
 }
 
