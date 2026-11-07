@@ -62,7 +62,8 @@ describe('اللقطة والتثبيت', () => {
     expect(base).not.toMatch(/backup_2026/);
   });
   it('الراعي يُثبَّت عند كل مسار ربط، بعملة', () => {
-    expect(api('entitlements.ts')).toMatch(/currency: s\.currency/);
+    // العملة من الإعداد لحظة التثبيت، تمر إلى الدالة الذرية (D20) وإلى المسار السابق قبل ترحيلها
+    expect(api('entitlements.ts')).toMatch(/const currency = s\.currency \|\| 'USD';[\s\S]*p_currency: currency[\s\S]*value_cents: item === 'program' \? value : 0, currency,/);
     const participant = api('participant.ts');
     expect(participant.match(/pinSponsorFor\(/g)?.length).toBeGreaterThanOrEqual(4);
     expect(api('admin.ts')).toMatch(/if \(target\) for \(const id of moved\) if \(await pinSponsorFor\(id\)\)/);
