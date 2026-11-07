@@ -63,11 +63,21 @@ export async function adminDecide(a: Admin, b: Body) {
   const now = new Date().toISOString();
   const p = r.participants;
   if (b.approve) {
-    const org = must(await db.from('organizations').select('id, name, status').eq('id', String(b.organization_id || '')).maybeSingle()) as any;
+    const org = must(await db.from('organizations').select('id, name, status, seats').eq('id', String(b.organization_id || r.organization_id || '')).maybeSingle()) as any;
     if (!org || org.status !== 'active') throw new Fail('اختر جهة نشطة');
     if (p.organization_id && p.organization_id !== org.id) throw new Fail('المشارك مرتبط بجهة أخرى؛ غيّرها من ملفه', 409);
-    must(await db.from('participants').update({ organization_id: org.id, org_via: 'admin' }).eq('id', p.id));
-    await pinSponsorFor(p.id);   // الإعفاء يُثبَّت لحظة القبول
+    // D20: رعاية بانتظار الاعتماد لامتلاء المقاعد: القبول مقعد يُضاف إلى العقد بتعليل مكتوب وتدقيق
+    if (r.kind === 'seats') {
+      const why = String(b.reason || '').trim();
+      if (why.length < 5) throw new Fail('اكتب سبب إضافة المقعد إلى العقد', 400, 'seat_reason');
+      const { data: bumped } = await db.from('organizations').update({ seats: (org.seats ?? 0) + 1 }).eq('id', org.id).eq('seats', org.seats).select('seats');
+      if (!bumped?.length) throw new Fail('تغيّرت مقاعد الجهة للتو، أعد المحاولة', 409, 'seats_changed');
+      await audit('admin', a.email, 'sponsor.seat-added', 'organizations', org.id, { seats: org.seats }, { seats: bumped[0].seats, participant: p.id, reason: why.slice(0, 300) });
+    }
+    must(await db.from('participants').update({ organization_id: org.id, org_via: p.organization_id ? undefined : 'admin' }).eq('id', p.id));
+    if (!(await pinSponsorFor(p.id))) {
+      throw new Fail(r.kind === 'contract' ? 'مدة العقد لا تشمل اليوم. عدّل تاريخي العقد في ملف الجهة ثم اعتمد' : 'تعذّر تثبيت الرعاية، راجع مقاعد الجهة وحالتها', 409, 'seat_blocked');
+    }   // الإعفاء يُثبَّت لحظة القبول
     await db.from('sponsor_requests').update({ status: 'approved', organization_id: org.id, decided_by: a.email, decided_at: now }).eq('id', r.id);
     await audit('admin', a.email, 'sponsor.approve', 'participants', p.id, null, { org: org.id, typed: r.typed_name });
     sendMail(p.email, `تأكدت رعايتك من ${org.name}`, shell(`أهلًا ${firstName(p.full_name)}`,

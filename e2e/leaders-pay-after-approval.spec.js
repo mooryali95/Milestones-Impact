@@ -19,12 +19,12 @@ const meOf = (approved) => ({
 });
 const signedIn = (page) => page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_next_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-pay-0000000000000000000'); });
 
-async function mock(page, approved) {
+async function mock(page, approved, patch = {}) {
   const sent = [];
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     sent.push(b.action);
-    const r = { me: meOf(approved), 'pay.checkout': { success: false, message: 'الدفع غير متاح الآن، حاول لاحقًا' } }[b.action];
+    const r = { me: { ...meOf(approved), ...patch }, 'pay.checkout': { success: false, message: 'الدفع غير متاح الآن، حاول لاحقًا' } }[b.action];
     await route.fulfill({ json: r ?? { success: true } });
   });
   return sent;
@@ -54,4 +54,16 @@ test('بعد الاعتماد: الدفع بالمسار المعتمد من م�
   await expect(page.getByText('ضريبة القيمة المضافة')).toBeVisible();
   await page.getByRole('button', { name: 'ادفع وأكمل البرنامج' }).click();
   await expect.poll(() => sent.includes('pay.checkout')).toBe(true);
+});
+
+test('رعاية بانتظار الاعتماد (D20): لا بوابة دفع، ولا ما يكشف عقد الجهة، والملف محفوظ', async ({ page }) => {
+  const base = meOf(false);
+  const sent = await mock(page, false, { access: { ...base.access, assessment: null, request: { status: 'pending', kind: 'seats', typed_name: 'جهة' } } });
+  await signedIn(page);
+  await page.goto(APP);
+  await expect(page.getByRole('heading', { name: 'رعايتك بانتظار الاعتماد' })).toBeVisible();
+  await expect(page.getByText('ملفك وقياسك محفوظان')).toBeVisible();
+  await expect(page.locator('.pay-card')).not.toContainText('مقاعد');
+  await expect(page.getByRole('button', { name: /ادفع/ })).toHaveCount(0);
+  expect(sent).not.toContain('pay.checkout');
 });

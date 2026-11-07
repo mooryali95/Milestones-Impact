@@ -437,6 +437,16 @@ export async function setStatus(a: Admin, b: Body) {
   if (!allowed.includes(b.status)) throw new Fail('حالة غير صالحة');
   must(await db.from('participants').update({ status: b.status }).eq('id', String(b.participant_id)));
   await audit('admin', a.email, 'participant.status', 'participants', String(b.participant_id), null, { status: b.status });
+  // D20: من ينسحب قبل فتح أول باب يُرد مقعده إلى عقد جهته
+  if (b.status === 'withdrawn') {
+    const pid = String(b.participant_id);
+    const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('participant_id', pid);
+    if (!count) {
+      const { data: back } = await db.from('entitlements').update({ revoked_at: new Date().toISOString(), revoked_by: 'seat-return' })
+        .eq('participant_id', pid).eq('source', 'sponsor').is('revoked_at', null).select('organization_id');
+      if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
+    }
+  }
   // إنهاء البرنامج يُصدر الشهادة تلقائيًا (مرة واحدة)
   const cert = b.status === 'completed' ? await issueOnCompletion(String(b.participant_id), a.email) : null;
   return { success: true, certificate: cert };
@@ -854,9 +864,10 @@ export async function save(a: Admin, b: Body) {
   }
 
   if (b.entity === 'organizations') {
-    if ('invite_code' in row || isNew) {
-      const code = String(row.invite_code || '').trim().toLowerCase() || crypto.randomUUID().slice(0, 8);
-      if (!/^[a-z0-9-]{4,40}$/.test(code)) throw new Fail('رمز الدعوة: أحرف إنجليزية صغيرة وأرقام وشرطة، من 4 إلى 40');
+    // D20: رمز الدعوة عشرة أحرف عشوائية على الأقل، وتفريغ الحقل وحفظه يدوّر الرمز. الرمز القائم يمر بلا فحص حتى يُدوَّر
+    if (isNew || ('invite_code' in row && String(row.invite_code || '').trim().toLowerCase() !== String(current?.invite_code || ''))) {
+      const code = String(row.invite_code || '').trim().toLowerCase() || inviteCode();
+      if (!/^[a-z0-9-]{10,40}$/.test(code)) throw new Fail('رمز الدعوة: أحرف إنجليزية صغيرة وأرقام وشرطة، من 10 إلى 40. اتركه فارغًا ليُولَّد رمز عشوائي');
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
@@ -925,6 +936,10 @@ export async function save(a: Admin, b: Body) {
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
   return { success: true, row: saved };
 }
+
+// رمز دعوة عشوائي من 12 حرفًا بلا الأحرف الملتبسة (0 وo و1 وl)
+const INVITE_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
+export const inviteCode = (n = 12) => [...crypto.getRandomValues(new Uint8Array(n))].map((x) => INVITE_ALPHABET[x % INVITE_ALPHABET.length]).join('');
 
 // جداول المحتوى التي تحمل updated_at وupdated_by
 const STAMPED = new Set(['handbook_modules', 'questions', 'instruments', 'learning_models', 'content_items', 'tracks', 'grid_cells', 'journey_stages', 'stage_requirements']);

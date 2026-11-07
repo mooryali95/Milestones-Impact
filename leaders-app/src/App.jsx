@@ -33,7 +33,7 @@ const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
 const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
-import Paywall, { AwaitingApproval } from './screens/Paywall.jsx';
+import Paywall, { AwaitingApproval, seatHold, SponsorshipPending } from './screens/Paywall.jsx';
 import { gateDone, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
@@ -293,7 +293,8 @@ function Participant() {
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} /></>;
-  } else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
+  } else if (seatHold(me) && (!paidFor('assessment') || !paidFor('program'))) screen = <SponsorshipPending />;   // D20: لا بوابة دفع أثناء قرار الرعاية
+  else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
   else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
   // D04: رسم البرنامج بعد اعتماد المسار؛ قبله حالة انتظار مؤرخة بلا بوابة دفع
   else if (!paidFor('program')) screen = me.profile?.approved ? <Paywall item="program" me={me} onUpdate={accept} /> : <AwaitingApproval me={me} />;

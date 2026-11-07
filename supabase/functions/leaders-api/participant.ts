@@ -99,9 +99,17 @@ const campaignOf = (c: unknown) => {
   return /^[a-z0-9_-]{1,40}$/.test(s) ? s : null;
 };
 
-async function resolveOrg(b: Body) {
-  const byCode = await orgByCode(b.org);
-  return byCode ? { org: byCode, via: 'link' as const } : null;
+// رمز رابط الجهة (?org=): محاولاته الخاطئة محدودة لكل شبكة أو حساب (D20)، فلا تُخمَّن الرموز
+const ORG_LINK_TRIES_PER_HOUR = 30;
+async function resolveOrg(b: Body, key = 'anon') {
+  const c = String(b.org || '').trim();
+  if (!c) return null;
+  const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('action', 'org.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString());
+  if ((count ?? 0) >= ORG_LINK_TRIES_PER_HOUR) throw new Fail('محاولات كثيرة لرابط الجهة، حاول بعد ساعة', 429, 'rate');
+  const byCode = await orgByCode(c);
+  if (!byCode) { await audit('system', key, 'org.code-fail', 'organizations', 'none'); return null; }
+  return { org: byCode, via: 'link' as const };
 }
 
 // ── الجهة الراعية برمز يكتبه المشارك ──
@@ -130,7 +138,7 @@ export async function orgByEmail(email: string) {
   return org ? { org, via: 'domain' as const } : null;
 }
 async function sponsorFor(b: Body, key: string, email = '') {
-  return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b)) || (await orgByEmail(email));
+  return (await sponsorByCode(b.sponsor_code, key)) || (await resolveOrg(b, key)) || (await orgByEmail(email));
 }
 
 // أدوار البريد الأخرى، تُكشف لصاحبه فقط بعد إثبات ملكيته (رمز أو رابط أو Google)، فلا يُنشأ له حساب مشارك خطأً
@@ -148,8 +156,8 @@ export async function sponsorCode(p: any, b: Body) {
 }
 
 // يعرض اسم الجهة في شاشة التسجيل قبل إدخال البريد
-export async function orgInfo(b: Body) {
-  const r = await resolveOrg(b);
+export async function orgInfo(b: Body, ctx: { ip?: string | null } = {}) {
+  const r = await resolveOrg(b, `ip:${ctx.ip || 'none'}`);
   if (!r) return { success: false, message: 'رابط الجهة غير صالح أو منتهٍ', code: 'org' };
   return { success: true, via: r.via, org: { name: r.org.name, short_name: r.org.short_name, color: r.org.color } };
 }

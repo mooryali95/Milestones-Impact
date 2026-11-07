@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107120000_leaders_mail_events
+-- as-of migration: 20261107130000_leaders_sponsor_seats
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1396,7 +1396,9 @@ create table if not exists leaders.sponsor_requests (
   decided_at timestamp with time zone,
   reason text,
   created_at timestamp with time zone default now() not null,
+  kind text default 'claim'::text not null,
   constraint sponsor_requests_contact_email_check CHECK (((contact_email IS NULL) OR (char_length(contact_email) <= 254))),
+  constraint sponsor_requests_kind_check CHECK ((kind = ANY (ARRAY['claim'::text, 'seats'::text, 'contract'::text]))),
   constraint sponsor_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text]))),
   constraint sponsor_requests_typed_name_check CHECK (((char_length(typed_name) >= 2) AND (char_length(typed_name) <= 200))),
   constraint sponsor_requests_pkey PRIMARY KEY (id)
@@ -2957,6 +2959,39 @@ AS $function$
       where a.instrument_id = p_instrument and a.status = 'submitted' and r.dimension = agg.dimension)
   from agg;
 $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.pin_sponsor_seat(p_participant uuid, p_org uuid, p_program_value integer, p_currency text, p_note text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders'
+AS $function$
+declare
+  o record;
+  used int;
+begin
+  select id, seats, contract_starts, contract_ends, status into o from leaders.organizations where id = p_org for update;
+  if not found or o.status <> 'active' then return 'inactive'; end if;
+  if exists (select 1 from leaders.entitlements where participant_id = p_participant and organization_id = p_org and source = 'sponsor' and revoked_at is null) then
+    insert into leaders.entitlements (participant_id, item, source, organization_id, granted_by, note, value_cents, currency)
+      select p_participant, i, 'sponsor', p_org, 'sponsor', p_note, case when i = 'program' then p_program_value else 0 end, p_currency
+        from unnest(array['assessment', 'program']) as i
+    on conflict do nothing;
+    return 'exists';
+  end if;
+  if o.contract_starts is not null and current_date < o.contract_starts then return 'before'; end if;
+  if o.contract_ends is not null and current_date > o.contract_ends then return 'after'; end if;
+  if o.seats is not null then
+    select count(distinct participant_id) into used from leaders.entitlements
+     where organization_id = p_org and source = 'sponsor' and revoked_at is null;
+    if used >= o.seats then return 'full'; end if;
+  end if;
+  insert into leaders.entitlements (participant_id, item, source, organization_id, granted_by, note, value_cents, currency)
+    select p_participant, i, 'sponsor', p_org, 'sponsor', p_note, case when i = 'program' then p_program_value else 0 end, p_currency
+      from unnest(array['assessment', 'program']) as i
+  on conflict do nothing;
+  return 'granted';
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.sync_org_name_to_participants()
