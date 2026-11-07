@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // التقييم الختامي على الخادم: يجمع المصادر، ويحفظ التعديل والقرار، ويدير الاعتماد
 // ════════════════════════════════════════════════════════════════
-import { audit, db, Fail, must } from './core.ts';
+import { alertOps, audit, db, Fail, finalDecisionMail, FINAL_MAIL_SUBJECT, must, sendMail } from './core.ts';
+import { onFinalApproved, suspendForReopen } from './certificates.ts';
 import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, voteBlock } from './final.js';
 import { DEFAULT_MODEL } from './logic.js';
 import { mePayload } from './participant.ts';
@@ -106,6 +107,15 @@ export async function vote(a: Actor, b: Body) {
   else if (st.returned) patch.status = 'returned';
   must(await db.from('final_evaluations').update(patch).eq('participant_id', pid).eq('program_id', program.id));
   await audit(a.actor || 'admin', a.email, `final.${v}`, 'participants', pid, null, { note: note || null, status: patch.status || 'pending' });
+  // D05: الاعتماد وحده يصدر الشهادة (اجتاز أو اجتاز بملاحظات)، أو يلغي المعلّقة، ثم بريد القرار بخطوته التالية
+  if (patch.status === 'approved') {
+    const decision = String(record.decision || record.snapshot?.decision || '');
+    const certificate = await onFinalApproved(pid, { decision, formula_version: record.snapshot?.config_version ?? null, program_id: program.id }, a.email)
+      .catch(async (e) => { await alertOps('certificate_issue', { participant: pid, message: String((e as Error)?.message || e).slice(0, 200) }); return null; });
+    if (p.email) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null), [], { ref: `participant:${pid}` })
+      .catch((e) => console.error('final decision mail', e));
+    return { success: true, status: patch.status, approval: st, certificate };
+  }
   return { success: true, status: patch.status || 'pending', approval: st };
 }
 
@@ -119,6 +129,8 @@ export async function reopen(a: Actor, b: Body) {
   if (!record) throw new Fail('لا تقييم', 404);
   must(await db.from('final_evaluations').update({ status: 'draft', votes: [], decided_at: null, updated_at: new Date().toISOString() }).eq('participant_id', pid).eq('program_id', program.id));
   await audit(a.actor || 'admin', a.email, 'final.reopen', 'participants', pid, null, { note });
+  // D05: الشهادة السارية تُعلَّق حتى يُعتمد التقييم من جديد
+  await suspendForReopen(pid, a.email, note);
   return { success: true };
 }
 

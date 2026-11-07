@@ -17,7 +17,6 @@ const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
 const FILTERS = [...['submitted', 'accepted', 'returned', 'approved'].map((k) => [k, STATUS[k]]), ['', 'الكل']];
-const PART = { quizzes: 'اختبارات الأبواب', lab: 'أدوات المختبر', capstone: 'مشروع التخرج', participation: 'المشاركة في الرحلة' };
 
 async function openDoc(doc, toast) {
   const win = window.open('', '_blank');
@@ -142,12 +141,12 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>
         </section>
         <section className="la-card">
-          <h3>نتيجة القائد في تقريره</h3>
-          <p className="la-muted">بالأوزان المعتمدة. الجزء الغائب يُعاد توزيع وزنه، ولا تظهر النتيجة في الشهادة.</p>
+          {/* D05: مصدر واحد هو التقييم الختامي (معادلة البرنامج نفسها)، لا نتيجة موازية */}
+          <h3>التقييم الختامي</h3>
+          <p className="la-muted">{lead?.frozen ? 'اللقطة المرفوعة للاعتماد' : 'الحساب الحي بمعادلة البرنامج'}{lead?.config_version != null ? ` · الإصدار ${lead.config_version}` : ''}. منه قرار الشهادة.</p>
           <p className="cps-big">{lead?.score ?? '·'}<small> من 100</small></p>
-          {lead?.pending === 'capstone' && <p className="la-muted">تُحسب بعد تقييم مشروع التخرج؛ فهو إلزامي ولا يُعاد توزيع وزنه.</p>}
           <table className="la-table"><tbody>
-            {Object.entries(lead?.weights || {}).map(([k, w]) => <tr key={k}><td>{PART[k]}</td><td>{w}%</td><td>{lead.parts[k] ?? 'لم يُقس'}</td></tr>)}
+            {(lead?.components || []).map((x) => <tr key={x.key}><td>{x.label}</td><td>{x.weight}%</td><td>{x.value ?? 'لم يُقس'}</td></tr>)}
           </tbody></table>
           {c.review_note && <><h3>خلاصتك</h3><p>{c.review_note}</p></>}
           {c.sponsor_note && <><h3>ملاحظة الراعي</h3><p>{c.sponsor_note}</p></>}

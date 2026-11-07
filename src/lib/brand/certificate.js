@@ -79,9 +79,13 @@ export function certificateHtml(c, qrSvg, { status } = {}) {
   const signers = (c.signatories || []).slice(0, 1);
   const period = c.start && c.end ? `${fmtAr(c.start)} – ${fmtAr(c.end)}` : '';
   const periodEn = c.start && c.end ? `${new Date(c.start).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })} – ${new Date(c.end).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}` : '';
-  const micro = `MILESTONE IMPACT · ${c.serial} · CERTIFICATE OF PARTICIPATION · `.repeat(14);
+  // D05: نوع الشهادة من لقطتها؛ ما صدر قبل القرار يبقى «شهادة مشاركة»
+  const success = c.kind === 'completion_success';
+  const kindEn = success ? 'Certificate of Successful Completion' : 'Certificate of Participation';
+  const kindAr = success ? 'شهادة إتمام بنجاح' : 'شهادة مشاركة';
+  const micro = `MILESTONE IMPACT · ${c.serial} · ${kindEn.toUpperCase()} · `.repeat(14);
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<title>شهادة مشاركة · ${esc(c.name_ar)} · ${esc(c.serial)}</title>
+<title>${kindAr} · ${esc(c.name_ar)} · ${esc(c.serial)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
@@ -155,8 +159,8 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
       ${co ? `<i class="sep"></i><div class="org"><img src="${esc(c.org.logo)}" alt="${esc(c.org.name)}"><small>بالشراكة مع ${esc(c.org.name)}</small></div>` : ''}
     </header>
     <section class="main">
-      <p class="kind-en">Certificate of Participation</p>
-      <h1 class="kind">شهادة مشاركة</h1>
+      <p class="kind-en">${kindEn}</p>
+      <h1 class="kind">${kindAr}</h1>
       <div class="rule"><i></i><b></b><i></i></div>
       <p class="lead">تُمنح هذه الشهادة إلى</p>
       <h2 class="name">${esc(c.name_ar)}</h2>

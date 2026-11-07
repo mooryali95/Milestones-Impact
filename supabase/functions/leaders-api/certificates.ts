@@ -1,11 +1,12 @@
 // ════════════════════════════════════════════════════════════════
 // شهادات المشاركة: الإصدار والتحقق العام والإدارة
 // ════════════════════════════════════════════════════════════════
-// الإصدار تلقائي حين تصير حالة المشارك «أنهى البرنامج»، ويحفظ لقطة ثابتة
-// (snapshot) لكل ما يظهر على الشهادة، ويقفل الاسم. التوقيع HMAC للحقول
-// الحاكمة بسرّ الخادم، فلا تمر شهادة عُدّلت لقطتها في القاعدة دون أن يظهر
-// ذلك عند التحقق. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
-import { audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
+// D05: «شهادة إتمام بنجاح» تصدر آليًا وحصرًا عند اعتماد تقييم ختامي بقرار اجتاز أو اجتاز بملاحظات
+// (final.ts)، لا بتغيير الحالة ولا يدويًا. إعادة فتح التقييم تعلّقها، والاسترداد يلغيها، والإجراء اليدوي
+// الوحيد التعليق أو الإلغاء بتعليل وصلاحية super. تحفظ لقطة ثابتة لكل ما يظهر على الشهادة وتقفل الاسم.
+// التوقيع HMAC للحقول الحاكمة بمفتاح مستقل عن ملح الجلسات بمعرّف مفتاح (kid)، فتدوير الملح لا يبطل شهادة،
+// وتدوير المفتاح لا يبطل ما صدر. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
+import { alertOps, audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
 import { displayTitles } from './profiles.ts';
 import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
@@ -25,12 +26,36 @@ function newSerial(at = new Date()) {
 
 // الحقول الحاكمة فقط: تغيير أيّها يُبطل التوقيع
 // الدفعة أُضيفت لاحقًا: تدخل التوقيع حين توجد فقط، فتبقى الشهادات السابقة صحيحة
-const signed = (s: any) => [s.serial, s.name_ar, s.name_en || '', s.program_ar, s.track_ar || '', s.hours || '', s.issued_at, s.org?.name || '', ...(s.cohort_ar ? [s.cohort_ar] : [])].join('|');
+// نوع الشهادة وقرارها وإصدار المعادلة (D05) تدخل التوقيع حين توجد، فتبقى السابقة صحيحة
+const signed = (s: any) => [s.serial, s.name_ar, s.name_en || '', s.program_ar, s.track_ar || '', s.hours || '', s.issued_at, s.org?.name || '',
+  ...(s.cohort_ar ? [s.cohort_ar] : []), ...(s.kind ? [s.kind, s.decision || '', s.formula_version ?? ''] : [])].join('|');
 
-async function hmac(text: string) {
-  const key = await crypto.subtle.importKey('raw', enc.encode(`cert:${CONFIG.pepper}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+async function hmacWith(secret: string, text: string) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(text));
   return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+// مفاتيح التوقيع (D05): الحالي بمعرّفه، والسابقة للتحقق وحده ({"k1":"..."} في LEADERS_CERT_PREVIOUS_KEYS).
+// التوقيع القديم بلا معرّف مشتق من ملح الجلسات، ويبقى قابلًا للتحقق ما بقي الملح نفسه.
+export const certKeys = () => {
+  let previous: Record<string, string> = {};
+  try { previous = JSON.parse(Deno.env.get('LEADERS_CERT_PREVIOUS_KEYS') || '{}') || {}; } catch { previous = {}; }
+  return { kid: Deno.env.get('LEADERS_CERT_KEY_ID') || 'k1', key: Deno.env.get('LEADERS_CERT_SIGNING_KEY') || '', previous };
+};
+export async function signCertificate(text: string) {
+  const { kid, key } = certKeys();
+  if (key.length < 32) {
+    await alertOps('cert_key_missing', { note: 'LEADERS_CERT_SIGNING_KEY غير مضبوط أو أقصر من 32 حرفًا؛ لا تصدر شهادة' });
+    throw new Fail('إصدار الشهادات متوقف حتى يُضبط مفتاح التوقيع', 503, 'cert_key_missing');
+  }
+  return `${kid}:${await hmacWith(key, text)}`;
+}
+export async function checkCertificate(text: string, signature: string) {
+  const m = String(signature || '').match(/^([a-z0-9_-]{1,20}):([0-9a-f]{64})$/);
+  if (!m) return CONFIG.pepper ? (await hmacWith(`cert:${CONFIG.pepper}`, text)) === signature : false;
+  const { kid, key, previous } = certKeys();
+  const secret = m[1] === kid ? key : previous[m[1]];
+  return !!secret && (await hmacWith(secret, text)) === m[2];
 }
 
 // ── مصدر واحد لما يظهر على الشهادة ──
@@ -104,7 +129,7 @@ function snapshotOf(x: { serial: string; issuedAt: string; name_ar: string; name
 }
 
 // الدفعة كما تحددها رحلة المشارك (تسجيله، أو دفعة جهته، أو المفتوحة)، وبرنامجها
-async function buildSnapshot(p: any, serial: string, issuedAt: string) {
+async function buildSnapshot(p: any, serial: string, issuedAt: string, final: FinalRef | null = null) {
   const [cfg, pl, org, { cohort }] = await Promise.all([
     settings(),
     db.from('placements').select('dimension, level').eq('participant_id', p.id),
@@ -126,27 +151,32 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string) {
     const h = programHours(def.requirements, levels);
     if (!h.missing.length && h.hours) profile.hours = h.hours;
   }
-  return snapshotOf({
+  const snap = snapshotOf({
     serial, issuedAt, name_ar: p.full_name, name_en: p.name_en || null, track,
     start: cohort?.starts_on || p.created_at, end: cohort?.ends_on || issuedAt,
     cohort: cohort && !cohort.is_default ? cohort.name : null,
     org, profile,
   });
+  // D05: نوع الشهادة وقرار الختامي وإصدار معادلته وبرنامجه
+  return final ? { ...snap, kind: 'completion_success', decision: final.decision, formula_version: final.formula_version ?? null, program_id: final.program_id } : snap;
 }
 
-async function insertCertificate(p: any, by: string | null) {
+export type FinalRef = { decision: string; formula_version?: number | null; program_id: string };
+export const PASSING = ['pass', 'pass_notes'];
+
+async function insertCertificate(p: any, by: string | null, final: FinalRef | null = null) {
   if (!String(p.full_name || '').trim()) throw new Fail('اسم المشارك مطلوب قبل إصدار الشهادة');
   const issuedAt = new Date().toISOString();
   for (let i = 0; i < 4; i++) {
     const serial = newSerial();
-    const snapshot = await buildSnapshot(p, serial, issuedAt);
+    const snapshot = await buildSnapshot(p, serial, issuedAt, final);
     const { data, error } = await db.from('certificates')
-      .insert({ serial, participant_id: p.id, snapshot, signature: await hmac(signed(snapshot)), issued_at: issuedAt, issued_by: by })
+      .insert({ serial, participant_id: p.id, snapshot, signature: await signCertificate(signed(snapshot)), issued_at: issuedAt, issued_by: by })
       .select('id, serial').single();
     if (!error) {
       if (!p.name_locked_at) await db.from('participants').update({ name_locked_at: issuedAt }).eq('id', p.id);
       await audit(by ? 'admin' : 'system', by, 'certificate.issue', 'certificates', data.id, null, { serial });
-      sendMail(p.email, 'شهادة مشاركتك في برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)))
+      sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
         .catch((e) => console.error('certificate mail:', e));
       return data;
     }
@@ -159,14 +189,50 @@ async function insertCertificate(p: any, by: string | null) {
   throw new Fail('تعذّر توليد رقم شهادة', 500);
 }
 
-// يُستدعى عند تغيير الحالة إلى «أنهى البرنامج»؛ لا يُصدر ثانية إن وُجدت سارية
-export async function issueOnCompletion(participantId: string, by: string | null) {
+// ── دورة الشهادة من التقييم الختامي (D05) ──
+// يُستدعى عند اعتماد التقييم الختامي. اجتاز أو اجتاز بملاحظات: تصدر، أو تُعاد المعلّقة إن طابق قرارها،
+// وإلا تُستبدل بجديدة. يُمدَّد أو لم يجتز: لا يصدر شيء، وتُلغى المعلّقة.
+export async function onFinalApproved(participantId: string, final: FinalRef, by: string | null) {
   const cfg = await settings();
+  const { data: certs } = await db.from('certificates').select('id, status, snapshot').eq('participant_id', participantId).in('status', ['valid', 'suspended']);
+  const valid = (certs || []).find((c: any) => c.status === 'valid');
+  const suspended = (certs || []).find((c: any) => c.status === 'suspended');
+  if (!PASSING.includes(final.decision)) {
+    for (const c of [valid, suspended]) if (c) await setStatus(c.id, 'revoked', by || 'system', `قرار ختامي: ${final.decision}`);
+    return null;
+  }
+  if (valid) return null;
+  if (suspended && suspended.snapshot?.decision === final.decision) {
+    await setStatus(suspended.id, 'valid', by || 'system', null);
+    await audit('system', by, 'certificate.restore', 'certificates', suspended.id, null, { decision: final.decision });
+    return { id: suspended.id, serial: suspended.snapshot?.serial };
+  }
+  if (suspended) await setStatus(suspended.id, 'replaced', by || 'system', 'اعتماد ختامي جديد');
   if (!cfg.enabled) return null;
-  const { data: existing } = await db.from('certificates').select('id').eq('participant_id', participantId).eq('status', 'valid').maybeSingle();
-  if (existing) return null;
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
-  return insertCertificate(p, by);
+  return insertCertificate(p, by, final);
+}
+
+// إعادة فتح التقييم الختامي تعلّق الشهادة السارية حتى يُعتمد من جديد
+export async function suspendForReopen(participantId: string, by: string, note: string) {
+  const { data: c } = await db.from('certificates').select('id').eq('participant_id', participantId).eq('status', 'valid').maybeSingle();
+  if (c) await setStatus(c.id, 'suspended', by, `إعادة فتح التقييم الختامي: ${note}`.slice(0, 500));
+}
+
+// الاسترداد يلغي الشهادة السارية أو المعلّقة (سياسة الاسترداد)
+export async function revokeForRefund(participantId: string) {
+  const { data: certs } = await db.from('certificates').select('id').eq('participant_id', participantId).in('status', ['valid', 'suspended']);
+  for (const c of certs || []) await setStatus(c.id, 'revoked', 'creem', 'استرداد الرسوم');
+}
+
+// تغيير الحالة بأثره. التعليق قبل ترحيل 20261107140000 (قيد الحالة القديم) يصير إلغاءً بسببه
+async function setStatus(id: string, status: 'valid' | 'suspended' | 'revoked' | 'replaced', by: string, reason: string | null) {
+  const patch: Body = status === 'valid' ? { status, revoked_at: null, revoked_by: null, revoke_reason: null }
+    : { status, revoked_at: new Date().toISOString(), revoked_by: by, revoke_reason: reason };
+  let { error } = await db.from('certificates').update(patch).eq('id', id);
+  if (error && status === 'suspended' && error.code === '23514') ({ error } = await db.from('certificates').update({ ...patch, status: 'revoked' }).eq('id', id));
+  if (error) throw new Fail('تعذّر تحديث حالة الشهادة', 500, 'db_error');
+  await audit('system', by, `certificate.${status}`, 'certificates', id, null, { reason });
 }
 
 // ── التحقق العام ──
@@ -185,14 +251,16 @@ export async function verify(b: Body, ctx: { ip: string | null; ua: string | nul
     : { data: null };
   await db.from('certificate_checks').insert({ serial: valid ? serial : null, found: !!c, ip: ctx.ip, user_agent: ctx.ua });
   if (!c) return { success: true, found: false };
-  const authentic = (await hmac(signed(c.snapshot))) === c.signature;
+  const authentic = await checkCertificate(signed(c.snapshot), c.signature);
   let replacement = null;
   if (c.replaced_by) replacement = (await db.from('certificates').select('serial').eq('id', c.replaced_by).maybeSingle()).data?.serial || null;
+  // D05: غير السارية تُعرض حالتها وحدها، بلا اسم ولا تفاصيل شخصية
+  const shown = authentic && c.status === 'valid';
   return {
     success: true, found: true, authentic,
     status: authentic ? c.status : 'invalid',
     revoked_at: c.revoked_at, replacement,
-    certificate: c.snapshot,
+    certificate: shown ? c.snapshot : null,
   };
 }
 
@@ -223,31 +291,30 @@ export async function get(b: Body) {
   return { success: true, certificate: data, checks: checks || [] };
 }
 
-export async function issue(a: Actor, b: Body) {
-  const id = String(b.participant_id);
-  const { data: p } = await db.from('participants').select('*').eq('id', id).maybeSingle();
-  if (!p) throw new Fail('المشارك غير موجود', 404);
-  if (p.status !== 'completed') throw new Fail('تُصدر الشهادة لمن أنهى البرنامج فقط');
-  const { data: existing } = await db.from('certificates').select('id').eq('participant_id', id).eq('status', 'valid').maybeSingle();
-  if (existing) throw new Fail('للمشارك شهادة سارية. استعمل إعادة الإصدار لتصحيحها', 409, 'exists');
-  return { success: true, certificate: await insertCertificate(p, a.email) };
+// لا إصدار يدويًا أبدًا (D05): الاستثناء يُعالج داخل الختامي بحوكمته (التعديل الكبير بتوقيعين)
+export async function issue(_a: Actor, _b: Body) {
+  throw new Fail('تصدر الشهادة من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات، لا يدويًا', 409, 'cert_from_final');
 }
 
+// الإجراء اليدوي الوحيد: تعليق السارية أو إلغاء السارية والمعلّقة، بتعليل (وصلاحية super في index.ts)
 export async function revoke(a: Actor, b: Body) {
   const reason = String(b.reason || '').trim().slice(0, 500);
-  if (!reason) throw new Fail('سبب الإلغاء مطلوب');
+  if (reason.length < 5) throw new Fail('سبب الإلغاء أو التعليق مطلوب');
+  const to = b.suspend === true ? 'suspended' : 'revoked';
   const { data: c } = await db.from('certificates').select('id, status').eq('id', String(b.id)).maybeSingle();
-  if (!c || c.status !== 'valid') throw new Fail('الشهادة غير سارية', 409);
-  must(await db.from('certificates').update({ status: 'revoked', revoked_at: new Date().toISOString(), revoked_by: a.email, revoke_reason: reason }).eq('id', c.id));
-  await audit('admin', a.email, 'certificate.revoke', 'certificates', c.id, null, { reason });
-  return { success: true };
+  if (!c || !(to === 'suspended' ? ['valid'] : ['valid', 'suspended']).includes(c.status)) throw new Fail(to === 'suspended' ? 'تُعلَّق السارية وحدها' : 'الشهادة ليست سارية ولا معلّقة', 409);
+  await setStatus(c.id, to, a.email, reason);
+  return { success: true, status: to };
 }
 
 // استبدال شهادة سارية بإصدار جديد من البيانات الحالية: القديمة «استُبدلت» وتشير إلى الجديدة
 async function replace(oldId: string, participantId: string, by: string, reason: string) {
+  const { data: old } = await db.from('certificates').select('snapshot').eq('id', oldId).maybeSingle();
   must(await db.from('certificates').update({ status: 'replaced', revoked_at: new Date().toISOString(), revoked_by: by, revoke_reason: reason }).eq('id', oldId).eq('status', 'valid'));
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
-  const fresh = await insertCertificate(p, by);
+  // التصحيح يحمل نوع الشهادة وقرارها وإصدار معادلتها من السابقة نفسها، فلا يصير التصحيح إصدارًا جديدًا
+  const o: any = old?.snapshot || {};
+  const fresh = await insertCertificate(p, by, o.kind ? { decision: o.decision, formula_version: o.formula_version, program_id: o.program_id } : null);
   if (fresh) await db.from('certificates').update({ replaced_by: fresh.id }).eq('id', oldId);
   return fresh;
 }

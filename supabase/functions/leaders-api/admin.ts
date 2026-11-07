@@ -11,7 +11,7 @@ import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
-import { cleanProfile, issueOnCompletion } from './certificates.ts';
+import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { privateFile } from './guards.js';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
@@ -447,9 +447,8 @@ export async function setStatus(a: Admin, b: Body) {
       if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
     }
   }
-  // إنهاء البرنامج يُصدر الشهادة تلقائيًا (مرة واحدة)
-  const cert = b.status === 'completed' ? await issueOnCompletion(String(b.participant_id), a.email) : null;
-  return { success: true, certificate: cert };
+  // D05: الحالة لا تُصدر شهادة؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات (final.ts)
+  return { success: true, certificate: null };
 }
 
 // إعادة القياس: يُلغى القياس الحالي ويُفتح جديد، والمستوى المعتمد يبقى حتى يُعتمد غيره

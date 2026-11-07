@@ -8,7 +8,7 @@ import { L } from './leaders.js';
 import { useUI } from './ui.jsx';
 import { BRAND } from '../../shared/js/brand.js';
 
-const STAMP = { revoked: 'ملغاة', replaced: 'مستبدلة', sample: 'نموذج' };
+const STAMP = { suspended: 'معلّقة', revoked: 'ملغاة', replaced: 'مستبدلة', sample: 'نموذج' };
 
 // تُفتح النافذة متزامنة مع النقرة، ثم تُكتب الشهادة فيها حين تجهز بياناتها
 export async function openCertificate(load, status) {

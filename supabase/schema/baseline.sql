@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107130000_leaders_sponsor_seats
+-- as-of migration: 20261107140000_leaders_certificate_suspended
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -207,7 +207,7 @@ create table if not exists leaders.certificates (
   created_at timestamp with time zone default now() not null,
   constraint certificates_revoke_reason_check CHECK (((revoke_reason IS NULL) OR (char_length(revoke_reason) <= 500))),
   constraint certificates_serial_check CHECK ((serial ~ '^MI-LDR-[0-9]{4}-[0-9A-Z]{6}$'::text)),
-  constraint certificates_status_check CHECK ((status = ANY (ARRAY['valid'::text, 'revoked'::text, 'replaced'::text]))),
+  constraint certificates_status_check CHECK ((status = ANY (ARRAY['valid'::text, 'suspended'::text, 'revoked'::text, 'replaced'::text]))),
   constraint certificates_pkey PRIMARY KEY (id),
   constraint certificates_serial_key UNIQUE (serial)
 );

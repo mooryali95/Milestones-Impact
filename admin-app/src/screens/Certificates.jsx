@@ -11,7 +11,7 @@ import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
-const ST = { valid: ['سارية', 'ok'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
+const ST = { valid: ['سارية', 'ok'], suspended: ['معلّقة', 'warn'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
 
 // الإعداد العام: يسري على كل الشهادات الجديدة، وما تخصّصه جهة يعلوه لمشاركيها
 function SettingsCard({ canWrite }) {

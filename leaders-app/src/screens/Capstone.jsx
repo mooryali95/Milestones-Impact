@@ -12,7 +12,7 @@ import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
-import { LEADER_WEIGHTS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 
@@ -204,7 +204,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
 
           <details className="card cp-rubric">
             <summary>كيف تُقيَّم الوثيقة</summary>
-            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. {d.track?.priority ? `أبعاد إطارك الأولوي (${dimOf(d.track.priority).short}) وزنها ×${PRIORITY_WEIGHT}.` : 'مستوياتك في الأطر الثلاثة متساوية، فكل الأبعاد بوزن واحد.'} الدرجة تدخل تقرير القائد بوزن {LEADER_WEIGHTS.capstone}%، ولا تظهر في الشهادة.</p>
+            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. {d.track?.priority ? `أبعاد إطارك الأولوي (${dimOf(d.track.priority).short}) وزنها ×${PRIORITY_WEIGHT}.` : 'مستوياتك في الأطر الثلاثة متساوية، فكل الأبعاد بوزن واحد.'} الدرجة مكوّن «المشروع» في التقييم الختامي بوزنه المعلن في برنامجك، ومنه قرار الشهادة.</p>
             <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}</b><small>{r.anchors[3]}</small></li>)}</ul>
           </details>
         </aside>

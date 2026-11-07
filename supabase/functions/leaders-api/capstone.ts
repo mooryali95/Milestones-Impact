@@ -13,10 +13,11 @@ import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority }
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { approvalOf, isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, leaderComposite, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
+import { get as finalGet } from './final.ts';
 import { profileFor } from './profiles.ts';
 
 type Body = Record<string, any>;
@@ -223,23 +224,16 @@ async function participantRow(id: unknown) {
   return p as any;
 }
 
-// نتيجة القائد بأوزانها المعتمدة: تُعرض في تقريره، ولا تظهر في الشهادة
-async function leaderScore(p: any, capstoneScore: number | null) {
-  const [hp, lab, reqs] = await Promise.all([
-    db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id),
-    db.from('lab_attempts').select('item_id, pct').eq('participant_id', p.id).not('finished_at', 'is', null),
-    mePayload(p, 'admin').catch(() => null),
-  ]);
-  const q = (hp.data || []).reduce((a: any, r: any) => ({ s: a.s + (r.quiz_score || 0), t: a.t + (r.quiz_total || 0) }), { s: 0, t: 0 });
-  const best: Record<string, number> = {};
-  for (const r of lab.data || []) best[r.item_id] = Math.max(best[r.item_id] ?? 0, Number(r.pct) || 0);
-  const labs = Object.values(best);
-  return leaderComposite({
-    quizzes: q.t ? (q.s / q.t) * 100 : null,
-    lab: labs.length ? labs.reduce((a, b) => a + b, 0) / labs.length : null,
-    capstone: capstoneScore,
-    participation: reqs ? (reqs as any).progress ?? null : null,
-  });
+// D05: نتيجة القائد من مصدر واحد هو التقييم الختامي (computeFinal في final.js)، لا حساب موازٍ بأوزان أخرى.
+// تُعرض اللقطة المعتمدة إن رُفع التقييم، وإلا الحساب الحي بمعادلة البرنامج نفسها.
+async function leaderScore(p: any) {
+  const f: any = await finalGet({ participant_id: p.id }).catch(() => null);
+  if (!f?.live) return null;
+  return {
+    score: f.live.score ?? null, decision: f.live.decision || f.live.suggested || null, status: f.record?.status || 'draft', frozen: !!f.frozen,
+    config_version: f.live.config_version ?? null, coverage: f.live.coverage ?? null,
+    components: (f.live.components || []).map((x: any) => ({ key: x.key, label: x.label, weight: x.weight, value: x.value })),
+  };
 }
 
 export async function adminGet(b: Body) {
@@ -251,7 +245,7 @@ export async function adminGet(b: Body) {
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
     sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
     priority: state.weighted, max_revisions: MAX_REVISIONS,
-    rubric: rubricFor(state.levels), leader: await leaderScore(p, c?.score != null ? Number(c.score) : null),
+    rubric: rubricFor(state.levels), leader: await leaderScore(p),
   };
 }
 

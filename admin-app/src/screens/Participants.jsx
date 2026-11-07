@@ -301,10 +301,6 @@ function Person({ id, canWrite, onBack }) {
     const d = await act('admin.cohort-enroll', { cohort_id: cohortTo, participant_ids: [p.id] }, 'سُجّل في الدفعة');
     if (d.success) setCohortTo('');
   };
-  const issueCert = async () => {
-    if (!(await confirm('إصدار شهادة لهذا المشارك الآن؟ تُسجَّل برقم تحقق ويصله بريد بها.'))) return;
-    act('admin.certificate-issue', { participant_id: p.id }, 'صدرت الشهادة');
-  };
 
   const pts = r.points || { total: 0, rank: { title: 'مستكشف' } };
   const book = r.book || [];
@@ -341,7 +337,8 @@ function Person({ id, canWrite, onBack }) {
                 </span>
               )}
             </dd>
-            <dt>الشهادة</dt><dd>{p.status === 'completed' ? (canWrite ? <button className="btn-sm ghost" onClick={issueCert}>إصدار الشهادة يدويًا</button> : 'تُصدر عند الإنهاء') : 'بعد إنهاء البرنامج'}</dd>
+            {/* D05: لا إصدار يدويًا؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات */}
+            <dt>الشهادة</dt><dd>تصدر آليًا عند اعتماد التقييم الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»</dd>
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}

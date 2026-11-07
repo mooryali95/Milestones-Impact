@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   bindAnswers, canSubmit, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
-  leaderComposite, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
+  parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
 import { priorityFor, rubricPriority, activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
@@ -186,11 +186,10 @@ describe('المعيار ونتيجة القائد', () => {
     const r = cleanRubric(all(3), { strategy: ' جيد ', planning: '' });
     expect(r.notes).toEqual({ strategy: 'جيد' });
   });
-  it('مشروع التخرج إلزامي، وما غاب غيره يُعاد توزيع وزنه', () => {
-    expect(leaderComposite({ quizzes: 100, lab: 100, capstone: 100, participation: 100 })).toMatchObject({ score: 100, complete: true });
-    expect(leaderComposite({ quizzes: 80, capstone: null })).toMatchObject({ score: null, complete: false, pending: 'capstone' });
-    expect(leaderComposite({ quizzes: 80, capstone: 80 })).toMatchObject({ score: 80, complete: false, parts: { quizzes: 80, capstone: 80 } });
-    expect(leaderComposite({}).score).toBeNull();
+  it('D05: لا نتيجة موازية للقائد؛ مصدرها التقييم الختامي وحده', async () => {
+    const mod = await import('../../supabase/functions/leaders-api/capstone.js');
+    expect(mod.leaderComposite).toBeUndefined();
+    expect(mod.LEADER_WEIGHTS).toBeUndefined();
   });
 
   it('الفحص الحاجب يمنع التسليم مهما بلغت الجاهزية', () => {
