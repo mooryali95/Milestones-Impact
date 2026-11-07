@@ -68,7 +68,7 @@ describe('«المطلوب منك الآن» في ملف المشارك (الم�
 describe('الحراس: المصدر الواحد لطلبات الأقران والملف', () => {
   it('peer مصدر في التقييم المستمر ووزنه في إعداد البرنامج، والترحيل يسجّل نفسه', () => {
     expect(CONTINUOUS_SOURCE_AR.peer).toBeTruthy();
-    expect(read('supabase/functions/leaders-api/final.js')).toMatch(/sources: \{ quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 1, peer: 1 \}/);
+    expect(read('supabase/functions/leaders-api/final.js')).toMatch(/sources: \{ quizzes: 1, models: 1, milestones: 1, lab: 1, katon: 0, peer: 1 \}/);
     const mig = read('supabase/migrations/20261105170000_leaders_peer_requests.sql');
     expect(mig).toMatch(/supervision text not null default 'peers_expert'/);
     expect(mig).toMatch(/create table if not exists leaders\.peer_requests/);

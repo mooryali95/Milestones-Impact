@@ -3,6 +3,8 @@ import {
   approvalState, cleanAdjust, cleanFinalConfig, computeFinal, decisionFor, finalComponents, finalConfig, FINAL_DEFAULTS, measureScore, voteBlock,
 } from '../../supabase/functions/leaders-api/logic.js';
 
+// المكسب كما كان قبل D06 صريحًا، والافتراضي الآن الإتقان المحكّي
+const GAIN = { measure: { mode: 'gain' } };
 const src = {
   continuous: { index: 80, components: [{ label: 'اختبارات الكتيب', value: 80, in_index: true }, { label: 'النماذج', value: 60, in_index: true }, { label: 'المختبر', value: 30, in_index: false }], trend: { dir: 'up' } },
   milestones: { total: 4, done: 3, late: 1, max_late: 5, done_late: 1, max_done_late: 10 },
@@ -12,7 +14,7 @@ const src = {
 
 describe('التقييم الختامي', () => {
   it('يحسب كل مكوّن من مصدره ويشرحه؛ المنجز بعد موعده يُخصم كالمتأخر', () => {
-    const c = finalComponents(src);
+    const c = finalComponents(src, GAIN);
     const by = Object.fromEntries(c.map((x) => [x.key, x]));
     expect(by.milestones.value).toBe(50);   // (3 − 0.5 × (1 + 1)) / 4
     expect(by.milestones.reason).toContain('منها 1 بعد موعده');
@@ -21,16 +23,23 @@ describe('التقييم الختامي', () => {
     expect(by.project.value).toBe(72);
     expect(by.post).toMatchObject({ value: 100 });
     expect(by.post.reason).toContain('صاعد');
+    // D06: الافتراضي الإتقان المحكّي من الاختبار الموضوعي البعدي وحده (62 مقابل 70)
+    expect(finalComponents(src).find((x) => x.key === 'post')).toMatchObject({ value: 89 });
   });
 
   it('مكوّن القياس النهائي بطريقة البرنامج: مكسب موثوق، أو إتقان محكّي، أو مستوى', () => {
-    const g = FINAL_DEFAULTS.measure;
+    const g = { ...FINAL_DEFAULTS.measure, mode: 'gain' };
+    expect(FINAL_DEFAULTS.measure.mode).toBe('mastery');
     expect(measureScore({ ...src.post, direction: 'flat' }, g).value).toBe(60);
     expect(measureScore({ ...src.post, direction: 'down' }, g).value).toBe(20);
     // أثر السقف: بلغ المحك قبل البرنامج وبقي عليه فيُحسب صاعدًا
     const ceiling = measureScore({ pct: 85, test_pre: 78, test_post: 74, direction: 'flat' }, g);
     expect(ceiling.value).toBe(100);
     expect(ceiling.reason).toContain('أثر السقف');
+    // D06: التراجع الموثوق يبقى تراجعًا ولو بقي فوق المحك (كان يُحوَّل إلى 100)
+    const fell = measureScore({ pct: 85, test_pre: 90, test_post: 72, direction: 'down' }, g);
+    expect(fell.value).toBe(20);
+    expect(fell.reason).not.toContain('أثر السقف');
     // بلا زوج مقارن: إتقان محكّي بإعلان
     const noPair = measureScore({ pct: 66, test_post: 56, direction: null }, g);
     expect(noPair).toMatchObject({ value: 80 });
@@ -43,8 +52,8 @@ describe('التقييم الختامي', () => {
 
   it('يجمع بالأوزان ويقترح القرار', () => {
     const r = computeFinal(finalComponents(src), {});
-    // (80*30 + 50*20 + 72*30 + 100*20) / 100 = 75.6
-    expect(r.auto_score).toBe(76);
+    // (80*30 + 50*20 + 72*30 + 89*20) / 100 = 73.4، والقياس بالإتقان المحكّي (D06)
+    expect(r.auto_score).toBe(73);
     expect(r.coverage).toBe(100);
     expect(r.suggested).toBe('pass');
     expect(r.config_version).toBe(1);
@@ -110,7 +119,10 @@ describe('التقييم الختامي', () => {
     expect(c.effective_from).toMatch(/^\d{4}-/);
     expect(c.committee).toEqual(['a@x.sa', 'b@x.sa', 'c@x.sa']);
     expect(c.sources.experts).toBeUndefined();   // الانخراط خارج المؤشر
-    expect(finalConfig({}).measure).toEqual({ mode: 'gain', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 });
+    expect(finalConfig({}).measure).toEqual({ mode: 'mastery', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 });
+    // D17: كاتون بوزن صفر صريح في الدفعة الأولى
+    expect(finalConfig({}).sources.katon).toBe(0);
+    expect(FINAL_DEFAULTS.sources.katon).toBe(0);
     expect(finalConfig({ measure: { mode: 'mastery', mastery_cut: 65 } }).measure.mode).toBe('mastery');
   });
 
@@ -126,5 +138,15 @@ describe('التقييم الختامي', () => {
     expect(voteBlock('x@x.sa', { submitted_by: 'x@x.sa', adjust: {} }, {})).toBeNull();
     expect(voteBlock('y@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toMatch(/أعضاء اللجنة/);
     expect(voteBlock('a@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toBeNull();
+  });
+
+  it('D06: تعذر المقارنة يُوسم ولا يُستعاض باختبار خام، ويُحجب اقتراح القرار', () => {
+    const c = finalComponents({ ...src, post: { ...src.post, failed: true } });
+    const post = c.find((x) => x.key === 'post');
+    expect(post).toMatchObject({ value: null, failed: true });
+    expect(post.reason).toContain('تعذر حساب');
+    const r = computeFinal(c, {});
+    expect(r.suggested).toBeNull();
+    expect(r.failed).toEqual(['القياس النهائي']);
   });
 });

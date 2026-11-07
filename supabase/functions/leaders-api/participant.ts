@@ -501,6 +501,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       : null,
     accessOf(p),
   ]);
+  // «كيف تُقيَّم» (D06 وD07): معادلة برنامج المشارك كما تُطبَّق، بلا مفاتيح
+  const finalEval = def.program_id ? (await db.from('programs').select('final_eval').eq('id', def.program_id).maybeSingle()).data?.final_eval ?? null : null;
+  const fc: any = finalConfig(finalEval);
   const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
@@ -546,6 +549,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     cohort: !def.cohort || def.cohort.is_default ? null : { name: def.cohort.name, starts_on: def.cohort.starts_on, ends_on: def.cohort.ends_on },
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
     baseline_submitted_at: baselineAt,
+    final_policy: { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
   };

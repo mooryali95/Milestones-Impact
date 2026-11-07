@@ -13,6 +13,7 @@ import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity from './Activities.jsx';
+import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
@@ -563,6 +564,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}
       {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
+      {approved && <HowEvaluated policy={me.final_policy} />}
       {me.final && (
         <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
           <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}

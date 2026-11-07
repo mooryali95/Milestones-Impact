@@ -108,17 +108,25 @@ export async function adminState(b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
   const s = await openSession(String(b.cohort_id));
   if (!s) {
-    const { data: topics } = await db.from('katon_topics').select('id, title_ar, status').neq('status', 'archived').order('sort');
+    // D17: القاعة على المنشور من الموضوعات وحده
+    const { data: topics } = await db.from('katon_topics').select('id, title_ar, status').eq('status', 'published').order('sort');
     return { success: true, session: null, topics: topics || [] };
   }
   if (Number(b.since) === s.version) return { success: true, unchanged: true, version: s.version };
   return buildState(s, { kind: 'admin' });
 }
 
+// D17: لا موضوع غير منشور في القاعة، فتحًا ولا تبديلًا (كانت القائمة والفتح يقبلان المسودة)
+async function requirePublished(topicId: string) {
+  const { data } = await db.from('katon_topics').select('status').eq('id', topicId).maybeSingle();
+  if (data?.status !== 'published') throw new Fail('القاعة على الموضوعات المنشورة وحدها. انشر الموضوع أولًا', 409, 'topic_unpublished');
+}
+
 export async function open(a: Actor, b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
   if (await openSession(String(b.cohort_id))) throw new Fail('للدفعة قاعة مفتوحة؛ أغلقها أولًا', 409);
   const mode = b.mode === 'self' ? 'self' : 'live';
+  if (isUuid(b.topic_id)) await requirePublished(String(b.topic_id));
   // رمز الدخول ستة أرقام عشوائية؛ تصادمه مع قاعة مفتوحة أخرى نادر ويُعاد السحب بدل الفشل
   for (let tries = 0; ; tries += 1) {
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -147,7 +155,10 @@ export async function step(a: Actor, b: Body) {
     if (!['enter', 'train', 'split', 'round', 'reveal'].includes(b.stage)) throw new Fail('مرحلة غير معروفة');
     patch.stage = b.stage;
   }
-  if ('topic_id' in b) { patch.topic_id = isUuid(b.topic_id) ? b.topic_id : null; patch.sentence_id = null; }
+  if ('topic_id' in b) {
+    if (isUuid(b.topic_id)) await requirePublished(String(b.topic_id));
+    patch.topic_id = isUuid(b.topic_id) ? b.topic_id : null; patch.sentence_id = null;
+  }
   if (isUuid(b.sentence_id)) patch.sentence_id = b.sentence_id;
   if (patch.stage === 'round' && !patch.sentence_id && !s.sentence_id && (patch.topic_id || s.topic_id)) {
     const { data } = await db.from('katon_sentences').select('id').eq('topic_id', patch.topic_id || s.topic_id).order('sort').limit(1);
