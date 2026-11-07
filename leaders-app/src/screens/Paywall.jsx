@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { levelOf } from '../labels.js';
 import { stepTitle } from '../Onboarding.jsx';
-import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
+import { KATON_ENABLED, LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -16,13 +16,15 @@ const COPY = {
     eyebrow: stepTitle('assessment'),   // اسم الخطوة من معالج البداية؛ العدّاد في الرأس فوق الشاشة
     title: 'القياس المبدئي',
     lead: 'قياس معاير في المعالم والأثر والقيادة، يحدد مستواك في كل بُعد ويبني عليه مسارك من بين مسارات البرنامج.',
-    points: ['نتيجة فورية بمستواك في الأبعاد الثلاثة', 'ملف تعريف يشرح نقاط قوتك وأولويتك', 'رسم رمزي يؤكد جدّية التسجيل'],
+    // D04: يُفصح قبل القياس أن نتيجته تحدد المسار لا السعر
+    points: ['نتيجة فورية بمستواك في الأبعاد الثلاثة', 'ملف تعريف يشرح نقاط قوتك وأولويتك', 'رسم رمزي يؤكد جدّية التسجيل', 'نتيجتك تحدد مسارك لا سعرك: رسم البرنامج واحد لكل المسارات، ويُدفع بعد اعتماد مسارك'],
     cta: 'ادفع وابدأ القياس',
   },
   program: {
     eyebrow: 'نتيجتك جاهزة',
     title: 'أكمل رحلتك في البرنامج',
-    lead: 'مسارك مبني على نتيجتك. أكمل البرنامج لتفتح رحلتك كاملة: الكتيب و«كاتون» والقاعة والمبادرة والتقييم والشهادة.',
+    // نص الباقة من KATON_ENABLED (D04 وD17): لا وعد بما لم يُفعَّل
+    lead: `اعتُمد مسارك بعد مراجعة المستشار. أكمل البرنامج لتفتح رحلتك كاملة: الكتيب${KATON_ENABLED ? ' و«كاتون»' : ''} والقاعة والمبادرة والتقييم والشهادة.`,
     points: ['رحلة تأهيل على مقاس مستواك', 'مشروع حقيقي من جهتك بمعالم وتقييم خبير', 'تقييم ختامي وشهادة موثقة'],
     cta: 'ادفع وأكمل البرنامج',
   },
@@ -95,6 +97,7 @@ export default function Paywall({ item, me, onUpdate }) {
             {me.profile.track?.title && <><span className="small muted">مسارك</span><b>{me.profile.track.title}</b></>}
           </div>
         )}
+        {item === 'program' && <PathSummary journey={me.journey} />}
         <p className="muted">{c.lead}</p>
         <ul className="pay-points">{c.points.map((x) => <li key={x}>{x}</li>)}</ul>
         <div className="pay-price"><b dir="ltr">{money(price, cur)}</b><span>دفعة واحدة · بطاقة أو Apple Pay</span></div>
@@ -133,4 +136,61 @@ export default function Paywall({ item, me, onUpdate }) {
       </div>
     </div>
   );
+}
+
+// المسار المعتمد من مصدره (D04): مراحل الرحلة وأبوابها ونماذجها ومدتها كما يبنيها الخادم لمستوى المشارك
+export function pathOf(journey = []) {
+  const items = journey.flatMap((s) => s.items || []);
+  const days = journey.reduce((t, s) => t + (Number(s.duration_days) || 0), 0);
+  return {
+    stages: journey.length,
+    readings: items.filter((i) => i.kind === 'reading').length,
+    models: items.filter((i) => i.kind === 'model').length,
+    weeks: days ? Math.max(1, Math.round(days / 7)) : null,
+    titles: journey.map((s) => s.title_ar).filter(Boolean),
+  };
+}
+
+function PathSummary({ journey }) {
+  const p = pathOf(journey);
+  if (!p.stages) return null;
+  return (
+    <div className="pay-path">
+      <span className="small muted">مسارك المعتمد</span>
+      <ul className="pay-points">
+        <li>{p.stages} مراحل: {p.titles.join('، ')}</li>
+        {p.readings > 0 && <li>{p.readings} من أنشطة القراءة في الكتيب بمستواك</li>}
+        {p.models > 0 && <li>{p.models} من النماذج التطبيقية يراجعها مستشارك</li>}
+        {p.weeks && <li>نحو {weeksAr(p.weeks)} من بداية دفعتك</li>}
+      </ul>
+    </div>
+  );
+}
+
+// بانتظار اعتماد المسار (D04): حالة مؤرخة بموعد معلن، ولا بوابة دفع قبل الاعتماد
+export function AwaitingApproval({ me }) {
+  const at = me.baseline_submitted_at ? new Date(me.baseline_submitted_at) : null;
+  const due = at ? businessDays(at, 2) : null;
+  const fmt = (d) => d.toLocaleDateString('ar-SA-u-ca-gregory', { weekday: 'long', day: 'numeric', month: 'long' });
+  return (
+    <div className="page narrow">
+      <div className="card stack pay-card" role="status">
+        <p className="eyebrow">نتيجتك جاهزة</p>
+        <h1>مسارك قيد الاعتماد</h1>
+        {me.profile && <div className="pay-result"><span className="small muted">مستواك العام المبدئي</span><b>{levelOf(me.profile.level).title}</b></div>}
+        <p className="muted">يراجع المستشار نتيجتك ويعتمد مسارك خلال يومي عمل{due ? `، أي قبل نهاية ${fmt(due)}` : ''}. يصلك بريد حين يُعتمد، فيه مسارك المعتمد بأبوابه ونماذجه، ومعه خطوة إكمال التسجيل إن لم ترعك جهة.</p>
+        {at && <p className="small muted">أنهيت القياس في {fmt(at)}.</p>}
+      </div>
+    </div>
+  );
+}
+
+export const weeksAr = (n) => (n === 1 ? 'أسبوع' : n === 2 ? 'أسبوعين' : n <= 10 ? `${n} أسابيع` : `${n} أسبوعًا`);
+
+// يوما عمل في السعودية: الجمعة والسبت عطلة
+export function businessDays(from, n) {
+  const d = new Date(from);
+  let left = n;
+  while (left > 0) { d.setDate(d.getDate() + 1); if (![5, 6].includes(d.getDay())) left -= 1; }
+  return d;
 }

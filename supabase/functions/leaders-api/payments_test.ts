@@ -1,7 +1,7 @@
 // الدفع: توقيع إشعار Creem (HMAC-SHA256) يُفحص قبل أي كتابة، ووضع المفتاح من بادئته
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { modeOf, webhook } = await import('./payments.ts');
+const { eventMode, modeOf, paidIssues, settleable, webhook } = await import('./payments.ts');
 const { Fail } = await import('./core.ts');
 
 const SECRET = 'whsec-test';
@@ -46,4 +46,24 @@ Deno.test('توقيع صحيح لكن الحمولة بلا معرّف أو غي
   Deno.env.delete('CREEM_WEBHOOK_SECRET'); Deno.env.set('CAREEM_WEBHOOK_SECRET', SECRET);
   const alias = await failOf(() => webhook(raw, headers(sig)));
   assertEquals(alias.code, 'payload');
+});
+
+// D04: إشعاران موقّعان مرفوضان قبل أي منح. الدفع لا يُسوّى إلا بمبلغ وعملة ومنتج ووضع تطابق ما طُلب،
+// ولا يُسوّى بعد استرداد (كان إشعار بمعرّف جديد بعد الاسترداد يعيد الحق).
+const pay = { id: 'pay_1', status: 'pending', amount_cents: 9900, currency: 'USD', product_id: 'prod_program', mode: 'live' };
+const paidObj = (o: Record<string, unknown> = {}) => ({ mode: 'prod', order: { amount: 9900, currency: 'USD', product: 'prod_program' }, ...o });
+
+Deno.test('مرفوض 1: مبلغ أقل أو عملة أو منتج أو وضع آخر، والغائب منها مخالفة', () => {
+  assertEquals(paidIssues(pay, paidObj()), []);
+  assertEquals(paidIssues(pay, paidObj({ order: { amount: 10500, currency: 'usd', product: 'prod_program' } })), []);   // الضريبة فوق السعر تمر
+  assertEquals(paidIssues(pay, paidObj({ order: { amount: 100, currency: 'USD', product: 'prod_program' } })), ['المبلغ 100 أقل من 9900']);
+  assertEquals(paidIssues(pay, paidObj({ order: { amount: 9900, currency: 'EUR', product: 'prod_program' } })), ['العملة EUR لا USD']);
+  assertEquals(paidIssues(pay, paidObj({ order: { amount: 9900, currency: 'USD', product: 'prod_assessment' } })), ['المنتج prod_assessment لا prod_program']);
+  assertEquals(paidIssues(pay, paidObj({ mode: 'sandbox' })), ['الوضع test لا live']);
+  assertEquals(paidIssues(pay, {}), ['بلا مبلغ', 'بلا عملة', 'بلا منتج']);
+  assertEquals([eventMode('prod'), eventMode('local'), eventMode(null)], ['live', 'test', null]);
+});
+
+Deno.test('مرفوض 2: لا تسوية لدفعة مستردة أو مسوّاة، والمعلّقة والمنتهية والفاشلة تُسوّى', () => {
+  assertEquals(['pending', 'expired', 'failed', 'paid', 'refunded'].map((status) => settleable({ status })), [true, true, true, false, false]);
 });

@@ -6,9 +6,9 @@
 // الحساب أولًا ثم الدفع: صفحة الدفع تُنشأ من الخادم باسم المشارك ومعرّفه، والحق لا يُكتب إلا من إشعار Creem
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
-import { audit, CONFIG, db, Fail, must } from './core.ts';
+import { alertOps, audit, CONFIG, db, Fail, must, payReminderMail, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { ITEMS, pinSponsor, settings, type Item } from './entitlements.ts';
+import { ITEMS, pinSponsor, programPaymentDue, settings, type Item } from './entitlements.ts';
 
 type Body = Record<string, any>;
 export { ITEMS, settings };
@@ -65,6 +65,8 @@ export async function checkout(p: any, b: Body) {
   const a: any = await access(p);
   if (a[item]) return { success: true, entitled: true };
   if (item === 'program' && !a.assessment) throw new Fail('ابدأ بالقياس المبدئي أولًا', 409);
+  // D04: يُدفع رسم البرنامج بعد اعتماد المسار، فيدفع المشارك وهو يعرف مساره
+  if (item === 'program' && !APPROVED.includes(p.status)) throw new Fail('يُفتح دفع البرنامج بعد اعتماد مسارك، خلال يومي عمل من إنهاء القياس', 409, 'pay_wait_approval');
   const s: any = await settings();
   const product = item === 'program' ? s.program_product : s.assessment_product;
   if (!product || !apiKey()) throw new Fail('الدفع غير متاح الآن، حاول لاحقًا', 409, 'pay_off');
@@ -95,9 +97,46 @@ export async function checkout(p: any, b: Body) {
   return { success: true, url: out.checkout_url };
 }
 
+// حالات المشارك بعد اعتماد مساره (D04)
+export const APPROVED = ['placed', 'enrolled', 'completed'];
+
+// ── إحكام إشعار الدفع (D04): لا يُمنح حق إلا بدفع يطابق ما طُلب، ولا يُعاد بعد استرداد ──
+// وضع Creem في الحمولة: prod للحي، وما سواه (test وsandbox وlocal) تجريبي
+export const eventMode = (m: unknown) => (m == null || m === '' ? null : ['prod', 'live', 'production'].includes(String(m)) ? 'live' : 'test');
+// ما يمنع تسوية الدفع: المبلغ أقل من المطلوب، أو عملة أو منتج أو وضع آخر. الحقول من حمولة checkout.completed
+// (object.order.amount وcurrency وproduct، وobject.product.id، وobject.mode). الغائب منها يُعد مخالفة لا تجاوزًا.
+export function paidIssues(pay: any, obj: any): string[] {
+  const issues: string[] = [];
+  const amount = Number(obj?.order?.amount);
+  if (!Number.isFinite(amount)) issues.push('بلا مبلغ');
+  else if (pay.amount_cents != null && amount < Number(pay.amount_cents)) issues.push(`المبلغ ${amount} أقل من ${pay.amount_cents}`);
+  const cur = String(obj?.order?.currency || '').toUpperCase();
+  if (!cur) issues.push('بلا عملة');
+  else if (pay.currency && cur !== String(pay.currency).toUpperCase()) issues.push(`العملة ${cur} لا ${pay.currency}`);
+  const product = obj?.order?.product || obj?.product?.id || null;
+  if (!product) issues.push('بلا منتج');
+  else if (pay.product_id && product !== pay.product_id) issues.push(`المنتج ${product} لا ${pay.product_id}`);
+  const mode = eventMode(obj?.mode);
+  if (mode && pay.mode && mode !== pay.mode) issues.push(`الوضع ${mode} لا ${pay.mode}`);
+  return issues;
+}
+// لا تسوية لدفعة مسوّاة أو مستردّة: إشعار مكرر بمعرّف جديد بعد الاسترداد كان يعيد الحق
+export const settleable = (pay: any) => ['pending', 'expired', 'failed'].includes(pay?.status);
+
 // ── منح الحق بعد دفع مؤكد (من الإشعار أو المطابقة) ──
 async function settle(pay: any, obj: any) {
-  if (pay.status === 'paid') return;
+  if (!settleable(pay)) {
+    if (pay.status === 'refunded') await audit('system', 'creem', 'payment.settle-refused', 'payments', pay.id, null, { reason: 'refunded' });
+    return false;
+  }
+  const issues = paidIssues(pay, obj);
+  if (issues.length) {
+    // معلّقة للمراجعة: لا حق، وتنبيه فوري، والقرار للإدارة (منح يدوي أو استرداد من Creem)
+    await db.from('payments').update({ note: `held: ${issues.join('؛ ')}`.slice(0, 300) }).eq('id', pay.id);
+    await audit('system', 'creem', 'payment.held', 'payments', pay.id, null, { issues });
+    await alertOps('payment_mismatch', { payment: pay.id, issues });
+    return false;
+  }
   const now = new Date().toISOString();
   await db.from('payments').update({
     status: 'paid', paid_at: now, order_id: obj?.order?.id || pay.order_id || null, customer_id: obj?.customer?.id || null,
@@ -108,6 +147,7 @@ async function settle(pay: any, obj: any) {
     if (error && error.code !== '23505') throw error;
     await audit('system', 'creem', 'payment.paid', 'payments', pay.id, null, { item: pay.item });
   }
+  return true;
 }
 
 async function revokeFor(pay: any, by: string) {
@@ -172,6 +212,32 @@ async function findPayment(obj: any) {
   return null;
 }
 
+// ── تذكير من اعتُمد مساره ولم يُكمل التسجيل: بعد 3 أيام ثم 7 (D04)، من المهمة الساعية ──
+// كل تذكير مرة واحدة، وأثره في audit_log (payment.reminder بيومه). يتوقف حين يدفع أو ترعاه جهة.
+export const REMINDER_DAYS = [3, 7];
+export async function payReminders(now = Date.now()) {
+  const s: any = await settings();
+  if (!s.enabled) return { sent: 0 };
+  const { data: people } = await db.from('participants').select('id, full_name, email').eq('status', 'placed').eq('is_demo', false).limit(200);
+  let sent = 0;
+  for (const p of people || []) {
+    const { data: pl } = await db.from('placements').select('approved_at').eq('participant_id', p.id).not('approved_at', 'is', null);
+    const approved = Math.max(...(pl || []).map((x: any) => Date.parse(x.approved_at)).filter(Number.isFinite));
+    if (!Number.isFinite(approved)) continue;
+    const days = Math.floor((now - approved) / 864e5);
+    const due = [...REMINDER_DAYS].reverse().find((d) => days >= d);
+    if (!due || !p.email) continue;
+    const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'payment.reminder').eq('entity_id', p.id).eq('after->>day', String(due));
+    if (count) continue;
+    if (!(await programPaymentDue(p.id))) continue;
+    await audit('system', 'payments', 'payment.reminder', 'participants', p.id, null, { day: due });
+    await sendMail(p.email, 'مسارك المعتمد بانتظارك', payReminderMail(p.full_name, days), [], { ref: `participant:${p.id}` }).catch((e) => console.error('pay reminder', e));
+    sent++;
+  }
+  return { sent };
+}
+
 // ════════════════════════════════════════════════════════════════
 // لوحة الإدارة: كل ما يلزم دون الرجوع إلى لوحة Creem
 // ════════════════════════════════════════════════════════════════
@@ -219,10 +285,19 @@ export async function adminOverview() {
       pending: live.filter((x: any) => x.status === 'pending').length, participants: participants ?? 0,
       grants: (ents || []).filter((e: any) => e.source === 'admin' && !e.revoked_at).length,
     },
+    // القمع (D04): أنهى القياس، ثم اعتُمد مساره، ثم أكمل التسجيل بدفع أو رعاية
+    funnel: await funnel(),
     daily, payments: pays || [], entitlements: ents || [], events: evs || [],
     sponsors: Object.entries(sponsored).map(([id, g]) => ({ id, name: g.name, participants: g.participants.size, cents: g.cents })).sort((a, b) => b.cents - a.cents),
     review,
   };
+}
+
+async function funnel() {
+  const count = async (statuses: string[]) => (await db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).in('status', statuses)).count ?? 0;
+  const [assessed, approved] = await Promise.all([count(['pending_approval', ...APPROVED]), count(APPROVED)]);
+  const { data: prog } = await db.from('entitlements').select('participant_id').eq('item', 'program').is('revoked_at', null);
+  return { assessed, approved, enrolled: new Set((prog || []).map((x: any) => x.participant_id)).size };
 }
 
 export async function adminSettings(a: Admin, b: Body) {
@@ -265,6 +340,8 @@ export async function adminReconcile(a: Admin, b: Body) {
   requireWrite(a);
   const pay = must(await db.from('payments').select('*').eq('id', String(b.id || '')).maybeSingle()) as any;
   if (!pay?.checkout_id) throw new Fail('لا صفحة دفع لهذه العملية', 404);
+  // المطابقة للمعلّق وحده (D04): المسوّى والمسترد والمنتهي قرارات قائمة لا تُعاد من هنا
+  if (pay.status !== 'pending') throw new Fail(`هذه العملية ${pay.status}، والمطابقة للمعلّقة وحدها`, 409, 'not_pending');
   const res = await fetch(`${apiBase()}/v1/checkouts?checkout_id=${encodeURIComponent(pay.checkout_id)}`, { headers: { 'x-api-key': apiKey() } });
   const out: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Fail(`تعذّر الاستعلام من Creem (${res.status})`, 502);
