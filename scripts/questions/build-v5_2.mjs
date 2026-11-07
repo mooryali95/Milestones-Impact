@@ -6,16 +6,19 @@
 // الترحيل يحدّث الصفوف المتغيرة وحدها (بالأداة والرمز) بحارس أن نصها الحالي نص v5.1، ويرفض التطبيق إن كان لأي
 // من الأداتين قياس مبدوء. يسبق ترحيل التفعيل 20261102100100 الذي يشترطه. لا يمس baseline-v4 ولا post-v2.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { EDITS } from './edits-v5_2.mjs';
 import { INSTRUMENTS } from './lengths.mjs';
 
-const ROOT = new URL('../../', import.meta.url);
-export const V51 = JSON.parse(readFileSync(new URL('supabase/content/questions/v5.1/items.json', ROOT), 'utf8'));
-const OUT_JSON = new URL('supabase/content/questions/v5.2/items.json', ROOT);
+// مسار بالملفات لا بعنوان URL نسبي، فيعمل تحت Node وvitest معًا
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+export const V51 = JSON.parse(readFileSync(join(ROOT, 'supabase/content/questions/v5.1/items.json'), 'utf8'));
+const OUT_JSON = join(ROOT, 'supabase/content/questions/v5.2/items.json');
 export const MIGRATION = '20261107190000_leaders_v5_2_balance';
-const OUT_SQL = new URL(`supabase/migrations/${MIGRATION}.sql`, ROOT);
+const OUT_SQL = join(ROOT, `supabase/migrations/${MIGRATION}.sql`);
 const POS = 'ABCD';
-const FIELDS = new Set([...POS, 'text_ar', 'chapter_key']);
+const FIELDS = new Set([...POS, 'text_ar', 'chapter_key', 'competency_ar']);
 const fail = (m) => { throw new Error(m); };
 
 export function applyBalance(rows, edits = EDITS) {
@@ -28,7 +31,7 @@ export function applyBalance(rows, edits = EDITS) {
     if (q.kind !== 'choice' && POS.split('').some((k) => e[k] != null)) fail(`${q.code}: تعديل الخيارات للاختيار فقط`);
     seen.add(q.code);
     const options = q.options.map((o, i) => (e[POS[i]] == null ? o : { ...o, label: e[POS[i]] }));
-    return { ...q, options, ...(e.text_ar ? { text_ar: e.text_ar } : {}), ...(e.chapter_key ? { chapter_key: e.chapter_key } : {}) };
+    return { ...q, options, ...(e.text_ar ? { text_ar: e.text_ar } : {}), ...(e.chapter_key ? { chapter_key: e.chapter_key } : {}), ...(e.competency_ar ? { competency_ar: e.competency_ar } : {}) };
   });
   for (const c of Object.keys(edits)) if (!seen.has(c)) fail(`EDITS/${c}: رمز غير موجود في v5.1`);
   return out;
@@ -56,11 +59,11 @@ export function balanceSql(before, after) {
   L.push('end $$;');
   L.push('');
   // الحارس بالمساواة الدلالية (نص الجذع وjsonb الخيارات): يُحدَّث الصف إن كان نص v5.1 أو نص v5.2 نفسه
-  const now = (q) => `(q.text_ar = ${lit(q.text_ar)} and q.options = ${lit(JSON.stringify(q.options))}::jsonb and q.chapter_key is not distinct from ${lit(q.chapter_key)})`;
+  const now = (q) => `(q.text_ar = ${lit(q.text_ar)} and q.options = ${lit(JSON.stringify(q.options))}::jsonb and q.chapter_key is not distinct from ${lit(q.chapter_key)} and q.competency_ar is not distinct from ${lit(q.competency_ar)})`;
   for (const q of changed) {
     const prev = before.find((x) => x.instrument === q.instrument && x.code === q.code);
     L.push(`-- ${q.instrument}/${q.code}`);
-    L.push(`update leaders.questions q set text_ar = ${lit(q.text_ar)}, options = ${lit(JSON.stringify(q.options))}::jsonb, chapter_key = ${lit(q.chapter_key)}`);
+    L.push(`update leaders.questions q set text_ar = ${lit(q.text_ar)}, options = ${lit(JSON.stringify(q.options))}::jsonb, chapter_key = ${lit(q.chapter_key)}, competency_ar = ${lit(q.competency_ar)}`);
     L.push(`  from leaders.instruments i where i.id = q.instrument_id and i.key = ${lit(q.instrument)} and q.code = ${lit(q.code)}`);
     L.push(`  and (${now(prev)} or ${now(q)});`);
   }
@@ -80,8 +83,8 @@ export function balanceSql(before, after) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const after = applyBalance(V51);
   const { sql, changed } = balanceSql(V51, after);
-  mkdirSync(new URL('supabase/content/questions/v5.2/', ROOT), { recursive: true });
+  mkdirSync(join(ROOT, 'supabase/content/questions/v5.2'), { recursive: true });
   writeFileSync(OUT_JSON, JSON.stringify(after, null, 2) + '\n');
   writeFileSync(OUT_SQL, sql);
-  console.log(`v5.2: ${after.length} صفًا، ${changed.length} متغيرًا → ${OUT_JSON.pathname}\n${OUT_SQL.pathname}`);
+  console.log(`v5.2: ${after.length} صفًا، ${changed.length} متغيرًا → ${OUT_JSON}\n${OUT_SQL}`);
 }

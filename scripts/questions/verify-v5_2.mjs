@@ -7,16 +7,16 @@
 // وأربعة خيارات مختلفة · المجيبون الآليون (الأطول، وثاني الأطول، والأقصر، والأوسط) لا يتجاوزون التخمين بأكثر
 // من 10 نقاط في أي خلية، ولا يُسكَّنون فوق التأسيسي في أي إطار، ولا يصنعون مكسبًا بين القبلي والبعدي.
 import { readFileSync } from 'node:fs';
-import { EDITS } from './edits-v5_2.mjs';
-import { applyBalance, V51 } from './build-v5_2.mjs';
+import { join } from 'node:path';
+import { EDITS, LENGTH_EXCEPTIONS } from './edits-v5_2.mjs';
+import { applyBalance, ROOT, V51 } from './build-v5_2.mjs';
 import { CHI2_CRIT_DF3, cells, gains, isChoice, KEY_MEDIAN_BAND, keyBand, keyRank, len, MAX_GAIN, MAX_RANK_SHARE, OVER_CHANCE, responders } from './lengths.mjs';
 
-const ROOT = new URL('../../', import.meta.url);
-const V52 = JSON.parse(readFileSync(new URL('supabase/content/questions/v5.2/items.json', ROOT), 'utf8'));
+const V52 = JSON.parse(readFileSync(join(ROOT, 'supabase/content/questions/v5.2/items.json'), 'utf8'));
 const ABSOLUTE = /(دائمًا|أبدًا|مطلقًا|إطلاقًا|حصرًا|فقط|تمامًا|بالكامل|لا شيء مما|كل ما سبق)/;
 const POS = 'ABCD';
 
-export function check(v51 = V51, v52 = V52, edits = EDITS) {
+export function check(v51 = V51, v52 = V52, edits = EDITS, exceptions = LENGTH_EXCEPTIONS) {
   const fails = [];
   const fail = (m) => fails.push(m);
   // 0) المودع مولَّد من v5.1 والطبقة لا غير
@@ -30,12 +30,19 @@ export function check(v51 = V51, v52 = V52, edits = EDITS) {
     POS.split('').forEach((k, j) => {
       if (e[k] == null) return;
       const was = len(a.options[j].label), now = len(b.options[j].label);
-      if (now < was * 0.6 || now > was * 1.4) fail(`${a.code}/${k}: الطول ${now} خارج ±40% من ${was}`);
+      // استثناء مسمى بتعليل في LENGTH_EXCEPTIONS وحده (مصطلح مفرد يقابله مصطلحه المركب المعتاد)، وتبقى قواعد D03 كلها عليه
+      if ((now < was * 0.6 || now > was * 1.4) && !exceptions[`${a.code}/${k}`]) fail(`${a.code}/${k}: الطول ${now} خارج ±40% من ${was}`);
       if (ABSOLUTE.test(b.options[j].label) && !ABSOLUTE.test(a.options[j].label)) fail(`${a.code}/${k}: قرينة مطلقة`);
       if (b.options[j].label === a.options[j].label) fail(`${a.code}/${k}: النص لم يتغير`);
     });
     if (new Set(b.options.map((o) => o.label.trim())).size !== b.options.length) fail(`${a.code}: خياران متطابقان`);
   });
+  for (const [k, why] of Object.entries(exceptions)) {
+    const [code, pos] = k.split('/');
+    if (!edits[code]?.[pos]) fail(`LENGTH_EXCEPTIONS/${k}: لا تعديل له`);
+    if (String(why || '').length < 30) fail(`LENGTH_EXCEPTIONS/${k}: التعليل أقصر من أن يُراجع`);
+  }
+  if (Object.keys(exceptions).length > 3) fail('LENGTH_EXCEPTIONS: أكثر من ثلاثة استثناءات تعني مراجعة القاعدة لا استثناءها');
   // 1) رتبة المفتاح لكل خلية
   for (const c of cells(v52)) {
     if (c.max_share > MAX_RANK_SHARE) fail(`${c.cell}: حصة رتبة ${Math.round(c.max_share * 100)}% (${c.counts.join('/')}) فوق 35%`);

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { applyBalance, balanceSql, MIGRATION, V51 } from '../../scripts/questions/build-v5_2.mjs';
-import { EDITS } from '../../scripts/questions/edits-v5_2.mjs';
+import { EDITS, LENGTH_EXCEPTIONS } from '../../scripts/questions/edits-v5_2.mjs';
 import { check } from '../../scripts/questions/verify-v5_2.mjs';
 import { cells, gains, keyRank, MAX_RANK_SHARE, order, responders, STRATEGIES } from '../../scripts/questions/lengths.mjs';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
@@ -49,6 +49,9 @@ describe('v5.2', () => {
     expect(V52.filter((q) => q.instrument === 'baseline-v5' || q.instrument === 'post-v3').some((q) => /عبور مشروط/.test(JSON.stringify(q)))).toBe(false);
     expect(V52.some((q) => /مانح/.test(JSON.stringify(q)))).toBe(false);
     for (const k of Object.keys(EDITS)) expect(V51.some((q) => q.code === k), k).toBe(true);
+    // استثناءات ±40% مسماة بتعليل وثلاثة على الأكثر، وقواعد D03 كلها عليها
+    expect(Object.keys(LENGTH_EXCEPTIONS).length).toBeLessThanOrEqual(3);
+    for (const why of Object.values(LENGTH_EXCEPTIONS)) expect(String(why).length).toBeGreaterThanOrEqual(30);
   });
 });
 
@@ -59,7 +62,7 @@ describe('الترحيل والتفعيل', () => {
     expect(balanceSql(V51, V52).sql).toBe(SQL);
     const act = read('supabase/migrations/20261102100100_leaders_activate_v5.sql');
     expect(act).toContain(`where name = '${MIGRATION}'`);
-    expect(act.indexOf(MIGRATION)).toBeLessThan(act.indexOf("update leaders.instruments set active"));
+    expect(act.indexOf(MIGRATION)).toBeLessThan(act.indexOf("\nupdate leaders.instruments set active"));
   });
   async function seed(rows) {
     const db = new PGlite();
@@ -68,10 +71,10 @@ describe('الترحيل والتفعيل', () => {
       create table leaders.instruments (id serial primary key, key text unique);
       insert into leaders.instruments (key) values ('baseline-v5'), ('post-v3');
       create table leaders.assessments (id serial primary key, instrument_id int);
-      create table leaders.questions (id serial primary key, instrument_id int, code text, text_ar text, options jsonb, chapter_key text);`);
+      create table leaders.questions (id serial primary key, instrument_id int, code text, text_ar text, options jsonb, chapter_key text, competency_ar text);`);
     for (const q of rows) {
-      await db.query('insert into leaders.questions (instrument_id, code, text_ar, options, chapter_key) select id, $2, $3, $4::jsonb, $5 from leaders.instruments where key = $1',
-        [q.instrument, q.code, q.text_ar, JSON.stringify(q.options), q.chapter_key]);
+      await db.query('insert into leaders.questions (instrument_id, code, text_ar, options, chapter_key, competency_ar) select id, $2, $3, $4::jsonb, $5, $6 from leaders.instruments where key = $1',
+        [q.instrument, q.code, q.text_ar, JSON.stringify(q.options), q.chapter_key, q.competency_ar]);
     }
     return db;
   }
@@ -81,11 +84,12 @@ describe('الترحيل والتفعيل', () => {
     const db = await seed(before);
     await db.exec(SQL);
     await db.exec(SQL);
-    const got = (await db.query('select i.key, q.code, q.text_ar, q.options, q.chapter_key from leaders.questions q join leaders.instruments i on i.id = q.instrument_id')).rows;
+    const got = (await db.query('select i.key, q.code, q.text_ar, q.options, q.chapter_key, q.competency_ar from leaders.questions q join leaders.instruments i on i.id = q.instrument_id')).rows;
     for (const c of changed) {
       const r = got.find((x) => x.key === c.instrument && x.code === c.code);
       expect(r.options).toEqual(c.options);
       expect(r.chapter_key).toBe(c.chapter_key);
+      expect(r.competency_ar).toBe(c.competency_ar);
     }
     expect((await db.query(`select 1 from leaders.schema_migrations where name = '${MIGRATION}'`)).rows).toHaveLength(1);
     if (changed.length) {
