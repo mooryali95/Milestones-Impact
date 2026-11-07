@@ -47,7 +47,7 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
   const cohort = base.program?.cohort || null;
   const extra = await around(base.participant, cohort?.id || null, opts.viewer || null);
   const needs = needsFor({ submissions: base.models || [], milestones: base.milestones || [], final: extra.final?.record || null, peerAnswers: extra.peer.pending_answers, sessions: [] });
-  const common = { ...extra, needs, cohort: cohort ? { id: cohort.id, name: cohort.name, starts_on: cohort.starts_on, ends_on: cohort.ends_on, supervision: cohort.supervision || 'peers_expert' } : null };
+  const common = { ...extra, needs, cohort: cohort ? { id: cohort.id, name: cohort.name, starts_on: cohort.starts_on, ends_on: cohort.ends_on, supervision: cohort.supervision || 'peers_expert', content_release: cohort.content_release ?? null } : null };
   if (audience === 'admin') return { ...base, ...common };
   // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية؛ والختامي والمعالم بكامل الصلاحية لمستشار الدفعة وحده
   const p = base.participant;

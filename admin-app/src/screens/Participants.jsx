@@ -326,7 +326,7 @@ function Person({ id, canWrite, onBack }) {
               : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
             <dt>الدفعة</dt><dd>
-              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}
+              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}
               {canWrite && cohorts?.length > 0 && (
                 <span className="la-row">
                   <select aria-label="تسجيل صريح في دفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>

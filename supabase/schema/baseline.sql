@@ -5,13 +5,15 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107170000_leaders_rater_verification
+-- as-of migration: 20261107180000_leaders_content_releases
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
 create schema if not exists leaders;
 
 create sequence if not exists leaders.consent_events_id_seq as bigint;
+
+create sequence if not exists leaders.content_patches_id_seq as bigint;
 
 create sequence if not exists leaders.mail_events_id_seq as bigint;
 
@@ -292,6 +294,7 @@ create table if not exists leaders.cohorts (
   advisor_expert_id uuid,
   hidden_requirements text[] default '{}'::text[] not null,
   supervision text default 'peers_expert'::text not null,
+  content_release text,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
@@ -352,6 +355,24 @@ create table if not exists leaders.content_items (
   constraint content_items_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.content_patches (
+  id bigint default nextval('leaders.content_patches_id_seq'::regclass) not null,
+  created_at timestamp with time zone default now() not null,
+  release_id text not null,
+  base_release_id text not null,
+  entity text not null,
+  entity_key text not null,
+  reason text not null,
+  signed_by text[] not null,
+  regrade text not null,
+  constraint content_patches_entity_check CHECK ((entity = ANY (ARRAY['handbook_modules'::text, 'lab_items'::text, 'questions'::text, 'learning_models'::text]))),
+  constraint content_patches_entity_key_check CHECK ((char_length(entity_key) <= 200)),
+  constraint content_patches_reason_check CHECK (((char_length(reason) >= 10) AND (char_length(reason) <= 2000))),
+  constraint content_patches_regrade_check CHECK ((regrade = ANY (ARRAY['rekey'::text, 'drop'::text, 'none'::text]))),
+  constraint content_patches_signed_by_check CHECK ((cardinality(signed_by) >= 2)),
+  constraint content_patches_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.content_progress (
   participant_id uuid not null,
   item_id uuid not null,
@@ -362,6 +383,22 @@ create table if not exists leaders.content_progress (
   completed_at timestamp with time zone,
   last_ping_at timestamp with time zone,
   constraint content_progress_pkey PRIMARY KEY (participant_id, item_id)
+);
+
+create table if not exists leaders.content_releases (
+  id text not null,
+  created_at timestamp with time zone default now() not null,
+  base_id text,
+  git_ref text,
+  sha256 text not null,
+  manifest jsonb not null,
+  signed_by text[] default '{}'::text[] not null,
+  note text,
+  constraint content_releases_git_ref_check CHECK (((git_ref IS NULL) OR (git_ref ~ '^[0-9a-f]{7,40}$'::text))),
+  constraint content_releases_id_check CHECK ((id ~ '^\d{4}\.\d{2}-[a-z0-9]+(\.\d+)?$'::text)),
+  constraint content_releases_note_check CHECK (((note IS NULL) OR (char_length(note) <= 2000))),
+  constraint content_releases_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
+  constraint content_releases_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.coordinator_challenges (
@@ -669,6 +706,9 @@ create table if not exists leaders.handbook_progress (
   quiz_score smallint default 0 not null,
   quiz_total smallint default 0 not null,
   reflection text,
+  content_release text,
+  quiz_fingerprint text,
+  quiz_answers jsonb,
   constraint handbook_progress_reflection_check CHECK (((reflection IS NULL) OR (char_length(reflection) <= 4000))),
   constraint handbook_progress_pkey PRIMARY KEY (participant_id, module_id)
 );
@@ -794,6 +834,7 @@ create table if not exists leaders.lab_attempts (
   started_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   finished_at timestamp with time zone,
+  content_release text,
   constraint lab_attempts_pct_check CHECK (((pct IS NULL) OR ((pct >= 0) AND (pct <= 100)))),
   constraint lab_attempts_pkey PRIMARY KEY (id)
 );
@@ -1976,6 +2017,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.cohorts add constraint cohorts_content_release_fkey FOREIGN KEY (content_release) REFERENCES leaders.content_releases(id);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.cohorts add constraint cohorts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
@@ -1988,11 +2033,23 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.content_patches add constraint content_patches_base_release_id_fkey FOREIGN KEY (base_release_id) REFERENCES leaders.content_releases(id);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.content_patches add constraint content_patches_release_id_fkey FOREIGN KEY (release_id) REFERENCES leaders.content_releases(id);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.content_progress add constraint content_progress_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.content_items(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.content_progress add constraint content_progress_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.content_releases add constraint content_releases_base_id_fkey FOREIGN KEY (base_id) REFERENCES leaders.content_releases(id);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -2747,7 +2804,11 @@ alter table leaders.consent_events enable row level security;
 
 alter table leaders.content_items enable row level security;
 
+alter table leaders.content_patches enable row level security;
+
 alter table leaders.content_progress enable row level security;
+
+alter table leaders.content_releases enable row level security;
 
 alter table leaders.coordinator_challenges enable row level security;
 
@@ -2929,12 +2990,34 @@ alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
 
+CREATE OR REPLACE FUNCTION leaders.cohort_release_pinned()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if old.content_release is not null and new.content_release is distinct from old.content_release
+     and coalesce(current_setting('leaders.content_patch', true), '') <> 'on' then
+    raise exception 'إصدار محتوى الدفعة «%» مثبت (D02)، ولا يتغير إلا بمسار الترقيع', old.name using errcode = '42501';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.consent_events_frozen()
  RETURNS trigger
  LANGUAGE plpgsql
 AS $function$
 begin
   raise exception 'سجل الموافقات لا يُعدَّل ولا يُحذف' using errcode = '42501';
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.content_ledger_frozen()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  raise exception 'سجل إصدارات المحتوى وتصويباته لا يُعدَّل ولا يُحذف' using errcode = '42501';
 end $function$
 ;
 
@@ -2951,6 +3034,20 @@ begin
     -- الكاتب لم يختم: ليس حفظًا من اللوحة
     new.updated_at := now();
     new.updated_by := 'db:' || current_user;
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.handbook_quiz_locked()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if new.quiz_md is distinct from old.quiz_md
+     and coalesce(current_setting('leaders.content_patch', true), '') <> 'on'
+     and exists (select 1 from leaders.handbook_progress hp where hp.module_id = old.id and hp.quiz_total > 0) then
+    raise exception 'اختبار الباب «%» مقفل بعد أول نتيجة (D02)، والتصويب بمسار الترقيع بتوقيعين', old.title_ar using errcode = '42501';
   end if;
   return new;
 end $function$
@@ -2998,6 +3095,20 @@ AS $function$
       where a.instrument_id = p_instrument and a.status = 'submitted' and r.dimension = agg.dimension)
   from agg;
 $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.lab_spec_locked()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if new.spec is distinct from old.spec
+     and coalesce(current_setting('leaders.content_patch', true), '') <> 'on'
+     and exists (select 1 from leaders.lab_attempts la where la.item_id = old.id and la.finished_at is not null) then
+    raise exception 'مواصفة الأداة «%» مقفلة بعد أول محاولة منتهية (D02)، والتصويب بمسار الترقيع بتوقيعين', old.title_ar using errcode = '42501';
+  end if;
+  return new;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.pin_sponsor_seat(p_participant uuid, p_org uuid, p_program_value integer, p_currency text, p_note text)
@@ -3648,6 +3759,8 @@ do $$ begin
   create policy service_only on public.totp_attempts as PERMISSIVE for ALL to public using (false);
 exception when duplicate_object then null; end $$;
 
+CREATE OR REPLACE TRIGGER cohort_release_pinned BEFORE UPDATE OF content_release ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.cohort_release_pinned();
+
 CREATE OR REPLACE TRIGGER cohorts_touch BEFORE UPDATE ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
 CREATE OR REPLACE TRIGGER consent_events_frozen BEFORE DELETE OR UPDATE ON leaders.consent_events FOR EACH ROW EXECUTE FUNCTION leaders.consent_events_frozen();
@@ -3655,6 +3768,10 @@ CREATE OR REPLACE TRIGGER consent_events_frozen BEFORE DELETE OR UPDATE ON leade
 CREATE OR REPLACE TRIGGER consent_events_no_truncate BEFORE TRUNCATE ON leaders.consent_events FOR EACH STATEMENT EXECUTE FUNCTION leaders.consent_events_frozen();
 
 CREATE OR REPLACE TRIGGER content_items_provenance BEFORE INSERT OR UPDATE ON leaders.content_items FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER content_patches_frozen BEFORE DELETE OR UPDATE ON leaders.content_patches FOR EACH ROW EXECUTE FUNCTION leaders.content_ledger_frozen();
+
+CREATE OR REPLACE TRIGGER content_releases_frozen BEFORE DELETE OR UPDATE ON leaders.content_releases FOR EACH ROW EXECUTE FUNCTION leaders.content_ledger_frozen();
 
 CREATE OR REPLACE TRIGGER enrollments_touch BEFORE UPDATE ON leaders.enrollments FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
@@ -3664,6 +3781,8 @@ CREATE OR REPLACE TRIGGER grid_cells_touch BEFORE UPDATE ON leaders.grid_cells F
 
 CREATE OR REPLACE TRIGGER handbook_modules_provenance BEFORE INSERT OR UPDATE ON leaders.handbook_modules FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
+CREATE OR REPLACE TRIGGER handbook_quiz_locked BEFORE UPDATE OF quiz_md ON leaders.handbook_modules FOR EACH ROW EXECUTE FUNCTION leaders.handbook_quiz_locked();
+
 CREATE OR REPLACE TRIGGER instruments_provenance BEFORE INSERT OR UPDATE ON leaders.instruments FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
 CREATE OR REPLACE TRIGGER journey_stages_provenance BEFORE INSERT OR UPDATE ON leaders.journey_stages FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
@@ -3671,6 +3790,8 @@ CREATE OR REPLACE TRIGGER journey_stages_provenance BEFORE INSERT OR UPDATE ON l
 CREATE OR REPLACE TRIGGER katon_sentences_provenance BEFORE INSERT OR UPDATE ON leaders.katon_sentences FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
 CREATE OR REPLACE TRIGGER katon_topics_provenance BEFORE INSERT OR UPDATE ON leaders.katon_topics FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER lab_spec_locked BEFORE UPDATE OF spec ON leaders.lab_items FOR EACH ROW EXECUTE FUNCTION leaders.lab_spec_locked();
 
 CREATE OR REPLACE TRIGGER learning_models_provenance BEFORE INSERT OR UPDATE ON leaders.learning_models FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 

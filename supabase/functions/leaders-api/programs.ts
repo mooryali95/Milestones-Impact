@@ -43,6 +43,17 @@ export async function cohortOf(p: { id?: string | null; organization_id?: string
   return pickCohort({ enrollments: enr.data || [], cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
 }
 
+// إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتيب فيه لحساب بند القراءة على إصدار الدفعة.
+// قبل قطع الإصدار أو قبل ترحيله: null، فيُحسب كل شيء على المحتوى الحي كما كان
+export async function releaseOf(p: { id?: string | null; organization_id?: string | null }) {
+  const { cohort } = await cohortOf(p);
+  const id = (cohort as any)?.content_release || null;
+  if (!id) return null;
+  const { data } = await db.from('content_releases').select('id, manifest').eq('id', id).maybeSingle();
+  const items = (data as any)?.manifest?.areas?.handbook_modules?.items;
+  return { id, modules: items ? Object.values(items).map((x: any) => x.id).filter(Boolean) as string[] : null };
+}
+
 // تعريف رحلة المشارك: المراحل والمتطلبات كما تسري عليه بعد تخصيص دفعته
 export async function journeyDefinition(p: { id?: string | null; organization_id?: string | null }) {
   const { cohort, via } = await cohortOf(p);
