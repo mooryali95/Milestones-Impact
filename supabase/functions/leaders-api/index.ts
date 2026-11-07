@@ -18,6 +18,7 @@
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { alertOps, clientIp, drainMailQueue, Fail, preflight, reply } from './core.ts';
+import { CONSENT_GATED, consentState } from './labels.js';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -76,6 +77,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
   'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(),
     pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+    policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
@@ -351,6 +353,10 @@ Deno.serve(async (req) => {
       // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
       const need = payGate(action, b);
       if (need) await Y.requireAccess(p, need);
+      // D18: ما يعتمد على أغراض النسخة الجوهرية وحدها ينتظر تجديد الموافقة، والرحلة نفسها لا تُحجب
+      if (CONSENT_GATED.includes(action) && 'consented_at' in p && consentState(p.consent_version, p.consented_at).needed) {
+        throw new Fail('جدّد موافقتك على سياسة الخصوصية المحدّثة أولًا، من الشريط أعلى رحلتك', 428, 'consent_renew');
+      }
       return reply(req, await participant[action](p, b, sessionId, ctx));
     }
     if (coordinator[action]) {

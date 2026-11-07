@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  audit, BUCKET, CONFIG, db, Fail, hash, humanGate, issuePass, mailGuard, must, networkGuard, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
+  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
@@ -14,7 +14,7 @@ import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, requirementFor } from './programs.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
-import { CONTACT_EMAIL, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
+import { CONTACT_EMAIL, consentState, POLICY_CHANGES, POLICY_MATERIAL_VERSION, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
@@ -170,10 +170,16 @@ async function setConsent(participantId: string, fields: Record<string, unknown>
   if (error && error.code !== '42703') console.error('consent:', error.message);
   return !error;
 }
-const recordConsent = (participantId: string) => setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
+// الموافقة في جدول المشارك (النسخة النافذة ووقتها) وسطر في السجل التاريخي لا يُكتب فوقه (D18)
+async function recordConsent(participantId: string, kind: 'accept' | 'renew' = 'accept') {
+  const ok = await setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
+  await logConsent('participant', participantId, kind);
+  return ok;
+}
 export async function consentAccept(p: any) {
-  await recordConsent(p.id);
-  await audit('participant', p.id, 'participant.consent', 'participants', p.id, null, { version: POLICY_VERSION });
+  const before = consentState(p.consent_version, p.consented_at);
+  await recordConsent(p.id, before.needed === 'renew' ? 'renew' : 'accept');
+  await audit('participant', p.id, 'participant.consent', 'participants', p.id, { version: p.consent_version ?? null }, { version: POLICY_VERSION });
   const fresh = must(await db.from('participants').select('*').eq('id', p.id).single());
   return { success: true, ...(await mePayload(fresh)) };
 }
@@ -182,8 +188,29 @@ export async function orgShareConsent(p: any, b: Body) {
   const share = b.share === true;
   const ok = await setConsent(p.id, { org_share_consented_at: share ? new Date().toISOString() : null });
   if (!ok) throw new Fail('تعذّر حفظ اختيارك الآن', 500, 'db_error');
+  await logConsent('participant', p.id, share ? 'org_share_on' : 'org_share_off');
   await audit('participant', p.id, share ? 'participant.org-share.on' : 'participant.org-share.off', 'participants', p.id);
   return { success: true, share };
+}
+
+// إخطار النسخة الجوهرية مرة واحدة لكل نسخة (D18): بريد لكل من وافق على نسخة أقدم، في طابور البريد الجماعي
+// فيمر بالعداد الموحد (D15). يُكتب في الطابور دفعة واحدة، ثم يُسجَّل في السجل فلا يتكرر. من المهمة الساعية.
+export async function policyNotify() {
+  const v = POLICY_MATERIAL_VERSION;
+  const { data: done, error } = await db.from('audit_log').select('id').eq('action', 'policy.notify').eq('entity_id', v).limit(1);
+  if (error) return { queued: 0, error: error.message };
+  if (done?.length) return { queued: 0, done: true };
+  const rows = (await all((f, t) => db.from('participants').select('id, email, full_name, consent_version, is_demo')
+    .not('consented_at', 'is', null).or(`consent_version.is.null,consent_version.lt.${v}`).order('id').range(f, t)))
+    .filter((r: any) => !r.is_demo && r.email && !isDemoMail(r.email));
+  const items = POLICY_CHANGES.find((c) => c.version === v)?.items || [];
+  const subject = 'حدّثنا سياسة الخصوصية وشروط برنامج القادة';
+  if (rows.length) {
+    const { error: qe } = await db.from('mail_queue').insert(rows.map((r: any) => ({ to_email: r.email, subject, html: policyChangeMail(r.full_name, v, items), ref: `participant:${r.id}`, kind: 'bulk' })));
+    if (qe) return { queued: 0, error: qe.message };
+  }
+  await audit('system', null, 'policy.notify', 'policy', v, null, { version: v, recipients: rows.length });
+  return { queued: rows.length };
 }
 
 // ── 1. بدء الدخول أو التسجيل ──
@@ -518,6 +545,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
       // null = لم يوافق بعد (يُعرض الإشعار)؛ غياب الحقل = العمود لم يُرحَّل بعد
       consented_at: 'consented_at' in p ? p.consented_at : undefined,
+      // D18: لم يوافق قط، أو وافق قبل آخر نسخة جوهرية (يرى ما تغيّر)، أو صدرت نسخة غير جوهرية (شريط)
+      consent: 'consented_at' in p ? consentState(p.consent_version, p.consented_at) : undefined,
       org_share: 'org_share_consented_at' in p ? !!p.org_share_consented_at : undefined,
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار

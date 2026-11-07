@@ -5,6 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
+import { POLICY_DIGEST } from './policy-digest.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -150,6 +151,15 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
   }
 }
 
+// سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق. متسامح قبل ترحيله (42P01)
+// فلا تتعطل الموافقة نفسها، وأي خطأ آخر يُسجَّل ولا يرمي: الموافقة مسجلة في جدول صاحبها أولًا.
+export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater';
+export async function logConsent(subject: ConsentSubject, subjectId: string, kind: 'accept' | 'renew' | 'org_share_on' | 'org_share_off') {
+  const { error } = await db.from('consent_events').insert({ subject, subject_id: subjectId, kind, version: POLICY_DIGEST.version, text_digest: POLICY_DIGEST.sha256 });
+  if (error && error.code !== '42P01' && error.code !== 'PGRST205') console.error('consent_events insert:', error.message);
+  return !error;
+}
+
 // ── البريد ──
 // القالب من المصدر الموحّد (_shared/mail.ts)؛ هنا رسائل البرنامج فقط
 export { mailButton };
@@ -263,6 +273,15 @@ export function payReminderMail(name: string, days: number) {
     mailText(`${hello(name)} اعتُمد مسارك قبل ${days} أيام، وبقي إكمال التسجيل لتُفتح رحلتك. إن كان لديك سؤال عن المسار أو الرسم فرُدّ على هذه الرسالة.`)
     + mailButton(CONFIG.appUrl, 'أكمل التسجيل'),
     'خطوة واحدة تفتح رحلتك');
+}
+
+// إخطار النسخة الجوهرية (D18): ما تغيّر بنصه من POLICY_CHANGES، ورابط السجل والسياسة، وأن الموافقة تُطلب عند الدخول
+export function policyChangeMail(name: string, version: string, items: readonly string[]) {
+  return shell('journey', 'حدّثنا سياسة الخصوصية وشروط البرنامج',
+    mailText(`${hello(name)} نشرنا النسخة ${esc(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
+    + items.map((t) => mailText(`• ${esc(t)}`)).join('')
+    + mailButton(`${CONFIG.appUrl}/legal/changes`, 'اقرأ سجل التغييرات'),
+    'ما تغيّر في سياسة الخصوصية والشروط');
 }
 
 export function certificateMail(name: string, url: string) {

@@ -13,7 +13,7 @@ describe('الموافقة', () => {
   const participant = api('participant.ts');
   it('نسخة السياسة بصيغة تاريخ، وتُسجَّل مع التسجيل بالبريد وبـGoogle وعند القبول اللاحق', () => {
     expect(POLICY_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(participant.match(/await recordConsent\(p\.id\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(participant.match(/await recordConsent\(p\.id[,)]/g)?.length).toBeGreaterThanOrEqual(3);
     expect(participant).toMatch(/consent_version: POLICY_VERSION/);
     expect(api('index.ts')).toMatch(/'consent\.accept': \(p\) => P\.consentAccept\(p\)/);
   });
@@ -25,7 +25,7 @@ describe('الموافقة', () => {
     const signIn = read('leaders-app/src/screens/SignIn.jsx');
     expect(signIn.match(/<ConsentNote action=/g)?.length).toBe(2);
     expect(signIn).toMatch(/LEGAL_PATH\.privacy/);
-    expect(read('leaders-app/src/App.jsx')).toMatch(/me\.participant\.consented_at === null && !me\.participant\.is_demo\) screen = <Consent/);
+    expect(read('leaders-app/src/App.jsx')).toMatch(/consentNeed === 'first' && !me\.participant\.is_demo\) screen = <Consent/);
   });
 });
 

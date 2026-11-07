@@ -76,7 +76,8 @@ describe('تطبيق القادة: التحليلات بلا سكربت مضمّ
 
   it('سياسة الخصوصية تذكر الإحصاءات، ونسختها رُفعت مع النص', () => {
     expect(read('leaders-app/src/screens/Legal.jsx')).toContain('إحصاءات زيارات مجمّعة لا تتعرّف عليك ولا تستعمل كعكات');
-    expect(read('supabase/functions/leaders-api/labels.js')).toContain("POLICY_VERSION = '2026-11-06'");
+    // النسخة صارت من سجل النسخ (D18)، وأي تغيير في النص يحتاج نسخة جديدة بحارس البصمة (consent-policy.test.js)
+    expect(read('supabase/functions/leaders-api/labels.js')).toMatch(/\{ version: '2026-11-06', material: true,/);
   });
 });
 
