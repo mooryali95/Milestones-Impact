@@ -6,11 +6,13 @@
 -- 118 صفًا يتغير، والدرجات ومواضع المفاتيح ثابتة. الحارس: لا قياس مبدوء على الأداتين، ونص كل صف
 -- المتغير هو نص v5.1 (بصمة md5 للجذع والخيارات)، وإلا يُرفض الترحيل كله. آمن لإعادة التشغيل.
 do $$ begin
-  if exists (select 1 from leaders.assessments a join leaders.instruments i on i.id = a.instrument_id where i.key in ('baseline-v5', 'post-v3')) then
-    raise exception 'v5.2: لأداتي v5 قياسات مبدوءة؛ لا تُعدَّل فقراتهما بعد ذلك';
-  end if;
-  if not exists (select 1 from leaders.schema_migrations where name = '20261105150000_leaders_v5_1_pre_activation') then
-    raise exception 'v5.2: طبّق 20261105150000_leaders_v5_1_pre_activation.sql أولًا';
+  if exists (select 1 from leaders.questions q join leaders.instruments i on i.id = q.instrument_id where i.key in ('baseline-v5', 'post-v3')) then
+    if exists (select 1 from leaders.assessments a join leaders.instruments i on i.id = a.instrument_id where i.key in ('baseline-v5', 'post-v3')) then
+      raise exception 'v5.2: لأداتي v5 قياسات مبدوءة؛ لا تُعدَّل فقراتهما بعد ذلك';
+    end if;
+    if not exists (select 1 from leaders.schema_migrations where name = '20261105150000_leaders_v5_1_pre_activation') then
+      raise exception 'v5.2: طبّق 20261105150000_leaders_v5_1_pre_activation.sql أولًا';
+    end if;
   end if;
 end $$;
 
@@ -608,7 +610,7 @@ do $$ declare n int; begin
     or (i.key = 'post-v3' and q.code = 'L-S12B' and (q.text_ar = 'تختار قائدًا لبرنامج تحول من بين ثلاثة مرشحين متقاربين في الخبرة التقنية. ما المعيار الحاسم وفق مثلث المواهب؟' and q.options = '[{"label":"توازن طرق العمل والمهارات القوية وفطنة الأعمال","score":4},{"label":"أقوى علاقات شخصية مع قيادات الجهة العليا وشركائها","score":2},{"label":"أعلى شهادة مهنية معتمدة دوليًا في إدارة المشاريع","score":1},{"label":"أطول خبرة عملية في أدوات الجدولة وتخطيط الموارد","score":0}]'::jsonb and q.chapter_key is not distinct from 'ch1' and q.competency_ar is not distinct from 'توازن جدارات القائد'))
     or (i.key = 'post-v3' and q.code = 'L-S13' and (q.text_ar = 'سلّمت منصة رقمية للجهة المشغلة بمحضر موثق. متى تنتهي رقابتك على هذه العهدة؟' and q.options = '[{"label":"عند انتهاء فترة التشغيل المصاحب المتفق عليها","score":2},{"label":"بعد أسبوعين من التشغيل دون بلاغات أعطال","score":1},{"label":"عند توقيع الطرفين المحضر واعتماده رسميًا","score":0},{"label":"عندما يثبت استقلال الجهة المشغلة بها فعلًا","score":4}]'::jsonb and q.chapter_key is not distinct from 'ch3' and q.competency_ar is not distinct from 'الرقابة بعد التسليم'))
   ;
-  if n <> 118 then
+  if exists (select 1 from leaders.questions q join leaders.instruments i on i.id = q.instrument_id where i.key in ('baseline-v5', 'post-v3')) and n <> 118 then
     raise exception 'v5.2: % من % صفًا طابق نص v5.2 بعد التحديث؛ صف لم يطابق نص v5.1، راجع قبل التفعيل', n, 118;
   end if;
 end $$;

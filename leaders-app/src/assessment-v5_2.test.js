@@ -72,10 +72,11 @@ describe('الترحيل والتفعيل', () => {
       insert into leaders.instruments (key) values ('baseline-v5'), ('post-v3');
       create table leaders.assessments (id serial primary key, instrument_id int);
       create table leaders.questions (id serial primary key, instrument_id int, code text, text_ar text, options jsonb, chapter_key text, competency_ar text);`);
-    for (const q of rows) {
-      await db.query('insert into leaders.questions (instrument_id, code, text_ar, options, chapter_key, competency_ar) select id, $2, $3, $4::jsonb, $5, $6 from leaders.instruments where key = $1',
-        [q.instrument, q.code, q.text_ar, JSON.stringify(q.options), q.chapter_key, q.competency_ar]);
-    }
+    // دفعة واحدة بدل صف صف: الاختبار يبني ثلاث قواعد
+    const lit = (v) => (v == null ? 'null' : `'${String(v).replace(/'/g, "''")}'`);
+    if (rows.length) await db.exec(`insert into leaders.questions (instrument_id, code, text_ar, options, chapter_key, competency_ar)
+      select i.id, v.code, v.text_ar, v.options::jsonb, v.chapter_key, v.competency_ar from (values ${rows.map((q) => `(${lit(q.instrument)}, ${lit(q.code)}, ${lit(q.text_ar)}, ${lit(JSON.stringify(q.options))}, ${lit(q.chapter_key)}, ${lit(q.competency_ar)})`).join(', ')})
+      as v(instrument, code, text_ar, options, chapter_key, competency_ar) join leaders.instruments i on i.key = v.instrument`);
     return db;
   }
   it('يحدّث ما تغيّر، وإعادته آمنة، ويرفض إن خالف صف نص v5.1، وإن بدأ قياس', async () => {
@@ -99,5 +100,10 @@ describe('الترحيل والتفعيل', () => {
     const started = await seed(before);
     await started.exec("insert into leaders.assessments (instrument_id) select id from leaders.instruments where key = 'baseline-v5'");
     await expect(started.exec(SQL)).rejects.toThrow(/قياسات مبدوءة/);
-  });
+    // قاعدة بلا فقرات الأداتين (لقطة المخطط): بلا أثر، ويُسجَّل الترحيل
+    const empty = await seed([]);
+    await empty.exec('delete from leaders.schema_migrations');
+    await empty.exec(SQL);
+    expect((await empty.query(`select 1 from leaders.schema_migrations where name = '${MIGRATION}'`)).rows).toHaveLength(1);
+  }, 30000);
 });

@@ -49,12 +49,16 @@ export function balanceSql(before, after) {
   L.push('-- مولَّد بـ scripts/questions/build-v5_2.mjs من supabase/content/questions/v5.1 وscripts/questions/edits-v5_2.mjs');
   L.push(`-- ${changed.length} صفًا يتغير، والدرجات ومواضع المفاتيح ثابتة. الحارس: لا قياس مبدوء على الأداتين، ونص كل صف`);
   L.push('-- المتغير هو نص v5.1 (بصمة md5 للجذع والخيارات)، وإلا يُرفض الترحيل كله. آمن لإعادة التشغيل.');
+  // الحراس على قاعدة فيها فقرات الأداتين (الإنتاج)؛ وفي قاعدة بلا بيانات (لقطة المخطط المحلية) الترحيل بلا أثر
+  const HAS = "exists (select 1 from leaders.questions q join leaders.instruments i on i.id = q.instrument_id where i.key in ('baseline-v5', 'post-v3'))";
   L.push('do $$ begin');
-  L.push("  if exists (select 1 from leaders.assessments a join leaders.instruments i on i.id = a.instrument_id where i.key in ('baseline-v5', 'post-v3')) then");
-  L.push("    raise exception 'v5.2: لأداتي v5 قياسات مبدوءة؛ لا تُعدَّل فقراتهما بعد ذلك';");
-  L.push('  end if;');
-  L.push("  if not exists (select 1 from leaders.schema_migrations where name = '20261105150000_leaders_v5_1_pre_activation') then");
-  L.push("    raise exception 'v5.2: طبّق 20261105150000_leaders_v5_1_pre_activation.sql أولًا';");
+  L.push(`  if ${HAS} then`);
+  L.push("    if exists (select 1 from leaders.assessments a join leaders.instruments i on i.id = a.instrument_id where i.key in ('baseline-v5', 'post-v3')) then");
+  L.push("      raise exception 'v5.2: لأداتي v5 قياسات مبدوءة؛ لا تُعدَّل فقراتهما بعد ذلك';");
+  L.push('    end if;');
+  L.push("    if not exists (select 1 from leaders.schema_migrations where name = '20261105150000_leaders_v5_1_pre_activation') then");
+  L.push("      raise exception 'v5.2: طبّق 20261105150000_leaders_v5_1_pre_activation.sql أولًا';");
+  L.push('    end if;');
   L.push('  end if;');
   L.push('end $$;');
   L.push('');
@@ -72,7 +76,7 @@ export function balanceSql(before, after) {
   L.push('  select count(*) into n from leaders.questions q join leaders.instruments i on i.id = q.instrument_id where false');
   for (const q of changed) L.push(`    or (i.key = ${lit(q.instrument)} and q.code = ${lit(q.code)} and ${now(q)})`);
   L.push('  ;');
-  L.push(`  if n <> ${changed.length} then`);
+  L.push(`  if ${HAS} and n <> ${changed.length} then`);
   L.push("    raise exception 'v5.2: % من % صفًا طابق نص v5.2 بعد التحديث؛ صف لم يطابق نص v5.1، راجع قبل التفعيل', n, " + changed.length + ';');
   L.push('  end if;');
   L.push('end $$;');
