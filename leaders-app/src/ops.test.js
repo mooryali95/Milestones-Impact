@@ -89,8 +89,11 @@ describe('بوابة النشر', () => {
   });
   it('المسبار والتمرين موجودان', () => {
     expect(read('.github/workflows/probe.yml')).toMatch(/system\.ping/);
-    expect(read('.github/workflows/restore-drill.yml')).toMatch(/pg_restore[\s\S]*leaders\.participants/);
-    expect(read('.github/workflows/backup.yml')).toMatch(/backup-storage\.mjs/);
+    // النسخ والتمرين في سكربتين يشغّلهما السيران والمالك من جهازه (D09، backups-offsite.test.js)
+    expect(read('.github/workflows/restore-drill.yml')).toMatch(/scripts\/ops\/restore-drill\.sh/);
+    expect(read('scripts/ops/restore-drill.sh')).toMatch(/pg_restore[\s\S]*Object\.keys\(m\.rows\)/);
+    expect(read('scripts/ops/backup.sh')).toMatch(/leaders\.participants[\s\S]*backup-storage\.mjs/);
+    expect(read('.github/workflows/backup.yml')).toMatch(/scripts\/ops\/backup\.sh/);
     // الترحيلات على الحية بقرار المالك: سير يدوي بالأسماء، لا يُشغَّل بغير dispatch
     const mig = read('.github/workflows/migrate.yml');
     expect(mig).toMatch(/workflow_dispatch/);

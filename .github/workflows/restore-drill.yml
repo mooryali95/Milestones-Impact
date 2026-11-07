@@ -1,11 +1,14 @@
 name: Backup restore drill
 
-# نسخة احتياطية لم تُستعد قط ليست نسخة. شهريًا (أو يدويًا) يُنزَّل آخر ملف من
-# backup.yml ويُفك تشفيره ويُستعاد في قاعدة مؤقتة داخل العامل، ثم تُعدّ الصفوف
-# الأساسية. يفعل شيئًا فقط إن وُجد السر BACKUP_PASSPHRASE.
+# نسخة لم تُستعد قط ليست نسخة (D09).
+# - r2: كل يوم، فحص النسخة في R2 بلا فك تشفير: عمرها دون 36 ساعة، وكل ملف في البيان بحجمه، والتشفير بالمفتاح العام.
+# - legacy: شهريًا وما دام التشفير متماثلًا (لا BACKUP_PUBLIC_KEY)، استعادة كاملة صارمة لآخر نسخة في قاعدة مؤقتة.
+# التمرين الكامل بالمفتاح العام يجريه المالك شهريًا من جهازه (scripts/ops/restore-drill.sh)، لأن المفتاح الخاص
+# لا يكون في GitHub. ويلزم تمرين ناجح قبل استقبال بيانات الدفعة.
 
 on:
   schedule:
+    - cron: '47 6 * * *'
     - cron: '17 3 2 * *'
   workflow_dispatch:
 
@@ -14,12 +17,36 @@ permissions:
   actions: read
 
 jobs:
-  restore:
+  r2:
     runs-on: ubuntu-latest
     env:
-      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - name: Skip without R2
+        id: gate
+        run: |
+          if [ -z "$R2_BUCKET" ]; then echo "::notice::R2 is not configured; nothing to check."; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: '20'
+      - name: The latest backup is fresh, complete and encrypted with the public key
+        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/ops/backup-check.mjs --max-hours=36
+
+  legacy:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 2 * *'
+    runs-on: ubuntu-latest
+    env:
+      DRILL_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
       GH_TOKEN: ${{ github.token }}
-      PGPASSWORD: drill
+      DRILL_DB_URL: postgresql://postgres:drill@localhost:5432/postgres
     services:
       postgres:
         image: postgres:17
@@ -33,41 +60,28 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - name: Skip without passphrase
+      - name: Skip unless the backups are still symmetric
         id: gate
         run: |
-          if [ -z "$PASSPHRASE" ]; then
-            echo "::notice::BACKUP_PASSPHRASE is not set; drill skipped."
+          if [ -n "$PUBLIC_KEY" ] || [ -z "$DRILL_PASSPHRASE" ]; then
+            echo "::notice::Backups use the public key (or no passphrase is set); the full drill runs on the owner's machine (scripts/ops/restore-drill.sh)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Download the latest nightly dump
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: '20'
+      - name: Download the latest nightly backup
         if: steps.gate.outputs.skip != 'true'
         run: |
           run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow backup.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')
           test -n "$run_id"
-          echo "backup run $run_id"
-          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --dir dump
-          # كل أداة تُنزَّل في مجلد باسمها (leaders-YYYY-MM-DD.dump.gpg/…)، فالبحث عن الملف لا المجلد
-          f=$(find dump -type f -name 'leaders-*.dump.gpg' | head -1)
-          test -n "$f"
-          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASSPHRASE" -d -o db.dump "$f"
-          test -s db.dump
-          ls -l db.dump
-      - name: Restore into the scratch database
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --dir dl
+          dir=$(dirname "$(find dl -type f -name 'manifest-*.json' | head -1)")
+          test -n "$dir"
+          echo "DIR=$dir" >> "$GITHUB_ENV"
+      - name: Strict restore and row counts against the manifest
         if: steps.gate.outputs.skip != 'true'
-        run: |
-          # أدوار Supabase التي تشير إليها السياسات، حتى لا تفشل إعادة إنشائها
-          docker run --rm --network host -e PGPASSWORD postgres:17 psql -h localhost -U postgres -v ON_ERROR_STOP=1 \
-            -c "create role anon nologin; create role authenticated nologin; create role service_role nologin;"
-          docker run --rm --network host -e PGPASSWORD -v "$PWD/db.dump:/db.dump:ro" postgres:17 \
-            pg_restore -h localhost -U postgres -d postgres --no-owner --no-privileges /db.dump \
-            || echo "::warning::pg_restore reported errors (objects that depend on Supabase extensions); the row counts below are the real check"
-      - name: Count the rows that matter
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          docker run --rm --network host -e PGPASSWORD postgres:17 psql -h localhost -U postgres -v ON_ERROR_STOP=1 -At \
-            -c "select 'participants=' || count(*) from leaders.participants" \
-            -c "select 'placements=' || count(*) from leaders.placements" \
-            -c "select 'capstones=' || count(*) from leaders.capstones" \
-            -c "select 'certificates=' || count(*) from leaders.certificates" \
-            -c "select 'contact_requests=' || count(*) from public.contact_requests"
+        run: bash scripts/ops/restore-drill.sh "$DIR"

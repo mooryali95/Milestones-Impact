@@ -10,7 +10,7 @@
 | `leaders.sunkvalue.com` | `leaders-app/` (React + Vite) | `leaders/` (ناتج البناء مُودع) | `mi-leaders` | `npm run leaders:build`؛ CI يرفض اختلاف `leaders/` عن مصدره |
 | `admin.sunkvalue.com` | `admin-app/` (React + Vite) | `admin/` (ناتج البناء مُودع) | `mi-admin` | `npm run admin:build`؛ CI يرفض اختلاف `admin/` عن مصدره |
 | `matrix.sunkvalue.com` | الجذر (`src/`، `index.html`، `public/`) | `build/` (لا يُودع) | `mi-matrix` | `npm run build` على Cloudflare |
-| SSPDF | `SSPDF/` (Vite مستقل) | `SSPDF/dist` | `mi-sspdf` | خارج CI؛ قرار صيانته أو تجميده للمالك |
+| SSPDF (مجمّدة) | `SSPDF/` | لا شيء | `mi-sspdf` يُوقف | مجمّدة بقرار D13: `SSPDF/FROZEN.md` |
 
 ## الخلفية
 

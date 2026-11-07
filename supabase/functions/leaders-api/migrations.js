@@ -84,4 +84,5 @@ export const MIGRATIONS = [
   '20261105160000_leaders_katon_cbm',
   '20261105170000_leaders_peer_requests',
   '20261107100000_leaders_content_provenance',
+  '20261107110000_sspdf_freeze',
 ];

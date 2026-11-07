@@ -1,0 +1,15 @@
+# مراقب حداثة النسخ الاحتياطية (D09). النشر من جهاز المالك: README.md في هذا المجلد.
+name = "mi-backup-monitor"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[triggers]
+crons = ["17 * * * *"]
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "mi-backups"
+
+[vars]
+ALERT_FROM = "Milestone Impact <alerts@sunkvalue.com>"
+# ALERT_TO وRESEND_API_KEY أسرار: wrangler secret put ALERT_TO ثم wrangler secret put RESEND_API_KEY
