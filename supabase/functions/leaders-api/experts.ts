@@ -6,7 +6,7 @@
 import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { audit, CONFIG, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
+import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
@@ -502,10 +502,19 @@ export async function portalLogout(sessionId: string) {
 }
 
 // كل ما يراه الخبير في لوحته، من مصادره نفسها (expert_requests وcoaching_sessions وexpert_ratings)
+// سطر الموافقة للخبير (D18): يعالج بيانات مشاركيه بموجب السياسة النافذة
+export async function portalConsent(e: any) {
+  await logConsent('expert', e.id, 'accept');
+  await audit('system', `expert:${e.email}`, 'expert.consent', 'experts', e.id);
+  return portalDashboard(e);
+}
+
 export async function portalDashboard(e: any) {
   // قبل الاعتماد: الملف وحده (يستكمله المدعو، ويراجعه من قدّم طلبه)
   const switch_to = (await rolesOf(e.email)).filter((d) => d !== 'expert');
-  if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
+  // D18: سطر الموافقة عند أول دخول، قبل أي بيانات مشاركين
+  const consent_needed = await consentNeeded('expert', e.id);
+  if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, consent_needed, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
@@ -530,7 +539,7 @@ export async function portalDashboard(e: any) {
   const stats = expertStats(sessions || [], null);
   const advisorCohorts = ((await db.from('cohorts').select('*').eq('advisor_expert_id', e.id).neq('status', 'closed')).data || []).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision || 'peers_expert' }));
   return {
-    success: true, switch_to,
+    success: true, switch_to, consent_needed,
     // دفعاته بصفته مستشارها: للقاعة من بوابته (المرحلة 9)
     advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),

@@ -6,11 +6,11 @@
 import { journeyFor } from './participant.ts';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
-  allFor, audit, CONFIG, coordinatorInviteMail, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
+  allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
 import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
-import { adminReport as impactReport } from './impact.ts';
+import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
 
@@ -84,7 +84,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
   }));
   await db.from('org_coordinators').update({ last_login_at: new Date().toISOString(), status: 'active' }).eq('id', c.id);
   await audit('coordinator', c.email, 'coordinator.login', 'org_coordinators', c.id);
-  return { success: true, token, ...(await mePayload(c)), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org') };
+  return { success: true, token, ...(await mePayload(c)), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org'), consent_needed: await consentNeeded('coordinator', c.id) };
 }
 
 // ── 2. الجلسة ──
@@ -103,7 +103,22 @@ const mePayload = (c: any) => ({
   coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
   org: { name: c.organizations.name },
 });
-export const me = async (c: any) => ({ success: true, ...mePayload(c), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org') });
+export const me = async (c: any) => ({ success: true, ...mePayload(c), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org'),
+  consent_needed: await consentNeeded('coordinator', c.id) });
+// سطر الموافقة عند أول دخول (D18): المنسق يطّلع على بيانات مشاركي جهته بموجب السياسة النافذة
+export async function consent(c: any) {
+  await logConsent('coordinator', c.id, 'accept');
+  await audit('coordinator', c.email, 'coordinator.consent', 'org_coordinators', c.id);
+  return me(c);
+}
+// D19: المنسق يؤكد مقيّمي مشاركي جهته إن كان يرى قائمتهم
+export async function raterConfirm(c: any, b: Record<string, any>) {
+  if (!coordPermissions(c.permissions).list) throw new Fail('تأكيد المقيّمين لمن يرى قائمة المشاركين', 403, 'forbidden');
+  return confirmRater({ kind: 'coordinator', email: c.email }, b, async (pid) => {
+    const { data } = await db.from('participants').select('id').eq('id', pid).eq('organization_id', c.organization_id).maybeSingle();
+    return !!data;
+  });
+}
 
 export async function logout(sessionId: string) {
   await db.from('coordinator_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', sessionId);
@@ -183,6 +198,8 @@ export async function dashboard(c: any) {
     .map((x: any) => (list ? x : { ...x, participant_id: null, full_name: null }));
   // أثر المبادرات في الجهة: من ملخص المتابعة نفسه الذي يراه القائد والمستشار
   r.outcomes = portfolioOutcomes(r.initiatives.map((x: any) => ({ summary: x.tracking, cost: x.cost })));
+  // D19: مقيّمون بانتظار تأكيد المنسق، لمن يرى قائمة المشاركين
+  r.raters_pending = list ? await awaitingFor((r.participants || []).map((p: any) => p.id)) : [];
   await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
   return r;
 }

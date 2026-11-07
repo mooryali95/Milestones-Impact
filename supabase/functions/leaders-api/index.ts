@@ -171,6 +171,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
 // لوحة الخبير: الجلسة من expert_sessions، والخبير يُشتق منها على الخادم
 const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'xp.dashboard': (e) => E.portalDashboard(e),
+  'xp.consent': (e) => E.portalConsent(e),
+  'xp.rater-confirm': (e, b) => FL.raterConfirm(e, b),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
   'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
   'xp.reviews': (e) => V2.reviews(e),
@@ -200,6 +202,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
   'coord.me': (c) => C.me(c),
+  'coord.consent': (c) => C.consent(c),
+  'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
   'coord.dashboard': (c) => C.dashboard(c),
   'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b),
@@ -366,7 +370,7 @@ Deno.serve(async (req) => {
     if (expert[action]) {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
       // قبل الاعتماد: الملف والخروج فقط
-      if (!E.portalWorking(e) && !['xp.dashboard', 'xp.profile-save', 'xp.logout', 'xp.switch'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
+      if (!E.portalWorking(e) && !['xp.dashboard', 'xp.consent', 'xp.profile-save', 'xp.logout', 'xp.switch'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
       return reply(req, await expert[action](e, b, sessionId));
     }
     if (admin[action]) {

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107160000_leaders_consent_events
+-- as-of migration: 20261107170000_leaders_rater_verification
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1361,12 +1361,18 @@ create table if not exists leaders.raters (
   opened_at timestamp with time zone,
   submitted_at timestamp with time zone,
   phase text default 'post'::text not null,
+  verification text,
+  verification_flags text[] default '{}'::text[] not null,
+  verified_by text,
+  verified_at timestamp with time zone,
   constraint raters_comment_check CHECK (((comment IS NULL) OR (char_length(comment) <= 2000))),
   constraint raters_email_check CHECK (((email = lower(email)) AND (char_length(email) <= 254))),
   constraint raters_full_name_check CHECK (((full_name IS NULL) OR (char_length(full_name) <= 120))),
   constraint raters_phase_check CHECK ((phase = ANY (ARRAY['pre'::text, 'post'::text]))),
   constraint raters_relation_check CHECK ((relation = ANY (ARRAY['manager'::text, 'peer'::text, 'report'::text]))),
-  constraint raters_status_check CHECK ((status = ANY (ARRAY['invited'::text, 'submitted'::text, 'revoked'::text]))),
+  constraint raters_status_check CHECK ((status = ANY (ARRAY['awaiting'::text, 'invited'::text, 'submitted'::text, 'revoked'::text]))),
+  constraint raters_verification_check CHECK (((verification IS NULL) OR (verification = ANY (ARRAY['org_domain'::text, 'confirmed'::text, 'pending'::text, 'rejected'::text])))),
+  constraint raters_verified_by_check CHECK (((verified_by IS NULL) OR (char_length(verified_by) <= 300))),
   constraint raters_pkey PRIMARY KEY (id),
   constraint raters_participant_email_phase_key UNIQUE (participant_id, email, phase),
   constraint raters_token_hash_key UNIQUE (token_hash)
@@ -2622,6 +2628,8 @@ CREATE INDEX IF NOT EXISTS program_milestones_program_idx ON leaders.program_mil
 CREATE UNIQUE INDEX IF NOT EXISTS programs_one_default ON leaders.programs USING btree ((true)) WHERE is_default;
 
 CREATE INDEX IF NOT EXISTS questions_instrument_idx ON leaders.questions USING btree (instrument_id, dimension, sort);
+
+CREATE INDEX IF NOT EXISTS raters_awaiting ON leaders.raters USING btree (participant_id) WHERE (status = 'awaiting'::text);
 
 CREATE INDEX IF NOT EXISTS raters_participant_idx ON leaders.raters USING btree (participant_id);
 

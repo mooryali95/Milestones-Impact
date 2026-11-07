@@ -6,6 +6,7 @@
 // الخبير يرى مشاركي الدفعات التي هو مستشارها (كامل الصلاحية: الختامي والمعالم والقاعة)، ومن أُسند
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
 import { db, Fail } from './core.ts';
+import { awaitingFor, confirmRater } from './impact.ts';
 import { participant as adminParticipant } from './admin.ts';
 import type { Actor } from './admin.ts';
 import { advisorCohorts, myParticipantIds } from './advisor.ts';
@@ -88,7 +89,7 @@ const actorOf = (e: any): Actor => ({ email: e.email, actor: 'system' });
 export async function participants(e: any) {
   const scope = await expertScope(e);
   const ids = [...new Set([...scope.advisor, ...scope.assigned.keys()])].slice(0, 60);
-  if (!ids.length) return { success: true, items: [], cohorts: await advisorCohorts(e.id) };
+  if (!ids.length) return { success: true, items: [], cohorts: await advisorCohorts(e.id), raters_pending: [] };
   const { data: ps } = await db.from('participants').select('*').in('id', ids).eq('is_demo', false).order('full_name');
   const items: any[] = [];
   for (let i = 0; i < (ps || []).length; i += 5) {
@@ -113,7 +114,13 @@ export async function participants(e: any) {
     }));
     items.push(...got);
   }
-  return { success: true, items, cohorts: (await advisorCohorts(e.id)).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision })) };
+  // D19: مقيّمو مشاركي المستشار بانتظار تأكيده قبل إرسال دعواتهم
+  return { success: true, items, cohorts: (await advisorCohorts(e.id)).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision })),
+    raters_pending: await awaitingFor([...scope.advisor]) };
+}
+
+export async function raterConfirm(e: any, b: Body) {
+  return confirmRater({ kind: 'expert', email: e.email }, b, async (pid) => (await expertScope(e)).advisor.has(pid));
 }
 
 export async function participant(e: any, b: Body) {
