@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { xpCall } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
-import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
 const MS_CHIP = { done: 'ok', late: 'bad', due_soon: 'gold', on_time: '', unscheduled: '' };
@@ -33,7 +33,7 @@ function RubricForm({ m, onSave, onClose }) {
         <label key={k} className="field"><span>{r.title}</span>
           <select className="input" value={v[k] || ''} onChange={(e) => setV({ ...v, [k]: e.target.value })}>
             <option value="">بلا تقييم</option>
-            {r.levels.map((t, i) => <option key={i} value={String(i + 1)}>{i + 1}. {t}</option>)}
+            {r.levels.map((t, i) => <option key={i} value={String(i + 1)}>{i + 1}. {RUBRIC_LEVEL_AR[i + 1]}: {t}</option>)}
           </select></label>
       ))}
       <label className="field"><span>ملاحظة للسجل</span><textarea className="input" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
@@ -223,7 +223,7 @@ export default function ExpertFile({ id, onBack }) {
         <div className="xpp-cols">
           <div><b className="small">الجلسات</b>{d.sessions.length ? <ul className="small muted">{d.sessions.slice(0, 8).map((s) => <li key={s.id}>{when(s.starts_at)} · {SESSION_AR[s.status] || s.status}{s.expert ? ` · ${s.expert}` : ''}</li>)}</ul> : <p className="muted small">لا جلسات.</p>}</div>
           <div><b className="small">طلبات الخبراء</b>{d.expert_requests.length ? <ul className="small muted">{d.expert_requests.slice(0, 8).map((r) => <li key={r.id}>{r.role_ar}{r.expert ? ` · ${r.expert}` : ''} · {r.status}</li>)}</ul> : <p className="muted small">لا طلبات.</p>}</div>
-          <div><b className="small">النماذج المسلّمة</b>{d.models.length ? <ul className="small muted">{d.models.slice(0, 8).map((m) => <li key={m.id}>{m.title} · {m.status_ar}{m.rating ? ` (${m.rating}/5)` : ''}</li>)}</ul> : <p className="muted small">لا تسليمات.</p>}</div>
+          <div><b className="small">النماذج المسلّمة</b>{d.models.length ? <ul className="small muted">{d.models.slice(0, 8).map((m) => <li key={m.id}>{m.title} · {m.status_ar}{m.rating ? ` (${rubricLevelAr(m.rating)})` : ''}</li>)}</ul> : <p className="muted small">لا تسليمات.</p>}</div>
         </div>
       </section>
 

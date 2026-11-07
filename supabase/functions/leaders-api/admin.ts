@@ -6,7 +6,7 @@
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, missingColumn, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
-import { DIM_AR } from './labels.js';
+import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { trackProject } from './capstone.js';
@@ -780,7 +780,8 @@ export async function reviewSubmission(a: Admin, b: Body) {
 // التقييم نفسه للإدارة وللمستشار الأساسي من بوابته؛ المقيّم يُسجَّل باسمه (reviewed_by)
 export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'system', b: Body) {
   const status = b.status === 'returned' ? 'returned' : 'reviewed';
-  const rating = b.rating ? Math.max(1, Math.min(5, Math.round(Number(b.rating)))) : null;
+  // D08: السلّم الرباعي الواحد (labels.js)
+  const rating = b.rating ? Math.max(1, Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(b.rating)))) : null;
   const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));
   const s = must(await db.from('model_submissions').update({
     status, rating, bonus, feedback_ar: String(b.feedback || '').slice(0, 4000) || null,
@@ -790,7 +791,7 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
     await db.from('points_ledger').upsert({ participant_id: s.participant_id, source: 'review', ref_id: s.id, points: bonus, note: `تميّز: ${s.learning_models?.title_ar || ''}` },
       { onConflict: 'participant_id,source,ref_id' });
   }
-  await audit(actor, reviewer, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus });
+  await audit(actor, reviewer, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus, scale: RUBRIC_SCALE.version });
   const { data: who } = await db.from('participants').select('full_name, email').eq('id', s.participant_id).single();
   if (who?.email) {
     sendMail(who.email, status === 'returned' ? 'ملاحظة على نموذجك' : 'اعتُمد نموذجك',

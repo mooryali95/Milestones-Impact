@@ -22,6 +22,10 @@ export const KINDS = { tool: 'أداة عمل', scenario: 'موقف محاكاة
 export const MASTERY = 70;
 export const EXCELLENCE = 90;
 export const EXCELLENCE_SHARE = 0.25;
+// تقابل النسبة الآلية مع السلّم الرباعي (D08): المختبر يُصحَّح آليًا خارج السلّم، ويُعلن مستواه المقابل
+// بحدوده هذه: دون 40 «دون المطلوب»، ومن 40 «مقبول»، ومن عتبة الإتقان «متقن»، ومن عتبة التميز «متميز»
+export const LAB_LEVEL_CUTS = Object.freeze([0, 40, MASTERY, EXCELLENCE]);
+export const labLevel = (pct) => LAB_LEVEL_CUTS.filter((c) => Number(pct) >= c).length || 1;
 
 // ── من يرى المختبر ──
 // المختبر قسم مستقل تفتحه الإدارة لجهة أو لشخص، للمختبر كله أو لأداة بعينها،

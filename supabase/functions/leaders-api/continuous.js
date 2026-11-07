@@ -4,14 +4,14 @@
 // تكويني: يُعرض للمشارك والخبير ليعدّلا الدعم، ولا يحكم وحده. يُبنى عليه التقييم الختامي.
 // لا يُنسخ رقم: كل مصدر يُقرأ من جدوله، وكل مكوّن يحمل سببه بجملة ومصدره وعدد أحداثه وخطأه.
 //   quizzes    ← handbook_progress: مجموع الصواب ÷ مجموع الأسئلة عبر الأبواب (لا متوسط النسب)
-//   models     ← model_submissions.rating (1..5) بعد مراجعة المستشار، بخريطة RATING_PCT
+//   models     ← model_submissions.rating بالسلّم الرباعي (1..4) بعد مراجعة المستشار، بخريطة RUBRIC_PCT (D08)
 //   milestones ← participant_milestones.scores (معيار وصفي 1..4) عند اعتماد المعلم، بخريطة RUBRIC_PCT
 //   lab        ← lab_attempts.pct: متوسط أول محاولة منتهية وأفضلها في كل أداة (لا الأفضل وحدها)
 //   katon      ← معطّل حتى يُعاد تصميمه
 //   peer       ← peer_answers بحالة confirmed/corrected: إسهام للزملاء أكّده الخبير (كامل) أو صحّحه (جزئي)، بخريطة PEER_PCT
 // تقدير الخبراء بعد الجلسات (انخراط) يُعرض منفصلًا ولا يدخل المؤشر (الملحق 5 §3.2).
 // لا يدخل المصدر المؤشر قبل حد أدنى من الأحداث (min_events، وللاختبارات min_quiz_items سؤالًا) (§3.4).
-import { CONTINUOUS_SOURCE_AR, ENGAGEMENT_AR, KATON_ENABLED, MILESTONE_RUBRIC, RATING_PCT, RUBRIC_PCT } from './labels.js';
+import { CONTINUOUS_SOURCE_AR, ENGAGEMENT_AR, EXPERT_RATING_PCT, KATON_ENABLED, MILESTONE_RUBRIC, RUBRIC_PCT } from './labels.js';
 import { peerEvents } from './peer.js';
 
 const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -37,7 +37,11 @@ export const rubricPct = (scores) => {
   const v = Object.values(scores || {}).filter((n) => n >= 1 && n <= 4).map((n) => RUBRIC_PCT[n]);
   return v.length ? Math.round(avg(v)) : null;
 };
-export const ratingPct = (n) => (n >= 1 && n <= 5 ? RATING_PCT[Math.round(n)] : null);
+// تقييمات الخبراء للمشارك (خماسية) وحدها
+export const expertRatingPct = (n) => (n >= 1 && n <= 5 ? EXPERT_RATING_PCT[Math.round(n)] : null);
+// تقدير النموذج بالسلّم الرباعي (D08). القيمة 5 من السلّم الخماسي السابق تُقرأ «متميز» بجدول التحويل (5←4)؛
+// وما دونها يُحوَّل على الإنتاج بجدول يقره المالك قبل تضييق قيد القاعدة
+export const modelPct = (n) => { const r = Math.round(Number(n)); return r === 5 ? RUBRIC_PCT[4] : r >= 1 && r <= 4 ? RUBRIC_PCT[r] : null; };
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
 /** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[], peer?: any[], weights?: Record<string, number> | null, min_events?: number, min_quiz_items?: number }} [src] */
@@ -48,7 +52,7 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
     quizItems += Number(q.quiz_total); quizRight += Number(q.quiz_score);
     events.push({ source: 'quizzes', at: q.completed_at, pct: Math.round((q.quiz_score / q.quiz_total) * 100), label: q.title || 'اختبار باب' });
   }
-  for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: ratingPct(m.rating), label: m.title || 'نموذج' });
+  for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: modelPct(m.rating), label: m.title || 'نموذج' });
   for (const m of milestones) {
     const p = rubricPct(m.scores);
     if (p != null) events.push({ source: 'milestones', at: m.done_at, pct: p, label: m.title_ar || 'معلم' });
@@ -79,7 +83,7 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
   const wsum = have.reduce((a, c) => a + c.weight, 0);
   const index = wsum ? Math.round(have.reduce((a, c) => a + c.value * c.weight, 0) / wsum) : null;
   // الانخراط بتقدير الخبراء: يُعرض بجانب المؤشر ولا يدخله
-  const eng = ratings.filter((r) => r.overall >= 1).map((r) => ({ at: r.created_at, pct: ratingPct(Number(r.overall)), label: r.label || 'تقييم خبير', comment: r.comment || null }));
+  const eng = ratings.filter((r) => r.overall >= 1).map((r) => ({ at: r.created_at, pct: expertRatingPct(Number(r.overall)), label: r.label || 'تقييم خبير', comment: r.comment || null }));
   const engagement = { label: ENGAGEMENT_AR, value: eng.length ? Math.round(avg(eng.map((e) => e.pct))) : null, n: eng.length,
     reason: eng.length ? `متوسط ${eng.length} تقدير خبير (جاء مستعدًا، تفاعل بجدية، يتقدم في هدفه)؛ انخراط لا جدارة، فلا يدخل المؤشر` : 'لم يقيّمه خبير بعد جلسة أو استشارة',
     events: eng.sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 5) };

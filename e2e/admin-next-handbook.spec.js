@@ -8,7 +8,7 @@ const catalog = {
   success: true, journey_stages: [], stage_requirements: [], instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [],
   tracks: [{ key: 'M1I1L1', title_ar: 'مسار التأسيس', milestone_level: 'beginner' }], track_stats: {},
   handbook_modules: [ch, { ...ch, id: 'h2', sort: 2, title_ar: 'الأنواع', quiz_md: '' }], learning_models: [model],
-  book_stats: { chapters: { h1: { done: 4, score: 6, total: 8 } }, models: { m1: { submitted: 1, reviewed: 2, rating: 9, rated: 2 } }, points: { participants: 5, avg: 40 }, to_review: 1 },
+  book_stats: { chapters: { h1: { done: 4, score: 6, total: 8 } }, models: { m1: { submitted: 1, reviewed: 2, rating: 7, rated: 2 } }, points: { participants: 5, avg: 40 }, to_review: 1 },
 };
 const submission = { id: 's1', status: 'submitted', submitted_at: '2026-10-20', answers: { project: 'منصة التعلم' }, participants: { full_name: 'سارة الأحمد', job_title: 'مديرة' }, learning_models: model };
 
@@ -73,7 +73,7 @@ test('الأبواب الجديدة وحذفها من المستودع: لا ز�
 test('النماذج: إضافة حقل جدول ومعاينته، ثم الحفظ', async ({ page }) => {
   const calls = await setup(page);
   await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: 'النماذج التعليمية' }).click();
-  await expect(page.getByText('4.5★', { exact: false })).toBeVisible();
+  await expect(page.getByText('متوسط 3.5 من 4', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'تحرير', exact: true }).click();
   const ed = page.getByRole('dialog', { name: 'تحرير النموذج: سجل المنافع' });
   await ed.getByRole('button', { name: '+ حقل' }).click();
@@ -84,7 +84,7 @@ test('النماذج: إضافة حقل جدول ومعاينته، ثم الح�
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row.fields?.[1]).toMatchObject({ type: 'table', columns: ['المنفعة', 'المؤشر'] });
 });
 
-test('المعاينة كمشارك، والتقييم بالنجوم والملاحظات', async ({ page }) => {
+test('المعاينة كمشارك، والتقييم بالسلّم الرباعي والملاحظات', async ({ page }) => {
   const calls = await setup(page);
   const views = page.getByRole('navigation', { name: 'أقسام الكتاب' });
   await views.getByRole('button', { name: /الكتاب الأصلي/ }).click();
@@ -96,8 +96,11 @@ test('المعاينة كمشارك، والتقييم بالنجوم والمل
   await expect(ed.getByText('منصة التعلم')).toBeVisible();
   await ed.getByRole('button', { name: 'إعادة للتطوير مع الملاحظات' }).click();
   await expect(ed.getByRole('alert')).toContainText('اكتب ملاحظاتك');
-  await ed.locator('.sub-stars label').nth(3).click();
-  await expect(ed.locator('.sub-stars label.on')).toHaveCount(4);
+  // D08: أربعة خيارات بأسمائها ومراسيها بدل النجوم الخمس
+  await expect(ed.locator('.sub-scale label')).toHaveText([/دون المطلوب/, /مقبول/, /متقن/, /متميز/]);
+  await expect(ed.getByRole('radio', { name: /متميز/ })).toHaveCount(1);
+  await ed.locator('.sub-scale label').filter({ hasText: 'متميز' }).click();
+  await expect(ed.locator('.sub-scale label.on')).toHaveText(/متميز/);
   await ed.getByLabel('ملاحظاتك للمشارك').fill('عمل متقن');
   await ed.getByRole('button', { name: 'اعتماد التقييم' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review-submission')).toMatchObject({ id: 's1', status: 'reviewed', rating: 4, feedback: 'عمل متقن' });

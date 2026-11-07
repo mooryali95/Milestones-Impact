@@ -10,6 +10,7 @@ import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
+import { rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import ExpertApply from './ExpertApply.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
@@ -161,8 +162,11 @@ function AdvisorReviews() {
           {open === x.id && (
             <div className="stack" style={{ gap: 8 }}>
               <dl className="adv-answers">{(x.learning_models?.fields || []).map((fl) => <React.Fragment key={fl.key}><dt>{fl.label || fl.key}</dt><dd>{showVal(x.answers?.[fl.key]) || '·'}</dd></React.Fragment>)}</dl>
-              <div className="rx-row" role="radiogroup" aria-label="التقدير"><span>التقدير</span>
-                <span className="rx-stars">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={f.rating === n} className={n <= f.rating ? 'on' : ''} onClick={() => setF({ ...f, rating: n })}>★</button>)}</span></div>
+              {/* D08: السلّم الرباعي الواحد بأسمائه ومراسيه، كما في أداة المراجع في اللوحة */}
+              <div className="rx-scale" role="radiogroup" aria-label="التقدير">{RUBRIC_SCALE.levels.map((l) => (
+                <button key={l.n} type="button" role="radio" aria-checked={f.rating === l.n} className={f.rating === l.n ? 'on' : ''} onClick={() => setF({ ...f, rating: l.n })}>
+                  <b>{l.ar}</b><small>{l.anchor_ar}</small></button>
+              ))}</div>
               <textarea className="input" rows={3} maxLength={4000} placeholder="ملاحظاتك المكتوبة للمشارك" value={f.feedback} onChange={(e) => setF({ ...f, feedback: e.target.value })} />
               <div className="row"><button className="btn sm" disabled={busy || !f.rating} onClick={() => send(x, 'reviewed')}>اعتمد</button>
                 <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>أعده بملاحظة</button>
@@ -172,7 +176,7 @@ function AdvisorReviews() {
         </div>
       ))}
       {done.length > 0 && <details><summary className="small">آخر ما قُيّم</summary>
-        <ul className="small muted">{done.map((x) => <li key={x.id}>{x.participants?.full_name} · {x.learning_models?.title_ar} · {x.status === 'returned' ? 'أُعيد' : `اعتُمد${x.rating ? ` (${x.rating}/5)` : ''}`}{x.reviewed_by ? ` · ${x.reviewed_by}` : ''}</li>)}</ul></details>}
+        <ul className="small muted">{done.map((x) => <li key={x.id}>{x.participants?.full_name} · {x.learning_models?.title_ar} · {x.status === 'returned' ? 'أُعيد' : `اعتُمد${x.rating ? ` (${rubricLevelAr(x.rating)})` : ''}`}{x.reviewed_by ? ` · ${x.reviewed_by}` : ''}</li>)}</ul></details>}
     </section>
   );
 }

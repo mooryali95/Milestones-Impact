@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KATON_ENABLED, RATING_PCT, RUBRIC_PCT } from '../../supabase/functions/leaders-api/labels.js';
+import { EXPERT_RATING_PCT, KATON_ENABLED, RUBRIC_PCT } from '../../supabase/functions/leaders-api/labels.js';
 import { cleanRubricScores, continuousAssessment, PEER_PCT, rubricPct } from '../../supabase/functions/leaders-api/logic.js';
 
 const quizzes = [
@@ -19,17 +19,18 @@ describe('التقييم المستمر', () => {
   it('المقاييس موحدة بخريطة صريحة: الاختبارات مجموع الصواب على المجموع، والتقدير والمعيار من خريطتيهما', () => {
     const c = continuousAssessment({
       quizzes,
-      models: [{ rating: 5, reviewed_at: '2026-01-02', title: 'ن1' }, { rating: 3, reviewed_at: '2026-01-05', title: 'ن2' }, { rating: 1, reviewed_at: '2026-01-06', title: 'ن3' }],
+      // السلّم الرباعي (D08): متميز 100، ومقبول 40، ودون المطلوب 0
+      models: [{ rating: 4, reviewed_at: '2026-01-02', title: 'ن1' }, { rating: 2, reviewed_at: '2026-01-05', title: 'ن2' }, { rating: 1, reviewed_at: '2026-01-06', title: 'ن3' }],
       milestones: [{ scores: { understanding: 4, structure: 2 }, done_at: '2026-01-04', title_ar: 'م1' }, { scores: { execution: 3 }, done_at: '2026-01-07', title_ar: 'م2' }, { scores: { impact: 1 }, done_at: '2026-01-08', title_ar: 'م3' }],
     });
     const by = Object.fromEntries(c.components.map((x) => [x.key, x.value]));
     // الاختبارات: 8 من 10 أسئلة = 80 لا متوسط (80، 100، 67) = 82
-    expect(by).toEqual({ quizzes: 80, models: 50, milestones: 48, lab: null, peer: null, ...(KATON_ENABLED ? { katon: null } : {}) });
-    expect(RATING_PCT[3]).toBe(50);
+    expect(by).toEqual({ quizzes: 80, models: 47, milestones: 48, lab: null, peer: null, ...(KATON_ENABLED ? { katon: null } : {}) });
+    expect(EXPERT_RATING_PCT[3]).toBe(50);   // تقييمات الخبراء وحدها بخماسي (D08)
     expect(RUBRIC_PCT[3]).toBe(75);
-    expect(c.index).toBe(59);
+    expect(c.index).toBe(58);   // (80 + 46.7 + 48) / 3
     expect(c.components.find((x) => x.key === 'quizzes')).toMatchObject({ n: 3, items: 10, enough: true, in_index: true });
-    expect(c.components.find((x) => x.key === 'models').se).toBe(28.9);
+    expect(c.components.find((x) => x.key === 'models').se).toBe(29.1);
   });
 
   it('لا يدخل المصدر المؤشر قبل حده الأدنى من الأحداث (3) أو أسئلة الاختبارات (10)، ويُعلَن ذلك', () => {
