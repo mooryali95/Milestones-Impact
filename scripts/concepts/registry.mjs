@@ -13,7 +13,7 @@ import { loadChapters, ROOT, VERSION } from '../handbook/content.mjs';
 const DIR = join(ROOT, 'supabase/content/concepts');
 const REG = join(DIR, 'registry.json');
 const LOCK = join(DIR, 'ids.lock');
-export const BANK = 'v5.1';   // أداة الدفعة الأولى (D03)
+export const BANK = 'v5.2';   // أداة الدفعة الأولى بعد طبقة الموازنة (D03)
 const PREFIX = { milestone: 'M', impact: 'I', leadership: 'L' };
 const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const SCORED_TIERS = new Set(['knowledge', 'skill', 'behavior']);
