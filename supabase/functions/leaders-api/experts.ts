@@ -44,7 +44,7 @@ export async function apply(b: Body, ctx: Ctx) {
     mailText('وصلنا طلب انضمامك إلى شبكة خبراء برنامج القادة. نراجع الطلبات خلال خمسة أيام عمل، ونراسلك بالنتيجة على هذا البريد.'))).catch(() => {});
   if (CONFIG.alertEmail) {
     sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير جديد',
-      mailText(`${fields.full_name}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلب'))).catch(() => {});
+      mailText(`${esc(fields.full_name)}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلب'))).catch(() => {});
   }
   return { success: true, received: true };
 }
@@ -219,7 +219,7 @@ async function offerNext(req: any, pick?: any) {
     await audit('system', null, 'expert-request.unmatched', 'expert_requests', req.id);
     if (CONFIG.alertEmail) {
       sendMail(CONFIG.alertEmail, `لا خبير متاح: ${roleAr(req.role)} لـ ${p.full_name}`, shell('طلب بلا خبير مطابق',
-        mailText(`لم يقبل أحد من الخبراء المطابقين طلب ${roleAr(req.role)} للمشارك ${p.full_name}، أو لا أحد متاح. أسنده يدويًا أو أضف خبيرًا.`)
+        mailText(`لم يقبل أحد من الخبراء المطابقين طلب ${roleAr(req.role)} للمشارك ${esc(p.full_name)}، أو لا أحد متاح. أسنده يدويًا أو أضف خبيرًا.`)
         + mailButton(`${SITES.admin}/#/leaders/experts?view=requests`, 'افتح الطلبات'))).catch(() => {});
     }
     return { status: 'unmatched' };
@@ -234,7 +234,7 @@ async function offerNext(req: any, pick?: any) {
   await audit('system', null, 'expert-request.offered', 'expert_requests', req.id, null, { expert_id: e.id, score: e.match?.total ?? null });
   const what = [roleAr(req.role), need.dimension ? (DIM_AR as Record<string, string>)[need.dimension] : null, need.level ? `مستوى ${(LEVEL_AR as Record<string, string>)[need.level]}` : null].filter(Boolean).join(' · ');
   sendMail(e.email, `طلب خدمة: ${roleAr(req.role)}`, shell(`أهلًا ${firstName(e.full_name)}`,
-    mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${what}</b>.`)
+    mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${esc(what)}</b>.`)
     + (req.note ? mailNote(`<b>ما يحتاجه:</b> ${esc(req.note)}`) : '')
     + mailText(`لديك ${OFFER_HOURS} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
     + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب'))).catch(() => {});
@@ -331,7 +331,7 @@ export async function offerRespond(b: Body) {
     const { data: p } = await db.from('participants').select('full_name, email').eq('id', r.participant_id).maybeSingle();
     if (p?.email) {
       sendMail(p.email, `خبيرك في برنامج القادة: ${r.experts?.full_name}`, shell(`أهلًا ${firstName(p.full_name)}`,
-        mailText(`أُسند إليك <b>${r.experts?.full_name}</b> ${roleAr(r.role)} في رحلتك. ستجده في رحلتك، وتصلك منه مواعيد الجلسات.`)
+        mailText(`أُسند إليك <b>${esc(r.experts?.full_name)}</b> ${roleAr(r.role)} في رحلتك. ستجده في رحلتك، وتصلك منه مواعيد الجلسات.`)
         + mailButton(SITES.leaders, 'افتح رحلتك'))).catch(() => {});
     }
     return { success: true, accepted: true };
@@ -446,7 +446,7 @@ export async function portalStart(b: Body, ctx: Ctx) {
   const row = must(await db.from('expert_challenges').insert({ expert_id: e!.id, email, code_hash: await hash(code), ip: ctx.ip, expires_at: new Date(Date.now() + CONFIG.codeMinutes * 6e4).toISOString() })
     .select('id').single()) as { id: string };
   await sendOrDiscard('expert_challenges', row.id, email, 'رمز الدخول إلى لوحة الخبير', shell('رمز الدخول إلى لوحة الخبير',
-    mailText(`أهلًا ${firstName(e!.full_name)}، أدخل الرمز في صفحة الدخول.`) + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)));
+    mailText(`أهلًا ${esc(firstName(e!.full_name))}، أدخل الرمز في صفحة الدخول.`) + mailCode(code, `صالح ${CONFIG.codeMinutes} دقيقة ولمرة واحدة.`)));
   return SENT;
 }
 
@@ -558,7 +558,7 @@ export async function portalProfileSave(e: any, b: Body) {
   await audit('system', e.email, 'expert.profile', 'experts', e.id, { status: e.status }, { status: 'applied' });
   if (first && CONFIG.alertEmail) {
     sendMail(CONFIG.alertEmail, `خبير مدعو استكمل ملفه: ${fields.full_name}`, shell('ملف خبير جاهز للاعتماد',
-      mailText(`${fields.full_name}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
+      mailText(`${esc(fields.full_name)}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
   }
   return { success: true, expert: expertPublic({ ...saved, hourly_rate: undefined, admin_note: undefined }) };
 }

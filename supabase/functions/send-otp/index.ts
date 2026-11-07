@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { deliver, esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain } from "../_shared/mail.ts";
+import { esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
@@ -35,7 +35,11 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const sendEmail = (to: string, subject: string, html: string) => deliver(to, subject, html, { key: RESEND_API_KEY, from: FROM_EMAIL });
+// رسائل نموذج التواصل بالعداد الموحد (D15) نوعًا contact، فتُحتسب من نصيب غير الرموز
+const MAIL_CAP = Number(Deno.env.get("LEADERS_MAIL_DAILY_CAP") || "80") || 80;
+const counter = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const sendEmail = async (to: string, subject: string, html: string) =>
+  (await sendCounted(counter, to, subject, html, { kind: "contact", source: "send-otp", cap: MAIL_CAP, key: RESEND_API_KEY, from: FROM_EMAIL })).ok;
 
 // عميل بلا أنواع جداول (لا مخطط مولَّد هنا)
 // deno-lint-ignore no-explicit-any

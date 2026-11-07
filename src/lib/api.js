@@ -46,8 +46,9 @@ export async function publicRead(path) {
 
 // ── User data API (token-scoped: a user only ever sees/writes their own row) ──
 export const UserAPI = {
-  registerSend: (name, phone, email) => callFn('user-api', { action: 'register-send', name, phone, email }),
-  resumeSend: (phone) => callFn('user-api', { action: 'resume-send', phone }),
+  // captcha: رمز Turnstile حين يطلبه الخادم (D15)
+  registerSend: (name, phone, email, captcha) => callFn('user-api', { action: 'register-send', name, phone, email, ...(captcha ? { captcha } : {}) }),
+  resumeSend: (phone, captcha) => callFn('user-api', { action: 'resume-send', phone, ...(captcha ? { captcha } : {}) }),
   verify: (payload) => callFn('user-api', { action: 'verify', ...payload }),
   get: (token) => callFn('user-api', { action: 'get', token }),
   save: (token, fields) => callFn('user-api', { action: 'save', token, fields }),

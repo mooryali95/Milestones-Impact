@@ -346,7 +346,7 @@ export async function weeklyReports() {
     try {
       const d = await dashboardFor(c);
       await db.from('org_coordinators').update({ last_report_at: new Date().toISOString() }).eq('id', c.id);
-      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis));
+      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis), [], { kind: 'bulk', ref: `coordinator:${c.id}` });
       await audit('system', null, 'coordinator.weekly-report', 'org_coordinators', c.id);
       sent += 1;
     } catch (e) { console.error('weekly report', c.id, e); }

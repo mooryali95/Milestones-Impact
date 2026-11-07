@@ -1024,7 +1024,7 @@ export async function reminders(b: Record<string, any>) {
     const open = (count ?? 0) + onboarding;
     if (!open || !p.email) continue;
     await db.from('participants').update({ reminded_at: new Date().toISOString() }).eq('id', p.id);
-    await sendMail(p.email, 'رحلتك القيادية بانتظارك', reminderMail(p.full_name, open)).catch((e) => console.error(e));
+    await sendMail(p.email, 'رحلتك القيادية بانتظارك', reminderMail(p.full_name, open), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error(e));
     sent += 1;
   }
   return { success: true, sent };

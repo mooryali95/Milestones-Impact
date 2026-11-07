@@ -6,8 +6,9 @@ import Icon from './components/Icon';
 import Footer from './components/Footer';
 import ProcessModal from './components/ProcessModal';
 import ConfirmDialog from './components/ConfirmDialog';
+import Captcha from './components/Captcha';
 import DemographicsScreen from './screens/demographics';
-import { API_URL, TRACKS, PHASES, OPERATIONS } from './config/constants';
+import { TRACKS, PHASES, OPERATIONS } from './config/constants';
 import { validPhone, validEmail, isPast } from './lib/dateUtils';
 import { UserAPI } from './lib/api';
 import { LocalSession, AdminSession } from './lib/session';
@@ -74,6 +75,16 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [resumePhone, setResumePhone] = useState("");
   const [resumeError, setResumeError] = useState("");
+  // التحقق البشري (D15): يطلبه الخادم برمز captcha، فيظهر التحدي ثم يُعاد الطلب نفسه برمزه
+  const [captcha, setCaptcha] = useState(null);
+  const withHuman = async (call) => {
+    const res = await call(undefined);
+    if (res?.code !== "captcha" || !res.site_key) return res;
+    const token = await new Promise((resolve) => setCaptcha({ siteKey: res.site_key, resolve }));
+    setCaptcha(null);
+    if (!token) return { success: false, message: "لم يكتمل التحقق البشري، أعد المحاولة" };
+    return call(token);
+  };
   const [resumeLoading, setResumeLoading] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const passkeyAvailable = useMemo(() => browserSupportsWebAuthn(), []);
@@ -222,7 +233,7 @@ export default function App() {
 
     setResumeLoading(true);
     setResumeError("");
-    const res = await UserAPI.resumeSend(phone);
+    const res = await withHuman((c) => UserAPI.resumeSend(phone, c));
     setResumeLoading(false);
     if (!res.success) { setResumeError(res.message || "خطأ في إرسال رمز التحقق"); return; }
 
@@ -265,7 +276,7 @@ export default function App() {
 
     setOtpSending(true);
     setOtpError("");
-    const res = await UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim());
+    const res = await withHuman((c) => UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim(), c));
     setOtpSending(false);
     if (!res.success) { setRegErrors({ email: res.message || "خطأ في إرسال رمز التحقق" }); return; }
 
@@ -308,8 +319,8 @@ export default function App() {
     setOtpSending(true);
     setOtpError("");
     const res = (otpPending?.type === "resume" && otpPending.phone)
-      ? await UserAPI.resumeSend(otpPending.phone)
-      : await UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim());
+      ? await withHuman((c) => UserAPI.resumeSend(otpPending.phone, c))
+      : await withHuman((c) => UserAPI.registerSend(user.name.trim(), user.phone.replace(/\s/g, ""), user.email.trim(), c));
     setOtpSending(false);
     if (res.success) {
       setOtpLastSent(Date.now());
@@ -384,29 +395,14 @@ export default function App() {
     LocalSession.update({ submitted: true });
     setTab("output");
     showToast("تم حفظ الخطة النهائية! ✓");
-    // ── إشعار المستشار ──
-    try {
-      await fetch(`${API_URL}/notify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'plan_submitted',
-          name: user.name,
-          phone: user.phone,
-          email: user.email,
-          submittedAt,
-          datesCount: Object.keys(dates).length,
-          confirmedCount: Object.keys(confirmed).length,
-        }),
-      });
-    } catch (e) { /* إشعار اختياري — لا يوقف التجربة */ }
+    // إشعار المستشار يُرسل من الخادم عند أول تقديم (user-api، D14)، فلا تغادر بيانات المشارك الموقع إلى طرف آخر
   };
 
   const handleSubmit = () => {
     if (!allDated) { showToast("يجب تحديد مواعيد جميع الـ 16 عملية"); return; }
     setConfirmAction({
       title: "الموافقة النهائية",
-      message: "سيتم قفل الخطة بعد التقديم.\nإذا أردت التعديل لاحقاً، يمكنك طلب إعادة الفتح من المدير.",
+      message: "سيتم قفل الخطة بعد التقديم، ويُخطَر المستشار باسمك وبريدك لمتابعتها.\nإذا أردت التعديل لاحقاً، يمكنك طلب إعادة الفتح من المدير.",
       onConfirm: doFinalSubmit,
     });
   };
@@ -468,7 +464,19 @@ export default function App() {
 
   // Copyright footer
   // الإشعار المنبثق يظهر في كل الشاشات، لا في الشاشة الرئيسية وحدها
-  const toastEl = toast && <div className="toast" role="status">{toast}</div>;
+  const toastEl = <>
+    {toast && <div className="toast" role="status">{toast}</div>}
+    {captcha && (
+      <div className="confirm-overlay">
+        <div className="confirm-box" role="dialog" aria-modal="true" aria-label="تحقق بشري">
+          <h3>تحقق سريع</h3>
+          <p>أكّد أنك لست برنامجًا آليًا لنرسل الرمز إلى بريدك.</p>
+          <Captcha siteKey={captcha.siteKey} onToken={(t) => captcha.resolve(t)} onError={() => captcha.resolve(null)} />
+          <div className="confirm-btns"><button className="btn btn-outline" onClick={() => captcha.resolve(null)}>إلغاء</button></div>
+        </div>
+      </div>
+    )}
+  </>;
 
   // ════════ SPLASH ════════
   if (screen === "splash") return (

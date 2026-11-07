@@ -205,7 +205,7 @@ export async function reminders() {
     await sendMail(p.email, `${title}: ${initiativeOf(c.snapshot)}`, mailShell(title,
       mailText(`أهلًا ${esc(p.full_name || '')}، حان «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}».`)
       + mailText(s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
-      + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
+      + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' }), [], { kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((e) => console.error(e));
     sent += 1;
   }
   return { sent };
