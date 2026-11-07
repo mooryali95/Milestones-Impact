@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261107140000_leaders_certificate_suspended
+-- as-of migration: 20261107150000_leaders_rubric_scale
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -904,7 +904,7 @@ create table if not exists leaders.model_submissions (
   reviewed_by text,
   updated_at timestamp with time zone default now() not null,
   constraint model_submissions_bonus_check CHECK (((bonus >= 0) AND (bonus <= 100))),
-  constraint model_submissions_rating_check CHECK (((rating IS NULL) OR ((rating >= 1) AND (rating <= 5)))),
+  constraint model_submissions_rating_check CHECK (((rating IS NULL) OR ((rating >= 1) AND (rating <= 4)))),
   constraint model_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewed'::text, 'returned'::text]))),
   constraint model_submissions_pkey PRIMARY KEY (id),
   constraint model_submissions_participant_id_model_id_key UNIQUE (participant_id, model_id)
