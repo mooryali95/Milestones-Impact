@@ -12,6 +12,7 @@ import Captcha from '../Captcha.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import ExpertApply from './ExpertApply.jsx';
+import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
@@ -184,8 +185,12 @@ function AdvisorReviews() {
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
 function MyParticipants({ onOpen }) {
   const [d, setD] = useState(null);
-  useEffect(() => { xpCall('xp.participants').then(setD); }, []);
+  const load = () => xpCall('xp.participants').then(setD);
+  useEffect(() => { load(); }, []);
+  const decide = async (b) => { const r = await xpCall('xp.rater-confirm', b); if (r.success) load(); return r; };
   return (
+    <>
+    <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
     <section className="card stack" aria-labelledby="xp-mine">
       <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
@@ -198,6 +203,7 @@ function MyParticipants({ onOpen }) {
           </div>
         ))}
     </section>
+    </>
   );
 }
 
@@ -270,6 +276,7 @@ function Dashboard({ onOut }) {
   useEffect(() => { load(); }, []);
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
+  if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
   const e = d.expert;

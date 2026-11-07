@@ -6,6 +6,7 @@ import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, 
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
+import { POLICY_MATERIAL_VERSION } from './labels.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -159,6 +160,12 @@ export async function logConsent(subject: ConsentSubject, subjectId: string, kin
   if (error && error.code !== '42P01' && error.code !== 'PGRST205') console.error('consent_events insert:', error.message);
   return !error;
 }
+// سطر الموافقة عند أول دخول للمنسق والخبير (D18): مطلوب إن لم يُسجَّل له قبول لآخر نسخة جوهرية. قبل الترحيل لا حجب
+export async function consentNeeded(subject: ConsentSubject, subjectId: string) {
+  const { data, error } = await db.from('consent_events').select('id').eq('subject', subject).eq('subject_id', subjectId).gte('version', POLICY_MATERIAL_VERSION).limit(1);
+  if (error) return false;
+  return !data?.length;
+}
 
 // ── البريد ──
 // القالب من المصدر الموحّد (_shared/mail.ts)؛ هنا رسائل البرنامج فقط
@@ -301,8 +308,25 @@ export function raterMail(rater: string | null, who: string, link: string, phase
       ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
       : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.')
     + mailButton(link, 'ابدأ التقدير')
-    + mailNote('الرابط خاص بك وصالح 30 يومًا.'),
+    + mailNote(`الرابط خاص بك وصالح 30 يومًا. نحفظ اسمك وبريدك وصلتك به وتقديرك لقياس أثر البرنامج وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
     `${pre ? 'ثلاث' : 'خمس'} دقائق لتقدير ممارسة ${who}`, '');
+}
+
+// D19: مقيّم بانتظار تأكيد المستشار أو المنسق قبل إرسال دعوته، بلا عنوانه في البريد
+export function raterConfirmMail(who: string, why: string, url: string) {
+  return shell('journey', 'مقيّم بانتظار تأكيدك',
+    mailText(`دعا ${esc(who)} مقيّمًا لتقدير أثره، وبريده يحتاج تأكيدك قبل إرسال الدعوة: ${esc(why)}.`)
+    + mailText('تأكد أن المقيّم من يعمل معه فعلًا (مديره أو زميله أو أحد فريقه)، فتقديره يدخل حكم «تغير مؤكد» وتقرير الأثر للجهة.')
+    + mailButton(url, 'راجع وأكّد'),
+    'تأكيد مقيّم قبل إرسال دعوته');
+}
+
+export function raterRejectedMail(name: string, rater: string, reason: string) {
+  return shell('journey', 'لم يُعتمد أحد مقيّميك',
+    mailText(`${hello(name)} لم يُعتمد ${esc(rater)} مقيّمًا لأثرك، والسبب: ${esc(reason)}.`)
+    + mailText('ادعُ مقيّمًا آخر ممن يعملون معك، ويُفضَّل ببريد جهتك.')
+    + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
+    'ادعُ مقيّمًا آخر');
 }
 
 // ── الجلسات ──

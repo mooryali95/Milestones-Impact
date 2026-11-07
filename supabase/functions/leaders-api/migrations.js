@@ -90,4 +90,5 @@ export const MIGRATIONS = [
   '20261107140000_leaders_certificate_suspended',
   '20261107150000_leaders_rubric_scale',
   '20261107160000_leaders_consent_events',
+  '20261107170000_leaders_rater_verification',
 ];

@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf } from '../labels.js';
+import { LEGAL_PATH, POLICY_VERSION } from '../../../supabase/functions/leaders-api/labels.js';
 
 export default function Rater() {
   const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
@@ -77,6 +78,8 @@ export default function Rater() {
         <label className="field"><span>ملاحظة <em>(اختياري)</em>: مثال محدد على تغيير لاحظته</span>
           <textarea className="input" rows={4} maxLength={2000} value={comment} onChange={(e) => setComment(e.target.value)} /></label>
         {error && <div className="alert err">{error}</div>}
+        {/* D18 وD19: إشعار خصوصية المقيّم وسطر موافقته، ويُسجَّل قبوله بإرسال التقدير */}
+        <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك لقياس أثر البرنامج وحده، ولا يظهر تقديرك للمشارك منفردًا. يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> (النسخة {POLICY_VERSION}).</p>
         <div className="row">
           <button className="btn gold" disabled={busy || left > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : left ? `بقي ${left}` : 'أرسل التقدير'}</button>
         </div>

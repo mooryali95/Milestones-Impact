@@ -82,3 +82,24 @@ export function domainCandidates(host) {
   const parts = h.split('.');
   return parts.slice(0, -1).map((_, i) => parts.slice(i).join('.')).filter((c) => !isPublicSuffix(c));
 }
+
+// التحقق من المقيّم الخارجي (D19). الرابط الموقّع يثبت ملكية الصندوق لا هوية صاحبه، فالقبول الآلي بنطاق الجهة:
+//   reject      البريد أحد بُرُد المشارك المعروفة
+//   org_domain  من نطاق جهة المشارك المسجل (organizations.domains) أو نطاق فرعي منه: يُرسل فورًا
+//   pending     بريد عام، أو نطاق آخر، أو مشارك فردي: يؤكده المستشار أو منسق الجهة قبل الإرسال
+// flags تُحفظ مع المقيّم من أول دعوة، فلا تقترن لاحقًا تقديرات غير موسومة
+/** @param {string} email @param {{ participantEmails?: string[], orgDomains?: string[], linked?: boolean }} [opts] */
+export function raterVerification(email, { participantEmails = [], orgDomains = [], linked = false } = {}) {
+  const e = String(email || '').trim().toLowerCase();
+  if (participantEmails.map((x) => String(x || '').trim().toLowerCase()).includes(e)) return { verdict: 'reject', flags: ['self'] };
+  const domain = e.split('@')[1] || '';
+  const own = (orgDomains || []).map((d) => hostOf(d)).filter(Boolean);
+  if (linked && own.some((d) => domain === d || domain.endsWith(`.${d}`))) return { verdict: 'org_domain', flags: [] };
+  const flags = [];
+  if (isPublicMail(domain)) flags.push('public_mail');
+  else if (linked) flags.push('other_domain');
+  if (!linked) flags.push('individual');
+  return { verdict: 'pending', flags };
+}
+export const RATER_FLAG_AR = { self: 'بريد المشارك نفسه', public_mail: 'بريد عام', other_domain: 'نطاق غير نطاق جهته', individual: 'مشارك فردي بلا جهة' };
+export const RATER_VERIFICATION_AR = { org_domain: 'محقق بنطاق الجهة', confirmed: 'أكده المستشار أو المنسق', pending: 'بانتظار التأكيد', rejected: 'لم يُعتمد' };

@@ -10,6 +10,7 @@ import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
+import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
 import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
@@ -217,6 +218,7 @@ function Dashboard({ me, onLogout }) {
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
         <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${org.seats} مقعد${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
       </section>
+      <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
       <div className="op-kpis">
         {[['انضموا هذا الأسبوع', kpis.joined_week], ['نشطون هذا الأسبوع', kpis.active_week], ['اعتُمد مسارهم', kpis.approved], ['أنهوا البرنامج', kpis.completed], ['متوسط الإنجاز', `${kpis.avg_progress}%`]]
@@ -297,5 +299,6 @@ export default function OrgPortal() {
   const logout = async () => { await coordCall('coord.logout'); coordSession.clear(); setMe(null); };
 
   if (boot) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (me?.consent_needed) return <PortalConsent role="coordinator" onAccept={async () => { const r = await coordCall('coord.consent'); if (r.success) setMe((m) => ({ ...m, ...r })); return r; }} />;
   return me ? <Dashboard me={me} onLogout={logout} /> : <SignIn onIn={signedIn} initialError={error} />;
 }

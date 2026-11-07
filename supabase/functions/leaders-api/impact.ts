@@ -3,11 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // المنطق الحسابي في logic.js (يُختبر في vitest)، وهنا جمع البيانات فقط.
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
-import { all, allFor, audit, CONFIG, db, Fail, hash, must, randomToken, raterMail, sendMail } from './core.ts';
+import { all, allFor, audit, CONFIG, db, Fail, hash, logConsent, missingColumn, must, randomToken, raterConfirmMail, raterMail, raterRejectedMail, sendMail } from './core.ts';
+import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domains.js';
+import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
 import { requirementIdByCode } from './programs.ts';
 import {
-  compareAssessments, compositeReliability, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
+  compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
 } from './logic.js';
 
@@ -223,8 +225,9 @@ export function participantSummary(row: any) {
 export async function mine(p: any) {
   const [{ rows }, raters, pre] = await Promise.all([
     compareFor([p.id]),
-    db.from('raters').select('id, email, full_name, relation, status, invited_at, submitted_at, phase')
-      .eq('participant_id', p.id).neq('status', 'revoked').order('invited_at').then((r: any) => must(r) ?? []),
+    // كل الأعمدة حتى لا يُفشل عمود لم يُرحَّل القراءة (D19)، ثم ما يحق للمشارك رؤيته وحده
+    db.from('raters').select('*').eq('participant_id', p.id).neq('status', 'revoked').order('invited_at')
+      .then((r: any) => ((must(r) ?? []) as any[]).map(raterView)),
     preRating(p),
   ]);
   return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT, pre_available: !!pre.ok };
@@ -250,10 +253,34 @@ async function preRating(p: any) {
   return { ok: true, instrument_id: base.instrument_id };
 }
 
+const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, status: r.status, invited_at: r.invited_at, submitted_at: r.submitted_at, phase: r.phase,
+  verification: r.verification ?? null, verification_ar: r.verification ? (RATER_VERIFICATION_AR as Record<string, string>)[r.verification] : null,
+  flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) });
+
+// D19: حكم التحقق من بريد المقيّم بنطاقات جهة المشارك المسجلة
+async function raterCheck(p: any, email: string) {
+  const org = p.organization_id ? (await db.from('organizations').select('domains').eq('id', p.organization_id).maybeSingle()).data : null;
+  return raterVerification(email, { participantEmails: [p.email], orgDomains: (org as any)?.domains || [], linked: !!p.organization_id });
+}
+
+// من يؤكد مقيّمًا منتظرًا: مستشار دفعة المشارك، ومنسقو جهته ممن يرون قائمة المشاركين. بريد بلا عنوان المقيّم
+async function notifyConfirmers(p: any, flags: string[]) {
+  const why = flags.map((f) => (RATER_FLAG_AR as Record<string, string>)[f] || f).join('، ');
+  const adv = await advisorOf(p).catch(() => null);
+  const to: [string, string][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`]] : [];
+  if (p.organization_id) {
+    const { data: coords } = await db.from('org_coordinators').select('email, status, permissions').eq('organization_id', p.organization_id).neq('status', 'suspended');
+    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`]);
+  }
+  for (const [email, url] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
+  return to.length;
+}
+
 export async function invite(p: any, b: Body) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد غير صحيح');
-  if (email === normalizeEmail(p.email)) throw new Fail('ادعُ مديرك أو زميلك، لا بريدك');
+  const check = await raterCheck(p, email);
+  if (check.verdict === 'reject') throw new Fail('ادعُ مديرك أو زميلك، لا بريدك');
   const phase = b.phase === 'pre' ? 'pre' : 'post';
   // قبل البرنامج: المدير المباشر وحده، فهو من يُعاد تقديره بعد البرنامج
   const relation = phase === 'pre' ? 'manager' : ['manager', 'peer', 'report'].includes(b.relation) ? b.relation : 'manager';
@@ -271,23 +298,78 @@ export async function invite(p: any, b: Body) {
   const existing = must(await db.from('raters').select('id, email, status').eq('participant_id', p.id).eq('phase', phase).neq('status', 'revoked')) as any[] ?? [];
   if (!existing.some((r: any) => r.email === email) && existing.length >= limit) throw new Fail(limit === 1 ? 'دعوت مديرك من قبل' : `الحد ${limit} مقيّمين`);
   const token = randomToken();
-  const row = { participant_id: p.id, instrument_id: instrumentId, email, full_name: name, relation, phase, token_hash: await hash(token),
-    status: 'invited', invited_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 864e5).toISOString() };
+  // D19: من نطاق الجهة يُرسل فورًا، وما سواه awaiting حتى يؤكده المستشار أو المنسق. العلامات من أول دعوة
+  const awaiting = check.verdict === 'pending';
+  const row: Record<string, unknown> = { participant_id: p.id, instrument_id: instrumentId, email, full_name: name, relation, phase, token_hash: await hash(token),
+    status: awaiting ? 'awaiting' : 'invited', invited_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 864e5).toISOString(),
+    verification: check.verdict, verification_flags: check.flags, verified_by: awaiting ? null : 'system:org_domain', verified_at: awaiting ? null : new Date().toISOString() };
   const { data: prev } = await db.from('raters').select('id, status, invited_at').eq('participant_id', p.id).eq('email', email).eq('phase', phase).maybeSingle();
   if (prev?.status === 'submitted') throw new Fail('أرسل هذا المقيّم تقديره من قبل');
   if (prev && Date.now() - new Date(prev.invited_at).getTime() < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
-  if (prev) must(await db.from('raters').update(row).eq('id', prev.id));
-  const saved = prev ? { id: prev.id } : must(await db.from('raters').insert(row).select('id').single()) as { id: string };
+  const write = (r: Record<string, unknown>) => (prev ? db.from('raters').update(r).eq('id', prev.id).select('id').single() : db.from('raters').insert(r).select('id').single());
+  let res: any = await write(row);
+  // قبل ترحيل 20261107170000: الدعوة كما كانت، تُرسل فورًا بلا علامات
+  let legacy = false;
+  if (res.error && (missingColumn(res.error) || res.error.code === '23514')) {
+    legacy = true;
+    const { verification: _v, verification_flags: _f, verified_by: _b, verified_at: _a, ...old } = row;
+    res = await write({ ...old, status: 'invited' });
+  }
+  const saved = must(res) as { id: string };
+  if (awaiting && !legacy) {
+    const told = await notifyConfirmers(p, check.flags);
+    await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: 'pending', flags: check.flags, confirmers: told });
+    return mine(p);
+  }
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
   // ref المقيّم: منه نسب استجابة المقيّمين في سجل الإرسال (D15)
   await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { ref: `rater:${saved.id}` });
-  await audit('participant', p.id, 'rater.invite', 'raters', null, null, { email, relation, phase });
+  await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: legacy ? null : check.verdict });
   return mine(p);
 }
 
 export async function revoke(p: any, b: Body) {
-  must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).eq('status', 'invited'));
+  must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).in('status', ['invited', 'awaiting']));
   return mine(p);
+}
+
+// ── D19: المقيّمون المنتظرون ومن يؤكدهم ──
+// القائمة لمشاركين بأعينهم (مشاركو المستشار، أو مشاركو جهة المنسق). قبل الترحيل: لا شيء
+export async function awaitingFor(ids: string[]) {
+  if (!ids.length) return [];
+  const { data, error } = await db.from('raters').select('id, participant_id, email, full_name, relation, phase, verification_flags, invited_at, participants(full_name)')
+    .in('participant_id', ids).eq('status', 'awaiting').order('invited_at');
+  if (error) return [];
+  return (data || []).map((r: any) => ({ id: r.id, participant_id: r.participant_id, participant: r.participants?.full_name || null, email: r.email, full_name: r.full_name,
+    relation_ar: RELATION_AR[r.relation] || r.relation, phase: r.phase, invited_at: r.invited_at,
+    flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) }));
+}
+
+// التأكيد يرسل الدعوة برابط جديد (الرمز لا يُستعاد من بصمته)، وعدم الاعتماد بسبب يُبلَّغ به المشارك.
+// allowed يحصر الصلاحية في نطاق المؤكِّد؛ وكل قرار في السجل بمن اتخذه
+export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: string }, b: Body, allowed: (participantId: string) => Promise<boolean>) {
+  const id = String(b.id || '');
+  const r = must(await db.from('raters').select('id, participant_id, email, full_name, relation, phase, status, participants(full_name, email)').eq('id', id).maybeSingle()) as any;
+  if (!r || r.status !== 'awaiting') throw new Fail('لا مقيّم بانتظار التأكيد بهذا المعرّف', 404, 'not_found');
+  if (!(await allowed(r.participant_id))) throw new Fail('هذا المقيّم لمشارك ليس من نطاقك', 403, 'forbidden');
+  const who = `${by.kind}:${by.email}`;
+  const now = new Date().toISOString();
+  const actorType = by.kind === 'coordinator' ? 'coordinator' : 'system';
+  if (b.decision === 'reject') {
+    const reason = String(b.reason || '').trim().slice(0, 500);
+    if (reason.length < 5) throw new Fail('اكتب سبب عدم الاعتماد ليصل المشارك');
+    must(await db.from('raters').update({ status: 'revoked', verification: 'rejected', verified_by: who, verified_at: now }).eq('id', id).eq('status', 'awaiting'));
+    await audit(actorType, who, 'rater.reject', 'raters', id, null, { participant_id: r.participant_id, reason });
+    if (r.participants?.email) await sendMail(r.participants.email, 'لم يُعتمد أحد مقيّميك', raterRejectedMail(r.participants.full_name, r.full_name || r.email, reason), [], { ref: `participant:${r.participant_id}` }).catch((e) => console.error('rater reject mail', e));
+    return { success: true, decision: 'reject' };
+  }
+  const token = randomToken();
+  must(await db.from('raters').update({ status: 'invited', verification: 'confirmed', verified_by: who, verified_at: now, token_hash: await hash(token),
+    invited_at: now, expires_at: new Date(Date.now() + 30 * 864e5).toISOString() }).eq('id', id).eq('status', 'awaiting'));
+  const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
+  await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { ref: `rater:${id}` });
+  await audit(actorType, who, 'rater.confirm', 'raters', id, null, { participant_id: r.participant_id });
+  return { success: true, decision: 'confirm' };
 }
 
 // ── المقيّم: رابط بريد بلا حساب ──
@@ -347,6 +429,7 @@ export async function raterSubmit(b: Body) {
       });
     }
   }
+  await logConsent('rater', r.id, 'accept');   // D18: سطر موافقة المقيّم بإرساله تقديره بعد إشعار الخصوصية
   await audit('system', null, 'rater.submit', 'raters', r.id, null, { participant_id: r.participant_id, relation: r.relation });
   return { success: true };
 }

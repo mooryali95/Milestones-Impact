@@ -14,7 +14,8 @@ const RELATIONS = [
   { key: 'peer', title: 'زميل يعمل معك' },
   { key: 'report', title: 'أحد أعضاء فريقك' },
 ];
-const STATUS = { invited: 'بانتظار تقديره', submitted: 'أرسل تقديره ✓' };
+// D19: awaiting دعوة لم تُرسل بعد، بانتظار تأكيد المستشار أو منسق الجهة لأن البريد عام أو من نطاق آخر
+const STATUS = { awaiting: 'بانتظار تأكيد المستشار', invited: 'بانتظار تقديره', submitted: 'أرسل تقديره ✓' };
 
 function Bars({ label, before, after, beforeLabel, afterLabel }) {
   if (before == null || after == null) return null;
@@ -50,14 +51,15 @@ function Invite({ data, onChange }) {
         <p className="small muted">يقدّر مديرك ممارستك الآن وقبل البرنامج في 5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. يُكمل ذلك بند «إفادة المدير المباشر» في رحلتك.</p>
         {preManager && <p className="small muted">ادعُ المدير نفسه الذي قدّرك قبل البرنامج: {preManager.full_name || preManager.email}.</p>}
       </div>
+      {raters.some((r) => r.status === 'awaiting') && <p className="small muted">الدعوة ببريد عام أو من غير نطاق جهتك تصل بعد أن يؤكد مستشارك أو منسق جهتك أن المقيّم يعمل معك. بريد جهتك يصل فورًا.</p>}
       {raters.length > 0 && (
         <ul className="rater-list">
           {raters.map((r) => (
             <li key={r.id} className="row between">
-              <span><b>{r.full_name || r.email}</b> <span className="small muted">{RELATIONS.find((x) => x.key === r.relation)?.title}</span></span>
+              <span><b>{r.full_name || r.email}</b> <span className="small muted">{RELATIONS.find((x) => x.key === r.relation)?.title}{r.verification_ar ? ` · ${r.verification_ar}` : ''}</span></span>
               <span className="row small">
                 <span className={`chip ${r.status === 'submitted' ? 'ok' : 'warn'}`}>{STATUS[r.status]}</span>
-                {r.status === 'invited' && <button className="link small" onClick={() => revoke(r.id)}>إلغاء</button>}
+                {['invited', 'awaiting'].includes(r.status) && <button className="link small" onClick={() => revoke(r.id)}>إلغاء</button>}
               </span>
             </li>
           ))}
