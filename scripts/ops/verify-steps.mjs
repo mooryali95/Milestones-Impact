@@ -17,6 +17,8 @@ export const STEPS = [
     'node scripts/katon/verify.mjs > /dev/null 2>&1',
     'node scripts/handbook/build-migration.mjs > /dev/null && git diff --exit-code --stat -- supabase/migrations/20261102110000_leaders_handbook_v3.sql',
     'node scripts/handbook/verify.mjs > /dev/null',
+    'node scripts/handbook/build-version.mjs --check',
+    'node scripts/concepts/registry.mjs --check',
   ] },
   { id: 'secrets', title: 'لا أسرار في الملفات المودعة', ci: true, cmds: ['node scripts/ops/secrets-scan.mjs'] },
   { id: 'audit', title: 'لا ثغرة عالية في حزم الإنتاج', ci: true, cmds: ['npm audit --omit=dev --audit-level=high'] },

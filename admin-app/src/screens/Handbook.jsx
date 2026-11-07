@@ -7,12 +7,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
-  FTYPE, HB_TOOLS, HB_VIEWS, MASTER, QUIZ_TEMPLATE, RANK, SCOPE_VIEW, SUB_FILTER,
-  applyTool, badQuiz, chapterLabs, chapterLint, clearDraft, deleteNotice, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
+  FTYPE, HB_TOOLS, HB_VIEWS, MASTER, RANK, SCOPE_VIEW, SUB_FILTER,
+  applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ROM = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -107,7 +108,7 @@ function LintBar({ items, onPick }) {
 
 // ══ محرر الباب ══
 export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
-  const { toast, confirm } = useUI();
+  const { toast } = useUI();
   const d = m?.dimension || dim;
   const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '' });
   const guard = useGuard(draftKey('chapter', m, d), v, setV);
@@ -147,25 +148,16 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   };
   const submit = async (btn) => {
     if (btn === 'cancel') return guard.guardClose(() => onClose());
-    let r;
-    if (btn === 'delete') {
-      const n = deleteNotice(catalog, m);
-      if (n.blocked) return setErr(n.text);
-      if (!(await confirm(n.text, { danger: true }))) return;
-      r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
-    } else {
-      if (!v.title_ar.trim()) return setErr('عنوان الباب مطلوب');
-      const blockErr = bodyLint.find((x) => x.level === 'error');
-      if (blockErr) { pick(blockErr); return setErr(`لا يُحفظ الباب وفيه خطأ في الكتل: السطر ${blockErr.line}، ${blockErr.msg}`); }
-      const bad = badQuiz(v.quiz_md);
-      if (bad > 0 && !(await confirm(`${bad} من الأسئلة بلا خيار صحيح (*) أو بأقل من خيارين، ولن تظهر للمشارك. احفظ على أي حال؟`))) return;
-      const row = { title_ar: v.title_ar.trim(), min_level: v.min_level, body_md: v.body_md, reflection_ar: v.reflection_ar.trim() || null, quiz_md: v.quiz_md.trim() || null };
-      Object.assign(row, m ? { id: m.id } : { dimension: d, sort: nextSort(catalog.handbook_modules || [], d), chapter_key: `ch-${Date.now().toString(36)}` });
-      r = await L('admin.save', { entity: 'handbook_modules', row });
-    }
+    if (!v.title_ar.trim()) return setErr('عنوان الباب مطلوب');
+    const blockErr = bodyLint.find((x) => x.level === 'error');
+    if (blockErr) { pick(blockErr); return setErr(`لا يُحفظ الباب وفيه خطأ في الكتل: السطر ${blockErr.line}، ${blockErr.msg}`); }
+    // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فلا يُرسلان؛ يحفظ المحرر النص غير المُقاس وحده.
+    // الأبواب الجديدة وحذفها من المستودع كذلك، فالمحرر لا يفتح إلا بابًا قائمًا.
+    const row = { id: m.id, title_ar: v.title_ar.trim(), body_md: v.body_md, reflection_ar: v.reflection_ar.trim() || null };
+    const r = await L('admin.save', { entity: 'handbook_modules', row });
     if (!r.success) return setErr(r.message);
     guard.done();
-    toast(btn === 'delete' ? 'حُذف الباب' : 'حُفظ الباب');
+    toast('حُفظ الباب');
     onClose(true);
   };
 
@@ -174,11 +166,10 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
       <header className="hb-ed-head">
         <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]}{labs.length > 0 && <span className="hb-ed-labs"> · مختبرات أسفل الباب: {labs.map((l) => l.title_ar).join('، ')}</span>}</small>
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
-        <div className="hb-ed-lvl"><small>يظهر لمن مستواه</small><LevelSeg value={v.min_level} onChange={(l) => setV({ ...v, min_level: l })} disabled={!canWrite} /></div>
+        <div className="hb-ed-lvl"><small>يظهر لمن مستواه (من المستودع)</small><LevelSeg value={v.min_level} onChange={() => {}} disabled /></div>
         <div className="hb-ed-btns">
           {canWrite && <button className="btn-sm primary" value="save">حفظ الباب</button>}
           <button className="btn-sm ghost" value="cancel" formNoValidate>إغلاق</button>
-          {canWrite && m && <button className="hb-del" value="delete" formNoValidate>حذف</button>}
         </div>
       </header>
       <nav className="hb-ed-tabs">
@@ -210,9 +201,9 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
           <div className="hb-ed-panes">
             <div className="hb-ed-src qz-src">
               <label>سؤال التأمل<textarea rows={2} readOnly={!canWrite} value={v.reflection_ar} onChange={set('reflection_ar')} placeholder="سؤال يربط الباب بعمل المشارك الحقيقي" /></label>
-              <div className="qz-head"><b>الاختبار القصير</b>{canWrite && <button type="button" className="btn-sm ghost" onClick={() => setV({ ...v, quiz_md: `${v.quiz_md.trim() ? `${v.quiz_md.trim()}\n\n` : ''}${QUIZ_TEMPLATE}` })}>+ سؤال</button>}</div>
-              <small className="la-muted">س: السؤال · ثم الخيارات، كل خيار يبدأ بـ - والخيار الصحيح بـ * · ثم لماذا: شرح يظهر بعد الإجابة.</small>
-              <textarea ref={qa} className="qz-md" aria-label="أسئلة الاختبار" spellCheck={false} readOnly={!canWrite} value={v.quiz_md} onChange={set('quiz_md')} />
+              <div className="qz-head"><b>الاختبار القصير</b></div>
+              <p className="la-note" role="note">الاختبار {REPO_EDIT_AR}. يُعدَّل ملف الباب في supabase/content/handbook ثم يُولَّد الترحيل.</p>
+              <textarea ref={qa} className="qz-md" aria-label="أسئلة الاختبار" spellCheck={false} readOnly value={v.quiz_md} />
             </div>
             <div className="hb-ed-out"><div className="hb-ed-cap">كما يراه المشارك بعد الباب</div>
               <article className="hb-page qz-out">
@@ -444,23 +435,16 @@ export function Submission({ id, canWrite, onClose }) {
 
 // ══ القوائم ══
 function Chapters({ catalog, reload, canWrite, open }) {
-  const { toast, confirm } = useUI();
   const mods = catalog.handbook_modules || [];
   const cs = (id) => catalog.book_stats?.chapters?.[id] || {};
-  const remove = async (m) => {
-    const n = deleteNotice(catalog, m);
-    if (n.blocked) return toast(n.text);
-    if (!(await confirm(n.text, { danger: true }))) return;
-    const r = await L('admin.delete', { entity: 'handbook_modules', id: m.id });
-    toast(r.success ? 'حُذف الباب' : r.message); if (r.success) reload();
-  };
+
   return DIMS.map((d) => {
     const list = mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
     return (
       <section key={d} className="hb-dim">
         <header><span className="tx-roman">{DIM_EN[d][0]}</span><div><small>{DIM_EN[d]}</small><b>{DIM[d]}</b></div>
           <span className="hb-dim-n">{list.length} باب</span>
-          {canWrite && <button className="tx-btn gold" onClick={() => open({ kind: 'chapter', dim: d })}>+ باب جديد</button>}</header>
+</header>
         {list.length ? <ol className="hb-list">{list.map((m, i) => {
           const n = words(m.body_md);
           const q = parseQuiz(m.quiz_md).length;
@@ -482,7 +466,7 @@ function Chapters({ catalog, reload, canWrite, open }) {
               </button>
               <span className="hb-acts"><Move rows={mods} entity="handbook_modules" id={m.id} reload={reload} canWrite={canWrite} />
                 <button className="btn-sm ghost" onClick={() => open({ kind: 'chapter', m })}>{canWrite ? 'تحرير' : 'قراءة'}</button>
-                {canWrite && <button className="hb-del" onClick={() => remove(m)}>حذف</button>}</span>
+</span>
             </li>
           );
         })}</ol> : <p className="la-muted hb-none">لا أبواب في هذا الإطار بعد.</p>}

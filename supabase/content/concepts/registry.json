@@ -1,0 +1,788 @@
+{
+  "version": "0.1",
+  "status": "مسودة: المعرّفات ثابتة، والصيغ والتعريفات لخبراء المحتوى (D10)",
+  "bank": "v5.1",
+  "competencies": [
+    {
+      "id": "M-C01",
+      "dimension": "milestone",
+      "label_ar": "قيادة اجتماعات القرار",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C02",
+      "dimension": "milestone",
+      "label_ar": "معايير التسليم والقبول",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C03",
+      "dimension": "milestone",
+      "label_ar": "مراجعة مبرر الاستمرار",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C04",
+      "dimension": "milestone",
+      "label_ar": "إيقاف ما لا يخدم القيمة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C05",
+      "dimension": "milestone",
+      "label_ar": "بناء سجل المعالم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C06",
+      "dimension": "milestone",
+      "label_ar": "قراءة الانزلاق",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C07",
+      "dimension": "milestone",
+      "label_ar": "مواءمة متطلبات المانح",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C08",
+      "dimension": "milestone",
+      "label_ar": "قرار البوابة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C09",
+      "dimension": "milestone",
+      "label_ar": "ضبط تغيير النطاق",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C10",
+      "dimension": "milestone",
+      "label_ar": "الاستجابة للمخاطر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C11",
+      "dimension": "milestone",
+      "label_ar": "البوابة والمعلم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C12",
+      "dimension": "milestone",
+      "label_ar": "اختيار نهج الإدارة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C13",
+      "dimension": "milestone",
+      "label_ar": "المسار الحرج",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C14",
+      "dimension": "milestone",
+      "label_ar": "ضبط التغيير",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C15",
+      "dimension": "milestone",
+      "label_ar": "الخطر والمشكلة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C16",
+      "dimension": "milestone",
+      "label_ar": "خط الأساس",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C01",
+      "dimension": "impact",
+      "label_ar": "سؤال التغيير",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C02",
+      "dimension": "impact",
+      "label_ar": "ملكية المنافع",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C03",
+      "dimension": "impact",
+      "label_ar": "نزاهة الأدلة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C04",
+      "dimension": "impact",
+      "label_ar": "الأثر في القرار",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C05",
+      "dimension": "impact",
+      "label_ar": "صياغة المنفعة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C06",
+      "dimension": "impact",
+      "label_ar": "خط الأساس المتأخر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C07",
+      "dimension": "impact",
+      "label_ar": "اختيار مؤشر الأثر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C08",
+      "dimension": "impact",
+      "label_ar": "مراجعة المنافع",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C09",
+      "dimension": "impact",
+      "label_ar": "ادعاءات الأثر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C10",
+      "dimension": "impact",
+      "label_ar": "الآثار غير المقصودة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C11",
+      "dimension": "impact",
+      "label_ar": "مستويات سلسلة القيمة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C12",
+      "dimension": "impact",
+      "label_ar": "المساهمة والإسناد",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C13",
+      "dimension": "impact",
+      "label_ar": "النتائج الرئيسية ومؤشرات الأداء",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C14",
+      "dimension": "impact",
+      "label_ar": "مكونات المؤشر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C15",
+      "dimension": "impact",
+      "label_ar": "نظرية التغيير",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C16",
+      "dimension": "impact",
+      "label_ar": "المنافع السلبية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C01",
+      "dimension": "leadership",
+      "label_ar": "المرونة القيادية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C02",
+      "dimension": "leadership",
+      "label_ar": "ضبط الانفعال",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C03",
+      "dimension": "leadership",
+      "label_ar": "توثيق العهدة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C04",
+      "dimension": "leadership",
+      "label_ar": "شرح سبب التغيير",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C05",
+      "dimension": "leadership",
+      "label_ar": "تلقي التوجيه",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C06",
+      "dimension": "leadership",
+      "label_ar": "إدارة أصحاب المصلحة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C07",
+      "dimension": "leadership",
+      "label_ar": "إيصال الأخبار الصعبة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C08",
+      "dimension": "leadership",
+      "label_ar": "توجيه عضو جديد",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C09",
+      "dimension": "leadership",
+      "label_ar": "إدارة الخلاف",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C10",
+      "dimension": "leadership",
+      "label_ar": "التسليم والتسلم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C11",
+      "dimension": "leadership",
+      "label_ar": "القيادة الموقفية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C12",
+      "dimension": "leadership",
+      "label_ar": "التأثير دون سلطة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C13",
+      "dimension": "leadership",
+      "label_ar": "الأمان النفسي",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C14",
+      "dimension": "leadership",
+      "label_ar": "القيادة التحويلية والتبادلية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C15",
+      "dimension": "leadership",
+      "label_ar": "نتائج القيادة في الفريق",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C16",
+      "dimension": "leadership",
+      "label_ar": "الملاحظة البنّاءة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch4"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C17",
+      "dimension": "milestone",
+      "label_ar": "أسئلة طبقات المعالم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C18",
+      "dimension": "milestone",
+      "label_ar": "التمويل المرحلي في المحفظة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C19",
+      "dimension": "milestone",
+      "label_ar": "جدارات القائد في إطار المعلم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C20",
+      "dimension": "milestone",
+      "label_ar": "الأداة تخدم المنهجية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C17",
+      "dimension": "impact",
+      "label_ar": "معلم القيمة بعد التسليم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C18",
+      "dimension": "impact",
+      "label_ar": "ملكية المنفعة والتبني",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C19",
+      "dimension": "impact",
+      "label_ar": "أخلاقيات بيانات الأثر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C20",
+      "dimension": "impact",
+      "label_ar": "حوكمة الأدلة والأمانة القياسية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C17",
+      "dimension": "leadership",
+      "label_ar": "أدوات قيادة التحول",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C18",
+      "dimension": "leadership",
+      "label_ar": "اصطفاف أصحاب المصلحة في البرنامج",
+      "aliases_ar": [],
+      "chapters": [
+        "ch5"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C19",
+      "dimension": "leadership",
+      "label_ar": "أداة DIRECT",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C20",
+      "dimension": "leadership",
+      "label_ar": "جدارات القائد الذاتية",
+      "aliases_ar": [],
+      "chapters": [
+        "ch6"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C21",
+      "dimension": "milestone",
+      "label_ar": "التمييز بين المخرج والنتيجة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C22",
+      "dimension": "milestone",
+      "label_ar": "حوكمة القرار في المشروع",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C23",
+      "dimension": "milestone",
+      "label_ar": "معالم المشروع الحكومي",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "M-C24",
+      "dimension": "milestone",
+      "label_ar": "أنواع المعالم في السياق التنموي",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C21",
+      "dimension": "impact",
+      "label_ar": "أسئلة تقييم التدخل",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C22",
+      "dimension": "impact",
+      "label_ar": "تحقق المنافع بعد التسليم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C23",
+      "dimension": "impact",
+      "label_ar": "اختيار نموذج القياس",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C24",
+      "dimension": "impact",
+      "label_ar": "من تقارير الإنجاز إلى تقارير الأثر",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C21",
+      "dimension": "leadership",
+      "label_ar": "الفرق بين القيادة والإدارة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C22",
+      "dimension": "leadership",
+      "label_ar": "إغلاق حلقة التكليف",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C23",
+      "dimension": "leadership",
+      "label_ar": "توازن جدارات القائد",
+      "aliases_ar": [],
+      "chapters": [
+        "ch1"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "L-C24",
+      "dimension": "leadership",
+      "label_ar": "الرقابة بعد التسليم",
+      "aliases_ar": [],
+      "chapters": [
+        "ch3"
+      ],
+      "status": "draft"
+    },
+    {
+      "id": "I-C25",
+      "dimension": "impact",
+      "label_ar": "حدود الأدلة",
+      "aliases_ar": [],
+      "chapters": [
+        "ch2"
+      ],
+      "status": "draft"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "VC-01",
+      "kind": "value_chain",
+      "label_ar": "سلسلة القيمة",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "BN-01",
+      "kind": "benefit",
+      "label_ar": "المنفعة ومالكها",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "MD-01",
+      "kind": "milestone_decision",
+      "label_ar": "خيارات القرار عند المعلم",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "TY-01",
+      "kind": "types",
+      "label_ar": "الأنواع الأربعة",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "IM-01",
+      "kind": "impact_meaning",
+      "label_ar": "معاني «الأثر»",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "LF-01",
+      "kind": "framework_name",
+      "label_ar": "اسم إطار القيادة",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    },
+    {
+      "id": "PS-01",
+      "kind": "public_sector",
+      "label_ar": "مصطلحات القطاع العام (D12)",
+      "definition_ar": null,
+      "status": "awaiting_experts"
+    }
+  ]
+}

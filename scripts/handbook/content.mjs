@@ -5,7 +5,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
-export const VERSION = 'v3';
+// الإصدار الحالي أحدث مجلد (v2 ثم v3 ثم v3.1...)، فيقرؤه المتحقق وكشف الانحراف دون ثابت يُنسى.
+// كل إصدار مجمّد بعد ترحيله: التعديل إصدار جديد بـ scripts/handbook/build-version.mjs (D01 وD02).
+export const versions = () => readdirSync(join(ROOT, 'supabase/content/handbook'), { withFileTypes: true }).filter((d) => d.isDirectory() && /^v\d+(\.\d+)*$/.test(d.name))
+  .map((d) => d.name).sort((a, b) => a.slice(1).split('.').map(Number).reduce((r, n, i) => r || n - (b.slice(1).split('.').map(Number)[i] ?? -1), 0) || a.length - b.length);
+export const VERSION = versions().at(-1);
 export const dirOf = (ver = VERSION) => join(ROOT, 'supabase/content/handbook', ver);
 export const DIR = dirOf();
 

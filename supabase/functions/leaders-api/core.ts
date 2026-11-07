@@ -105,6 +105,9 @@ export function fromBytea(s: string) {
   return out;
 }
 
+// عمود غير موجود في القاعدة أو في ذاكرة PostgREST: ترحيل لم يُطبَّق بعد، فيُعاد الطلب بدونه (قراءة متسامحة)
+export const missingColumn = (err: any) => err?.code === 'PGRST204' || err?.code === '42703';
+
 export function must<T>(res: { data: T; error: unknown }, msg = 'تعذّر تنفيذ العملية'): T {
   if (res.error) {
     console.error(res.error);

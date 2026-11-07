@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261105170000_leaders_peer_requests
+-- as-of migration: 20261107100000_leaders_content_provenance
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -317,6 +317,7 @@ create table if not exists leaders.content_items (
   active boolean default true not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  updated_by text,
   constraint content_items_check CHECK ((NOT ((min_level IS NOT NULL) AND (only_level IS NOT NULL)))),
   constraint content_items_check1 CHECK (((dimension IS NOT NULL) OR ((min_level IS NULL) AND (only_level IS NULL)))),
   constraint content_items_description_ar_check CHECK ((char_length(description_ar) <= 2000)),
@@ -572,6 +573,7 @@ create table if not exists leaders.grid_cells (
   description_ar text,
   updated_at timestamp with time zone default now() not null,
   path_title_ar text,
+  updated_by text,
   constraint grid_cells_pkey PRIMARY KEY (dimension, level)
 );
 
@@ -634,6 +636,8 @@ create table if not exists leaders.handbook_modules (
   body_md text,
   reflection_ar text,
   quiz_md text,
+  updated_at timestamp with time zone,
+  updated_by text,
   constraint handbook_modules_pkey PRIMARY KEY (id),
   constraint handbook_modules_dimension_chapter_key_key UNIQUE (dimension, chapter_key)
 );
@@ -671,6 +675,8 @@ create table if not exists leaders.instruments (
   intro_ar text,
   est_minutes smallint,
   pairs_with text,
+  updated_at timestamp with time zone,
+  updated_by text,
   constraint instruments_kind_check CHECK ((kind = ANY (ARRAY['baseline'::text, 'post'::text, 'final'::text]))),
   constraint instruments_pkey PRIMARY KEY (id),
   constraint instruments_key_key UNIQUE (key)
@@ -692,6 +698,8 @@ create table if not exists leaders.journey_stages (
   builds_on_ar text,
   program_id uuid not null,
   rules jsonb default '{}'::jsonb not null,
+  updated_at timestamp with time zone,
+  updated_by text,
   constraint journey_stages_mode_check CHECK ((mode = ANY (ARRAY['in_person'::text, 'online'::text, 'hybrid'::text, 'self'::text]))),
   constraint journey_stages_phase_check CHECK ((phase = ANY (ARRAY['admission'::text, 'qualification'::text, 'impact'::text]))),
   constraint journey_stages_pkey PRIMARY KEY (program_id, key)
@@ -726,6 +734,7 @@ create table if not exists leaders.katon_sentences (
   explain_ar text,
   tasks jsonb default '{}'::jsonb not null,
   updated_at timestamp with time zone default now() not null,
+  updated_by text,
   constraint katon_sentences_explain_ar_check CHECK ((char_length(explain_ar) <= 800)),
   constraint katon_sentences_key_check CHECK ((key = ANY (ARRAY['true'::text, 'false'::text, 'opinion'::text]))),
   constraint katon_sentences_question_check CHECK ((question = ANY (ARRAY['why'::text, 'what'::text, 'how'::text, 'absent'::text, 'who'::text, 'when'::text]))),
@@ -744,6 +753,7 @@ create table if not exists leaders.katon_topics (
   sort smallint default 0 not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  updated_by text,
   constraint katon_topics_dimension_check CHECK ((dimension = ANY (ARRAY['milestone'::text, 'impact'::text, 'leadership'::text]))),
   constraint katon_topics_key_check CHECK (((char_length(key) >= 2) AND (char_length(key) <= 60))),
   constraint katon_topics_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text]))),
@@ -825,6 +835,7 @@ create table if not exists leaders.learning_models (
   updated_at timestamp with time zone default now() not null,
   capstone_sort smallint,
   scopes text[] default '{}'::text[] not null,
+  updated_by text,
   constraint learning_models_key_check CHECK ((key ~ '^[a-z0-9-]{2,60}$'::text)),
   constraint learning_models_points_check CHECK (((points >= 0) AND (points <= 500))),
   constraint learning_models_pkey PRIMARY KEY (id),
@@ -1267,6 +1278,8 @@ create table if not exists leaders.questions (
   text_rater_ar text,
   form text,
   min_level text,
+  updated_at timestamp with time zone,
+  updated_by text,
   constraint questions_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
   constraint questions_kind_check CHECK ((kind = ANY (ARRAY['likert'::text, 'choice'::text, 'text'::text]))),
   constraint questions_min_level_check CHECK ((min_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text]))),
@@ -1365,6 +1378,8 @@ create table if not exists leaders.stage_requirements (
   active boolean default true not null,
   config jsonb default '{}'::jsonb not null,
   program_id uuid not null,
+  updated_at timestamp with time zone,
+  updated_by text,
   constraint stage_requirements_check CHECK (((level IS NULL) OR (dimension IS NOT NULL))),
   constraint stage_requirements_kind_check CHECK ((kind = ANY (ARRAY['check'::text, 'upload'::text, 'form'::text, 'meeting'::text, 'reading'::text, 'auto'::text, 'video'::text, 'workshop'::text, 'coaching'::text, 'curriculum'::text, 'model'::text, 'capstone'::text, 'survey'::text]))),
   constraint stage_requirements_pkey PRIMARY KEY (id),
@@ -1401,6 +1416,7 @@ create table if not exists leaders.tracks (
   updated_at timestamp with time zone default now() not null,
   title_en text,
   profile_key text,
+  updated_by text,
   constraint tracks_key_check CHECK ((key ~ '^M[1-3]I[1-3]L[1-3]$'::text)),
   constraint tracks_title_en_check CHECK (((title_en IS NULL) OR (char_length(title_en) <= 200))),
   constraint tracks_pkey PRIMARY KEY (key),
@@ -2829,6 +2845,24 @@ alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
 
+CREATE OR REPLACE FUNCTION leaders.content_provenance()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders'
+AS $function$
+begin
+  if tg_op = 'INSERT' then
+    new.updated_at := coalesce(new.updated_at, now());
+    new.updated_by := coalesce(new.updated_by, 'db:' || current_user);
+  elsif new.updated_at is not distinct from old.updated_at then
+    -- الكاتب لم يختم: ليس حفظًا من اللوحة
+    new.updated_at := now();
+    new.updated_by := 'db:' || current_user;
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.instrument_reliability(p_instrument uuid)
  RETURNS TABLE(dimension text, n integer, k integer, alpha numeric, sd numeric)
  LANGUAGE sql
@@ -3490,9 +3524,25 @@ exception when duplicate_object then null; end $$;
 
 CREATE OR REPLACE TRIGGER cohorts_touch BEFORE UPDATE ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
+CREATE OR REPLACE TRIGGER content_items_provenance BEFORE INSERT OR UPDATE ON leaders.content_items FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
 CREATE OR REPLACE TRIGGER enrollments_touch BEFORE UPDATE ON leaders.enrollments FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
+CREATE OR REPLACE TRIGGER grid_cells_provenance BEFORE INSERT OR UPDATE ON leaders.grid_cells FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
 CREATE OR REPLACE TRIGGER grid_cells_touch BEFORE UPDATE ON leaders.grid_cells FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER handbook_modules_provenance BEFORE INSERT OR UPDATE ON leaders.handbook_modules FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER instruments_provenance BEFORE INSERT OR UPDATE ON leaders.instruments FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER journey_stages_provenance BEFORE INSERT OR UPDATE ON leaders.journey_stages FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER katon_sentences_provenance BEFORE INSERT OR UPDATE ON leaders.katon_sentences FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER katon_topics_provenance BEFORE INSERT OR UPDATE ON leaders.katon_topics FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER learning_models_provenance BEFORE INSERT OR UPDATE ON leaders.learning_models FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
 CREATE OR REPLACE TRIGGER organizations_name_sync AFTER UPDATE OF name ON leaders.organizations FOR EACH ROW EXECUTE FUNCTION leaders.sync_org_name_to_participants();
 
@@ -3504,7 +3554,13 @@ CREATE OR REPLACE TRIGGER participants_touch BEFORE UPDATE ON leaders.participan
 
 CREATE OR REPLACE TRIGGER placement_model_touch BEFORE UPDATE ON leaders.placement_model FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
+CREATE OR REPLACE TRIGGER questions_provenance BEFORE INSERT OR UPDATE ON leaders.questions FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER stage_requirements_provenance BEFORE INSERT OR UPDATE ON leaders.stage_requirements FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
 CREATE OR REPLACE TRIGGER track_profiles_touch BEFORE UPDATE ON leaders.track_profiles FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER tracks_provenance BEFORE INSERT OR UPDATE ON leaders.tracks FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
 CREATE OR REPLACE TRIGGER tracks_touch BEFORE UPDATE ON leaders.tracks FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 

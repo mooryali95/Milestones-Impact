@@ -48,24 +48,26 @@ test('الأبواب: معاينة بحسب المستوى، وأداة المح
   await body.evaluate((t) => { const i = t.value.indexOf('نص للجميع'); t.focus(); t.setSelectionRange(i, i); });
   await ed.getByRole('button', { name: 'خلاصة' }).click();
   await expect(body).toHaveValue(/\n> نص للجميع\n/);
+  // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فيُعرضان للقراءة ولا يُرسلان مع الحفظ
   await ed.getByRole('button', { name: /التأمل والاختبار/ }).click();
   await expect(ed.getByText('أقصى نقاط الباب: 20')).toBeVisible();
-  await ed.getByRole('button', { name: '+ سؤال' }).click();
-  await expect(ed.getByText('أقصى نقاط الباب: 25')).toBeVisible();
+  await expect(ed.getByRole('button', { name: '+ سؤال' })).toHaveCount(0);
+  await expect(ed.getByLabel('أسئلة الاختبار')).toHaveAttribute('readonly', '');
+  await expect(ed.getByRole('note')).toContainText('يُعدَّل من المستودع');
   await ed.getByRole('button', { name: 'حفظ الباب' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'handbook_modules', row: { id: 'h1', title_ar: 'المعلم', reflection_ar: 'ما معلمك؟' } });
-  expect(calls.find((c) => c.action === 'admin.save').row.quiz_md).toContain('الخيار الصحيح');
+  const row = calls.find((c) => c.action === 'admin.save').row;
+  expect(row).not.toHaveProperty('quiz_md');
+  expect(row).not.toHaveProperty('min_level');
 });
 
-test('باب جديد يُرتَّب آخر إطاره ويُطلب عنوانه', async ({ page }) => {
-  const calls = await setup(page);
-  await page.getByRole('button', { name: '+ باب جديد' }).first().click();
-  const ed = page.getByRole('dialog', { name: 'باب جديد' });
-  await ed.getByRole('button', { name: 'حفظ الباب' }).click();
-  await expect(ed.getByRole('alert')).toHaveText('عنوان الباب مطلوب');
-  await ed.getByLabel('عنوان الباب').fill('باب ثالث');
-  await ed.getByRole('button', { name: 'حفظ الباب' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ title_ar: 'باب ثالث', dimension: 'milestone', sort: 3 });
+test('الأبواب الجديدة وحذفها من المستودع: لا زر باب جديد ولا حذف في اللوحة', async ({ page }) => {
+  await setup(page);
+  await expect(page.getByRole('button', { name: /^المعلم/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ باب جديد' })).toHaveCount(0);
+  await expect(page.locator('.hb-list .hb-del')).toHaveCount(0);
+  await page.getByRole('button', { name: /^المعلم/ }).click();
+  await expect(page.getByRole('dialog', { name: 'تحرير الباب: المعلم' }).getByRole('button', { name: 'حذف' })).toHaveCount(0);
 });
 
 test('النماذج: إضافة حقل جدول ومعاينته، ثم الحفظ', async ({ page }) => {

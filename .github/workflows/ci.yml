@@ -57,6 +57,9 @@ jobs:
           # الكتاب v3: ترحيله مولَّد من ملفاته، والأبواب تجتاز متحقق الكتيب (كتل المستوى والاختبارات والأمثلة والتأمل)
           node scripts/handbook/build-migration.mjs > /dev/null && git diff --exit-code --stat -- supabase/migrations/20261102110000_leaders_handbook_v3.sql
           node scripts/handbook/verify.mjs > /dev/null
+          # كل إصدار للكتاب بعد v3 يطابق ترحيله (الإصدار المرحَّل مجمّد)، وسجل المفاهيم يربط كل فقرة محتسبة بجدارة وباب (D01 وD10)
+          node scripts/handbook/build-version.mjs --check
+          node scripts/concepts/registry.mjs --check
 
       # لا مفتاح خدمة ولا رمز وصول ولا مفتاح خاص في أي ملف مودع (مفتاح anon العام وحده مسموح)
       - name: No secrets in tracked files
