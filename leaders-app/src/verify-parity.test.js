@@ -90,7 +90,7 @@ describe('فحص الأسرار', () => {
   it('مفتاح anon مسموح، ومفتاح الخدمة وأنواع الأسرار المعروفة مرفوضة', () => {
     expect(scanText(`const k = '${jwt({ role: 'anon', ref: 'x' })}'`)).toEqual([]);
     expect(scanText(`k=${jwt({ role: 'service_role' })}`)[0].kind).toMatch(/service_role/);
-    for (const s of ['sbp_' + 'a'.repeat(40), 'AKIA' + 'A'.repeat(16), '-----BEGIN PRIVATE KEY-----', 're_abcdefgh_' + 'x'.repeat(20), 'ghp_' + 'a'.repeat(36)]) {
+    for (const s of ['sbp_' + 'a'.repeat(40), 'AKIA' + 'A'.repeat(16), '-----BEGIN ' + 'PRIVATE KEY-----', 're_abcdefgh_' + 'x'.repeat(20), 'ghp_' + 'a'.repeat(36)]) {
       expect(scanText(`x ${s} y`).length, s.slice(0, 6)).toBe(1);
     }
   });
