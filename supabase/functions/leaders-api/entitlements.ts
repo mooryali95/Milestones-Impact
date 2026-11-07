@@ -92,11 +92,14 @@ async function seatAlerts(org: { id: string; name: string }) {
     `استُهلك ${used} من ${o.seats} مقعدًا في عقد ${esc(org.name)}.${level === 1 ? ' التسجيلات التالية تنتظر قرار الرعاية.' : ''}`);
 }
 
+// المنسق يُخطَر ببوابة جهته (لا يدخل لوحة الإدارة)، والإدارة بصفحة الطلبات حيث يُتخذ القرار
 async function notifyOrg(org: { id: string; name: string }, subject: string, text: string) {
   const { data: coords } = await db.from('org_coordinators').select('email, status').eq('organization_id', org.id).neq('status', 'suspended');
-  const to = [...new Set([...(coords || []).map((c: any) => c.email).filter(Boolean), CONFIG.alertEmail].filter(Boolean))];
-  const html = mailShell(subject, mailText(text) + mailButton(`${SITES.admin}/#/leaders/payments`, 'افتح الطلبات'), { family: 'admin', footnote: '' });
-  for (const t of to) await sendMail(t as string, subject, html, [], { ref: `organization:${org.id}` }).catch((e) => console.error('seat notify', e));
+  const coordEmails = [...new Set((coords || []).map((c: any) => c.email).filter(Boolean))] as string[];
+  const send = (to: string, url: string, label: string) => sendMail(to, subject, mailShell(subject, mailText(text) + mailButton(url, label), { family: 'admin', footnote: '' }), [], { ref: `organization:${org.id}` })
+    .catch((e) => console.error('seat notify', e));
+  for (const t of coordEmails) await send(t, `${CONFIG.appUrl}/org`, 'افتح بوابة جهتك');
+  if (CONFIG.alertEmail && !coordEmails.includes(CONFIG.alertEmail)) await send(CONFIG.alertEmail, `${SITES.admin}/#/leaders/payments`, 'افتح الطلبات');
 }
 
 // يثبّت لمشارك بمعرّفه إن كانت جهته نشطة؛ يُستدعى من مسارات الربط كلها. لا يرمي: الربط نفسه نجح، والتثبيت له احتياط في access()
