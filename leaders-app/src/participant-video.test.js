@@ -1,5 +1,6 @@
 // فيديو المشارك (2026-11-09): الملفات والترجمة من PARTICIPANT_BEATS وحدها، وقواعد النص التي تمنع عودة الانحراف:
-// صيغة المخاطب، ولا رقم يتغير من اللوحة، ولا ادعاء خالف قرارات اللجنة في الجولة الكاملة (D03 وD05 وD06 وD17 وD20).
+// كل مقتطف حرفي من نص خطوته (فهو ما في التسجيل)، ولا رقم يتغير من اللوحة، ولا لغة لوحة أو حساب عرض،
+// ولا ادعاء خالف قرارات اللجنة في الجولة الكاملة (D03 وD05 وD06 وD17 وD20).
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,22 +20,35 @@ describe('نص فيديو المشارك', () => {
     for (const b of PARTICIPANT_BEATS) expect(b.title.split(/\s+/).length).toBeLessThanOrEqual(4);
   });
 
-  it('نحو دقيقتين: بين 150 و230 كلمة', () => {
-    expect(words).toBeGreaterThanOrEqual(150);
-    expect(words).toBeLessThanOrEqual(230);
+  it('كل مقتطف نص متصل من خطوته في الجولة، يبدأ وينتهي عند حد كلمة', () => {
+    const d = Object.fromEntries(TOUR_STEPS.map((s) => [s.key, s.d.split(/\s+/)]));
+    for (const l of PARTICIPANT_LINES) {
+      expect(l.clips.length).toBeGreaterThan(0);
+      for (const c of l.clips) {
+        const w = c.split(/\s+/), t = d[l.step];
+        // الكلمة الأخيرة قد تُقتطع قبل علامة الوقف التي تليها في النص («جهته،» تنتهي «جهته»)
+        const at = t.findIndex((_, k) => w.every((x, j) => t[k + j] === x || (j === w.length - 1 && t[k + j]?.replace(/[،؛.:؟!]$/, '') === x)));
+        expect(at, `${l.step}: ${c}`).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 
-  it('بصيغة المخاطب، بلا شرطة ولا رقم ولا لغة مقدّم أو لوحة', () => {
+  it('نحو ثلاث دقائق كلامًا: بين 150 و260 كلمة', () => {
+    expect(words).toBeGreaterThanOrEqual(150);
+    expect(words).toBeLessThanOrEqual(260);
+  });
+
+  it('بلا شرطة ولا رقم ولا لغة مقدّم أو لوحة أو حساب عرض', () => {
     const titles = PARTICIPANT_BEATS.map((b) => b.title).join(' ');
     expect(`${titles} ${all}`).not.toMatch(/[-\u2010-\u2015\u2212\u0640]/);
     expect(all).not.toMatch(/[0-9\u0660-\u0669]/);
-    for (const w of ['المشارك', 'أهلًا بكم', 'لنرى', 'حساب العرض', 'اللوحة', 'الكود', 'مصدر واحد']) expect(all).not.toContain(w);
+    for (const w of ['لنرى', 'نسير معًا', 'حساب العرض', 'البرنامج الحقيقي', 'اللوحة', 'الكود', 'مصدر واحد', 'بوابة']) expect(all).not.toContain(w);
   });
 
   it('لا ادعاء خالف القرارات: مدة القياس، والقاعة، والشهادة، والرعاية، والقياس الأخير', () => {
     expect(all).not.toMatch(/دقيقة|دقائق/);                   // المدة من الأداة الفعالة على الشاشة (D03)
     expect(all).not.toContain('شهادة مشاركة');                // «إتمام بنجاح» وحدها (D05)
-    expect(all).toContain('شهادة إتمام بنجاح');
+    expect(all).not.toMatch(/عشر مراحل/);                    // عدد المراحل يُضبط من الإعداد
     const hall = PARTICIPANT_LINES.find((l) => l.step === 'hall').text;
     expect(hall).not.toMatch(/يُحتسب|تقييم/);                 // القاعة للتعلم (D17)
     expect(all).not.toMatch(/تلقائيًا|تُغطّى/);              // الرعاية ضمن مقاعد العقد (D20)
@@ -45,7 +59,7 @@ describe('نص فيديو المشارك', () => {
 
 describe('ملفات فيديو المشارك', () => {
   const base = `leaders-app/public/media/${PARTICIPANT_VIDEO.file}`;
-  it('الملفات الخمسة موجودة وتحت السقف، والمدة مطابقة ودون دقيقتين ونصف', () => {
+  it('الملفات الخمسة موجودة وتحت السقف، والمدة مطابقة ودون ثلاث دقائق', () => {
     for (const ext of ['mp4', 'webm', 'vtt', 'jpg', 'json']) {
       const p = join(root, `${base}.${ext}`);
       expect(existsSync(p), p).toBe(true);
@@ -53,7 +67,7 @@ describe('ملفات فيديو المشارك', () => {
     }
     const meta = JSON.parse(read(`${base}.json`));
     expect(PARTICIPANT_VIDEO.seconds).toBe(meta.seconds);
-    expect(meta.seconds).toBeLessThanOrEqual(150);
+    expect(meta.seconds).toBeLessThanOrEqual(180);
     expect(meta.marks).toHaveLength(PARTICIPANT_LINES.length);
   });
 

@@ -150,7 +150,7 @@ const beginLine = async (idx, anchorOverride) => {
   const ln = PARTICIPANT_LINES[idx], st = TOUR_STEPS.find((x) => x.key === ln.step);
   const anchor = anchorOverride === undefined ? st.anchor : anchorOverride;
   if (anchor) { await page.locator(`[data-tour="${anchor}"]`).first().waitFor({ timeout: 8000 }).catch(() => {}); await page.locator(`[data-tour="${anchor}"]`).first().scrollIntoViewIfNeeded().catch(() => {}); }
-  await sleep(300);
+  await sleep(200);
   const total = PARTICIPANT_BEATS.length;
   await page.evaluate(([a, n, t, title, text, mark, chip]) => window.__mi.show(a, n, t, title, text, mark, chip), [anchor, ln.beat, total, ln.title, ln.text, idx + 1, `المحطة ${ln.beat} من ${total}`]);
   cur = { idx, from: now(), text: ln.text, full: false };
@@ -167,11 +167,11 @@ const atWord = async (word) => {
   if (t > 0) await sleep(t * 1000);
 };
 // ينتظر انتهاء كلام الخطوة (مهما سبقته الحركة) ثم يسجّل موضعها للترجمة ويخفي البطاقة
-const end = async (padMs = PART ? 300 : 500) => {
+const end = async (padMs = PART ? 200 : 500) => {
   const remain = cur.from + speechSec(cur.text, cur.idx) + padMs / 1000 - now();
   if (remain > 0) await sleep(remain * 1000);
   marks.push([cur.from, now(), cur.text]);
-  if (cur.full) { await ev('window.__mi.fullHide()'); await sleep(700); } else { await ev('window.__mi.hide()'); await sleep(350); }
+  if (cur.full) { await ev('window.__mi.fullHide()'); await sleep(PART ? 500 : 700); } else { await ev('window.__mi.hide()'); await sleep(PART ? 250 : 350); }
   cur = null;
 };
 const say = async (idx, anchorOverride) => { await begin(idx, anchorOverride); await end(); };
@@ -190,115 +190,121 @@ await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.getByLabel('البريد الإلكتروني').waitFor();
 await sleep(600);
 
-// فيديو المشارك: خمسة عشر سطرًا في ست محطات، كل سطر على شاشة خطوته من الجولة، والحركة مع الكلمة التي تصفها
+// فيديو المشارك: كل سطر من PARTICIPANT_LINES على شاشة خطوته، والحركة مع الكلمة التي تصفها. الشاشات بالمفتاح (step)،
+// فيبقى المسار صالحًا إن تغيّر النص أو اختيرت أسطر أخرى من الجولة، والكلمة الأولى الموجودة من كل قائمة هي موضع الحركة.
 async function participantFlow() {
-  srv.s.approveOnSubmit = false;   // «قيد المراجعة» بعد الإرسال، ثم يعتمد المستشار قبل محطة التأهيل
-  // ما يتغير على الخادم لا يظهر في الصورة: عدد أسئلة المحاكاة غير عدد الأداة الفعالة
-  await page.addStyleTag({ content: '.quiz-head > span.small:not(.muted){visibility:hidden}' }).catch(() => {});
-  const L = (i) => PARTICIPANT_LINES[i];
-
-  // المحطة 1: بطاقة كاملة فوق شاشة الدخول
-  await fullBegin('برنامج إدارة المشروعات للقادة', L(0).title, L(0).text, 0);
-  await end(800);
-
-  // المحطة 2: الدخول بالبريد، ورمز الجهة الراعية في خطوة الاسم مع «رمزها»، ثم الملف
-  await beginLine(1);
-  await atWord('ببريدك');
-  await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
-  await click(page.getByRole('button', { name: 'متابعة' }));
-  await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
-  await atWord('رمزها');
-  const sponsor = page.getByLabel(/رمز الجهة الراعية/);
-  if (await sponsor.isVisible().catch(() => false)) await type(sponsor, 'HTR-2026');
-  await click(page.getByRole('button', { name: 'أرسل الرمز' }));
-  await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
-  await cursorHide();
-  await end();
-  await type(page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first(), '246810');
-  const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
-  if (await verify.isVisible().catch(() => false)) await click(verify);
-  await page.locator('h1', { hasText: 'عرّفنا بك' }).first().waitFor({ timeout: 15000 });   // h3 بطاقة المحطة تحمل الاسم نفسه
-  await cursorHide();
-
-  await beginLine(2);
-  await atWord('تُعرّفنا');
-  await put(page.getByLabel(/رقم الجوال/), '0551234567');
-  await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
-  await put(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
-  await put(page.getByLabel(/سنوات الخبرة/), '9');
-  await atWord('ونطاق');
-  const scope = page.getByLabel(/نطاق ما تقوده الآن/);
-  if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
-  await cursorHide();
-  await end();
-  await click(page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }));
-  await page.getByRole('heading', { name: 'لنحدد نقطة انطلاقك' }).waitFor({ timeout: 15000 });
-  await cursorHide();
-
-  // المحطة 3: سطر الزمن بلا رقم ولا عدد أسئلة (يعرضهما التطبيق من الأداة الفعالة)، ثم الإجابة مع «وتُحفظ»
-  await page.locator('[data-tour="assessment"] .alert.info').first().evaluate((el) => { el.textContent = '⏱ بلا حد زمني. تُحفظ إجاباتك أولًا بأول.'; }).catch(() => {});
-  await beginLine(3);
-  await atWord('زمني'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(500);
-  await atWord('وتُحفظ'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(400);
-  for (const [label, pick] of [[/واصل إلى|التالي/, /تغيّر سلوك المستفيدين/], [/واصل إلى|التالي/, /دائمًا/]]) {
-    const next = page.getByRole('button', { name: label }).first();
-    if (await next.isVisible().catch(() => false)) await click(next);
-    await click(page.getByRole('radio', { name: pick }).first()); await sleep(300);
+  srv.s.approveOnSubmit = false;   // «قيد المراجعة» بعد الإرسال، ثم يعتمد المستشار قبل خطوات التأهيل
+  await page.addStyleTag({ content: '.quiz-head > span.small:not(.muted){visibility:hidden}' }).catch(() => {});   // عدد أسئلة المحاكاة ليس عدد الأداة
+  const cue = async (...words) => { const w = words.find((x) => cur.text.includes(x)); if (w) await atWord(w); };
+  const nav = async (tab, anchor) => {
+    await click(page.locator(`[data-tour="${tab}"]`).first());
+    await page.locator(`[data-tour="${anchor}"]`).waitFor({ timeout: 15000 });
+    await cursorHide();
+  };
+  const SCREENS = {
+    welcome: async (i) => { await fullBegin('برنامج إدارة المشروعات للقادة', 'كيف تسير رحلتك', PARTICIPANT_LINES[i].text, i); await end(800); },
+    doors: async (i) => {
+      await beginLine(i);
+      await cue('ببريدك', 'ببريده');
+      await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
+      await click(page.getByRole('button', { name: 'متابعة' }));
+      await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
+      await cue('رمزها', 'ترشّحه');
+      const sponsor = page.getByLabel(/رمز الجهة الراعية/);
+      if (await sponsor.isVisible().catch(() => false)) await type(sponsor, 'HTR-2026');
+      await click(page.getByRole('button', { name: 'أرسل الرمز' }));
+      await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
+      await cursorHide();
+      await end();
+      await type(page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first(), '246810');
+      const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
+      if (await verify.isVisible().catch(() => false)) await click(verify);
+      await page.locator('h1', { hasText: 'عرّفنا بك' }).first().waitFor({ timeout: 15000 });   // h3 البطاقة قد تحمل الاسم نفسه
+      await cursorHide();
+    },
+    profile: async (i) => {
+      await beginLine(i);
+      await cue('تُعرّفنا', 'المسمى');
+      await put(page.getByLabel(/رقم الجوال/), '0551234567');
+      await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
+      await put(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
+      await put(page.getByLabel(/سنوات الخبرة/), '9');
+      await cue('ونطاق');
+      const scope = page.getByLabel(/نطاق ما تقوده الآن/);
+      if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
+      await cursorHide();
+      await end();
+      await click(page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }));
+      await page.getByRole('heading', { name: 'لنحدد نقطة انطلاقك' }).waitFor({ timeout: 15000 });
+      await cursorHide();
+    },
+    // سطر الزمن بلا رقم ولا عدد أسئلة (يعرضهما التطبيق من الأداة الفعالة)، والإجابة مع ذكر الحفظ
+    assessment: async (i) => {
+      await page.locator('[data-tour="assessment"] .alert.info').first().evaluate((el) => { el.textContent = '⏱ بلا حد زمني. تُحفظ إجاباتك أولًا بأول.'; }).catch(() => {});
+      await beginLine(i);
+      await cue('زمني'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(500);
+      await cue('وتُحفظ', 'ويُحفظ'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(400);
+      for (const pick of [/تغيّر سلوك المستفيدين/, /دائمًا/]) {
+        const next = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
+        if (await next.isVisible().catch(() => false)) await click(next);
+        await click(page.getByRole('radio', { name: pick }).first()); await sleep(300);
+      }
+      await page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' }).waitFor({ timeout: 10000 }).catch(() => {});
+      await cursorHide();
+      await end();
+      await click(page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }));
+      await page.locator('[data-tour="journey-hero"]').waitFor({ timeout: 15000 });
+      await cursorHide();
+      await sleep(700);
+    },
+    // النتيجة قيد المراجعة، ثم يعتمد المستشار المسار فتُفتح خطوات التأهيل
+    result: async (i) => {
+      await beginLine(i); await end();
+      srv.s.approved = true;
+      await page.reload();
+      await page.locator('[data-tour="next-step"]').waitFor({ timeout: 15000 });
+      await sleep(700);
+    },
+    handbook: async (i) => {
+      await nav('nav-handbook', 'handbook-toc');
+      await beginLine(i);
+      await cue('وتختم', 'يقرأ');
+      const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
+      if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(700); await cursorHide(); }
+      await end();
+    },
+    capstone: async (i) => { await nav('nav-capstone', 'capstone-sections'); await beginLine(i); await end(); },
+    hall: async (i) => { await nav('nav-hall', 'hall'); await beginLine(i); await end(); },
+    peer: async (i) => {
+      await nav('nav-home', 'peer');
+      await beginLine(i);
+      await cue('توجيهًا', 'يطرحه');
+      await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
+      await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
+      await cue('احتجت', 'يجيب');
+      await click(page.locator('[data-tour="peer"]').getByRole('button', { name: /أرسل|اطلب/ }).last());
+      await sleep(700);
+      await cursorHide();
+      await end();
+    },
+    // صفحة التحقق العامة من الشهادة: ما تراه أي جهة برقمها
+    final: async (i) => {
+      await page.goto(`http://127.0.0.1:${PORT}/v/MI-LDR-2026-000142`);
+      await page.locator('[data-tour="verify"] .vf-state').waitFor({ timeout: 15000 });
+      await sleep(500);
+      await beginLine(i, 'verify'); await end();
+    },
+    close: async (i) => {
+      const t = PARTICIPANT_LINES[i].text;
+      const q = t.endsWith('؟');   // السؤال عنوانًا والدعوة تحته، أو الدعوة عنوانًا
+      await fullBegin(q ? 'سؤال الختام' : 'برنامج إدارة المشروعات للقادة', q ? t : 'ابدأ رحلتك', q ? 'ابدأ رحلتك: leaders.sunkvalue.com' : `${t} leaders.sunkvalue.com`, i);
+      await end(1400);
+    },
+  };
+  for (let i = 0; i < PARTICIPANT_LINES.length; i++) {
+    const run = SCREENS[PARTICIPANT_LINES[i].step] || (async (k) => { await beginLine(k); await end(); });
+    await run(i);
   }
-  await page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' }).waitFor({ timeout: 10000 }).catch(() => {});
-  await cursorHide();
-  await end();
-  await click(page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }));
-  await page.locator('[data-tour="journey-hero"]').waitFor({ timeout: 15000 });
-  await cursorHide();
-  await sleep(700);
-  await beginLine(4);
-  await end();
-
-  // يعتمد المستشار المسار، فتُفتح محطة التأهيل بمعالمها وتقييمها المستمر
-  srv.s.approved = true;
-  await page.reload();
-  await page.locator('[data-tour="next-step"]').waitFor({ timeout: 15000 });
-  await sleep(700);
-  for (const i of [5, 6, 7]) { await beginLine(i); await end(); }
-
-  // المحطة 5: الكتيب ويُفتح باب مع «وتختم»، والمبادرة، والقاعة، وطلب التوجيه
-  await click(page.locator('[data-tour="nav-handbook"]').first());
-  await page.locator('[data-tour="handbook-toc"]').waitFor({ timeout: 15000 });
-  await cursorHide();
-  await beginLine(8);
-  await atWord('وتختم');
-  const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
-  if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(700); await cursorHide(); }
-  await end();
-  await click(page.locator('[data-tour="nav-capstone"]').first());
-  await page.locator('[data-tour="capstone-sections"]').waitFor({ timeout: 15000 });
-  await cursorHide();
-  await beginLine(9); await end();
-  await click(page.locator('[data-tour="nav-hall"]').first());
-  await page.locator('[data-tour="hall"]').waitFor({ timeout: 15000 });
-  await cursorHide();
-  await beginLine(10); await end();
-  await click(page.locator('[data-tour="nav-home"]').first());
-  await page.locator('[data-tour="peer"]').waitFor({ timeout: 15000 });
-  await cursorHide();
-  await beginLine(11);
-  await atWord('توجيهًا');
-  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
-  await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
-  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: /أرسل|اطلب/ }).last());
-  await sleep(700);
-  await cursorHide();
-  await end();
-
-  // المحطة 6: الأثر، ثم صفحة التحقق العامة من الشهادة، ثم الدعوة
-  await beginLine(12); await end();
-  await page.goto(`http://127.0.0.1:${PORT}/v/MI-LDR-2026-000142`);
-  await page.locator('[data-tour="verify"] .vf-state').waitFor({ timeout: 15000 });
-  await sleep(500);
-  await beginLine(13, 'verify'); await end();
-  await fullBegin(L(14).title, 'ابدأ رحلتك', 'عرّفنا بك، ثم حدّد نقطة انطلاقك. leaders.sunkvalue.com', 14);
-  await end(2000);
 }
 
 // الجولة الكاملة: الخطوات الثماني عشرة بصوت المقدّم
