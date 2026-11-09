@@ -76,8 +76,9 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      # none: deno لا يعيد ترتيب node_modules، وإلا اختلف ناتج Vite بعده عن البناء المودع
       - name: Typecheck all edge functions
-        run: deno check --node-modules-dir=auto supabase/functions/*/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/*/index.ts
 
       # اختبارات Deno للوحدات التي لا تختبرها vitest: توقيع Google، مفاتيح المرور، توقيع Creem
       - name: Deno unit tests
