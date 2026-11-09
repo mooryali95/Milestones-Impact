@@ -1,7 +1,7 @@
 // الفيديو التعريفي ومعالج البداية: المشغّل من شاشة الدخول، ثم ترحيب المشارك الجديد بالفيديو،
 // ثم رأس الخطوات فوق الملف والقياس، ثم بطاقة «ما بعد ذلك» في الرحلة حتى الاعتماد.
 import { test, expect } from '@playwright/test';
-import { VIDEO } from '../shared/video/scenes.js';
+import { PARTICIPANT_VIDEO as VIDEO } from '../shared/video/scenes.js';   // التطبيق يعرض فيديو المشارك
 
 const APP = 'http://localhost:4304/';
 
@@ -41,10 +41,10 @@ function server() {
 
 test('شاشة الدخول: زر الفيديو يفتح مشغّلًا داخل الصفحة ويُغلق بـEsc', async ({ page }) => {
   await page.goto(APP);
-  const btn = page.getByRole('button', { name: /شاهد كيف تعمل المنصة/ });
+  const btn = page.getByRole('button', { name: new RegExp(VIDEO.label) });
   await expect(btn).toBeVisible();
   await btn.click();
-  const dialog = page.getByRole('dialog', { name: 'كيف تعمل رحلتك في برنامج القادة' });
+  const dialog = page.getByRole('dialog', { name: VIDEO.title });
   await expect(dialog).toBeVisible();
   const video = dialog.locator('video');
   await expect(video).toHaveAttribute('controls', '');
