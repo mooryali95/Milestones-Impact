@@ -32,14 +32,15 @@ describe('الخطوط والعامل والتحميل', () => {
     const admin = read('admin-app/src/App.jsx');
     for (const s of ['Leaders', 'Matrix', 'Visits', 'Contacts', 'Settings']) expect(admin).toContain(`const ${s} = lazy(() => import('./screens/${s}.jsx'))`);
     expect(read('admin-app/src/main.jsx')).toMatch(/<Suspense fallback=/);
-    for (const v of ['leaders-app/vite.config.js', 'admin-app/vite.config.js']) expect(read(v)).toMatch(/manualChunks: \{ react: \['react', 'react-dom'\] \}/);
+    // قطعة React مستقلة، وتصدير Excel باسمين ثابتين كي لا يختلف ناتج البناء بين الجهاز وCI
+    for (const v of ['leaders-app/vite.config.js', 'admin-app/vite.config.js']) expect(read(v)).toMatch(/manualChunks: \{ react: \['react', 'react-dom'\], fflate: \['fflate'\], excel: \['write-excel-file\/browser'\] \}/);
   });
 });
 
 describe('CI والاختبارات', () => {
   it('أنواع كل الدوال واختبارات Deno في ci.yml، وسير التكامل بمساراته الذهبية', () => {
     const ci = read('.github/workflows/ci.yml');
-    expect(ci).toContain('deno check --node-modules-dir=auto supabase/functions/*/index.ts');
+    expect(ci).toContain('deno check --node-modules-dir=none supabase/functions/*/index.ts');
     expect(ci).toMatch(/deno test --node-modules-dir=none .*supabase\/functions\/leaders-api\//);
     const integ = read('.github/workflows/integration.yml');
     expect(integ).toContain('supabase start');
