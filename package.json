@@ -30,7 +30,8 @@
     "e2e": "playwright test",
     "verify": "node scripts/ops/verify.mjs",
     "since-release": "node scripts/ops/since-release.mjs",
-    "video:audio": "node shared/video/cut-audio.mjs"
+    "video:audio": "node shared/video/cut-audio.mjs",
+    "video:excerpt": "node shared/video/excerpt-audio.mjs"
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.29.7",
