@@ -1,11 +1,11 @@
 // فيديو المشارك (2026-11-09): الملفات والترجمة من PARTICIPANT_BEATS وحدها، وقواعد النص التي تمنع عودة الانحراف:
-// كل مقتطف حرفي من نص خطوته (فهو ما في التسجيل)، ولا رقم يتغير من اللوحة، ولا لغة لوحة أو حساب عرض،
+// كل مقتطف حرفي من نص خطوته المسجَّل (spoken: said حيث وُجد وإلا d، فهو ما في التسجيل)، ولا رقم يتغير من اللوحة، ولا لغة لوحة أو حساب عرض،
 // ولا ادعاء خالف قرارات اللجنة في الجولة الكاملة (D03 وD05 وD06 وD17 وD20).
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PARTICIPANT_VIDEO } from '../../shared/video/scenes.js';
-import { PARTICIPANT_BEATS, PARTICIPANT_LINES, TOUR_STEPS } from './tour-steps.js';
+import { PARTICIPANT_BEATS, PARTICIPANT_LINES, TOUR_STEPS, spoken } from './tour-steps.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -21,7 +21,7 @@ describe('نص فيديو المشارك', () => {
   });
 
   it('كل مقتطف نص متصل من خطوته في الجولة، يبدأ وينتهي عند حد كلمة', () => {
-    const d = Object.fromEntries(TOUR_STEPS.map((s) => [s.key, s.d.split(/\s+/)]));
+    const d = Object.fromEntries(TOUR_STEPS.map((s) => [s.key, spoken(s).split(/\s+/)]));
     for (const l of PARTICIPANT_LINES) {
       expect(l.clips.length).toBeGreaterThan(0);
       for (const c of l.clips) {

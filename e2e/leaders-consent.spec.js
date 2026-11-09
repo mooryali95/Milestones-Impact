@@ -40,7 +40,7 @@ test('من سبق تسجيله يرى شاشة الموافقة مرة، وقب�
 test('صفحات الخصوصية والشروط والاسترداد بلا دخول، بتبويباتها', async ({ page }) => {
   await page.goto(APP + 'legal/privacy');
   await expect(page.getByRole('heading', { name: 'سياسة خصوصية برنامج القادة' })).toBeVisible();
-  await expect(page.getByText('مستوياتك في الأبعاد الثلاثة لا تصل جهتك إلا بموافقتك')).toBeVisible();
+  await expect(page.getByText('مسارك ومستوياتك في الأبعاد الثلاثة لا تصل جهتك إلا بموافقتك')).toBeVisible();
   await page.getByRole('link', { name: 'الاسترداد' }).first().click();
   await expect(page.getByRole('heading', { name: 'سياسة الاسترداد لبرنامج القادة' })).toBeVisible();
   await page.goto(APP + 'legal/terms');
@@ -68,7 +68,7 @@ test('مشاركة المستويات مع الجهة: مفتاح في «ملف�
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
   await expect(page.getByRole('heading', { name: 'ماذا ترى جهتك' })).toBeVisible();
   await expect(page.getByText('لا تصلها إلا بموافقتك أدناه')).toBeVisible();
-  const box = page.getByRole('checkbox', { name: /أوافق على اطلاع شركة المعالم على مستوياتي/ });
+  const box = page.getByRole('checkbox', { name: /أوافق على اطلاع شركة المعالم على مساري ومستوياتي/ });
   await expect(box).not.toBeChecked();
   await box.check();
   await expect(box).toBeChecked();

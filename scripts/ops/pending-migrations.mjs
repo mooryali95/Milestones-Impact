@@ -8,6 +8,7 @@
 //   -- deploy-gate: tolerant   الدوال تقرؤه قراءة متسامحة، فتعمل قبله وبعده
 //   -- deploy-gate: deferred   مؤجل بقرار مسمّى في سطره (مثل تفعيل أداة قياس)، ولا تعتمد عليه الدوال
 // الوسم وعد يحرسه مراجع الطلب. ترحيل لا يحمله يُطبّق بسير migrate.yml قبل أن يمر النشر.
+// الوسم يُزال حين يُطبَّق الترحيل على الإنتاج ويُحذف الكود المتسامح معه.
 import { readdirSync, readFileSync } from 'node:fs';
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';

@@ -7,7 +7,7 @@
 // جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
 // كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML.
 
-import { crossesAlert, domainOf, mailDecision } from './mail-budget.js';
+import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
 
 // ألوان البريد من ألوان الهوية (shared/js/brand.js) بالقيم نفسها؛ دوال الحافة لا تستورد من خارج
 // supabase/functions، فتُنسخ هنا ويطابقها single-source.test.js. القيم مكتوبة لأن برامج البريد لا تقرأ متغيرات CSS.
@@ -152,9 +152,13 @@ const eventsOf = (client: Client) => (typeof client?.schema === 'function' ? cli
 export async function mailCounts(client: Client, since = new Date(Date.now() - 864e5).toISOString()) {
   const base = () => eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').gte('created_at', since);
   const [all, non] = await Promise.all([base(), base().not('kind', 'in', '(code,alert)')]);
-  if (all.error || non.error) return null;   // قبل ترحيل 20261107120000: لا عداد بعد
+  if (all.error || non.error) { console.error('mail_events count:', all.error || non.error); return null; }   // العداد غير مقروء الآن
   return { sent: all.count ?? 0, nonCode: non.count ?? 0 };
 }
+
+// تنبيه تعذّر العداد مرة كل عشر دقائق لكل نسخة من الدالة، فلا يُغرق الرابط
+const COUNTER_ALERT_MS = 10 * 60e3;
+let counterAlertAt = 0;
 
 // sourceShare: نصيب مصدر واحد من السقف (مصفوفة التأثير مثلًا)، فلا تستنزف بوابة عامة رموز دخول غيرها
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
@@ -168,12 +172,16 @@ export async function sendCounted(client: Client, to: string, subject: string, h
       return { ok: false, reason: 'mail_share' };
     }
   }
-  const log = (status: string, resend_id: string | null = null) => counts
-    ? eventsOf(client).insert({ kind, source, ref, status, resend_id, to_domain: domainOf(to) }).then(({ error }: { error: unknown }) => { if (error) console.error('mail_events insert:', error); })
-    : Promise.resolve();
+  const log = (status: string, resend_id: string | null = null) =>
+    eventsOf(client).insert({ kind, source, ref, status, resend_id, to_domain: domainOf(to) }).then(({ error }: { error: unknown }) => { if (error) console.error('mail_events insert:', error); });
   if (counts) {
     const d = mailDecision(kind, counts, cap);
     if (!d.ok) { await log('blocked'); return { ok: false, reason: d.reason as SendOutcome['reason'] }; }
+  } else {
+    // تعذّر العداد (D15): لا رسالة بلا قرار سقف إلا الرموز والتنبيه. ما سواها يُحجب بسبب السقف، والجماعي يدخل
+    // الطابور عند مرسله، والمالك يُنبَّه عبر الرابط
+    if (Date.now() - counterAlertAt > COUNTER_ALERT_MS) { counterAlertAt = Date.now(); await alertWebhook('mail_counter_unavailable', { source, kind }); }
+    if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); return { ok: false, reason: 'mail_cap' }; }
   }
   const r = await deliverResult(to, subject, html, opts);
   await log(r.ok ? 'sent' : 'failed', r.ok ? (r.id ?? null) : null);

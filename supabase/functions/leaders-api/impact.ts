@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المنطق الحسابي في logic.js (يُختبر في vitest)، وهنا جمع البيانات فقط.
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
-import { all, allFor, audit, CONFIG, db, Fail, hash, logConsent, missingColumn, must, randomToken, raterConfirmMail, raterMail, raterRejectedMail, sendMail } from './core.ts';
+import { all, allFor, audit, CONFIG, db, Fail, hash, logConsent, must, randomToken, raterConfirmMail, raterMail, raterRejectedMail, sendMail } from './core.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domains.js';
 import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
@@ -307,16 +307,9 @@ export async function invite(p: any, b: Body) {
   if (prev?.status === 'submitted') throw new Fail('أرسل هذا المقيّم تقديره من قبل');
   if (prev && Date.now() - new Date(prev.invited_at).getTime() < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
   const write = (r: Record<string, unknown>) => (prev ? db.from('raters').update(r).eq('id', prev.id).select('id').single() : db.from('raters').insert(r).select('id').single());
-  let res: any = await write(row);
-  // قبل ترحيل 20261107170000: الدعوة كما كانت، تُرسل فورًا بلا علامات
-  let legacy = false;
-  if (res.error && (missingColumn(res.error) || res.error.code === '23514')) {
-    legacy = true;
-    const { verification: _v, verification_flags: _f, verified_by: _b, verified_at: _a, ...old } = row;
-    res = await write({ ...old, status: 'invited' });
-  }
-  const saved = must(res) as { id: string };
-  if (awaiting && !legacy) {
+  // D19: تعذّر الحفظ (ومنه قيد الحالة أو الحكم) يفشل الدعوة، ولا تُرسل بلا علامات ولا تحقق
+  const saved = must(await write(row)) as { id: string };
+  if (awaiting) {
     const told = await notifyConfirmers(p, check.flags);
     await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: 'pending', flags: check.flags, confirmers: told });
     return mine(p);
@@ -324,7 +317,7 @@ export async function invite(p: any, b: Body) {
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
   // ref المقيّم: منه نسب استجابة المقيّمين في سجل الإرسال (D15)
   await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { ref: `rater:${saved.id}` });
-  await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: legacy ? null : check.verdict });
+  await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: check.verdict });
   return mine(p);
 }
 
@@ -334,12 +327,11 @@ export async function revoke(p: any, b: Body) {
 }
 
 // ── D19: المقيّمون المنتظرون ومن يؤكدهم ──
-// القائمة لمشاركين بأعينهم (مشاركو المستشار، أو مشاركو جهة المنسق). قبل الترحيل: لا شيء
+// القائمة لمشاركين بأعينهم (مشاركو المستشار، أو مشاركو جهة المنسق). تعذّر القراءة يرمي، فلا تظهر قائمة فارغة بصمت
 export async function awaitingFor(ids: string[]) {
   if (!ids.length) return [];
-  const { data, error } = await db.from('raters').select('id, participant_id, email, full_name, relation, phase, verification_flags, invited_at, participants(full_name)')
-    .in('participant_id', ids).eq('status', 'awaiting').order('invited_at');
-  if (error) return [];
+  const data = must(await db.from('raters').select('id, participant_id, email, full_name, relation, phase, verification_flags, invited_at, participants(full_name)')
+    .in('participant_id', ids).eq('status', 'awaiting').order('invited_at')) as any[];
   return (data || []).map((r: any) => ({ id: r.id, participant_id: r.participant_id, participant: r.participants?.full_name || null, email: r.email, full_name: r.full_name,
     relation_ar: RELATION_AR[r.relation] || r.relation, phase: r.phase, invited_at: r.invited_at,
     flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) }));
@@ -417,6 +409,8 @@ export async function raterSubmit(b: Body) {
     answers[q.id] = pre ? { now: a.now } : { now: a.now, before: a.before };
   }
   const comment = b.comment ? String(b.comment).trim().slice(0, 2000) || null : null;
+  // D18: سطر موافقة المقيّم بإرساله تقديره بعد إشعار الخصوصية، قبل الحفظ: تعذّره يفشل الإرسال فيعيده، ولا تقدير بلا موافقته
+  await logConsent('rater', r.id, 'accept');
   must(await db.from('raters').update({ answers, comment, status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', r.id));
   // إفادة المدير في الرحلة تكتمل بتقديره المنظم بعد البرنامج
   if (r.relation === 'manager' && !pre) {
@@ -429,7 +423,6 @@ export async function raterSubmit(b: Body) {
       });
     }
   }
-  await logConsent('rater', r.id, 'accept');   // D18: سطر موافقة المقيّم بإرساله تقديره بعد إشعار الخصوصية
   await audit('system', null, 'rater.submit', 'raters', r.id, null, { participant_id: r.participant_id, relation: r.relation });
   return { success: true };
 }

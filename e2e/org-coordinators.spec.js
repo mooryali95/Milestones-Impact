@@ -126,7 +126,11 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
   await expect(page.getByText('الرمز غير صحيح')).toBeVisible();
   await page.getByLabel('رمز التحقق').fill('123456');
   await expect(page.getByRole('heading', { name: 'وزارة التجربة' })).toBeVisible();
-  await expect(page.getByText('مسار البداية').first()).toBeVisible();
+  // D18: بلا صلاحية المستويات لا مسار ولا عموده ولا مرشّحه، ولو وصلت حقوله من خادم أقدم
+  await expect(page.getByRole('cell', { name: 'سارة' })).toBeVisible();
+  await expect(page.getByText('مسار البداية')).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'المسار' })).toHaveCount(0);
+  await expect(page.getByLabel('المسار')).toHaveCount(0);
   await expect(page.getByRole('columnheader', { name: 'التواصل' })).toHaveCount(0);
   // أثر الجهة: أرقام الخادم كما هي، وزر التقرير مع صلاحية التصدير
   await expect(page.getByRole('heading', { name: 'أثر البرنامج على مشاركيك' })).toBeVisible();

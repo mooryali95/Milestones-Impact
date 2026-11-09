@@ -88,7 +88,12 @@ describe('بوابة النشر', () => {
     expect(manual).not.toMatch(/\n\s+push:/);
   });
   it('المسبار والتمرين موجودان', () => {
-    expect(read('.github/workflows/probe.yml')).toMatch(/system\.ping/);
+    const probe = read('.github/workflows/probe.yml');
+    expect(probe).toMatch(/system\.ping/);
+    // البديل على pages.dev لا يُقبل إلا بعنوان المنصة، وmi-home.pages.dev موقع آخر فلا يكون بديلًا (N14)
+    expect(probe).toMatch(/grep -qi '<title>\[\^<\]\*Milestone Impact' \/tmp\/b/);
+    expect(probe).not.toMatch(/probe https:\/\/mi\.sunkvalue\.com\/ https:\/\/mi-home\.pages\.dev/);
+    expect(probe).toMatch(/^ +probe https:\/\/mi\.sunkvalue\.com\/$/m);
     // النسخ والتمرين في سكربتين يشغّلهما السيران والمالك من جهازه (D09، backups-offsite.test.js)
     expect(read('.github/workflows/restore-drill.yml')).toMatch(/scripts\/ops\/restore-drill\.sh/);
     expect(read('scripts/ops/restore-drill.sh')).toMatch(/pg_restore[\s\S]*Object\.keys\(m\.rows\)/);

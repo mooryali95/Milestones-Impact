@@ -534,7 +534,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
   const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
   const doneCount = counted.filter((s) => s.status === 'done').length;
-  // مدة المراجعة من مرحلة الاعتماد نفسها (مولَّدة من duration_days)، لا رقم هنا
+  // مدة المراجعة من مرحلة الاعتماد نفسها (duration_label كما يعرضه الخادم)، لا رقم هنا
   const reviewWait = journey.find((s) => s.key === 'approval')?.duration_label || '';
   let order = 0;
 

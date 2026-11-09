@@ -174,17 +174,20 @@ function Dashboard({ me, onLogout }) {
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div><button className="btn sm" style={{ marginTop: 12 }} onClick={load}>حاول مرة أخرى</button></div>;
 
   const { org, kpis, funnel, permissions: perms } = d;
-  const tracks = Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]);
-  const titleOf = (k) => d.participants.find((p) => p.track === k)?.track_title || k;
+  // D18: المسار مشتق من المستويات، فلا يظهر إلا مع صلاحية المستويات، والخادم يحصره فيمن وافق من المشاركين.
+  // مفتاحه الداخلي لا يُعرض عنوانًا، والمسارات التي تشترك في ملف تعريف واحد تُجمع في شريط واحد
+  const tracks = perms.scores ? Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]) : [];
+  const titleOf = (k) => d.participants.find((p) => p.track === k)?.track_title || 'مسار';
+  const trackBars = tracks.reduce((o, [k, n]) => { const t = titleOf(k); o[t] = (o[t] || 0) + n; return o; }, {});
   // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
   const exportXlsx = async () => {
     const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const head = [['الاسم', 26], ['المسمى', 22], ['المسار', 28], ['المرحلة', 18], ['الإنجاز %', 11], ...(perms.activity ? [['آخر دخول', 16]] : []), ['التسجيل', 16],
+    const head = [['الاسم', 26], ['المسمى', 22], ...(perms.scores ? [['المسار', 28]] : []), ['المرحلة', 18], ['الإنجاز %', 11], ...(perms.activity ? [['آخر دخول', 16]] : []), ['التسجيل', 16],
       ...(perms.contact ? [['البريد', 30], ['الجوال', 16]] : []), ...(perms.scores ? DIMS.map(([, en]) => [en, 12]) : [])];
     exportWorkbook(
       { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
       head.map(([label, width]) => ({ label, width })),
-      rows.map((p) => [p.full_name, p.job_title, p.track_title || p.track, STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
+      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
         ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
     );
   };
@@ -228,7 +231,8 @@ function Dashboard({ me, onLogout }) {
       <div className="op-grid">
         <section className="card"><h3>مراحل الرحلة</h3><Bars obj={Object.fromEntries(FUNNEL.map(([k, l]) => [l, funnel[k] || 0]))} total={funnel.registered} /></section>
         <section className="card"><h3>المسارات</h3>
-          {tracks.length ? <Bars obj={Object.fromEntries(tracks.map(([k, n]) => [titleOf(k), n]))} total={kpis.total} /> : <p className="small muted">لم يُعتمد مسار أحد بعد.</p>}</section>
+          {tracks.length ? <Bars obj={trackBars} total={kpis.total} />
+            : <p className="small muted">{perms.scores ? 'لا مسار ظاهر بعد: يظهر هنا مسار من وافق من مشاركيك على اطلاع جهته على مستوياته متى تحددت.' : 'المسار مشتق من مستويات المشارك، فلا يظهر إلا مع صلاحية المستويات وبموافقة المشارك.'}</p>}</section>
         <section className="card"><h3>طريقة الانضمام</h3><Bars obj={d.by_via} label={(k) => VIA[k] || k} total={kpis.total} /></section>
       </div>
 
@@ -243,9 +247,9 @@ function Dashboard({ me, onLogout }) {
             <select className="input" aria-label="المرحلة" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
               <option value="">كل المراحل</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
-            <select className="input" aria-label="المسار" value={f.track} onChange={(e) => setF({ ...f, track: e.target.value })}>
+            {tracks.length > 0 && <select className="input" aria-label="المسار" value={f.track} onChange={(e) => setF({ ...f, track: e.target.value })}>
               <option value="">كل المسارات</option>{tracks.map(([k]) => <option key={k} value={k}>{titleOf(k)}</option>)}
-            </select>
+            </select>}
             <select className="input" aria-label="الترتيب" value={sort} onChange={(e) => setSort(e.target.value)}>
               <option value="name">بالاسم</option><option value="progress">بالإنجاز</option>{perms.activity && <option value="recent">بآخر نشاط</option>}
             </select>
@@ -253,12 +257,12 @@ function Dashboard({ me, onLogout }) {
         </div>
         <p className="small muted" aria-live="polite">{rows.length} من {kpis.total}</p>
         <div className="op-scroll"><table>
-          <thead><tr><th>الاسم</th><th>المسار</th><th>المرحلة</th><th>الإنجاز</th>{perms.activity && <th>آخر دخول</th>}
+          <thead><tr><th>الاسم</th>{perms.scores && <th>المسار</th>}<th>المرحلة</th><th>الإنجاز</th>{perms.activity && <th>آخر دخول</th>}
             {perms.contact && <th>التواصل</th>}{perms.scores && DIMS.map(([k, en]) => <th key={k}>{en}</th>)}</tr></thead>
           <tbody>{rows.length ? rows.map((p) => (
             <tr key={p.id}>
               <td><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
-              <td>{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>
+              {perms.scores && <td>{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
               <td><span className="chip">{STATUS[p.status] || p.status}</span></td>
               <td><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</td>
               {perms.activity && <td>{fmt(p.last_login_at)}</td>}

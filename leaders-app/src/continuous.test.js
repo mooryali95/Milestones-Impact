@@ -34,14 +34,16 @@ describe('التقييم المستمر', () => {
   });
 
   it('لا يدخل المصدر المؤشر قبل حده الأدنى من الأحداث (3) أو أسئلة الاختبارات (10)، ويُعلَن ذلك', () => {
-    const c = continuousAssessment({ quizzes: quizzes.slice(0, 2), models: [{ rating: 5, reviewed_at: '2026-01-02' }] });
+    const c = continuousAssessment({ quizzes: quizzes.slice(0, 2), models: [{ rating: 4, reviewed_at: '2026-01-02' }] });
     const q = c.components.find((x) => x.key === 'quizzes'), m = c.components.find((x) => x.key === 'models');
     expect(q).toMatchObject({ value: 86, items: 7, enough: false, in_index: false });
     expect(q.reason).toContain('لا يدخل المؤشر قبل 10 أسئلة');
     expect(m).toMatchObject({ value: 100, n: 1, in_index: false });
     expect(m.reason).toContain('لا يدخل المؤشر قبل 3 أحداث');
     expect(c.index).toBeNull();
-    expect(continuousAssessment({ models: [{ rating: 5, reviewed_at: '2026-01-02' }], min_events: 1 }).index).toBe(100);
+    expect(continuousAssessment({ models: [{ rating: 4, reviewed_at: '2026-01-02' }], min_events: 1 }).index).toBe(100);
+    // 5 خارج السلّم الرباعي بعد التحويل (D08): لا حدث منه
+    expect(continuousAssessment({ models: [{ rating: 5, reviewed_at: '2026-01-02' }], min_events: 1 }).components.find((x) => x.key === 'models').n).toBe(0);
   });
 
   it('تقدير الخبراء انخراط لا جدارة: يُعرض منفصلًا ولا يدخل المؤشر', () => {

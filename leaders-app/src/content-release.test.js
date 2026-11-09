@@ -40,8 +40,8 @@ async function schema() {
 const P = (n) => `00000000-0000-0000-0000-00000000000${n}`;
 
 describe('ترحيل 20261107180000_leaders_content_releases', () => {
-  it('متسامح وآمن لإعادة التشغيل', async () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب بعد تطبيقه وآمن لإعادة التشغيل', async () => {
+    expect(gateOf(SQL).gate).toBe('blocking');
     const db = await schema();
     await db.exec(SQL);
   });
@@ -157,14 +157,21 @@ describe('التصويب الحرج', () => {
 });
 
 describe('الخادم والواجهة', () => {
-  it('نتيجة الباب تحمل الإصدار وبصمة الاختبار والإجابات نصًا، ومحاولة المختبر الإصدار، وكلاهما متسامح قبل الترحيل', () => {
+  it('نتيجة الباب تحمل الإصدار وبصمة الاختبار والإجابات نصًا، ومحاولة المختبر الإصدار، والختمان إلزاميان', () => {
     const p = api('participant.ts');
     expect(p).toMatch(/quiz_answers: quiz\.map\(\(x: any, i: number\) => \(\{ q: x\.q, a: x\.options\[Number\(b\.answers\?\.\[i\]\)\] \?\? null \}\)\)/);
     expect(p).toMatch(/quiz_fingerprint: await sha256Hex\(String\(m\.quiz_md \|\| ''\)\)/);
-    expect(p).toMatch(/if \(error && missingColumn\(error\)\) must\(await db\.from\('handbook_progress'\)\.insert\(row\)\);/);
+    expect(p).toMatch(/must\(await db\.from\('handbook_progress'\)\.insert\(\{ \.\.\.row, \.\.\.stamp \}\)\);/);
+    expect(p).not.toMatch(/insert\(row\)|missingColumn/);
     const lab = api('lab.ts');
     expect(lab).toMatch(/insert\(\{ participant_id: p\.id, item_id: it\.id, content_release: release \}\)/);
-    expect(lab).toMatch(/if \(res\.error && missingColumn\(res\.error\)\)/);
+    expect(lab).not.toMatch(/missingColumn/);
+    // الإصدار null لدفعة بلا إصدار وحدها، وخطأ القراءة يرمي فلا يُختم الناتج على المحتوى الحي بصمت
+    for (const s of [p, lab]) expect(s).toMatch(/content_release: \(await releaseOf\(p\)\)\?\.id \?\? null|const release = \(await releaseOf\(p\)\)\?\.id \?\? null;/);
+    for (const s of [p, lab]) expect(s).not.toMatch(/releaseOf\(p\)\.catch/);
+    const prog = api('programs.ts');
+    expect(prog).toMatch(/const \{ cohort \} = await cohortOf\(p, \{ strict: true \}\);/);
+    expect(prog).toMatch(/if \(strict\) \{ must\(enr\); must\(cohorts\); \}/);
   });
   it('بند القراءة على أبواب إصدار الدفعة، والإصدار في الشهادة وملف المشارك', () => {
     expect(api('programs.ts')).toMatch(/export async function releaseOf\(p: \{ id\?: string \| null; organization_id\?: string \| null \}\)/);

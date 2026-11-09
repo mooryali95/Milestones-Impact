@@ -4,7 +4,7 @@
 // المفتاح والشرح لا يُرسلان للمشارك قبل أن يجيب عن جمل الموضوع كلها، وبعدها تُقفل إجاباته
 // فلا يُعدّل بعد رؤية المفتاح. جدول النقاط الثلاثي من إعداد برنامجه (programs.katon_points) ويُرفض
 // إن لم يكن قاعدة تسجيل سليمة. الأعمدة الجديدة verdict/confidence/stances؛ choice القديم يُقرأ للتوافق.
-import { audit, db, Fail, missingColumn, must } from './core.ts';
+import { audit, db, Fail, must } from './core.ts';
 import {
   cbmCheck, cleanAnswer, cleanSentence, katonPoints, katonScore, katonSummary, KATON_CONFIDENCE, KATON_STANCES, normalizeAnswer, sentenceDistribution, topicIssues,
 } from './katon.js';
@@ -111,12 +111,9 @@ export async function adminList(b: Body) {
   };
 }
 
-// حفظ بختم المصدر (20261107100000_leaders_content_provenance)، ويُعاد بلا updated_by قبل الترحيل
+// حفظ بختم المصدر (D01، 20261107100000_leaders_content_provenance)، إلزامي فلا يُحفظ بلا ختم
 async function stamped(a: Admin, run: (by: Record<string, string>) => PromiseLike<{ data: any; error: any }>) {
-  const by = { updated_at: new Date().toISOString(), updated_by: a.email };
-  let res = await run(by);
-  if (res.error && missingColumn(res.error)) res = await run({ updated_at: by.updated_at });
-  return must(res);
+  return must(await run({ updated_at: new Date().toISOString(), updated_by: a.email }));
 }
 
 export async function topicSave(a: Admin, b: Body) {

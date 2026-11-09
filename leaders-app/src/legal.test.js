@@ -17,8 +17,10 @@ describe('الموافقة', () => {
     expect(participant).toMatch(/consent_version: POLICY_VERSION/);
     expect(api('index.ts')).toMatch(/'consent\.accept': \(p\) => P\.consentAccept\(p\)/);
   });
-  it('غياب العمود قبل ترحيله لا يعطّل التسجيل', () => {
-    expect(participant).toMatch(/error\.code !== '42703'\) console\.error\('consent:'/);
+  it('تعذّر حفظ الموافقة يرمي ولا تُعد مسجلة، والتسجيل لا يفشل بها بل تطلبها شاشة الموافقة', () => {
+    expect(participant).not.toMatch(/'42703'/);
+    expect(participant).toMatch(/must\(await db\.from\('participants'\)\.update\(fields\)\.eq\('id', participantId\), 'تعذّر حفظ موافقتك الآن، حاول بعد قليل'\);/);
+    expect(participant.match(/await recordConsent\(p\.id\)\.catch\(\(e\) => console\.error\('register consent:', e\)\)/g)?.length).toBe(2);
     expect(participant).toMatch(/consented_at: 'consented_at' in p \? p\.consented_at : undefined/);
   });
   it('الإشعار قبل زرّي التسجيل، وشاشة الموافقة لمن سبق تسجيله', () => {
@@ -35,6 +37,13 @@ describe('مشاركة المستويات مع الجهة بموافقة', () =>
     expect(coord).toMatch(/org_share_consented_at\)\.map\(\(r: any\) => r\.id\)\)/);
     expect(coord).toMatch(/levels: shared\.has\(p\.id\) \? levelsBy\[p\.id\] \|\| null : null/);
     expect(coord).toMatch(/p\.dimensions && shared\.has\(p\.id\)/);
+  });
+  // D18: المسار مشتق من المستويات، فتوزيع المسارات في لوحة الجهة لا يعدّ إلا من خرجت مستوياته
+  it('توزيع المسارات للجهة يعدّ من وافق وحده، لا by_track الإداري', () => {
+    const coord = api('coordinator.ts');
+    expect(coord).toMatch(/for \(const p of full\) if \(p\.levels && p\.track\) byTrack\[p\.track\]/);
+    expect(coord).toMatch(/funnel: d\.funnel, by_track: byTrack, by_via: d\.by_via,/);
+    expect(coord).not.toMatch(/by_track: d\.by_track/);
   });
   it('المفتاح بيد المشارك في «ملفي»', () => {
     expect(api('index.ts')).toMatch(/'org\.share-consent': \(p, b\) => P\.orgShareConsent\(p, b\)/);

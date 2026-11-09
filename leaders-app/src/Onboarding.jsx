@@ -7,7 +7,7 @@
 // التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md
 import React from 'react';
 import { PARTICIPANT_VIDEO as VIDEO } from '../../shared/video/scenes.js';
-import { gateDone, gateStage } from './gates.js';
+import { gateDone, gateStage, hasAccess } from './gates.js';
 import { nextSeen, welcomeSeen } from './api.js';
 import IntroVideo, { IntroPlayer } from './IntroVideo.jsx';
 
@@ -26,8 +26,8 @@ export function assessmentMinutes(me) {
   const label = gateStage(me, 'assessment')?.duration_label;
   return label && !label.includes('{') ? label : null;
 }
-// مدة الاعتماد من مرحلته، كما في بطاقة «ما بعد ذلك»
-const approvalWait = (me) => me?.journey?.find((s) => s.key === 'approval')?.duration_label || 'أيام عمل قليلة';
+// مدة الاعتماد من مرحلته، كما في بطاقة «ما بعد ذلك»؛ وبغيابها الموعد المعلن في D04 (يوما عمل، كما في صفحة الانتظار)
+const approvalWait = (me) => me?.journey?.find((s) => s.key === 'approval')?.duration_label || 'يومي عمل';
 
 // الخطوة الحالية أو null حين لا معالج (الرحلة مفتوحة أو الحساب ليس مشاركًا)
 // flags: assessmentPaywall (بوابة الدفع تسبق القياس)، welcomeSeen وnextSeen (لاختبار الدالة بلا متصفح)
@@ -69,6 +69,8 @@ export function OnboardingRail({ step }) {
 export function OnboardingWelcome({ me, step, onStart }) {
   const first = me.participant.full_name.split(' ')[0];
   const minutes = assessmentMinutes(me);
+  // D04: رسم البرنامج بعد الاعتماد؛ من لم يُفتح له البرنامج بعد (لا دفع ولا رعاية ولا إعفاء) يُخبَر بخطوة إكمال التسجيل
+  const programOpen = hasAccess(me, 'program');
   return (
     <div className="page narrow">
       <OnboardingRail step={step} />
@@ -82,7 +84,7 @@ export function OnboardingWelcome({ me, step, onStart }) {
         <ol className="onb-list">
           <li><b>عرّفنا بك</b> في دقيقتين، ليفهم المستشار سياقك.</li>
           <li><b>قياس مبدئي</b>{minutes ? ` في نحو ${minutes}` : ''} يحدد نقطة انطلاقك في كل إطار.</li>
-          <li><b>اعتماد مسارك</b> خلال {approvalWait(me)}، ثم تُفتح رحلتك كاملة.</li>
+          <li><b>اعتماد مسارك</b> خلال {approvalWait(me)}، ثم {programOpen ? 'تُفتح رحلتك كاملة' : 'إكمال التسجيل برسم البرنامج إن لم ترعك جهة، فتُفتح رحلتك كاملة'}.</li>
         </ol>
         <button type="button" className="btn block" onClick={onStart}>لنبدأ</button>
       </div>
@@ -101,7 +103,7 @@ export function OnboardingNextCard({ me, onClose }) {
         <ol className="small">
           <li>يراجع المستشار نتيجتك ويعتمد مسارك خلال {wait}، ويصلك بريد حين يكتمل.</li>
           <li>حتى ذلك الحين تكمل ما بقي من قائمة التحقق أدناه، وتفعّل مفتاح المرور لدخول أسرع.</li>
-          <li>بعد الاعتماد تُفتح لك: كتيبك، ومبادرتك، والقاعة، وطلبات الأقران.</li>
+          <li>بعد الاعتماد تُفتح لك: كتيبك، ومبادرتك، والقاعة، وطلبات التوجيه.</li>
         </ol>
         <IntroVideo className="link small" label="أعد مشاهدة الفيديو التعريفي" />
       </div>

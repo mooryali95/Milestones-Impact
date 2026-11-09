@@ -71,11 +71,14 @@ describe('الخادم يطبّق القفل ويحفظ المصدر والقي�
       expect(body).not.toMatch(/db\.from\('instruments'\)/);
     }
   });
-  it('الختم ببريد المشرف مع إعادة متسامحة قبل الترحيل، والقيمة السابقة في السجل', () => {
+  it('الختم ببريد المشرف إلزامي بلا إعادة دونه، والقيمة السابقة في السجل', () => {
     expect(admin).toMatch(/updated_by: a\.email/);
-    expect(admin).toMatch(/missingColumn\(res\.error\)\) res = await write\(/);
+    expect(admin).toMatch(/const saved = must\(await write\(stamp\),/);
+    expect(admin).not.toMatch(/missingColumn|res = await write\(/);
+    expect(katon).toMatch(/return must\(await run\(\{ updated_at: new Date\(\)\.toISOString\(\), updated_by: a\.email \}\)\);/);
+    expect(katon).not.toMatch(/missingColumn/);
     expect(admin).toMatch(/await audit\('admin', a\.email, `\$\{b\.entity\}\.save`, b\.entity, [^,]+, before, row\)/);
-    expect(read('supabase/functions/leaders-api/core.ts')).toMatch(/export const missingColumn = \(err: any\) => err\?\.code === 'PGRST204' \|\| err\?\.code === '42703'/);
+    expect(read('supabase/functions/leaders-api/core.ts')).not.toMatch(/missingColumn/);
   });
   it('كاتون: مفتاح الجملة المجاب عنها ونصها وسؤالها ثابتة، وجدول النقاط ثابت بعد أول حكم بثقة', () => {
     expect(katon).toMatch(/if \(count && changed\.length\) throw new Fail\(.*409, 'content_locked'\)/);
@@ -96,8 +99,8 @@ describe('الخادم يطبّق القفل ويحفظ المصدر والقي�
 
 describe('ترحيل المصدر 20261107100000_leaders_content_provenance', () => {
   const SQL = read('supabase/migrations/20261107100000_leaders_content_provenance.sql');
-  it('متسامح في بوابة النشر، ويسجّل نفسه', () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب في بوابة النشر بعد تطبيقه، ويسجّل نفسه', () => {
+    expect(gateOf(SQL).gate).toBe('blocking');
     expect(SQL).toContain("insert into leaders.schema_migrations (name) values ('20261107100000_leaders_content_provenance')");
   });
   it('حفظ اللوحة يبقى باسم المشرف، وكل كتابة لا تختم تُنسب إلى دور القاعدة، وإعادة التشغيل آمنة', async () => {

@@ -38,9 +38,13 @@ export async function access(p: any) {
   const org = await sponsorOf(p);
   const read = () => db.from('entitlements').select('item, source, organization_id, value_cents').eq('participant_id', p.id).is('revoked_at', null);
   let { data } = await read();
-  // التثبيت مرة واحدة: حين يرتبط بجهة نشطة وينقصه أحد البندين
+  // التثبيت مرة واحدة: حين يرتبط بجهة نشطة وينقصه أحد البندين. تعذّر فحص المقعد (D20) لا يمنح شيئًا:
+  // يبقى بلا تثبيت (نبّه pinSponsor المالك)، ويُعاد في القراءة التالية
   let seat: string | null = null;
-  if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) { seat = await pinSponsor(p, org); ({ data } = await read()); }
+  if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) {
+    seat = await pinSponsor(p, org).catch((e) => { console.error('access pin:', e); return null; });
+    ({ data } = await read());
+  }
   // D20: مقعد مرفوض (العقد ممتلئ أو خارج مدته) لا يجعل الجهة راعية بعد؛ يبقى الطلب بانتظار القرار
   const held = !!seat && SEAT_BLOCKED.includes(seat as any) && !(data || []).some((x: any) => x.source === 'sponsor');
   const has = (i: Item) => (data || []).find((x: any) => x.item === i)?.source || null;
@@ -52,11 +56,7 @@ export async function access(p: any) {
   const pinnedValue = (data || []).filter((x: any) => x.source === 'sponsor').reduce((t: number, x: any) => t + (x.value_cents || 0), 0);
   const sponsor = src ? { name: src.name, short_name: src.short_name || null, value_cents: src.show_value === false ? null : (pinnedValue || null) } : null;
   const lastReq = (cols: string) => db.from('sponsor_requests').select(cols).eq('participant_id', p.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
-  let req: any = null;
-  if (!sponsor) {
-    const r1: any = await lastReq('typed_name, status, reason, kind');
-    req = r1.error ? (await lastReq('typed_name, status, reason')).data : r1.data;   // kind قبل ترحيل 20261107130000
-  }
+  const req: any = sponsor ? null : must(await lastReq('typed_name, status, reason, kind'));
   const request = req && req.status !== 'cancelled' ? req : null;
   if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor, request };
   return { ...base, assessment: has('assessment'), program: has('program'), sponsor, request };

@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DATA_ONLY, DATA_ONLY_ORDER } from '../../scripts/db/data-only.mjs';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -55,6 +56,12 @@ describe('CI والاختبارات', () => {
     const at = (needle) => { const i = apply.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
     expect(at('supabase/schema/baseline.sql')).toBeLessThan(at('scripts/integration/seed-reference.sql'));
     expect(at('scripts/integration/seed-reference.sql')).toBeLessThan(at('for f in $(ls supabase/migrations/*.sql | sort)'));
+    // ترحيلات القرار بعد الحلقة بترتيبها وتسجيلها، كما طُبّقت على الإنتاج: المسارات الذهبية على baseline-v5 (N12)
+    expect(at('for f in $(ls supabase/migrations/*.sql | sort)')).toBeLessThan(at('for name in $order; do'));
+    expect(at('for name in $order; do')).toBeLessThan(at("insert into leaders.schema_migrations (name) values ('$name') on conflict do nothing;"));
+    expect(apply).toContain('m.DATA_ONLY_ORDER');
+    expect(DATA_ONLY_ORDER).toEqual(['20261102100100_leaders_activate_v5']);
+    expect([...DATA_ONLY]).toEqual(DATA_ONLY_ORDER);
     const seed = read('scripts/integration/seed-reference.sql');
     expect(seed).toMatch(/insert into leaders\.placement_model \(id\) values \(1\)/);
     expect(seed).toMatch(/grant usage on schema leaders to service_role;/);   // اللقطة بلا صلاحيات؛ الوصول عبر service_role وحده

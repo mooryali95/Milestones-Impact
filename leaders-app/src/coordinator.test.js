@@ -18,7 +18,15 @@ describe('coordPermissions', () => {
 describe('coordParticipant', () => {
   it('لا يخرج البريد ولا الجوال ولا الدرجات ولا أي حقل داخلي افتراضيًا', () => {
     const out = coordParticipant(p, coordPermissions({}));
-    expect(Object.keys(out).sort()).toEqual(['approved', 'created_at', 'full_name', 'id', 'job_title', 'progress', 'status', 'track', 'track_title'].sort());
+    expect(Object.keys(out).sort()).toEqual(['approved', 'created_at', 'full_name', 'id', 'job_title', 'progress', 'status'].sort());
+  });
+  // D18: المسار مشتق من المستويات، فلا يخرج إلا معها: صلاحية المستويات وموافقة المشارك
+  it('لا مسار ولا عنوان مسار بلا موافقة المشارك ولو مُنحت صلاحية المستويات', () => {
+    const out = coordParticipant({ ...p, levels: null }, coordPermissions({ scores: true }));
+    expect(out.levels).toBeNull();
+    expect(out.track).toBeUndefined();
+    expect(out.track_title).toBeUndefined();
+    expect(coordParticipant(p, coordPermissions({ activity: true, contact: true })).track).toBeUndefined();
   });
   it('يضيف التواصل والدرجات فقط عند السماح', () => {
     const out = coordParticipant(p, coordPermissions({ contact: true, scores: true }));
@@ -33,7 +41,7 @@ describe('coordParticipant', () => {
     const extra = (k) => Object.keys(coordParticipant(p, coordPermissions({ [k]: true }))).filter((x) => !base.includes(x)).sort();
     expect(extra('activity')).toEqual(['last_login_at']);
     expect(extra('contact')).toEqual(['email', 'phone']);
-    expect(extra('scores')).toEqual(['levels']);
+    expect(extra('scores')).toEqual(['levels', 'track', 'track_title']);
     expect(extra('export')).toEqual([]);
   });
 });

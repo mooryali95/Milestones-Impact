@@ -82,12 +82,12 @@ async function claim(sb: SB, kind: "notify" | "confirm", ref: string): Promise<b
   return false;
 }
 
-async function countSince(sb: SB, since: string, filter?: (q: any) => any) {
+// عدد الطلبات منذ وقت، أو null إن تعذّر العد فيفشل الطلب مغلقًا (لا طلب بلا حد)
+async function countSince(sb: SB, since: string, filter?: (q: any) => any): Promise<number | null> {
   let q: any = sb.from("contact_requests").select("id", { count: "exact", head: true }).gte("created_at", since);
   if (filter) q = filter(q);
   const { count, error } = await q;
-  // عمود ip يُضاف بترحيل 20261105100000؛ قبله لا حد لكل شبكة
-  if (error) { if (error.code !== "42703") console.error("contact count:", error); return 0; }
+  if (error) { console.error("contact count:", error); return null; }
   return count ?? 0;
 }
 
@@ -140,18 +140,20 @@ async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
     return json({ success: false, code: "captcha", site_key: TURNSTILE_SITE, message: body.captcha ? "تعذّر التحقق، أعيدوا المحاولة" : "أكّدوا أنكم لستم برنامجًا آليًا" }, 400);
   }
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
-  const tooMany = (await countSince(sb, hourAgo, (q) => q.eq("email", email))) >= PER_EMAIL_HOUR
-    || (ip ? (await countSince(sb, hourAgo, (q) => q.eq("ip", ip))) >= PER_IP_HOUR : false)
-    || (await countSince(sb, hourAgo)) >= GLOBAL_HOUR;
-  if (tooMany) return json({ success: false, code: "rate", message: "طلبات كثيرة، حاولوا بعد ساعة أو راسلونا بالبريد" }, 429);
+  const limits: [number | null, number][] = [
+    [await countSince(sb, hourAgo, (q) => q.eq("email", email)), PER_EMAIL_HOUR],
+    [ip ? await countSince(sb, hourAgo, (q) => q.eq("ip", ip)) : 0, PER_IP_HOUR],
+    [await countSince(sb, hourAgo), GLOBAL_HOUR],
+  ];
+  if (limits.some(([n]) => n === null)) return json({ success: false, code: "rate", message: "تعذّر التحقق من حد الطلبات الآن، حاولوا بعد قليل أو راسلونا بالبريد" }, 429);
+  if (limits.some(([n, max]) => (n ?? 0) >= max)) return json({ success: false, code: "rate", message: "طلبات كثيرة، حاولوا بعد ساعة أو راسلونا بالبريد" }, 429);
 
   const row: Row = {
     product: text(body.product, 40) || "MI-HOME", source_url: text(body.source_url, 500), name, organization: text(body.organization, 200),
     email, phone: text(body.phone, 40), interest: text(body.interest, 40), interest_label: text(body.interest_label, 120),
     context: text(body.context, 2000), user_agent: text(body.user_agent, 300), language: text(body.language, 40), status: "new",
   };
-  let ins = await sb.from("contact_requests").insert({ ...row, ip }).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
-  if (ins.error?.code === "42703") ins = await sb.from("contact_requests").insert(row).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
+  const ins = await sb.from("contact_requests").insert({ ...row, ip }).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
   if (ins.error || !ins.data) {
     console.error("contact insert:", ins.error);
     return json({ success: false, code: "db", message: "تعذّر حفظ الطلب الآن" }, 500);

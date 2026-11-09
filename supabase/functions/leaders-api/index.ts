@@ -206,7 +206,7 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
   'coord.dashboard': (c) => C.dashboard(c),
-  'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b),
+  'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b, c.permissions),
   'coord.logout': (_c, _b, sid) => C.logout(sid),
 };
 

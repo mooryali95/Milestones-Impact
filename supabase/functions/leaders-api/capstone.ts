@@ -11,9 +11,9 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { approvalOf, isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { approvalOf, coordPermissions, isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
@@ -348,7 +348,8 @@ export async function sponsorGet(b: Body) {
   const c = await sponsorFrom(b.t);
   return {
     success: true, done: c.sponsor_status !== 'pending', decision: c.sponsor_status,
-    sponsor: c.sponsor_name, doc: await recordFor(c.participants, 'sponsor'),
+    // D18: الراعي لا يرى مستوى الوثيقة ولا مسارها إلا بموافقة المشارك
+    sponsor: c.sponsor_name, doc: docLevelsFor(await recordFor(c.participants, 'sponsor'), !!c.participants?.org_share_consented_at),
   };
 }
 
@@ -400,10 +401,12 @@ export async function orgList(orgId: string) {
   });
 }
 
-export async function orgDoc(orgId: string, b: Body) {
+export async function orgDoc(orgId: string, b: Body, permissions: unknown = null) {
   const p = await participantRow(b.participant_id);
   if (p.organization_id !== orgId) throw new Fail('هذا المشارك ليس من جهتك', 403);
   const { data: c } = await db.from('capstones').select('status').eq('participant_id', p.id).maybeSingle();
   if (c?.status !== 'approved') throw new Fail('تُعرض الوثيقة للجهة بعد اعتمادها', 403, 'not_approved');
-  return { success: true, doc: await withTracking(await recordFor(p, 'org'), p.id) };
+  // D18: مستوى الوثيقة ومسارها للمنسق بصلاحية المستويات وموافقة المشارك معًا، كما في لوحة الجهة
+  const show = coordPermissions(permissions).scores && !!p.org_share_consented_at;
+  return { success: true, doc: await withTracking(docLevelsFor(await recordFor(p, 'org'), show), p.id) };
 }

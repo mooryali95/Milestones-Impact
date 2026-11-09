@@ -15,7 +15,7 @@ function server() {
     journey: [
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active', [{ id: 'i1', code: 'P-INFO', kind: 'system', title_ar: 'بيانات الملف', required: true, status: s.profileDone ? 'done' : 'pending' }]),
       stage('assessment', 'تحديد المستوى', 'admission', s.assessed ? 'done' : s.profileDone ? 'active' : 'locked', [{ id: 'i2', code: 'A-DONE', kind: 'system', title_ar: 'إرسال القياس', required: true, status: s.assessed ? 'done' : 'pending' }]),
-      { ...stage('approval', 'اعتماد المستوى', 'admission', s.assessed ? 'active' : 'locked'), duration_label: '3 أيام عمل' },
+      { ...stage('approval', 'اعتماد المستوى', 'admission', s.assessed ? 'active' : 'locked'), duration_label: 'يومي عمل' },
     ],
     progress: s.assessed ? 20 : 5, passkeys: 1, prompt_passkey: false,
   });
@@ -97,7 +97,7 @@ test('مشارك جديد: ترحيب بالفيديو ثم رأس الخطوا�
   await expect(page.getByRole('heading', { name: /نتيجتك قيد المراجعة/ })).toBeVisible();
   const card = page.getByRole('status').filter({ hasText: 'أرسلت قياسك. ما بعد ذلك' });
   await expect(card).toBeVisible();
-  await expect(card).toContainText('3 أيام عمل');
+  await expect(card).toContainText('خلال يومي عمل');
   await expect(rail).toHaveCount(0);
   await card.getByRole('button', { name: 'فهمت' }).click();
   await expect(card).toHaveCount(0);

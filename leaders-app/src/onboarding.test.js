@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { onboardingStep, ONBOARDING_STEPS } from './Onboarding.jsx';
 import { PARTICIPANT_VIDEO, VIDEO } from '../../shared/video/scenes.js';
-import { TOUR_STEPS } from './tour-steps.js';
+import { TOUR_STEPS, spoken } from './tour-steps.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -15,7 +15,7 @@ const me = ({ profile = false, assessment = false, approved = false } = {}) => (
   journey: [
     { key: 'profile', status: profile ? 'done' : 'active', items: [{ code: 'P-INFO', status: profile ? 'done' : 'pending' }] },
     { key: 'assessment', status: assessment ? 'done' : 'locked', items: [{ code: 'A-DONE', status: assessment ? 'done' : 'pending' }] },
-    { key: 'approval', status: 'locked', items: [], duration_label: '3 أيام عمل' },
+    { key: 'approval', status: 'locked', items: [], duration_label: 'يومي عمل' },
   ],
 });
 
@@ -54,10 +54,10 @@ describe('الفيديو التعريفي', () => {
     expect(VIDEO.seconds).toBe(meta.seconds);
     expect(meta.marks).toHaveLength(TOUR_STEPS.length);
   });
-  it('الترجمة من نص الجولة الحيّة نفسه (المصدر الواحد)، ومتصلة بالترتيب', () => {
+  it('الترجمة من نص الجولة كما سُجّل (spoken من المصدر الواحد)، ومتصلة بالترتيب', () => {
     const vtt = read(`leaders-app/public/media/${VIDEO.file}.vtt`);
     expect(vtt.startsWith('WEBVTT')).toBe(true);
-    for (const s of TOUR_STEPS) expect(vtt).toContain(s.d);
+    for (const s of TOUR_STEPS) expect(vtt).toContain(spoken(s));
     const times = [...vtt.matchAll(/(\d\d:\d\d:\d\d\.\d{3}) --> (\d\d:\d\d:\d\d\.\d{3})/g)].map((m) => m.slice(1, 3));
     expect(times).toHaveLength(TOUR_STEPS.length);
     for (let i = 1; i < times.length; i++) expect(times[i][0] >= times[i - 1][1]).toBe(true);

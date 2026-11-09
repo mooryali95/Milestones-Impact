@@ -50,6 +50,19 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(mail).toMatch(/crossesAlert\(counts\.sent, cap\)\) await alertWebhook\('mail_quota_70'/);
     expect(mail).toMatch(/Deno\.env\.get\('LEADERS_ALERT_WEBHOOK'\)/);
   });
+  it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
+    expect(mail).not.toMatch(/لا عداد بعد|: Promise\.resolve\(\)/);
+    expect(mail).toMatch(/await alertWebhook\('mail_counter_unavailable', \{ source, kind \}\)/);
+    expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
+    expect(read('supabase/functions/leaders-api/core.ts')).not.toMatch(/contactMailCount|الصيغة القديمة/);
+  });
+  it('حدود الشبكة تفشل مغلقة، ولا إعادة بلا عمود الشبكة', () => {
+    for (const f of ['user-api/index.ts', 'send-otp/index.ts']) {
+      const s = read(`supabase/functions/${f}`);
+      expect(s, f).not.toMatch(/PGRST204|42703|قبله لا حد/);
+      expect(s, f).toContain('تعذّر التحقق من حد الطلبات الآن');
+    }
+  });
   it('كل دالة ترسل بـ sendCounted بمصدرها، ولا تستدعي deliver مباشرة', () => {
     for (const [f, src] of [['leaders-api/core.ts', 'leaders-api'], ['user-api/index.ts', 'user-api'], ['admin-api/index.ts', 'admin-api'], ['send-otp/index.ts', 'send-otp']]) {
       const s = read(`supabase/functions/${f}`);
@@ -82,8 +95,8 @@ describe('العداد الموحد في الدوال الأربع', () => {
 
 describe('ترحيل 20261107120000_leaders_mail_events', () => {
   const SQL = read('supabase/migrations/20261107120000_leaders_mail_events.sql');
-  it('متسامح، والجدولان لدور الخدمة وحده، وعمود الشبكة لرموز المصفوفة', async () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب بعد تطبيقه، والجدولان لدور الخدمة وحده، وعمود الشبكة لرموز المصفوفة', async () => {
+    expect(gateOf(SQL).gate).toBe('blocking');
     const db = new PGlite();
     await db.exec(`create role anon; create role authenticated; create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table public.email_otps (id serial primary key, email text, otp_code text, created_at timestamptz default now());

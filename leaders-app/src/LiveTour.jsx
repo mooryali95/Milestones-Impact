@@ -155,13 +155,14 @@ export default function LiveTour({ me, onAccept, onGo }) {
           {last && <button type="button" className="btn" onClick={() => to(0)}>من البداية</button>}
           {i > 0 && <button type="button" className="btn ghost" onClick={() => to(i - 1)}>السابق</button>}
           <div className="tour-tools">
-            {audioOk && (
+            {/* مقطع الخطوة تسجيل said القديم: لا يُعرض حيث صُحّح نصها (d) حتى يُعاد التسجيل */}
+            {audioOk && !step.said && (
               <button type="button" className="link small" onClick={() => { const a = audio.current; if (!a) return; if (a.paused) { a.src = `${TOUR_AUDIO_BASE}${i + 1}.mp3`; a.play().catch(() => setAudioOk(false)); } else a.pause(); }}>▶ الصوت</button>
             )}
             <button type="button" className="link small" onClick={togglePresenter} aria-pressed={presenter}>{presenter ? 'نص عادي' : 'وضع المقدِّم'}</button>
             <button type="button" className="link small" onClick={() => setMin(true)}>إخفاء</button>
           </div>
-          {TOUR_AUDIO && <audio ref={audio} preload="none" onError={() => setAudioOk(false)} />}
+          {TOUR_AUDIO && !step.said && <audio ref={audio} preload="none" onError={() => setAudioOk(false)} />}
         </div>
       </aside>
     </>
