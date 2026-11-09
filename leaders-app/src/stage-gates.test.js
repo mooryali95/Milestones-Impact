@@ -1,6 +1,6 @@
 // بوابات المراحل الخمس (scripts/ops/stage-gates.mjs): الحكم على النقاط واحتساب المكسب
 import { describe, expect, it } from 'vitest';
-import { evaluate, judge, STAGES, toMarkdown, BASE_SCORE } from '../../scripts/ops/stage-gates.mjs';
+import { evaluate, judge, STAGES, toMarkdown, BASE_SCORE, stateOf } from '../../scripts/ops/stage-gates.mjs';
 
 const NOW = Date.parse('2026-11-09T12:00:00Z');
 const allPass = (stageIds) => {
@@ -21,6 +21,21 @@ describe('بوابات المراحل', () => {
     expect(judge(drill, {}, { 'm1.restore-drill': { by: 'المالك' } }, NOW).status).toBe('fail');
     expect(judge(drill, {}, { 'm1.restore-drill': { by: 'المالك', at: '2026-11-01' } }, NOW).status).toBe('pass');
     expect(judge(drill, {}, { 'm1.restore-drill': { by: 'المالك', at: '2026-09-01' } }, NOW).reason).toContain('تقادم');
+  });
+
+  it('الإقرار بتاريخ مستقبلي لا يُقبل، فلا يتجاوز التقادم', () => {
+    const drill = STAGES[0].checks.find((c) => c.id === 'm1.restore-drill');
+    expect(judge(drill, {}, { 'm1.restore-drill': { by: 'المالك', at: '2099-01-01' } }, NOW).status).toBe('fail');
+  });
+
+  it('مرحلة مكتملة بعد مرحلة مفتوحة تظهر «بانتظار ما قبلها» ولا يُحتسب مكسبها', () => {
+    const p = allPass([2]);
+    const r = evaluate(p.facts, p.attest, NOW);
+    expect(r.stages[1].crossed).toBe(true);
+    expect(r.stages[1].effective).toBe(false);
+    expect(stateOf(r.stages[1])).toBe('مكتملة بانتظار ما قبلها');
+    expect(toMarkdown(r, 'x')).not.toContain('⚠️');
+    expect(toMarkdown(evaluate({ 'm1.migrations': { status: 'unknown' } }, {}, NOW), 'x')).toContain('⚠️');
   });
 
   it('النقطة الآلية التي تعذّر فحصها لا تُحسب نجاحًا', () => {
