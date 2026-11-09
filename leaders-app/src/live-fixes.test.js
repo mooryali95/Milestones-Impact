@@ -41,8 +41,9 @@ describe('صفحة البرنامج: الفيديو بغلافه وترجمته�
   it('الفيديو من مصدره الواحد: الاسم والمدة من scenes.js، ويُطلب بـCORS ليحمّل ملف الترجمة', () => {
     const video = page.match(/<video[^>]*>[\s\S]*?<\/video>/)[0];
     expect(video).toContain('crossorigin="anonymous"');
-    for (const ext of ['jpg', 'webm', 'mp4', 'vtt']) expect(video).toContain(`${leadersOrigin}/media/${VIDEO.file}.${ext}`);
-    expect(page.match(/<figcaption>([^<]+)<\/figcaption>/)[1]).toContain(VIDEO.duration_ar);
+    // صفحة البرنامج تعرض فيديو المشارك نفسه الذي في التطبيق
+    for (const ext of ['jpg', 'webm', 'mp4', 'vtt']) expect(video).toContain(`${leadersOrigin}/media/${PARTICIPANT_VIDEO.file}.${ext}`);
+    expect(page.match(/<figcaption>([^<]+)<\/figcaption>/)[1]).toContain(PARTICIPANT_VIDEO.duration_ar);
   });
 
   it('سياسة الموقع تسمح بالغلاف والوسائط من منصة القادة، ومنصة القادة تسمح بقراءة ملفات الوسائط العامة من أي نطاق للموقع', () => {

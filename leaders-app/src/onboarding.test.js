@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { onboardingStep, ONBOARDING_STEPS } from './Onboarding.jsx';
-import { VIDEO } from '../../shared/video/scenes.js';
+import { PARTICIPANT_VIDEO, VIDEO } from '../../shared/video/scenes.js';
 import { TOUR_STEPS } from './tour-steps.js';
 
 const root = join(__dirname, '../..');
@@ -67,8 +67,8 @@ describe('الفيديو التعريفي', () => {
     expect(read('leaders-app/src/screens/Journey.jsx')).toMatch(/<IntroVideo className="link small" \/>[\s\S]*OnboardingNextCard/);
     expect(read('leaders-app/src/Onboarding.jsx')).toMatch(/<IntroPlayer \/>/);
     const home = read('home/leaders/index.html');
-    expect(home).toContain(`https://leaders.sunkvalue.com/media/${VIDEO.file}.mp4`);
-    expect(home).toContain(`https://leaders.sunkvalue.com/media/${VIDEO.file}.vtt`);
+    expect(home).toContain(`https://leaders.sunkvalue.com/media/${PARTICIPANT_VIDEO.file}.mp4`);
+    expect(home).toContain(`https://leaders.sunkvalue.com/media/${PARTICIPANT_VIDEO.file}.vtt`);
     expect(read('home/_headers')).toMatch(/media-src 'self' https:\/\/leaders\.sunkvalue\.com/);
     expect(read('leaders-app/public/_headers')).toMatch(/\/media\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
   });
