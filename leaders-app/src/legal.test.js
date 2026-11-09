@@ -36,14 +36,22 @@ describe('مشاركة المستويات مع الجهة بموافقة', () =>
     const coord = api('coordinator.ts');
     expect(coord).toMatch(/org_share_consented_at\)\.map\(\(r: any\) => r\.id\)\)/);
     expect(coord).toMatch(/levels: shared\.has\(p\.id\) \? levelsBy\[p\.id\] \|\| null : null/);
-    expect(coord).toMatch(/p\.dimensions && shared\.has\(p\.id\)/);
+    expect(coord).toMatch(/const paired = r\.participants\.filter\(\(p: any\) => p\.dimensions\);/);
+    expect(coord).toMatch(/paired\.filter\(\(p: any\) => shared\.has\(p\.id\)\)/);
   });
   // D18: المسار مشتق من المستويات، فتوزيع المسارات في لوحة الجهة لا يعدّ إلا من خرجت مستوياته
   it('توزيع المسارات للجهة يعدّ من وافق وحده، لا by_track الإداري', () => {
     const coord = api('coordinator.ts');
-    expect(coord).toMatch(/for \(const p of full\) if \(p\.levels && p\.track\) byTrack\[p\.track\]/);
-    expect(coord).toMatch(/funnel: d\.funnel, by_track: byTrack, by_via: d\.by_via,/);
+    expect(coord).toMatch(/for \(const p of full\) if \(p\.levels && p\.track\) \{ byTrack\[p\.track\]/);
+    expect(coord).toMatch(/funnel: d\.funnel, by_track: byTrack, track_titles: trackTitles, by_via: d\.by_via,/);
     expect(coord).not.toMatch(/by_track: d\.by_track/);
+  });
+  // المتوسط مع صفوف من وافق يكشف بالطرح نتيجة غير الموافقين إن قلّوا، فالصفوف بالأسماء تُحجب حينها
+  it('أثر الجهة: لا صفوف بالأسماء إن كان غير الموافقين من المقيسين بين واحد وما دون حد الإخفاء', () => {
+    const coord = api('coordinator.ts');
+    expect(coord).toMatch(/const hidden = paired\.filter\(\(p: any\) => !shared\.has\(p\.id\)\)\.length;/);
+    expect(coord).toMatch(/const named = scores && \(hidden === 0 \|\| hidden >= MIN_COHORT\);/);
+    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toMatch(/im\.rows_withheld &&/);
   });
   it('المفتاح بيد المشارك في «ملفي»', () => {
     expect(api('index.ts')).toMatch(/'org\.share-consent': \(p, b\) => P\.orgShareConsent\(p, b\)/);

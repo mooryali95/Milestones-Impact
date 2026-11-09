@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
 import IntroVideo from '../IntroVideo.jsx';
+import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
@@ -534,8 +535,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
   const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
   const doneCount = counted.filter((s) => s.status === 'done').length;
-  // مدة المراجعة من مرحلة الاعتماد نفسها (duration_label كما يعرضه الخادم)، لا رقم هنا
-  const reviewWait = journey.find((s) => s.key === 'approval')?.duration_label || '';
+  // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
+  const reviewWait = APPROVAL_SLA_AR;
   let order = 0;
 
   return (

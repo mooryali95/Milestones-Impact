@@ -9,6 +9,7 @@ import React from 'react';
 import { PARTICIPANT_VIDEO as VIDEO } from '../../shared/video/scenes.js';
 import { gateDone, gateStage, hasAccess } from './gates.js';
 import { nextSeen, welcomeSeen } from './api.js';
+import { APPROVAL_SLA_AR } from '../../supabase/functions/leaders-api/labels.js';
 import IntroVideo, { IntroPlayer } from './IntroVideo.jsx';
 
 // العدّاد الواحد لخطوات البداية: منه رأس الخطوات وحده، ولا تكتب الشاشات عدّادًا خاصًا بها.
@@ -26,8 +27,8 @@ export function assessmentMinutes(me) {
   const label = gateStage(me, 'assessment')?.duration_label;
   return label && !label.includes('{') ? label : null;
 }
-// مدة الاعتماد من مرحلته، كما في بطاقة «ما بعد ذلك»؛ وبغيابها الموعد المعلن في D04 (يوما عمل، كما في صفحة الانتظار)
-const approvalWait = (me) => me?.journey?.find((s) => s.key === 'approval')?.duration_label || 'يومي عمل';
+// موعد الاعتماد المعلن في D04 بصيغة الجملة، كما في صفحة الانتظار؛ لا من وسم المرحلة المرفوع «يوما عمل»
+const approvalWait = () => APPROVAL_SLA_AR;
 
 // الخطوة الحالية أو null حين لا معالج (الرحلة مفتوحة أو الحساب ليس مشاركًا)
 // flags: assessmentPaywall (بوابة الدفع تسبق القياس)، welcomeSeen وnextSeen (لاختبار الدالة بلا متصفح)

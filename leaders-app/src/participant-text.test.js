@@ -21,7 +21,7 @@ const api = (f) => read(`supabase/functions/leaders-api/${f}`);
 const MIG = '20261110100000_leaders_approval_two_working_days';
 const SQL = read(`supabase/migrations/${MIG}.sql`);
 
-const me = ({ access, label = 'يومي عمل' } = {}) => ({
+const me = ({ access, label = 'يوما عمل' } = {}) => ({
   participant: { id: 'p1', full_name: 'سارة عبدالله الأحمد' },
   profile: { approved: false },
   ...(access !== undefined && { access }),
@@ -67,6 +67,9 @@ describe('B2: مدة الاعتماد يوما عمل في كل موضع (D04)',
     expect(nextCard(me())).toContain('ويعتمد مسارك خلال يومي عمل');
     expect(welcome(me({ label: null }))).toContain('خلال يومي عمل');
     expect(read('leaders-app/src/Onboarding.jsx')).not.toContain('أيام عمل قليلة');
+    // الجمل من الموعد المعلن بصيغتها بعد «خلال»، والوسم المرفوع لا يدخل جملة
+    expect(welcome(me({ label: 'يوما عمل' }))).not.toContain('خلال يوما عمل');
+    expect(read('leaders-app/src/screens/Journey.jsx')).toContain('const reviewWait = APPROVAL_SLA_AR;');
   });
   it('صفحة الانتظار والخادم على الموعد نفسه', () => {
     const pw = read('leaders-app/src/screens/Paywall.jsx');
@@ -82,7 +85,7 @@ describe('B2: مدة الاعتماد يوما عمل في كل موضع (D04)',
   });
   it('النص ثابت لأن الرمز بيومين لا يُقرأ صحيحًا بعد «خلال»، ولا رقم فيه يرفضه الحارس', () => {
     expect(renderJourneyText('{duration} عمل', { durationDays: 2 })).toBe('يومان عمل');
-    expect(hardcodedFacts('يومي عمل')).toBeNull();
+    expect(hardcodedFacts('يوما عمل')).toBeNull();
   });
   it('يحدّث الصف الذي على قيمته الأصلية وحده، ولا يمس تعديل اللوحة، وآمن لإعادة التشغيل', async () => {
     const db = new PGlite();
@@ -96,7 +99,7 @@ describe('B2: مدة الاعتماد يوما عمل في كل موضع (D04)',
     await db.exec(SQL);
     const { rows } = await db.query('select program_id, key, duration_label, duration_days from leaders.journey_stages order by program_id, key');
     expect(rows.map((r) => [r.key, r.duration_label, r.duration_days])).toEqual([
-      ['approval', 'يومي عمل', 2], ['evaluation', '{duration}', 14], ['approval', 'خمسة أيام عمل', 5],
+      ['approval', 'يوما عمل', 2], ['evaluation', '{duration}', 14], ['approval', 'خمسة أيام عمل', 5],
     ]);
     expect((await db.query('select name from leaders.schema_migrations')).rows).toEqual([{ name: MIG }]);
   });

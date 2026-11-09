@@ -108,6 +108,9 @@ export function consentState(version, consentedAt) {
 }
 // ما يعتمد على أغراض النسخة الجوهرية وحدها: يُحجب عمن لم يجدد موافقته، وتبقى رحلته بأساس العقد
 export const CONSENT_GATED = Object.freeze(['rater.invite', 'sponsor.request', 'me.sponsor-code']);
+// موعد اعتماد المسار المعلن (D04) بصيغته في الجملة بعد «خلال» و«تستغرق»: «يومي عمل». ووسم مرحلة الاعتماد
+// في الرحلة يُعرض وحده فيُخزَّن مرفوعًا «يوما عمل» (20261110100000)، فلا تُبنى جملة من وسم المرحلة.
+export const APPROVAL_SLA_AR = 'يومي عمل';
 export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund', changes: '/legal/changes' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);

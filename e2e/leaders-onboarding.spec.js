@@ -15,7 +15,7 @@ function server() {
     journey: [
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active', [{ id: 'i1', code: 'P-INFO', kind: 'system', title_ar: 'بيانات الملف', required: true, status: s.profileDone ? 'done' : 'pending' }]),
       stage('assessment', 'تحديد المستوى', 'admission', s.assessed ? 'done' : s.profileDone ? 'active' : 'locked', [{ id: 'i2', code: 'A-DONE', kind: 'system', title_ar: 'إرسال القياس', required: true, status: s.assessed ? 'done' : 'pending' }]),
-      { ...stage('approval', 'اعتماد المستوى', 'admission', s.assessed ? 'active' : 'locked'), duration_label: 'يومي عمل' },
+      { ...stage('approval', 'اعتماد المستوى', 'admission', s.assessed ? 'active' : 'locked'), duration_label: 'يوما عمل' },
     ],
     progress: s.assessed ? 20 : 5, passkeys: 1, prompt_passkey: false,
   });

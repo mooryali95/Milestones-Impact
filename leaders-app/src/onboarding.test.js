@@ -15,7 +15,7 @@ const me = ({ profile = false, assessment = false, approved = false } = {}) => (
   journey: [
     { key: 'profile', status: profile ? 'done' : 'active', items: [{ code: 'P-INFO', status: profile ? 'done' : 'pending' }] },
     { key: 'assessment', status: assessment ? 'done' : 'locked', items: [{ code: 'A-DONE', status: assessment ? 'done' : 'pending' }] },
-    { key: 'approval', status: 'locked', items: [], duration_label: 'يومي عمل' },
+    { key: 'approval', status: 'locked', items: [], duration_label: 'يوما عمل' },
   ],
 });
 

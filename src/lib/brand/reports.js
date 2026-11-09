@@ -13,7 +13,7 @@ import { DIM_AR, DIM_SHORT as DIM_EN, FUNNEL as BASE_FUNNEL, LEVEL_AR as LVL } f
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '·');
 
 // تقرير الجهة. audience: 'admin' (كامل بمصادر الانضمام) أو 'coordinator' (بصلاحياته فقط)
-// d: { org, participants, funnel, by_track, by_via, by_campaign?, by_site?, kpis?, permissions? }
+// d: { org, participants, funnel, by_track, track_titles?, by_via, by_campaign?, by_site?, kpis?, permissions? }
 export function orgReport(d, audience = 'admin') {
   const o = d.org;
   const ps = d.participants || [];
@@ -29,7 +29,7 @@ export function orgReport(d, audience = 'admin') {
   // D18: المسار مشتق من المستويات، فلا يظهر للمنسق إلا مع صلاحية المستويات (والخادم يحصره فيمن وافق)،
   // ومفتاحه الداخلي لا يُعرض له عنوانًا
   const showTrack = audience !== 'coordinator' || !!perms.scores;
-  const titleOf = (key) => ps.find((p) => p.track === key)?.track_title || (audience === 'coordinator' ? 'مسار' : key);
+  const titleOf = (key) => d.track_titles?.[key] || ps.find((p) => p.track === key)?.track_title || (audience === 'coordinator' ? 'مسار' : key);
   const tracks = showTrack ? Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]) : [];
   const showProgress = ps.some((p) => typeof p.progress === 'number');
 

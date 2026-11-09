@@ -147,6 +147,7 @@ function ImpactCard({ im, onReport }) {
       <div className="row between"><h3>أثر البرنامج على مشاركيك</h3>{onReport && c.paired > 0 && !im.suppressed && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
       <p className="small muted">{c.baseline || 0} أجروا القياس المبدئي، و{c.post || 0} أجروا البعدي، و{c.paired || 0} لديهم القياسان.</p>
       {im.caution && <div className="alert info small">{im.caution}</div>}
+      {im.rows_withheld && <p className="small muted">تظهر نتائج من وافق من مشاركيك بأسمائهم حين لا يبقى غير موافق، أو يبلغ غير الموافقين خمسة على الأقل، فلا تُستنتج نتيجة أحد منهم من المتوسط.</p>}
       {im.suppressed ? <p className="small muted">تظهر المقارنة حين يكمل {im.suppressed} مشاركين على الأقل القياسين، حفاظًا على خصوصيتهم.</p> : c.paired > 0 ? (
         <div className="op-scroll"><table>
           <thead><tr><th>الإطار</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسن موثوق</th></tr></thead>
@@ -177,7 +178,7 @@ function Dashboard({ me, onLogout }) {
   // D18: المسار مشتق من المستويات، فلا يظهر إلا مع صلاحية المستويات، والخادم يحصره فيمن وافق من المشاركين.
   // مفتاحه الداخلي لا يُعرض عنوانًا، والمسارات التي تشترك في ملف تعريف واحد تُجمع في شريط واحد
   const tracks = perms.scores ? Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]) : [];
-  const titleOf = (k) => d.participants.find((p) => p.track === k)?.track_title || 'مسار';
+  const titleOf = (k) => d.track_titles?.[k] || d.participants.find((p) => p.track === k)?.track_title || 'مسار';
   const trackBars = tracks.reduce((o, [k, n]) => { const t = titleOf(k); o[t] = (o[t] || 0) + n; return o; }, {});
   // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
   const exportXlsx = async () => {
