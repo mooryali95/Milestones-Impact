@@ -14,6 +14,7 @@
 // قراءة GitHub بـ GITHUB_TOKEN إن وُجد، وإلا بأداة gh، وإلا تُعلَن النقطة «تعذّر الفحص».
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const BASE_SCORE = 7.5;
 export const TARGET_SCORE = 9.5;
@@ -114,6 +115,9 @@ export function evaluate(facts, attest, now = Date.now()) {
   return { stages, score: Math.round(score * 10) / 10, target: TARGET_SCORE };
 }
 
+// خلية جدول Markdown: لا عمود زائد ولا سطر مكسور من قيمة في القاعدة
+const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
+
 export function toMarkdown(r, at) {
   const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
   const out = [`# تقرير بوابات المراحل`, '', `**وقت الفحص:** ${at}`, '', `**الدرجة المحتسبة بالبوابات:** ${r.score} من 10، والهدف ${r.target}. لا يُحتسب مكسب مرحلة قبل عبورها وما قبلها.`, ''];
@@ -121,7 +125,7 @@ export function toMarkdown(r, at) {
   for (const s of r.stages) out.push(`| م${s.id} ${s.title} (+${s.gain}) | ${s.passed} من ${s.total} | ${s.crossed ? 'عُبرت' : 'مفتوحة'} |`);
   for (const s of r.stages) {
     out.push('', `## م${s.id} ${s.title}`, '', '| النقطة | النوع | الحالة | السبب |', '|---|---|---|---|');
-    for (const c of s.checks) out.push(`| ${c.title} | ${c.kind === 'auto' ? 'آلية' : 'إقرار'} | ${icon[c.status]} | ${c.reason} |`);
+    for (const c of s.checks) out.push(`| ${cell(c.title)} | ${c.kind === 'auto' ? 'آلية' : 'إقرار'} | ${icon[c.status]} | ${cell(c.reason)} |`);
   }
   return out.join('\n') + '\n';
 }
@@ -133,7 +137,8 @@ const REPO = process.env.GITHUB_REPOSITORY || 'mooryali95/Milestones-Impact';
 async function sql(q) {
   const r = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
     method: 'POST', headers: { Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: q }),
+    // read_only: معاملة للقراءة وحدها، فلا يكتب استعلام هنا في الإنتاج ولو عُدّل خطأً
+    body: JSON.stringify({ query: q, read_only: true }),
   });
   if (!r.ok) throw new Error(`SQL ${r.status}`);
   return r.json();
@@ -211,14 +216,17 @@ export async function collect() {
       where i.kind = 'baseline' and i.active and q.active and q.dimension = m.dimension and q.chapter_key = m.chapter_key)) covered
       from (select distinct dimension, chapter_key from leaders.handbook_modules) m`,
     ([r]) => ({ ok: +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا لها فقرة مبدئية` }));
-  await q('m3.foundation-access', `select q.code from leaders.questions q join leaders.instruments i on i.id = q.instrument_id
+  await q('m3.foundation-access', `select distinct q.code from leaders.questions q join leaders.instruments i on i.id = q.instrument_id
       join leaders.handbook_modules m on m.dimension = q.dimension and m.chapter_key = q.chapter_key
       where i.active and q.active and coalesce(q.min_level, 'beginner') = 'beginner' and coalesce(m.min_level, 'beginner') <> 'beginner'`,
     (rows) => ({ ok: !rows.length, reason: rows.length ? `${rows.length} فقرة على باب محجوب: ${rows.slice(0, 6).map((r) => r.code).join('، ')}` : 'لا فقرة على باب محجوب' }));
   await q('m3.public-sector', `select count(*) n from leaders.handbook_modules where dimension = 'impact' and body_md like '%مانح%'`,
     ([r]) => ({ ok: +r.n === 0, reason: +r.n ? `«مانح» في ${r.n} بابًا من إطار الأثر` : 'لا «مانح» في المتن' }));
   f['m3.concepts'] = await safe(async () => {
-    try { execFileSync('node', ['scripts/concepts/registry.mjs', '--check'], { stdio: 'ignore' }); return { ok: true, reason: 'الحارس يجتاز' }; }
+    // بلا الرمزين: الحارس لا يحتاج الإنتاج ولا GitHub
+    const { SUPABASE_ACCESS_TOKEN: _s, GITHUB_TOKEN: _g, ...env } = process.env;
+    const script = fileURLToPath(new URL('../concepts/registry.mjs', import.meta.url));
+    try { execFileSync('node', [script, '--check'], { stdio: 'ignore', env }); return { ok: true, reason: 'الحارس يجتاز' }; }
     catch { return { ok: false, reason: 'الحارس يفشل' }; }
   });
   await q('m4.katon-coverage', `select d, count(t.id) n from unnest(array['milestone','impact','leadership']) d
