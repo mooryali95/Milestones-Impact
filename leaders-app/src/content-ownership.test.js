@@ -100,7 +100,7 @@ describe('الخادم يطبّق القفل ويحفظ المصدر والقي�
 describe('ترحيل المصدر 20261107100000_leaders_content_provenance', () => {
   const SQL = read('supabase/migrations/20261107100000_leaders_content_provenance.sql');
   it('حاجب في بوابة النشر بعد تطبيقه، ويسجّل نفسه', () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107100000_leaders_content_provenance').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     expect(SQL).toContain("insert into leaders.schema_migrations (name) values ('20261107100000_leaders_content_provenance')");
   });
   it('حفظ اللوحة يبقى باسم المشرف، وكل كتابة لا تختم تُنسب إلى دور القاعدة، وإعادة التشغيل آمنة', async () => {

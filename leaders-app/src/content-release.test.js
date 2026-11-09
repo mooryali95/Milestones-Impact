@@ -41,7 +41,7 @@ const P = (n) => `00000000-0000-0000-0000-00000000000${n}`;
 
 describe('ترحيل 20261107180000_leaders_content_releases', () => {
   it('حاجب بعد تطبيقه وآمن لإعادة التشغيل', async () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107180000_leaders_content_releases').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = await schema();
     await db.exec(SQL);
   });

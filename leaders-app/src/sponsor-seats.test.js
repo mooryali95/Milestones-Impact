@@ -29,7 +29,7 @@ const pin = async (d, p, o) => (await d.query(`select leaders.pin_sponsor_seat($
 
 describe('leaders.pin_sponsor_seat', () => {
   it('حاجب في بوابة النشر بعد تطبيقه (لا كود متسامح معه)، ولدور الخدمة وحده، ويقفل صف الجهة', () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107130000_leaders_sponsor_seats').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     expect(SQL).toMatch(/from leaders\.organizations where id = p_org for update;/);
     expect(SQL).toMatch(/revoke all on function leaders\.pin_sponsor_seat\(uuid, uuid, integer, text, text\) from public, anon, authenticated;/);
   });

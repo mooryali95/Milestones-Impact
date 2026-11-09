@@ -125,7 +125,7 @@ describe('الواجهة', () => {
 describe('ترحيل 20261107170000_leaders_rater_verification', () => {
   const SQL = read('supabase/migrations/20261107170000_leaders_rater_verification.sql');
   it('حاجب بعد تطبيقه، ويقبل الانتظار والعلامات، ويرفض حكمًا مجهولًا، وإعادته آمنة', async () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107170000_leaders_rater_verification').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table leaders.raters (id serial primary key, participant_id int not null, email text not null, status text not null default 'invited',

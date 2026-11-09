@@ -8,15 +8,21 @@
 //   -- deploy-gate: tolerant   الدوال تقرؤه قراءة متسامحة، فتعمل قبله وبعده
 //   -- deploy-gate: deferred   مؤجل بقرار مسمّى في سطره (مثل تفعيل أداة قياس)، ولا تعتمد عليه الدوال
 // الوسم وعد يحرسه مراجع الطلب. ترحيل لا يحمله يُطبّق بسير migrate.yml قبل أن يمر النشر.
-// الوسم يُزال حين يُطبَّق الترحيل على الإنتاج ويُحذف الكود المتسامح معه.
+// الوسم ينتهي حين يُطبَّق الترحيل على الإنتاج ويُحذف الكود المتسامح معه: لا يُمس ملفه (بصمته في
+// scripts/db/applied-manifest.json لا تتغير)، بل يصير حاجبًا لأي قاعدة تنقصه لأن اسمه في البيان.
 import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const APPLIED = new Set(Object.keys(JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../db/applied-manifest.json'), 'utf8')).migrations));
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 const LIST = process.argv.includes('--list');
 const DIR = new URL('../../supabase/migrations/', import.meta.url);
 
-export function gateOf(sql) {
+export function gateOf(sql, name) {
+  if (name && APPLIED.has(name)) return { gate: 'blocking', note: 'مطبّق على الإنتاج، فوسمه منتهٍ' };
   const head = sql.split('\n').slice(0, 15).join('\n');
   const m = head.match(/^--\s*deploy-gate:\s*(tolerant|deferred)\b(.*)$/m);
   return m ? { gate: m[1], note: m[2].trim() } : { gate: 'blocking', note: '' };
@@ -24,7 +30,7 @@ export function gateOf(sql) {
 
 export function classify(repoNames, applied, readSql) {
   const set = new Set(applied);
-  return repoNames.filter((n) => !set.has(n)).map((n) => ({ name: n, ...gateOf(readSql(n)) }));
+  return repoNames.filter((n) => !set.has(n)).map((n) => ({ name: n, ...gateOf(readSql(n), n) }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

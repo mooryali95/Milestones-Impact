@@ -125,7 +125,7 @@ describe('نص الوثائق', () => {
 describe('ترحيل 20261107160000_leaders_consent_events', () => {
   const SQL = read('supabase/migrations/20261107160000_leaders_consent_events.sql');
   it('حاجب بعد تطبيقه، ويُكتب ولا يُعدَّل ولا يُحذف ولا يُفرَّغ، وإعادته آمنة', async () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107160000_leaders_consent_events').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create role anon; create role authenticated;`);

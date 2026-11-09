@@ -64,7 +64,7 @@ describe('دورة الشهادة من التقييم الختامي', () => {
 describe('ترحيل 20261107140000_leaders_certificate_suspended', () => {
   const SQL = read('supabase/migrations/20261107140000_leaders_certificate_suspended.sql');
   it('حاجب بعد تطبيقه، ويقبل المعلّقة، وإعادته آمنة', async () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107140000_leaders_certificate_suspended').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table leaders.certificates (id serial primary key, status text not null default 'valid',

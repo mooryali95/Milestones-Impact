@@ -96,7 +96,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
 describe('ترحيل 20261107120000_leaders_mail_events', () => {
   const SQL = read('supabase/migrations/20261107120000_leaders_mail_events.sql');
   it('حاجب بعد تطبيقه، والجدولان لدور الخدمة وحده، وعمود الشبكة لرموز المصفوفة', async () => {
-    expect(gateOf(SQL).gate).toBe('blocking');
+    expect(gateOf(SQL, '20261107120000_leaders_mail_events').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create role anon; create role authenticated; create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table public.email_otps (id serial primary key, email text, otp_code text, created_at timestamptz default now());
