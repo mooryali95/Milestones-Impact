@@ -6,7 +6,7 @@
 // التي توجّه App.jsx؛ وخطوتا 1 و4 راحة عرض تُغلق مرة واحدة بالمخزن المحلي (كبطاقة الترحيب).
 // التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md
 import React from 'react';
-import { VIDEO } from '../../shared/video/scenes.js';
+import { PARTICIPANT_VIDEO as VIDEO } from '../../shared/video/scenes.js';
 import { gateDone, gateStage } from './gates.js';
 import { nextSeen, welcomeSeen } from './api.js';
 import IntroVideo, { IntroPlayer } from './IntroVideo.jsx';
@@ -76,7 +76,7 @@ export function OnboardingWelcome({ me, step, onStart }) {
         <div>
           <p className="eyebrow">معالج البداية</p>
           <h1>أهلًا {first}، لنبدأ</h1>
-          <p className="muted">في {VIDEO.duration_ar} ترى كيف تعمل المنصة، ثم ثلاث خطوات قصيرة تضعك في رحلتك.</p>
+          <p className="muted">{VIDEO.in_ar} ترى كيف تسير رحلتك، ثم ثلاث خطوات قصيرة تضعك فيها.</p>
         </div>
         <IntroPlayer />
         <ol className="onb-list">
