@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [react()],
-  build: { outDir: '../leaders', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'] } } } },
+  // التصدير إلى Excel باسم ثابت: بلا ذلك يسمّي Rollup قطعته المشتركة index محليًا وbrowser في CI بالمحتوى نفسه،
+  // فيختلف المبني المودع عن بناء CI
+  build: { outDir: '../leaders', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'], excel: ['write-excel-file/browser', 'fflate'] } } } },
   server: { port: 5174 },
 });
