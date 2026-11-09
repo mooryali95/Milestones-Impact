@@ -16,12 +16,12 @@ export const VIDEO = {
 };
 
 // فيديو المشارك (2026-11-09): ست محطات من PARTICIPANT_BEATS في tour-steps.js، مقتطفات من صوت الجولة نفسه
-// (excerpt-audio.mjs) على الواجهة الحقيقية بـ record.mjs --cut=participant --audio. هو ما يعرضه تطبيق القادة (الدخول والترحيب
+// (excerpt-audio.mjs) على الواجهة الحقيقية، بلا «على حدة» التي لا تُنطق صحيحة في التسجيل، بـ record.mjs --cut=participant --audio. هو ما يعرضه تطبيق القادة (الدخول والترحيب
 // والرحلة). intro-p1 النسخة الصامتة بصيغة المخاطب تبقى للرجوع. الجولة الكاملة VIDEO أعلاه تبقى لصفحة البرنامج حتى يُنقل رابطها
 // بعد تأكيد فرع mi-home، وللعروض.
 export const PARTICIPANT_VIDEO = {
-  file: 'intro-p2',
-  seconds: 176,
+  file: 'intro-p3',
+  seconds: 167,
   fps: 24,
   width: 1280,
   height: 720,
