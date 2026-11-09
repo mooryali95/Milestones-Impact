@@ -34,8 +34,10 @@ describe('بوابات المراحل', () => {
     expect(r.stages[1].crossed).toBe(true);
     expect(r.stages[1].effective).toBe(false);
     expect(stateOf(r.stages[1])).toBe('مكتملة بانتظار ما قبلها');
-    expect(toMarkdown(r, 'x')).not.toContain('⚠️');
-    expect(toMarkdown(evaluate({ 'm1.migrations': { status: 'unknown' } }, {}, NOW), 'x')).toContain('⚠️');
+    // النقاط الآلية لبقية المراحل بلا حقائق فهي «تعذّر الفحص»، والتقرير ينبّه
+    expect(toMarkdown(r, 'x')).toContain('⚠️');
+    const all = allPass([1, 2, 3, 4, 5]);
+    expect(toMarkdown(evaluate(all.facts, all.attest, NOW), 'x')).not.toContain('⚠️');
   });
 
   it('النقطة الآلية التي تعذّر فحصها لا تُحسب نجاحًا', () => {
