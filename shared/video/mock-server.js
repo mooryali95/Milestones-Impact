@@ -5,22 +5,23 @@ const LIKERT = ['نادرًا جدًا', 'نادرًا', 'أحيانًا', 'غا
 const stage = (key, title_ar, phase, status, items = [], extra = {}) => ({ key, title_ar, phase, status, items, done: items.filter((i) => i.status === 'done').length, total: items.length, ...extra });
 
 export function createMockServer() {
-  const s = { named: false, profileDone: false, assessed: false, chapterDone: false, points: 0, mine: [], answered: false };
+  // approved منفصل عن assessed: الجولة الكاملة تعتمد فور الإرسال (approveOnSubmit)، وفيديو المشارك يُظهر «قيد المراجعة» ثم يعتمد
+  const s = { named: false, profileDone: false, assessed: false, approved: false, approveOnSubmit: true, chapterDone: false, points: 0, mine: [], answered: false };
   const me = () => ({
     success: true,
     participant: { id: 'p1', full_name: NAME, email: 'sara@company.sa', status: s.assessed ? 'enrolled' : 'registered', consented_at: '2026-11-01T00:00:00Z', organization_name: 'هيئة التحوّل الرقمي', organization_linked: true },
     profile: {
       full_name: NAME, phone: s.profileDone ? '0551234567' : '', job_title: s.profileDone ? 'مديرة إدارة المشاريع' : '', organization_name: s.profileDone ? 'هيئة التحوّل الرقمي' : '',
       years_experience: s.profileDone ? 9 : null, work_scope: s.profileDone ? 'program' : null, sector: s.profileDone ? 'حكومي' : '',
-      approved: s.assessed, level: s.assessed ? 'intermediate' : null,
+      approved: s.approved, level: s.assessed ? 'intermediate' : null,
       track: s.assessed ? { title: 'القيادة من خلال الآخرين', summary: 'تتقن أدوات العمل، والفرق الذي ينتظرك في الناس.', strengths: 'أقوى أطرك: إدارة المشروعات وتحويل المشروع إلى أثر.', journey: 'المختبر: خريطة أصحاب المصلحة، والأسبوع الصعب، وأنماط إدارة الخلاف.' } : null,
-      dimensions: s.assessed ? [{ dimension: 'milestone', level: 'advanced', approved: true }, { dimension: 'impact', level: 'intermediate', approved: true }, { dimension: 'leadership', level: 'intermediate', approved: true }] : [],
+      dimensions: s.assessed ? [{ dimension: 'milestone', level: 'advanced', approved: s.approved }, { dimension: 'impact', level: 'intermediate', approved: s.approved }, { dimension: 'leadership', level: 'intermediate', approved: s.approved }] : [],
     },
     journey: [
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active', [{ id: 'i1', code: 'P-INFO', kind: 'system', title_ar: 'بيانات الملف', required: true, status: s.profileDone ? 'done' : 'pending' }]),
       stage('assessment', 'تحديد المستوى', 'admission', s.assessed ? 'done' : s.profileDone ? 'active' : 'locked', [{ id: 'i2', code: 'A-DONE', kind: 'system', title_ar: 'إرسال القياس', required: true, status: s.assessed ? 'done' : 'pending' }]),
-      stage('approval', 'اعتماد المستوى', 'admission', s.assessed ? 'done' : 'locked', [], { duration_label: '3 أيام عمل' }),
-      stage('training', 'التدريب', 'qualification', s.assessed ? 'active' : 'locked', [
+      stage('approval', 'اعتماد المستوى', 'admission', s.approved ? 'done' : s.assessed ? 'active' : 'locked', [], { duration_label: 'يومي عمل' }),
+      stage('training', 'التدريب', 'qualification', s.approved ? 'active' : 'locked', [
         { id: 'r0', code: 'T-ATTEND', kind: 'attendance', title_ar: 'حضور الأيام التدريبية', required: true, status: 'done', auto: true },
         { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتيبك الشخصي', required: true, status: s.chapterDone ? 'done' : 'pending' },
         { id: 'r2', code: 'T-PLAN', kind: 'upload', title_ar: 'تسمية مبادرتك', required: true, status: 'pending' },
@@ -32,13 +33,19 @@ export function createMockServer() {
       stage('evaluation', 'التقييم والقياس', 'impact', 'locked', [{ id: 'e1', code: 'E-POST', kind: 'system', title_ar: 'القياس البعدي', required: true, status: 'pending' }], { duration_label: 'أسبوعان' }),
       stage('report', 'التقرير النهائي', 'impact', 'locked', [], { duration_label: 'أسبوع' }),
     ],
+    // بشكل الخادم (milestones.js وcontinuous.js): due وlate_days وpct، والاتجاه {dir}، ولكل مصدر value وreason
     milestones: s.assessed ? [
-      { id: 'm1', title_ar: 'تسمية المبادرة', due_on: '2026-11-12', status: 'due_soon', days: 5 },
-      { id: 'm2', title_ar: 'بطاقة المبادرة', due_on: '2026-11-26', status: 'on_time', days: 19 },
-      { id: 'm3', title_ar: 'هيكل تجزئة العمل', due_on: '2026-12-10', status: 'unscheduled', days: null },
+      { id: 'm1', title_ar: 'تسمية المبادرة', due: '2026-11-08', status: 'done', late_days: 0 },
+      { id: 'm2', title_ar: 'بطاقة المبادرة', due: '2026-11-12', status: 'due_soon', late_days: 0 },
+      { id: 'm3', title_ar: 'هيكل تجزئة العمل', due: '2026-11-26', status: 'on_time', late_days: 0 },
     ] : [],
-    milestone_summary: { done: 0, total: 3 },
-    continuous: s.assessed ? { index: 64, trend: 'up', components: [{ key: 'handbook', label: 'الكتيب', pct: 70 }, { key: 'milestone', label: 'المعالم', pct: 60 }, { key: 'peer', label: 'طلبات الأقران', pct: 55 }], events: [] } : null,
+    milestone_summary: { done: 1, total: 3, late: 0, max_late: 0, pct: 33 },
+    continuous: s.assessed ? { index: 68, trend: { dir: 'up' }, components: [
+      { key: 'quizzes', label: 'اختبارات الكتيب', value: 80, reason: '4 أبواب' },
+      { key: 'models', label: 'النماذج التطبيقية', value: 75, reason: 'نموذجان' },
+      { key: 'milestones', label: 'المعالم', value: 75, reason: 'معلم واحد' },
+      { key: 'peer', label: 'الإسهام المؤكَّد في طلبات الأقران', value: null, reason: 'لم تكتمل له أحداث كافية بعد' },
+    ], events: [] } : null,
     group: s.assessed ? { name: 'فريق التوجيه', members: 5 } : null, project_mode: 'individual',
     progress: s.assessed ? 32 : s.profileDone ? 12 : 5, passkeys: 1, prompt_passkey: false,
     cohort: { name: 'دفعة نوفمبر 2026', starts_on: '2026-11-04', ends_on: '2027-02-20' },
@@ -73,8 +80,9 @@ export function createMockServer() {
       case 'auth.verify': return b.code === '246810' ? { success: true, token: 'tok-demo-recording-000000000000', ...me() } : { success: false, message: 'الرمز غير صحيح' };
       case 'me': return me();
       case 'profile.save': s.profileDone = true; return me();
+      // est_minutes من الأداة الفعالة على الخادم ويتغير من اللوحة، فلا رقم في الفيديو
       case 'assessment.get': return {
-        success: true, assessment: { id: 'a1', kind: 'baseline', status: 'in_progress', est_minutes: 12 },
+        success: true, assessment: { id: 'a1', kind: 'baseline', status: 'in_progress', est_minutes: null },
         questions: [
           { id: 'q1', dimension: 'milestone', tier: 'behavior', kind: 'likert', text: 'أراجع المعالم مع فريقي كل أسبوع وأوثّق قرار كل معلم.', options: LIKERT },
           { id: 'q2', dimension: 'impact', tier: 'skill', kind: 'mcq', text: 'أي مؤشر يقيس الأثر لا الإنجاز؟', options: [{ k: 0, label: 'عدد الورش المنفذة' }, { k: 1, label: 'تغيّر سلوك المستفيدين' }, { k: 2, label: 'نسبة الصرف من الميزانية' }] },
@@ -83,7 +91,7 @@ export function createMockServer() {
         answers: {}, before: {},
       };
       case 'assessment.answer': return { success: true };
-      case 'assessment.submit': s.assessed = true; return me();
+      case 'assessment.submit': s.assessed = true; if (s.approveOnSubmit) s.approved = true; return me();
       case 'handbook.toc': return { success: true, name: NAME, code: 'M3I2L2', chapters, points: { total: s.points, rank: { title: 'مستكشف', next: { title: 'ممارس', at: 75, left: 75 - s.points } } }, models: { total: 4, submitted: 1 } };
       case 'handbook.chapter': {
         const ch = chapters.find((c) => c.id === b.id) || chapters[0];
@@ -110,6 +118,7 @@ export function createMockServer() {
       case 'peer.ask': s.mine.push(b.text); return peer();
       case 'experts.suggest': return { success: true, role: 'coach', roles: [], contexts: {}, dimensions: {}, requests: [], candidates: [] };
       case 'certificate': return { success: true, certificate: null };
+      case 'cert.verify': return { success: true, found: true, status: 'valid', certificate: { kind: 'completion_success', serial: b.serial || 'MI-LDR-2026-000142', name_ar: NAME, program_ar: 'برنامج إدارة المشروعات للقادة', cohort_ar: 'دفعة نوفمبر 2026', org: { name: 'هيئة التحوّل الرقمي' }, issued_at: '2027-02-25T00:00:00Z' } };
       case 'lab.list': return { success: true, items: [], points: 0 };
       case 'org.visibility': return { success: true, list: true, scores: true, share_consented: false, org: 'هيئة التحوّل الرقمي' };
       case 'sessions.list': return { success: true, items: [{ id: 's1', device: 'Chrome على Windows', at: '2026-11-05T09:00:00Z', current: true }] };

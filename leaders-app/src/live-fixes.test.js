@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { VIDEO } from '../../shared/video/scenes.js';
+import { PARTICIPANT_VIDEO, VIDEO } from '../../shared/video/scenes.js';
 import { AUTO_CHECKS } from '../../supabase/functions/leaders-api/logic.js';
 import { assessmentMinutes, onboardingStep, ONBOARDING_STEPS, stepTitle } from './Onboarding.jsx';
 import { TABS, tabFromSearch } from './deeplink.js';
@@ -118,10 +118,10 @@ describe('عدّاد واحد ومدد من مصادرها (العيب 10)', () 
   });
 
   it('مدة الفيديو من scenes.js، ومدة القياس من مرحلته في الرحلة كما يملؤها الخادم', () => {
-    expect(ONBOARDING_STEPS[0].minutes).toBe(VIDEO.duration_ar);
+    expect(ONBOARDING_STEPS[0].minutes).toBe(PARTICIPANT_VIDEO.duration_ar);
     const step = onboardingStep(me('18 دقيقة'), { welcomeSeen: true });
     expect(step).toMatchObject({ key: 'assessment', n: 3, total: 4, minutes: '18 دقيقة' });
-    expect(step.steps.map((s) => s.minutes)).toEqual([VIDEO.duration_ar, 'دقيقتان', '18 دقيقة', 'دقيقة']);
+    expect(step.steps.map((s) => s.minutes)).toEqual([PARTICIPANT_VIDEO.duration_ar, 'دقيقتان', '18 دقيقة', 'دقيقة']);
   });
 
   it('رمز لم يُملأ أو مرحلة غائبة لا يُظهر رقمًا مخترعًا', () => {

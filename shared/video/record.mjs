@@ -2,7 +2,8 @@
 // يسجّل الفيديو التعريفي من الواجهة الحقيقية (ناتج البناء في leaders/) بخادم محاكاة (mock-server.js):
 // يسير على خطوات الجولة الحيّة الثماني عشرة (leaders-app/src/tour-steps.js، المصدر الواحد للنص)، يكتب
 // ويضغط فعلًا على الشاشة بمؤشر ظاهر، ويكتب فوق كل عنصر بطاقة شرح مضاءة، ويخرج MP4 وWebM وVTT وغلافًا
-// إلى leaders-app/public/media/. التشغيل: node shared/video/record.mjs [--out=dir] [--port=4312] [--audio=dir] [--quick]
+// إلى leaders-app/public/media/. التشغيل: node shared/video/record.mjs [--out=dir] [--port=4312] [--audio=dir] [--quick] [--cut=participant]
+// --cut=participant: فيديو المشارك (PARTICIPANT_LINES وPARTICIPANT_VIDEO): ست محطات بصيغة المخاطب على شاشات الجولة نفسها.
 // مع --audio تُعرض كل بطاقة بطول كلامها، وتأتي الكتابة والضغط أثناء الجملة التي تصفها (atWord)، ويُدمج الصوت في الناتج.
 import { createRequire } from 'node:module';
 import { spawn, execFileSync } from 'node:child_process';
@@ -10,8 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { createMockServer } from './mock-server.js';
-import { VIDEO } from './scenes.js';
-import { TOUR_STEPS } from '../../leaders-app/src/tour-steps.js';
+import { PARTICIPANT_VIDEO, VIDEO } from './scenes.js';
+import { PARTICIPANT_BEATS, PARTICIPANT_LINES, TOUR_STEPS } from '../../leaders-app/src/tour-steps.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -20,11 +21,15 @@ const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=
 const OUT = path.resolve(root, arg('out', 'leaders-app/public/media'));
 const PORT = Number(arg('port', 4312));
 const QUICK = process.argv.includes('--quick');   // تجربة سريعة: بلا انتظار قراءة
+const PART = arg('cut', 'tour') === 'participant';
+// المقاطع بالترتيب: خطوات الجولة، أو أسطر فيديو المشارك (لكل منها نص يُقرأ، ومنه الترجمة والصوت)
+const ITEMS = PART ? PARTICIPANT_LINES : TOUR_STEPS.map((st) => ({ ...st, text: st.d }));
+const OUTV = PART ? PARTICIPANT_VIDEO : VIDEO;
 // الصوت: مجلد فيه segments.json (لكل خطوة: speech = ثوانٍ من بداية مقطعها إلى آخر كلمة فيه) وملفات 01.mp3 إلى 18.mp3
 // مقطوعة من تسجيل واحد على حدود الكلام (shared/video/cut-audio.py)؛ البطاقة تبقى حتى آخر كلمة، ويُدمج الصوت في الناتج
 const AUDIO = arg('audio', '');
 const SEGS = AUDIO ? JSON.parse(fs.readFileSync(path.join(AUDIO, 'segments.json'), 'utf8')) : null;
-if (SEGS && (SEGS.length !== TOUR_STEPS.length || SEGS.some((x) => !(x.speech > 0)))) throw new Error(`segments.json: يلزم ${TOUR_STEPS.length} مقطعًا لكل منها speech`);
+if (SEGS && (SEGS.length !== ITEMS.length || SEGS.some((x) => !(x.speech > 0)))) throw new Error(`segments.json: يلزم ${ITEMS.length} مقطعًا لكل منها speech`);
 fs.mkdirSync(OUT, { recursive: true });
 const W = 1920, H = 1080;
 // شريط أسفل الإطار يحمل لون الخطوة الجارية: تسجيل Playwright لا يطابق ساعة الحائط (يتمدد ثوانيَ عند الكتابة الكثيفة)،
@@ -92,11 +97,12 @@ const overlay = `
     else conn.style.height = '0px';
   };
   window.__mi = {
-    show(sel, n, total, title, text) {
-      $('mi-mark').style.background = 'rgb(' + (40 + n * 10) + ',0,200)';
+    // head: سطر علوي واحد (المحطة n من 6) بدل الاسم والعدّاد والشارة، لفيديو المشارك
+    show(sel, n, total, title, text, mark, head) {
+      $('mi-mark').style.background = 'rgb(' + (40 + (mark || n) * 10) + ',0,200)';
       anchorSel = sel || null; anchorEl = sel ? document.querySelector('[data-tour="' + sel + '"]') : null;
-      const card = $('mi-card'); card.innerHTML = '<p class="k"><span><i></i>' + title + '</span><span>' + n + ' / ' + total + '</span></p><h3>' + title + '</h3><p>' + text + '</p>';
-      $('mi-chip').textContent = 'الخطوة ' + n + ' من ' + total; $('mi-chip').style.opacity = 1;
+      const card = $('mi-card'); card.innerHTML = '<p class="k"><span><i></i>' + (head || title) + '</span>' + (head ? '' : '<span>' + n + ' / ' + total + '</span>') + '</p><h3>' + title + '</h3><p>' + text + '</p>';
+      $('mi-chip').textContent = 'الخطوة ' + n + ' من ' + total; $('mi-chip').style.opacity = head ? 0 : 1;
       if (anchorEl) { place(); $('mi-dim').style.opacity = 1; $('mi-conn').style.opacity = 1; }
       else { $('mi-dim').style.opacity = 0; $('mi-conn').style.opacity = 0; card.style.left = (window.innerWidth - 560 - 48) + 'px'; card.style.top = '90px'; }
       card.style.opacity = 1; card.style.transform = 'translateY(0)';
@@ -127,7 +133,8 @@ const marks = [];   // للترجمة VTT: [من، إلى، النص]
 const now = () => (Date.now() - t0) / 1000;
 const sleep = (ms) => page.waitForTimeout(QUICK ? Math.min(ms, 400) : ms);
 // مدة كلام الخطوة بالثواني: من مقطعها الصوتي، وإلا من طول النص
-const speechSec = (text, idx) => (SEGS && idx >= 0 ? SEGS[idx].speech : Math.max(5, Math.min(16, text.split(/\s+/).length * 0.33)));
+// بلا صوت في فيديو المشارك: زمن قراءة البطاقة نفسها (نحو 140 كلمة في الدقيقة) لأنها ما يقرؤه المشاهد
+const speechSec = (text, idx) => (SEGS && idx >= 0 ? SEGS[idx].speech : PART ? Math.max(4.5, Math.min(14, text.split(/\s+/).length * 0.43)) : Math.max(5, Math.min(16, text.split(/\s+/).length * 0.33)));
 const ev = (code) => page.evaluate(code);
 let cur = null;     // الخطوة الجارية: فهرسها، لحظة بدء كلامها، نصها، وهل بطاقتها كاملة
 // تُظهر بطاقة الخطوة فيبدأ كلامها من هذه اللحظة؛ الحركة تأتي بعدها أثناء الكلام، ثم end() ينتظر انتهاءه ويخفي البطاقة
@@ -138,9 +145,19 @@ const begin = async (idx, anchorOverride) => {
   await page.evaluate(([a, n, t, title, text]) => window.__mi.show(a, n, t, title, text), [anchor, idx + 1, TOUR_STEPS.length, st.t, st.d]);
   cur = { idx, from: now(), text: st.d, full: false };
 };
+// سطر من فيديو المشارك: شاشة خطوته في الجولة، والبطاقة باسم المحطة وعدّادها (المحطة n من 6)، والشريط برقم السطر
+const beginLine = async (idx, anchorOverride) => {
+  const ln = PARTICIPANT_LINES[idx], st = TOUR_STEPS.find((x) => x.key === ln.step);
+  const anchor = anchorOverride === undefined ? st.anchor : anchorOverride;
+  if (anchor) { await page.locator(`[data-tour="${anchor}"]`).first().waitFor({ timeout: 8000 }).catch(() => {}); await page.locator(`[data-tour="${anchor}"]`).first().scrollIntoViewIfNeeded().catch(() => {}); }
+  await sleep(300);
+  const total = PARTICIPANT_BEATS.length;
+  await page.evaluate(([a, n, t, title, text, mark, chip]) => window.__mi.show(a, n, t, title, text, mark, chip), [anchor, ln.beat, total, ln.title, ln.text, idx + 1, `المحطة ${ln.beat} من ${total}`]);
+  cur = { idx, from: now(), text: ln.text, full: false };
+};
 const fullBegin = async (eyebrow, title, text, idx) => {
   await page.evaluate(([e, t, x, n]) => window.__mi.full(e, t, x, n), [eyebrow, title, text, idx + 1]);
-  cur = { idx, from: now(), text: TOUR_STEPS[idx].d, full: true };
+  cur = { idx, from: now(), text: ITEMS[idx].text, full: true };
 };
 // ينتظر حتى تُقال كلمة بعينها من نص الخطوة (بموضعها النسبي في النص) ليأتي الفعل مع الجملة التي تصفه
 const atWord = async (word) => {
@@ -150,7 +167,7 @@ const atWord = async (word) => {
   if (t > 0) await sleep(t * 1000);
 };
 // ينتظر انتهاء كلام الخطوة (مهما سبقته الحركة) ثم يسجّل موضعها للترجمة ويخفي البطاقة
-const end = async (padMs = 500) => {
+const end = async (padMs = PART ? 300 : 500) => {
   const remain = cur.from + speechSec(cur.text, cur.idx) + padMs / 1000 - now();
   if (remain > 0) await sleep(remain * 1000);
   marks.push([cur.from, now(), cur.text]);
@@ -161,124 +178,246 @@ const say = async (idx, anchorOverride) => { await begin(idx, anchorOverride); a
 const moveTo = async (locator) => {
   const box = await locator.boundingBox(); if (!box) return;
   const x = box.x + Math.min(box.width - 10, Math.max(10, box.width * 0.5)), y = box.y + box.height / 2;
-  await page.evaluate(([x, y]) => window.__mi.cursor(x, y), [x, y]); await sleep(600);
+  await page.evaluate(([x, y]) => window.__mi.cursor(x, y), [x, y]); await sleep(PART ? 450 : 600);
 };
-const click = async (locator) => { await moveTo(locator); await ev('window.__mi.click()'); await locator.click(); await sleep(450); };
-const type = async (locator, text) => { await click(locator); await locator.fill(''); await locator.pressSequentially(text, { delay: QUICK ? 5 : 55 }); await sleep(350); };
+const click = async (locator) => { await moveTo(locator); await ev('window.__mi.click()'); await locator.click(); await sleep(PART ? 300 : 450); };
+const type = async (locator, text) => { await click(locator); await locator.fill(''); await locator.pressSequentially(text, { delay: QUICK ? 5 : PART ? 30 : 55 }); await sleep(PART ? 200 : 350); };
+// حقل يُملأ دفعة واحدة (أرقام قصيرة) أو يُترك إن سبق ملؤه من الجهة
+const put = async (locator, text) => { if (await locator.inputValue().catch(() => '')) return; await click(locator); await locator.fill(text); await sleep(150); };
 const cursorHide = () => ev('window.__mi.cursorHide()');
 
 await page.goto(`http://127.0.0.1:${PORT}/`);
 await page.getByLabel('البريد الإلكتروني').waitFor();
 await sleep(600);
 
-// 1 الترحيب: بطاقة كاملة فوق شاشة الدخول
-await fullBegin('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', TOUR_STEPS[0].d, 0);
-await end(800);
+// فيديو المشارك: خمسة عشر سطرًا في ست محطات، كل سطر على شاشة خطوته من الجولة، والحركة مع الكلمة التي تصفها
+async function participantFlow() {
+  srv.s.approveOnSubmit = false;   // «قيد المراجعة» بعد الإرسال، ثم يعتمد المستشار قبل محطة التأهيل
+  // ما يتغير على الخادم لا يظهر في الصورة: عدد أسئلة المحاكاة غير عدد الأداة الفعالة
+  await page.addStyleTag({ content: '.quiz-head > span.small:not(.muted){visibility:hidden}' }).catch(() => {});
+  const L = (i) => PARTICIPANT_LINES[i];
 
-// 2 أبواب الدخول: مع «ببريده» يُكتب البريد والاسم ويُرسل الرمز؛ وبعد الكلام يُكتب الرمز فيُدخل
-await begin(1);
-await atWord('ببريده');
-await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
-await click(page.getByRole('button', { name: 'متابعة' }));
-await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
-await click(page.getByRole('button', { name: 'أرسل الرمز' }));
-await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
-await cursorHide();
-await end();
-const code = page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first();
-await type(code, '246810');
-const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
-if (await verify.isVisible().catch(() => false)) await click(verify);
-await page.getByRole('heading', { name: /عرّفنا بك/ }).waitFor({ timeout: 15000 });
-await cursorHide();
+  // المحطة 1: بطاقة كاملة فوق شاشة الدخول
+  await fullBegin('برنامج إدارة المشروعات للقادة', L(0).title, L(0).text, 0);
+  await end(800);
 
-// 3 الملف: كل حقل يُملأ عند ذكره في الكلام، ثم الحفظ بعده
-await begin(2);
-await atWord('بيانات'); await type(page.getByLabel(/رقم الجوال/), '0551234567');
-await atWord('المسمى'); await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
-await atWord('وجهة'); await type(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
-await atWord('وسنوات'); await type(page.getByLabel(/سنوات الخبرة/), '9');
-await atWord('ونطاق');
-const scope = page.getByLabel(/نطاق ما تقوده الآن/);
-if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
-await cursorHide();
-await end();
-await click(page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }));
-await page.getByRole('heading', { name: 'لنحدد نقطة انطلاقك' }).waitFor({ timeout: 15000 });
-await cursorHide();
+  // المحطة 2: الدخول بالبريد، ورمز الجهة الراعية في خطوة الاسم مع «رمزها»، ثم الملف
+  await beginLine(1);
+  await atWord('ببريدك');
+  await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
+  await click(page.getByRole('button', { name: 'متابعة' }));
+  await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
+  await atWord('رمزها');
+  const sponsor = page.getByLabel(/رمز الجهة الراعية/);
+  if (await sponsor.isVisible().catch(() => false)) await type(sponsor, 'HTR-2026');
+  await click(page.getByRole('button', { name: 'أرسل الرمز' }));
+  await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
+  await cursorHide();
+  await end();
+  await type(page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first(), '246810');
+  const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
+  if (await verify.isVisible().catch(() => false)) await click(verify);
+  await page.locator('h1', { hasText: 'عرّفنا بك' }).first().waitFor({ timeout: 15000 });   // h3 بطاقة المحطة تحمل الاسم نفسه
+  await cursorHide();
 
-// 4 القياس: البدء مع «الأطر»، وإجابة كل طبقة عند ذكرها، ثم الإرسال بعد الكلام
-await begin(3);
-await atWord('الأطر'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(600);
-await atWord('الممارسة'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(500);
-const cont1 = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
-if (await cont1.isVisible().catch(() => false)) await click(cont1);
-await atWord('المواقف'); await click(page.getByRole('radio', { name: /تغيّر سلوك المستفيدين/ }).first()); await sleep(500);
-const cont2 = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
-if (await cont2.isVisible().catch(() => false)) await click(cont2);
-await atWord('المعرفة'); await click(page.getByRole('radio', { name: /دائمًا/ }).first()); await sleep(500);
-await page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' }).waitFor({ timeout: 10000 }).catch(() => {});
-await cursorHide();
-await end();
-await click(page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }));
-await page.locator('[data-tour="journey-hero"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await sleep(900);
+  await beginLine(2);
+  await atWord('تُعرّفنا');
+  await put(page.getByLabel(/رقم الجوال/), '0551234567');
+  await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
+  await put(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
+  await put(page.getByLabel(/سنوات الخبرة/), '9');
+  await atWord('ونطاق');
+  const scope = page.getByLabel(/نطاق ما تقوده الآن/);
+  if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
+  await cursorHide();
+  await end();
+  await click(page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }));
+  await page.getByRole('heading', { name: 'لنحدد نقطة انطلاقك' }).waitFor({ timeout: 15000 });
+  await cursorHide();
 
-// 5 إلى 9: الرحلة، بطاقة على كل جزء
-for (const i of [4, 5, 6, 7, 8]) await say(i);
+  // المحطة 3: سطر الزمن بلا رقم ولا عدد أسئلة (يعرضهما التطبيق من الأداة الفعالة)، ثم الإجابة مع «وتُحفظ»
+  await page.locator('[data-tour="assessment"] .alert.info').first().evaluate((el) => { el.textContent = '⏱ بلا حد زمني. تُحفظ إجاباتك أولًا بأول.'; }).catch(() => {});
+  await beginLine(3);
+  await atWord('زمني'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(500);
+  await atWord('وتُحفظ'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(400);
+  for (const [label, pick] of [[/واصل إلى|التالي/, /تغيّر سلوك المستفيدين/], [/واصل إلى|التالي/, /دائمًا/]]) {
+    const next = page.getByRole('button', { name: label }).first();
+    if (await next.isVisible().catch(() => false)) await click(next);
+    await click(page.getByRole('radio', { name: pick }).first()); await sleep(300);
+  }
+  await page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' }).waitFor({ timeout: 10000 }).catch(() => {});
+  await cursorHide();
+  await end();
+  await click(page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }));
+  await page.locator('[data-tour="journey-hero"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await sleep(700);
+  await beginLine(4);
+  await end();
 
-// 10 الكتيب: تبويب كتيبي والفهرس، ويُفتح باب عند «يقرأ»
-await click(page.locator('[data-tour="nav-handbook"]').first());
-await page.locator('[data-tour="handbook-toc"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await begin(9);
-await atWord('يقرأ');
-const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
-if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(900); await cursorHide(); }
-await end();
+  // يعتمد المستشار المسار، فتُفتح محطة التأهيل بمعالمها وتقييمها المستمر
+  srv.s.approved = true;
+  await page.reload();
+  await page.locator('[data-tour="next-step"]').waitFor({ timeout: 15000 });
+  await sleep(700);
+  for (const i of [5, 6, 7]) { await beginLine(i); await end(); }
 
-// 11 المبادرة
-await click(page.locator('[data-tour="nav-capstone"]').first());
-await page.locator('[data-tour="capstone-sections"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await say(10);
+  // المحطة 5: الكتيب ويُفتح باب مع «وتختم»، والمبادرة، والقاعة، وطلب التوجيه
+  await click(page.locator('[data-tour="nav-handbook"]').first());
+  await page.locator('[data-tour="handbook-toc"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await beginLine(8);
+  await atWord('وتختم');
+  const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
+  if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(700); await cursorHide(); }
+  await end();
+  await click(page.locator('[data-tour="nav-capstone"]').first());
+  await page.locator('[data-tour="capstone-sections"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await beginLine(9); await end();
+  await click(page.locator('[data-tour="nav-hall"]').first());
+  await page.locator('[data-tour="hall"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await beginLine(10); await end();
+  await click(page.locator('[data-tour="nav-home"]').first());
+  await page.locator('[data-tour="peer"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await beginLine(11);
+  await atWord('توجيهًا');
+  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
+  await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
+  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: /أرسل|اطلب/ }).last());
+  await sleep(700);
+  await cursorHide();
+  await end();
 
-// 12 القاعة
-await click(page.locator('[data-tour="nav-hall"]').first());
-await page.locator('[data-tour="hall"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await say(11);
+  // المحطة 6: الأثر، ثم صفحة التحقق العامة من الشهادة، ثم الدعوة
+  await beginLine(12); await end();
+  await page.goto(`http://127.0.0.1:${PORT}/v/MI-LDR-2026-000142`);
+  await page.locator('[data-tour="verify"] .vf-state').waitFor({ timeout: 15000 });
+  await sleep(500);
+  await beginLine(13, 'verify'); await end();
+  await fullBegin(L(14).title, 'ابدأ رحلتك', 'عرّفنا بك، ثم حدّد نقطة انطلاقك. leaders.sunkvalue.com', 14);
+  await end(2000);
+}
 
-// 13 طلبات الأقران: العودة إلى الرحلة، وعند «يطرحه» يُكتب سؤال، وعند «يجيب» يُرسل
-await click(page.locator('[data-tour="nav-home"]').first());
-await page.locator('[data-tour="peer"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await begin(12);
-await atWord('يطرحه');
-await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
-await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
-await atWord('يجيب');
-await click(page.locator('[data-tour="peer"]').getByRole('button', { name: /أرسل|اطلب/ }).last());
-await sleep(900);
-await cursorHide();
-await end();
+// الجولة الكاملة: الخطوات الثماني عشرة بصوت المقدّم
+async function tourFlow() {
+  // 1 الترحيب: بطاقة كاملة فوق شاشة الدخول
+  await fullBegin('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', TOUR_STEPS[0].d, 0);
+  await end(800);
 
-// 14 الأثر (تبويب مقفل)، 15 الختامي والشهادة
-await say(13);
-await say(14);
+  // 2 أبواب الدخول: مع «ببريده» يُكتب البريد والاسم ويُرسل الرمز؛ وبعد الكلام يُكتب الرمز فيُدخل
+  await begin(1);
+  await atWord('ببريده');
+  await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
+  await click(page.getByRole('button', { name: 'متابعة' }));
+  await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
+  await click(page.getByRole('button', { name: 'أرسل الرمز' }));
+  await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
+  await cursorHide();
+  await end();
+  const code = page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first();
+  await type(code, '246810');
+  const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
+  if (await verify.isVisible().catch(() => false)) await click(verify);
+  await page.getByRole('heading', { name: /عرّفنا بك/ }).waitFor({ timeout: 15000 });
+  await cursorHide();
 
-// 16 الملف والأمان
-await click(page.locator('[data-tour="nav-profile"]').first());
-await page.locator('[data-tour="security"]').waitFor({ timeout: 15000 });
-await cursorHide();
-await say(15);
+  // 3 الملف: كل حقل يُملأ عند ذكره في الكلام، ثم الحفظ بعده
+  await begin(2);
+  await atWord('بيانات'); await type(page.getByLabel(/رقم الجوال/), '0551234567');
+  await atWord('المسمى'); await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
+  await atWord('وجهة'); await type(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
+  await atWord('وسنوات'); await type(page.getByLabel(/سنوات الخبرة/), '9');
+  await atWord('ونطاق');
+  const scope = page.getByLabel(/نطاق ما تقوده الآن/);
+  if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
+  await cursorHide();
+  await end();
+  await click(page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }));
+  await page.getByRole('heading', { name: 'لنحدد نقطة انطلاقك' }).waitFor({ timeout: 15000 });
+  await cursorHide();
 
-// 17 البوابتان و18 الختام: بطاقتان كاملتان
-await fullBegin('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', TOUR_STEPS[16].d, 16);
-await end(800);
-await fullBegin('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', 17);
-await end(2000);
+  // 4 القياس: البدء مع «الأطر»، وإجابة كل طبقة عند ذكرها، ثم الإرسال بعد الكلام
+  await begin(3);
+  await atWord('الأطر'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(600);
+  await atWord('الممارسة'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(500);
+  const cont1 = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
+  if (await cont1.isVisible().catch(() => false)) await click(cont1);
+  await atWord('المواقف'); await click(page.getByRole('radio', { name: /تغيّر سلوك المستفيدين/ }).first()); await sleep(500);
+  const cont2 = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
+  if (await cont2.isVisible().catch(() => false)) await click(cont2);
+  await atWord('المعرفة'); await click(page.getByRole('radio', { name: /دائمًا/ }).first()); await sleep(500);
+  await page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' }).waitFor({ timeout: 10000 }).catch(() => {});
+  await cursorHide();
+  await end();
+  await click(page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }));
+  await page.locator('[data-tour="journey-hero"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await sleep(900);
+
+  // 5 إلى 9: الرحلة، بطاقة على كل جزء
+  for (const i of [4, 5, 6, 7, 8]) await say(i);
+
+  // 10 الكتيب: تبويب كتيبي والفهرس، ويُفتح باب عند «يقرأ»
+  await click(page.locator('[data-tour="nav-handbook"]').first());
+  await page.locator('[data-tour="handbook-toc"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await begin(9);
+  await atWord('يقرأ');
+  const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
+  if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(900); await cursorHide(); }
+  await end();
+
+  // 11 المبادرة
+  await click(page.locator('[data-tour="nav-capstone"]').first());
+  await page.locator('[data-tour="capstone-sections"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await say(10);
+
+  // 12 القاعة
+  await click(page.locator('[data-tour="nav-hall"]').first());
+  await page.locator('[data-tour="hall"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await say(11);
+
+  // 13 طلبات الأقران: العودة إلى الرحلة، وعند «يطرحه» يُكتب سؤال، وعند «يجيب» يُرسل
+  await click(page.locator('[data-tour="nav-home"]').first());
+  await page.locator('[data-tour="peer"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await begin(12);
+  await atWord('يطرحه');
+  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
+  await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
+  await atWord('يجيب');
+  await click(page.locator('[data-tour="peer"]').getByRole('button', { name: /أرسل|اطلب/ }).last());
+  await sleep(900);
+  await cursorHide();
+  await end();
+
+  // 14 الأثر (تبويب مقفل)، 15 الختامي والشهادة
+  await say(13);
+  await say(14);
+
+  // 16 الملف والأمان
+  await click(page.locator('[data-tour="nav-profile"]').first());
+  await page.locator('[data-tour="security"]').waitFor({ timeout: 15000 });
+  await cursorHide();
+  await say(15);
+
+  // 17 البوابتان و18 الختام: بطاقتان كاملتان
+  await fullBegin('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', TOUR_STEPS[16].d, 16);
+  await end(800);
+  await fullBegin('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', 17);
+  await end(2000);
+}
+
+try { if (PART) await participantFlow(); else await tourFlow(); } catch (e) {
+  // لقطة لحظة الفشل بجوار الناتج لتشخيصها
+  await page.screenshot({ path: path.join(OUT, 'record-failure.png') }).catch(() => {});
+  throw e;
+}
 
 await context.close();
 await browser.close();
@@ -287,7 +426,7 @@ preview.kill();
 // ── الترميز والترجمة ──
 const webmIn = fs.readdirSync(tmpVid).map((f) => path.join(tmpVid, f)).find((f) => f.endsWith('.webm'));
 const run = (args) => new Promise((resolve, reject) => { const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' }); p.on('exit', (c) => (c === 0 ? resolve() : reject(new Error(`ffmpeg ${c}`)))); });
-const base = path.join(OUT, VIDEO.file);
+const base = path.join(OUT, OUTV.file);
 const FPS = 24;
 // لحظات الخطوات من الإطارات: متوسط لون الشريط في كل إطار (بالمعدل نفسه الذي يُرمَّز به الناتج)، وأول إطار يحمل لون الخطوة هو ظهورها
 const strip = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', webmIn, '-vf', `fps=${FPS},crop=${W}:${STRIP}:0:${H},scale=1:1:flags=area`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 1 << 26 });
@@ -301,10 +440,10 @@ for (let f = 0; f < frames; f++) {
   else if (inside && !lit) { offsets.push(f / FPS); inside = false; expect++; }
 }
 if (inside) { offsets.push(frames / FPS); expect++; }
-if (onsets.length !== TOUR_STEPS.length) throw new Error(`قراءة شريط الخطوات: ${onsets.length} من ${TOUR_STEPS.length}`);
+if (onsets.length !== ITEMS.length) throw new Error(`قراءة شريط الخطوات: ${onsets.length} من ${ITEMS.length}`);
 const seconds = Math.ceil(frames / FPS);
 const FADE = 0.3;   // الصوت يبدأ حين تكتمل البطاقة
-const cues = onsets.map((t, i) => [t, Math.min(offsets[i], i + 1 < onsets.length ? onsets[i + 1] - 0.2 : frames / FPS), TOUR_STEPS[i].d]);
+const cues = onsets.map((t, i) => [t, Math.min(offsets[i], i + 1 < onsets.length ? onsets[i + 1] - 0.2 : frames / FPS), ITEMS[i].text]);
 // الصوت: كل مقطع يبدأ مع بداية خطوته المسجَّلة (marks)، ثم يُدمج مع الصورة
 let audioArgs = [], audioMap = [];
 if (SEGS) {
@@ -325,7 +464,7 @@ fs.writeFileSync(`${base}.vtt`, vtt.join('\n'));
 fs.writeFileSync(`${base}.json`, JSON.stringify({ seconds, marks: cues.map(([a, b]) => [Number(a.toFixed(2)), Number(b.toFixed(2))]), wall: marks.map(([a, b]) => [Number(a.toFixed(2)), Number(b.toFixed(2))]) }, null, 2));
 for (const ext of ['mp4', 'webm']) {
   const size = fs.statSync(`${base}.${ext}`).size;
-  console.log(`${VIDEO.file}.${ext}: ${(size / 1024 / 1024).toFixed(2)} ميجابايت`);
-  if (size > VIDEO.maxBytes) { console.error(`✗ تجاوز السقف ${(VIDEO.maxBytes / 1024 / 1024).toFixed(0)} ميجابايت`); process.exit(1); }
+  console.log(`${OUTV.file}.${ext}: ${(size / 1024 / 1024).toFixed(2)} ميجابايت`);
+  if (size > OUTV.maxBytes) { console.error(`✗ تجاوز السقف ${(OUTV.maxBytes / 1024 / 1024).toFixed(0)} ميجابايت`); process.exit(1); }
 }
 console.log(`✓ ${seconds} ثانية، ${cues.length} خطوة من الإطارات (فرق ساعة الحائط ${(marks[marks.length - 1][0] - onsets[onsets.length - 1]).toFixed(1)} ث)، ${OUT}`);

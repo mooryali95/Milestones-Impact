@@ -49,7 +49,7 @@ export default function Verify() {
   return (
     <div className="vf">
       <p className="eyebrow" style={{ textAlign: 'center' }}>التحقق من الشهادات · Certificate verification</p>
-      <div className="vf-card" aria-live="polite">
+      <div className="vf-card" aria-live="polite" data-tour="verify">
         {serial && !r && <div className="spinner" aria-label="جارٍ التحقق" style={{ margin: '20px auto' }} />}
         {r && !r.success && <p className="muted">{r.message}</p>}
         {state && <>
