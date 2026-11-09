@@ -21,7 +21,7 @@ export const VIDEO = {
 // بعد تأكيد فرع mi-home، وللعروض.
 export const PARTICIPANT_VIDEO = {
   file: 'intro-p2',
-  seconds: 174,
+  seconds: 176,
   fps: 24,
   width: 1280,
   height: 720,

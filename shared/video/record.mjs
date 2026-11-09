@@ -167,7 +167,7 @@ const atWord = async (word) => {
   if (t > 0) await sleep(t * 1000);
 };
 // ينتظر انتهاء كلام الخطوة (مهما سبقته الحركة) ثم يسجّل موضعها للترجمة ويخفي البطاقة
-const end = async (padMs = PART ? 200 : 500) => {
+const end = async (padMs = PART ? 450 : 500) => {
   const remain = cur.from + speechSec(cur.text, cur.idx) + padMs / 1000 - now();
   if (remain > 0) await sleep(remain * 1000);
   marks.push([cur.from, now(), cur.text]);
