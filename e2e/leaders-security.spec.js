@@ -52,7 +52,9 @@ test('تسجيل جديد: التحقق البشري قبل طلب الاسم، 
   await page.goto(APP);
   await page.getByLabel('البريد الإلكتروني').fill('new@x.sa');
   await page.getByRole('button', { name: 'متابعة' }).click();
-  await expect(page.locator('.captcha')).toBeVisible();
+  // الخادم طلب التحدي. ظهور الأداة نفسها عابر (الوهمية ترد بعد 50 جزءًا من الثانية والساعة تجري)، ففحص رؤيتها كان
+  // يسابق اختفاءها تحت الحمل. الدليل الثابت أن الطلب الثاني يحمل رمزها، وهو في فحص starts آخر الاختبار
+  await expect.poll(() => starts.length).toBeGreaterThanOrEqual(1);
   await page.clock.runFor(100);   // الأداة الوهمية تعيد رمزها بعد 50 جزءًا من الثانية
   await expect(page.getByRole('heading', { name: 'أهلًا بك في البرنامج' })).toBeVisible();
   await page.getByLabel('الاسم الكامل').fill('نورة السالم');
