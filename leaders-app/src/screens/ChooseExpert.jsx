@@ -73,6 +73,7 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
                 {d.candidates.map((e) => (
                   <article key={e.id} className="cx-card stack">
                     <b>{e.full_name}</b>
+                    {e.team && <span className="chip ok cx-team">من فريق دفعتك</span>}
                     {e.title && <small className="muted">{e.title}{e.years ? ` · ${e.years} سنة خبرة` : ''}</small>}
                     {e.bio && <p className="small">{e.bio}</p>}
                     <small>{e.rating ? `★ ${e.rating.avg} (${e.rating.count} تقييم)` : 'خبير جديد في البرنامج'}</small>

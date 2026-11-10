@@ -2079,6 +2079,25 @@ export function rankExperts(experts, need, tried = []) {
     .sort((a, b) => b.match.total - a.match.total || ((a.load?.requests || 0) - (b.load?.requests || 0)) || String(a.id).localeCompare(String(b.id)));
 }
 
+// ── فريق خبراء الدفعة ──
+// الدفعة نقطة الربط: مستشارها الأساسي (cohorts.advisor_expert_id) ومعه فريق من الخبراء (cohort_experts).
+// من يطلب خبيرًا يُعرض عليه فريق دفعته أولًا بترتيب مطابقتهم، ثم بقية الخبراء إن لم يكفِ الفريق.
+// لا يغيّر شروط الأهلية (نشط، يحمل الدور، غير ممتلئ): تلك في rankExperts قبل هذا.
+/** @param {any[]} ranked ناتج rankExperts @param {Iterable<string>} teamIds */
+export function teamFirst(ranked, teamIds) {
+  const team = new Set(teamIds || []);
+  if (!team.size) return ranked.map((e) => ({ ...e, team: false }));
+  const tagged = ranked.map((e) => ({ ...e, team: team.has(e.id) }));
+  return [...tagged.filter((e) => e.team), ...tagged.filter((e) => !e.team)];
+}
+// قائمة فريق نظيفة من مدخل اللوحة: معرّفات فريدة، بحد أعلى يمنع قائمة بلا معنى
+export const TEAM_MAX = 30;
+export function cleanTeamIds(ids, isId) {
+  const out = [...new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)).filter((x) => isId(x)))];
+  if (out.length > TEAM_MAX) throw new Error(`فريق الدفعة ${TEAM_MAX} خبيرًا على الأكثر`);
+  return out;
+}
+
 // ── التقييم في الاتجاهين ──
 // يقبل المعايير المعروفة وحدها، كل منها 1 إلى 5، والمعدل متوسطها. ناقص = مرفوض
 export function cleanRating(scores, keys) {

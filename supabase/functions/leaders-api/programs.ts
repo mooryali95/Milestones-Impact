@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
@@ -114,6 +114,10 @@ export async function list() {
     db.from('organizations').select('id, name, short_name, delivery_default, invite_code, status').order('name'),
     db.from('stage_requirements').select('program_id, kind, active'),
   ]);
+  // فريق خبراء كل دفعة؛ الجدول قد لا يكون مطبّقًا بعد فيُعد الفريق فارغًا
+  const teamRows = await db.from('cohort_experts').select('cohort_id, expert_id');
+  const teams: Record<string, string[]> = {};
+  for (const t of teamRows.data || []) (teams[t.cohort_id] ||= []).push(t.expert_id);
   const count = (rows: any[], f: (r: any) => boolean) => rows.filter(f).length;
   const enrolled: Record<string, number> = {};
   for (const e of enr.data || []) if (e.status !== 'withdrawn') enrolled[e.cohort_id] = (enrolled[e.cohort_id] || 0) + 1;
@@ -124,8 +128,10 @@ export async function list() {
       requirements: count(reqs.data || [], (r) => r.program_id === pr.id && r.active !== false),
       versions: (versions.data || []).filter((v: any) => v.program_id === pr.id),
     })),
-    cohorts: (cohorts.data || []).map((c: any) => ({ ...c, enrolled: enrolled[c.id] || 0 })),
+    cohorts: (cohorts.data || []).map((c: any) => ({ ...c, enrolled: enrolled[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: !teamRows.error })),
     organizations: orgs.data || [],
+    // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
+    team_ready: !teamRows.error,
   };
 }
 
@@ -333,12 +339,28 @@ export async function cohortSave(a: Admin, b: Body) {
       : (await liveRows(programId)).stages;
     row.stage_modes = cleanStageModes(b.stage_modes, stages.map((x: any) => x.key));
   }
+  // فريق خبراء الدفعة: خبراء معتمدون يُعرضون على مشاركيها أولًا. المستشار الأساسي يبقى في advisor_expert_id وحده
+  let team: string[] | null = null;
+  if ('team_expert_ids' in b) {
+    try { team = cleanTeamIds(b.team_expert_ids, isUuid); }
+    catch (err) { throw new Fail((err as Error).message); }
+    if (team.length) {
+      const ok = must(await db.from('experts').select('id').in('id', team).in('status', ['active', 'paused'])) as any[];
+      if ((ok || []).length !== team.length) throw new Fail('في فريق الدفعة خبير غير معتمد. اختر من الخبراء المعتمدين');
+    }
+  }
   row.updated_at = new Date().toISOString();
   const saved: any = prev
     ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
     : must(await db.from('cohorts').insert(row).select(COHORT_COLS).single(), 'تعذّر إنشاء الدفعة');
-  await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, row);
-  return { success: true, cohort: saved };
+  if (team) {
+    // استبدال كامل: القائمة المرسلة هي الفريق. قبل تطبيق الترحيل يُرفض بسبب واضح ولا يضيع حفظ الدفعة نفسها
+    const del = await db.from('cohort_experts').delete().eq('cohort_id', saved.id);
+    if (del.error && team.length) throw new Fail('حُفظت الدفعة، وفريق الخبراء ينتظر تحديث قاعدة البيانات', 503, 'team_not_ready');
+    if (!del.error && team.length) must(await db.from('cohort_experts').insert(team.map((expert_id) => ({ cohort_id: saved.id, expert_id, added_by: a.email }))), 'تعذّر حفظ فريق الخبراء');
+  }
+  await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, team ? { ...row, team_expert_ids: team } : row);
+  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined } };
 }
 
 // ترقية دفعة إلى أحدث نسخة من برنامجها، مع ما سيتغير على مشاركيها

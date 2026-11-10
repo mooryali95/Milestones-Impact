@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110180000_leaders_capstone_card_gate
+-- as-of migration: 20261110190000_leaders_cohort_experts
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -241,6 +241,15 @@ create table if not exists leaders.coaching_sessions (
   constraint coaching_sessions_status_check CHECK ((status = ANY (ARRAY['requested'::text, 'booked'::text, 'attended'::text, 'no_show'::text, 'cancelled'::text]))),
   constraint coaching_sessions_pkey PRIMARY KEY (id),
   constraint coaching_sessions_external_id_key UNIQUE (external_id)
+);
+
+create table if not exists leaders.cohort_experts (
+  cohort_id uuid not null,
+  expert_id uuid not null,
+  added_by text,
+  created_at timestamp with time zone default now() not null,
+  constraint cohort_experts_added_by_check CHECK (((added_by IS NULL) OR (char_length(added_by) <= 200))),
+  constraint cohort_experts_pkey PRIMARY KEY (cohort_id, expert_id)
 );
 
 create table if not exists leaders.cohort_group_members (
@@ -2030,6 +2039,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.cohort_experts add constraint cohort_experts_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_experts add constraint cohort_experts_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.cohort_group_members add constraint cohort_group_members_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2599,6 +2616,8 @@ CREATE INDEX IF NOT EXISTS coaching_sessions_participant_idx ON leaders.coaching
 
 CREATE INDEX IF NOT EXISTS coaching_sessions_status_idx ON leaders.coaching_sessions USING btree (status, starts_at);
 
+CREATE INDEX IF NOT EXISTS cohort_experts_expert ON leaders.cohort_experts USING btree (expert_id);
+
 CREATE INDEX IF NOT EXISTS cohort_group_members_group_idx ON leaders.cohort_group_members USING btree (group_id);
 
 CREATE INDEX IF NOT EXISTS cohort_groups_cohort_idx ON leaders.cohort_groups USING btree (cohort_id, sort);
@@ -2846,6 +2865,8 @@ alter table leaders.certificate_settings enable row level security;
 alter table leaders.certificates enable row level security;
 
 alter table leaders.coaching_sessions enable row level security;
+
+alter table leaders.cohort_experts enable row level security;
 
 alter table leaders.cohort_group_members enable row level security;
 
