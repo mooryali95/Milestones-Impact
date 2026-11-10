@@ -67,6 +67,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     setList(r.participants || []);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
+  const [erasures, setErasures] = useState([]);
+  useEffect(() => { L('admin.erasures', {}).then((r) => setErasures(r.success ? r.items || [] : [])); }, [list]);
 
   const all = list || [];
   const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
@@ -114,6 +117,16 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel{shown.length !== all.length ? ` (${shown.length})` : ''}</button>
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
         </>} />
+      {erasures.length > 0 && (
+        <div className="la-bulk" role="status">
+          <span><b>{erasures.length}</b> طلب حذف بيانات قائم، ومهلة كل طلب 30 يومًا:</span>
+          {erasures.map((e) => (
+            <button key={e.id} className="btn-sm ghost" type="button" onClick={() => onOpen(e.participant_id)}>
+              {e.name || e.email} · قبل {new Date(e.due_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' })}
+            </button>
+          ))}
+        </div>
+      )}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk">
           <span><b>{picked.size}</b> محدد</span>

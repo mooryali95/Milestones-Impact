@@ -14,6 +14,7 @@ import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
+import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 
 type Body = Record<string, any>;
@@ -371,6 +372,8 @@ export async function participantDelete(a: Admin, b: Body) {
     for (const x of files || []) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
   }
   if (paths.length) await storage.from(BUCKET).remove(paths);
+  // طلب الحذف القائم يُغلق بتنفيذه، ويبقى أثره بعد حذف صاحبه
+  await closeErasure(id, a.email);
   must(await db.from('participants').delete().eq('id', id), 'تعذّر الحذف');
   await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, ...impact.counts });
   return { success: true, files: paths.length };
