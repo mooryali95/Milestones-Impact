@@ -9,6 +9,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      devices:
+        description: عدد أجهزة اختبار حمل القاعة (50 افتراضيًا، و100 لبوابة م4)
+        default: '50'
 
 permissions:
   contents: read
@@ -63,11 +67,14 @@ jobs:
       # القاعة تحت الحمل: 50 جهازًا افتراضيًا في جلسة كاملة بطلبات التطبيق نفسها، وتفشل إن ضاع رفع إصدار
       # أو بقي جهاز على حالة قديمة أو فشل طلب (scripts/integration/hall-load.mjs)
       # ومعه على القاعدة الحقيقية: الطاولات المحفوظة وثباتها، ومؤقت الخادم وقفل الإجابة بعده، وكتابة الحضور عند الإغلاق
-      - name: Hall under load (50 devices)
+      - name: Hall under load (50 devices, or the dispatch input)
+        env:
+          HALL_DEVICES: ${{ inputs.devices || '50' }}
         run: |
+          case "$HALL_DEVICES" in ''|*[!0-9]*) echo "::error::devices must be a number"; exit 1;; esac
           eval "$(supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY)=' || true)"
           export ANON_KEY SERVICE_ROLE_KEY
-          node scripts/integration/hall-load.mjs --devices=50 --rounds=2 --round-seconds=10
+          node scripts/integration/hall-load.mjs --devices="$HALL_DEVICES" --rounds=2 --round-seconds=10
 
       - name: Function logs
         if: always()

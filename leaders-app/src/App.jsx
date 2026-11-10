@@ -17,6 +17,7 @@ import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.
 import { tabFromSearch } from './deeplink.js';
 import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
+import MyData from './screens/MyData.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
 const Handbook = lazy(() => import('./screens/Handbook.jsx'));
@@ -295,7 +296,7 @@ function Participant() {
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
-    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} /></>;
+    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}</>;
   } else if (seatHold(me) && (!paidFor('assessment') || !paidFor('program'))) screen = <SponsorshipPending />;   // D20: لا بوابة دفع أثناء قرار الرعاية
   else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
   else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;

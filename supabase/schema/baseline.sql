@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110140000_leaders_hall_attendance
+-- as-of migration: 20261110150000_leaders_erasure_requests
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -488,6 +488,22 @@ create table if not exists leaders.entitlements (
   constraint entitlements_item_check CHECK ((item = ANY (ARRAY['assessment'::text, 'program'::text]))),
   constraint entitlements_source_check CHECK ((source = ANY (ARRAY['paid'::text, 'admin'::text, 'grandfathered'::text, 'sponsor'::text]))),
   constraint entitlements_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.erasure_requests (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid,
+  status text default 'pending'::text not null,
+  reason text,
+  created_at timestamp with time zone default now() not null,
+  decided_at timestamp with time zone,
+  decided_by text,
+  note text,
+  constraint erasure_requests_decided_by_check CHECK (((decided_by IS NULL) OR (char_length(decided_by) <= 200))),
+  constraint erasure_requests_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+  constraint erasure_requests_reason_check CHECK (((reason IS NULL) OR (char_length(reason) <= 500))),
+  constraint erasure_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'done'::text, 'cancelled'::text, 'rejected'::text]))),
+  constraint erasure_requests_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.expert_challenges (
@@ -2088,6 +2104,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.erasure_requests add constraint erasure_requests_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.expert_challenges add constraint expert_challenges_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2591,6 +2611,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS entitlements_one_live ON leaders.entitlements 
 
 CREATE INDEX IF NOT EXISTS entitlements_organization_idx ON leaders.entitlements USING btree (organization_id) WHERE (organization_id IS NOT NULL);
 
+CREATE UNIQUE INDEX IF NOT EXISTS erasure_requests_one_pending ON leaders.erasure_requests USING btree (participant_id) WHERE (status = 'pending'::text);
+
+CREATE INDEX IF NOT EXISTS erasure_requests_status ON leaders.erasure_requests USING btree (status, created_at);
+
 CREATE INDEX IF NOT EXISTS expert_challenges_email_idx ON leaders.expert_challenges USING btree (email, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS expert_ratings_expert_idx ON leaders.expert_ratings USING btree (expert_id, direction);
@@ -2832,6 +2856,8 @@ alter table leaders.email_challenges enable row level security;
 alter table leaders.enrollments enable row level security;
 
 alter table leaders.entitlements enable row level security;
+
+alter table leaders.erasure_requests enable row level security;
 
 alter table leaders.expert_challenges enable row level security;
 
