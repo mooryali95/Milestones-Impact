@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110130000_leaders_hall_timer
+-- as-of migration: 20261110140000_leaders_hall_attendance
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -664,6 +664,7 @@ create table if not exists leaders.hall_sessions (
   created_at timestamp with time zone default now() not null,
   closed_at timestamp with time zone,
   phase_ends_at timestamp with time zone,
+  workshop_session_id uuid,
   constraint hall_sessions_code_check CHECK ((code ~ '^[0-9]{6}$'::text)),
   constraint hall_sessions_mode_check CHECK ((mode = ANY (ARRAY['live'::text, 'self'::text]))),
   constraint hall_sessions_persona_ar_check CHECK ((char_length(persona_ar) <= 200)),
@@ -1564,7 +1565,7 @@ create table if not exists leaders.workshop_attendance (
   recorded_by text,
   ip inet,
   user_agent text,
-  constraint workshop_attendance_method_check CHECK ((method = ANY (ARRAY['qr'::text, 'manual'::text, 'join'::text]))),
+  constraint workshop_attendance_method_check CHECK ((method = ANY (ARRAY['qr'::text, 'manual'::text, 'join'::text, 'hall'::text, 'remote'::text]))),
   constraint workshop_attendance_pkey PRIMARY KEY (session_id, participant_id)
 );
 
@@ -1581,6 +1582,9 @@ create table if not exists leaders.workshop_sessions (
   mode text default 'in_person'::text not null,
   join_url text,
   cohort_id uuid,
+  invited_at timestamp with time zone,
+  reminded_day_at timestamp with time zone,
+  reminded_hour_at timestamp with time zone,
   constraint workshop_sessions_check CHECK ((ends_at > starts_at)),
   constraint workshop_sessions_join_url_check CHECK ((char_length(join_url) <= 500)),
   constraint workshop_sessions_location_ar_check CHECK ((char_length(location_ar) <= 300)),
@@ -2157,6 +2161,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.hall_sessions add constraint hall_sessions_topic_id_fkey FOREIGN KEY (topic_id) REFERENCES leaders.katon_topics(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.hall_sessions add constraint hall_sessions_workshop_session_id_fkey FOREIGN KEY (workshop_session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin

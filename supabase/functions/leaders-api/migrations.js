@@ -96,4 +96,5 @@ export const MIGRATIONS = [
   '20261110100000_leaders_approval_two_working_days',
   '20261110120000_leaders_hall_tables',
   '20261110130000_leaders_hall_timer',
+  '20261110140000_leaders_hall_attendance',
 ];

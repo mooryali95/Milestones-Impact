@@ -92,7 +92,7 @@ function Attendance({ id, canWrite, onClose }) {
               <tr key={p.id}>
                 <td>{p.full_name}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                 <td>{p.organization_name || ''}</td>
-                <td>{p.attendance ? <span className="la-chip ok">{p.attendance.method === 'qr' ? 'QR' : 'يدوي'} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}</td>
+                <td>{p.attendance ? <span className="la-chip ok">{{ qr: 'QR', join: 'انضمام', hall: 'القاعة', remote: 'القاعة عن بعد' }[p.attendance.method] || 'يدوي'} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}</td>
                 <td>{canWrite && (p.attendance
                   ? <button className="la-link" onClick={() => mark(p.id, false)}>إلغاء</button>
                   : <button className="btn-sm ghost" onClick={() => mark(p.id, true)}>تسجيل حضور</button>)}</td>
@@ -107,7 +107,15 @@ function Attendance({ id, canWrite, onClose }) {
 }
 
 function Workshops({ data, reload, canWrite }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
+  // الدعوة تذهب لأعضاء الدفعة كلهم، فتُؤكَّد؛ وإعادتها تُؤكَّد صريحة
+  const invite = async (s) => {
+    if (!(await confirm(s.invited_at ? `أُرسلت دعوة «${s.title_ar}» من قبل. إرسالها مرة أخرى لكل أعضاء الدفعة؟` : `تُرسل دعوة «${s.title_ar}» بالبريد إلى كل أعضاء الدفعة، ومعها ملف تقويم. متابعة؟`))) return;
+    const r = await L('admin.workshop-invite', { id: s.id, again: !!s.invited_at });
+    if (!r.success) return toast(r.message);
+    toast(r.failed ? `أُرسلت ${r.sent} دعوة، وتعذّرت ${r.failed}` : `أُرسلت الدعوة إلى ${r.sent} مشاركًا`);
+    reload();
+  };
   const [form, setForm] = useState(null);
   const [qr, setQr] = useState(null);
   const [att, setAtt] = useState(null);
@@ -138,6 +146,9 @@ function Workshops({ data, reload, canWrite }) {
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
                       {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {canWrite && s.cohort_id && new Date(s.ends_at) > new Date() && (
+                        <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
+                      )}
                       {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>

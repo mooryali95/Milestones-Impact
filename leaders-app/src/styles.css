@@ -1403,3 +1403,6 @@ body:has(.tour) main{padding-bottom:260px}
 .first-open .ico { font-size: 1.1em; }
 .first-open ol { margin-top: 4px; line-height: 1.7; }
 @media (max-width: 620px) { .first-open .grow { flex-basis: 100%; } }
+
+/* بطاقة «جلستك القادمة»: في نافذتها تتقدم على الخطوة التالية وتتميز */
+.j-session.live { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }

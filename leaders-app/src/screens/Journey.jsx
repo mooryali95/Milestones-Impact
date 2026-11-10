@@ -341,6 +341,41 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
 }
 
 // الخطوة التالية: أول متطلب يستطيع المشارك إنجازه بنفسه في المرحلة الحالية
+// جلستك القادمة: أقرب جلسة ورشة لم تنتهِ، من بنود الرحلة نفسها (مصدرها workshop_sessions). في نافذتها تفتح القاعة.
+export function nextSession(journey, now = Date.now()) {
+  const all = (journey || []).flatMap((st) => (st.items || []).filter((i) => i.activity?.type === 'workshop').flatMap((i) => i.activity.sessions || []));
+  return all.filter((x) => new Date(x.ends_at).getTime() > now).sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)))[0] || null;
+}
+const two = (n) => String(n).padStart(2, '0');
+const icsStamp = (iso) => { const d = new Date(iso); return `${d.getUTCFullYear()}${two(d.getUTCMonth() + 1)}${two(d.getUTCDate())}T${two(d.getUTCHours())}${two(d.getUTCMinutes())}00Z`; };
+// ملف تقويم يُنزَّل من الجهاز: الموعد نفسه بلا طلب للخادم
+export function sessionIcs(x) {
+  const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'BEGIN:VEVENT', `UID:${x.id}@sunkvalue.com`, `DTSTAMP:${icsStamp(new Date().toISOString())}`,
+    `DTSTART:${icsStamp(x.starts_at)}`, `DTEND:${icsStamp(x.ends_at)}`, `SUMMARY:${esc(x.title)}`, ...(x.location ? [`LOCATION:${esc(x.location)}`] : []),
+    'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${esc(x.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
+function NextSession({ session, onHall }) {
+  const when = new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([sessionIcs(session)], { type: 'text/calendar;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'session.ics'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return (
+    <div className={`next-card j-session${session.open ? ' live' : ''}`} data-tour="next-session">
+      <span className="k">{session.open ? 'جلستك الآن' : 'جلستك القادمة'}</span>
+      <b>{session.title}</b>
+      <span className="small muted">{when}{session.mode === 'online' ? ' · عن بعد' : session.location ? ` · ${session.location}` : ''}</span>
+      {session.attended && <span className="chip ok">سُجّل حضورك</span>}
+      <div className="row">
+        {session.open && onHall && <button className="btn sm" onClick={onHall}>ادخل القاعة</button>}
+        <button className="btn ghost sm" onClick={download}>أضفها إلى تقويمك</button>
+      </div>
+    </div>
+  );
+}
+
 function nextStep(journey) {
   for (const st of journey.filter((s) => s.status === 'active')) {
     const it = st.items.find((i) => i.status === 'returned')
@@ -500,7 +535,7 @@ function Continuous({ c }) {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, lab, onLab }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab }) {
   const { journey, profile, participant } = me;
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
@@ -538,6 +573,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
   const reviewWait = APPROVAL_SLA_AR;
   let order = 0;
+  const upcoming = approved ? nextSession(journey) : null;
 
   return (
     <div className="page wide">
@@ -588,8 +624,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتيب والمختبر */}
       <div className="j-layout">
         <aside className="j-side" aria-label="ما تفعله الآن">
-          {(next || reading) && (
+          {(next || reading || upcoming) && (
             <div className="next-grid j-next" data-tour="next-step">
+              {upcoming && upcoming.open && <NextSession session={upcoming} onHall={onHall} />}
               {next && (
                 <div className="next-card">
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
@@ -598,6 +635,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                   <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
                 </div>
               )}
+              {upcoming && !upcoming.open && <NextSession session={upcoming} onHall={onHall} />}
               {reading && (
                 <div className="next-card">
                   <span className="k">تابع القراءة</span>

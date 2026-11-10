@@ -98,6 +98,21 @@ export function publicView(view) {
   };
 }
 
+// الحضور بالمشاركة لا بالدخول: يحضر من أجاب عن HALL_ATTEND_SHARE من الجولات المكشوفة على الأقل.
+// بلا جولة مكشوفة لا يُكتب حضور من القاعة (يسجّله المشرف بطريقته)، فلا يصير الدخول وحده حضورًا.
+export const HALL_ATTEND_SHARE = 0.6;
+/** @param {string[]} revealed @param {{participant_id:string, sentence_id:string}[]} answers @param {string[]} memberIds
+ *  @returns {{rounds:number, need:number, eligible:string[]}} */
+export function hallAttendance(revealed, answers, memberIds) {
+  const rounds = new Set(revealed || []);
+  const need = Math.ceil(rounds.size * HALL_ATTEND_SHARE);
+  if (!rounds.size) return { rounds: 0, need: 0, eligible: [] };
+  /** @type {Map<string, Set<string>>} */
+  const by = new Map();
+  for (const a of answers || []) { if (!rounds.has(a.sentence_id)) continue; if (!by.has(a.participant_id)) by.set(a.participant_id, new Set()); /** @type {Set<string>} */ (by.get(a.participant_id)).add(a.sentence_id); }
+  return { rounds: rounds.size, need, eligible: (memberIds || []).filter((id) => (by.get(id)?.size || 0) >= need).sort() };
+}
+
 // قائد الجولة التالي: من فريق القيادة بالتناوب، ثم من الجميع إن لم يكن في القيادة أحد
 /** @param {Record<string,string>} roles @param {string|null} current @param {Set<string>|null} [presentIds] */
 export function nextLeader(roles, current, presentIds = null) {

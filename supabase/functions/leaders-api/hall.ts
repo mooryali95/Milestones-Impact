@@ -4,9 +4,9 @@
 // التزامن بالسؤال الخفيف: كل تغيير يرفع version، والجهاز يرسل رقمه فيُرد عليه
 // «لا جديد» بقراءة واحدة، أو بالحالة كاملة حين تتغير. الحضور يتجدد مع كل سؤال.
 import { audit, db, Fail, must } from './core.ts';
-import { answersClosed, answerSeconds, assignTables, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
+import { answersClosed, answerSeconds, assignTables, hallAttendance, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
-import { overallLevel } from './logic.js';
+import { checkinOpen, overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
 import type { Actor } from './admin.ts';
 
@@ -55,6 +55,21 @@ async function seatOne(cohortId: string, participantId: string, team: string) {
   await saveSeats(cohortId, roles, tables, [participantId]);
 }
 
+// جلسات الورشة التي يصح أن تنتمي إليها قاعة الدفعة: الفعّالة لدفعتها أو لكل الدفعات، من الأمس إلى أسبوع قادم
+async function workshopsFor(cohortId: string) {
+  const now = Date.now();
+  const { data } = await db.from('workshop_sessions').select('id, title_ar, starts_at, ends_at, cohort_id, active')
+    .eq('active', true).gte('ends_at', new Date(now - 864e5).toISOString()).lte('starts_at', new Date(now + 7 * 864e5).toISOString()).order('starts_at');
+  return ((data || []) as any[]).filter((w) => !w.cohort_id || w.cohort_id === cohortId)
+    .map((w) => ({ id: w.id, title: w.title_ar, starts_at: w.starts_at, ends_at: w.ends_at, open: checkinOpen(w, now) }));
+}
+// من يُكتب حضوره لو أُغلقت القاعة الآن: من أجاب عن 60% من الجولات المكشوفة
+async function attendanceOf(session: any, memberIds: string[]) {
+  const revealed = (session.revealed || []) as string[];
+  const answers = revealed.length ? ((await db.from('katon_answers').select('participant_id, sentence_id').in('sentence_id', revealed)).data || []) : [];
+  return hallAttendance(revealed, answers as any[], memberIds);
+}
+
 // الحالة الكاملة لطرف
 async function buildState(session: any, viewer: { kind: 'participant' | 'admin'; id?: string }) {
   const cohort = must(await db.from('cohorts').select('*').eq('id', session.cohort_id).single()) as any;
@@ -76,7 +91,14 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     roles: seat.roles, tables: seat.tables,
     points: katonPoints((prog as any).data?.katon_points), viewer,
   });
-  return { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic, sentences };
+  const out: Body = { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic, sentences };
+  // للخبير: الجلسة التي يُكتب فيها الحضور، ومن يستحقه لو أُغلقت الآن
+  if (viewer.kind === 'admin') {
+    const att = await attendanceOf(session, members.map((m: any) => m.id));
+    const linked = session.workshop_session_id ? (await db.from('workshop_sessions').select('id, title_ar').eq('id', session.workshop_session_id).maybeSingle()).data as any : null;
+    out.attendance = { rounds: att.rounds, need: att.need, eligible: att.eligible.length, total: members.length, workshop: linked ? { id: linked.id, title: linked.title_ar } : null };
+  }
+  return out;
 }
 
 // ── للمشارك ──
@@ -155,7 +177,7 @@ export async function adminState(b: Body) {
   if (!s) {
     // D17: القاعة على المنشور من الموضوعات وحده
     const { data: topics } = await db.from('katon_topics').select('id, title_ar, status').eq('status', 'published').order('sort');
-    return { success: true, session: null, topics: topics || [] };
+    return { success: true, session: null, topics: topics || [], workshops: await workshopsFor(String(b.cohort_id)) };
   }
   if (Number(b.since) === s.version) return { success: true, unchanged: true, version: s.version };
   return buildState(s, { kind: 'admin' });
@@ -172,13 +194,16 @@ export async function open(a: Actor, b: Body) {
   if (await openSession(String(b.cohort_id))) throw new Fail('للدفعة قاعة مفتوحة؛ أغلقها أولًا', 409);
   const mode = b.mode === 'self' ? 'self' : 'live';
   if (isUuid(b.topic_id)) await requirePublished(String(b.topic_id));
+  // جلسة الورشة التي يُكتب فيها الحضور: ما اختاره الخبير، وإلا الجلسة المفتوحة نافذتها الآن؛ وبلا جلسة لا حضور من القاعة
+  const ws = await workshopsFor(String(b.cohort_id));
+  const workshopId = b.workshop_session_id === null ? null : (ws.find((w) => w.id === b.workshop_session_id) || ws.find((w) => w.open))?.id || null;
   // رمز الدخول ستة أرقام عشوائية؛ تصادمه مع قاعة مفتوحة أخرى نادر ويُعاد السحب بدل الفشل
   for (let tries = 0; ; tries += 1) {
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const { error } = await db.from('hall_sessions').insert({
-      cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code,
-      stage: mode === 'self' ? 'round' : 'enter', created_by: a.email,
-    }).select(SESSION_COLS).single();
+    const row = { cohort_id: b.cohort_id, topic_id: isUuid(b.topic_id) ? b.topic_id : null, mode, code, stage: mode === 'self' ? 'round' : 'enter', created_by: a.email };
+    let error: any = (await db.from('hall_sessions').insert({ ...row, workshop_session_id: workshopId }).select(SESSION_COLS).single()).error;
+    // قبل الترحيل 20261110140000 لا عمود للربط: تُفتح القاعة بلا جلسة ورشة
+    if (error && error.code !== '23505') error = (await db.from('hall_sessions').insert(row).select(SESSION_COLS).single()).error;
     if (!error) break;
     if (error.code !== '23505' || tries >= 4) { console.error(error); throw new Fail('تعذّر فتح القاعة', 500, 'db_error'); }
   }
@@ -278,7 +303,24 @@ export async function assign(a: Actor, b: Body) {
 
 export async function close(a: Actor, b: Body) {
   const s = await adminSession(b);
+  // الحضور إلى مصدره الوحيد قبل الإغلاق: صف في workshop_attendance بطريقة hall لمن شارك، ومن سبق تسجيله (QR أو يدوي) يبقى كما هو
+  const attendance: Body = { written: 0, eligible: 0, rounds: 0, workshop: null, reason: null };
+  if (s.mode === 'live') {
+    const cohort = must(await db.from('cohorts').select('*').eq('id', s.cohort_id).single()) as any;
+    const att = await attendanceOf(s, (await cohortMembers(cohort)).map((m: any) => m.id));
+    Object.assign(attendance, { eligible: att.eligible.length, rounds: att.rounds });
+    const w = s.workshop_session_id ? (await db.from('workshop_sessions').select('id, title_ar').eq('id', s.workshop_session_id).maybeSingle()).data as any : null;
+    if (!w) attendance.reason = 'no_workshop';
+    else if (!att.rounds) attendance.reason = 'no_rounds';
+    else if (att.eligible.length) {
+      attendance.workshop = w.title_ar;
+      const { error } = await db.from('workshop_attendance').upsert(
+        att.eligible.map((participant_id) => ({ session_id: w.id, participant_id, method: 'hall', recorded_by: a.email })),
+        { onConflict: 'session_id,participant_id', ignoreDuplicates: true });
+      if (error) { console.error('hall attendance', error); attendance.reason = 'not_written'; } else attendance.written = att.eligible.length;
+    } else attendance.workshop = w.title_ar;
+  }
   await bump(s.id, { stage: 'closed', closed_at: new Date().toISOString() });
-  await audit(a.actor || 'admin', a.email, 'hall.close', 'cohorts', s.cohort_id);
-  return adminState({ cohort_id: s.cohort_id });
+  await audit(a.actor || 'admin', a.email, 'hall.close', 'cohorts', s.cohort_id, null, attendance);
+  return { ...(await adminState({ cohort_id: s.cohort_id })), attendance };
 }

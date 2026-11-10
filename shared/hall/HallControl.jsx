@@ -18,7 +18,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sel, setSel] = useState(null);
-  const [form, setForm] = useState({ mode: 'live', topic_id: '' });
+  const [form, setForm] = useState({ mode: 'live', topic_id: '', workshop_session_id: '' });
   const [q, setQ] = useState('');
   const [only, setOnly] = useState('all');
   const ver = useRef(0);
@@ -40,6 +40,15 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
     setBusy(false);
     if (!r.success) return toast(r.message);
     if (ok) toast(ok);
+    // نتيجة كتابة الحضور عند الإغلاق تُقال للخبير صريحة: كم كُتب، أو لماذا لم يُكتب
+    if (key === 'close' && r.attendance) {
+      const t = r.attendance;
+      toast(t.written ? `أُغلقت القاعة، وكُتب حضور ${t.written} مشاركًا في «${t.workshop}»`
+        : t.reason === 'no_workshop' ? 'أُغلقت القاعة. لم تُربط بجلسة ورشة، فلم يُكتب حضور؛ سجّله من «الحضور والجلسات»'
+          : t.reason === 'no_rounds' ? 'أُغلقت القاعة. لم تُكشف جولة، فلم يُكتب حضور؛ سجّله من «الحضور والجلسات»'
+            : t.reason === 'not_written' ? 'أُغلقت القاعة، وتعذّر حفظ الحضور؛ سجّله من «الحضور والجلسات»'
+              : 'أُغلقت القاعة، ولم يبلغ أحد حد المشاركة');
+    }
     ver.current = r.session?.version || 0; setV(r);
   };
   const left = useHallTimer(v);
@@ -86,7 +95,15 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
                 {(v.topics || []).map((t) => <option key={t.id} value={t.id}>{t.title_ar}{t.status !== 'published' ? ' (مسودة: يُفتح للقاعة فقط)' : ''}</option>)}
               </select></label>
           </div>
-          {canWrite && <button className={u.btn} disabled={busy} onClick={() => act('open', { cohort_id: cohortId, ...form }, 'فُتحت القاعة')}>افتح القاعة</button>}
+          {form.mode === 'live' && (
+            <label className="field"><span>جلسة الورشة التي يُكتب فيها الحضور</span>
+              <select className="input" aria-label="جلسة الورشة" value={form.workshop_session_id} onChange={(e) => setForm({ ...form, workshop_session_id: e.target.value })}>
+                <option value="">{(v.workshops || []).some((w) => w.open) ? 'الجلسة الجارية الآن (تلقائيًا)' : 'بلا جلسة: لا يُكتب حضور من القاعة'}</option>
+                {(v.workshops || []).map((w) => <option key={w.id} value={w.id}>{w.title} · {new Date(w.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</option>)}
+              </select>
+              <small className={u.muted}>عند الإغلاق يُكتب حضور من شارك في 60% من الجولات المكشوفة، فيكتمل بند الورشة في رحلته.</small></label>
+          )}
+          {canWrite && <button className={u.btn} disabled={busy} onClick={() => act('open', { cohort_id: cohortId, mode: form.mode, topic_id: form.topic_id, ...(form.workshop_session_id ? { workshop_session_id: form.workshop_session_id } : {}) }, 'فُتحت القاعة')}>افتح القاعة</button>}
         </section>
       )}
 
@@ -140,7 +157,12 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
                 <div className="hall-teams">{Object.entries(v.teams).map(([t, x]) => (
                   <span key={t}><i style={{ background: TEAM_COLOR[t] }} />{TEAM_AR[t]}: {x.present}/{x.count}</span>
                 ))}<span>بلا فريق: {v.people.filter((p) => !p.team).length}</span><span>✋ {v.people.filter((p) => p.hand).length}</span></div>
-                <button className={u.link} onClick={async () => { if (await ask('اكتب «إغلاق» لإغلاق القاعة. تبقى الإجابات والفرق محفوظة.', '') === 'إغلاق') act('close', { session_id: sid }, 'أُغلقت القاعة'); }}>إغلاق القاعة</button>
+                {sess.mode === 'live' && v.attendance && (
+                  <p className={u.muted}>{!v.attendance.workshop ? 'لم تُربط القاعة بجلسة ورشة، فلن يُكتب منها حضور.'
+                    : !v.attendance.rounds ? `الحضور يُكتب في «${v.attendance.workshop.title}» عند الإغلاق، لمن يشارك في 60% من الجولات المكشوفة.`
+                      : `لو أُغلقت الآن: حضور ${v.attendance.eligible} من ${v.attendance.total} في «${v.attendance.workshop.title}» (أجابوا عن ${v.attendance.need} من ${v.attendance.rounds} جولات على الأقل).`}</p>
+                )}
+                <button className={u.link} onClick={async () => { if (await ask('اكتب «إغلاق» لإغلاق القاعة. تبقى الإجابات والفرق محفوظة، ويُكتب الحضور.', '') === 'إغلاق') act('close', { session_id: sid }); }}>إغلاق القاعة</button>
               </section>
             </div>
           )}

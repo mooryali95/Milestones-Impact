@@ -138,3 +138,40 @@ describe('مؤقت القاعة', () => {
     expect(hallView({ ...args, session: { ...base, stage: 'train' } }).session.ends_at).toBeNull();
   });
 });
+
+// ── الحضور بالمشاركة، وجلستك القادمة ──
+import { hallAttendance } from '../../supabase/functions/leaders-api/logic.js';
+import { nextSession, sessionIcs } from './screens/Journey.jsx';
+
+describe('حضور القاعة بالمشاركة', () => {
+  const ans = (p, ...ss) => ss.map((s) => ({ participant_id: p, sentence_id: s }));
+  it('يحضر من أجاب عن 60% من الجولات المكشوفة، ولا تُحسب إجابة عن جملة لم تُكشف', () => {
+    const r = hallAttendance(['s1', 's2', 's3', 's4', 's5'], [...ans('a', 's1', 's2', 's3'), ...ans('b', 's1', 's2'), ...ans('c', 's1', 's2', 's9', 's8'), ...ans('x', 's1', 's2', 's3', 's4')], ['a', 'b', 'c', 'd']);
+    expect(r).toEqual({ rounds: 5, need: 3, eligible: ['a'] });
+  });
+  it('جولة واحدة مكشوفة تكفي إجابتها، وبلا جولة مكشوفة لا حضور من القاعة', () => {
+    expect(hallAttendance(['s1'], ans('a', 's1'), ['a', 'b']).eligible).toEqual(['a']);
+    expect(hallAttendance([], ans('a', 's1'), ['a'])).toEqual({ rounds: 0, need: 0, eligible: [] });
+  });
+});
+
+describe('جلستك القادمة', () => {
+  const now = Date.parse('2026-11-15T06:00:00Z');
+  const s = (id, start, end, extra = {}) => ({ id, title: `جلسة ${id}`, starts_at: start, ends_at: end, mode: 'in_person', location: 'قاعة التدريب; الدور 3', attended: false, open: false, ...extra });
+  const journey = [{ key: 'training', items: [{ kind: 'workshop', activity: { type: 'workshop', sessions: [
+    s('old', '2026-11-10T06:00:00Z', '2026-11-10T10:00:00Z'), s('far', '2026-11-20T06:00:00Z', '2026-11-20T10:00:00Z'), s('near', '2026-11-16T06:00:00Z', '2026-11-16T10:00:00Z'),
+  ] } }, { kind: 'reading' }] }];
+  it('أقرب جلسة لم تنتهِ، ولا شيء حين تنتهي كلها أو لا ورشة', () => {
+    expect(nextSession(journey, now).id).toBe('near');
+    expect(nextSession(journey, Date.parse('2026-12-01T00:00:00Z'))).toBeNull();
+    expect(nextSession([{ items: [{ kind: 'reading' }] }], now)).toBeNull();
+  });
+  it('ملف التقويم بتوقيت UTC وبحروفه الخاصة مهرّبة', () => {
+    const ics = sessionIcs(nextSession(journey, now));
+    expect(ics).toContain('DTSTART:20261116T060000Z');
+    expect(ics).toContain('DTEND:20261116T100000Z');
+    expect(ics).toContain(String.raw`LOCATION:قاعة التدريب\; الدور 3`);
+    expect(ics.startsWith('BEGIN:VCALENDAR\r\n')).toBe(true);
+    expect(ics.endsWith('END:VCALENDAR\r\n')).toBe(true);
+  });
+});

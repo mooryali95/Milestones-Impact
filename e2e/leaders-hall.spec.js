@@ -26,6 +26,7 @@ function hall({ stage = 'round', admin = false } = {}) {
     people, tables: nos.map((no) => ({ no, team: people.find((p) => p.table === no).team, count: people.filter((p) => p.table === no).length })),
     teams: Object.fromEntries(['support', 'lead', 'guide', 'eval'].map((t) => [t, { count: people.filter((p) => p.team === t).length, present: people.filter((p) => p.team === t && p.present).length, score: null }])),
     distribution: admin ? { true1: 0, true2: 17, true3: 0, false1: 0, false2: 16, false3: 0, none: 0 } : null,
+    ...(admin ? { attendance: { rounds: 3, need: 2, eligible: 31, total: 50, workshop: { id: 'w1', title: 'اليوم التدريبي الأول' } } } : {}),
   };
 }
 
@@ -59,7 +60,8 @@ test('الخبير: شاشة العرض آمنة قبل الكشف، وإعاد�
       'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
       'xp.participants': { success: true, items: [], cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
     };
-    await route.fulfill({ json: replies[b.action] || (b.action.startsWith('xp.hall') ? hall({ admin: true }) : { success: true, items: [] }) });
+    const closed = { success: true, session: null, topics: [], workshops: [], attendance: { written: 31, eligible: 31, rounds: 3, workshop: 'اليوم التدريبي الأول', reason: null } };
+    await route.fulfill({ json: replies[b.action] || (b.action === 'xp.hall-close' ? closed : b.action.startsWith('xp.hall') ? hall({ admin: true }) : { success: true, items: [] }) });
   });
   await page.addInitScript(() => localStorage.setItem('mi_leaders_expert_session', 'x'.repeat(40)));
   await page.setViewportSize({ width: 390, height: 844 });
@@ -96,6 +98,13 @@ test('الخبير: شاشة العرض آمنة قبل الكشف، وإعاد�
   await expect(list.locator('.hall-row')).toHaveCount(5);
   await list.locator('.hall-row').first().click();
   await expect(region.locator('.hall-person')).toContainText('طاولة');
+
+  // الحضور: معاينة قبل الإغلاق، ثم نتيجة الكتابة تُقال للخبير عند الإغلاق
+  await expect(region).toContainText('لو أُغلقت الآن: حضور 31 من 50 في «اليوم التدريبي الأول»');
+  page.once('dialog', (d) => d.accept('إغلاق'));
+  await region.getByRole('button', { name: 'إغلاق القاعة' }).click();
+  await expect(page.getByText('كُتب حضور 31 مشاركًا في «اليوم التدريبي الأول»')).toBeVisible();
+  await expect(region).toContainText('لا قاعة مفتوحة لهذه الدفعة');
 });
 
 test('المشارك: مؤقت الجولة يعدّ من وقت الخادم، والإجابة تُؤكَّد، وما لم يصل يُعاد إرساله وحده', async ({ page }) => {
@@ -138,4 +147,37 @@ test('المشارك: مؤقت الجولة يعدّ من وقت الخادم، 
   await expect(receipt).toContainText('استُلمت إجابتك', { timeout: 15_000 });
   expect(sent.at(-1)).toMatchObject({ sentence_id: 'k1', verdict: 'false', confidence: 2 });
   expect(await page.evaluate(() => localStorage.getItem('mi_leaders_hall_pending'))).toBeNull();
+});
+
+test('المشارك: بطاقة «جلستك» في رحلته بموعدها ومكانها، وفي نافذتها تفتح القاعة، وملف التقويم يُنزَّل', async ({ page }) => {
+  const srv = createMockServer();
+  Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
+  let open = false;
+  const start = () => new Date(Date.now() + (open ? -10 : 26 * 60) * 60_000).toISOString();
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const r = srv.reply(b);
+    if (b.action === 'me') {
+      r.journey.find((st) => st.key === 'training').items.push({ id: 'w1', code: 'T-DAYS', kind: 'workshop', title_ar: 'الأيام التدريبية', required: true, status: 'pending',
+        activity: { type: 'workshop', done: false, count: 0, total: 1, verify: 'qr', sessions: [{ id: 's1', title: 'اليوم التدريبي الأول', mode: 'in_person', location: 'قاعة التدريب', starts_at: start(), ends_at: new Date(Date.parse(start()) + 4 * 3600_000).toISOString(), attended: false, open, can_join: false }] } });
+    }
+    await route.fulfill({ json: r });
+  });
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 't'.repeat(40)); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP);
+  const card = page.locator('.j-session');
+  await expect(card).toContainText('جلستك القادمة');
+  await expect(card).toContainText('اليوم التدريبي الأول');
+  await expect(card).toContainText('قاعة التدريب');
+  await expect(card.getByRole('button', { name: 'ادخل القاعة' })).toHaveCount(0);
+  const dl = page.waitForEvent('download');
+  await card.getByRole('button', { name: 'أضفها إلى تقويمك' }).click();
+  expect((await dl).suggestedFilename()).toBe('session.ics');
+  // في نافذة الجلسة: البطاقة أول ما يُرى، وزرها يفتح القاعة
+  open = true;
+  await page.reload();
+  await expect(card).toContainText('جلستك الآن');
+  await card.getByRole('button', { name: 'ادخل القاعة' }).click();
+  await expect(page.getByRole('heading', { name: 'القاعة', exact: true })).toBeVisible();
 });

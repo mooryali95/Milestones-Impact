@@ -3,8 +3,8 @@
 // ════════════════════════════════════════════════════════════════
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
-import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail } from './core.ts';
-import { contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
+import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -294,7 +294,8 @@ export async function overview() {
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
   const [reqs, ws, att, coach, programs, cohorts] = await Promise.all([
     db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
-    db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').order('starts_at'),
+    // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
+    db.from('workshop_sessions').select('*').order('starts_at'),
     db.from('workshop_attendance').select('session_id'),
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
@@ -306,7 +307,7 @@ export async function overview() {
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).map((s: any) => ({ ...s, attended: counts[s.id] || 0 })),
+    workshops: (ws.data || []).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0 }; delete row.secret; return row; }),
     coaching: coach.data || [],
     programs: programs.data || [], cohorts: cohorts.data || [],
   };
@@ -464,4 +465,58 @@ export async function sessionReminders() {
     sent += 1;
   }
   return sent;
+}
+
+// ── دعوة الجلسة التدريبية وتذكيراها ──
+// المصدر جلسة الورشة نفسها (workshop_sessions): موعدها ومكانها ودفعتها. الدعوة بيد المشرف مرة واحدة ومعها ملف تقويم،
+// والتذكيران من المهمة الساعية: قبل يوم (23 إلى 25 ساعة) وقبل ساعة (30 إلى 90 دقيقة). كلٌّ مرة واحدة لكل جلسة.
+// جلسة بلا دفعة (لكل الدفعات) لا يُعرف مدعووها، فلا تُرسل دعوتها ولا تذكيرها آليًا.
+const workshopWhen = (iso: string) => new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
+async function workshopRecipients(s: any) {
+  if (!s.cohort_id) return [];
+  const cohort = (await db.from('cohorts').select('*').eq('id', s.cohort_id).maybeSingle()).data as any;
+  if (!cohort) return [];
+  return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && m.status !== 'withdrawn');
+}
+async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
+  const people = await workshopRecipients(s);
+  const when = workshopWhen(s.starts_at);
+  const ics = kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url: s.join_url || '' })] : [];
+  let sent = 0, failed = 0;
+  for (const m of people) {
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, s.mode === 'online' ? s.join_url || null : null), ics, { kind: 'bulk', ref: s.id }); sent += 1; }
+    catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
+  }
+  return { sent, failed, total: people.length };
+}
+
+export async function workshopInvite(a: any, b: Body) {
+  const s = must(await db.from('workshop_sessions').select('*').eq('id', String(b.id || '')).maybeSingle()) as any;
+  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  if (!s.cohort_id) throw new Fail('هذه الجلسة لكل الدفعات؛ حدّد دفعتها لتُرسل الدعوة إلى أعضائها');
+  if (new Date(s.ends_at).getTime() < Date.now()) throw new Fail('انتهت هذه الجلسة');
+  if (s.invited_at && b.again !== true) throw new Fail('أُرسلت دعوة هذه الجلسة من قبل', 409, 'invited');
+  const r = await workshopSend(s, 'invite');
+  // قبل الترحيل 20261110140000 لا عمود للوسم: تُرسل الدعوة ولا يُحفظ وقتها
+  if (r.sent) await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id);
+  await audit('admin', a.email, 'workshop.invite', 'workshop_sessions', s.id, null, r);
+  return { success: true, ...r };
+}
+
+export async function workshopReminders() {
+  const now = Date.now();
+  const out = { day: 0, hour: 0 };
+  const windows: ['day' | 'hour', 'reminded_day_at' | 'reminded_hour_at', number, number][] = [['day', 'reminded_day_at', 23 * 36e5, 25 * 36e5], ['hour', 'reminded_hour_at', 30 * 6e4, 90 * 6e4]];
+  for (const [kind, col, from, to] of windows) {
+    // قبل الترحيل لا عمود للوسم: الاستعلام يفشل فلا يُرسل تذكير (ولا يتكرر كل ساعة بلا وسم)
+    const { data, error } = await db.from('workshop_sessions').select('*').eq('active', true).not('cohort_id', 'is', null).is(col, null)
+      .gte('starts_at', new Date(now + from).toISOString()).lte('starts_at', new Date(now + to).toISOString()).limit(20);
+    if (error) continue;
+    for (const s of (data || []) as any[]) {
+      const { data: mark } = await db.from('workshop_sessions').update({ [col]: new Date().toISOString() }).eq('id', s.id).is(col, null).select('id');
+      if (!mark?.length) continue;
+      out[kind] += (await workshopSend(s, kind)).sent;
+    }
+  }
+  return out;
 }
