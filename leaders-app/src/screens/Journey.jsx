@@ -48,7 +48,7 @@ function Ring({ value }) {
   );
 }
 
-export function PasskeyBanner({ onDone, settings = false }) {
+export function PasskeyBanner({ onDone, settings = false, more = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (!browserSupportsWebAuthn()) return null;
@@ -68,12 +68,12 @@ export function PasskeyBanner({ onDone, settings = false }) {
     <div className="banner mist">
       <span className="ico"><Ico name="key" /></span>
       <div className="grow">
-        <b>ادخل المرة القادمة ببصمتك أو وجهك</b>
-        <p className="small muted">مفتاح المرور أسرع وأكثر أمانًا من رمز البريد، ويبقى على جهازك.</p>
+        <b>{more ? 'تستخدم جهازًا آخر؟' : 'ادخل المرة القادمة ببصمتك أو وجهك'}</b>
+        <p className="small muted">{more ? 'كل جهاز يحتاج مفتاحه. أضف مفتاحًا لهذا الجهاز إن لم يكن له مفتاح.' : 'مفتاح المرور أسرع وأكثر أمانًا من رمز البريد، ويبقى على جهازك.'}</p>
         {error && <p className="small" style={{ color: 'var(--bad)' }}>{error}</p>}
       </div>
       <div className="row">
-        <button className="btn sm" onClick={setup} disabled={busy}>{busy ? 'لحظة…' : 'فعّله الآن'}</button>
+        <button className="btn sm" onClick={setup} disabled={busy}>{busy ? 'لحظة…' : more ? 'أضف مفتاحًا لهذا الجهاز' : 'فعّله الآن'}</button>
         {!settings && <button className="link small" onClick={later}>لاحقًا</button>}
       </div>
     </div>
@@ -200,6 +200,15 @@ function Survey({ item, open, onUpdate, setToast }) {
   );
 }
 
+// عدّاد المرحلة يحسب المطلوب فقط، والاختياري يُذكر وحده: فلا تظهر مرحلة «مكتملة» بعدّاد ناقص
+export const stageCount = (stage) => {
+  const items = stage.items || [];
+  const req = items.filter((i) => i.required);
+  if (!items.length || !req.length) return `${stage.done} من ${stage.total}`;
+  const opt = items.length - req.length;
+  return `${req.filter((i) => i.status === 'done').length} من ${req.length}${opt ? ` · ${opt === 1 ? 'واحد اختياري' : `${opt} اختيارية`}` : ''}`;
+};
+
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
   const act = async (extra) => {
@@ -237,7 +246,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
             <span className={`chip ${item.status === 'done' ? 'ok' : item.status === 'returned' ? 'bad' : 'warn'}`}>{REQ_STATUS[item.status]}</span>
           )}
         </div>
-        {item.help_ar && <p className="h">{item.help_ar}</p>}
+        {item.help_ar && !(item.code === 'T-360' && sys && !verified && item.status !== 'done') && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
         {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
         {sys && !verified && item.kind !== 'survey' && item.status !== 'done' && (
@@ -299,7 +308,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
               {mode && <span className="tag"><i aria-hidden="true">{mode.icon}</i>{mode.title}</span>}
               {stage.duration_label && <span className="tag">{stage.duration_label}</span>}
               {stage.work_mode && <span className="tag">{WORK_AR[stage.work_mode]}</span>}
-              {stage.total > 0 && <span className="tag">{stage.done} من {stage.total}</span>}
+              {stage.total > 0 && <span className="tag">{stageCount(stage)}</span>}
             </div>
             {locked && stage.lock_reason && <small className="muted">{stage.lock_reason}</small>}
           </div>
@@ -329,7 +338,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
             )}
             {stage.items.length > 0 && (
               <>
-                <div className="check-head"><b>قائمة التحقق</b><span className="small muted">{stage.done} من {stage.total}</span></div>
+                <div className="check-head"><b>قائمة التحقق</b><span className="small muted">{stageCount(stage)}</span></div>
                 <ul className="checklist">
                   {stage.items.map((it) => <Requirement key={it.id} item={it} open={!locked} {...rest} />)}
                 </ul>
@@ -476,8 +485,8 @@ export function PreManager({ inSettings = false }) {
           : (
             <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
               <p className="small" style={{ flexBasis: '100%' }}>5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا.</p>
-              <input className="input" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-              <input className="input ltr" type="email" required placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <input className="input" aria-label="اسم المدير" autoComplete="off" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <input className="input ltr" type="email" required aria-label="بريد المدير" placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
               <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
               {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
             </form>

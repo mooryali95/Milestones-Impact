@@ -60,7 +60,7 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
   return (
     <div className="page narrow">
       <form className="card stack xp" onSubmit={submit}>
-        <p className="eyebrow" dir="ltr">EXPERT NETWORK</p>
+        <p className="eyebrow">شبكة الخبراء</p>
         <h2>{expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h2>
         {expert ? <p className="muted">أدوارك والأبعاد التي تتقنها ونبذة عن خبرتك، ليُسند إليك ما يناسبك. نراجع الملف ثم نفعّل لوحتك.</p> : <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>}
 
