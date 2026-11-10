@@ -141,16 +141,20 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     if (inSec.every((x) => isComplete(x, answers, before)) && (mode === 'review' || i < secIndex)) return 'done';
     return i === secIndex && mode !== 'review' ? 'on' : '';
   };
+  const sectionPct = (i) => {
+    const inSec = qs.filter((x) => secOf(x) === SECTIONS[i].key);
+    return inSec.length ? Math.round((inSec.filter((x) => isComplete(x, answers, before)).length / inSec.length) * 100) : 0;
+  };
   const header = (
     <>
       <div className="quiz-head">
         <span className="small muted">{post ? 'القياس البعدي' : 'القياس المبدئي'}</span>
-        <div className="bar"><i style={{ width: `${pct}%` }} /></div>
-        <span className="small">أجبت <b>{answered}</b> من {qs.length}</span>
+        <span className="small quiz-count">أجبت <b>{answered}</b> من {qs.length}</span>
         {elapsed > 0 && <span className="small muted" aria-label="الوقت المنقضي في هذه الجلسة">· {elapsed} د</span>}
       </div>
-      <div className="sections">
-        {SECTIONS.map((d, i) => <div key={d.key} className={sectionState(i)}>{d.short}</div>)}
+      {/* مؤشر تقدم واحد: شريط الأقسام نفسه يمتلئ بنسبة ما أُجيب في كل قسم، فلا شريط ثانٍ فوقه */}
+      <div className="sections" role="progressbar" aria-label="تقدمك في القياس" aria-valuemin={0} aria-valuemax={qs.length} aria-valuenow={answered} aria-valuetext={`أجبت ${answered} من ${qs.length}`}>
+        {SECTIONS.map((d, i) => <div key={d.key} className={sectionState(i)}><i style={{ width: `${sectionPct(i)}%` }} /><span>{d.short}</span></div>)}
       </div>
     </>
   );

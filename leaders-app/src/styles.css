@@ -158,14 +158,19 @@ textarea.input { min-height: 96px; resize: vertical; }
 /* ── القياس ── */
 .quiz { max-width: 680px; margin: 0 auto; }
 .quiz-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-.quiz-head .bar { flex: 1; }
+.quiz-head .quiz-count { margin-inline-start: auto; }
 .sections { display: flex; gap: 6px; margin-bottom: 20px; }
 .sections > div {
   flex: 1; font-size: 14px; text-align: center; padding: 6px 4px; border-radius: 8px;
   background: rgba(11, 39, 47, .05); color: var(--muted); font-weight: 600;
 }
+.sections > div { position: relative; overflow: hidden; }
+.sections > div > span { position: relative; }
+/* امتلاء القسم بما أُجيب فيه: خط في أسفل الخانة، فالشريط نفسه هو مؤشر التقدم الوحيد */
+.sections > div > i { position: absolute; inset-block-end: 0; inset-inline-start: 0; height: 4px; background: var(--accent); transition: width .3s; }
 .sections > div.on { background: var(--graphite); color: var(--mist); }
-.sections > div.done { background: var(--st-ok-bg); color: var(--ok); }
+.sections > div.done { background: var(--st-ok-bg); color: var(--st-ok-text); }
+.sections > div.done > i { background: var(--ok); }
 .q-text { font-size: 19px; font-weight: 600; line-height: 1.8; margin: 8px 0 6px; }
 .q-help { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
 .options { display: grid; gap: 10px; }

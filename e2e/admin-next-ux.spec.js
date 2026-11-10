@@ -24,6 +24,8 @@ async function setup(page, hash = '') {
   await page.evaluate(() => { sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })); localStorage.clear(); });
   await page.goto(BASE + hash);
   await page.reload();
+  // اللوحة تكتب سياقها في العنوان بعد أول رسم؛ الانتقال قبل ذلك يسابقها فيضيع العنوان المطلوب
+  await page.waitForFunction(() => window.location.hash.length > 2);
 }
 
 test('لكل شاشة رابط: التحديث يبقيك فيها، وزر الرجوع يعيد السابقة', async ({ page }) => {
