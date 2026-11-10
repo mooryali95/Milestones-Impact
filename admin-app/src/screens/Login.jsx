@@ -2,6 +2,7 @@
 // الدخول: البريد ← رمز (تطبيق المصادقة أو البريد)، أو مفتاح المرور
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useRef, useState } from 'react';
+import Ico from '../../../shared/ui/Ico.jsx';
 import { call, validEmail } from '../api.js';
 import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
 import { useUI } from '../ui.jsx';
@@ -108,7 +109,7 @@ export default function Login({ onSignedIn }) {
               {passkeySupported() && (
                 <>
                   <div className="login-or">أو</div>
-                  <button className="passkey-login-btn" type="button" onClick={withPasskey} disabled={!!busy}>🔑 الدخول بمفتاح المرور</button>
+                  <button className="passkey-login-btn" type="button" onClick={withPasskey} disabled={!!busy}><Ico name="key" /> الدخول بمفتاح المرور</button>
                 </>
               )}
               <Err msg={error} />
@@ -126,7 +127,7 @@ export default function Login({ onSignedIn }) {
               </div>
               <div className="code-hint">
                 <span>يقبل:</span>
-                <span className="code-hint-badge totp">🔐 TOTP — تطبيق المصادقة</span>
+                <span className="code-hint-badge totp"><Ico name="lock" /> TOTP — تطبيق المصادقة</span>
                 <span className="code-hint-badge otp">✉️ OTP — البريد الإلكتروني</span>
               </div>
               <button className="send-code-btn" type="button" onClick={resendCode} disabled={!!busy}>

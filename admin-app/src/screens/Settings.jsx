@@ -2,6 +2,7 @@
 // الإعدادات: الملف، تطبيق المصادقة، مفاتيح المرور، الجلسات، المستخدمون
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useState } from 'react';
+import Ico from '../../../shared/ui/Ico.jsx';
 import { BRAND } from '../../../shared/js/brand.js';
 import { call, fmtDate, ROLE_LABELS, session } from '../api.js';
 import { passkeyCancelled, passkeyCreate, passkeySupported } from '../passkey.js';
@@ -74,9 +75,9 @@ function Totp({ user, onUser }) {
       </div></div>
       <div className="btn-row" style={{ marginBottom: 12 }}>
         {on ? <>
-          <button className="btn-sm ghost" onClick={reset}>🔄 إعادة ربط التطبيق</button>
+          <button className="btn-sm ghost" onClick={reset}><Ico name="refresh" /> إعادة ربط التطبيق</button>
           <button className="btn-sm danger" onClick={disable}>تعطيل TOTP</button>
-        </> : <button className="btn-sm primary" onClick={begin}>🔐 تفعيل TOTP</button>}
+        </> : <button className="btn-sm primary" onClick={begin}><Ico name="lock" /> تفعيل TOTP</button>}
       </div>
       {setup && (
         <form onSubmit={confirmSetup}>
@@ -169,7 +170,7 @@ function Security({ onUser }) {
         {sec.passkeys.length ? sec.passkeys.map((p) => (
           <div className="pk-row" key={p.id}>
             <div>
-              <div className="pk-name">🔑 {p.device_label || 'مفتاح مرور'}{p.backed_up ? ' · متزامن' : ''}</div>
+              <div className="pk-name"><Ico name="key" /> {p.device_label || 'مفتاح مرور'}{p.backed_up ? ' · متزامن' : ''}</div>
               <div className="pk-sub">أُضيف {fmtDate(p.created_at)}{p.last_used_at ? ` · آخر استخدام ${fmtDate(p.last_used_at)}` : ''}</div>
             </div>
             <button className="btn-sm danger" onClick={() => remove(p.id)}>حذف</button>
@@ -271,7 +272,7 @@ function Users({ me }) {
                         <button className="btn-ghost-small" style={{ marginInlineStart: 6 }} title="يدخل برمز البريد ثم يضبط وسيلته من جديد"
                           onClick={async () => { if (window.confirm(`إعادة وصول ${u.name}؟ يُلغى مفتاح المرور الوحيد وتطبيق المصادقة، ويدخل برمز البريد.`) && await update(u.id, 'reset_access', true)) { toast('✅ أُعيد الوصول وأُبلغ بالبريد'); load(); } }}>إعادة الوصول</button>
                       )}</td>
-                    <td>{u.is_owner ? '🔒' : (
+                    <td>{u.is_owner ? <Ico name="lock" /> : (
                       <button className={`toggle-btn ${u.is_active ? 'on' : 'off'}`} role="switch" aria-checked={!!u.is_active} aria-label={`تفعيل ${u.name}`}
                         onClick={async () => { if (await update(u.id, 'is_active', !u.is_active)) load(); }} />
                     )}</td>

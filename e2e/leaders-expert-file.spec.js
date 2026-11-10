@@ -1,6 +1,7 @@
 // بوابة الخبير (المرحلتان 8 و9): مشاركوه وملف المشارك في صفحة، واعتماد الختامي وتقييم المعلم من البوابة،
 // وطلبات الأقران: تأكيد إجابة زميل وتصحيحها وإجابة الخبير. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
+import { readable } from './readable.js';
 
 const PORTAL = 'http://localhost:4304/x';
 const XP_TOKEN = 'x'.repeat(40);
@@ -50,6 +51,7 @@ function server() {
       case 'xp.participants': return { success: true, items: [{ id: 'p1', name: 'سارة الأحمد', first: 'سارة', title: 'مديرة مشاريع', org: 'جهة الاختبار', status: 'enrolled', cohort: 'دفعة نوفمبر', advisor: true, role_ar: null, level: 'intermediate', level_ar: 'متوسط', approved: true, stage: 'التوجيه على رأس العمل', progress: 55, late: 1, continuous: 72, needs: 4 }], cohorts: [] };
       case 'xp.participant': return file();
       case 'xp.reviews': return { success: true, advisor: true, items: [] };
+      case 'xp.sus-state': return { success: true, ready: true, due: true, answered: false };
       case 'xp.peer-list': return peerList();
       case 'xp.peer-review': state.answers[b.answer_id] = b.status; return peerList();
       case 'xp.peer-answer': return peerList();
@@ -111,6 +113,12 @@ test('مشاركو الخبير وملف المشارك: المطلوب الآن
   await fin.getByRole('button', { name: 'اعتمد' }).click();
   await expect.poll(() => s.calls.find((c) => c.action === 'xp.final-eval-vote')).toMatchObject({ participant_id: 'p1', vote: 'approve' });
   await expect(fin).toContainText('معتمد');
+  // على الجوال: لا تمرير أفقي ولا نص دون 13 بكسل في ملف المشارك، ثم في رئيسية الخبير ومعها بطاقة استبيان سهولة الاستخدام
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await readable(page)).toEqual({ hscroll: false, tiny: [] });
+  await page.goto(PORTAL);
+  await expect(page.getByRole('heading', { name: 'رأيك في سهولة المنصة' })).toBeVisible();
+  expect(await readable(page)).toEqual({ hscroll: false, tiny: [] });
 });
 
 test('طابور الأقران في لوحة الخبير: إجابة الخبير نفسه تُرسل مؤكَّدة', async ({ page }) => {
