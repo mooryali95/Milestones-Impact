@@ -92,7 +92,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
 
   return (
     <div className="page capstone">
-      <FirstOpen id="capstone" icon="🧭" title="مبادرتك على عملك الحقيقي" lines={[
+      <FirstOpen id="capstone" icon="compass" title="مبادرتك على عملك الحقيقي" lines={[
         'اختر مشروعًا من عملك، وفصول الوثيقة تتبع نطاق ما تقوده كما حددته في ملفك.',
         'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تسلّمها.',
         'ملاحظات المستشار تعيد الوثيقة إليك هنا مع ما يحتاج تعديلًا، ثم تعتمد.',

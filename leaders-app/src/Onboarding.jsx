@@ -6,6 +6,7 @@
 // التي توجّه App.jsx؛ وخطوتا 1 و4 راحة عرض تُغلق مرة واحدة بالمخزن المحلي (كبطاقة الترحيب).
 // التصور: docs/journey/2026-11-05-تصور-الفيديو-التعريفي-ومعالج-البداية-v2.md
 import React from 'react';
+import Ico from './Ico.jsx';
 import { PARTICIPANT_VIDEO as VIDEO } from '../../shared/video/scenes.js';
 import { gateDone, gateStage, hasAccess } from './gates.js';
 import { nextSeen, welcomeSeen } from './api.js';
@@ -98,7 +99,7 @@ export function OnboardingNextCard({ me, onClose }) {
   const wait = approvalWait(me);
   return (
     <div className="banner mist onb-next" role="status">
-      <span className="ico" aria-hidden="true">🎯</span>
+      <span className="ico" aria-hidden="true"><Ico name="target" /></span>
       <div className="grow">
         <b>أرسلت قياسك. ما بعد ذلك:</b>
         <ol className="small">

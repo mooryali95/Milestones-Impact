@@ -9,6 +9,7 @@
 // القياس البعدي (kind="post") بالشاشة نفسها، مع تقديرين لعبارات الممارسة
 // (الآن وقبل البرنامج) وقسم أخير عن انتقال التعلم.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Ico from '../Ico.jsx';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, TIERS } from '../labels.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
@@ -167,7 +168,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
           <p>{data.assessment.intro || 'أسئلة قصيرة في الأطر الثلاثة. نتيجتها تحدد مسارك في كل إطار على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
           {/* الزمن تقدير متوسط لا وعد: لا حد زمني، ويظهر الوقت المنقضي في الرأس أثناء الإجابة */}
-          <div className="alert info small">⏱ {data.assessment.est_minutes ? `نحو ${data.assessment.est_minutes} دقيقة في المتوسط بلا حد زمني، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
+          <div className="alert info small"><Ico name="clock" /> {data.assessment.est_minutes ? `نحو ${data.assessment.est_minutes} دقيقة في المتوسط بلا حد زمني، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
           {resumed && <div className="bar"><i style={{ width: `${pct}%` }} /></div>}
           <div className="row">
             <button className="btn gold" onClick={() => setMode('q')}>{resumed ? `تابع (${answered} من ${qs.length})` : 'ابدأ'}</button>

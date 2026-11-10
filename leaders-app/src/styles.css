@@ -1470,3 +1470,6 @@ body:has(.tour) main{padding-bottom:260px}
 .pr-more>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;color:var(--slate);font-weight:600;font-size:14px}
 .pr-more[open]>summary{margin-bottom:8px}
 .pr-more>.pr-list+h4{margin-top:12px}
+/* الأيقونات المرسومة تأخذ لون النص وتصطف مع سطره */
+.ico-svg{vertical-align:-.22em;flex:none}
+.banner .ico .ico-svg,.empty-state .ico .ico-svg{display:block}
