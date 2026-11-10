@@ -545,7 +545,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
   return (
     <div className="page book">
-      <FirstOpen id="handbook" icon="📘" title="كتيبك على مستواك" lines={[
+      <FirstOpen id="handbook" icon="book" title="كتيبك على مستواك" lines={[
         'الأبواب مرتبة بمستواك في كل إطار؛ ابدأ بالباب المعلّم «التالي».',
         'في نهاية كل باب سؤال تأمل واختبار قصير يوثّقان قراءتك في رحلتك تلقائيًا.',
         'يحفظ الكتيب موضعك، فتعود إليه من حيث توقفت على أي جهاز.',

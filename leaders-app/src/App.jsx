@@ -9,6 +9,7 @@
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
 import React, { lazy, useCallback, useEffect, useState } from 'react';
+import Ico from './Ico.jsx';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
@@ -100,7 +101,7 @@ function Nav({ items, view, onGo, className }) {
       {items.map((it) => (
         <button key={it.key} type="button" data-tour={`nav-${it.key}`} className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
           disabled={it.locked} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined} onClick={() => onGo(it.key)}>
-          <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true">🔒</i>}</span>
+          <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true"><Ico name="lock" size="12" /></i>}</span>
         </button>
       ))}
     </nav>

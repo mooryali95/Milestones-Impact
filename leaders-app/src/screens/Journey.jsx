@@ -4,6 +4,7 @@
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
 import React, { useEffect, useState } from 'react';
+import Ico from '../Ico.jsx';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
 import IntroVideo from '../IntroVideo.jsx';
@@ -64,7 +65,7 @@ export function PasskeyBanner({ onDone, settings = false }) {
   const later = async () => { await call('passkey.dismiss'); onDone('dismissed'); };
   return (
     <div className="banner mist">
-      <span className="ico">🔐</span>
+      <span className="ico"><Ico name="key" /></span>
       <div className="grow">
         <b>ادخل المرة القادمة ببصمتك أو وجهك</b>
         <p className="small muted">مفتاح المرور أسرع وأكثر أمانًا من رمز البريد، ويبقى على جهازك.</p>
@@ -388,7 +389,7 @@ function nextStep(journey) {
 function Welcome({ firstName, onClose }) {
   return (
     <div className="banner mist welcome">
-      <span className="ico">👋</span>
+      <span className="ico"><Ico name="hand" /></span>
       <div className="grow">
         <b>أهلًا {firstName}، هكذا تعمل رحلتك</b>
         <ol className="small">
@@ -463,7 +464,7 @@ export function PreManager({ inSettings = false }) {
   };
   return (
     <div className="banner mist">
-      <span className="ico">👥</span>
+      <span className="ico"><Ico name="people" /></span>
       <div className="grow stack" style={{ gap: 8 }}>
         <div className="row between"><b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
           {!inSettings && <button type="button" className="link small" aria-label="إخفاء" onClick={() => { try { localStorage.setItem(PRE_HIDE, '1'); } catch { /* خاص */ } setHidden(true); }}>إخفاء · تجدها في «ملفي»</button>}</div>
@@ -514,7 +515,7 @@ function Milestones({ list, summary }) {
         <h2 id="ms-h" className="as-h3">معالمك</h2>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
       </div>
-      {summary.late > 0 && <div className="banner"><span className="ico">⏰</span><div className="grow">لديك {summary.late === 1 ? 'معلم متأخر' : `${summary.late} معالم متأخرة`}، أقصاها {summary.max_late} يومًا. ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
+      {summary.late > 0 && <div className="banner"><span className="ico"><Ico name="clock" /></span><div className="grow">لديك {summary.late === 1 ? 'معلم متأخر' : `${summary.late} معالم متأخرة`}، أقصاها {summary.max_late} يومًا. ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
       <div className="ms-bar" role="progressbar" aria-label="نسبة إنجاز معالمك" aria-valuetext={`${summary.done} من ${summary.total} منجزة`} aria-valuenow={summary.pct || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${summary.pct || 0}%` }} /></div>
       <ol className="ms-list">{list.map((m) => (
         <li key={m.id} className={m.status}>
@@ -615,11 +616,11 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {participant.status === 'completed' && <CertificateCard />}
       <RateExpert />
       {approved && me.group && (
-        <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
+        <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}
       {!approved && profile && (
         <div className="banner gold">
-          <span className="ico">⏳</span>
+          <span className="ico"><Ico name="hourglass" /></span>
           <div className="grow">
             <b>ماذا يحدث الآن؟</b>
             <p className="small">
@@ -670,7 +671,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 : 'يُفتح بعد اعتماد مسارك.'}</p>
               <div className="row">{approved
                 ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
-                : <span className="chip">🔒 مقفل</span>}</div>
+                : <span className="chip"><Ico name="lock" size="14" /> مقفل</span>}</div>
             </div>
             {lab?.length > 0 && (
               <div className="tool-card">
@@ -688,7 +689,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           {approved && me.milestones?.length > 0 && <Fold title="معالمك" meta={`${me.milestone_summary.done} من ${me.milestone_summary.total} منجزة${me.milestone_summary.late ? ` · ${me.milestone_summary.late} متأخرة` : ''}`}><Milestones list={me.milestones} summary={me.milestone_summary} /></Fold>}
           {approved && <HowEvaluated policy={me.final_policy} />}
           {me.final && (
-            <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
+            <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico"><Ico name="cap" /></span>
               <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}
                 {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
           )}
