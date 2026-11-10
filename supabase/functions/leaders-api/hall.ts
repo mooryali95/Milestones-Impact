@@ -17,9 +17,17 @@ const SESSION_COLS = '*';
 async function openSession(cohortId: string) {
   return (await db.from('hall_sessions').select(SESSION_COLS).eq('cohort_id', cohortId).neq('stage', 'closed').maybeSingle()).data as any;
 }
+// رفع الإصدار ذري: الكتابة مشروطة بالرقم المقروء، فتغييران متزامنان لا يأخذان الرقم نفسه (كان الثاني يكتب الرقم
+// نفسه فيبقى جهاز سأل بينهما على حالة قديمة يظنها الأحدث). من سُبق يعيد القراءة ويحاول، كما يكشفه hall-load.mjs
+const BUMP_TRIES = 12;
 async function bump(id: string, patch: Body = {}) {
-  const cur = must(await db.from('hall_sessions').select('version').eq('id', id).single()) as any;
-  return must(await db.from('hall_sessions').update({ ...patch, version: cur.version + 1 }).eq('id', id).select(SESSION_COLS).single()) as any;
+  for (let i = 0; i < BUMP_TRIES; i += 1) {
+    const cur = must(await db.from('hall_sessions').select('version').eq('id', id).single()) as any;
+    const rows = must(await db.from('hall_sessions').update({ ...patch, version: cur.version + 1 }).eq('id', id).eq('version', cur.version).select(SESSION_COLS)) as any[];
+    if (rows?.length) return rows[0];
+    await new Promise((r) => setTimeout(r, 5 + Math.random() * 20 * (i + 1)));
+  }
+  throw new Fail('القاعة مزدحمة الآن، أعد المحاولة', 409, 'hall_busy');
 }
 
 // الحالة الكاملة لطرف
@@ -94,14 +102,15 @@ export async function pick(p: any, b: Body) {
 export async function hallGate(p: any, sentenceId: string) {
   const { cohort } = await cohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
-  if (!s) return { inHall: false };
+  if (!s) return { inHall: false, sessionId: null };
   const inTopic = !!s.topic_id && !!(await db.from('katon_sentences').select('id').eq('id', sentenceId).eq('topic_id', s.topic_id).maybeSingle()).data;
-  if (!inTopic) return { inHall: false };
+  if (!inTopic) return { inHall: false, sessionId: null };
   if ((s.revealed || []).includes(sentenceId)) throw new Fail('كُشف مفتاح هذه الجملة في القاعة؛ لا تُعدَّل الإجابة بعده', 409, 'revealed');
   if (s.mode === 'live' && s.sentence_id !== sentenceId) throw new Fail('أجب عن الجملة المعروضة الآن في القاعة', 409, 'not_current');
-  await bump(s.id);
-  return { inHall: true };
+  // الإصدار يُرفع بعد حفظ الإجابة (hallAnswered) لا قبله: من سأل بين الرفع والحفظ كان يأخذ الرقم الجديد بلا الإجابة
+  return { inHall: true, sessionId: s.id as string };
 }
+export const hallAnswered = (sessionId: string) => bump(sessionId);
 
 // ── للمدير من اللوحة ولمستشار الدفعة من بوابته (التقييد بالدفعة في file.ts) ──
 export async function adminState(b: Body) {
