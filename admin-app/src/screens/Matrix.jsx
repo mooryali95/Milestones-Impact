@@ -335,7 +335,7 @@ export default function Matrix({ canWrite, tab, id }) {
       <div className="page-header">
         <div className="page-header-left">
           <div className="page-eyebrow">Impact Matrix</div>
-          <div className="page-title">مصفوفة التأثير</div>
+          <h1 className="page-title">مصفوفة التأثير</h1>
           <div className="page-title-ar">matrix.sunkvalue.com · التسجيلات وخطط الجهات وتقاريرها</div>
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}

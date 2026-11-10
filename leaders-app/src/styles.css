@@ -1515,3 +1515,12 @@ body:has(.tour) main{padding-bottom:260px}
 .name-confirm-preview { display: grid; gap: 4px; padding: 12px; border-radius: 8px; background: var(--paper, transparent); text-align: center; }
 .name-confirm-preview b { font-size: 22px; color: var(--graphite); }
 .name-confirm-preview .ltr { font-size: 17px; letter-spacing: .02em; }
+.op-search { display: flex; align-items: center; gap: 6px; flex: 1 1 200px; min-width: 0; }
+.op-search .input { min-width: 0; width: 100%; }
+@media (max-width: 640px) { .op-tools .row { flex-wrap: wrap; } .op-search { flex-basis: 100%; } }
+/* أهداف اللمس على الأجهزة اللمسية وحدها (التدقيق 2026-11-10، البند 7.15): «ثبّت التطبيق» و«فهمت» و«إخفاء» و«افتح ملفي»
+   و«عدّل إجاباتك» وأزرار «افتح…» كانت 25 إلى 37 بكسل. الحاسوب بمؤشره الدقيق لا يتغير شكله */
+@media (pointer: coarse) {
+  button.link, .btn.sm, a.btn { min-height: 44px; }
+  button.link { display: inline-flex; align-items: center; min-width: 44px; justify-content: center; }
+}

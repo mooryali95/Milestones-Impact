@@ -800,6 +800,8 @@ export function coordParticipant(p, perms) {
   const out = {
     id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status, approved: !!p.approved,
     progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at,
+    // المرحلة الجارية في رحلته كما يراها هو (8.2)، والحالة الإدارية تبقى للتصفية
+    stage: p.stage || null,
   };
   if (perms.activity) out.last_login_at = p.last_login_at || null;
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }

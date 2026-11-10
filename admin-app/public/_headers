@@ -1,4 +1,5 @@
 # لوحة الإدارة لا تُفهرس أي استجابة منها (robots.txt يمنع الزحف أصلًا)
+# وبلا Access-Control-Allow-Origin: * الذي تضيفه Cloudflare Pages افتراضيًا: لا ملف فيها يُطلب من نطاق آخر (البند 9.14)
 /*
   X-Robots-Tag: noindex, nofollow
   X-Frame-Options: DENY
@@ -7,6 +8,7 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+  ! Access-Control-Allow-Origin
 
 # الصفحة تُفحص في كل زيارة فتظهر آخر نسخة فورًا، وملفات البناء تحمل بصمة في اسمها فتُخزَّن طويلًا
 /

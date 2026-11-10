@@ -18,7 +18,8 @@ describe('coordPermissions', () => {
 describe('coordParticipant', () => {
   it('لا يخرج البريد ولا الجوال ولا الدرجات ولا أي حقل داخلي افتراضيًا', () => {
     const out = coordParticipant(p, coordPermissions({}));
-    expect(Object.keys(out).sort()).toEqual(['approved', 'created_at', 'full_name', 'id', 'job_title', 'progress', 'status'].sort());
+    // stage: المرحلة الجارية في رحلته (8.2)، من نوع الحالة المعروضة أصلًا، لا درجة فيها ولا مستوى
+    expect(Object.keys(out).sort()).toEqual(['approved', 'created_at', 'full_name', 'id', 'job_title', 'progress', 'stage', 'status'].sort());
   });
   // D18: المسار مشتق من المستويات، فلا يخرج إلا معها: صلاحية المستويات وموافقة المشارك
   it('لا مسار ولا عنوان مسار بلا موافقة المشارك ولو مُنحت صلاحية المستويات', () => {

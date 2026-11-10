@@ -11,7 +11,7 @@
 import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
-import { bootPreload, call, session, setExpiredHandler } from './api.js';
+import { bootPreload, call, session, setExpiredHandler, signOut } from './api.js';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
@@ -128,9 +128,9 @@ export default function App() {
   if (location.pathname === '/outcome') return <Shell tag="تأكيد أثر المبادرة" back={false}><Outcome /></Shell>;
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
-  if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;
+  if (location.pathname === '/x') return <Shell tag="لوحة الخبير" home="/x"><ExpertPortal /></Shell>;
   if (location.pathname === LEGAL_PATH.index || location.pathname.startsWith(`${LEGAL_PATH.index}/`)) return <Shell tag="الخصوصية والشروط"><Legal /></Shell>;
-  if (isOrgPortal()) return <Shell tag="لوحة الجهة"><OrgPortal /></Shell>;
+  if (isOrgPortal()) return <Shell tag="لوحة الجهة" home="/org"><OrgPortal /></Shell>;
   // رابط لا تعرفه المنصة: صفحة تقول ذلك وتدل على الرئيسية، بدل صفحة الدخول تحت عنوان خاطئ
   if (!PARTICIPANT_PATHS.includes(location.pathname)) return <Shell tag="صفحة غير موجودة"><NotFound /></Shell>;
   return <Participant />;
@@ -165,8 +165,10 @@ const LegalLink = () => <a className="link small" href={LEGAL_PATH.index}>الخ
 
 // الرجوع من الصفحات المستقلة (طلب الخبير، لوحة الخبير، لوحة الجهة، الوثائق، التحقق من شهادة): من جاء من داخل المنصة
 // يعود إلى حيث كان، ومن فتح الرابط مباشرة يذهب إلى رئيسيتها. بلا هذا لا مخرج من الصفحة إلا زر المتصفح.
-function BackLink() {
+// ownHome: لوحة لها رئيسيتها (الجهة والخبير): «رجوع» لمن جاء من داخل المنصة وحده، ولا «الرئيسية» إلى دخول المشارك
+function BackLink({ ownHome = false }) {
   const inside = typeof document !== 'undefined' && document.referrer.startsWith(location.origin) && history.length > 1;
+  if (ownHome && !inside) return null;
   return (
     <a className="topbar-back" href="/" onClick={(e) => { if (inside) { e.preventDefault(); history.back(); } }}>
       <span aria-hidden="true">→</span> {inside ? 'رجوع' : 'الرئيسية'}
@@ -176,15 +178,18 @@ function BackLink() {
 
 // back=false لصفحات الرمز التي تصل أصحابها بالبريد (المقيّم، والراعي، وتأكيد الأثر): ليسوا مشاركين،
 // ورئيسية المنصة صفحة دخول المشارك فلا تعنيهم
-function Shell({ tag, back = true, children }) {
+// home: البوابة التي لها رئيسيتها (لوحة الجهة /org، ولوحة الخبير /x): الشعار يعيد إليها، ولا «رجوع» يقود إلى دخول
+// المشارك، فهي ليست صفحته (التدقيق 2026-11-10، البند 8.4)
+function Shell({ tag, back = true, home = null, children }) {
   // عنوان التبويب يسمّي الصفحة: «لوحة الخبير · رحلة القادة» بدل عنوان واحد لكل الصفحات
   useEffect(() => { document.title = `${tag} · رحلة القادة`; }, [tag]);
   return (
     <>
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar"><div className="topbar-in">
-        {back ? <a className="topbar-logo" href="/" aria-label="Milestone Impact: الرئيسية"><img src={logo} alt="" /></a> : <img src={logo} alt="Milestone Impact" />}
-        <span className="tag">{tag}</span><span className="spacer" />{back && <BackLink />}
+        {home ? <a className="topbar-logo" href={home} aria-label={`Milestone Impact: ${tag}`}><img src={logo} alt="" /></a>
+          : back ? <a className="topbar-logo" href="/" aria-label="Milestone Impact: الرئيسية"><img src={logo} alt="" /></a> : <img src={logo} alt="Milestone Impact" />}
+        <span className="tag">{tag}</span><span className="spacer" />{back && <BackLink ownHome={!!home} />}
       </div></header>
       <main id="main" tabIndex={-1}>{children}</main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة. <LegalLink /></footer>
@@ -306,8 +311,7 @@ function Participant() {
   const openLab = (id = null) => { setLabOpen(id); go('lab'); };
 
   const logout = async () => {
-    await call('logout');
-    session.clear();
+    await signOut('participant');
     try { localStorage.removeItem(LOGO_KEY); } catch { /* لا شيء محفوظ */ }
     setMe(null);
     setView('home');

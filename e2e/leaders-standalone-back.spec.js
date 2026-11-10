@@ -5,13 +5,24 @@ import { test, expect } from '@playwright/test';
 const APP = 'http://localhost:4304';
 const mock = (page) => page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: false, message: 'غير متوقع' } }));
 
-for (const path of ['/expert', '/x', '/org', '/legal', '/v']) {
+for (const path of ['/expert', '/legal', '/v']) {
   test(`${path}: فتح مباشر يعرض «الرئيسية» والشعار رابطًا إليها`, async ({ page }) => {
     await mock(page);
     await page.goto(APP + path);
     const bar = page.getByRole('banner');
     await expect(bar.getByRole('link', { name: 'الرئيسية', exact: false }).last()).toHaveAttribute('href', '/');
     await expect(bar.getByRole('link', { name: /Milestone Impact/ })).toHaveAttribute('href', '/');
+  });
+}
+
+// لوحتا الجهة والخبير لهما رئيسيتهما (التدقيق 2026-11-10، البند 8.4): الشعار يعيد إليها، ولا «الرئيسية» إلى دخول المشارك
+for (const [path, home] of [['/x', '/x'], ['/org', '/org']]) {
+  test(`${path}: فتح مباشر: الشعار إلى رئيسية اللوحة نفسها، ولا رابط إلى دخول المشارك`, async ({ page }) => {
+    await mock(page);
+    await page.goto(APP + path);
+    const bar = page.getByRole('banner');
+    await expect(bar.getByRole('link', { name: /Milestone Impact/ })).toHaveAttribute('href', home);
+    await expect(bar.locator('a[href="/"]')).toHaveCount(0);
   });
 }
 
