@@ -742,3 +742,5 @@
 .sub-gate { border: 1px solid var(--line-strong); border-inline-start: 3px solid var(--gold-deep); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: .86rem; display: grid; gap: 6px; }
 .sub-gate ul { margin: 0; padding-inline-start: 18px; }
 .sub-gate small { color: var(--ink-soft); }
+.la-group-adv { display: grid; gap: 4px; font-size: .82rem; margin: 6px 0; }
+.la-group-adv select { border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 8px; font: inherit; max-width: 100%; }

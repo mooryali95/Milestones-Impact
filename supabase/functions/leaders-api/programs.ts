@@ -489,8 +489,18 @@ export async function cohortGroups(b: Body) {
       : liveRows(c.program_id).then((r) => r.stages),
   ]);
   const gOf = new Map((links.data || []).map((l: any) => [l.participant_id, l.group_id]));
+  // خبير المجموعة: جاهز حين يكون عموده مطبّقًا. الخبراء المعتمدون، وفريق الدفعة منهم أولًا في القائمة
+  const [probe, experts, team] = await Promise.all([
+    db.from('cohort_groups').select('advisor_expert_id').limit(1),
+    db.from('experts').select('id, full_name, status').in('status', ['active', 'paused']).order('full_name'),
+    db.from('cohort_experts').select('expert_id').eq('cohort_id', c.id),
+  ]);
+  const inTeam = new Set([c.advisor_expert_id, ...((team.data || []).map((t: any) => t.expert_id))].filter(Boolean));
+  const list = (experts.data || []).map((e: any) => ({ id: e.id, full_name: e.full_name, team: inTeam.has(e.id) }));
   return {
     success: true, cohort: c,
+    group_advisor_ready: !probe.error,
+    experts: [...list.filter((e: any) => e.team), ...list.filter((e: any) => !e.team)],
     stages: (live as any[]).filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort).map((s) => ({ key: s.key, title_ar: s.title_ar })),
     groups: groups.data || [],
     members: members.map((m: any) => ({ ...m, group_id: gOf.get(m.id) || null })),
@@ -504,6 +514,20 @@ export async function cohortGroupSave(a: Admin, b: Body) {
     must(await db.from('cohort_groups').delete().eq('id', b.id).eq('cohort_id', c.id));
     await audit('admin', a.email, 'group.delete', 'cohorts', c.id, null, { group: b.id });
     return { success: true };
+  }
+  // خبير المجموعة: خبير معتمد، أو لا أحد فيعود أعضاؤها لمستشار الدفعة. يُحفظ وحده بلا تغيير الاسم
+  if (isUuid(b.id) && 'advisor_expert_id' in b && !('name' in b)) {
+    const adv = b.advisor_expert_id || null;
+    if (adv && !isUuid(adv)) throw new Fail('خبير غير صالح');
+    if (adv) {
+      const { data: e } = await db.from('experts').select('status').eq('id', adv).maybeSingle();
+      if (!e || !['active', 'paused'].includes(e.status)) throw new Fail('اختر خبيرًا معتمدًا لهذه المجموعة');
+    }
+    const up = await db.from('cohort_groups').update({ advisor_expert_id: adv }).eq('id', b.id).eq('cohort_id', c.id).select('*').maybeSingle();
+    if (up.error) throw new Fail('خبير المجموعة ينتظر تحديث قاعدة البيانات', 503, 'group_advisor_not_ready');
+    if (!up.data) throw new Fail('المجموعة غير موجودة', 404);
+    await audit('admin', a.email, 'group.advisor', 'cohorts', c.id, null, { group: b.id, advisor_expert_id: adv });
+    return { success: true, group: up.data };
   }
   const name = String(b.name || '').trim().slice(0, 80);
   if (!name) throw new Fail('اسم المجموعة مطلوب');

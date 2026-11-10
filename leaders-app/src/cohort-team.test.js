@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanTeamIds, rankExperts, TEAM_MAX, teamFirst } from '../../supabase/functions/leaders-api/logic.js';
+import { advisedParticipantIds, cleanTeamIds, effectiveAdvisorId, rankExperts, TEAM_MAX, teamFirst } from '../../supabase/functions/leaders-api/logic.js';
 
 const isId = (x) => /^[a-z]\d+$/.test(x);
 describe('فريق خبراء الدفعة', () => {
@@ -25,5 +25,25 @@ describe('فريق خبراء الدفعة', () => {
     expect(cleanTeamIds(['e1', 'e1', 'bad id', 'e2'], isId)).toEqual(['e1', 'e2']);
     expect(cleanTeamIds(null, isId)).toEqual([]);
     expect(() => cleanTeamIds(Array.from({ length: TEAM_MAX + 1 }, (_, i) => `e${i}`), isId)).toThrow(String(TEAM_MAX));
+  });
+});
+
+describe('خبير المجموعة: الأخص يغلب', () => {
+  const approved = ['adv', 'g1', 'g2'];
+  it('خبير المجموعة المعتمد يغلب مستشار الدفعة، وغير المعتمد يعيده إليه', () => {
+    expect(effectiveAdvisorId({ group: 'g1', cohort: 'adv' }, approved)).toBe('g1');
+    expect(effectiveAdvisorId({ group: null, cohort: 'adv' }, approved)).toBe('adv');
+    expect(effectiveAdvisorId({ group: 'gone', cohort: 'adv' }, approved)).toBe('adv');
+    expect(effectiveAdvisorId({ group: 'gone', cohort: 'gone2' }, approved)).toBeNull();
+    expect(effectiveAdvisorId({}, approved)).toBeNull();
+  });
+  it('مستشار الدفعة لا يرى من له خبير مجموعة معتمد غيره، وخبير المجموعة يرى أعضاءها وحدهم', () => {
+    const cohort = ['p1', 'p2', 'p3', 'p4'];
+    const links = [{ participant_id: 'p1', advisor_expert_id: 'g1' }, { participant_id: 'p2', advisor_expert_id: 'g1' }, { participant_id: 'p3', advisor_expert_id: 'gone' }];
+    expect(advisedParticipantIds('adv', cohort, links, approved).sort()).toEqual(['p3', 'p4']);
+    expect(advisedParticipantIds('g1', [], links, approved).sort()).toEqual(['p1', 'p2']);
+    // مستشار الدفعة هو نفسه خبير إحدى مجموعاتها: يبقى أعضاؤها عنده
+    expect(advisedParticipantIds('adv', cohort, [{ participant_id: 'p1', advisor_expert_id: 'adv' }], approved).sort()).toEqual(cohort);
+    expect(advisedParticipantIds('adv', cohort, [], approved)).toEqual(cohort);
   });
 });

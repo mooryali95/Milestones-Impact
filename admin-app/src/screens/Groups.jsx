@@ -38,7 +38,8 @@ export default function CohortGroups({ cohort, onClose }) {
   };
   const auto = async (by) => {
     const n = Math.min(d.members.length, Math.max(1, Math.round(Number(count)) || 1));
-    if (d.groups.length && !(await confirm(`يستبدل التوزيع الآلي المجموعات الحالية وأعضاءها بـ${n} مجموعات. متابعة؟`, { danger: true }))) return;
+    const adv = d.groups.some((g) => g.advisor_expert_id) ? ' وخبراء المجموعات المعيّنون يُمسحون معها.' : '';
+    if (d.groups.length && !(await confirm(`يستبدل التوزيع الآلي المجموعات الحالية وأعضاءها بـ${n} مجموعات.${adv} متابعة؟`, { danger: true }))) return;
     run('admin.cohort-groups-auto', { count: n, by }, 'وُزِّع المشاركون؛ انقل من تشاء يدويًا');
   };
   const add = async () => {
@@ -102,6 +103,15 @@ export default function CohortGroups({ cohort, onClose }) {
                       <div className="la-row between"><b>{g.name} <small className="la-muted">({ms.length})</small></b>
                         {g.id && <span className="la-row"><button className="la-link" onClick={() => rename(g)}>تسمية</button><button className="la-link" onClick={() => remove(g)}>حذف</button></span>}</div>
                       {ms.length > 0 && <small className="la-muted">{balance(ms)}</small>}
+                      {/* خبير المجموعة: يظهر حين يقول الخادم إنه جاهز. بلا اختيار يبقى أعضاؤها مع مستشار الدفعة */}
+                      {g.id && d.group_advisor_ready && (
+                        <label className="la-group-adv"><span className="la-muted">خبير المجموعة</span>
+                          <select aria-label={`خبير ${g.name}`} value={g.advisor_expert_id || ''} disabled={busy}
+                            onChange={(e) => run('admin.cohort-group-save', { id: g.id, advisor_expert_id: e.target.value || null }, e.target.value ? 'عُيّن خبير المجموعة' : 'عاد أعضاؤها لمستشار الدفعة')}>
+                            <option value="">مستشار الدفعة</option>
+                            {(d.experts || []).map((x) => <option key={x.id} value={x.id}>{x.full_name}{x.team ? ' · من فريق الدفعة' : ''}</option>)}
+                          </select></label>
+                      )}
                       <ul className="la-reqs">{ms.map((m) => (
                         <li key={m.id}><span>{m.name} <small className="la-muted">{lvl(m)}</small></span>
                           <select aria-label={`مجموعة ${m.name}`} value={m.group_id || ''} disabled={busy} onChange={(e) => run('admin.cohort-group-assign', { participant_id: m.id, group_id: e.target.value || null })}>
