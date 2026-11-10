@@ -37,6 +37,20 @@ test('الأطوار التي لا عمل فيها مطوية على الجوا�
   await expect(folded.getByText('الملف الشخصي')).toBeVisible();
 });
 
+test('المراحل المقفلة القادمة سطر يُفتح، وبطاقة الكتيب لا تتكرر على الجوال', async ({ page }) => {
+  await open(page, { success: false, code: 'unknown_action' });
+  const later = page.locator('details.j-later');
+  await expect(later.locator('summary')).toContainText('3 مراحل قادمة');
+  await expect(later.locator('summary')).toContainText('تُفتح بعد التدريب');
+  await expect(later.getByText('الاستشارة')).toBeHidden();
+  // قائمة تحقق المرحلة الحالية باقية كاملة بلا ضغط
+  await expect(page.getByText('قائمة التحقق')).toBeVisible();
+  await later.locator('summary').click();
+  await expect(later.getByText('الاستشارة')).toBeVisible();
+  // الكتيب في شريط التنقل، فبطاقته لا تظهر في الرئيسية
+  await expect(page.locator('.j-tools')).toBeHidden();
+});
+
 test('بطاقة SUS لا تظهر قبل نشر دالتها', async ({ page }) => {
   await open(page, { success: false, message: 'إجراء غير معروف', code: 'unknown_action' });
   await expect(page.locator('.sus')).toHaveCount(0);
