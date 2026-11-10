@@ -30,7 +30,9 @@ function Dashboard({ user, onUser, onLogout }) {
   // يُقرأ العنوان لحظة التنفيذ لا من الحالة: تغيّر العنوان بين الرسم والأثر كان يعيد اللوحة إلى السياق المحفوظ
   useEffect(() => { if (!route.ctx && !parseRoute(window.location.hash).ctx) navigate({ ctx }, { replace: true }); }, [route.ctx, ctx]);
   useEffect(() => { try { sessionStorage.setItem(CTX_KEY, ctx); } catch { /* */ } }, [ctx]);
-  const setCtx = (c) => navigate({ ctx: c });
+  // السياق المفتوح نفسه لا يُعاد التنقل إليه: كان يفرغ العنوان من فلاتره، وحين تُحمَّل الشاشة الكسولة بعده تقرؤه فارغًا
+  // فتضيع فلاتر رابط مشترك أو صفحة أُعيد تحميلها (التُقط مع تقسيم الحزمة، البند 9.13)
+  const setCtx = (c) => { if (c !== ctx) navigate({ ctx: c }); };
   const pending = usePending(ctx);
   const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
   const canWrite = (user.role_id || user.role) !== 'viewer';
