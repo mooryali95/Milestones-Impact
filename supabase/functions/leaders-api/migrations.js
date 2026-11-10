@@ -100,4 +100,5 @@ export const MIGRATIONS = [
   '20261110140000_leaders_hall_attendance',
   '20261110150000_leaders_erasure_requests',
   '20261110160000_leaders_sus_responses',
+  '20261110170000_leaders_katon_impact_leadership',
 ];
