@@ -201,8 +201,7 @@ async function candidates(need: any, participantId: string, tried: string[] = []
   return teamFirst(ranked, await cohortTeam(me));
 }
 
-// فريق دفعة المشارك: مستشارها الأساسي وخبراء cohort_experts. الجدول قد لا يكون مطبّقًا بعد، فغيابه فريق فارغ
-// والعرض كما كان. خطأ القراءة لا يوقف طلب الخبير: يُعرض الترتيب العام.
+// فريق دفعة المشارك: مستشارها الأساسي وخبراء cohort_experts. خطأ القراءة لا يوقف طلب الخبير: يُعرض الترتيب العام.
 export async function cohortTeam(p: any): Promise<string[]> {
   if (!p?.id) return [];
   try {
