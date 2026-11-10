@@ -17,6 +17,18 @@ export const HALL_TEAM_TASK_AR = {
 export const HALL_STAGE_AR = { enter: 'الدخول', train: 'التدريب', split: 'التقسيم', round: 'الجولة', reveal: 'الكشف', closed: 'أُغلقت' };
 export const HALL_SPLIT_AR = { mixed: 'آلي متنوع المستويات', level: 'آلي متقارب المستوى', choose: 'يختار كل مشارك فريقه', manual: 'يدوي من الخبير' };
 export const HALL_PRESENT_SECONDS = 25;
+// مؤقت الإجابة: وقت نهايته في الخادم (hall_sessions.phase_ends_at)، والأجهزة تعدّ إليه بفرق ساعتها عن ساعة الخادم.
+// الإجابة تُقبل حتى HALL_GRACE_MS بعد النهاية (إجابة أُرسلت في الثانية الأخيرة لا تضيع)، ثم تُقفل حتى يمدّد الخبير أو يكشف.
+export const HALL_ANSWER_SECONDS = 90;
+export const HALL_ANSWER_MIN = 20;
+export const HALL_ANSWER_MAX = 600;
+export const HALL_GRACE_MS = 3000;
+export const answerSeconds = (v) => Math.min(HALL_ANSWER_MAX, Math.max(HALL_ANSWER_MIN, Math.round(Number(v)) || HALL_ANSWER_SECONDS));
+/** الثواني الباقية (صفر فما فوق) أو null حين لا مؤقت؛ now ساعة الخادم بالميلي ثانية @param {string|null|undefined} endsAt @param {number} now */
+export const secondsLeft = (endsAt, now) => (endsAt ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000)) : null);
+/** @param {string|null|undefined} endsAt @param {number} now */
+export const answersClosed = (endsAt, now) => !!endsAt && now > new Date(endsAt).getTime() + HALL_GRACE_MS;
+export const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
 // تقسيم على الفرق الأربع: القيادة أصغرها (ربع حجم غيرها تقريبًا، ولا تقل عن واحد)
 export function splitTeams(members, method = 'mixed') {
@@ -33,6 +45,72 @@ export function splitTeams(members, method = 'mixed') {
   lead.forEach((id) => { out[id] = 'lead'; });
   ['support', 'guide', 'eval'].forEach((t, i) => rest[i].forEach((id) => { out[id] = t; }));
   return out;
+}
+
+// الطاولات: داخل كل فريق طاولات مرقّمة من HALL_TABLE_SIZE إلى HALL_TABLE_MAX (التعلم القائم على الفرق: مجموعة نقاش لا تزيد على سبعة).
+// stored = { participant_id: رقم طاولته المحفوظ }. المحفوظ يبقى ما دام صاحبه في فريق طاولته؛ ومن لا طاولة له
+// (متأخر، أو نُقل إلى فريق آخر) يُلحق بأصغر طاولات فريقه ولو بلغت ثمانية (مقعد زائد خير من طاولة بفرد واحد)،
+// وتُفتح طاولة جديدة حين تتجاوز كلها الحد.
+// order: ترتيب المعرّفات عند التوزيع الأول (متنوع المستويات مثلًا)، وإلا أبجديًا فيثبت الناتج.
+export const HALL_TABLE_SIZE = 6;
+export const HALL_TABLE_MAX = 7;
+/** @param {Record<string,string>} roles @param {Record<string,number>} [stored] @param {string[]|null} [order] @returns {Record<string,number>} */
+export function assignTables(roles, stored = {}, order = null) {
+  /** @type {Record<string,number>} */
+  const out = {};
+  const tables = new Map();
+  const known = Object.keys(roles || {}).sort();
+  const rank = new Map((order || []).map((id, i) => [id, i]));
+  const ids = order ? [...known].sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9) || (a < b ? -1 : 1)) : known;
+  // فريق الطاولة المحفوظة فريق أغلب الجالسين عليها؛ فمن نُقل وحده إلى فريق آخر هو من يتركها لا زملاؤه
+  const votes = new Map();
+  const seatOf = (id) => { const no = Number((stored || {})[id]); return Number.isInteger(no) && no >= 1 ? no : null; };
+  for (const id of known) { const no = seatOf(id); if (!no) continue; const v = votes.get(no) || {}; v[roles[id]] = (v[roles[id]] || 0) + 1; votes.set(no, v); }
+  for (const [no, v] of votes) tables.set(no, { team: Object.keys(v).sort((x, y) => v[y] - v[x] || (x < y ? -1 : 1))[0], ids: [] });
+  for (const id of known) { const no = seatOf(id); if (no && tables.get(no).team === roles[id]) { tables.get(no).ids.push(id); out[id] = no; } }
+  let next = Math.max(0, ...tables.keys()) + 1;
+  for (const team of ['lead', 'support', 'guide', 'eval']) {
+    const pending = ids.filter((id) => roles[id] === team && !out[id]);
+    if (!pending.length) continue;
+    const mine = [...tables.entries()].filter(([, t]) => t.team === team).sort((a, b) => a[0] - b[0]);
+    if (!mine.length) {
+      let k = Math.max(1, Math.round(pending.length / HALL_TABLE_SIZE));
+      while (pending.length / k > HALL_TABLE_MAX) k++;
+      for (let i = 0; i < k; i++) { const t = { team, ids: [] }; tables.set(next, t); mine.push([next, t]); next++; }
+      pending.forEach((id, i) => { const [no, t] = mine[i % k]; t.ids.push(id); out[id] = no; });
+      continue;
+    }
+    for (const id of pending) {
+      let [no, t] = [...mine].sort((a, b) => a[1].ids.length - b[1].ids.length || a[0] - b[0])[0];
+      if (t.ids.length > HALL_TABLE_MAX) { t = { team, ids: [] }; no = next++; tables.set(no, t); mine.push([no, t]); }
+      t.ids.push(id); out[id] = no;
+    }
+  }
+  return out;
+}
+
+// ما يُعرض على الشاشة الكبيرة: حالة الخبير بلا ما يُحجب عن المشاركين قبل الكشف (أحكام الأفراد وتوزيعها وملاحظاتهم)
+export function publicView(view) {
+  if (!view || view.revealed) return view;
+  return {
+    ...view, distribution: null,
+    people: (view.people || []).map((p) => { const q = { ...p, choice: null, confidence: null, stances: [] }; delete q.note; return q; }),
+  };
+}
+
+// الحضور بالمشاركة لا بالدخول: يحضر من أجاب عن HALL_ATTEND_SHARE من الجولات المكشوفة على الأقل.
+// بلا جولة مكشوفة لا يُكتب حضور من القاعة (يسجّله المشرف بطريقته)، فلا يصير الدخول وحده حضورًا.
+export const HALL_ATTEND_SHARE = 0.6;
+/** @param {string[]} revealed @param {{participant_id:string, sentence_id:string}[]} answers @param {string[]} memberIds
+ *  @returns {{rounds:number, need:number, eligible:string[]}} */
+export function hallAttendance(revealed, answers, memberIds) {
+  const rounds = new Set(revealed || []);
+  const need = Math.ceil(rounds.size * HALL_ATTEND_SHARE);
+  if (!rounds.size) return { rounds: 0, need: 0, eligible: [] };
+  /** @type {Map<string, Set<string>>} */
+  const by = new Map();
+  for (const a of answers || []) { if (!rounds.has(a.sentence_id)) continue; if (!by.has(a.participant_id)) by.set(a.participant_id, new Set()); /** @type {Set<string>} */ (by.get(a.participant_id)).add(a.sentence_id); }
+  return { rounds: rounds.size, need, eligible: (memberIds || []).filter((id) => (by.get(id)?.size || 0) >= need).sort() };
 }
 
 // قائد الجولة التالي: من فريق القيادة بالتناوب، ثم من الجميع إن لم يكن في القيادة أحد
@@ -52,7 +130,8 @@ export const firstName = (n) => String(n || '').trim().split(/\s+/).find((w) => 
 
 // حالة القاعة كما يراها طرف: viewer = { kind: 'participant'|'admin', id }
 /** @param {any} args */
-export function hallView({ session, sentence, members, roles, presence, answers, points, viewer, now = Date.now() }) {
+export function hallView({ session, sentence, members, roles, tables = {}, presence, answers, points, viewer, now = Date.now() }) {
+  const seat = assignTables(roles || {}, tables);
   const revealed = !!(sentence && (session.revealed || []).includes(sentence.id));
   const isAdmin = viewer?.kind === 'admin';
   const present = new Map((presence || []).map((p) => [p.participant_id, p]));
@@ -64,7 +143,7 @@ export function hallView({ session, sentence, members, roles, presence, answers,
     const showChoice = revealed || isAdmin || m.id === viewer?.id;
     return {
       id: m.id, name: isAdmin ? m.name : firstName(m.name), level: m.level || null, title: m.title || null, org: m.org || null,
-      team: roles?.[m.id] || null,
+      team: roles?.[m.id] || null, table: (roles?.[m.id] && seat[m.id]) || null,
       present: !!pr && now - new Date(pr.last_seen).getTime() < HALL_PRESENT_SECONDS * 1000,
       joined: !!pr, hand: !!pr?.hand,
       leader: session.leader_id === m.id, persona: session.persona_id === m.id,
@@ -83,13 +162,18 @@ export function hallView({ session, sentence, members, roles, presence, answers,
     session: {
       id: session.id, mode: session.mode, stage: session.stage, round: session.round, version: session.version,
       split_method: session.split_method, persona_ar: session.persona_ar, code: isAdmin ? session.code : undefined,
+      ends_at: session.stage === 'round' && !revealed ? session.phase_ends_at || null : null,
     },
     sentence: sentence ? {
       id: sentence.id, sort: sentence.sort, question: sentence.question, text_ar: sentence.text_ar, tasks: sentence.tasks || {},
       ...(revealed ? { key: sentence.key, explain_ar: sentence.explain_ar } : {}),
     } : null,
-    revealed,
+    revealed, now: new Date(now).toISOString(),
     people, teams,
+    tables: [...new Set(people.map((p) => p.table).filter(Boolean))].sort((x, y) => x - y).map((no) => {
+      const ps = people.filter((p) => p.table === no);
+      return { no, team: ps[0].team, count: ps.length };
+    }),
     answered, total: people.length,
     // التوزيع للخبير دائمًا، وللجميع بعد الكشف فقط
     distribution: isAdmin || revealed ? sentenceDistribution([...ansBy.values()]) : null,

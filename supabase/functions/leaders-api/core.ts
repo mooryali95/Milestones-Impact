@@ -349,6 +349,22 @@ export function sessionReminderMail(name: string, when: string, expert: string |
     `${when}${expert ? ` · مع ${expert}` : ''}`, '');
 }
 
+// دعوة جلسة الورشة وتذكيراها (قبل يوم وقبل ساعة): الموعد والمكان أو الرابط، والقاعة تُفتح من التطبيق
+export const WORKSHOP_MAIL = {
+  invite: { subject: 'دعوة: جلستك التدريبية', lead: 'ندعوك إلى الجلسة التدريبية القادمة في برنامجك.', note: 'أضف الموعد إلى تقويمك من المرفق. يوم الجلسة افتح «القاعة» في التطبيق من جوالك لتعرف فريقك وطاولتك.' },
+  day: { subject: 'جلستك التدريبية غدًا', lead: 'نذكّرك بجلستك التدريبية غدًا.', note: 'أحضر جوالك مشحونًا، فالمشاركة في الجولات من تطبيقك، وبها يُحتسب حضورك.' },
+  hour: { subject: 'جلستك التدريبية بعد ساعة', lead: 'جلستك التدريبية تبدأ بعد نحو ساعة.', note: 'افتح «القاعة» في التطبيق حين تصل، وادخلها لتظهر لزملائك وللخبير.' },
+} as const;
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null) {
+  const m = WORKSHOP_MAIL[kind];
+  return shell('sessions', m.subject,
+    mailText(`${hello(name)} ${m.lead}`)
+    + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي')
+    + mailNote(m.note),
+    `${title} · ${when}`, '');
+}
+
 // دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
 export function newDeviceMail(name: string, device: string, when: string) {
   return shell('access', 'دخول جديد إلى حسابك',
@@ -452,6 +468,9 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
   { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },
   { key: 'rater', family: 'journey', label: 'طلب تقدير 360', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
+  { key: 'workshop-invite', family: 'sessions', label: 'دعوة الجلسة التدريبية', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
+  { key: 'workshop-day', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل يوم', subject: WORKSHOP_MAIL.day.subject, html: () => workshopMail('day', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
+  { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة') },
