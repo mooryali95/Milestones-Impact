@@ -109,6 +109,8 @@ export default function Leaders({ canWrite, pending }) {
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
+      {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
+      <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
         {TAB_GROUPS.map(([g, keys]) => (
           <div key={g} className="la-tab-group" role="group" aria-label={g}>
@@ -121,6 +123,7 @@ export default function Leaders({ canWrite, pending }) {
         ))}
       </nav>
       <div className="la-body">{body}</div>
+      </div>
     </div>
   );
 }
