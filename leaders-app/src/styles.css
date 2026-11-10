@@ -1226,6 +1226,11 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .hall-mini summary{cursor:pointer;color:var(--muted);font-size:.95rem;min-height:44px;display:flex;align-items:center;gap:6px}
 /* الخروج ورابط الخصوصية في كل شاشة: هدف لمس كامل على أي جهاز، لا على pointer: coarse وحده */
 button.link.small.logout, a.link.small{min-height:44px;display:inline-flex;align-items:center}
+/* الملف: الحقل الأساسي الناقص بعد محاولة الحفظ، والحقول الاختيارية المطوية في القبول */
+.input[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 3px var(--st-bad-bg)}
+.more-fields>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;color:var(--slate);font-weight:600}
+.more-fields>summary em{font-style:normal;font-weight:400;color:var(--muted);font-size:.85em}
+.more-fields[open]>summary{margin-bottom:10px}
 .ht{display:grid;gap:10px}
 .ht-sum{color:var(--muted);font-size:.9rem;margin:0}
 .ht-team{background:var(--paper,#fff);border:1px solid var(--line);border-inline-start:4px solid var(--line);border-radius:14px;padding:12px 14px}
