@@ -43,6 +43,7 @@ import * as V2 from './advisor.ts';
 import * as PR from './peer.ts';
 import * as FL from './file.ts';
 import * as SU from './sus.ts';
+import * as PV from './privacy.ts';
 
 type Body = Record<string, any>;
 
@@ -87,7 +88,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
-  'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
+  'me.privacy', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
@@ -103,6 +104,9 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'sus.submit': (p, b) => SU.submit('participant', p, b),
   'org.logo': (p) => P.orgLogo(p),
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
+  'me.privacy': (p) => PV.state(p),
+  'me.export': (p) => PV.exportData(p),
+  'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
   'pay.checkout': (p, b) => Y.checkout(p, b),
   'sponsor.request': (p, b) => R.request(p, b),
@@ -241,6 +245,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
   'admin.sus': () => SU.adminSummary(),
+  'admin.erasures': () => PV.pendingList(),
   'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),

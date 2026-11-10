@@ -365,6 +365,17 @@ export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, tit
     `${title} · ${when}`, '');
 }
 
+// طلب حذف البيانات: تأكيد لصاحب الحساب بالمهلة وطريقة السحب (privacy.ts)
+export const ERASE_MAIL_SUBJECT = 'استلمنا طلب حذف بياناتك';
+export function eraseRequestMail(name: string, days: number) {
+  return shell('access', ERASE_MAIL_SUBJECT,
+    mailText(`${hello(name)} سجّلنا طلبك حذف حسابك وبياناتك من منصة Milestone Impact.`)
+    + mailText(`ننفذه خلال ${days} يومًا على الأكثر، ويصلك تأكيد عند تنفيذه. ما يُلزمنا النظام بحفظه (سجلات الدفع) يبقى للمدة النظامية وحدها.`)
+    + mailButton(CONFIG.appUrl, 'افتح ملفي')
+    + mailNote('إن لم تطلب ذلك أو غيّرت رأيك فاسحب الطلب من صفحة ملفك في التطبيق قبل تنفيذه. بعد التنفيذ لا تُسترد البيانات.'),
+    'طلب حذف البيانات', 'وصلتك هذه الرسالة لأن طلب حذف سُجّل من حسابك.');
+}
+
 // دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
 export function newDeviceMail(name: string, device: string, when: string) {
   return shell('access', 'دخول جديد إلى حسابك',
@@ -472,6 +483,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'workshop-day', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل يوم', subject: WORKSHOP_MAIL.day.subject, html: () => workshopMail('day', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
+  { key: 'erase-request', family: 'access', label: 'تأكيد طلب حذف البيانات', subject: ERASE_MAIL_SUBJECT, html: () => eraseRequestMail('سارة', 30) },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة') },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },

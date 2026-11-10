@@ -1199,7 +1199,7 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .ms-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .ms-list li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border-inline-start: 3px solid var(--st-warn-bg); }
 .ms-list li.late { border-inline-start-color: var(--st-bad); }
-.ms-list li.done { border-inline-start-color: var(--st-ok); opacity: .75; }
+.ms-list li.done { border-inline-start-color: var(--st-ok); }   /* بلا تعتيم: التعتيم أنزل تباين التاريخ إلى 3.4 (WCAG 1.4.3) */
 .ms-list li.due_soon { border-inline-start-color: var(--st-warn); }
 .ms-when { display: grid; justify-items: end; gap: 4px; white-space: nowrap; }
 .ca-index { font-size: 1.5rem; color: var(--accent); }
