@@ -213,10 +213,10 @@ function Participant() {
   // (كان يرمي إلى شاشة الدخول صامتًا فيطلب المشارك رمزًا جديدًا بلا داعٍ)
   const boot = useCallback(async () => {
     setBootError('');
-    // رابط البريد: /verify?e=...&t=...
-    if (location.pathname === '/verify') {
-      const q = new URLSearchParams(location.search);
-      history.replaceState(null, '', '/');
+    // رابط البريد: /verify?e=...&t=... . بلا رابط كامل (فُتح يدويًا أو قُصّ) لا شيء يُتحقق منه، فيكمل كأي زيارة بلا خطأ
+    const q = location.pathname === '/verify' ? new URLSearchParams(location.search) : null;
+    if (q) history.replaceState(null, '', '/');
+    if (q?.get('e') && q.get('t')) {
       const email = q.get('e'); const link = q.get('t');
       const res = await call('auth.verify', { email, link });
       // بريد جديد: اختيار الوجهة (لبريد خبير أو منسق جهة) أو الاسم يكمل في شاشة الدخول، والرابط يبقى صالحًا حتى يُنشأ الحساب

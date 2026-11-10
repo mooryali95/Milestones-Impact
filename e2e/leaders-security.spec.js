@@ -111,6 +111,17 @@ test('رابط مستعمل بلا جلسة: رسالة تسمّي الرابط 
   await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
 });
 
+test('/verify بلا رابط كامل: شاشة الدخول بلا رسالة خطأ ولا طلب تحقق', async ({ page }) => {
+  const actions = [];
+  await page.route(/functions\/v1\/leaders-api/, (route) => { actions.push(JSON.parse(route.request().postData() || '{}').action); return route.fulfill({ json: { success: false } }); });
+  await page.addInitScript(() => localStorage.setItem('mi_leaders_welcome_seen', 'true'));
+  await page.goto(`${APP}verify`);
+  await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
+  await expect(page.locator('.alert.err')).toHaveCount(0);
+  expect(actions).not.toContain('auth.verify');
+  expect(new URL(page.url()).pathname).toBe('/');
+});
+
 test('التحقق البشري: فشل التحميل غير فشل التحقق، وزر يعيد المحاولة', async ({ page }) => {
   let mode = 'block';
   // المرة الأولى يُحجب السكربت، ثم يُحمَّل وأداته ترفض، ثم تنجح بعد إعادة المحاولة
