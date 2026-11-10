@@ -1,6 +1,6 @@
 // حراس المرحلة ي (الهندسة والاختبارات): لا خطوط خارجية، عامل خدمة ببصمة البناء، تحميل كسول،
 // فحص أنواع كل الدوال واختبارات Deno وسير التكامل في CI، وكل متغير بيئة في الدوال موثّق في docs/SECRETS.md.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DATA_ONLY, DATA_ONLY_ORDER } from '../../scripts/db/data-only.mjs';
@@ -10,15 +10,27 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 
 describe('الخطوط والعامل والتحميل', () => {
   it('لا طلب إلى Google Fonts في التطبيقين، والخطوط محلية في public/fonts', () => {
-    for (const app of ['leaders-app', 'admin-app']) {
+    // ملف الخطوط باسم بإصدار: /fonts/* مخزّن immutable سنة، فتغيير المحتوى بالاسم نفسه لا يصل من خزّنه
+    for (const [app, css] of [['leaders-app', 'fonts-s2.css'], ['admin-app', 'fonts.css']]) {
       const html = read(`${app}/index.html`);
       expect(html).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
-      expect(html).toContain('/fonts/fonts.css');
+      expect(html).toContain(`/fonts/${css}`);
       expect(read(`${app}/public/_headers`)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
       expect(readdirSync(join(root, `${app}/public/fonts`)).filter((f) => f.endsWith('.woff2')).length).toBeGreaterThanOrEqual(5);
-      expect(read(`${app}/public/fonts/fonts.css`)).toMatch(/url\(\/fonts\/NotoKufiArabic-arabic(-s\d+)?\.woff2\)/);   // تطبيق القادة يحمّل النسخة المقلّصة -s1
+      expect(read(`${app}/public/fonts/${css}`)).toMatch(/url\(\/fonts\/NotoKufiArabic-arabic(-s\d+)?\.woff2\)/);
     }
-    expect(read('leaders-app/public/fonts/fonts.css')).toMatch(/font-family: 'Amiri'/);
+    expect(read('leaders-app/public/fonts/fonts-s2.css')).toMatch(/font-family: 'Amiri'/);
+  });
+  it('تطبيق القادة: الخط العربي المقلّص s2 دون 50 ك.ب، ومحمَّل مسبقًا هو نفسه الذي يطلبه ملف الخطوط', () => {
+    const html = read('leaders-app/index.html');
+    const css = read('leaders-app/public/fonts/fonts-s2.css');
+    const pre = html.match(/rel="preload" href="(\/fonts\/NotoKufiArabic-arabic[^"]*\.woff2)"/)[1];
+    expect(pre).toBe('/fonts/NotoKufiArabic-arabic-s2.woff2');
+    expect(css).toContain(`url(${pre})`);
+    expect(css).not.toMatch(/NotoKufiArabic-arabic(-s1)?\.woff2/);
+    expect(readFileSync(join(root, 'leaders-app/public', pre)).length).toBeLessThan(50 * 1024);
+    // الملفات السابقة باقية لمن يحمل صفحة قديمة (أسماؤها مخزّنة سنة)
+    for (const f of ['fonts.css', 'NotoKufiArabic-arabic.woff2', 'NotoKufiArabic-arabic-s1.woff2']) expect(existsSync(join(root, 'leaders-app/public/fonts', f)), f).toBe(true);
   });
   it('عامل الخدمة يسمّي مخزنه ببصمة البناء، والتسجيل يمررها، والصفحات لا تُخزَّن', () => {
     expect(read('leaders-app/public/sw.js')).toMatch(/searchParams\.get\('v'\)/);
