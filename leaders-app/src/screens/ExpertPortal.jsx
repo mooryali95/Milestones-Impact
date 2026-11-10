@@ -366,6 +366,10 @@ function Dashboard({ onOut }) {
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
       <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
+      {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
+      <AdvisorReviews />
+      <PeerQueue say={setMsg} />
+
       <div className="xpp-cols">
         <MyParticipants onOpen={setView} />
         <section className="card stack">
@@ -375,9 +379,6 @@ function Dashboard({ onOut }) {
           )) : <p className="muted small">لا جلسات قادمة.</p>}
         </section>
       </div>
-
-      <AdvisorReviews />
-      <PeerQueue say={setMsg} />
 
       {toRate.length > 0 && (
         <section className="card stack">

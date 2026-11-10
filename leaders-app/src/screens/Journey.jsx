@@ -491,11 +491,24 @@ const WORK_AR = { shared: 'جماعي مع دفعتك', individual: 'فردي', 
 const MS_CHIP = { done: 'ok', late: 'bad', due_soon: 'gold', on_time: '', unscheduled: '' };
 const MS_AR = { done: 'منجز', late: 'متأخر', due_soon: 'يستحق قريبًا', on_time: 'في الموعد', unscheduled: 'بلا موعد بعد' };
 const msDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('ar', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+// على عمود واحد (الجوال والتابلت) تُطوى الأقسام الثانوية في سطر بعنوانها ورقمها، فتبقى «خطوتك التالية» ثم المراحل
+// في أول شاشتين. على الحاسب (عمودان) تبقى مفتوحة بلا سطر الطي (styles.css: .j-fold). الحالة لا تُحفظ: راحة عرض.
+const NARROW = '(max-width: 1119px)';
+function Fold({ title, meta, children }) {
+  const [open, setOpen] = useState(() => !(typeof window !== 'undefined' && window.matchMedia?.(NARROW).matches));
+  return (
+    <details className="j-fold" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary><b>{title}</b>{meta && <span className="small muted">{meta}</span>}</summary>
+      {children}
+    </details>
+  );
+}
+
 function Milestones({ list, summary }) {
   if (!list?.length) return null;
   return (
     <section className="card stack ms-card" data-tour="milestones" aria-labelledby="ms-h">
-      <div className="row between">
+      <div className="row between fold-h">
         <h2 id="ms-h" className="as-h3">معالمك</h2>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
       </div>
@@ -520,7 +533,7 @@ function Continuous({ c }) {
   if (!c || c.index == null) return null;
   return (
     <section className="card stack" data-tour="continuous" aria-labelledby="ca-h">
-      <div className="row between">
+      <div className="row between fold-h">
         <h2 id="ca-h" className="as-h3">تقدمك في التقييم المستمر</h2>
         <b className="ca-index">{c.index}٪</b>
       </div>
@@ -632,7 +645,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
                   <b>{next.item.title_ar}</b>
                   <span className="small muted">{next.stage.title_ar}</span>
-                  <div className="row"><button className="btn sm" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
+                  <div className="row"><button className="btn" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
                 </div>
               )}
               {upcoming && !upcoming.open && <NextSession session={upcoming} onHall={onHall} />}
@@ -670,25 +683,25 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
         <div className="j-main" data-tour="stages">
           {/* تحت «خطوتك التالية» لا فوقها: الفعل التالي أول ما يراه المشارك، ثم مواعيده وتقدمه */}
-          {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
+          {approved && me.milestones?.length > 0 && <Fold title="معالمك" meta={`${me.milestone_summary.done} من ${me.milestone_summary.total} منجزة${me.milestone_summary.late ? ` · ${me.milestone_summary.late} متأخرة` : ''}`}><Milestones list={me.milestones} summary={me.milestone_summary} /></Fold>}
           {approved && <HowEvaluated policy={me.final_policy} />}
           {me.final && (
             <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
               <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}
                 {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
           )}
-          {approved && <Continuous c={me.continuous} />}
+          {approved && me.continuous?.index != null && <Fold title="تقدمك في التقييم المستمر" meta={`${me.continuous.index}٪`}><Continuous c={me.continuous} /></Fold>}
           {approved && <PeerRequests />}
           {approved && <ChooseExpert />}
 
           {profile && (
-            <>
-              <div className="section-title">
+            <Fold title={profile.track?.title ? 'مسارك' : 'نتيجتك'} meta={profile.track?.title || 'حصيلة قياسك في الأطر الثلاثة'}>
+              <div className="section-title fold-h">
                 <h2>{profile.track?.title ? 'مسارك' : 'نتيجتك'}</h2>
                 <span className="small muted">حصيلة قياسك في الأطر الثلاثة</span>
               </div>
               {profile.track?.title ? <TrackCard profile={profile} cohort={me.cohort} /> : <Competency profile={profile} />}
-            </>
+            </Fold>
           )}
 
           <div className="section-title">

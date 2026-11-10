@@ -244,6 +244,12 @@ for (let r = 0; r < ROUNDS; r++) {
   await settle();
   consistent(`الجولة ${r + 1} بعد الكشف`, { hands: 0 });
   ok(devices.every((d) => d.view?.revealed === true && d.view?.sentence?.key != null), `الجولة ${r + 1}: كل جهاز يرى المفتاح بعد الكشف`);
+  // قائمة الجمل تُقرأ مرة وتُشارك بين السائلين (sharedState): نص الجمل القادمة للخبير وحده، ولا يصل أي مشارك
+  if (r === 0) {
+    const leaked = devices.filter((d) => (d.view?.sentences || []).some((x) => 'text_ar' in x));
+    ok(devices.every((d) => (d.view?.sentences || []).length > 0) && !leaked.length, 'قائمة الجمل عند المشاركين بلا نصوص الجمل القادمة', `${leaked.length} جهازًا وصله نص`);
+    ok((reveal.sentences || []).length > 0 && (reveal.sentences || []).every((x) => typeof x.text_ar === 'string'), 'قائمة الجمل عند الخبير بنصوصها', JSON.stringify(reveal.sentences || []).slice(0, 120));
+  }
 }
 
 // الطاولات ثبتت طوال الجولات
