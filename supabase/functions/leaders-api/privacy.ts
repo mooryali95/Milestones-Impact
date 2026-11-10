@@ -77,6 +77,7 @@ export async function eraseRequest(p: any, b: Body) {
   // التأكيد بكتابة البريد: الحذف لا يُسترد
   if (String(b.confirm_email || '').trim().toLowerCase() !== String(p.email).toLowerCase()) throw new Fail('اكتب بريدك كما هو للتأكيد', 400, 'confirm');
   const row = must(await db.from('erasure_requests').insert({ participant_id: p.id, reason: cleanReason(b.reason) }).select('id, status, reason, created_at').single(), 'تعذّر تسجيل الطلب');
+  if (!row) throw new Fail('تعذّر تسجيل الطلب', 500, 'db_error');
   await audit('participant', p.id, 'participant.erase-request', 'participants', p.id, null, { request: row.id });
   const view = eraseView(row)!;
   // المالك يُبلَّغ فورًا، والمشارك يصله تأكيد بالمهلة وطريقة السحب. تعذّر البريد لا يُسقط الطلب المسجَّل
