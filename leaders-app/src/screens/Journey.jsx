@@ -504,6 +504,8 @@ function Fold({ title, meta, children }) {
   );
 }
 
+const PhaseOpen = ({ children }) => children;
+
 function Milestones({ list, summary }) {
   if (!list?.length) return null;
   return (
@@ -691,7 +693,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
           )}
           {approved && me.continuous?.index != null && <Fold title="تقدمك في التقييم المستمر" meta={`${me.continuous.index}٪`}><Continuous c={me.continuous} /></Fold>}
-          {approved && <PeerRequests />}
+          {approved && <PeerRequests compact />}
           {approved && <ChooseExpert />}
 
           {profile && (
@@ -712,9 +714,13 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
           if (!stages.length) return null;
           const doneHere = stages.filter((s) => s.status === 'done').length;
+          // على الشاشات الضيقة يبقى الطور الذي فيه عملك مفتوحًا، والبقية عناوين تُفتح: الرئيسية شاشتان لا خمس
+          const here = stages.some((s) => s.status === 'active' || s.key === next?.stage.key || expanded.has(s.key));
+          const Wrap = here ? PhaseOpen : Fold;
           return (
-            <div className="phase" key={ph.key}>
-              <div className="phase-head">
+            <Wrap key={ph.key} title={`${pi + 1}. ${ph.title}`} meta={`${doneHere} من ${stages.length}`}>
+            <div className="phase">
+              <div className={`phase-head ${here ? '' : 'fold-h'}`}>
                 <span className="phase-no">{pi + 1}</span>
                 <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
                 <span className="small muted">{doneHere} من {stages.length}</span>
@@ -729,6 +735,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 })}
               </div>
             </div>
+            </Wrap>
           );
         })}
 
