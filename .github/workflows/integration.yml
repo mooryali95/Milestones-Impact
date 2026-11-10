@@ -62,6 +62,7 @@ jobs:
 
       # القاعة تحت الحمل: 50 جهازًا افتراضيًا في جلسة كاملة بطلبات التطبيق نفسها، وتفشل إن ضاع رفع إصدار
       # أو بقي جهاز على حالة قديمة أو فشل طلب (scripts/integration/hall-load.mjs)
+      # ومعه على القاعدة الحقيقية: الطاولات المحفوظة وثباتها، ومؤقت الخادم وقفل الإجابة بعده، وكتابة الحضور عند الإغلاق
       - name: Hall under load (50 devices)
         run: |
           eval "$(supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY)=' || true)"

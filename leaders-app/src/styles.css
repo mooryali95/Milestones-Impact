@@ -1423,3 +1423,5 @@ body:has(.tour) main{padding-bottom:260px}
 .j-session.live { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
 
 .ht-t { color: var(--muted); font-size: 12px; }
+
+.xpp-find .input { flex: 1 1 200px; min-width: 0; min-height: 44px; }

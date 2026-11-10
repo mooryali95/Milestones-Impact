@@ -33,8 +33,10 @@ export const setExpiredHandler = (fn) => { onExpired = fn; };
 const BUSY = { success: false, message: 'الخادم مشغول لحظيًا، حاول بعد ثوانٍ', code: 'busy' };
 export async function parse(r) {
   const body = await r.json().catch(() => null);
-  if (body && typeof body === 'object') return 'success' in body || !BUSY_STATUS.includes(r.status) ? body : BUSY;
-  if (BUSY_STATUS.includes(r.status)) return BUSY;
+  // الدالة ترد دائمًا بحقل success. رد 5xx بلا هذا الحقل ليس منها بل من البوابة أو وقت التشغيل (500 عابر تحت الحمل،
+  // كما كشفه اختبار حمل القاعة): يُعامل «الخادم مشغول» برسالته العربية ورمزه، لا برسالة البوابة الإنجليزية بلا رمز
+  if (body && typeof body === 'object') return 'success' in body || r.status < 500 ? body : BUSY;
+  if (r.status >= 500) return BUSY;
   throw new Error(`bad response ${r.status}`);
 }
 

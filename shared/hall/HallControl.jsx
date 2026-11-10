@@ -141,7 +141,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
                 <h4>الجملة</h4>
                 <select className="input" aria-label="الجملة المعروضة" value={v.sentence?.id || ''} onChange={(e) => act('step', { session_id: sid, sentence_id: e.target.value, stage: 'round' })} disabled={busy || !v.sentences?.length}>
                   <option value="">اختر الجملة</option>
-                  {(v.sentences || []).map((x) => <option key={x.id} value={x.id}>{x.sort}. {Q_AR[x.question]}</option>)}
+                  {(v.sentences || []).map((x) => <option key={x.id} value={x.id}>{x.sort}. {Q_AR[x.question]}{x.text_ar ? ` · ${x.text_ar.length > 60 ? `${x.text_ar.slice(0, 60)}…` : x.text_ar}` : ''}</option>)}
                 </select>
                 <div className={u.row}>
                   <button className={u.btn} disabled={busy || !v.sentence || v.revealed} onClick={() => act('step', { session_id: sid, stage: 'reveal' })}>اكشف المفتاح</button>

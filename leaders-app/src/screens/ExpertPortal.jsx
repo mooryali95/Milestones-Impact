@@ -183,25 +183,47 @@ function AdvisorReviews() {
 }
 
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
+const MINE_PAGE = 12;
 function MyParticipants({ onOpen }) {
   const [d, setD] = useState(null);
   const load = () => xpCall('xp.participants').then(setD);
   useEffect(() => { load(); }, []);
   const decide = async (b) => { const r = await xpCall('xp.rater-confirm', b); if (r.success) load(); return r; };
+  // خمسون مشاركًا في القائمة: من ينتظرك أولًا ثم المتأخر ثم بالاسم، وبحث وتصفية، وعرض مختصر يُوسَّع
+  const [q, setQ] = useState('');
+  const [onlyNeeds, setOnlyNeeds] = useState(false);
+  const [all, setAll] = useState(false);
+  const sorted = [...(d?.items || [])].sort((x, y) => (y.needs || 0) - (x.needs || 0) || (y.late || 0) - (x.late || 0) || String(x.name).localeCompare(String(y.name), 'ar'));
+  const waiting = sorted.filter((x) => x.needs > 0).length;
+  const term = q.trim();
+  const rows = sorted.filter((x) => (!onlyNeeds || x.needs > 0) && (!term || String(x.name).includes(term) || String(x.org || '').includes(term)));
+  const shown = all || term || onlyNeeds ? rows : rows.slice(0, MINE_PAGE);
   return (
     <>
     <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
     <section className="card stack" aria-labelledby="xp-mine">
       <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
-        : d.items.map((x) => (
+        : (
+          <>
+            {d.items.length > MINE_PAGE && (
+              <div className="row wrap xpp-find">
+                <input className="input" type="search" aria-label="ابحث في مشاركيك" placeholder="ابحث بالاسم أو الجهة" value={q} onChange={(e) => setQ(e.target.value)} />
+                <button className={`btn sm${onlyNeeds ? '' : ' ghost'}`} aria-pressed={onlyNeeds} onClick={() => setOnlyNeeds(!onlyNeeds)}>بانتظارك {waiting}</button>
+              </div>
+            )}
+            {!rows.length && <p className="muted small">لا أحد بهذا البحث.</p>}
+            {shown.map((x) => (
           <div key={x.id} className="xpp-person">
             <div className="row between"><b>{x.name}</b>
               <span className="row">{x.needs > 0 && <span className="chip warn">{x.needs} بانتظارك</span>}{x.late > 0 && <span className="chip bad">{x.late} معلم متأخر</span>}
                 <button className="btn ghost sm" onClick={() => onOpen(x.id)}>افتح الملف</button></span></div>
             <small className="muted">{[x.cohort ? `دفعة ${x.cohort}` : null, x.advisor ? 'مستشارها' : x.role_ar, x.level_ar ? `${x.level_ar}${x.approved ? '' : ' (مبدئي)'}` : 'بلا قياس بعد', x.stage ? `المرحلة: ${x.stage}` : null, `${x.progress}٪`, x.continuous != null ? `المستمر ${x.continuous}٪` : null].filter(Boolean).join(' · ')}</small>
           </div>
-        ))}
+            ))}
+            {shown.length < rows.length && <button className="btn ghost sm" onClick={() => setAll(true)}>اعرض الكل ({rows.length})</button>}
+          </>
+        )}
     </section>
     </>
   );
