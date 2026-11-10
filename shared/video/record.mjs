@@ -209,7 +209,7 @@ async function participantFlow() {
       await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
       await click(page.getByRole('button', { name: 'متابعة' }));
       await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
-      await cue('رمزها', 'ترشّحه');
+      await cue('رشّحتك', 'رمزها', 'ترشّحه');
       const sponsor = page.getByLabel(/رمز الجهة الراعية/);
       if (await sponsor.isVisible().catch(() => false)) await type(sponsor, 'HTR-2026');
       await click(page.getByRole('button', { name: 'أرسل الرمز' }));
@@ -224,12 +224,12 @@ async function participantFlow() {
     },
     profile: async (i) => {
       await beginLine(i);
-      await cue('تُعرّفنا', 'المسمى');
+      await cue('مسمّاك', 'تُعرّفنا', 'المسمى');
       await put(page.getByLabel(/رقم الجوال/), '0551234567');
       await type(page.getByLabel(/المسمى الوظيفي/), 'مديرة إدارة المشاريع');
       await put(page.getByLabel(/جهة العمل/), 'هيئة التحوّل الرقمي');
       await put(page.getByLabel(/سنوات الخبرة/), '9');
-      await cue('ونطاق');
+      await cue('تقوده', 'ونطاق');
       const scope = page.getByLabel(/نطاق ما تقوده الآن/);
       if (await scope.isVisible().catch(() => false)) { await moveTo(scope); await scope.selectOption({ index: 2 }).catch(() => {}); await sleep(400); }
       await cursorHide();
@@ -242,8 +242,8 @@ async function participantFlow() {
     assessment: async (i) => {
       await page.locator('[data-tour="assessment"] .alert.info').first().evaluate((el) => { el.textContent = '⏱ بلا حد زمني. تُحفظ إجاباتك أولًا بأول.'; }).catch(() => {});
       await beginLine(i);
-      await cue('زمني'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(500);
-      await cue('وتُحفظ', 'ويُحفظ'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(400);
+      await cue('عدّاد', 'زمني'); await click(page.getByRole('button', { name: 'ابدأ' })); await sleep(500);
+      await cue('محفوظ', 'وتُحفظ', 'ويُحفظ'); await click(page.getByRole('radio', { name: /غالبًا/ }).first()); await sleep(400);
       for (const pick of [/تغيّر سلوك المستفيدين/, /دائمًا/]) {
         const next = page.getByRole('button', { name: /واصل إلى|التالي/ }).first();
         if (await next.isVisible().catch(() => false)) await click(next);
@@ -268,7 +268,7 @@ async function participantFlow() {
     handbook: async (i) => {
       await nav('nav-handbook', 'handbook-toc');
       await beginLine(i);
-      await cue('وتختم', 'يقرأ');
+      await cue('تقرأ', 'وتختم', 'يقرأ');
       const ch = page.locator('[data-tour="handbook-toc"] button.toc-ch').nth(1);
       if (await ch.isVisible().catch(() => false)) { await click(ch); await sleep(700); await cursorHide(); }
       await end();
@@ -278,7 +278,7 @@ async function participantFlow() {
     peer: async (i) => {
       await nav('nav-home', 'peer');
       await beginLine(i);
-      await cue('توجيهًا', 'يطرحه');
+      await cue('اطرحه', 'توجيهًا', 'يطرحه');
       await click(page.locator('[data-tour="peer"]').getByRole('button', { name: 'اطلب توجيهًا' }));
       await type(page.locator('[data-tour="peer"] textarea').first(), 'ما الفرق العملي بين معلم القيمة ومعلم الإنجاز في برنامج رقمنة الخدمات؟');
       await cue('احتجت', 'يجيب');

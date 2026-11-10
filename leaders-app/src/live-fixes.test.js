@@ -1,9 +1,9 @@
 // مرحلة الإصلاحات العاجلة (تقييم النضج 2026-11-06 §5): حراس تمنع رجوع العيوب الحية الاثني عشر.
 // كل حارس يقرأ المصدر الواحد للمعلومة ويتحقق أن ما يُعرض مشتق منه، لا نسخة ثانية منه.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PARTICIPANT_VIDEO, VIDEO } from '../../shared/video/scenes.js';
+import { PARTICIPANT_VIDEO, PROGRAM_PAGE_VIDEO, VIDEO } from '../../shared/video/scenes.js';
 import { AUTO_CHECKS } from '../../supabase/functions/leaders-api/logic.js';
 import { assessmentMinutes, onboardingStep, ONBOARDING_STEPS, stepTitle } from './Onboarding.jsx';
 import { TABS, tabFromSearch } from './deeplink.js';
@@ -41,9 +41,14 @@ describe('صفحة البرنامج: الفيديو بغلافه وترجمته�
   it('الفيديو من مصدره الواحد: الاسم والمدة من scenes.js، ويُطلب بـCORS ليحمّل ملف الترجمة', () => {
     const video = page.match(/<video[^>]*>[\s\S]*?<\/video>/)[0];
     expect(video).toContain('crossorigin="anonymous"');
-    // صفحة البرنامج تعرض فيديو المشارك نفسه الذي في التطبيق
-    for (const ext of ['jpg', 'webm', 'mp4', 'vtt']) expect(video).toContain(`${leadersOrigin}/media/${PARTICIPANT_VIDEO.file}.${ext}`);
-    expect(page.match(/<figcaption>([^<]+)<\/figcaption>/)[1]).toContain(PARTICIPANT_VIDEO.duration_ar);
+    // صفحة البرنامج تعرض فيديو المشارك من منصة القادة: الحالي، أو المنشور قبله أثناء الانتقال (PROGRAM_PAGE_VIDEO)،
+    // وملفاتها موجودة في المبني المودع فلا تطلب الصفحة اسمًا لم يُنشر
+    const v = PROGRAM_PAGE_VIDEO;
+    for (const ext of ['jpg', 'webm', 'mp4', 'vtt']) {
+      expect(video).toContain(`${leadersOrigin}/media/${v.file}.${ext}`);
+      expect(existsSync(join(root, `leaders/media/${v.file}.${ext}`)), `${v.file}.${ext}`).toBe(true);
+    }
+    expect(page.match(/<figcaption>([^<]+)<\/figcaption>/)[1]).toContain(v.duration_ar);
   });
 
   it('سياسة الموقع تسمح بالغلاف والوسائط من منصة القادة، ومنصة القادة تسمح بقراءة ملفات الوسائط العامة من أي نطاق للموقع', () => {
