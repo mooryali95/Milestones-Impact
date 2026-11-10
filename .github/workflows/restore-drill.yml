@@ -29,7 +29,7 @@ jobs:
         id: gate
         run: |
           if [ -z "$R2_BUCKET" ]; then echo "::notice::R2 is not configured; nothing to check."; echo "skip=true" >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.skip != 'true'
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.skip != 'true'
@@ -67,7 +67,7 @@ jobs:
             echo "::notice::Backups use the public key (or no passphrase is set); the full drill runs on the owner's machine (scripts/ops/restore-drill.sh)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.skip != 'true'
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.skip != 'true'
