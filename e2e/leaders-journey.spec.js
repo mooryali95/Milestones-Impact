@@ -34,8 +34,11 @@ function server() {
   const calls = [];
   const reply = (b) => {
     switch (b.action) {
-      case 'auth.start': return b.full_name ? { success: true, sent: true } : { success: true, needs_name: true };
-      case 'auth.verify': return b.code === '246810' ? { token: 'tok-journey-000000000000000000', ...me() } : { success: false, message: 'الرمز غير صحيح' };
+      case 'auth.start': return { success: true, sent: true };
+      // بريد جديد: الرمز الصحيح بلا اسم يطلب الاسم، ومعه يُنشأ الحساب
+      case 'auth.verify':
+        if (b.code !== '246810') return { success: false, message: 'الرمز غير صحيح' };
+        return b.full_name ? { token: 'tok-journey-000000000000000000', ...me() } : { success: false, code: 'needs_name', needs_name: true, message: 'أكمل اسمك' };
       case 'me': return me();
       case 'profile.save': s.profileDone = true; return me();
       case 'assessment.get': return {
@@ -94,14 +97,15 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   const srv = await mount(page);
   await page.goto(APP);
 
-  // التسجيل: بريد جديد يطلب الاسم، ثم الرمز
+  // التسجيل: البريد ثم الرمز، والاسم بعد إثبات ملكية البريد
   await page.getByLabel('البريد الإلكتروني').fill('sara@x.sa');
   await page.getByRole('button', { name: 'متابعة' }).click();
-  await page.getByLabel('الاسم الكامل').fill('سارة عبدالله الأحمد');
-  await page.getByRole('button', { name: 'أرسل الرمز' }).click();
   await page.getByLabel('رمز التحقق').fill('000000');
   await expect(page.getByText('الرمز غير صحيح')).toBeVisible();
   await page.getByLabel('رمز التحقق').fill('246810');
+  await expect(page.getByText('تحقّقنا من بريدك')).toBeVisible();
+  await page.getByLabel('الاسم الكامل').fill('سارة عبدالله الأحمد');
+  await page.getByRole('button', { name: 'أنشئ حسابي' }).click();
 
   // الملف: الزر مفعّل دائمًا، والحفظ الناقص يسمّي الحقول الناقصة ويذهب إلى أولها. والاختياري مطوي في القبول
   const save = page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' });
@@ -135,8 +139,10 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByRole('button', { name: 'افتح كتيبي' })).toHaveCount(0);
 
   const sent = (a) => srv.calls.filter((c) => c.action === a);
-  expect(sent('auth.start').at(-1)).toMatchObject({ email: 'sara@x.sa', full_name: 'سارة عبدالله الأحمد' });
-  expect(sent('auth.verify')).toHaveLength(2);
+  expect(sent('auth.start').at(-1)).toMatchObject({ email: 'sara@x.sa' });
+  expect(sent('auth.start').at(-1)).not.toHaveProperty('full_name');
+  expect(sent('auth.verify')).toHaveLength(3);
+  expect(sent('auth.verify').at(-1)).toMatchObject({ email: 'sara@x.sa', code: '246810', confirm_new: true, full_name: 'سارة عبدالله الأحمد' });
   expect(sent('profile.save')[0].fields).toMatchObject({ phone: '0500000000', job_title: 'مديرة مشاريع', organization_name: 'جهة الاختبار' });
   expect(sent('assessment.answer').map((c) => [c.question_id, c.k])).toEqual([['q1', 3], ['q2', 1]]);
   expect(sent('assessment.submit')).toHaveLength(1);

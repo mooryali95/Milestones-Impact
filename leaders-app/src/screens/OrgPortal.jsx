@@ -11,6 +11,7 @@ import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
+import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
 import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -34,7 +35,7 @@ function SignIn({ onIn, initialError }) {
     setBusy(true); setError('');
     const r = await coordCall('coord.auth-start', { email, captcha });
     setBusy(false);
-    if (r.code === 'captcha') { setCaptchaKey(r.site_key || ''); return setError(r.site_key ? '' : r.message); }
+    if (r.code === 'captcha') { const g = captchaGate(r, captcha); setCaptchaKey(g.box); return setError(g.error); }
     setCaptchaKey(null);
     if (!r.success) return setError(r.message);
     setStep('code');
@@ -60,7 +61,7 @@ function SignIn({ onIn, initialError }) {
               <input className="input ltr" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.sa" />
             </label>
             {error && <div className="alert err">{error}</div>}
-            {captchaKey && <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />}
+            {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => start(null, t)} />}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
             <OtherDoors here="org" />
           </form>

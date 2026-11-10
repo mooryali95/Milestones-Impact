@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
+  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
@@ -212,9 +212,10 @@ export async function policyNotify() {
 }
 
 // ── 1. بدء الدخول أو التسجيل ──
-// بريد واحد يحمل رابطًا ورمزًا. لبريد جديد نطلب الاسم أولًا (needs_name)، لكن بعد حدود الشبكة
-// والتحقق البشري لا قبلهما: الرد الذي يفرّق بين بريد مسجل وجديد لا يصل إلا من اجتاز التحدي (الملحق 1، M1)،
-// فلا يُستعلم آليًا عمّن سُجّل في البرنامج. والتصريح (pass) يحمل التحقق إلى خطوة الاسم فلا يُحل التحدي مرتين.
+// بريد واحد يحمل رابطًا ورمزًا، والرد واحد لكل بريد مسجلًا كان أو جديدًا: { success, sent }، كبوابتي الخبير والجهة.
+// الاسم والجوال ورمز الجهة تُطلب بعد إثبات ملكية البريد (needs_name في authVerify)، فلا يستطيع أحد أن يعرف
+// من صفحة الدخول إن كان بريد ما مسجلًا في البرنامج (التدقيق 2026-11-10). ما جاء به الزائر من رابط جهة أو حملة
+// يُحفظ مع التحدي فلا يضيع إن فُتح رابط البريد على جهاز آخر.
 export async function authStart(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
@@ -227,19 +228,12 @@ export async function authStart(b: Body, ctx: Ctx) {
   await humanGate(b, ctx, email);
 
   const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
-  let pending: Body | null = null;
-  if (!existing) {
-    const name = String(b.full_name || '').trim();
-    if (name.length < 3) return { success: true, needs_name: true, pass: await issuePass(email) };
-    const phone = b.phone ? normalizePhone(b.phone) : null;
-    if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
-    // الجهة الراعية: رمز يكتبه المشارك، أو رمز رابط جهة، أو نطاق بريده (يُثبَّت بعد توثيق البريد). جهة العمل يكتبها في ملفه لاحقًا
-    const r = await sponsorFor(b, ctx.ip || email, email);
-    pending = {
-      full_name: name.slice(0, 120), phone, campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
-      ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
-    };
-  }
+  // التسجيل الجديد: آثار الوصول وحدها الآن، والملف بعد التحقق. اسم يرسله عميل قديم (قبل هذا التغيير) يُحفظ كما كان
+  const pending: Body | null = existing ? null : {
+    campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
+    ...(String(b.org || '').trim() ? { org: String(b.org).trim().slice(0, 60) } : {}),
+    ...(String(b.full_name || '').trim().length >= 3 ? { full_name: String(b.full_name).trim().slice(0, 120) } : {}),
+  };
 
   await mailGuard(b, ctx, existing ? 'login' : 'register', { checked: true });
   const code = randomCode();
@@ -254,13 +248,32 @@ export async function authStart(b: Body, ctx: Ctx) {
   return { success: true, sent: true };
 }
 
+// ملف التسجيل الجديد يُتحقق منه قبل البحث عن التحدي، فلا يستهلك خطأ في الاسم أو الجوال محاولة من محاولات الرمز
+function newcomerFields(b: Body) {
+  if (b.full_name === undefined) return null;
+  const name = String(b.full_name || '').trim();
+  if (name.length < 3) throw new Fail('اكتب اسمك الكامل (3 أحرف على الأقل).', 400, 'name');
+  const phone = b.phone ? normalizePhone(b.phone) : null;
+  if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.', 400, 'phone');
+  return { full_name: name.slice(0, 120), phone };
+}
+
 // ── 2. التحقق بالرمز أو الرابط ──
+// رسائل الرابط تسمّي حاله بدقة (مستعمل، أو منتهٍ، أو لبريد آخر، أو غير معروف) بدل «منتهٍ» لكل شيء.
+// التسجيل الجديد يمر هنا مرتين: الأولى تثبت ملكية البريد فيُطلب الاسم (needs_name) والتحدي باقٍ صالحًا،
+// والثانية تحمل الاسم فيُستهلك التحدي ويُنشأ الحساب. needs_name ردّ غير ناجح عمدًا: عميل قديم لا يعرفه
+// يعرض رسالته بدل أن يعدّه دخولًا بلا جلسة.
 export async function authVerify(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
+  const fields = newcomerFields(b);
   let ch: any = null;
   if (b.link) {
     const { data } = await db.from('email_challenges').select('*').eq('link_token_hash', await hash(String(b.link))).maybeSingle();
-    if (data && data.email === email) ch = data;
+    if (!data) throw new Fail('رابط الدخول غير صالح، أو استُبدل برابط أحدث. افتح آخر رسالة وصلتك، أو اطلب رمزًا جديدًا.', 400, 'link_unknown');
+    if (data.email !== email) throw new Fail('هذا الرابط لبريد آخر. افتحه من الرسالة نفسها كما وصلت دون تعديل، أو اطلب رمزًا جديدًا.', 400, 'link_mismatch');
+    if (data.consumed_at) throw new Fail('استُخدم رابط الدخول هذا من قبل، فكل رابط لمرة واحدة. اطلب رمزًا جديدًا إن احتجت الدخول.', 400, 'used');
+    if (new Date(data.expires_at) < new Date()) throw new Fail(`انتهت صلاحية الرابط (${CONFIG.codeMinutes} دقيقة). اطلب رمزًا جديدًا.`, 400, 'expired');
+    ch = data;
   } else {
     const { data } = await db.from('email_challenges').select('*').eq('email', email).is('consumed_at', null)
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -274,26 +287,39 @@ export async function authVerify(b: Body, ctx: Ctx) {
     }
   }
   if (!ch || ch.consumed_at || new Date(ch.expires_at) < new Date()) {
-    throw new Fail('الرابط أو الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
+    throw new Fail('الرمز منتهٍ أو مستخدم، اطلب رمزًا جديدًا', 400, 'expired');
   }
-  // تسجيل جديد لبريد خبير أو منسق جهة: يختار صاحبه وجهته قبل إنشاء حساب مشارك (الرمز يبقى صالحًا لإعادة الطلب)
-  if (ch.purpose === 'register' && b.confirm_new !== true) {
-    const roles = await otherRoles(email);
-    if (roles.length) return { success: true, choose_role: true, roles };
+  let { data: p } = await db.from('participants').select('*').eq('email', email).maybeSingle();
+  let profile: Body | null = null;
+  if (!p) {
+    if (ch.purpose !== 'register') throw new Fail('انتهت صلاحية خطوة التسجيل. ابدأ من جديد.', 400, 'restart');
+    // تسجيل جديد لبريد خبير أو منسق جهة: يختار صاحبه وجهته قبل إنشاء حساب مشارك (الرمز يبقى صالحًا لإعادة الطلب)
+    if (b.confirm_new !== true) {
+      const roles = await otherRoles(email);
+      if (roles.length) return { success: true, choose_role: true, roles };
+    }
+    const pend = ch.pending_profile || {};
+    const named = fields || (pend.full_name ? { full_name: pend.full_name, phone: pend.phone || null } : null);
+    if (!named) return { success: false, needs_name: true, code: 'needs_name', message: 'تحقّقنا من بريدك. حدّث الصفحة وأكمل اسمك لإنشاء حسابك.' };
+    // الجهة الراعية: رمز يكتبه المشارك، أو رابط جهة جاء به، أو نطاق بريده الموثَّق. التسجيل القديم حمل الجهة محسومة
+    const r = pend.organization_id ? { org: { id: pend.organization_id }, via: pend.org_via }
+      : await sponsorFor({ sponsor_code: b.sponsor_code, org: pend.org }, ctx.ip || email, email);
+    profile = {
+      ...named, campaign: pend.campaign || null, referrer_host: pend.referrer_host || null,
+      ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
+    };
   }
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
   const { data: used } = await db.from('email_challenges').update({ consumed_at: new Date().toISOString() })
     .eq('id', ch.id).is('consumed_at', null).select('id');
-  if (!used?.length) throw new Fail('استُخدم هذا الرمز من قبل. اطلب رمزًا جديدًا.', 400, 'used');
+  if (!used?.length) throw new Fail(b.link ? 'استُخدم رابط الدخول هذا من قبل. اطلب رمزًا جديدًا إن احتجت الدخول.' : 'استُخدم هذا الرمز من قبل. اطلب رمزًا جديدًا.', 400, 'used');
 
-  let { data: p } = await db.from('participants').select('*').eq('email', email).maybeSingle();
-  if (!p) {
-    if (ch.purpose !== 'register' || !ch.pending_profile) throw new Fail('انتهت صلاحية خطوة التسجيل. ابدأ من جديد.', 400, 'restart');
+  if (!p && profile) {
     p = must(await db.from('participants').insert({
-      email, full_name: ch.pending_profile.full_name, phone: ch.pending_profile.phone,
-      organization_id: ch.pending_profile.organization_id || null,
-      org_via: ch.pending_profile.org_via || null, campaign: ch.pending_profile.campaign || null, referrer_host: ch.pending_profile.referrer_host || null,
-      email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
+      email, full_name: profile.full_name, phone: profile.phone,
+      organization_id: profile.organization_id || null,
+      org_via: profile.org_via || null, campaign: profile.campaign, referrer_host: profile.referrer_host,
+      email_verified_at: new Date().toISOString(), source: profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
     // أكمل التسجيل بعد إشعار الخصوصية والشروط. تعذّر تسجيلها لا يفشل الحساب المنشأ: تبقى غير مسجلة، فتطلبها شاشة الموافقة

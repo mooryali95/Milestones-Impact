@@ -112,12 +112,29 @@ describe('حراس المصدر: لا ترجع ثغرات ل1', () => {
     expect(otp).not.toMatch(/if \(TURNSTILE_SECRET &&/);
     expect(index).toMatch(/'captcha_unconfigured', 'audit_failed'\]\.includes\(e\.code\)/);
   });
-  it('needs_name بعد حدود الشبكة والتحقق البشري، لا قبلهما (M1)', () => {
+  it('بدء الدخول يرد بالشيء نفسه لكل بريد، والاسم بعد إثبات الملكية (M1، التدقيق 2026-11-10)', () => {
     const p = read('supabase/functions/leaders-api/participant.ts');
-    const at = (s) => { const i = p.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i; };
-    expect(at('await networkGuard(ctx);')).toBeLessThan(at('needs_name: true'));
+    const start = p.slice(p.indexOf('export async function authStart'), p.indexOf('function newcomerFields'));
+    const at = (s) => { const i = start.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i; };
     expect(at('await humanGate(b, ctx, email);')).toBeLessThan(at("const { data: existing } = await db.from('participants')"));
-    expect(p).toContain("needs_name: true, pass: await issuePass(email)");
+    // لا رد يفرّق بين مسجل وجديد: لا needs_name ولا تصريح، والرد الوحيد { success: true, sent: true }
+    expect(start).not.toContain('needs_name');
+    expect(start).not.toContain('issuePass');
+    expect(start.match(/return \{/g)).toHaveLength(1);
+    expect(start).toContain('return { success: true, sent: true };');
+    // needs_name في التحقق بعد مقارنة الرمز أو الرابط، وقبل استهلاك التحدي، وغير ناجح فلا يعدّه عميل قديم دخولًا
+    const verify = p.slice(p.indexOf('export async function authVerify'), p.indexOf('// ── 3. الدخول بحساب Google'));
+    const v = (s) => { const i = verify.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i; };
+    expect(v("await reserveCodeAttempt('email_challenges', ch);")).toBeLessThan(v("needs_name: true"));
+    expect(v("needs_name: true")).toBeLessThan(v("update({ consumed_at:"));
+    expect(verify).toContain("return { success: false, needs_name: true, code: 'needs_name'");
+    // الملف يُتحقق منه قبل البحث عن التحدي، فخطأ في الجوال لا يستهلك محاولة رمز
+    expect(v('const fields = newcomerFields(b);')).toBeLessThan(v("await reserveCodeAttempt"));
+  });
+  it('رسائل رابط البريد تسمّي حاله: غير معروف، لبريد آخر، مستعمل، منتهٍ', () => {
+    const p = read('supabase/functions/leaders-api/participant.ts');
+    for (const code of ['link_unknown', 'link_mismatch', 'used', 'expired']) expect(p, code).toContain(`400, '${code}')`);
+    expect(p).toContain('استُخدم رابط الدخول هذا من قبل');
   });
   it('البوابات الثلاث تحجز المحاولة ذريًا ولا تكتب attempts + 1 بعد القراءة (M2)', () => {
     for (const [file, table] of [['participant', 'email_challenges'], ['coordinator', 'coordinator_challenges'], ['experts', 'expert_challenges']]) {
@@ -172,10 +189,16 @@ describe('حراس المصدر: لا ترجع ثغرات ل1', () => {
     expect(golden).toContain("const HUMAN = 'XXXX.DUMMY.TOKEN.XXXX';");
     expect(golden).toMatch(/judged === 5 && refused === 15 && tries === 5/);
   });
-  it('الواجهات الثلاث تعرض أداة التحقق، والتسجيل يحمل التصريح إلى خطوة الاسم', () => {
-    for (const f of ['SignIn', 'OrgPortal', 'ExpertPortal']) expect(read(`leaders-app/src/screens/${f}.jsx`), f).toMatch(/<Captcha siteKey=\{captchaKey\}/);
+  it('الواجهات الثلاث تعرض أداة التحقق برسائلها من مصدر واحد، والتسجيل يطلب الاسم بعد الرمز', () => {
+    for (const f of ['SignIn', 'OrgPortal', 'ExpertPortal']) {
+      const src = read(`leaders-app/src/screens/${f}.jsx`);
+      expect(src, f).toMatch(/<Captcha key=\{captchaKey\.n\} siteKey=\{captchaKey\.site\}/);
+      expect(src, f).toContain('captchaGate(');
+      expect(src, f).not.toContain('تعذّر تحميل أداة التحقق');
+    }
     const signin = read('leaders-app/src/screens/SignIn.jsx');
-    expect(signin).toContain("...(asNew && pass ? { pass } : {})");
-    expect(signin).toContain("setPass(res.pass || '')");
+    expect(signin).toContain("call('auth.start', { email, ...via, captcha })");
+    expect(signin).toContain("if (res.code === 'needs_name') { setProof(pr); setStep('name'); return; }");
+    expect(signin).not.toContain('setPass(');
   });
 });

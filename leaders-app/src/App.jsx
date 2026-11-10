@@ -33,7 +33,6 @@ const Outcome = lazy(() => import('./screens/Outcome.jsx'));
 const ExpertApply = lazy(() => import('./screens/ExpertApply.jsx'));
 const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
 const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
-import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall, { AwaitingApproval, seatHold, SponsorshipPending } from './screens/Paywall.jsx';
 import { gateDone, hasAccess, impactOpen } from './gates.js';
@@ -218,11 +217,18 @@ function Participant() {
     if (location.pathname === '/verify') {
       const q = new URLSearchParams(location.search);
       history.replaceState(null, '', '/');
-      const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
-      // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
-      if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
-      if (res.success) accept(res);
-      else setVerifyError(res.message);
+      const email = q.get('e'); const link = q.get('t');
+      const res = await call('auth.verify', { email, link });
+      // بريد جديد: اختيار الوجهة (لبريد خبير أو منسق جهة) أو الاسم يكمل في شاشة الدخول، والرابط يبقى صالحًا حتى يُنشأ الحساب
+      if (res.success && res.choose_role) { setLinkChoice({ email, link, roles: res.roles }); setBooting(false); return; }
+      if (res.code === 'needs_name') { setLinkChoice({ email, link, needsName: true }); setBooting(false); return; }
+      if (res.success) { accept(res); setBooting(false); return; }
+      // رابط مستعمل أو منتهٍ وفي الجهاز جلسة سارية: صاحبه داخل أصلًا، فيكمل منها بدل رسالة خطأ
+      if (session.get()) {
+        const again = await call('me');
+        if (again.success) { accept(again); setBooting(false); return; }
+      }
+      setVerifyError(res.message);
       setBooting(false);
       return;
     }
@@ -291,15 +297,7 @@ function Participant() {
   const consentNeed = me?.participant?.consent?.needed ?? null;
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
-  else if (!me && linkChoice) screen = (
-    <div className="auth-wrap"><div className="auth card stack">
-      <RoleChoice roles={linkChoice.roles} onParticipant={async () => {
-        const r = await call('auth.verify', { email: linkChoice.email, link: linkChoice.link, confirm_new: true });
-        setLinkChoice(null);
-        if (r.success) accept(r); else setVerifyError(r.message);
-      }} />
-    </div></div>
-  );
+  else if (!me && linkChoice) screen = <SignIn pendingLink={linkChoice} onSignedIn={(r) => { setLinkChoice(null); setCheckin(null); accept(r); }} />;
   else if (!me && bootError) screen = (
     <div className="page narrow stack">
       <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />

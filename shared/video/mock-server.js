@@ -76,8 +76,10 @@ export function createMockServer() {
 
   const reply = (b) => {
     switch (b.action) {
-      case 'auth.start': if (b.full_name) s.named = true; return s.named ? { success: true, sent: true } : { success: true, needs_name: true };
-      case 'auth.verify': return b.code === '246810' ? { success: true, token: 'tok-demo-recording-000000000000', ...me() } : { success: false, message: 'الرمز غير صحيح' };
+      case 'auth.start': return { success: true, sent: true };
+      case 'auth.verify':
+        if (b.code !== '246810') return { success: false, message: 'الرمز غير صحيح' };
+        return b.full_name ? { success: true, token: 'tok-demo-recording-000000000000', ...me() } : { success: false, code: 'needs_name', needs_name: true, message: 'أكمل اسمك' };
       case 'me': return me();
       case 'profile.save': s.profileDone = true; return me();
       // est_minutes من الأداة الفعالة على الخادم ويتغير من اللوحة، فلا رقم في الفيديو

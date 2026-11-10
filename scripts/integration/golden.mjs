@@ -42,20 +42,33 @@ async function seed(email, name) {
 const ping = await call('system.ping');
 ok(ping.success === true && typeof ping.db_ms === 'number', 'system.ping يمر بالقاعدة', JSON.stringify(ping));
 
-// 2) التسجيل (المرحلة ل1): الحدود والتحقق البشري قبل أي رد يفرّق بين بريد مسجل وجديد، ثم الاسم بتصريح
-// يحمل التحقق فلا يُحل التحدي مرتين، ثم رمز يُحفظ هاشًا بالفلفل مع الملف المعلّق، والبريد التجريبي لا يُرسل
+// 2) التسجيل: الحدود والتحقق البشري قبل أي إرسال، والرد واحد لكل بريد مسجلًا كان أو جديدًا (التدقيق 2026-11-10)،
+// والاسم بعد إثبات ملكية البريد: الرمز الصحيح بلا اسم يعيد needs_name ولا يُستهلك، ومعه الاسم يُنشأ الحساب
 const email = `golden-${Date.now()}@demo.milestone-impact.org`;
 const bare = await call('auth.start', { email });
 ok(bare.code === 'captcha' && !!bare.site_key && bare.needs_name !== true, 'بريد جديد بلا تحقق بشري: يُطلب التحقق ولا يُكشف أنه جديد', JSON.stringify(bare));
 const human = await call('auth.start', { email, captcha: HUMAN });
-ok(human.success === true && human.needs_name === true && /^\d{13}\.[0-9a-f]{64}$/.test(human.pass || ''), 'بعد التحقق البشري: يُطلب الاسم مع تصريح', JSON.stringify(human));
-const borrowed = await call('auth.start', { email: `other-${email}`, full_name: 'منتحل التصريح', pass: human.pass });
-ok(borrowed.code === 'captcha', 'التصريح مربوط ببريده: لا يصلح لبريد آخر', JSON.stringify(borrowed));
-const start = await call('auth.start', { email, full_name: 'مشارك المسار الذهبي', pass: human.pass });
-ok(start.success === true && start.sent === true, 'auth.start لمسجّل جديد يرسل الرمز بالتصريح بلا تحدٍّ ثانٍ', JSON.stringify(start));
-const ch = sql(`select code_hash, pending_profile->>'full_name' from leaders.email_challenges where email = ${q(email)} order by created_at desc limit 1`).split('|');
+ok(human.success === true && human.sent === true && human.needs_name === undefined && human.pass === undefined, 'بريد جديد بعد التحقق البشري: يُرسل الرمز ولا يُطلب الاسم', JSON.stringify(human));
+const known = await seed(`golden-known-${Date.now()}@demo.milestone-impact.org`, 'مشارك مسجل');
+const knownEmail = sql(`select email from leaders.participants where id = ${q(known.pid)}`);
+const old = await call('auth.start', { email: knownEmail, captcha: HUMAN });
+const shape = (r) => JSON.stringify(Object.keys(r).filter((k) => k !== 'status').sort().map((k) => [k, r[k]]));
+ok(shape(old) === shape(human), 'الرد نفسه لبريد مسجل وبريد جديد: لا يُعرف من صفحة الدخول من سُجّل', `${shape(old)} / ${shape(human)}`);
+const ch = sql(`select code_hash, purpose, coalesce(pending_profile->>'full_name', '') from leaders.email_challenges where email = ${q(email)} order by created_at desc limit 1`).split('|');
 ok(/^[0-9a-f]{64}$/.test(ch[0] || ''), 'الرمز محفوظ هاشًا (64 hex) لا نصًا');
-ok(ch[1] === 'مشارك المسار الذهبي', 'الملف المعلّق محفوظ مع التحدي', ch[1]);
+ok(ch[1] === 'register' && ch[2] === '', 'التحدي تسجيل بلا اسم: الاسم بعد التحقق من البريد', ch.join('|'));
+// الاسم بعد الرمز: تحدٍّ برمز معروف (الحقيقي يصل بالبريد ولا يُقرأ)
+const fresh = `golden-new-${Date.now()}@demo.milestone-impact.org`;
+const CODE = '135790';
+sql(`insert into leaders.email_challenges (email, purpose, code_hash, link_token_hash, pending_profile, expires_at) values (${q(fresh)}, 'register', ${q(hash(CODE))}, ${q(hash(`l-${fresh}`))}, '{}'::jsonb, now() + interval '15 minutes')`);
+const noName = await call('auth.verify', { email: fresh, code: CODE });
+ok(noName.success === false && noName.code === 'needs_name' && !noName.token, 'الرمز الصحيح لبريد جديد بلا اسم: needs_name بلا جلسة', JSON.stringify(noName));
+ok(sql(`select (consumed_at is null)::text from leaders.email_challenges where email = ${q(fresh)}`) === 'true', 'التحدي باقٍ صالحًا حتى يُكتب الاسم');
+const badPhone = await call('auth.verify', { email: fresh, code: CODE, confirm_new: true, full_name: 'مشارك جديد', phone: '12' });
+ok(badPhone.code === 'phone', 'جوال غير صحيح يُرفض قبل محاولات الرمز', JSON.stringify(badPhone));
+const named = await call('auth.verify', { email: fresh, code: CODE, confirm_new: true, full_name: 'مشارك المسار الذهبي' });
+ok(named.success === true && !!named.token && named.participant?.full_name === 'مشارك المسار الذهبي', 'الاسم مع الرمز: يُنشأ الحساب وتُفتح الجلسة', JSON.stringify(named).slice(0, 200));
+ok(sql(`select attempts::text from leaders.email_challenges where email = ${q(fresh)}`) === '2', 'خطأ الجوال لم يستهلك محاولة: محاولتان فقط');
 // محاولات الرمز ذرية (M2): عشرون تخمينًا متزامنًا لا يُقيَّم منها إلا خمسة، والبقية تُرفض قبل المقارنة
 // (رموز من غير ست خانات فلا تصيب الرمز الحقيقي مصادفة)
 const guesses = await Promise.all(Array.from({ length: 20 }, (_, i) => call('auth.verify', { email, code: `x${i}` })));
