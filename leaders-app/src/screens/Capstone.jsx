@@ -5,6 +5,7 @@
 // فتجد العمل ذاته. الصفحة تجمعها، وتفحص اتساقها، وتسلّمها للمستشار، وتصدر
 // الوثيقة الاحترافية للطباعة. لا محتوى يُكتب مرتين.
 import React, { useEffect, useState } from 'react';
+import Ico from '../Ico.jsx';
 import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { useUnsavedGuard } from '../unsaved.js';
@@ -22,6 +23,7 @@ const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.r
   : s.status === 'submitted' ? { t: SUBMISSION_STATUS.submitted, c: 'gold' }
     : s.status === 'returned' ? { t: SUBMISSION_STATUS.returned, c: 'bad' }
       : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: SUBMISSION_STATUS.draft, c: 'warn' } : { t: 'لم يبدأ', c: '' });
+const CARD_GATE_TITLE = { none: 'الخطوة الأولى: اعتماد بطاقة المبادرة', waiting: 'بطاقة مبادرتك عند المستشار', returned: 'أعاد المستشار بطاقة مبادرتك' };
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
 const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي'], ['approved', 'الاعتماد']];
 
@@ -153,6 +155,18 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
 
+      {/* بوابة البطاقة: ما ينتظره المشارك من المستشار قبل تسليم الوثيقة، وما يفعله في الأثناء */}
+      {editable && d.card && d.card.state !== 'approved' && (
+        <div className={`banner${d.card.state === 'returned' ? '' : ' gold'}`} data-card-gate={d.card.state}>
+          <span className="ico"><Ico name={d.card.state === 'waiting' ? 'hourglass' : 'target'} /></span>
+          <div className="grow">
+            <b>{CARD_GATE_TITLE[d.card.state]}</b>
+            <p className="small">{d.card.state === 'none' ? `اكتب بطاقة المبادرة وسلّمها أولًا: يعتمد مستشارك اختيار المبادرة عادةً خلال ${d.card.sla}، قبل أن تبني عليها بقية الفصول.`
+              : d.card.state === 'waiting' ? `الاعتماد عادةً خلال ${d.card.sla}. تابع بقية الفصول في الأثناء، وتُسلَّم الوثيقة بعد اعتماد البطاقة.`
+                : 'افتح بطاقة المبادرة لترى ملاحظات المستشار، ثم عدّلها وسلّمها من جديد.'}</p>
+          </div>
+        </div>
+      )}
       <div className="cp-grid">
         <section className="card cp-sections" data-tour="capstone-sections">
           <h2>فصول الوثيقة</h2>

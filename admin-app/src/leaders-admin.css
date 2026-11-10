@@ -739,3 +739,6 @@
 .la-blank b { font-size: 1rem; color: var(--ink); }
 .la-blank p { margin: 0; max-width: 56ch; color: var(--ink-soft); font-size: .88rem; }
 .la-blank-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.sub-gate { border: 1px solid var(--line-strong); border-inline-start: 3px solid var(--gold-deep); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: .86rem; display: grid; gap: 6px; }
+.sub-gate ul { margin: 0; padding-inline-start: 18px; }
+.sub-gate small { color: var(--ink-soft); }

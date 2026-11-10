@@ -363,11 +363,31 @@ export function sectionState(model, fields, sub) {
   };
 }
 
+// ── بوابة البطاقة ──
+// المستشار يعتمد اختيار المبادرة من بطاقتها قبل تسليم الوثيقة كاملة: هل هي حقيقية في جهته، وبحجم يكفيه زمن البرنامج،
+// ولها راعٍ. كان الحكم الأول على المبادرة يأتي عند الوثيقة كاملة في آخر الرحلة، فتُكتشف المبادرة غير المناسبة بعد بنائها.
+// البوابة لا تقفل الفصول: المشارك يكمل البناء أثناء الانتظار، والذي ينتظر الاعتماد هو تسليم الوثيقة وحده.
+export const CARD_REVIEW_CRITERIA = [
+  'حقيقية في جهته وليست تمرينًا',
+  'بحجم يُخطَّط له في زمن البرنامج',
+  'لها راعٍ في الجهة يملك قرارها',
+  'مشكلتها ومنفعتها المتوقعة واضحتان',
+];
+/** @param {string | null | undefined} status حالة تسليم نموذج البطاقة */
+export function cardGate(status) {
+  if (status === 'reviewed') return { state: 'approved', ok: true, reason: null };
+  if (status === 'submitted') return { state: 'waiting', ok: false, reason: 'بطاقة المبادرة بانتظار اعتماد المستشار. تُسلَّم الوثيقة بعد اعتمادها.' };
+  if (status === 'returned') return { state: 'returned', ok: false, reason: 'أعاد المستشار بطاقة المبادرة بملاحظات. عدّلها وسلّمها ليعتمدها.' };
+  return { state: 'none', ok: false, reason: 'سلّم بطاقة المبادرة ليعتمد المستشار اختيارها قبل تسليم الوثيقة.' };
+}
+
 // يمكن التسليم؟ كل الفصول مكتملة، والجاهزية فوق الحد، والحالة تسمح
 export function canSubmit(state) {
   if (!['draft', 'returned', undefined, null].includes(state.status)) return { ok: false, reason: 'الوثيقة قيد المراجعة أو معتمدة' };
   if (!state.scope) return { ok: false, reason: 'حدد نطاق عملك (مشروع، برنامج، محفظة) في ملفك أولًا' };
   if (!state.initiative) return { ok: false, reason: 'اكتب اسم المبادرة في بطاقة المبادرة' };
+  // state.card غائبة في وثيقة بلا فصل بطاقة (برنامج لا يضعها في الوثيقة): لا بوابة
+  if (state.card) { const g = cardGate(state.card.status); if (!g.ok) return { ok: false, reason: g.reason }; }
   const open = state.sections.filter((s) => !s.complete);
   if (open.length) return { ok: false, reason: `فصول لم تكتمل: ${open.map((s) => s.title).slice(0, 5).join('، ')}` };
   const blocked = (state.checks || []).filter((x) => x.blocking && !x.ok);

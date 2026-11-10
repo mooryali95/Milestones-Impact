@@ -25,6 +25,8 @@ function participantServer() {
       { key: 'wbs-owner', title: 'لكل حزمة عمل مالك واحد', ok: s.ready, detail: s.ready ? null : 'حزم بلا مالك: WP-2' },
     ],
     readiness: s.ready ? 100 : 58, ready_min: 80,
+    // بوابة البطاقة: قبل اكتمال الفصول البطاقة عند المستشار، وبعده معتمدة
+    card: { state: s.ready ? 'approved' : 'waiting', sla: 'يومي عمل' },
     can_submit: s.ready && s.status === 'draft', blocker: s.ready ? null : 'فصول لم تكتمل: هيكل تجزئة العمل',
     rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', 'وصف المستوى الأعلى'] })),
   });
@@ -61,6 +63,9 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
   await expect(page.getByText('حزم بلا مالك: WP-2')).toBeVisible();
   await expect(page.getByRole('button', { name: 'سلّم الوثيقة للمستشار' })).toBeDisabled();
   await expect(page.getByText('فصول لم تكتمل: هيكل تجزئة العمل')).toBeVisible();
+  // بوابة البطاقة: ما ينتظره من المستشار ومدته، وأنه يكمل الفصول في الأثناء
+  await expect(page.locator('[data-card-gate="waiting"]')).toContainText('بطاقة مبادرتك عند المستشار');
+  await expect(page.locator('[data-card-gate="waiting"]')).toContainText('خلال يومي عمل');
 
   srv.s.ready = true;
   await page.reload();

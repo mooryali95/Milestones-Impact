@@ -4,6 +4,7 @@
 // المحرران (الباب والنموذج) بمعاينة حية كما يراها المشارك. الكتابة عبر
 // admin.save / admin.delete / admin.reorder، والتقييم عبر admin.review-submission.
 import React, { useEffect, useRef, useState } from 'react';
+import { CARD_REVIEW_CRITERIA, CHARTER_KEY } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
@@ -419,6 +420,14 @@ export function Submission({ id, canWrite, onClose }) {
         <div className="hb-ed-out"><div className="hb-ed-cap">عمل المشارك</div><article className="hb-page mp"><ModelForm m={m} answers={x.answers || {}} /></article></div>
         <aside className="sub-review">
           <h4>تقييمك</h4>
+          {/* بطاقة المبادرة: اعتمادها قرار على اختيار المبادرة نفسها، قبل أن يبني المشارك وثيقته عليها */}
+          {m.key === CHARTER_KEY && (
+            <div className="sub-gate" role="note">
+              <b>اعتماد البطاقة قرار على اختيار المبادرة</b>
+              <ul>{CARD_REVIEW_CRITERIA.map((c) => <li key={c}>{c}</li>)}</ul>
+              <small>إن لم تتحقق فأعدها بملاحظة تسمّي ما ينقص. المشارك لا يسلّم وثيقته قبل اعتمادها.</small>
+            </div>
+          )}
           {/* D08: السلّم الرباعي الواحد بأسمائه ومراسيه من labels.js، بدل النجوم الخمس */}
           <div className="sub-scale" role="radiogroup" aria-label="التقييم">{RUBRIC_SCALE.levels.map((l) => (
             <label key={l.n} className={rating === l.n ? 'on' : ''}><input type="radio" name="rating" value={l.n} checked={rating === l.n} disabled={!canWrite} onChange={() => setRating(l.n)} />
