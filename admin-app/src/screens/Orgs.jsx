@@ -8,7 +8,7 @@ import {
 } from '../leaders.js';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -83,6 +83,9 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
       </div>
       <FilterBar scope="orgs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={ORG_PRESETS} counts={counts}
         shown={shown.length} total={list.length} noun="جهة" placeholder="ابحث باسم الجهة أو القطاع أو النطاق أو جهة التواصل" />
+      {!shown.length && (list.length
+        ? <Empty compact title="لا جهات لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." />
+        : <Empty title="لا جهات بعد" hint="الجهة ترعى مشاركيها: لها رابط دعوة ومقاعد ومنسق يتابعهم.">{canWrite && <button className="btn-sm primary" type="button" onClick={onAdd}>+ جهة جديدة</button>}</Empty>)}
       <div className="la-orgs">
         {shown.map((o) => (
           <article key={o.id} className={`la-org${o.status === 'inactive' ? ' off' : ''}`} style={{ '--org': orgColor(o) }}>

@@ -5,7 +5,7 @@
 // الموقّع أو منحة إدارية مسجّلة، والمطابقة تستعلم Creem مباشرة لدفعة فات إشعارها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { csvText, date, download, L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 const ITEM = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
@@ -191,7 +191,7 @@ export default function Payments({ canWrite, onPerson }) {
           <p className="la-muted small">رعاية الجهة تُثبَّت هنا لحظة سريانها فلا تسقط إن أُوقفت الجهة لاحقًا. للمنح اليدوي افتح ملف المشارك.</p>
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>البند</th><th>المصدر</th><th>التاريخ</th><th>الحالة</th><th /></tr></thead>
-            <tbody>{ents.slice(0, 500).map((e) => (
+            <tbody>{!ents.length && <tr><td colSpan={6}><Empty compact title="لا حقوق مثبتة بعد" hint="يظهر هنا حق كل مشارك في البرنامج: من دفعه، أو من رعاية جهته، أو من منحة يدوية." /></td></tr>}{ents.slice(0, 500).map((e) => (
               <tr key={e.id} className={e.revoked_at ? 'off' : ''}>
                 <td><button className="la-link" onClick={() => onPerson?.(e.participant_id)}>{e.participants?.full_name || '·'}</button><br /><small className="la-muted" dir="ltr">{e.participants?.email}</small></td>
                 <td>{ITEM[e.item]}</td>

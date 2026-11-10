@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L } from '../leaders.js';
 import Form from '../Form.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 import { KATON_KEY_AR, KATON_QUESTION_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
 const STATUS = { draft: 'مسودة', published: 'منشور', archived: 'مؤرشف' };
@@ -95,6 +95,7 @@ export default function KatonBank({ canWrite, programId }) {
           {canWrite && d.program_id && <> <button className="la-link" onClick={editPoints}>تعديل النقاط</button></>}</div>
         {canWrite && <button className="btn-sm ghost" onClick={() => editTopic()}>+ موضوع</button>}
       </div>
+      {!d.topics.length && <Empty title="لا موضوعات بعد" hint="الموضوع جلسة قاعة: جمل يجيب عنها المشاركون ثم يناقشونها. أضف موضوعًا لتفتح به قاعة.">{canWrite && <button className="btn-sm primary" type="button" onClick={() => editTopic()}>+ موضوع</button>}</Empty>}
       {d.topics.map((t) => (
         <section key={t.id} className={`la-card${t.status === 'archived' ? ' off' : ''}`}>
           <div className="la-row between">

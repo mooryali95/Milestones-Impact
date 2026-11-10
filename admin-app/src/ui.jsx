@@ -72,3 +72,15 @@ export function useEscape(onClose, active = true) {
 }
 
 export const Spinner = () => <div className="spinner" aria-label="جارٍ التحميل" />;
+
+// حالة فارغة واحدة لكل الشاشات: ماذا يظهر هنا، ولماذا هو فارغ، وما الخطوة التالية.
+// كانت كل شاشة تكتب سطرها («لا نتائج») أو تترك جدولًا برؤوسه وحدها أو مساحة بيضاء.
+export function Empty({ title, hint, children, compact = false }) {
+  return (
+    <div className={`la-blank${compact ? ' compact' : ''}`} role="status">
+      <b>{title}</b>
+      {hint && <p>{hint}</p>}
+      {children && <div className="la-blank-actions">{children}</div>}
+    </div>
+  );
+}

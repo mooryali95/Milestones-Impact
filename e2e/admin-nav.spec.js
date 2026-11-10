@@ -48,3 +48,11 @@ test('القاعة الحية بدفعة واحدة مفتوحة تختارها 
   await open(page, '#/leaders/hall', [{ id: 'c9', name: 'الدفعة الوحيدة', status: 'running' }]);
   await expect(page.getByLabel('الدفعة')).toHaveValue('c9');
 });
+
+test('قائمة مشاركين فارغة تقول ما يظهر فيها وتعرض الإضافة والاستيراد', async ({ page }) => {
+  await open(page, '#/leaders/participants', []);
+  const blank = page.locator('.la-blank');
+  await expect(blank).toContainText('لا مشاركين بعد');
+  await blank.getByRole('button', { name: 'أضف مشاركين من قائمة' }).click();
+  await expect(page.getByRole('dialog', { name: 'استيراد مشاركين' })).toBeVisible();
+});

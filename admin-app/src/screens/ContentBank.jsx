@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { DIM, DIMS, L } from '../leaders.js';
 import { CONTENT_FIELDS, CONTENT_KIND, audienceLabel, contentToForm, reorderIds } from '../methodology.js';
 import Form from '../Form.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 
 function Move({ rows, id, reload, canWrite }) {
   const { toast } = useUI();
@@ -35,6 +35,7 @@ function Preview({ tracks }) {
           {tracks.map((t) => <option key={t.key} value={t.key}>{t.key}{t.title_ar ? ` · ${t.title_ar}` : ''}</option>)}
         </select>
       </label>
+      {!track && <Empty compact title="معاينة بعين المشارك" hint="اختر مسارًا لترى المواد كما تظهر لصاحبه: ما يُعرض له، وما يُحجب عنه بمستواه." />}
       {track && (!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : (
         <div className="la-grid">
           <div>
