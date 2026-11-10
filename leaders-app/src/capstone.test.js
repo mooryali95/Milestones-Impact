@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  bindAnswers, canSubmit, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
+  bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
   docLevelsFor, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
 import { priorityFor, rubricPriority, activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
@@ -157,6 +157,13 @@ describe('الجاهزية والتسليم', () => {
     expect(canSubmit({ ...base, initiative: null }).reason).toContain('اسم المبادرة');
     expect(canSubmit({ ...base, sections: [{ complete: false, title: 'الحوكمة' }] }).reason).toContain('الحوكمة');
     expect(canSubmit({ ...base, readiness: 70 }).reason).toContain('80');
+    // بوابة البطاقة: الوثيقة لا تُسلَّم قبل اعتماد المستشار لبطاقة المبادرة، وبلا فصل بطاقة لا بوابة
+    expect(canSubmit({ ...base, card: { status: 'reviewed' } }).ok).toBe(true);
+    expect(canSubmit({ ...base, card: { status: 'submitted' } })).toMatchObject({ ok: false, reason: expect.stringContaining('بانتظار اعتماد المستشار') });
+    expect(canSubmit({ ...base, card: { status: 'returned' } }).reason).toContain('أعاد المستشار');
+    expect(canSubmit({ ...base, card: { status: 'draft' } }).reason).toContain('سلّم بطاقة المبادرة');
+    expect(canSubmit({ ...base, card: { status: null } }).ok).toBe(false);
+    expect(['reviewed', 'submitted', 'returned', 'draft', null].map((x) => cardGate(x).state)).toEqual(['approved', 'waiting', 'returned', 'none', 'none']);
   });
 });
 

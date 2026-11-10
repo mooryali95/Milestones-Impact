@@ -13,8 +13,9 @@ import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority }
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { approvalOf, coordPermissions, isEmail, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+import { APPROVAL_SLA_AR } from './labels.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -89,12 +90,16 @@ const sponsorView = (c: any) => (c?.sponsor_status || c?.sponsor_waived ? {
   name: c.sponsor_name, status: c.sponsor_status, at: c.sponsor_at, note: c.sponsor_note, waived: !!c.sponsor_waived,
 } : null);
 
+// فصل البطاقة في وثيقة المشارك وحالة تسليمه؛ null إن لم تكن البطاقة من فصول وثيقته
+const cardOf = (d: any) => { const c = d.sections.find((s: any) => s.model.key === CHARTER_KEY); return c ? { status: c.state.status } : null; };
+
 // ── المشارك ──
 export async function get(p: any) {
   const d = await build(p);
   const c = d.capstone;
   const status = c?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
+  const card = cardOf(d);
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, card, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   return {
     success: true,
     scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
@@ -108,6 +113,8 @@ export async function get(p: any) {
       // الملاحظات تصل المشارك فور المراجعة، والدرجات بعد الاعتماد
       review: reviewView(c, status === 'approved'), sponsor: sponsorView(c),
     },
+    // بوابة البطاقة: حالتها ومدة الاعتماد المعتادة، لتقول الواجهة ما ينتظره المشارك
+    card: card ? { state: cardGate(card.status).state, sla: APPROVAL_SLA_AR } : null,
     can_submit: gate.ok, blocker: gate.ok ? null : gate.reason,
     rubric: rubricFor(d.levels).map((r) => ({ key: r.key, title: r.title, dimension: r.dimension, level: r.level, anchors: r.anchors })),
   };
@@ -124,7 +131,8 @@ export async function saveSummary(p: any, b: Body) {
 export async function submit(p: any) {
   const d = await build(p);
   const status = d.capstone?.status || 'draft';
-  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
+  const card = cardOf(d);
+  const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, card, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   if (!gate.ok) throw new Fail(gate.reason as string, 400, 'not_ready');
   const now = new Date().toISOString();
   must(await db.from('capstones').upsert({
