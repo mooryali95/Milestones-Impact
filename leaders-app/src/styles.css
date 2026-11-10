@@ -131,11 +131,11 @@ textarea.input { min-height: 96px; resize: vertical; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
   background: var(--mist); color: var(--slate); white-space: nowrap;
 }
-.chip.ok { background: var(--st-ok-bg); color: var(--ok); }
-.chip.warn { background: var(--st-warn-bg); color: var(--warn); }
+.chip.ok { background: var(--st-ok-bg); color: var(--st-ok-text); }
+.chip.warn { background: var(--st-warn-bg); color: var(--st-warn-text); }
 .chip.bad { background: var(--st-bad-bg); color: var(--bad); }
 .chip.gold { background: var(--brand-cream); color: var(--accent); }
 .chip.blue { background: var(--st-info-bg); color: var(--st-info-dark); }
@@ -620,6 +620,12 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .op-people td.op-name b { font-size: 16px; }
   .op-people td.op-name br { display: none; }
 }
+/* لوحة الجهة: ما يحتاج تدخل المنسق، أعلى اللوحة */
+.op-todo { margin-top: 16px; border-inline-start: 4px solid var(--org, var(--copper)); }
+.op-todo h3 { margin: 0 0 8px; font-size: 16px; }
+.op-todo ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.op-todo li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.op-todo li b { font-variant-numeric: tabular-nums; }
 .op-prog { display: inline-block; width: 60px; height: 6px; border-radius: 99px; background: var(--mist); vertical-align: middle; overflow: hidden; }
 .op-prog i { display: block; height: 100%; background: var(--org, var(--copper)); }
 @media (max-width: 860px) { .op-kpis { grid-template-columns: repeat(2, 1fr); } .op-grid { grid-template-columns: 1fr; } }

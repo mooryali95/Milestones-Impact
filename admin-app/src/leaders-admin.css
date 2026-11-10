@@ -38,7 +38,7 @@
 .la-row.between { justify-content: space-between; }
 .la-link { color: var(--petrol-soft); font-weight: 600; font-size: .84rem; text-decoration: underline; text-underline-offset: 3px; }
 .la-chip { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--sand-light); color: var(--ink-soft); }
-.la-chip.warn { background: rgba(178,107,0,.12); color: var(--st-warn); }
+.la-chip.warn { background: rgba(178,107,0,.12); color: var(--st-warn-text); }
 .la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok); }
 .la-chip.bad { background: var(--st-bad-bg); color: var(--st-bad); }
 .la-phase { font-size: .9rem; color: var(--gold-text); margin: 22px 0 10px; }
