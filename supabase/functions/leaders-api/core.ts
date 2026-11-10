@@ -387,12 +387,31 @@ export function newDeviceMail(name: string, device: string, when: string) {
 }
 
 // ── الجهة ──
-export function coordinatorInviteMail(name: string | null, org: string) {
+// دعوة المنسق: رسالة الترحيب الوحيدة التي تصل الجهة، فتحمل كل ما يبدأ به: رابط تسجيل موظفيه، ومقاعد العقد ومدته، وخطواته الأولى
+export type OrgInviteInfo = { invite_code?: string | null; seats?: number | null; contract_starts?: string | null; contract_ends?: string | null };
+const contractDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
+export const orgJoinUrl = (code?: string | null) => (code ? `${CONFIG.appUrl}/j/${encodeURIComponent(code)}` : null);
+export function coordinatorInviteMail(name: string | null, org: string, info: OrgInviteInfo = {}) {
+  const join = orgJoinUrl(info.invite_code);
+  const term = info.contract_starts && info.contract_ends ? `${contractDay(info.contract_starts)} إلى ${contractDay(info.contract_ends)}`
+    : info.contract_ends ? `حتى ${contractDay(info.contract_ends)}` : null;
+  const rows: [string, unknown, boolean?][] = [
+    ...(join ? [['رابط تسجيل موظفيكم', join, true] as [string, unknown, boolean]] : []),
+    ...(info.seats ? [['مقاعد العقد', `${info.seats} مقعدًا`] as [string, unknown]] : []),
+    ...(term ? [['مدة العقد', term] as [string, unknown]] : [])];
+  const steps = [
+    'ادخل لوحة الجهة من الزر أدناه، برمز يصل إلى هذا البريد، بلا كلمة مرور.',
+    ...(join ? ['أرسل رابط التسجيل إلى من ترشّحهم جهتك. من يسجّل منه يظهر في دفعة جهتك، وتغطي الجهة رسومه ما دام العقد ساريًا وفيه مقعد شاغر.'] : []),
+    'تابع من اللوحة تقدّم مشاركيك بما تتيحه صلاحياتك، ويصلك ملخص أسبوعي بالبريد.',
+  ];
   return shell('organization', `لوحة ${org} في برنامج القادة`,
-    mailText(`${hello(name)} أُنشئ لك حساب اطلاع على ${esc(org)} في برنامج القادة من Milestone Impact.`)
-    + mailText('ترى منه ما تتيحه لك صلاحياتك عن مشاركي جهتك وتقاريرها، ويصلك ملخص أسبوعي بالبريد. الدخول برمز يصل إلى هذا البريد، بلا كلمة مرور.')
-    + mailButton(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة'),
-    `حساب اطلاع على ${org}`, '');
+    mailText(`${hello(name)} أُنشئ لك حساب منسق لجهة ${esc(org)} في برنامج القادة.`)
+    + (rows.length ? mailRows(rows) : '')
+    + mailText('<b>خطواتك الأولى</b>')
+    + mailText(steps.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>'))
+    + mailButton(`${CONFIG.appUrl}/org`, 'افتح لوحة الجهة')
+    + mailNote('لا ترى الجهة أبدًا: إجابات القياس، ونماذج المشارك وتأملاته، وملاحظات المستشار، ومسودة مبادرته قبل اعتمادها.'),
+    join ? `رابط تسجيل موظفيكم ولوحة ${org}` : `حساب منسق لجهة ${org}`, '');
 }
 
 export function coordinatorSignInMail(name: string | null, code: string, link: string) {
@@ -485,7 +504,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'erase-request', family: 'access', label: 'تأكيد طلب حذف البيانات', subject: ERASE_MAIL_SUBJECT, html: () => eraseRequestMail('سارة', 30) },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
-  { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة') },
+  { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },

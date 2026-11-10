@@ -761,6 +761,18 @@ export function templateOf(perms) {
 // المطّلع نافذ ما لم يُوقف أو تنتهِ مدته أو تتوقف جهته
 export const viewerActive = (c, now = Date.now()) => !!c && c.status !== 'suspended' && (!c.expires_at || Date.parse(c.expires_at) > now)
   && c.organizations?.status !== 'inactive';
+// حالة وصول الجهة إلى منسقها، لقائمة الجهات في الإدارة: نشط دخل، أو دُعي ولم يدخل، أو حسابه موقوف أو منتهٍ،
+// أو بريد جهة اتصال بلا حساب فلم تصله دعوة (حالة «سفراء» 2026-11-10)، أو بلا منسق
+export function orgAccessState(org, coords, now = Date.now()) {
+  const live = (coords || []).filter((c) => viewerActive({ ...c, organizations: org }, now));
+  if (live.some((c) => c.last_login_at)) return { state: 'active', n: live.length };
+  if (live.length) {
+    const c = [...live].sort((x, y) => String(y.invited_at || '').localeCompare(String(x.invited_at || '')))[0];
+    return { state: 'invited', n: live.length, id: c.id, email: c.email, invited_at: c.invited_at || null };
+  }
+  if ((coords || []).length) return { state: 'lapsed', n: coords.length };
+  return { state: org?.contact_email ? 'contact' : 'none', email: org?.contact_email || null };
+}
 // ما يعرفه المشارك عن اطلاع جهته: اتحاد صلاحيات المطّلعين النافذين، وعددهم
 export function orgVisibility(viewers, now = Date.now()) {
   const live = (viewers || []).filter((c) => viewerActive(c, now));

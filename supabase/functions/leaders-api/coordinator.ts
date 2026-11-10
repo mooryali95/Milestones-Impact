@@ -311,7 +311,10 @@ async function notifyNewAccess(orgId: string, orgName: string, before: Record<st
 }
 
 async function sendInvite(c: any, orgName: string) {
-  await sendMail(c.email, `لوحة ${orgName} في برنامج القادة`, coordinatorInviteMail(c.full_name, orgName));
+  const { data: o } = await db.from('organizations').select('status, invite_code, seats, contract_starts, contract_ends').eq('id', c.organization_id).maybeSingle();
+  // رابط التسجيل لا يُرسل لجهة موقوفة، فرابطها معطّل
+  const info = o ? { ...o, invite_code: o.status === 'active' ? o.invite_code : null } : {};
+  await sendMail(c.email, `لوحة ${orgName} في برنامج القادة`, coordinatorInviteMail(c.full_name, orgName, info));
   await db.from('org_coordinators').update({ invited_at: new Date().toISOString() }).eq('id', c.id);
   return true;
 }

@@ -44,7 +44,33 @@ const ORG_PRESETS = [
   { key: 'full', label: 'اكتملت مقاعدها', test: (o) => o.seats && o.stats.total >= o.seats },
   { key: 'empty', label: 'بلا مشاركين', test: (o) => !o.stats.total },
   { key: 'off', label: 'موقوفة', test: (o) => o.status === 'inactive' },
+  { key: 'no-coord', label: 'منسقها لم يدخل بعد', test: (o) => o.status !== 'inactive' && ['none', 'contact', 'invited', 'lapsed'].includes(o.access?.state) },
 ];
+
+// حالة منسق الجهة على بطاقتها (orgAccessState في الخادم): ما لم يدخل المنسق، تظهر الحالة وما يُفعل
+const ACCESS = {
+  none: ['warn', 'بلا منسق'],
+  contact: ['warn', 'المنسق بلا حساب: لم تصله دعوة'],
+  invited: ['warn', 'دُعي المنسق ولم يدخل بعد'],
+  lapsed: ['', 'حساب المنسق موقوف أو منتهٍ'],
+};
+function AccessLine({ o, canWrite, onEdit, toast }) {
+  const a = o.access;
+  if (!a || a.state === 'active' || o.status === 'inactive') return null;
+  const [tone, label] = ACCESS[a.state] || ['', ''];
+  const resend = async () => {
+    const r = await L('admin.coordinator-invite', { organization_id: o.id, id: a.id });
+    toast(r.success ? `أُعيدت الدعوة إلى ${a.email}` : r.message);
+  };
+  return (
+    <div className="la-row la-org-access">
+      <span className={`la-chip ${tone}`}>{label}{a.state === 'invited' && a.invited_at ? ` · ${date(a.invited_at)}` : ''}</span>
+      {canWrite && (a.state === 'invited'
+        ? <button className="la-link" onClick={resend}>أعد الدعوة</button>
+        : <button className="la-link" onClick={() => onEdit(o)}>{a.state === 'contact' ? 'فعّل الحساب وأرسل الدعوة' : 'أضف المنسق'}</button>)}
+    </div>
+  );
+}
 
 function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const { toast } = useUI();
@@ -96,6 +122,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
             {domainsOf(o).length > 0 && <div className="la-domains">{domainsOf(o).map((d) => <span key={d} dir="ltr">{d}</span>)}</div>}
             <Seats n={o.stats.total} seats={o.seats} />
             <Funnel f={o.stats} />
+            <AccessLine o={o} canWrite={canWrite} onEdit={onEdit} toast={toast} />
             <div className="la-org-foot">
               {o.stats.pending_approval ? <span className="la-chip warn">{o.stats.pending_approval} بانتظار اعتمادك</span> : <span className="la-chip ok">لا شيء ينتظرك</span>}
               <span className="la-muted">{o.stats.active_week} نشط هذا الأسبوع</span>

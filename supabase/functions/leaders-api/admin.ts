@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
@@ -72,9 +72,10 @@ function funnel(rows: any[]) {
 const orgFilter = (q: any, org: unknown) => { q = q.eq('is_demo', false); return org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q; };
 
 export async function orgs() {
-  const [{ data: list }, { data: ps }] = await Promise.all([
+  const [{ data: list }, { data: ps }, { data: coords }] = await Promise.all([
     db.from('organizations').select('*').order('created_at'),
     all((f, t) => db.from('participants').select('id, status, organization_id, organization_name, last_login_at').eq('is_demo', false).order('id').range(f, t)).then((data) => ({ data })),
+    db.from('org_coordinators').select('id, organization_id, email, status, expires_at, invited_at, last_login_at'),
   ]);
   const weekAgo = Date.now() - 7 * 864e5;
   const stats = (rows: any[]) => ({ ...funnel(rows), total: rows.length, active_week: rows.filter((r) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length });
@@ -84,7 +85,8 @@ export async function orgs() {
   for (const p of unassigned) { const n = String(p.organization_name || '').trim(); if (n) typed[n] = (typed[n] || 0) + 1; }
   return {
     success: true,
-    orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)) })),
+    orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)),
+      access: orgAccessState(o, (coords || []).filter((c: any) => c.organization_id === o.id)) })),
     unassigned: { ...stats(unassigned), typed: Object.entries(typed).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, n]) => ({ name, n })) },
   };
 }
