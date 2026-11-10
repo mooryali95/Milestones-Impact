@@ -70,7 +70,7 @@ export const STAGES = [
       { id: 'm4.dsar', title: 'خدمة ذاتية لتصدير المشارك بياناته وطلب حذفها', kind: 'auto' },
       { id: 'm4.hall-load', title: 'اختبار حمل القاعة بمئة جهاز ناجح', kind: 'attest' },
       { id: 'm4.wcag', title: 'تدقيق WCAG 2.2 AA بلا خلل حرج', kind: 'attest' },
-      { id: 'm4.sus', title: 'SUS لخمسة مستخدمين لكل دور فوق 75', kind: 'attest' },
+      { id: 'm4.sus', title: 'SUS لخمسة مستخدمين لكل دور فوق 75', kind: 'auto' },
     ],
   },
   {
@@ -288,6 +288,10 @@ export async function collect() {
     const [ex, er] = [await known('me.export'), await known('me.erase-request')];
     return { ok: ex && er, reason: ex && er ? 'مسارا التصدير وطلب الحذف منشوران' : `غير منشور: ${[!ex && 'me.export', !er && 'me.erase-request'].filter(Boolean).join('، ')}` };
   });
+  // من إجابات الاستبيان داخل المنصة (sus.js): خمسة مجيبين على الأقل في كل دور، ومتوسط الدور فوق 75
+  await q('m4.sus', `select r role, count(s.id) n, round(avg(s.score), 1) mean from unnest(array['participant','expert','coordinator']) r
+      left join leaders.sus_responses s on s.role = r and s.answers is not null group by r order by r`,
+    (rows) => ({ ok: rows.every((r) => +r.n >= 5 && +r.mean > 75), reason: rows.map((r) => `${r.role} ${r.n}${r.mean == null ? '' : ` بمتوسط ${r.mean}`}`).join('، ') }));
   // دفعات جهات حقيقية (لا الافتراضية)، وتسجيل غير منسحب، وقياس بعدي بعد التسجيل
   await q('m5.cohorts-data', `select count(*) n from (select e.cohort_id from leaders.enrollments e
       join leaders.cohorts c on c.id = e.cohort_id and not c.is_default

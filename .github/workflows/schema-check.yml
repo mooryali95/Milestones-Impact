@@ -34,3 +34,9 @@ jobs:
       - name: Live schema equals the committed snapshot
         if: steps.gate.outputs.skip != 'true'
         run: node scripts/db/snapshot.mjs --check
+      # المحتوى المُقاس الحي (الكتيب وفقراته) يساوي ما في المستودع: أي فرق تعديل من اللوحة لم يُصالح (D01).
+      # بالقراءة وحدها، ويفشل عند أول فرق فيصل المالك ببريد GitHub. المصالحة في docs/ops/دليل-المشغل-v1.md
+      - name: Live measured content equals the repository
+        if: steps.gate.outputs.skip != 'true' && always()
+        run: node scripts/content/export-live.mjs --check
+
