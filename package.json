@@ -30,6 +30,7 @@
     "e2e": "playwright test",
     "verify": "node scripts/ops/verify.mjs",
     "since-release": "node scripts/ops/since-release.mjs",
+    "gate": "bash scripts/ops/local-gate.sh",
     "stage-gates": "node scripts/ops/stage-gates.mjs",
     "video:audio": "node shared/video/cut-audio.mjs",
     "video:excerpt": "node shared/video/excerpt-audio.mjs"

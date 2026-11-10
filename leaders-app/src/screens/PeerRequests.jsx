@@ -11,7 +11,8 @@ const when = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn',
 const CHIP = { open: '', answered: 'warn', confirmed: 'ok', closed: 'dark' };
 const A_CHIP = { pending: 'warn', confirmed: 'ok', corrected: 'gold', hidden: 'dark' };
 
-export default function PeerRequests({ preset = null, onDone }) {
+// compact: في رئيسية المشارك تُطوى القوائم على الشاشات الضيقة، فيبقى العنوان وزر الطلب وعدد ما ينتظر
+export default function PeerRequests({ preset = null, onDone, compact = false }) {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(!!preset);
   const [text, setText] = useState(preset?.text || '');
@@ -67,6 +68,7 @@ export default function PeerRequests({ preset = null, onDone }) {
         </div>
       )}
 
+      <ListFold on={compact && (mine.length + forMe.length) > 0} label={[mine.length && `طلباتي ${mine.length}`, forMe.length && `طلبات زملائي ${forMe.length}`].filter(Boolean).join(' · ')}>
       {mine.length > 0 && <ul className="pr-list" aria-label="طلباتي">{mine.map((r) => (
         <li key={r.id}>
           <div className="row between"><span><b>{r.source_ar}</b> ← {r.target_team_ar} <small className="muted">· {when(r.at)}</small></span><span className={`chip ${CHIP[r.status]}`}>{r.status_ar}</span></div>
@@ -95,7 +97,15 @@ export default function PeerRequests({ preset = null, onDone }) {
           ))}</ul>
         </>
       )}
+      </ListFold>
       {!mine.length && !forMe.length && !open && <p className="muted small">لا طلبات بعد. حين تحتاج توجيهًا في سؤال أو جزء من مشروعك، ارفعه هنا فيراه فريقك ويؤكّد خبيرك ما يُجاب.</p>}
     </section>
   );
+}
+
+// القوائم تحت عنوان يُفتح على الشاشات الضيقة، وظاهرة كما هي على الحاسب
+function ListFold({ on, label, children }) {
+  const [wide] = useState(() => !(typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1119px)').matches));
+  if (!on || wide) return children;
+  return <details className="pr-more"><summary>{label}</summary>{children}</details>;
 }
