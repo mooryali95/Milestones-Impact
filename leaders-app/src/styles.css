@@ -954,7 +954,9 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 /* اللمس: لا أهداف أصغر من 44px، ولا وميض عند النقر */
 @media (pointer: coarse) {
   .btn.sm { min-height: 44px; padding-inline: 16px; }
-  button.link.small { min-height: 40px; }
+  button.link.small, a.link.small { min-height: 44px; display: inline-flex; align-items: center; }
+  .hall-admin select.input, .hall-stage-bar .step { min-height: 44px; }
+  .hall-stage-bar .step { box-sizing: border-box; align-items: center; }
   * { -webkit-tap-highlight-color: transparent; }
 }
 
@@ -1223,7 +1225,20 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 /* القاعة من الجوال */
 .hall-me{border-inline-start:4px solid var(--line)}
 .hall-pick{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.hall-mini summary{cursor:pointer;color:var(--muted);font-size:.9rem;margin-bottom:8px}
+.hall-mini summary{cursor:pointer;color:var(--muted);font-size:.95rem;min-height:44px;display:flex;align-items:center;gap:6px}
+/* الخروج ورابط الخصوصية في كل شاشة: هدف لمس كامل على أي جهاز، لا على pointer: coarse وحده */
+button.link.small.logout, a.link.small{min-height:44px;display:inline-flex;align-items:center}
+.ht{display:grid;gap:10px}
+.ht-sum{color:var(--muted);font-size:.9rem;margin:0}
+.ht-team{background:var(--paper,#fff);border:1px solid var(--line);border-inline-start:4px solid var(--line);border-radius:14px;padding:12px 14px}
+.ht-team h3{margin:0 0 8px;font-size:1rem}
+.ht-team h3 small{color:var(--muted);font-weight:400;font-size:.82rem;margin-inline-start:6px}
+.ht-team ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.ht-p{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);font-size:.9rem;line-height:1.4}
+.ht-p.me{border-color:var(--accent);background:var(--brand-cream);font-weight:600}
+.ht-p.away{opacity:.55}
+.ht-p .ht-a{color:var(--accent);font-weight:700}
+.ht-p b.pos{color:var(--ok)}.ht-p b.neg{color:var(--bad)}
 
 /* جولة العرض التوضيحي */
 /* ── الجولة الحيّة لحساب العرض: إضاءة العنصر ولوحة الشرح ── */
@@ -1406,3 +1421,5 @@ body:has(.tour) main{padding-bottom:260px}
 
 /* بطاقة «جلستك القادمة»: في نافذتها تتقدم على الخطوة التالية وتتميز */
 .j-session.live { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+
+.ht-t { color: var(--muted); font-size: 12px; }

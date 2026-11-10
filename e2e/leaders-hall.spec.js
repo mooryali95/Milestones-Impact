@@ -30,7 +30,7 @@ function hall({ stage = 'round', admin = false } = {}) {
   };
 }
 
-test('المشارك: يرى رقم طاولته وفريقه وزملاء طاولته، وخمسون مشاركًا مرسومون في المنظور', async ({ page }) => {
+test('المشارك: يرى رقم طاولته وفريقه وزملاء طاولته، وخمسون مشاركًا في قائمة الفرق بطاولاتهم', async ({ page }) => {
   // مشارك معتمد المسار من خادم المحاكاة المشترك مع تسجيل الفيديو، والقاعة وحدها من هنا
   const srv = createMockServer();
   Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
@@ -46,9 +46,10 @@ test('المشارك: يرى رقم طاولته وفريقه وزملاء طا�
   await expect(mine).toContainText('فريق التوجيه');
   await expect(mine).toContainText('طاولة 7');
   await expect(mine).toContainText('معك:');
+  // على الجوال: الفرق قائمةً مقروءة بأسمائها وطاولاتها (HallTeams)
   await page.locator('details.hall-mini summary').click();
-  await expect(page.locator('.hv g[role="img"]')).toHaveCount(50);
-  await expect(page.locator('.hv')).toContainText('طاولة 9');
+  await expect(page.locator('.ht-p')).toHaveCount(50);
+  await expect(page.locator('.ht')).toContainText('طاولة 9');
 });
 
 test('الخبير: شاشة العرض آمنة قبل الكشف، وإعادة التقسيم والرجوع مرحلة بتأكيد، والمشاركون بالبحث والتصفية', async ({ page }) => {

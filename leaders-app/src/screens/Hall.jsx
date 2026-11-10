@@ -6,8 +6,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
-import { pollPeriod } from '../hallPoll.js';
-import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import { pollPeriod, POLL_FAIL_LIMIT } from '../hallPoll.js';
+import { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import HallTeams from '../../../shared/hall/HallTeams.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { useHallTimer, timerLabel } from '../../../shared/hall/HallTimer.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
@@ -44,9 +45,13 @@ export default function Hall({ onBack }) {
     return r;
   }, []);
   useEffect(() => { try { pending.current = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch { pending.current = null; } }, []);
+  const fails = useRef(0);
+  const [pollErr, setPollErr] = useState('');
   const load = useCallback(async (force) => {
     const r = await call('hall.state', { since: force ? 0 : ver.current });
-    if (!r.success) { setErr(r.message); return; }
+    // أول تحميل يعرض خطأه فورًا (لا شيء على الشاشة غيره)، والسؤال الدوري لا يعرضه إلا إن توالى
+    if (!r.success) { fails.current += 1; if (force || fails.current >= POLL_FAIL_LIMIT) (force ? setErr : setPollErr)(r.message); return; }
+    fails.current = 0; setPollErr('');
     if (pending.current) {
       const sent = await send(pending.current);
       if (sent.success) { const again = await call('hall.state', { since: 0 }); if (again.success && !again.unchanged) { ver.current = again.session?.version || 0; setV(again); } return; }
@@ -79,7 +84,7 @@ export default function Hall({ onBack }) {
         <section className="card stack hall-preview" data-tour="hall" aria-label="معاينة القاعة">
           <div><p className="eyebrow">معاينة</p><h2 className="as-h3">هكذا تبدو القاعة حين تُفتح</h2>
             <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
-          <HallView view={PREVIEW} compact />
+          <HallTeams view={PREVIEW} />
         </section>
         <button className="btn ghost" onClick={onBack}>رحلتي</button>
       </div>
@@ -157,12 +162,12 @@ export default function Hall({ onBack }) {
           )}
         </>
       )}
-      {err && <ErrorBox message={err} />}
+      {(err || pollErr) && <ErrorBox message={err || pollErr} />}
       {/* سجل النشاط: طلبات التوجيه في الدفعة؛ في المسار الذاتي دائمًا، وفي الحية حين يُرفع طلب */}
       {v.inside && (ask || !live) && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
       <details className="hall-mini" open={!v.inside}>
-        <summary>منظور القاعة</summary>
-        <HallView view={v} me={v.me} compact timer={timerLabel(left)} />
+        <summary>الفرق والحضور</summary>
+        <HallTeams view={v} me={v.me} />
       </details>
     </div>
   );
