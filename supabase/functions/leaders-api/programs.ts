@@ -489,9 +489,8 @@ export async function cohortGroups(b: Body) {
       : liveRows(c.program_id).then((r) => r.stages),
   ]);
   const gOf = new Map((links.data || []).map((l: any) => [l.participant_id, l.group_id]));
-  // خبير المجموعة: جاهز حين يكون عموده مطبّقًا. الخبراء المعتمدون، وفريق الدفعة منهم أولًا في القائمة
-  const [probe, experts, team] = await Promise.all([
-    db.from('cohort_groups').select('advisor_expert_id').limit(1),
+  // الخبراء المعتمدون، وفريق الدفعة منهم أولًا في القائمة
+  const [experts, team] = await Promise.all([
     db.from('experts').select('id, full_name, status').in('status', ['active', 'paused']).order('full_name'),
     db.from('cohort_experts').select('expert_id').eq('cohort_id', c.id),
   ]);
@@ -499,7 +498,8 @@ export async function cohortGroups(b: Body) {
   const list = (experts.data || []).map((e: any) => ({ id: e.id, full_name: e.full_name, team: inTeam.has(e.id) }));
   return {
     success: true, cohort: c,
-    group_advisor_ready: !probe.error,
+    // group_advisor_ready باقٍ للوحة المنشورة التي تُظهر الاختيار به؛ العمود مطبّق فهو صحيح دائمًا
+    group_advisor_ready: true,
     experts: [...list.filter((e: any) => e.team), ...list.filter((e: any) => !e.team)],
     stages: (live as any[]).filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort).map((s) => ({ key: s.key, title_ar: s.title_ar })),
     groups: groups.data || [],
@@ -524,7 +524,7 @@ export async function cohortGroupSave(a: Admin, b: Body) {
       if (!e || !['active', 'paused'].includes(e.status)) throw new Fail('اختر خبيرًا معتمدًا لهذه المجموعة');
     }
     const up = await db.from('cohort_groups').update({ advisor_expert_id: adv }).eq('id', b.id).eq('cohort_id', c.id).select('*').maybeSingle();
-    if (up.error) throw new Fail('خبير المجموعة ينتظر تحديث قاعدة البيانات', 503, 'group_advisor_not_ready');
+    if (up.error) throw new Fail('تعذّر حفظ خبير المجموعة الآن، حاول بعد قليل', 503, 'busy');
     if (!up.data) throw new Fail('المجموعة غير موجودة', 404);
     await audit('admin', a.email, 'group.advisor', 'cohorts', c.id, null, { group: b.id, advisor_expert_id: adv });
     return { success: true, group: up.data };
