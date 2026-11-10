@@ -78,7 +78,7 @@ export default function Hall({ onBack }) {
       ]} />
       <div className="row between">
         <div><p className="eyebrow">{live ? 'القاعة الحية' : 'المسار الذاتي'} · {v.cohort.name}</p><h1>{v.topic?.title_ar || 'القاعة'}</h1></div>
-        <span className="chip gold">{HALL_STAGE_AR[st]}{live && st !== 'enter' ? ` · الجولة ${v.session.round}` : ''}</span>
+        <span className="chip gold">{HALL_STAGE_AR[st]}{live && (st === 'round' || st === 'reveal') ? ` · الجولة ${v.session.round}` : ''}</span>
       </div>
 
       {!v.inside ? (
@@ -91,7 +91,7 @@ export default function Hall({ onBack }) {
           <section className="card stack hall-me" style={{ borderInlineStartColor: me?.team ? TEAM_COLOR[me.persona ? 'persona' : me.team] : undefined }}>
             <div className="row between">
               <div>
-                <b>{me?.persona ? `تتقمّص: ${v.session.persona_ar || 'الشخصية الافتراضية'}` : me?.team ? TEAM_AR[me.team] : st === 'enter' || st === 'train' ? 'التدريب أولًا للجميع' : 'بانتظار التقسيم'}</b>
+                <b>{me?.persona ? `تتقمّص: ${v.session.persona_ar || 'الشخصية الافتراضية'}` : me?.team ? TEAM_AR[me.team] : st === 'enter' ? 'أنت في القاعة. تبدأ الجلسة حين يفتحها الخبير' : st === 'train' ? 'التدريب أولًا للجميع' : 'بانتظار التقسيم'}</b>
                 {me?.leader && <span className="chip gold"> ♔ قائد الجولة</span>}
                 {me?.team && <p className="small muted">{(s?.tasks || {})[me.team] || HALL_TEAM_TASK_AR[me.team]}</p>}
               </div>

@@ -30,22 +30,37 @@ function gridLines() {
 }
 const GRID = gridLines();
 
-// موضع كل مشارك بحسب المرحلة
-function layout(people, stage) {
+// موضع كل مشارك بحسب المرحلة. يتسع للعدد: خمسون في القاعة يظهرون جميعًا بلا تراكب.
+// قبل التقسيم: من دخل يقف صفوفًا أمام المنصة بأعمدة تزيد مع العدد، ومن لم يدخل عند الباب (حتى DOOR_MAX، والباقي عدّاد).
+// على الطاولات: قوس واحد حتى SEATS_ARC مقعدًا، ثم قوس ثانٍ خلفه لما زاد.
+export const DOOR_MAX = 8;
+const SEATS_ARC = 8;
+const FLOOR_TOP = 420, FLOOR_BOTTOM = 840;
+const floorWidth = (y) => 760 + 300 * ((y - 250) / 630);
+export function layout(people, stage) {
   const atTables = ['split', 'round', 'reveal'].includes(stage);
   const pos = {};
-  people.forEach((p, i) => {
-    if (stage === 'enter' || (!atTables && !p.joined)) { pos[p.id] = { x: 1475 - (i % 4) * 30, y: 760 - Math.floor(i / 4) * 0 }; return; }
-    if (!atTables || (!p.team && !p.persona)) {
-      const row = Math.floor(i / 7), col = i % 7; const y = 430 + row * 110; const t = (y - 250) / 630; const w = 760 + 300 * t;
-      pos[p.id] = { x: 800 - w / 2 + col * (w / 6), y }; return;
-    }
+  const seated = (p) => atTables && (p.team || p.persona);
+  const standing = people.filter((p) => !seated(p) && p.joined);
+  const door = people.filter((p) => !seated(p) && !p.joined);
+  const cols = Math.max(7, Math.ceil(Math.sqrt(standing.length * 2)));
+  const rows = Math.max(1, Math.ceil(standing.length / cols));
+  const gap = rows > 1 ? Math.min(110, (FLOOR_BOTTOM - FLOOR_TOP) / (rows - 1)) : 0;
+  standing.forEach((p, i) => {
+    const row = Math.floor(i / cols), col = i % cols; const y = FLOOR_TOP + row * gap; const w = floorWidth(y);
+    pos[p.id] = { x: 800 - w / 2 + col * (w / (cols - 1)), y };
+  });
+  door.forEach((p, i) => { pos[p.id] = i < DOOR_MAX ? { x: 1500 - (i % 2) * 50, y: 830 - Math.floor(i / 2) * 50 } : null; });
+  people.filter(seated).forEach((p) => {
     const team = p.persona ? 'persona' : p.team;
     const mates = people.filter((q) => (q.persona ? 'persona' : q.team) === team);
     const k = mates.indexOf(p), n = mates.length, t = TABLES[team];
     if (team === 'persona') { pos[p.id] = { x: t.x, y: t.y - 18 }; return; }
-    const a = Math.PI * (0.12 + 0.76 * (k + 0.5) / n);
-    pos[p.id] = { x: t.x + Math.cos(Math.PI - a) * (t.rx + 12), y: t.y - Math.sin(a) * (t.ry + 30) };
+    const front = n > SEATS_ARC ? Math.ceil(n / 2) : n;
+    const back = k >= front, ki = back ? k - front : k, ni = back ? n - front : front;
+    const span = n >= 5 ? 0.96 : 0.76;
+    const a = Math.PI * ((1 - span) / 2 + span * (ki + 0.5) / ni);
+    pos[p.id] = { x: t.x + Math.cos(Math.PI - a) * (t.rx + (back ? 84 : n > SEATS_ARC ? 34 : 12)), y: t.y - Math.sin(a) * (t.ry + (back ? 116 : n > SEATS_ARC ? 66 : n >= 5 ? 50 : 30)) };
   });
   return pos;
 }
@@ -65,6 +80,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
   const pos = useMemo(() => layout(people, stage), [people, stage]);
   const s = view?.sentence;
   const dist = view?.distribution;
+  const waiting = people.filter((p) => !p.joined && !(atTables && (p.team || p.persona))).length;
 
   return (
     <div className="hv-wrap" style={{ position: 'relative' }}>
@@ -83,7 +99,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
         <g opacity={view?.session?.mode === 'self' ? 0.4 : 1}>
           <rect x="470" y="34" width="660" height="190" rx="14" fill="url(#hvScreen)" stroke="#c79a4b" strokeOpacity=".55" />
           <text x="1100" y="68" textAnchor="start" direction="rtl" fill="#c79a4b" fontSize="17">
-            {view?.topic?.title_ar ? `${view.topic.title_ar} · الجولة ${view.session.round}${s ? ` · ${Q_AR[s.question] || ''}` : ''}` : 'القاعة'}
+            {view?.topic?.title_ar ? `${view.topic.title_ar}${s && atTables ? ` · الجولة ${view.session.round} · ${Q_AR[s.question] || ''}` : ''}` : 'القاعة'}
           </text>
           <foreignObject x="500" y="80" width="600" height="100">
             <div xmlns="http://www.w3.org/1999/xhtml" style={{ color: '#f3ead9', font: `500 ${compact ? 24 : 21}px/1.6 'IBM Plex Sans Arabic',sans-serif`, direction: 'rtl', textAlign: 'right' }}>
@@ -100,7 +116,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
             );
           })}
           <path d="M560,236 L1040,236 L1080,262 L520,262 Z" fill="#203a43" stroke="#2a4651" />
-          <text x="800" y="255" textAnchor="middle" fill="#93a8ad" fontSize="13">منصة المدرّب{view ? ` · أجاب ${view.answered} من ${view.total}` : ''}</text>
+          <text x="800" y="255" textAnchor="middle" fill="#93a8ad" fontSize="13">منصة المدرّب{s && atTables ? ` · أجاب ${view.answered} من ${view.total}` : view && !atTables ? ` · دخل ${people.length - waiting} من ${people.length}` : ''}</text>
         </g>
 
         {Object.entries(TABLES).map(([k, t]) => (
@@ -112,10 +128,11 @@ export default function HallView({ view, me = null, onPerson, compact = false })
             {k !== 'persona' && stage === 'round' && s?.tasks?.[k] && <text x={t.x} y={t.y + t.ry + 26} textAnchor="middle" fill="#93a8ad" fontSize="13">{s.tasks[k]}</text>}
           </g>
         ))}
-        {stage === 'enter' && <g><rect x="1430" y="700" width="90" height="150" rx="6" fill="#0f2128" stroke="#2a4651" /><text x="1475" y="870" textAnchor="middle" fill="#93a8ad" fontSize="13">باب القاعة</text></g>}
+        {!atTables && (stage === 'enter' || waiting > 0) && <g><rect x="1415" y="640" width="120" height="215" rx="6" fill="#0f2128" stroke="#2a4651" /><text x="1475" y="874" textAnchor="middle" fill="#93a8ad" fontSize="14">{waiting ? `عند الباب: ${waiting}` : 'باب القاعة'}</text></g>}
 
         {people.map((p) => {
-          const at = pos[p.id] || { x: 1475, y: 760 };
+          const at = pos[p.id];
+          if (!at) return null;
           const team = p.persona ? 'persona' : p.team;
           const col = atTables && team ? TEAM_COLOR[team] : '#93a8ad';
           const mine = me && p.id === me;

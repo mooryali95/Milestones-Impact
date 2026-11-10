@@ -1205,8 +1205,10 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .kt-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* إجابة كاتون على CBM الثلاثي: حكم، ثقة، وسوم موقف */
 .kt-answer{display:grid;gap:8px}
-.kt-row{display:grid;grid-template-columns:64px 1fr;gap:8px;align-items:center}
+.kt-row{display:grid;grid-template-columns:72px 1fr;gap:8px;align-items:center}
 .kt-lbl{white-space:nowrap}
+/* «(بلا نقاط)» في سطر تحت التسمية، فلا تتراكب مع أول وسم */
+.kt-lbl small{display:block;white-space:normal}
 .kt-opts.two{grid-template-columns:repeat(2,minmax(0,1fr))}
 .kt-opts.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .kt-opt small{display:block;font-size:.75rem}
@@ -1370,3 +1372,9 @@ body:has(.tour) main{padding-bottom:260px}
 /* شريط سياسة الخصوصية (D18): تجديد مؤجل أو نسخة غير جوهرية */
 .policy-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; max-width: 960px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line); border-inline-start: 3px solid var(--gold); border-radius: 10px; background: var(--surface); font-size: 14px; }
 @media (max-width: 600px) { .policy-bar { margin: 8px 16px 0; } }
+
+/* أهداف اللمس على الشاشات اللمسية: 44 بكسل على الأقل (Apple HIG؛ WCAG 2.2 يشترط 24) */
+@media (pointer: coarse) {
+  .btn.sm { min-height: 44px; }
+  .logout { min-height: 44px; min-width: 44px; display: inline-grid; place-items: center; }
+}

@@ -566,17 +566,6 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {approved && me.group && (
         <div className="banner"><span className="ico">👥</span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}
-      {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
-      {approved && <HowEvaluated policy={me.final_policy} />}
-      {me.final && (
-        <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
-          <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}
-            {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
-      )}
-      {approved && <Continuous c={me.continuous} />}
-      {approved && <PeerRequests />}
-      {approved && <ChooseExpert />}
-
       {!approved && profile && (
         <div className="banner gold">
           <span className="ico">⏳</span>
@@ -642,6 +631,18 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </aside>
 
         <div className="j-main" data-tour="stages">
+          {/* تحت «خطوتك التالية» لا فوقها: الفعل التالي أول ما يراه المشارك، ثم مواعيده وتقدمه */}
+          {approved && <Milestones list={me.milestones} summary={me.milestone_summary} />}
+          {approved && <HowEvaluated policy={me.final_policy} />}
+          {me.final && (
+            <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico">🎓</span>
+              <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}
+                {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
+          )}
+          {approved && <Continuous c={me.continuous} />}
+          {approved && <PeerRequests />}
+          {approved && <ChooseExpert />}
+
           {profile && (
             <>
               <div className="section-title">
