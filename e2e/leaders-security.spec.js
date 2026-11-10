@@ -181,7 +181,7 @@ test('أجهزتك: الاسم في الشريط يفتح الملف، وإنه�
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
   await expect(page.getByRole('heading', { name: 'أجهزتك' })).toBeVisible();
   await expect(page.getByText('Safari على iPhone أو iPad')).toBeVisible();
-  await expect(page.getByText('هذا الجهاز')).toBeVisible();
+  await expect(page.getByText('هذا الجهاز', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'اخرج من الأجهزة الأخرى' }).click();
   await expect(page.getByText('Safari على iPhone أو iPad')).toHaveCount(0);
   expect(sent.find((b) => b.action === 'sessions.revoke')).not.toHaveProperty('id');

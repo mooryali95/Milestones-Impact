@@ -14,7 +14,7 @@ import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
-import { SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
@@ -117,7 +117,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         <div className="cp-hero-side">
           <Meter value={d.readiness} min={d.ready_min} />
           <span className={`chip ${STATUS_CHIP[c.status] || ''}`}>{c.status_title}</span>
-          <small>{done} من {d.sections.length} فصول مكتملة</small>
+          <small>اكتمل {done} من {countAr(d.sections.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</small>
         </div>
       </section>
 
@@ -179,7 +179,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
                   <button className={`cp-sec${s.complete ? ' done' : ''}`} onClick={() => setOpen(s.id)}>
                     <span className="cp-n">{String(i + 1).padStart(2, '0')}</span>
                     <span className="model-icon sm">{s.icon}</span>
-                    <span className="cp-t"><b>{s.title}</b><small>{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${s.missing} حقول ناقصة` : ''}</small></span>
+                    <span className="cp-t"><b>{s.title}</b><small>{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}</small></span>
                     {st.t && <span className={`chip ${st.c}`}>{st.t}</span>}
                   </button>
                 </li>

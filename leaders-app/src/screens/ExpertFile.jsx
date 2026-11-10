@@ -153,6 +153,7 @@ function PeerPending({ peer, advisor, reload, say }) {
 export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
   const [msg, setMsg] = useState('');
+  const [bad, setBad] = useState(false);
   const [rub, setRub] = useState(null);
   const load = useCallback(() => xpCall('xp.participant', { id }).then(setD), [id]);
   useEffect(() => { load(); }, [load]);
@@ -163,6 +164,7 @@ export default function ExpertFile({ id, onBack }) {
   const c = d.continuous;
   const rateMilestone = async (m, body) => {
     const r = await xpCall('xp.milestone', { participant_id: p.id, milestone_id: m.id, ...body });
+    setBad(!r.success);
     setMsg(r.success ? 'حُفظ' : r.message);
     if (r.success) { setRub(null); load(); }
   };
@@ -176,7 +178,7 @@ export default function ExpertFile({ id, onBack }) {
             <p className="small ltr">{p.email}{p.phone ? ` · ${p.phone}` : ''}</p></div>
           <span className="chip gold">{advisor ? 'أنت مستشار دفعته' : 'مسند إليك بطلب خدمة'}</span>
         </div>
-        {msg && <div className="banner"><span className="ico">✓</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
+        {msg && <div className={`banner${bad ? ' warn' : ''}`} role={bad ? 'alert' : 'status'}><span className="ico" aria-hidden="true">{bad ? '!' : '✓'}</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
         <div className="xf-needs" aria-label="المطلوب منك الآن">
           <b>المطلوب منك الآن</b>
           {d.needs.length ? <ul>{d.needs.map((n) => <li key={n.key}>{n.text}</li>)}</ul> : <p className="muted small">لا شيء ينتظرك الآن.</p>}
