@@ -16,6 +16,8 @@ const loadGsi = () => (loading ||= new Promise((ok, fail) => {
   document.head.appendChild(s);
 }));
 
+const whenIdle = () => new Promise((ok) => (window.requestIdleCallback ? window.requestIdleCallback(() => ok(), { timeout: 2500 }) : setTimeout(ok, 600)));
+
 // شعار Google الرسمي بألوانه (مسموح داخل زر مخصص وفق إرشادات علامة Google)
 const G = (
   <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
@@ -42,7 +44,8 @@ export default function GoogleButton({ onCredential, disabled }) {
 
   useEffect(() => {
     let live = true;
-    loadGsi().then(() => {
+    // مكتبة Google بعد أن تفرغ الصفحة من رسمها الأول، لا معه: الدخول بالبريد لا ينتظرها
+    whenIdle().then(loadGsi).then(() => {
       if (!live || !box.current) return;
       window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (r) => cb.current(r.credential), ux_mode: 'popup', locale: 'ar' });
       window.google.accounts.id.renderButton(box.current, { type: 'standard', size: 'large', width: Math.min(400, box.current.offsetWidth || 360), locale: 'ar' });

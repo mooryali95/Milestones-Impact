@@ -16,7 +16,7 @@ describe('الخطوط والعامل والتحميل', () => {
       expect(html).toContain('/fonts/fonts.css');
       expect(read(`${app}/public/_headers`)).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
       expect(readdirSync(join(root, `${app}/public/fonts`)).filter((f) => f.endsWith('.woff2')).length).toBeGreaterThanOrEqual(5);
-      expect(read(`${app}/public/fonts/fonts.css`)).toMatch(/url\(\/fonts\/NotoKufiArabic-arabic\.woff2\)/);
+      expect(read(`${app}/public/fonts/fonts.css`)).toMatch(/url\(\/fonts\/NotoKufiArabic-arabic(-s\d+)?\.woff2\)/);   // تطبيق القادة يحمّل النسخة المقلّصة -s1
     }
     expect(read('leaders-app/public/fonts/fonts.css')).toMatch(/font-family: 'Amiri'/);
   });

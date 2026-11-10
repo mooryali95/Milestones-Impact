@@ -1494,3 +1494,5 @@ body:has(.tour) main{padding-bottom:260px}
 .topbar-back:hover{background:rgba(255,255,255,.08)}
 .topbar-logo:focus-visible,.topbar-back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cx-team{justify-self:start}
+/* روابط داخل سطر (لوحة الخبير، لوحة الجهة، شاهد كيف تسير رحلتك): مساحة لمس 44 بلا تغيير في ارتفاع السطر */
+.role-note a.link,.signin-expert a.link,.intro-link{display:inline-flex;align-items:center;min-height:44px;margin-block:-12px;min-width:44px}
