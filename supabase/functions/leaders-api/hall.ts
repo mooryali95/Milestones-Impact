@@ -90,7 +90,10 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, verdict, confidence, stances, note').eq('sentence_id', session.sentence_id)).data || [])
     : [];
   const topic = session.topic_id ? (await db.from('katon_topics').select('id, title_ar').eq('id', session.topic_id).maybeSingle()).data : null;
-  const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
+  // نص الجملة في قائمة الخبير وحده (يختار وهو يقرأ)؛ المشارك لا تصله الجمل القادمة
+  const sentences = session.topic_id ? (((viewer.kind === 'admin'
+    ? await db.from('katon_sentences').select('id, sort, question, text_ar').eq('topic_id', session.topic_id).order('sort')
+    : await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) as any[]) : [];
   const view = hallView({
     session, sentence: (sentence as any).data, presence: presence.data || [], answers,
     members: members.map((m: any) => ({ ...m, level: overallLevel(m.levels) })),
