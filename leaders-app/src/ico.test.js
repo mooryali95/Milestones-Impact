@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { ICO_NAMES } from './Ico.jsx';
 
 const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.jsx') ? [join(d, e.name)] : []));
-const FILES = [...walk('leaders-app/src'), ...walk('shared/hall')];
+const FILES = [...walk('leaders-app/src'), ...walk('shared/hall'), ...walk('admin-app/src')];
 
 describe('الأيقونات مجموعة مرسومة واحدة', () => {
   it('كل اسم أيقونة مستعمل معرّف في المجموعة', () => {
@@ -16,7 +16,7 @@ describe('الأيقونات مجموعة مرسومة واحدة', () => {
     }
     expect([...used].filter((n) => !ICO_NAMES.includes(n))).toEqual([]);
   });
-  it('لا رمز تعبيري ملون في واجهة القادة والقاعة', () => {
+  it('لا رمز تعبيري ملون في واجهة القادة والقاعة ولوحة الإدارة', () => {
     const emoji = /[\u{1F300}-\u{1FAFF}\u{23F0}-\u{23F3}]/u;
     expect(FILES.filter((f) => emoji.test(readFileSync(f, 'utf8')))).toEqual([]);
   });

@@ -1,5 +1,6 @@
 // منسق الجهة: نموذج الجهة، وتحكم المدير، وبوابة المنسق. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
+import { readable } from './readable.js';
 
 const ADMIN = 'http://localhost:4303/';
 const PORTAL = 'http://localhost:4304/org';
@@ -115,6 +116,7 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
         impact: { counts: { participants: 2, baseline: 2, post: 1, paired: 1 }, caution: 'العدد 1 أقل من 20', transfer: [], participants: [],
           cohort: { milestone: { n: 1, pre: 40, post: 62, diff: 22, reliable_up: 1, verdicts: {} } } } },
       'coord.logout': { success: true },
+      'coord.sus-state': { success: true, ready: true, due: true, answered: false },
       'coord.me': { success: true, coordinator: { full_name: 'منسقة' }, org: { name: 'وزارة التجربة' } },
     }[b.action];
     await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
@@ -143,6 +145,13 @@ test('بوابة المنسق: الدخول بالرمز ثم لوحة الجه�
   await expect(page.locator('.op-table tbody tr').first()).toContainText('سارة');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'وزارة التجربة' })).toBeVisible();
+  // استبيان سهولة الاستخدام يظهر للمنسق حين يقرر الخادم استحقاقه
+  await expect(page.getByRole('heading', { name: 'رأيك في سهولة المنصة' })).toBeVisible();
+  // على الجوال: لا تمرير أفقي ولا نص دون 13 بكسل
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('heading', { name: 'وزارة التجربة' })).toBeVisible();
+  expect(await readable(page)).toEqual({ hscroll: false, tiny: [] });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('button', { name: 'خروج' }).click();
   await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
   expect(sent).toContain('coord.logout');

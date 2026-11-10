@@ -2,6 +2,7 @@
 // طلبات التواصل: إحصاءات، بحث وفلاتر، جدول بصفحات، ودرج التفاصيل
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Ico from '../../../shared/ui/Ico.jsx';
 import { call, fmtDate } from '../api.js';
 import { countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, STATUS_AR } from '../contacts.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
@@ -148,7 +149,7 @@ export default function Contacts() {
                   خطأ في تحميل البيانات: {error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button>
                 </td></tr>
               ) : !list.length ? (
-                <tr><td colSpan={7}><div className="empty-state"><div className="empty-state-icon">📭</div>
+                <tr><td colSpan={7}><div className="empty-state"><div className="empty-state-icon"><Ico name="inbox" size="34" /></div>
                   <p>{all.length ? 'لا توجد طلبات مطابقة' : 'لا توجد طلبات بعد'}</p></div></td></tr>
               ) : shown.map((r) => (
                 <tr key={r.id} tabIndex={0} onClick={() => open(r)} onKeyDown={(e) => { if (e.key === 'Enter') open(r); }} style={{ cursor: 'pointer' }}>

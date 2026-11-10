@@ -713,3 +713,4 @@
 .la-import-field textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; font: inherit; font-weight: 400; }
 .la-import-table { max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 .la-import-table .la-table { margin: 0; }
+.ico-svg{vertical-align:-.22em;flex:none}
