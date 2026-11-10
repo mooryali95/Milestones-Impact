@@ -630,7 +630,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       <RateExpert />
       {approved && <SusCard call={call} />}
       {approved && me.group && (
-        <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
+        <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مبادرة مجموعتكم واحدة، ووثيقة كل عضو يكتبها بنفسه وتُقيَّم باسمه.' : ''}</div></div>
       )}
       {!approved && profile && (
         <div className="banner gold">
