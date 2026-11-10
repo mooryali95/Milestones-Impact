@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // صوت فيديو المشارك من النص المعتمد (PARTICIPANT_LINES في leaders-app/src/tour-steps.js، المصدر الواحد) بـElevenLabs:
-// مقطع لكل سطر (01.mp3 إلى NN.mp3) وsegments.json (speech لكل سطر)، بالصوت والإعدادات التي اعتمدها المالك في 2026-11-10.
+// يُنطق voice (النص مشكولًا) حيث وُجد، وإلا text. مقطع لكل سطر (01.mp3 إلى NN.mp3) وsegments.json (speech لكل سطر)، بالصوت والإعدادات التي اعتمدها المالك في 2026-11-10.
 // بعد التوليد (المونتاج): رفع 5 dB، ثم محدِّد ذروة عند -0.5 dBFS بلا تسوية تلقائية، فلا يتشوّه الصوت.
 // الاستخدام: ELEVENLABS_API_KEY=... node shared/video/tts-audio.mjs <outdir> [--only=3,7]
 //   ثم: npm run video:record -- --cut=participant --audio=<outdir>
@@ -38,7 +38,7 @@ for (const [k, line] of PARTICIPANT_LINES.entries()) {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE.id}?output_format=mp3_44100_128`, {
       method: 'POST',
       headers: { 'xi-api-key': KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({ text: line.text, model_id: VOICE.model, language_code: 'ar', voice_settings: VOICE.settings }),
+      body: JSON.stringify({ text: line.voice || line.text, model_id: VOICE.model, language_code: 'ar', voice_settings: VOICE.settings }),
     });
     if (!r.ok) throw new Error(`السطر ${k + 1}: ElevenLabs ${r.status} ${(await r.text()).slice(0, 200)}`);
     fs.writeFileSync(raw, Buffer.from(await r.arrayBuffer()));

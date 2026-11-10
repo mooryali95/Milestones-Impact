@@ -33,6 +33,18 @@ describe('نص فيديو المشارك', () => {
     }
   });
 
+  it('voice هو say نفسه مشكولًا: بلا تشكيل يساويه حرفًا (عدا «جوجل» المنطوقة لـGoogle)', () => {
+    const strip = (t) => t.normalize('NFC').replace(/[\u064B-\u0652\u0670]/g, '').replace('جوجل', 'Google');
+    for (const l of PARTICIPANT_LINES.filter((x) => x.say)) {
+      expect(l.voice, l.step).toBeTruthy();
+      expect(strip(l.voice), l.step).toBe(strip(l.say));
+      // الكلمات التي نُطقت خطأً بلا تشكيل تبقى مشكولة
+    }
+    const v = Object.fromEntries(PARTICIPANT_LINES.map((l) => [l.step, l.voice]));
+    expect(v.doors).toContain('رَشَّحَتْكَ'); expect(v.continuous).toContain('يُخْتَصَرَ'); expect(v.handbook).toContain('كُتَيِّبُكَ');
+    expect(v.capstone).toContain('مُبادَرَتُكَ'); expect(v.peer).toContain('تَجِدْ'); expect(v.milestones).toContain('مَعْلَمٍ');
+  });
+
   it('صيغة المخاطب: لا «المشارك» يُتحدَّث عنه، ومدة الاعتماد يوما عمل (D04)', () => {
     if (PARTICIPANT_LINES.every((l) => l.say)) expect(all).not.toMatch(/المشارك/);
     expect(PARTICIPANT_LINES.find((l) => l.step === 'result').text).toMatch(/يومَي عمل|يومي عمل/);
