@@ -54,7 +54,7 @@ export default function Hall({ onBack }) {
     return (
       <div className="page stack">
         <h1>القاعة</h1>
-        <div className="card"><p className="muted">لا قاعة مفتوحة لدفعتك الآن. حين يفتحها الخبير تجدها هنا، وتصلك دعوة منه.</p></div>
+        <div className="card"><p className="muted">لا قاعة مفتوحة لدفعتك الآن. حين يفتحها الخبير تجدها هنا.</p></div>
         <section className="card stack hall-preview" data-tour="hall" aria-label="معاينة القاعة">
           <div><p className="eyebrow">معاينة</p><h2 className="as-h3">هكذا تبدو القاعة حين تُفتح</h2>
             <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
@@ -73,7 +73,7 @@ export default function Hall({ onBack }) {
     <div className="page wide stack hall-page" data-tour="hall">
       <FirstOpen id="hall" icon="🏛️" title="القاعة حيّة داخل المنصة" lines={[
         'حين يفتح الخبير جلسة تجد فريقك ودورك والجولة الحالية هنا دون أن تحدّث الصفحة.',
-        'كل تفاعل في الجولة يُحتسب في تقييمك المستمر، فشارك باسمك.',
+        'إجاباتك في الجولات للتعلم، ولا تدخل تقييمك المستمر ولا الختامي.',
         'سؤال لم تجد إجابته؟ اطرحه على أقرانك من «طلبات التوجيه» ويؤكد الخبير الإجابة.',
       ]} />
       <div className="row between">

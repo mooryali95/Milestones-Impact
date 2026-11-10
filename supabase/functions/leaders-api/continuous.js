@@ -39,9 +39,8 @@ export const rubricPct = (scores) => {
 };
 // تقييمات الخبراء للمشارك (خماسية) وحدها
 export const expertRatingPct = (n) => (n >= 1 && n <= 5 ? EXPERT_RATING_PCT[Math.round(n)] : null);
-// تقدير النموذج بالسلّم الرباعي (D08). القيمة 5 من السلّم الخماسي السابق تُقرأ «متميز» بجدول التحويل (5←4)؛
-// وما دونها يُحوَّل على الإنتاج بجدول يقره المالك قبل تضييق قيد القاعدة
-export const modelPct = (n) => { const r = Math.round(Number(n)); return r === 5 ? RUBRIC_PCT[4] : r >= 1 && r <= 4 ? RUBRIC_PCT[r] : null; };
+// تقدير النموذج بالسلّم الرباعي (D08)، من 1 إلى 4 وحدها: طُبّق التحويل (20261107150000) وقيد القاعدة 1..4، فما خارجه بلا نسبة
+export const modelPct = (n) => { const r = Math.round(Number(n)); return r >= 1 && r <= 4 ? RUBRIC_PCT[r] : null; };
 
 // events: كل حدث تقييم بتاريخه ونسبته، لحساب الاتجاه وعرض آخر ما جرى
 /** @param {{ quizzes?: any[], models?: any[], ratings?: any[], milestones?: any[], lab?: any[], katon?: any[], peer?: any[], weights?: Record<string, number> | null, min_events?: number, min_quiz_items?: number }} [src] */
@@ -52,7 +51,7 @@ export function continuousAssessment({ quizzes = [], models = [], ratings = [], 
     quizItems += Number(q.quiz_total); quizRight += Number(q.quiz_score);
     events.push({ source: 'quizzes', at: q.completed_at, pct: Math.round((q.quiz_score / q.quiz_total) * 100), label: q.title || 'اختبار باب' });
   }
-  for (const m of models) if (m.rating >= 1) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: modelPct(m.rating), label: m.title || 'نموذج' });
+  for (const m of models) if (modelPct(m.rating) != null) events.push({ source: 'models', at: m.reviewed_at || m.updated_at, pct: modelPct(m.rating), label: m.title || 'نموذج' });
   for (const m of milestones) {
     const p = rubricPct(m.scores);
     if (p != null) events.push({ source: 'milestones', at: m.done_at, pct: p, label: m.title_ar || 'معلم' });

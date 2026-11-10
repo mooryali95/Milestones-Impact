@@ -113,9 +113,6 @@ export function fromBytea(s: string) {
   return out;
 }
 
-// عمود غير موجود في القاعدة أو في ذاكرة PostgREST: ترحيل لم يُطبَّق بعد، فيُعاد الطلب بدونه (قراءة متسامحة)
-export const missingColumn = (err: any) => err?.code === 'PGRST204' || err?.code === '42703';
-
 export function must<T>(res: { data: T; error: unknown }, msg = 'تعذّر تنفيذ العملية'): T {
   if (res.error) {
     console.error(res.error);
@@ -158,18 +155,24 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
   }
 }
 
-// سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق. متسامح قبل ترحيله (42P01)
-// فلا تتعطل الموافقة نفسها، وأي خطأ آخر يُسجَّل ولا يرمي: الموافقة مسجلة في جدول صاحبها أولًا.
+// سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق، وهو دليل الموافقة.
+// تعذّر كتابته يرمي، فيفشل الطلب قبل أثره في السجل ولا تُعد الموافقة مسجلة بلا دليلها.
 export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater';
 export async function logConsent(subject: ConsentSubject, subjectId: string, kind: 'accept' | 'renew' | 'org_share_on' | 'org_share_off') {
   const { error } = await db.from('consent_events').insert({ subject, subject_id: subjectId, kind, version: POLICY_DIGEST.version, text_digest: POLICY_DIGEST.sha256 });
-  if (error && error.code !== '42P01' && error.code !== 'PGRST205') console.error('consent_events insert:', error.message);
-  return !error;
+  if (error) {
+    console.error('consent_events insert:', error.message);
+    throw new Fail('تعذّر تسجيل موافقتك الآن، حاول بعد قليل', 503, 'consent_unavailable');
+  }
 }
-// سطر الموافقة عند أول دخول للمنسق والخبير (D18): مطلوب إن لم يُسجَّل له قبول لآخر نسخة جوهرية. قبل الترحيل لا حجب
+// سطر الموافقة عند أول دخول للمنسق والخبير (D18): مطلوب إن لم يُسجَّل له قبول لآخر نسخة جوهرية.
+// تعذّر القراءة يرمي، فلا يُعفى أحد من الموافقة بعطل
 export async function consentNeeded(subject: ConsentSubject, subjectId: string) {
   const { data, error } = await db.from('consent_events').select('id').eq('subject', subject).eq('subject_id', subjectId).gte('version', POLICY_MATERIAL_VERSION).limit(1);
-  if (error) return false;
+  if (error) {
+    console.error('consent_events read:', error.message);
+    throw new Fail('تعذّر التحقق من الموافقة الآن، حاول بعد قليل', 503, 'consent_unavailable');
+  }
   return !data?.length;
 }
 
@@ -478,16 +481,10 @@ async function challengeCount(since: string, ip?: string | null, purpose?: 'regi
   }
   return n;
 }
-async function contactMailCount(since: string) {
-  const { count } = await publicDb.from('mail_log').select('id', { count: 'exact', head: true }).gte('created_at', since);
-  return count ?? 0;
-}
-// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد): العداد الموحد leaders.mail_events (D15)،
-// وقبل ترحيله الصيغة القديمة (الرموز ونموذج التواصل وحدهما)
+// استهلاك البريد في المدة كما يراه الحارس وتقرير الصحة (مصدر واحد): العداد الموحد leaders.mail_events (D15).
+// null: العداد غير مقروء الآن، فيقرر sendCounted (الرموز والتنبيه تمر، وما سواها يُحجب أو يدخل الطابور، وينبّه)
 export async function mailUsage(since = new Date(Date.now() - 864e5).toISOString()) {
-  const c = await mailCounts(db, since);
-  if (c) return c.sent;
-  return (await challengeCount(since)) + (await contactMailCount(since).catch(() => 0));
+  return (await mailCounts(db, since))?.sent ?? null;
 }
 // الرمز يُحتسب في السقف فقط إن أُرسل فعلًا: فشل الإرسال يحذف صفه ويرفع الخطأ نفسه
 export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string) {
@@ -544,7 +541,7 @@ export async function mailGuard(b: Record<string, any>, ctx: { ip: string | null
   if (purpose === 'register' && ctx.ip && await challengeCount(dayAgo, ctx.ip, 'register') >= CONFIG.registerPerIpDay) {
     throw new Fail('تسجيلات كثيرة اليوم من هذه الشبكة. سجّل بحساب Google، أو حاول غدًا', 429, 'rate');
   }
-  if (await mailUsage(dayAgo) >= CONFIG.mailDailyCap) {
+  if ((await mailUsage(dayAgo) ?? 0) >= CONFIG.mailDailyCap) {
     console.error('leaders-api: mail daily cap reached', CONFIG.mailDailyCap);
     throw new Fail('بلغت الرسائل حدها اليومي. ادخل بمفتاح المرور، أو حاول بعد ساعات', 429, 'mail_cap');
   }

@@ -7,7 +7,7 @@
 // نقاط الأداة عند الإتقان (70%) ومكافأة عند التميز (90%)، مرة واحدة لكل منهما.
 // المختبر قسم مستقل: يراه من فتحته له الإدارة أو لجهته (lab_grants)، ومن
 // اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
-import { all, audit, db, Fail, missingColumn, must } from './core.ts';
+import { all, audit, db, Fail, must } from './core.ts';
 import { releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
 import { seededShuffle } from './logic.js';
@@ -92,11 +92,9 @@ export async function start(p: any, b: Body) {
     const dayAgo = new Date(Date.now() - 864e5).toISOString();
     const { count } = await db.from('lab_attempts').select('id', { count: 'exact', head: true }).eq('participant_id', p.id).gte('started_at', dayAgo);
     if ((count ?? 0) >= STARTS_PER_DAY) throw new Fail('بدأت محاولات كثيرة اليوم، تابع غدًا', 429, 'rate');
-    // D02: إصدار محتوى الدفعة مع كل محاولة، ويُتجاوز قبل ترحيله
-    const release = (await releaseOf(p).catch(() => null))?.id ?? null;
-    let res: any = await db.from('lab_attempts').insert({ participant_id: p.id, item_id: it.id, content_release: release }).select('*').single();
-    if (res.error && missingColumn(res.error)) res = await db.from('lab_attempts').insert({ participant_id: p.id, item_id: it.id }).select('*').single();
-    a = must(res);
+    // D02: إصدار محتوى الدفعة مع كل محاولة، إلزامي: null لدفعة بلا إصدار وحدها، وخطأ القراءة أو الحفظ يرمي
+    const release = (await releaseOf(p))?.id ?? null;
+    a = must(await db.from('lab_attempts').insert({ participant_id: p.id, item_id: it.id, content_release: release }).select('*').single());
   }
   return {
     success: true,

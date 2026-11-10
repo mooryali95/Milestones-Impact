@@ -48,7 +48,7 @@ export default function PeerRequests({ preset = null, onDone }) {
         <h3 id="pr-h">طلبات التوجيه</h3>
         {!open && <button className="btn sm" onClick={() => setOpen(true)}>اطلب توجيهًا</button>}
       </div>
-      <p className="small muted">{d.supervision_ar}{d.team_ar ? ` · أنت في ${d.team_ar}` : ''}{d.advisor ? ` · خبير دفعتك: ${d.advisor}` : ''}. ما يؤكّده الخبير من إسهامك لزملائك يُحسب لك في التقييم المستمر.</p>
+      <p className="small muted">{d.supervision_ar}{d.team_ar ? ` · أنت في ${d.team_ar}` : ''}{d.advisor ? ` · مستشارك: ${d.advisor}` : ''}. ما يؤكّده الخبير من إسهامك لزملائك يُحسب لك في التقييم المستمر.</p>
       {msg?.ok && <div className="banner"><span className="ico">✓</span><div className="grow">{msg.ok}</div></div>}
       {msg?.err && <div className="alert err" role="alert">{msg.err}</div>}
       {open && (

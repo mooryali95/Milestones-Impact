@@ -61,15 +61,18 @@ function Impact({ im, instruments }) {
   );
 }
 
-// حالة النظام: ترحيلات لم تُشغَّل، وأسرار ناقصة، واقتراب البريد من سقفه اليومي
+// حالة النظام: ترحيلات لم تُطبَّق، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها
 function Health({ h }) {
   if (!h?.success) return null;
   const near = h.mail.today >= h.mail.cap * 0.8;
-  if (!h.missing_migrations.length && !h.missing_secrets.length && !near) return null;
+  const unread = h.migrations_ledger === false || h.mail.today == null;
+  if (!h.missing_migrations.length && !h.missing_secrets.length && !near && !unread) return null;
   return (
     <div className="la-note la-health" role="status">
       <b>حالة النظام</b>
-      {h.missing_migrations.length > 0 && <p>ترحيلات لم تُشغَّل بعد في SQL Editor: {h.missing_migrations.map((f) => <code key={f}>{f}.sql</code>)}</p>}
+      {h.migrations_ledger === false && <p>تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق.</p>}
+      {h.mail.today == null && <p>تعذّرت قراءة عداد البريد: لا يخرج الآن إلا الرموز والتنبيه، والتذكيرات في الطابور.</p>}
+      {h.missing_migrations.length > 0 && <p>ترحيلات لم تُطبَّق على الإنتاج، تُطبَّق بسير migrate.yml بأسمائها: {h.missing_migrations.map((f) => <code key={f}>{f}.sql</code>)}</p>}
       {h.missing_secrets.length > 0 && <p>أسرار ناقصة في دالة leaders-api: {h.missing_secrets.map((k) => <code key={k}>{k}</code>)}</p>}
       {near && <p>رسائل الرموز اليوم {h.mail.today} من {h.mail.cap}. عند السقف يتوقف إرسال الرموز حتى الغد، ويبقى الدخول بمفتاح المرور.</p>}
     </div>

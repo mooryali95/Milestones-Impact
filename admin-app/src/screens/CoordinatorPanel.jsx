@@ -37,9 +37,9 @@ function Preview({ orgId, id, onClose }) {
               <p className="la-muted">هذه البيانات نفسها التي يراها المنسق بصلاحياته الحالية، ولا شيء غيرها يصل إليه.</p>
               <div className="cp-kpis">{[['المشاركون', d.kpis.total], ['انضموا هذا الأسبوع', d.kpis.joined_week], ['نشطون هذا الأسبوع', d.kpis.active_week], ['متوسط الإنجاز', `${d.kpis.avg_progress}%`]].map(([l, n]) => <span key={l}><b>{n}</b>{l}</span>)}</div>
               {d.permissions.list === false ? <p className="la-muted">بلا صلاحية «قائمة المشاركين»: لا يرى صفًا فرديًا ولا اسمًا، والمبادرات بلا أسماء أصحابها.</p> : <div className="table-wrap"><table className="data-table">
-                <thead><tr><th>الاسم</th><th>المسمى</th><th>المسار</th><th>المرحلة</th><th>الإنجاز</th>{d.permissions.contact && <th>التواصل</th>}{d.permissions.scores && <th>المستويات</th>}</tr></thead>
+                <thead><tr><th>الاسم</th><th>المسمى</th>{d.permissions.scores && <th>المسار</th>}<th>المرحلة</th><th>الإنجاز</th>{d.permissions.contact && <th>التواصل</th>}{d.permissions.scores && <th>المستويات</th>}</tr></thead>
                 <tbody>{d.participants.map((p) => (
-                  <tr key={p.id}><td>{p.full_name}</td><td>{p.job_title}</td><td>{p.track_title || p.track || '·'}</td><td>{STATUS[p.status] || p.status}</td><td>{p.progress}%</td>
+                  <tr key={p.id}><td>{p.full_name}</td><td>{p.job_title}</td>{d.permissions.scores && <td>{p.track_title || '·'}</td>}<td>{STATUS[p.status] || p.status}</td><td>{p.progress}%</td>
                     {d.permissions.contact && <td dir="ltr">{p.email}</td>}
                     {d.permissions.scores && <td>{p.levels ? Object.values(p.levels).length : 0}/3</td>}</tr>
                 ))}</tbody>

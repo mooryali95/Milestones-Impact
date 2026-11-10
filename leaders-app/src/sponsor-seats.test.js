@@ -28,8 +28,8 @@ const U = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const pin = async (d, p, o) => (await d.query(`select leaders.pin_sponsor_seat($1, $2, 9900, 'USD', 'جهة') r`, [U(p), U(o)])).rows[0].r;
 
 describe('leaders.pin_sponsor_seat', () => {
-  it('متسامح في بوابة النشر، ولدور الخدمة وحده، ويقفل صف الجهة', () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب في بوابة النشر بعد تطبيقه (لا كود متسامح معه)، ولدور الخدمة وحده، ويقفل صف الجهة', () => {
+    expect(gateOf(SQL, '20261107130000_leaders_sponsor_seats').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     expect(SQL).toMatch(/from leaders\.organizations where id = p_org for update;/);
     expect(SQL).toMatch(/revoke all on function leaders\.pin_sponsor_seat\(uuid, uuid, integer, text, text\) from public, anon, authenticated;/);
   });
@@ -68,18 +68,23 @@ describe('leaders.pin_sponsor_seat', () => {
 
 describe('الخادم والواجهة', () => {
   const ent = read('supabase/functions/leaders-api/entitlements.ts');
-  it('التثبيت بالدالة الذرية، وقبل الترحيل كما كان، والرفض يفتح طلبًا بانتظار القرار ويُخطر المنسق والإدارة', () => {
+  it('التثبيت بالدالة الذرية وحدها، وتعذّرها لا يمنح شيئًا، والرفض يفتح طلبًا بانتظار القرار ويُخطر المنسق والإدارة', () => {
     expect(ent).toMatch(/db\.rpc\('pin_sponsor_seat'/);
-    expect(ent).toMatch(/\['PGRST202', '42883'\]\.includes/);
+    // لا مسار بلا فحص المقاعد: أي خطأ من الدالة ينبّه ويرمي 503 قبل أي إدراج
+    expect(ent).not.toMatch(/PGRST202|42883|'legacy'/);
+    expect(ent).not.toMatch(/from\('entitlements'\)\.insert/);
+    expect(ent).toMatch(/await alertOps\('seat_check_unavailable'[^\n]+\n\s+throw new Fail\('تعذّر تثبيت إعفاء الراعي', 503, 'seat_check_unavailable'\);/);
     expect(ent).toMatch(/if \(SEAT_BLOCKED\.includes\(r\)\) await holdSponsorship\(p\.id, org, r\);/);
     expect(ent).toMatch(/insert\(\{ participant_id: participantId, typed_name: org\.name, organization_id: org\.id, kind, status: 'pending' \}\)/);
     expect(ent).toMatch(/\.eq\('status', 'rejected'\)\.in\('kind', \['seats', 'contract'\]\)/);   // لا حلقة بعد قرار الدفع الفردي
     expect(ent).toMatch(/export const SEAT_ALERTS = \[0\.8, 1\];/);
   });
-  it('من رُفض مقعده ليس مرعيًا في access، وطلبه يصل الواجهة بنوعه', () => {
+  it('من رُفض مقعده ليس مرعيًا في access، وتعذّر الفحص يبقيه بلا تثبيت، وطلبه يصل الواجهة بنوعه', () => {
     const pay = read('supabase/functions/leaders-api/payments.ts');
     expect(pay).toMatch(/const src: any = held \? null :/);
-    expect(pay).toMatch(/lastReq\('typed_name, status, reason, kind'\)/);
+    expect(pay).toMatch(/seat = await pinSponsor\(p, org\)\.catch\(\(e\) => \{ console\.error\('access pin:', e\); return null; \}\);/);
+    expect(pay).toMatch(/must\(await lastReq\('typed_name, status, reason, kind'\)\)/);
+    expect(pay).not.toMatch(/lastReq\('typed_name, status, reason'\)/);
   });
   it('قبول الإدارة لطلب المقاعد مقعد يُضاف بتعليل وتدقيق، وللعقد يعدّل التاريخان أولًا', () => {
     const sp = read('supabase/functions/leaders-api/sponsor.ts');

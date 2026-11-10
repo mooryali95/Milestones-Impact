@@ -81,6 +81,9 @@ export const UNEXPECTED_ERROR = `حدث خطأ غير متوقع. حدّث ال�
 // الذي يسميه. كل تغيير في نص الوثائق يحتاج نسخة جديدة هنا، وبصمته في policy-digest.js (scripts/legal/policy-digest.mjs).
 export const MATERIAL_CHANGE_AR = 'غرض جديد، أو فئة بيانات جديدة، أو معالج أو موقع معالجة أو نقل جديد، أو اطلاع جهة جديدة على بياناتك، أو إطالة مدة الاحتفاظ';
 export const POLICY_CHANGES = Object.freeze([
+  { version: '2026-11-10', material: false, items: Object.freeze([
+    'ما تراه جهتك: مسارك مشتق من مستوياتك، فلا يصل جهتك إلا بموافقتك كالمستويات، وكذلك مستوى وثيقة مبادرتك ومسارها لدى جهتك وراعي مبادرتك.',
+  ]) },
   { version: '2026-11-07', material: true, items: Object.freeze([
     'مكان البيانات: قاعدة البيانات والملفات لدى Supabase على خوادم AWS في مومباي بالهند، وصار لكل معالج مكانه في السياسة.',
     'النسخ الاحتياطية: نسخة يومية مشفّرة بمفتاح لا يملكه المعالج، لدى Cloudflare R2، تُحفظ اليومية 30 يومًا والشهرية سنة.',
@@ -105,6 +108,9 @@ export function consentState(version, consentedAt) {
 }
 // ما يعتمد على أغراض النسخة الجوهرية وحدها: يُحجب عمن لم يجدد موافقته، وتبقى رحلته بأساس العقد
 export const CONSENT_GATED = Object.freeze(['rater.invite', 'sponsor.request', 'me.sponsor-code']);
+// موعد اعتماد المسار المعلن (D04) بصيغته في الجملة بعد «خلال» و«تستغرق»: «يومي عمل». ووسم مرحلة الاعتماد
+// في الرحلة يُعرض وحده فيُخزَّن مرفوعًا «يوما عمل» (20261110100000)، فلا تُبنى جملة من وسم المرحلة.
+export const APPROVAL_SLA_AR = 'يومي عمل';
 export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund', changes: '/legal/changes' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
@@ -112,9 +118,10 @@ export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? tw
 // المطّلعون من الجهة: القوالب والصلاحيات بأسمائها، لوحة الإدارة وبطاقة «ماذا ترى جهتك»
 export const VIEWER_TEMPLATE_AR = { executive: 'راعٍ تنفيذي', program: 'منسّق البرنامج', hr: 'الموارد البشرية', custom: 'مخصّص' };
 export const VIEWER_PERM_AR = {
-  list: ['قائمة المشاركين', 'الاسم والمسمى والمسار والمرحلة ونسبة الإنجاز'],
+  list: ['قائمة المشاركين', 'الاسم والمسمى والمرحلة ونسبة الإنجاز'],
   activity: ['نشاط المشاركين', 'آخر دخول لكل مشارك'],
-  scores: ['المستويات', 'تأسيسي أو متوسط أو احترافي لكل بُعد'],
+  // D18: المسار مشتق من المستويات الثلاثة، فيخرج معها وبالشرط نفسه (صلاحية المستويات وموافقة المشارك)
+  scores: ['المستويات', 'المسار ومستوى كل بُعد: تأسيسي أو متوسط أو احترافي'],
   contact: ['التواصل', 'البريد والجوال'],
   export: ['التصدير', 'Excel وطباعة التقرير'],
 };
@@ -172,8 +179,9 @@ export const RUBRIC_SCALE = Object.freeze({
 // توحيد المقاييس قبل الجمع (الملحق 5 §3.1): خريطة صريحة «مستوى ← نسبة» من السلّم نفسه، لا تحويلًا خطيًا ضمنيًا
 export const RUBRIC_PCT = Object.freeze(Object.fromEntries(RUBRIC_SCALE.levels.map((l) => [l.n, l.pct])));
 export const RUBRIC_LEVEL_AR = Object.freeze(Object.fromEntries(RUBRIC_SCALE.levels.map((l) => [l.n, l.ar])));
-// اسم الدرجة لتقدير نموذج مخزّن؛ 5 من السلّم الخماسي السابق تُقرأ «متميز» حتى يُطبَّق التحويل
-export const rubricLevelAr = (n) => RUBRIC_LEVEL_AR[Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(n)))] || null;
+// اسم الدرجة لتقدير نموذج مخزّن، من 1 إلى 4 وحدها: طُبّق تحويل السلّم الخماسي السابق (20261107150000) وقيد القاعدة 1..4،
+// فما خارج السلّم بلا اسم
+export const rubricLevelAr = (n) => RUBRIC_LEVEL_AR[Math.round(Number(n))] || null;
 // تقييمات الخبراء للمشارك بعد الجلسات (expert_ratings.overall من 1 إلى 5) وحدها بخريطة خماسية، انخراطًا لا جدارة
 export const EXPERT_RATING_PCT = Object.freeze({ 1: 0, 2: 25, 3: 50, 4: 75, 5: 100 });
 

@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, missingColumn, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
+  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, issuePass, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
@@ -164,17 +164,15 @@ export async function orgInfo(b: Body, ctx: { ip?: string | null } = {}) {
 
 // ── الموافقة على الخصوصية والشروط ──
 // تُسجَّل مع نسخة السياسة لحظة التسجيل (الإشعار يسبق زر التسجيل)، ولمن سبق تسجيله عند أول دخول
-// بعد نشر السياسة. الكتابة متسامحة مع غياب الأعمدة قبل ترحيلها (42703) حتى لا يتعطل التسجيل.
+// بعد نشر السياسة. تعذّر الكتابة يرمي، فلا تُعد الموافقة مسجلة وهي لم تُحفظ.
 async function setConsent(participantId: string, fields: Record<string, unknown>) {
-  const { error } = await db.from('participants').update(fields).eq('id', participantId);
-  if (error && error.code !== '42703') console.error('consent:', error.message);
-  return !error;
+  must(await db.from('participants').update(fields).eq('id', participantId), 'تعذّر حفظ موافقتك الآن، حاول بعد قليل');
 }
-// الموافقة في جدول المشارك (النسخة النافذة ووقتها) وسطر في السجل التاريخي لا يُكتب فوقه (D18)
+// سطر في السجل التاريخي لا يُكتب فوقه (D18) أولًا، ثم الموافقة في جدول المشارك (النسخة النافذة ووقتها):
+// إن تعذّر السطر لم تُكتب الموافقة، فتطلبها شاشة الموافقة من جديد ولا تُعد مسجلة بلا دليلها
 async function recordConsent(participantId: string, kind: 'accept' | 'renew' = 'accept') {
-  const ok = await setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
   await logConsent('participant', participantId, kind);
-  return ok;
+  await setConsent(participantId, { consented_at: new Date().toISOString(), consent_version: POLICY_VERSION });
 }
 export async function consentAccept(p: any) {
   const before = consentState(p.consent_version, p.consented_at);
@@ -186,8 +184,8 @@ export async function consentAccept(p: any) {
 // موافقة المشارك على اطلاع جهته على مستوياته: بدونها لا تخرج المستويات للجهة ولو مُنح منسقها صلاحيتها
 export async function orgShareConsent(p: any, b: Body) {
   const share = b.share === true;
-  const ok = await setConsent(p.id, { org_share_consented_at: share ? new Date().toISOString() : null });
-  if (!ok) throw new Fail('تعذّر حفظ اختيارك الآن', 500, 'db_error');
+  // الحالة أولًا فيسري السحب فورًا، ثم سطر السجل (D18)؛ تعذّر أيهما يفشل الطلب قبل أثره في السجل
+  must(await db.from('participants').update({ org_share_consented_at: share ? new Date().toISOString() : null }).eq('id', p.id), 'تعذّر حفظ اختيارك الآن');
   await logConsent('participant', p.id, share ? 'org_share_on' : 'org_share_off');
   await audit('participant', p.id, share ? 'participant.org-share.on' : 'participant.org-share.off', 'participants', p.id);
   return { success: true, share };
@@ -298,7 +296,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
       email_verified_at: new Date().toISOString(), source: ch.pending_profile.organization_id ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
-    await recordConsent(p.id);   // أكمل التسجيل بعد إشعار الخصوصية والشروط
+    // أكمل التسجيل بعد إشعار الخصوصية والشروط. تعذّر تسجيلها لا يفشل الحساب المنشأ: تبقى غير مسجلة، فتطلبها شاشة الموافقة
+    await recordConsent(p.id).catch((e) => console.error('register consent:', e));
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
@@ -328,7 +327,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
       source: r ? 'invite' : 'self',
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
-    await recordConsent(p.id);
+    await recordConsent(p.id).catch((e) => console.error('register consent:', e));   // كما في التسجيل بالبريد
     if (p.organization_id) await pinSponsorFor(p.id);
   } else if (!p.email_verified_at) {
     await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
@@ -603,7 +602,7 @@ export async function orgVisibilityFor(p: any) {
   const org = (data || [])[0]?.organizations as any;
   return {
     success: true, org: org?.name || p.organization_name || null, visibility: orgVisibility(data || []),
-    share_consented: 'org_share_consented_at' in p ? !!p.org_share_consented_at : null,   // null = لم يُرحَّل بعد
+    share_consented: !!p.org_share_consented_at,
   };
 }
 
@@ -1046,13 +1045,12 @@ export async function handbookComplete(p: any, b: Body) {
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
   else {
-    // D02: إصدار الدفعة وبصمة الاختبار والإجابات نصًا (السؤال والخيار المختار)، لتصويب عادل لا ينقص أحدًا
+    // D02: إصدار الدفعة وبصمة الاختبار والإجابات نصًا (السؤال والخيار المختار)، لتصويب عادل لا ينقص أحدًا.
+    // الختم إلزامي: null لدفعة بلا إصدار وحدها، وخطأ القراءة أو الحفظ يرمي فلا تُحفظ نتيجة بلا ختمها
     const row = { participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection };
-    const stamp = { content_release: (await releaseOf(p).catch(() => null))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
+    const stamp = { content_release: (await releaseOf(p))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
       quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
-    const { error } = await db.from('handbook_progress').insert({ ...row, ...stamp });
-    if (error && missingColumn(error)) must(await db.from('handbook_progress').insert(row));
-    else if (error) must({ data: null, error });
+    must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
   }
   const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
   const pts = await pointsOf(p.id);

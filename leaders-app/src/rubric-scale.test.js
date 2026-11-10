@@ -27,8 +27,8 @@ describe('السلّم الواحد', () => {
     expect(labels).not.toHaveProperty('RATING_PCT');
     expect(read('supabase/functions/leaders-api/labels.js')).toMatch(/export const RUBRIC_PCT = Object\.freeze\(Object\.fromEntries\(RUBRIC_SCALE\.levels\.map/);
   });
-  it('النموذج بالسلّم الرباعي، و5 القديمة «متميز»، والمعلم بالخريطة نفسها', () => {
-    expect([1, 2, 3, 4, 5].map(modelPct)).toEqual([0, 40, 75, 100, 100]);
+  it('النموذج بالسلّم الرباعي وحده (طُبّق التحويل، فـ 5 خارج السلّم)، والمعلم بالخريطة نفسها', () => {
+    expect([1, 2, 3, 4, 5].map(modelPct)).toEqual([0, 40, 75, 100, null]);
     expect(modelPct(0)).toBeNull();
     expect(rubricPct({ a: 3, b: 4 })).toBe(88);
   });
@@ -54,7 +54,7 @@ describe('الخادم والأدوات', () => {
     expect(read('leaders-app/src/screens/ExpertPortal.jsx')).toMatch(/RUBRIC_SCALE\.levels\.map/);
   });
   it('تقدير النموذج يُعرض باسم درجته لا بنجوم خمس، للمشارك والمستشار', () => {
-    expect([1, 2, 3, 4, 5].map(rubricLevelAr)).toEqual(['دون المطلوب', 'مقبول', 'متقن', 'متميز', 'متميز']);
+    expect([1, 2, 3, 4, 5, 0].map(rubricLevelAr)).toEqual(['دون المطلوب', 'مقبول', 'متقن', 'متميز', null, null]);
     const m = read('leaders-app/src/screens/Models.jsx');
     expect(m).not.toMatch(/★/);
     expect((m.match(/rubricLevelAr\(/g) || []).length).toBe(2);

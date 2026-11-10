@@ -227,12 +227,11 @@ export async function revokeForRefund(participantId: string) {
   for (const c of certs || []) await setStatus(c.id, 'revoked', 'creem', 'استرداد الرسوم');
 }
 
-// تغيير الحالة بأثره. التعليق قبل ترحيل 20261107140000 (قيد الحالة القديم) يصير إلغاءً بسببه
+// تغيير الحالة بأثره، والحالة المخزنة هي المطلوبة نفسها: تعذّر التعليق يفشل ولا يصير إلغاءً (D05)
 async function setStatus(id: string, status: 'valid' | 'suspended' | 'revoked' | 'replaced', by: string, reason: string | null) {
   const patch: Body = status === 'valid' ? { status, revoked_at: null, revoked_by: null, revoke_reason: null }
     : { status, revoked_at: new Date().toISOString(), revoked_by: by, revoke_reason: reason };
-  let { error } = await db.from('certificates').update(patch).eq('id', id);
-  if (error && status === 'suspended' && error.code === '23514') ({ error } = await db.from('certificates').update({ ...patch, status: 'revoked' }).eq('id', id));
+  const { error } = await db.from('certificates').update(patch).eq('id', id);
   if (error) throw new Fail('تعذّر تحديث حالة الشهادة', 500, 'db_error');
   await audit('system', by, `certificate.${status}`, 'certificates', id, null, { reason });
 }

@@ -72,15 +72,28 @@ Deno.test('رفض Resend للنطاق ينبّه عبر الرابط ولا يع
   Deno.env.delete('LEADERS_ALERT_WEBHOOK');
 });
 
-Deno.test('عبور 70% ينبّه مرة، وقبل الترحيل يُرسل بلا عداد', async () => {
+Deno.test('عبور 70% ينبّه مرة', async () => {
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
   await withResend(200, async (calls) => {
     const { client } = fakeDb([...sent('code', 6)]);
     await sendCounted(client, 'a@x.sa', 's', 'x', opts('code'));
     assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 1);
-    const { client: before, inserts } = fakeDb([], { missing: true });
-    assertEquals((await sendCounted(before, 'a@x.sa', 's', 'x', opts('notify'))).ok, true);
-    assertEquals(inserts.length, 0);
   });
+  Deno.env.delete('LEADERS_ALERT_WEBHOOK');
+});
+
+Deno.test('العداد غير مقروء: ما سوى الرموز والتنبيه يُحجب بسبب السقف بلا إرسال، والرمز يمر، والمالك يُنبَّه مرة', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const { client, inserts } = fakeDb([], { missing: true });
+  await withResend(200, async (calls) => {
+    for (const k of ['notify', 'contact', 'bulk']) assertEquals(await sendCounted(client, 'a@x.sa', 's', 'x', opts(k)), { ok: false, reason: 'mail_cap' });
+    assertEquals(calls.filter((u) => u.includes('resend.com')).length, 0);
+    assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 1);
+    assertEquals(await sendCounted(client, 'a@x.sa', 's', 'x', opts('code')), { ok: true, id: 're_123' });
+    assertEquals((await sendCounted(client, 'a@x.sa', 's', 'x', opts('alert'))).ok, true);
+    assertEquals(calls.filter((u) => u.includes('resend.com')).length, 2);
+    assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 1);   // مرة كل عشر دقائق لا مع كل رسالة
+  });
+  assertEquals(inserts.map((r) => [r.kind, r.status]), [['notify', 'blocked'], ['contact', 'blocked'], ['bulk', 'blocked'], ['code', 'sent'], ['alert', 'sent']]);
   Deno.env.delete('LEADERS_ALERT_WEBHOOK');
 });

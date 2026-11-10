@@ -56,7 +56,7 @@ function participant({ approved = true, profileDone = true, assessed = true, ass
     journey: [
       stage('profile', profileDone ? 'done' : 'active', [{ id: 'r1', code: 'P-INFO', status: profileDone ? 'done' : 'pending' }]),
       stage('assessment', assessed ? 'done' : 'active', [{ id: 'r2', code: 'A-DONE', status: assessed ? 'done' : 'pending' }], { duration_label: assessmentLabel }),
-      stage('approval', approved ? 'done' : 'locked', [], { duration_label: '3 أيام عمل' }),
+      stage('approval', approved ? 'done' : 'locked', [], { duration_label: 'يوما عمل' }),
     ],
     progress: 20, passkeys: 1, prompt_passkey: false,
   };

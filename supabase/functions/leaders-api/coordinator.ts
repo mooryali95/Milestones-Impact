@@ -149,6 +149,12 @@ export async function dashboardFor(c: any) {
   // الأرقام المجمّعة من كل مشاركي الجهة، والصفوف الفردية تمر عبر الصلاحيات (بلا «القائمة» لا صف واحد)
   const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, levels: shared.has(p.id) ? levelsBy[p.id] || null : null }));
   const participants = full.map((p: any) => coordParticipant(p, perms)).filter(Boolean);
+  // D18: المسار مشتق من المستويات، فيُحصى لمن خرجت مستوياته وحدهم (صلاحية المستويات وموافقة المشارك)،
+  // لا من by_track الإداري الذي يعدّ الجميع
+  const byTrack: Record<string, number> = {};
+  // وعنوان كل مسار معدود بجانبه، فلا يُبحث عنه في صفوف قد لا تصل (منسق بالمستويات بلا «القائمة»)
+  const trackTitles: Record<string, string> = {};
+  for (const p of full) if (p.levels && p.track) { byTrack[p.track] = (byTrack[p.track] || 0) + 1; if (p.track_title) trackTitles[p.track] = p.track_title; }
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
   // استهلاك مقاعد العقد (D20): من ثبتت رعايته، ومن ينتظر قرار الرعاية لامتلائها أو لخروجه عن مدة العقد
@@ -161,7 +167,7 @@ export async function dashboardFor(c: any) {
     success: true,
     org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector },
     permissions: perms,
-    funnel: d.funnel, by_track: d.by_track, by_via: d.by_via,
+    funnel: d.funnel, by_track: byTrack, track_titles: trackTitles, by_via: d.by_via,
     kpis: {
       total: full.length,
       joined_week: full.filter((p: any) => Date.parse(p.created_at) > weekAgo).length,
@@ -180,12 +186,18 @@ export async function impactFor(c: any) {
   const scores = coordPermissions(c.permissions).scores;
   // دون الحد الأدنى تكشف المتوسطات درجة الفرد: تبقى الأعداد وتُحجب المقارنة
   if ((r.counts?.paired ?? 0) < MIN_COHORT) return { counts: r.counts, cohort: null, transfer: null, caution: null, suppressed: MIN_COHORT, participants: [] };
-  // الصفوف بالأسماء لمن وافق على اطلاع جهته على مستوياته فقط (قبل ترحيل العمود: لا أحد)
+  // الصفوف بالأسماء لمن وافق على اطلاع جهته على مستوياته فقط
   const { data: ok } = await db.from('participants').select('id').eq('organization_id', c.organization_id).not('org_share_consented_at', 'is', null);
   const shared = new Set((ok || []).map((x: any) => x.id));
+  // D18: متوسط الجميع مع صفوف من وافق يكشف بالطرح نتيجة من لم يوافق إن قلّوا. فالصفوف بالأسماء لا تخرج
+  // إلا إن كان غير الموافقين من المقيسين صفرًا أو بلغوا حد الإخفاء نفسه
+  const paired = r.participants.filter((p: any) => p.dimensions);
+  const hidden = paired.filter((p: any) => !shared.has(p.id)).length;
+  const named = scores && (hidden === 0 || hidden >= MIN_COHORT);
   return {
     counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
-    participants: scores ? r.participants.filter((p: any) => p.dimensions && shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+    participants: named ? paired.filter((p: any) => shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+    ...(scores && !named ? { rows_withheld: true } : {}),
   };
 }
 export async function dashboard(c: any) {
@@ -286,7 +298,7 @@ export async function adminSave(a: Admin, b: Body) {
 }
 
 // الشفافية: حين يتسع ما تراه الجهة عن مشاركيها (حقل لم يكن يراه أي مطّلع نافذ)، يُبلَّغ كل مشارك بما فُتح
-const SENSITIVE: Record<string, string> = { list: 'اسمك وتقدّمك في الرحلة', activity: 'آخر دخول لك', contact: 'بريدك وجوالك', scores: 'مستوياتك في الأبعاد الثلاثة' };
+const SENSITIVE: Record<string, string> = { list: 'اسمك وتقدّمك في الرحلة', activity: 'آخر دخول لك', contact: 'بريدك وجوالك', scores: 'مسارك ومستوياتك في الأبعاد الثلاثة إن وافقت' };
 async function notifyNewAccess(orgId: string, orgName: string, before: Record<string, any>) {
   const after: Record<string, any> = orgVisibility(await viewersOf(orgId));
   const opened = Object.keys(SENSITIVE).filter((k) => after[k] && !before[k]).map((k) => SENSITIVE[k]);

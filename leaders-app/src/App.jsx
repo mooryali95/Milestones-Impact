@@ -34,7 +34,7 @@ const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
 import RoleChoice from './RoleChoice.jsx';
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall, { AwaitingApproval, seatHold, SponsorshipPending } from './screens/Paywall.jsx';
-import { gateDone, impactOpen } from './gates.js';
+import { gateDone, hasAccess, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import SponsorNote from './SponsorNote.jsx';
@@ -246,8 +246,8 @@ function Participant() {
   };
 
   // الأقسام المتاحة الآن فقط: الكتيب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
-  // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ
-  const paidFor = (item) => !me?.access || !!me.access[item];
+  // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ (hasAccess في gates.js)
+  const paidFor = (item) => hasAccess(me, item);
   const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !checkin;
   // معالج البداية: خطوته من البوابات نفسها (Onboarding.jsx)؛ الرأس يظهر فوق شاشات القبول، والخطوة 4 بطاقة في الرحلة
   const [onbTick, setOnbTick] = useState(0);
@@ -264,13 +264,13 @@ function Participant() {
     SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
-    { key: 'impact', label: 'أثري', ...(!(approved && impactOpen(me)) && { locked: 'يُفتح في مرحلة الأثر' }) },
+    { key: 'impact', label: 'أثري', ...(!(approved && impactOpen(me)) && { locked: 'يُفتح مع القياس البعدي في طور الأثر' }) },
     { key: 'profile', label: 'ملفي' },
   ].filter(Boolean) : [];
   const navView = view === 'lab' && !hasLab ? 'home' : view;
   const onNav = (k) => (k === 'lab' ? openLab() : go(k));
 
-  const consentNeed = me?.participant?.consent ? me.participant.consent.needed : me?.participant?.consented_at === null ? 'first' : null;
+  const consentNeed = me?.participant?.consent?.needed ?? null;
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   else if (!me && linkChoice) screen = (
@@ -289,8 +289,7 @@ function Participant() {
     </div>
   );
   else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
-  // D18: من لم يوافق قط يوافق مرة (null = لم يوافق؛ غياب الحقل = العمود لم يُرحَّل بعد)، ومن وافق قبل آخر
-  // نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل. الخادم الأقدم بلا حالة: يُكتفى بغياب الموافقة كما كان
+  // D18: من لم يوافق قط يوافق مرة، ومن وافق قبل آخر نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل (الحالة من الخادم)
   else if (consentNeed === 'first' && !me.participant.is_demo) screen = <Consent consent={me.participant.consent} onAccepted={accept} />;
   else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;

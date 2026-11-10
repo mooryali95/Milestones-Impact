@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TOUR_ACTS, TOUR_PEER_SAMPLE, TOUR_STEPS } from './tour-steps.js';
+import { TOUR_ACTS, TOUR_PEER_SAMPLE, TOUR_STEPS, spoken } from './tour-steps.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -42,5 +42,30 @@ describe('خطوات الجولة الحيّة', () => {
     expect(tour).toMatch(/call\('peer\.ask', \{ text: TOUR_PEER_SAMPLE/);
     expect(tour).toMatch(/ArrowLeft[\s\S]*ArrowRight[\s\S]*Escape/);
     expect(tour).toMatch(/tour-spot/);
+  });
+  // نص الجولة الحيّة (d) يصح في الكود وقرارات اللجنة؛ والنص المسجَّل القديم يبقى في said وحده حتى يُعاد التسجيل
+  it('نص الجولة الحيّة يصح في القرارات، والمسجَّل يبقى حيث يختلف وحده', () => {
+    const live = TOUR_STEPS.map((s) => s.d).join(' ');
+    const d = (k) => TOUR_STEPS.find((s) => s.key === k).d;
+    expect(live).not.toMatch(/[-‐-―−ـ]/);
+    expect(live).not.toMatch(/\d+\s*دقيقة|اثنتي عشرة دقيقة/);            // المدة من الأداة الفعالة على الشاشة (D03)
+    expect(live).not.toContain('شهادة مشاركة');                          // «شهادة إتمام بنجاح» وحدها (D05)
+    expect(live).not.toMatch(/بالأداة نفسها|بنفس الأداة|المكسب/);        // أداة مكافئة، والمكسب الفردي لا يدخل الدرجة (D06)
+    expect(live).not.toMatch(/تُغطّى|رسومه تلقائيًا/);                    // الرعاية ضمن مقاعد العقد ومدته (D20)
+    expect(d('doors')).not.toMatch(/تلقائيًا/);
+    expect(live).not.toMatch(/أسبوعًا بعد أسبوع/);                       // الاتجاه آخر التقييمات بما قبلها
+    expect(live).not.toMatch(/أيام عمل قليلة/);                          // اعتماد المسار خلال يومي عمل (D04)
+    expect(live).not.toMatch(/عشر مراحل/);                               // عدد المراحل يُضبط من الإعداد
+    expect(d('hall')).not.toMatch(/يُحتسب/);                             // القاعة للتعلم (D17)
+    expect(d('continuous')).not.toMatch(/القاعة|وتقدير الخبير، وكلٌّ/);   // ليست مصدرًا، وتقدير الخبير انخراط خارج المؤشر
+    for (const s of TOUR_STEPS) {
+      expect(spoken(s)).toBe(s.said ?? s.d);
+      if ('said' in s) expect(s.said, s.key).not.toBe(s.d);
+    }
+    const doc = read('docs/journey/2026-11-09-نص-الجولة-الحية-v2.md');
+    for (const s of TOUR_STEPS) expect(doc, s.key).toContain(`**النص:** ${s.d}\n`);
+    const tour = read('leaders-app/src/LiveTour.jsx');
+    expect(tour).toMatch(/<p>\{step\.d\}<\/p>/);
+    expect(tour).toMatch(/audioOk && !step\.said[\s\S]*TOUR_AUDIO && !step\.said && <audio/);
   });
 });

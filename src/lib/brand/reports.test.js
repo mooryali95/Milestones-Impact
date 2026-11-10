@@ -27,6 +27,22 @@ describe('orgReport', () => {
     expect(orgReport(d, 'admin').body).toContain('whatsapp');
     expect(orgReport(d, 'coordinator').body).not.toContain('whatsapp');
   });
+  // D18: المسار مشتق من المستويات، فلا يظهر للمنسق بلا صلاحيتها، ومفتاحه الداخلي لا يُطبع له أبدًا
+  it('المسار في تقرير المنسق مع صلاحية المستويات وحدها، والإدارة كما هي', () => {
+    const coord = orgReport({ ...d, permissions: { scores: false } }, 'coordinator').body;
+    expect(coord).not.toContain('البداية');
+    expect(coord).not.toContain('M1I1L2');
+    expect(coord).not.toContain('التوزيع على المسارات');
+    expect(coord).not.toMatch(/>المسار</);
+    expect(orgReport({ ...d, permissions: { scores: true } }, 'coordinator').body).toContain('البداية');
+    const noTitle = { ...d, participants: [], by_track: { M1I1L2: 1 }, permissions: { scores: true } };
+    expect(orgReport(noTitle, 'coordinator').body).not.toContain('M1I1L2');
+    // منسق بالمستويات بلا «القائمة»: العناوين تصل مع الأعداد، فلا تُجمع المسارات تحت «مسار»
+    const titled = { ...noTitle, track_titles: { M1I1L2: 'مسار البداية المعنون' } };
+    expect(orgReport(titled, 'coordinator').body).toContain('مسار البداية المعنون');
+    expect(orgReport(d, 'admin').body).toContain('التوزيع على المسارات');
+    expect(orgReport(d, 'admin').body).toContain('البداية');
+  });
 });
 
 describe('documentHtml', () => {

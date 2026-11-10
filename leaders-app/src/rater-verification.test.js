@@ -38,11 +38,16 @@ describe('الخادم', () => {
     expect(inv).toMatch(/const check = await raterCheck\(p, email\);\n\s+if \(check\.verdict === 'reject'\) throw new Fail/);
     expect(inv).toMatch(/status: awaiting \? 'awaiting' : 'invited'/);
     expect(inv).toMatch(/verification: check\.verdict, verification_flags: check\.flags/);
-    expect(inv).toMatch(/if \(awaiting && !legacy\) \{\n\s+const told = await notifyConfirmers\(p, check\.flags\);[\s\S]*?return mine\(p\);\n\s+\}/);
+    expect(inv).toMatch(/if \(awaiting\) \{\n\s+const told = await notifyConfirmers\(p, check\.flags\);[\s\S]*?return mine\(p\);\n\s+\}/);
     expect(inv.indexOf('notifyConfirmers(')).toBeLessThan(inv.indexOf('await sendMail(email'));
   });
-  it('قبل الترحيل تُرسل الدعوة كما كانت بلا علامات', () => {
-    expect(inv).toMatch(/if \(res\.error && \(missingColumn\(res\.error\) \|\| res\.error\.code === '23514'\)\) \{\n\s+legacy = true;/);
+  it('تعذّر حفظ الدعوة يفشلها، ولا إرسال بلا علامات ولا تحقق، وقائمة المنتظرين لا تفرغ بصمت', () => {
+    expect(inv).not.toMatch(/legacy/);
+    expect(inv).not.toMatch(/23514|missingColumn/);
+    expect(inv).toMatch(/const saved = must\(await write\(row\)\) as \{ id: string \};/);
+    const aw = imp.slice(imp.indexOf('export async function awaitingFor('), imp.indexOf('export async function confirmRater('));
+    expect(aw).not.toMatch(/if \(error\) return \[\]/);
+    expect(aw).toMatch(/const data = must\(await db\.from\('raters'\)/);
   });
   it('التأكيد في نطاق المؤكِّد، برابط جديد، والرفض بسبب يصل المشارك، وكلاهما في السجل', () => {
     const c = imp.slice(imp.indexOf('export async function confirmRater('));
@@ -79,7 +84,9 @@ describe('الخادم', () => {
   it('سطر الموافقة للخبير والمنسق عند أول دخول، مسموح قبل اعتماد الخبير', () => {
     const core = api('core.ts');
     expect(core).toMatch(/export async function consentNeeded\(subject: ConsentSubject, subjectId: string\) \{\n\s+const \{ data, error \} = await db\.from\('consent_events'\)[^\n]+\.gte\('version', POLICY_MATERIAL_VERSION\)/);
-    expect(core).toMatch(/if \(error\) return false;/);
+    // تعذّر القراءة لا يُعفي من الموافقة (D18): يرمي 503
+    expect(core).not.toMatch(/if \(error\) return false;/);
+    expect(core).toMatch(/throw new Fail\('تعذّر التحقق من الموافقة الآن، حاول بعد قليل', 503, 'consent_unavailable'\);/);
     const ex = api('experts.ts');
     expect(ex).toMatch(/const consent_needed = await consentNeeded\('expert', e\.id\);/);
     expect((ex.match(/consent_needed/g) || []).length).toBeGreaterThanOrEqual(3);
@@ -117,8 +124,8 @@ describe('الواجهة', () => {
 
 describe('ترحيل 20261107170000_leaders_rater_verification', () => {
   const SQL = read('supabase/migrations/20261107170000_leaders_rater_verification.sql');
-  it('متسامح، ويقبل الانتظار والعلامات، ويرفض حكمًا مجهولًا، وإعادته آمنة', async () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب بعد تطبيقه، ويقبل الانتظار والعلامات، ويرفض حكمًا مجهولًا، وإعادته آمنة', async () => {
+    expect(gateOf(SQL, '20261107170000_leaders_rater_verification').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table leaders.raters (id serial primary key, participant_id int not null, email text not null, status text not null default 'invited',

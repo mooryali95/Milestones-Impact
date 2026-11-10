@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // يسجّل الفيديو التعريفي من الواجهة الحقيقية (ناتج البناء في leaders/) بخادم محاكاة (mock-server.js):
-// يسير على خطوات الجولة الحيّة الثماني عشرة (leaders-app/src/tour-steps.js، المصدر الواحد للنص)، يكتب
+// يسير على خطوات الجولة الحيّة الثماني عشرة (leaders-app/src/tour-steps.js، المصدر الواحد للنص، بنصها المسجَّل spoken)، يكتب
 // ويضغط فعلًا على الشاشة بمؤشر ظاهر، ويكتب فوق كل عنصر بطاقة شرح مضاءة، ويخرج MP4 وWebM وVTT وغلافًا
 // إلى leaders-app/public/media/. التشغيل: node shared/video/record.mjs [--out=dir] [--port=4312] [--audio=dir] [--quick] [--cut=participant]
 // --cut=participant: فيديو المشارك (PARTICIPANT_LINES وPARTICIPANT_VIDEO): ست محطات بصيغة المخاطب على شاشات الجولة نفسها.
@@ -12,7 +12,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { createMockServer } from './mock-server.js';
 import { PARTICIPANT_VIDEO, VIDEO } from './scenes.js';
-import { PARTICIPANT_BEATS, PARTICIPANT_LINES, TOUR_STEPS } from '../../leaders-app/src/tour-steps.js';
+import { PARTICIPANT_BEATS, PARTICIPANT_LINES, TOUR_STEPS, spoken } from '../../leaders-app/src/tour-steps.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -23,7 +23,7 @@ const PORT = Number(arg('port', 4312));
 const QUICK = process.argv.includes('--quick');   // تجربة سريعة: بلا انتظار قراءة
 const PART = arg('cut', 'tour') === 'participant';
 // المقاطع بالترتيب: خطوات الجولة، أو أسطر فيديو المشارك (لكل منها نص يُقرأ، ومنه الترجمة والصوت)
-const ITEMS = PART ? PARTICIPANT_LINES : TOUR_STEPS.map((st) => ({ ...st, text: st.d }));
+const ITEMS = PART ? PARTICIPANT_LINES : TOUR_STEPS.map((st) => ({ ...st, text: spoken(st) }));
 const OUTV = PART ? PARTICIPANT_VIDEO : VIDEO;
 // الصوت: مجلد فيه segments.json (لكل خطوة: speech = ثوانٍ من بداية مقطعها إلى آخر كلمة فيه) وملفات 01.mp3 إلى 18.mp3
 // مقطوعة من تسجيل واحد على حدود الكلام (shared/video/cut-audio.py)؛ البطاقة تبقى حتى آخر كلمة، ويُدمج الصوت في الناتج
@@ -142,8 +142,8 @@ const begin = async (idx, anchorOverride) => {
   const st = TOUR_STEPS[idx], anchor = anchorOverride === undefined ? st.anchor : anchorOverride;
   if (anchor) { await page.locator(`[data-tour="${anchor}"]`).first().waitFor({ timeout: 8000 }).catch(() => {}); await page.locator(`[data-tour="${anchor}"]`).first().scrollIntoViewIfNeeded().catch(() => {}); }
   await sleep(500);
-  await page.evaluate(([a, n, t, title, text]) => window.__mi.show(a, n, t, title, text), [anchor, idx + 1, TOUR_STEPS.length, st.t, st.d]);
-  cur = { idx, from: now(), text: st.d, full: false };
+  await page.evaluate(([a, n, t, title, text]) => window.__mi.show(a, n, t, title, text), [anchor, idx + 1, TOUR_STEPS.length, st.t, spoken(st)]);
+  cur = { idx, from: now(), text: spoken(st), full: false };
 };
 // سطر من فيديو المشارك: شاشة خطوته في الجولة، والبطاقة باسم المحطة وعدّادها (المحطة n من 6)، والشريط برقم السطر
 const beginLine = async (idx, anchorOverride) => {
@@ -310,7 +310,7 @@ async function participantFlow() {
 // الجولة الكاملة: الخطوات الثماني عشرة بصوت المقدّم
 async function tourFlow() {
   // 1 الترحيب: بطاقة كاملة فوق شاشة الدخول
-  await fullBegin('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', TOUR_STEPS[0].d, 0);
+  await fullBegin('برنامج إدارة المشروعات للقادة', 'كيف تعمل المنصة', spoken(TOUR_STEPS[0]), 0);
   await end(800);
 
   // 2 أبواب الدخول: مع «ببريده» يُكتب البريد والاسم ويُرسل الرمز؛ وبعد الكلام يُكتب الرمز فيُدخل
@@ -413,9 +413,9 @@ async function tourFlow() {
   await say(15);
 
   // 17 البوابتان و18 الختام: بطاقتان كاملتان
-  await fullBegin('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', TOUR_STEPS[16].d, 16);
+  await fullBegin('ثلاث بوابات، منظومة واحدة', 'بوابتا الجهة والخبير', spoken(TOUR_STEPS[16]), 16);
   await end(800);
-  await fullBegin('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', TOUR_STEPS[17].d + ' leaders.sunkvalue.com', 17);
+  await fullBegin('سؤال الختام', 'ما الممارسة الواحدة التي ستبدأها غدًا؟', spoken(TOUR_STEPS[17]) + ' leaders.sunkvalue.com', 17);
   await end(2000);
 }
 
