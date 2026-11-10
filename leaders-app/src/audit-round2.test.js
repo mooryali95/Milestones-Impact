@@ -57,4 +57,7 @@ describe('9.13 حزمة الإدارة', () => {
     expect(l.match(/= (lazy|named)\(/g).length).toBeGreaterThanOrEqual(20);
     expect(l).toContain('<Suspense fallback={<Spinner />}>{body}</Suspense>');
   });
+  it('السياق المفتوح لا يُعاد التنقل إليه، فلا تضيع فلاتر العنوان قبل أن تقرأها الشاشة الكسولة', () => {
+    expect(read('admin-app/src/App.jsx')).toContain('const setCtx = (c) => { if (c !== ctx) navigate({ ctx: c }); };');
+  });
 });
