@@ -4,7 +4,11 @@
 // واحدة على الأقل، وشرح لكل خاطئة؛ وكل جملة تجتاز cleanSentence.
 import { readFileSync } from 'node:fs';
 import { cleanSentence, topicIssues } from '../../supabase/functions/leaders-api/katon.js';
-const topics = JSON.parse(readFileSync(new URL('../../supabase/content/katon/v1/topics.json', import.meta.url), 'utf8'));
+// v1 بنك البداية (المعالم)، وv2 موضوعات الأثر والقيادة (مسودة حتى تنشرها لجنة المحتوى)
+const read = (v) => JSON.parse(readFileSync(new URL(`../../supabase/content/katon/${v}/topics.json`, import.meta.url), 'utf8'));
+const topics = [...read('v1'), ...read('v2')];
+const keys = topics.map((t) => t.key);
+if (new Set(keys).size !== keys.length) { console.error('مفتاح موضوع مكرر بين v1 وv2'); process.exit(1); }
 const fails = [];
 for (const t of topics) {
   if (t.sentences.map((s) => s.question).join(',') !== 'why,what,how,absent,who,when') fails.push(`${t.key}: الأسئلة الست بترتيبها`);
