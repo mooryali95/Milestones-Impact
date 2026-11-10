@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -318,6 +318,8 @@ async function offerByToken(t: unknown) {
   if (typeof t !== 'string' || t.length < 20) throw new Fail('الرابط غير صحيح', 404);
   const r = must(await db.from('expert_requests').select('*, experts(full_name), participants(full_name, placements(dimension, level))').eq('offer_token_hash', await hash(t)).maybeSingle()) as any;
   if (!r) throw new Fail('انتهى هذا العرض أو لم يعد لك', 404, 'gone');
+  // العرض المقبول يعرض اسم المشارك كاملًا: يُطّلع عليه 30 يومًا بعد القرار ثم يُغلق (4.5). المنتظر تحكمه مهلته
+  if (r.status !== 'offered' && !linkAfterDecisionOk(r.accepted_at || r.updated_at)) throw new Fail(LINK_CLOSED_AR, 410, 'gone');
   return r;
 }
 export async function offerGet(b: Body) {

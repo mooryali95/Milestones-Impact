@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110200000_leaders_group_advisor
+-- as-of migration: 20261110210000_leaders_name_confirmation
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1138,6 +1138,7 @@ create table if not exists leaders.participants (
   consented_at timestamp with time zone,
   consent_version text,
   org_share_consented_at timestamp with time zone,
+  name_confirmed_at timestamp with time zone,
   constraint participants_bio_check CHECK ((char_length(bio) <= 2000)),
   constraint participants_campaign_check CHECK (((campaign IS NULL) OR (campaign ~ '^[a-z0-9_-]{1,40}$'::text))),
   constraint participants_email_check CHECK ((char_length(email) <= 254)),

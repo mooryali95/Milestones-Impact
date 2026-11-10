@@ -360,7 +360,9 @@ function Review({ data, onDone }) {
       <header className="review-head">
         <div><span className="eyebrow">مراجعة الباب</span><h3>ثبّت ما قرأت</h3></div>
         {data.done
-          ? <span className="chip ok">أتممته · {data.done.score}/{data.done.total}</span>
+          ? (data.reading && data.reading.state !== 'read'
+            ? <span className="chip warn" title="الباب يكتمل بالقراءة والاختبار معًا، كما في رحلتك">اختبرته · {data.done.score}/{data.done.total} · بقيت القراءة</span>
+            : <span className="chip ok">أتممته · {data.done.score}/{data.done.total}</span>)
           : <span className="chip gold">حتى {potential} نقطة</span>}
       </header>
 
@@ -407,6 +409,9 @@ function Review({ data, onDone }) {
   );
 }
 
+// الباب مكتمل بتعريف الرحلة نفسه: قراءة فعلية ثم الاختبار (complete من الخادم). خادم أقدم لا يرسله فيُعدّ بالاختبار كما كان
+const complete = (c) => (c.complete ?? !!c.done);
+
 export default function Handbook({ me, lab, onLab, onBack }) {
   const [toc, setToc] = useState(null);
   const [tab, setTab] = useState('read');
@@ -428,7 +433,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
     if (first && r.chapters.length) {
       const last = lastRead.get();
       const resume = last && r.chapters.find((c) => c.id === last.id);
-      setCurrent(resume ? resume.id : r.chapters.some((c) => c.done) ? (r.chapters.find((c) => !c.done) || r.chapters[0]).id : COVER);
+      setCurrent(resume ? resume.id : r.chapters.some(complete) ? (r.chapters.find((c) => !complete(c)) || r.chapters[0]).id : COVER);
     }
   }, []);
   const retry = () => { setError(''); loadToc(true); };
@@ -524,7 +529,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
 
   const list = toc.chapters;
   const idx = list.findIndex((c) => c.id === current);
-  const doneN = list.filter((c) => c.done).length;
+  const doneN = list.filter(complete).length;
   const go = (d) => { const n = list[idx + d]; if (n) setCurrent(n.id); };
   const pts = toc.points || { total: 0, rank: { title: 'مستكشف', next: null } };
   const nextPct = pts.rank.next ? Math.min(100, (1 - pts.rank.next.left / Math.max(1, pts.rank.next.at)) * 100) : 100;
@@ -596,7 +601,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
             {DIMENSIONS.map((d) => {
               const items = list.filter((c) => c.dimension === d.key);
               if (!items.length) return null;
-              const partDone = items.filter((c) => c.done).length;
+              const partDone = items.filter(complete).length;
               return (
                 <div key={d.key} className="toc-part">
                   <div className="toc-part-head">
@@ -605,8 +610,9 @@ export default function Handbook({ me, lab, onLab, onBack }) {
                     <span className="toc-part-n">{partDone}/{items.length}</span>
                   </div>
                   {items.map((c, i) => (
-                    <button key={c.id} className={`toc-ch${c.id === current ? ' on' : ''}${c.done ? ' done' : ''}`} onClick={() => setCurrent(c.id)}>
-                      <span className="toc-num">{c.done ? '✓' : pad(i + 1)}</span>
+                    <button key={c.id} className={`toc-ch${c.id === current ? ' on' : ''}${complete(c) ? ' done' : ''}`} onClick={() => setCurrent(c.id)}
+                      title={c.done && !complete(c) ? 'اختبرته، وبقيت القراءة ليكتمل الباب' : undefined}>
+                      <span className="toc-num">{complete(c) ? '✓' : c.done ? '◐' : pad(i + 1)}</span>
                       <span className="toc-t">{c.title}</span>
                     </button>
                   ))}

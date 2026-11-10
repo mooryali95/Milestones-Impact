@@ -87,7 +87,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 };
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
-const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
+const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'me.privacy', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
@@ -135,6 +135,12 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'sessions.list': (p, _b, sid) => P.sessionsList(p, sid),
   'sessions.revoke': (p, b, sid) => P.sessionsRevoke(p, b, sid),
   'profile.save': P.profileSave,
+  // «هكذا يظهر اسمك»: تأكيد الاسم كما سيُطبع على الشهادة، فتصدر إن كان التقييم الختامي معتمدًا (7.3)
+  'profile.confirm-name': async (p) => {
+    const r: any = await P.confirmName(p);
+    const certificate = await Z.issueAfterNameConfirm(p.id);
+    return { ...r, certificate: certificate && !certificate.awaiting_name ? certificate : null };
+  },
   'upload.url': P.uploadUrl,
   'cv.attach': P.cvAttach,
   'assessment.get': (p, b) => P.assessmentGet(p, b),

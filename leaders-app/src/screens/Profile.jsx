@@ -7,6 +7,7 @@ import { gateDone } from '../gates.js';
 import SponsorNote from '../SponsorNote.jsx';
 import { call, uploadFile } from '../api.js';
 import { countAr, VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { certNameOk } from '../../../supabase/functions/leaders-api/logic.js';
 
 const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
 const deviceOf = (ua = '') => {
@@ -101,10 +102,8 @@ function Devices() {
 }
 
 // اسم يصلح للشهادة: كلمتان على الأقل، كل منهما حرفان فأكثر، بحروف عربية أو لاتينية
-export const certName = (v) => {
-  const w = String(v || '').trim().split(/\s+/);
-  return w.length >= 2 && w.every((x) => /^[\p{L}\p{M}.'’-]+$/u.test(x)) && w.filter((x) => x.replace(/[^\p{L}]/gu, '').length >= 2).length >= 2;
-};
+// الفحص نفسه في الخادم (profile.save): مصدره logic.js
+export const certName = certNameOk;
 
 const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years_experience'];
 const LABEL = { full_name: 'الاسم الكامل', phone: 'رقم الجوال', job_title: 'المسمى الوظيفي', organization_name: 'جهة العمل', years_experience: 'سنوات الخبرة' };

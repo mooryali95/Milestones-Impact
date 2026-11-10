@@ -185,6 +185,7 @@ function Survey({ item, open, onUpdate, setToast }) {
   };
   if (!edit) return open ? <div className="actions"><button className="link small" onClick={() => setEdit(true)}>عدّل إجاباتك</button></div> : null;
   if (!open) return null;
+  if (item.waits) return <p className="small muted survey-waits">{item.waits}.</p>;
   return (
     <div className="survey stack">
       {qs.map((q) => (
@@ -413,12 +414,40 @@ function Welcome({ firstName, onClose }) {
   );
 }
 
-// شهادة المشاركة: تظهر لمن أنهى البرنامج، وتُفتح في نافذة جاهزة للطباعة
-function CertificateCard() {
+// «هكذا يظهر اسمك»: الاسم كما سيُطبع على الشهادة، يؤكده صاحبه قبل صدورها (7.3). الاسم يُقفل بعد الصدور،
+// والشهادة تحمل رقم تحقق عامًا، فالتأكيد يسبقها لا يلحقها. التعديل من «ملفي»، وتعديله يلغي التأكيد
+function NameConfirm({ participant, onConfirmed }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const confirm = async () => {
+    setBusy(true); setErr('');
+    const r = await call('profile.confirm-name');
+    setBusy(false);
+    if (r.success) onConfirmed(r); else setErr(r.message);
+  };
+  return (
+    <div className="name-confirm stack" role="group" aria-labelledby="nc-title">
+      <h3 id="nc-title" className="as-h4">هكذا يظهر اسمك على الشهادة</h3>
+      <div className="name-confirm-preview">
+        <b>{participant.full_name}</b>
+        {participant.name_en ? <span className="ltr" lang="en">{participant.name_en}</span> : <small className="muted">بلا اسم بالإنجليزية (اختياري، يُضاف من ملفك)</small>}
+      </div>
+      <p className="small muted">راجعه حرفًا حرفًا: يُطبع كما هو، ويُقفل بعد صدور الشهادة. إن كان فيه خطأ فصحّحه من «ملفي» ثم عد لتأكيده.</p>
+      {err && <div className="alert err small" role="alert">{err}</div>}
+      <div className="row"><button className="btn sm" disabled={busy} onClick={confirm}>{busy ? 'لحظة…' : 'الاسم صحيح، أكّده'}</button></div>
+    </div>
+  );
+}
+
+// شهادة المشاركة: تظهر لمن أنهى البرنامج أو اعتُمد تقييمه الختامي بنجاح، وتُفتح في نافذة جاهزة للطباعة
+function CertificateCard({ participant }) {
   const [cert, setCert] = useState(undefined);
   const [msg, setMsg] = useState('');
-  useEffect(() => { call('certificate').then((r) => setCert(r.success ? r.certificate : null)); }, []);
+  const [confirmed, setConfirmed] = useState(participant.name_confirmed);
+  const load = () => call('certificate').then((r) => setCert(r.success ? r.certificate : null));
+  useEffect(() => { load(); }, []);
   if (cert === undefined) return null;
+  const awaitingName = !cert && confirmed === false && !participant.name_locked;
   const open = async () => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
     const { writeCertificate } = await import('../../../src/lib/brand/certificate.js');
@@ -436,6 +465,10 @@ function CertificateCard() {
         {cert ? <>
           <h2>مبارك، صدرت شهادتك</h2>
           <p className="small muted">رقمها <span className="ltr">{cert.serial}</span>، ولها رابط تحقق عام يثبت صحتها لمن تشاركها معه.</p>
+        </> : awaitingName ? <>
+          <h2>خطوة واحدة قبل شهادتك</h2>
+          <p className="small muted">تصدر شهادتك حين تؤكد اسمك كما سيُطبع عليها، إن كان تقييمك الختامي معتمدًا بقرار «اجتاز» أو «اجتاز بملاحظات».</p>
+          <NameConfirm participant={participant} onConfirmed={() => { setConfirmed(true); load(); }} />
         </> : <>
           <h2>شهادتك قيد الإصدار</h2>
           <p className="small muted">تصدر شهادتك آليًا حين يُعتمد تقييمك الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»، وتظهر هنا.</p>
@@ -635,7 +668,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
         <Ring value={me.progress} />
       </section>
-      {participant.status === 'completed' && <CertificateCard />}
+      {(participant.status === 'completed' || ['pass', 'pass_notes'].includes(me.final?.decision)) && <CertificateCard participant={participant} />}
       <RateExpert />
       {approved && <SusCard call={call} />}
       {approved && me.group && (

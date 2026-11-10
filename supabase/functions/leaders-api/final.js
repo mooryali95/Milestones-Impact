@@ -243,7 +243,7 @@ export function voteBlock(email, record, config) {
   if (cfg.committee.length && !cfg.committee.includes(e)) return 'الاعتماد لأعضاء اللجنة المسمّين في إعداد البرنامج';
   const adj = record?.adjust || {};
   const touched = Object.keys(adj.components || {}).length > 0 || !!adj.score || !!adj.decision;
-  if (touched && record?.submitted_by && String(record.submitted_by).toLowerCase() === e) return 'من عدّل التقييم لا يعتمده بنفسه؛ يعتمده خبير آخر';
+  if (touched && finalEditors(record).includes(e)) return 'من عدّل التقييم لا يعتمده بنفسه؛ يعتمده خبير آخر';
   return null;
 }
 
@@ -256,7 +256,20 @@ export function approvalState(votes, config, { largeAdjust = false } = {}) {
     const need = largeAdjust ? 2 : 1;
     return { done: yes >= need, returned: no >= 1 && yes === 0, need, yes, no, large_adjust: largeAdjust };
   }
-  if (cfg.approval === 'committee_unanimous') return { done: yes >= cfg.committee_size && no === 0, returned: no >= 1, need: cfg.committee_size, yes, no };
+  // اللجنة أيضًا: التعديل الكبير لا يُعتمد بأقل من توقيعين، ولو كانت اللجنة من عضو واحد أو كفت أغلبيتها صوتًا واحدًا
+  // (التدقيق 2026-11-10، البند 4.6: كان الحد مفروضًا في طريقة «خبير» وحدها)
+  const floor = largeAdjust ? 2 : 1;
+  if (cfg.approval === 'committee_unanimous') {
+    const need = Math.max(cfg.committee_size, floor);
+    return { done: yes >= need && no === 0, returned: no >= 1, need, yes, no, large_adjust: largeAdjust };
+  }
   const majority = Math.floor(cfg.committee_size / 2) + 1;
-  return { done: yes >= majority, returned: no >= majority, need: majority, yes, no };
+  const need = Math.max(majority, floor);
+  return { done: yes >= need, returned: no >= majority, need, yes, no, large_adjust: largeAdjust };
+}
+
+// من عدّل التقييم: من رفعه ومن حفظ تعديلًا عليه في مسودة (adjust.edited_by). كلهم لا يعتمدون ما عدّلوه
+export function finalEditors(record) {
+  const list = [record?.submitted_by, ...(Array.isArray(record?.adjust?.edited_by) ? record.adjust.edited_by : [])];
+  return [...new Set(list.filter(Boolean).map((e) => String(e).toLowerCase()))];
 }

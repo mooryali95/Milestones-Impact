@@ -308,6 +308,15 @@ export function certificateMail(name: string, url: string) {
     'شهادتك جاهزة برابط تحقق عام');
 }
 
+// اعتُمد التقييم الختامي والشهادة تنتظر تأكيد الاسم كما سيُطبع عليها (7.3)
+export function nameConfirmMail(name: string, url: string) {
+  return shell('journey', 'اعتُمد تقييمك الختامي: أكّد اسمك لتصدر شهادتك',
+    mailText(`${hello(name)} اعتُمد تقييمك الختامي بنجاح. بقيت خطوة واحدة: راجع اسمك كما سيُطبع على الشهادة وأكّده، فتصدر فورًا.`)
+    + mailText('الشهادة تحمل رقم تحقق عامًا، والاسم يُقفل بعد صدورها، فراجعه بالعربية والإنجليزية.')
+    + mailButton(url, 'راجع اسمي وأكّده'),
+    'خطوة واحدة قبل صدور شهادتك');
+}
+
 // phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة
 export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' = 'post') {
   const pre = phase === 'pre';

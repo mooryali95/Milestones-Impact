@@ -8,7 +8,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -565,7 +565,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     // حسابات البريد الأخرى (خبير، منسق جهة) لزر التبديل
     switch_to: audience === 'participant' && !p.is_demo ? (await rolesOf(p.email)).filter((d) => d !== 'participant') : [],
     participant: {
-      id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at, phone: p.phone, job_title: p.job_title,
+      id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at,
+      // تأكيد الاسم قبل الشهادة (7.3): null = لم يؤكَّد، وغياب الحقل = العمود لم يُرحَّل بعد
+      name_confirmed: 'name_confirmed_at' in p ? !!p.name_confirmed_at : undefined, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
       // null = لم يوافق بعد (يُعرض الإشعار)؛ غياب الحقل = العمود لم يُرحَّل بعد
@@ -643,6 +645,17 @@ const PROFILE_FIELDS: Record<string, number> = {
   full_name: 120, name_en: 120, job_title: 120, organization_name: 200, sector: 120, bio: 2000, linkedin_url: 300,
 };
 
+// تأكيد الاسم كما سيُطبع على الشهادة (7.3). يُرفض اسم لا يصلح للشهادة، فيصحّحه صاحبه أولًا من ملفه
+export async function confirmName(p: any) {
+  if (!('name_confirmed_at' in p)) throw new Fail('تأكيد الاسم يُفعَّل قريبًا', 503, 'not_ready');
+  if (p.name_locked_at) return { success: true, name_confirmed: true, ...(await mePayload(p)) };
+  if (!certNameOk(p.full_name)) throw new Fail('اسمك العربي لا يصلح للشهادة بعد: اسمان على الأقل بالحروف. صحّحه في ملفك ثم أكّده.', 400, 'name');
+  if (p.name_en && !certNameEnOk(p.name_en)) throw new Fail('اسمك بالإنجليزية لا يصلح للشهادة بعد: اسمان بالحروف اللاتينية. صحّحه أو احذفه ثم أكّد.', 400, 'name_en');
+  const saved = must(await db.from('participants').update({ name_confirmed_at: new Date().toISOString() }).eq('id', p.id).select('*').single());
+  await audit('participant', p.id, 'participant.name-confirm', 'participants', p.id, null, { full_name: p.full_name, name_en: p.name_en || null });
+  return { success: true, ...(await mePayload(saved)) };
+}
+
 export async function profileSave(p: any, b: Body) {
   const f = b.fields || {};
   const patch: Body = {};
@@ -671,8 +684,20 @@ export async function profileSave(p: any, b: Body) {
       throw new Fail('اسمك مقفل بعد إصدار الشهادة. لتصحيحه تواصل مع إدارة البرنامج', 409, 'name_locked');
     }
   }
-  if (patch.name_en && !/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(patch.name_en)) {
-    throw new Fail('الاسم بالإنجليزية بأحرف لاتينية فقط');
+  // الاسم والمسمى يُطبعان على الشهادة ويراهما المنسق: يُفحص ما تغيّر منهما فقط، فلا يُمنع حساب قديم من حفظ غيرهما
+  // (التدقيق 2026-11-10، البند 7.3: «OmarManzoma» و«O» حُفظا بلا فحص). الفحص نفسه في الواجهة (logic.js)
+  if ('full_name' in patch && patch.full_name !== p.full_name && !certNameOk(patch.full_name)) {
+    throw new Fail('اكتب اسمك الكامل كما تريده على الشهادة: اسمان على الأقل، بالحروف دون أرقام أو رموز.', 400, 'name');
+  }
+  if (patch.name_en && patch.name_en !== (p.name_en || null) && !certNameEnOk(patch.name_en)) {
+    throw new Fail('الاسم بالإنجليزية بأحرف لاتينية، واسمان على الأقل', 400, 'name_en');
+  }
+  if ('job_title' in patch && patch.job_title !== p.job_title && patch.job_title && String(patch.job_title).trim().length < JOB_TITLE_MIN) {
+    throw new Fail(`اكتب مسماك الوظيفي (${JOB_TITLE_MIN} أحرف على الأقل)`, 400, 'job_title');
+  }
+  // تغيير الاسم يلغي تأكيده: يُعرض على صاحبه من جديد قبل أن تصدر به شهادة
+  if (('full_name' in patch && patch.full_name !== p.full_name) || ('name_en' in patch && patch.name_en !== (p.name_en || null))) {
+    if ('name_confirmed_at' in p) patch.name_confirmed_at = null;
   }
   if (patch.linkedin_url && !/^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(patch.linkedin_url)) {
     throw new Fail('رابط LinkedIn غير صحيح');
@@ -913,6 +938,9 @@ export async function requirementUpdate(p: any, b: Body) {
 
   // الاستبانة تكتمل بإجاباتها لا بنقرة، وتُعدَّل ما دامت المرحلة مفتوحة
   if (r.kind === 'survey') {
+    // الاستبانة المنتظرة للحضور لا تُرسل (7.8): الحكم من الرحلة نفسها (gateSurveys)، لا من الواجهة
+    const waits = stage.items.find((i: any) => i.id === r.id)?.waits;
+    if (waits) throw new Fail(waits, 409, 'survey_waits');
     const s: any = cleanSurvey(r.config, b.answers);
     if (s.error) throw new Fail(s.error);
     must(await db.from('participant_requirements').upsert({
@@ -973,15 +1001,17 @@ export async function award(participantId: string, source: string, refId: string
 
 export async function handbookToc(p: any) {
   const levels = await approvedLevels(p);
-  const [mods, prog, models, subs, pts] = await Promise.all([
+  const [mods, prog, models, subs, pts, reads] = await Promise.all([
     db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md, quiz_md'),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, completed_at').eq('participant_id', p.id),
     db.from('learning_models').select('id, dimension, sort, min_level, active, points, scopes'),
     db.from('model_submissions').select('model_id, status').eq('participant_id', p.id),
     pointsOf(p.id),
+    db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
+  const read = Object.fromEntries((reads.data || []).map((r: any) => [r.module_id, r]));
   const mine = modelsFor(models.data || [], levels, p.work_scope);
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
@@ -992,6 +1022,9 @@ export async function handbookToc(p: any) {
     chapters: chapters.map((m: any) => ({
       id: m.id, dimension: m.dimension, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
+      // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتيب كان يعدّ الاختبار وحده
+      // فيقول «أتممت 1 من 22» والرحلة «قرأت 0 من 22» (التدقيق 2026-11-10، البند 7.2)
+      ...chapterCompletion(readingVerdict(read[m.id]), !!done[m.id]),
     })),
     models: { total: mine.length, submitted: mine.filter((m: any) => submitted.has(m.id)).length,
       points: mine.reduce((a: number, m: any) => a + (m.points || 0), 0) },

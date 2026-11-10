@@ -6,7 +6,7 @@
 // الوحيد التعليق أو الإلغاء بتعليل وصلاحية super. تحفظ لقطة ثابتة لكل ما يظهر على الشهادة وتقفل الاسم.
 // التوقيع HMAC للحقول الحاكمة بمفتاح مستقل عن ملح الجلسات بمعرّف مفتاح (kid)، فتدوير الملح لا يبطل شهادة،
 // وتدوير المفتاح لا يبطل ما صدر. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
-import { alertOps, audit, certificateMail, CONFIG, db, Fail, must, sendMail } from './core.ts';
+import { alertOps, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
 import { displayTitles } from './profiles.ts';
 import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
@@ -212,7 +212,25 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
   if (suspended) await setStatus(suspended.id, 'replaced', by || 'system', 'اعتماد ختامي جديد');
   if (!cfg.enabled) return null;
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
+  // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm).
+  // قبل ترحيل 20261110210000 لا عمود، فتصدر كما كانت
+  if ('name_confirmed_at' in p && !p.name_confirmed_at) {
+    await audit('system', by, 'certificate.awaiting-name', 'participants', p.id, null, { decision: final.decision });
+    if (p.email && !p.is_demo) sendMail(p.email, 'أكّد اسمك لتصدر شهادتك', nameConfirmMail(p.full_name, CONFIG.appUrl), [], { ref: `participant:${p.id}` })
+      .catch((e) => console.error('name confirm mail:', e));
+    return { awaiting_name: true };
+  }
   return insertCertificate(p, by, final);
+}
+
+// بعد تأكيد الاسم: إن كان التقييم الختامي معتمدًا بقرار ناجح ولا شهادة سارية، تصدر الآن بقرار التقييم نفسه
+export async function issueAfterNameConfirm(participantId: string) {
+  const { data: rec } = await db.from('final_evaluations').select('program_id, decision, snapshot, status')
+    .eq('participant_id', participantId).eq('status', 'approved').order('decided_at', { ascending: false }).limit(1).maybeSingle();
+  if (!rec) return null;
+  const decision = String(rec.decision || rec.snapshot?.decision || '');
+  if (!PASSING.includes(decision)) return null;
+  return onFinalApproved(participantId, { decision, formula_version: rec.snapshot?.config_version ?? null, program_id: rec.program_id }, null);
 }
 
 // إعادة فتح التقييم الختامي تعلّق الشهادة السارية حتى يُعتمد من جديد
