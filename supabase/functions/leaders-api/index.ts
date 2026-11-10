@@ -174,10 +174,37 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'tracking.save': (p, b) => T.save(p, b),
 };
 
+// نتيجة فعل داخل طلب مجمّع بالشكل نفسه الذي يرده الفعل وحده، فخطؤه يبقى له ولا يُفشل الطلب كله
+async function settle(action: string, p: Promise<unknown>) {
+  try { return await p; } catch (e) {
+    if (e instanceof Fail) { logRefusal(action, e.status, e.code); return { success: false, message: e.message, code: e.code, ...e.extra }; }
+    const ref = crypto.randomUUID().slice(0, 8);
+    console.error(`leaders-api [${ref}] ${action}:`, e);
+    return { success: false, message: `خطأ داخلي، حاول بعد قليل (المرجع ${ref})`, code: 'internal', ref };
+  }
+}
+// كل رد 4xx يُسجَّل باسم الفعل ورمزه، بلا بريد ولا متن ولا رمز (البند 6.1): كان طلب يفشل بـ400 مع كل تحميل للوحة
+// الخبير ولا يُعرف أي فعل هو. الرفض المتوقع بكثرة (الجلسة المنتهية والتحقق البشري) لا يُسجَّل فلا يغرق السجل
+const QUIET = new Set(['session', 'captcha']);
+function logRefusal(action: string, status: number, code?: string) {
+  if (status >= 400 && status < 500 && !QUIET.has(String(code))) console.warn(`leaders-api refused ${action} ${status} ${code || '-'}`);
+}
+
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
 // لوحة الخبير: الجلسة من expert_sessions، والخبير يُشتق منها على الخادم
 const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
-  'xp.dashboard': (e) => E.portalDashboard(e),
+  // لوحة الخبير في رحلة واحدة (البند 6.2 من تدقيق الإنتاج): كانت اللوحة تطلب الملخص ثم أربعة طلبات بعده، فتُدفع
+  // المسافة إلى الخادم مرتين. هنا تُجمع الأربعة مع الملخص، ولكلٍّ نتيجته كما لو طُلب وحده (خطأ أحدها لا يُسقط اللوحة)،
+  // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
+  'xp.dashboard': async (e, b) => {
+    const d: any = await E.portalDashboard(e);
+    if (!d?.success || d.consent_needed || d.onboarding || b.lite === true) return d;
+    const [reviews, participants, peers, sus] = await Promise.all([
+      settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
+      settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)),
+    ]);
+    return { ...d, preload: { reviews, participants, peers, sus } };
+  },
   'xp.consent': (e) => E.portalConsent(e),
   'xp.rater-confirm': (e, b) => FL.raterConfirm(e, b),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
@@ -400,6 +427,7 @@ Deno.serve(async (req) => {
       if (['mail_failed', 'mail_unconfigured', 'mail_cap', 'captcha_unconfigured', 'audit_failed'].includes(e.code)) {
         await alertOps(e.code, { action, message: e.message, ...e.extra });
       }
+      logRefusal(action, e.status, e.code);
       return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
     }
     // رقم مرجع يراه المستخدم ويُسجَّل مع الخطأ ويصل في التنبيه، فيُربط البلاغ بسجله

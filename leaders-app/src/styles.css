@@ -1497,6 +1497,14 @@ body:has(.tour) main{padding-bottom:260px}
 /* روابط داخل سطر (لوحة الخبير، لوحة الجهة، شاهد كيف تسير رحلتك): مساحة لمس 44 بلا تغيير في ارتفاع السطر */
 .role-note a.link,.signin-expert a.link,.intro-link{display:inline-flex;align-items:center;min-height:44px;margin-block:-12px;min-width:44px}
 
+/* ── لوحة الخبير: تدقيق الإنتاج، المرحلة أ (2026-11-10) ── */
+/* أزرار الرأس بمساحة لمس 44 (البند 6.5): «خروج» كان 30×25 و«شهادة ساعات الخبرة» 37 */
+.xpp .xpp-head-acts > button, .xpp .xpp-head-acts > .link { min-height: 44px; min-width: 44px; padding-inline: 12px; }
+.xpp .xpp-head-acts > button:disabled { opacity: .55; cursor: not-allowed; }
+/* خطوات البداية للخبير الجديد (البند 6.9) */
+.xpp-steps { margin: 0; padding-inline-start: 22px; display: grid; gap: 10px; line-height: 1.8; }
+.xpp-steps li.done { color: var(--muted); }
+.xpp-steps li.done b::after { content: ' ✓'; color: var(--ok); }
 /* سبب قفل القسم عند لمسه (الهاتف لا يعرض title) */
 .nav-item[aria-disabled="true"]{cursor:not-allowed}
 .nav-hint{position:fixed;inset-inline:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;margin:0 auto;max-width:420px;padding:10px 14px;border-radius:12px;background:var(--brand-graphite);color:var(--brand-cream);font-size:14px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25)}

@@ -11,8 +11,8 @@ import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
-import { POPUP_BLOCKED } from '../ui.jsx';
-import { countAr, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
+import { POPUP_BLOCKED, Skel } from '../ui.jsx';
+import { CONTACT_EMAIL, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -135,14 +135,14 @@ function RateParticipant({ item, criteria, onDone }) {
 
 // المستشار الأساسي: نماذج مشاركي دفعته بانتظار تقييمه، بالمعيار نفسه في لوحة الإدارة
 const showVal = (v) => (Array.isArray(v) ? `جدول (${v.length} صفوف)` : v && typeof v === 'object' ? Object.values(v).filter(Boolean).join(' · ') : String(v ?? ''));
-function AdvisorReviews() {
-  const [d, setD] = useState(null);
+function AdvisorReviews({ initial }) {
+  const [d, setD] = useState(initial ?? null);
   const [open, setOpen] = useState(null);
   const [f, setF] = useState({ rating: 0, feedback: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const load = () => xpCall('xp.reviews').then(setD);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!initial) load(); }, []);
   if (!d?.success || !d.advisor) return null;
   const pending = d.items.filter((x) => x.status === 'submitted');
   const done = d.items.filter((x) => x.status !== 'submitted').slice(0, 8);
@@ -156,7 +156,7 @@ function AdvisorReviews() {
     <section className="card stack">
       <h2 className="as-h3">بانتظار تقييمك <small className="muted">· {pending.length}</small></h2>
       <p className="small muted">أنت المستشار الأساسي لدفعة هؤلاء المشاركين؛ يصلك ما يسلّمونه هنا وبالبريد، والإدارة ترى ما تقيّمه.</p>
-      {msg && <div className="banner" role="status"><span className="grow">{msg}</span></div>}
+      <div role="status" aria-live="polite">{msg && <div className="banner"><span className="grow">{msg}</span></div>}</div>
       {!pending.length && <p className="muted small">لا تسليمات معلّقة الآن.</p>}
       {pending.map((x) => (
         <div key={x.id} className="xpp-torate">
@@ -186,10 +186,10 @@ function AdvisorReviews() {
 
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
 const MINE_PAGE = 12;
-function MyParticipants({ onOpen }) {
-  const [d, setD] = useState(null);
+function MyParticipants({ onOpen, initial }) {
+  const [d, setD] = useState(initial ?? null);
   const load = () => xpCall('xp.participants').then(setD);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!initial) load(); }, []);
   const decide = async (b) => { const r = await xpCall('xp.rater-confirm', b); if (r.success) load(); return r; };
   // خمسون مشاركًا في القائمة: من ينتظرك أولًا ثم المتأخر ثم بالاسم، وبحث وتصفية، وعرض مختصر يُوسَّع
   const [q, setQ] = useState('');
@@ -232,13 +232,13 @@ function MyParticipants({ onOpen }) {
 }
 
 // طلبات الأقران في دفعات الخبير (المرحلة 8): يؤكّد أو يصحّح أو يخفي إجابات الزملاء، ويجيب بنفسه
-function PeerQueue({ say }) {
-  const [d, setD] = useState(null);
+function PeerQueue({ say, initial }) {
+  const [d, setD] = useState(initial ?? null);
   const [note, setNote] = useState({});
   const [reply, setReply] = useState({});
   const [busy, setBusy] = useState(false);
   const load = () => xpCall('xp.peer-list').then(setD);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!initial) load(); }, []);
   if (!d?.success || !d.advisor) return null;
   const act = async (action, body, ok) => {
     setBusy(true);
@@ -291,20 +291,54 @@ function ExpertHall({ cohorts, say }) {
   );
 }
 
+// هيكل اللوحة أثناء التحميل بدل دائرة في صفحة فارغة: يرى الخبير شكل ما سيأتي (البند 6.2)
+function DashboardSkeleton() {
+  return (
+    <div className="page wide xpp" aria-busy="true" aria-label="جارٍ تحميل لوحتك">
+      <div className="skel-hero"><Skel h={14} w="22%" /><Skel h={28} w="50%" /><Skel h={14} w="35%" /></div>
+      <div className="xpp-kpis">{[0, 1, 2, 3].map((i) => <div key={i}><Skel h={26} w="40%" /><Skel h={12} w="70%" style={{ marginTop: 8 }} /></div>)}</div>
+      {[0, 1].map((i) => <div key={i} className="card"><Skel h={18} w="35%" /><Skel h={12} style={{ marginTop: 10 }} /><Skel h={12} w="75%" style={{ marginTop: 6 }} /></div>)}
+    </div>
+  );
+}
+
+// خبير جديد بلا طلبات ولا جلسات ولا مشاركين: ما يفعله الآن وما يحدث بعده، بدل لوحة فارغة (البند 6.9)
+// الملف المعتمد تعدّله الإدارة لا الخبير (portalProfileSave)، فخطوة الملف تدل على مراسلتها
+function FirstSteps({ e }) {
+  const profile = [e.bio, e.weekly_hours, (e.dimensions || []).length, (e.levels || []).length].every(Boolean);
+  return (
+    <section className="card stack" aria-labelledby="xp-first">
+      <h2 className="as-h3" id="xp-first">بداية عملك في الشبكة</h2>
+      <ol className="xpp-steps">
+        <li className={profile ? 'done' : ''}><b>{profile ? 'ملفك مكتمل' : 'أكمل ملفك'}</b>: نبذتك، والأبعاد والمستويات التي تخدمها، وساعاتك الأسبوعية المتاحة. منها يُرشَّح لك القادة.
+          {!profile && <> ملفك معتمد فتعديله من الإدارة: <a className="link" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('استكمال ملف خبير')}`}>راسلنا بما ينقصه</a>.</>}</li>
+        <li><b>انتظر أول طلب</b>: يصلك بالبريد ويظهر هنا تحت «طلبات بانتظار ردك»، ولك مهلة للقبول أو الاعتذار قبل أن يُعرض على خبير آخر.</li>
+        <li><b>بعد القبول</b>: يظهر القائد في «مشاركوك» بملفه ومرحلته، وتظهر جلساتكما هنا، وتُحسب ساعاتك من الجلسات المنعقدة.</li>
+      </ol>
+    </section>
+  );
+}
+
 function Dashboard({ onOut }) {
   const [view, setView] = useState(null);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [msg, setMsg] = useState('');
   const [bad, setBad] = useState(false);   // رسالة خطأ لا تُعرض بعلامة النجاح
-  const load = () => xpCall('xp.dashboard').then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
+  // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
+  const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
   useEffect(() => { load(); }, []);
-  if (!d) return <div className="center-load"><div className="spinner" /></div>;
+  // ما جاء مجمّعًا يُستعمل مرة: فتح ملف مشارك ثم الرجوع يعيد تركيب الأقسام، فتطلب حالها الحالية لا نسخة التحميل الأول
+  const openFile = (id) => { setD((x) => (x ? { ...x, preload: undefined } : x)); setView(id); };
+  if (!d) return <DashboardSkeleton />;
   if (!d.success) return <div className="page narrow"><div className="alert err" role="alert">{d.message}</div></div>;
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
   const e = d.expert;
+  const pre = d.preload || {};
+  const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);
+  const isNew = !d.requests.length && !d.sessions.length && !d.stats.participants && !(d.advisor_cohorts || []).length;
   const offered = d.requests.filter((x) => x.status === 'offered');
   const now = Date.now();
   const upcoming = d.sessions.filter((s) => s.status === 'booked' && Date.parse(s.starts_at) > now).reverse();
@@ -315,7 +349,7 @@ function Dashboard({ onOut }) {
     const r = await xpCall('xp.respond', { id: x.id, accept });
     setBad(!r.success);
     setMsg(r.success ? (accept ? `قبلت طلب ${x.participant.name}. تجده في «مشاركوك».` : 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.') : r.message);
-    load();
+    load(true);
   };
   const certificate = async () => {
     const win = window.open('', '_blank');
@@ -338,15 +372,20 @@ function Dashboard({ onOut }) {
         <div className="stack">
           <p className="eyebrow">بوابة الخبراء</p>
           <h1>أهلًا {e.full_name}</h1>
-          <p className="muted">{[e.title, (e.roles || []).length ? countAr(e.roles.length, 'دور واحد', 'دوران', 'أدوار', 'دورًا') : null].filter(Boolean).join(' · ')}</p>
+          <p className="muted">{[e.title, roles.join('، ')].filter(Boolean).join(' · ')}</p>
         </div>
         <div className="row xpp-head-acts">
-          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate} disabled={!d.stats.hours} title={d.stats.hours ? undefined : 'تصدر بعد أول جلسة منعقدة'}>شهادة ساعات الخبرة</button>
+          {/* الشهادة تُصدر بعد أول جلسة منعقدة: بلا ساعات تكون وثيقة فارغة (البند 6.6) */}
+          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate} disabled={!d.stats.hours}
+            title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
+          {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button>
         </div>
       </section>
-      {msg && <div className={`banner${bad ? ' warn' : ''}`} role={bad ? 'alert' : 'status'}><span className="ico" aria-hidden="true">{bad ? '!' : '✓'}</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
+      {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}
+      <div role="status" aria-live="polite">{msg && !bad && <div className="banner"><span className="ico" aria-hidden="true">✓</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}</div>
+      {msg && bad && <div className="banner warn" role="alert"><span className="ico" aria-hidden="true">!</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
 
       <div className="xpp-kpis">
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
@@ -367,16 +406,18 @@ function Dashboard({ onOut }) {
         </section>
       )}
 
+      {isNew && <FirstSteps e={e} />}
+
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
       <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
-      <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" />
-      <AdvisorReviews />
-      <PeerQueue say={setMsg} />
+      <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" initial={pre.sus} />
+      <AdvisorReviews initial={pre.reviews} />
+      <PeerQueue say={setMsg} initial={pre.peers} />
 
       <div className="xpp-cols">
-        <MyParticipants onOpen={setView} />
+        <MyParticipants onOpen={openFile} initial={pre.participants} />
         <section className="card stack">
           <h2 className="as-h3">جلساتك القادمة</h2>
           {upcoming.length ? upcoming.map((s) => (
@@ -393,7 +434,7 @@ function Dashboard({ onOut }) {
             <div key={it.kind + it.id} className="xpp-torate">
               <div className="row between"><span><b>{it.who}</b> <small className="muted">{it.what} · {fmt(it.at)}</small></span>
                 {rating?.id !== it.id && <button className="btn ghost sm" onClick={() => setRating(it)}>قيّم</button>}</div>
-              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); setBad(false); setMsg('حُفظ تقييمك.'); load(); }} />}
+              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); setBad(false); setMsg('حُفظ تقييمك.'); load(true); }} />}
             </div>
           ))}
         </section>
