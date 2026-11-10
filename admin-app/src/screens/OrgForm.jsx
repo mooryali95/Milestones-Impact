@@ -171,6 +171,8 @@ export default function OrgForm({ org, coordinator, onClose }) {
   }), [org, coordinator]);
   const [v, setV] = useState(initial);
   const [coord, setCoord] = useState(initialCoord);
+  // جهة جديدة: كتابة بريد المنسق تفعّل حسابه ودعوته، ما لم يُطفئ المفتاح صراحة (كان مطفأً فيُحفظ البريد ولا يصل صاحبه شيء)
+  const [accountTouched, setAccountTouched] = useState(false);
   const [touched, setTouched] = useState({});
   const [busy, setBusy] = useState(false);
   const [serverErr, setServerErr] = useState('');
@@ -195,7 +197,12 @@ export default function OrgForm({ org, coordinator, onClose }) {
   const dirty = JSON.stringify(v) !== JSON.stringify(initial) || JSON.stringify(coord) !== JSON.stringify(initialCoord);
   const err = (k) => (touched[k] || touched.all ? errors[k] : null);
   const set = (k) => (e) => { setV({ ...v, [k]: e.target.value }); setTouched({ ...touched, [k]: true }); };
-  const setC = (k) => (e) => { setCoord({ ...coord, [k]: e.target.value }); setTouched({ ...touched, [`coord_${k}`]: true }); };
+  const setC = (k) => (e) => {
+    const next = { ...coord, [k]: e.target.value };
+    if (k === 'email' && !org && !accountTouched) next.enabled = !!e.target.value.trim();
+    setCoord(next); setTouched({ ...touched, [`coord_${k}`]: true });
+  };
+  const contactOnly = !coord.enabled && !coordinator && !!coord.email.trim();
 
   const close = async (saved) => {
     if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;
@@ -208,6 +215,8 @@ export default function OrgForm({ org, coordinator, onClose }) {
     setTouched({ all: true });
     const next = { ...v, ...patch };
     if (Object.keys(validateOrg(next, coord)).length) return;
+    // بريد منسق بلا حساب: لا تصله دعوة ولا رابط التسجيل، فيُنبَّه الحافظ قبل الحفظ إن كان البريد جديدًا
+    if (contactOnly && (!org || coord.email.trim().toLowerCase() !== (org.contact_email || '')) && !(await confirm(`لن يصل إلى ${coord.email.trim()} أي بريد: يُحفظ جهة اتصال فقط، بلا دعوة ولا رابط تسجيل للموظفين. الحفظ هكذا؟`, { ok: 'احفظ بلا دعوة' }))) return;
     setBusy(true); setServerErr('');
     const row = {
       name: next.name.trim(), name_en: next.name_en.trim() || null, logo: next.logo, cert_cobrand: next.cert_cobrand, cert: next.cert, short_name: next.short_name.trim() || null, sector: next.sector.trim() || null, status: next.status,
@@ -353,9 +362,9 @@ export default function OrgForm({ org, coordinator, onClose }) {
               <Field label="البريد" error={err('coord_email')} hint={domainHint(coord.email, v.domains)}><input type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
               <Field label="الجوال"><input dir="ltr" inputMode="tel" value={coord.phone} onChange={setC('phone')} /></Field>
               <Field group label="حساب الاطلاع" wide hint={coord.enabled
-                ? (coordinator && coordinator.email === coord.email.trim().toLowerCase() ? 'الحساب قائم. تغيير البريد ينقل الوصول وينهي جلسات البريد القديم.' : 'يُنشأ الحساب ويُرسل للمنسق بريد دعوة عند الحفظ.')
-                : 'بلا حساب: المنسق جهة اتصال فقط.'}>
-                <label className="of-switch"><input type="checkbox" checked={coord.enabled} onChange={(e) => setCoord({ ...coord, enabled: e.target.checked })} />
+                ? (coordinator && coordinator.email === coord.email.trim().toLowerCase() ? 'الحساب قائم. تغيير البريد ينقل الوصول وينهي جلسات البريد القديم.' : 'عند الحفظ يُنشأ الحساب، ويصل المنسق بريد ترحيب فيه رابط تسجيل الموظفين ولوحة الجهة.')
+                : contactOnly ? '⚠ لم يصل هذا البريد شيء: المنسق جهة اتصال فقط. فعّل الحساب لتُرسل له الدعوة ورابط التسجيل.' : 'بلا حساب: المنسق جهة اتصال فقط.'}>
+                <label className="of-switch"><input type="checkbox" checked={coord.enabled} onChange={(e) => { setAccountTouched(true); setCoord({ ...coord, enabled: e.target.checked }); }} />
                   <span>يرى لوحة الجهة وتقاريرها ويصله ملخص أسبوعي</span></label>
               </Field>
             </div>
