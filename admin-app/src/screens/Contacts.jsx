@@ -111,7 +111,7 @@ export default function Contacts() {
       <div className="page-header">
         <div className="page-header-left">
           <div className="page-eyebrow">Contact Requests</div>
-          <div className="page-title">طلبات التواصل</div>
+          <h1 className="page-title">طلبات التواصل</h1>
           <div className="page-title-ar">جميع الطلبات الواردة من المنظومة</div>
         </div>
         <div className="last-updated">{updated ? `آخر تحديث: ${updated.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}` : '—'}</div>

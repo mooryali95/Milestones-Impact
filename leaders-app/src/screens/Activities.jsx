@@ -33,8 +33,14 @@ function ReadFold({ on, label, children }) {
 }
 function Reading({ a, onHandbook }) {
   const skimmed = a.chapters.some((c) => c.state === 'skimmed');
-  const seen = new Set(); const dup = new Set();
-  a.chapters.forEach((c) => { if (seen.has(c.title)) dup.add(c.title); seen.add(c.title); });
+  // صيغة واحدة لكل الأبواب (التدقيق 2026-11-10، البند 7.13): بعض العناوين المخزنة تحمل اسم الإطار وبعضها لا، فيلتبس
+  // «الباب الثاني» لأي إطار. حين تجمع القائمة أكثر من إطار يسبق كلَّ باب إطارُه، ويُحذف اسم الإطار إن كان في العنوان نفسه
+  const mixed = new Set(a.chapters.map((c) => c.dimension)).size > 1;
+  const label = (c) => {
+    const dim = DIM_TITLE[c.dimension];
+    const t = dim ? String(c.title).replace(new RegExp(`^\\s*${dim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[·:،-]\\s*`), '') : c.title;
+    return { dim: mixed && dim ? dim : null, t };
+  };
   return (
     <div className="act">
       <div className="row between"><b className="small">قرأت {a.count} من {countAr(a.total, 'باب واحد', 'بابين', 'أبواب', 'بابًا')}</b>
@@ -46,7 +52,7 @@ function Reading({ a, onHandbook }) {
           const [cls, t] = READ_CHIP[c.state];
           return (
             <li key={c.id}>
-              <span className="grow">{DIM_TITLE[c.dimension] && dup.has(c.title) && <small className="muted">{DIM_TITLE[c.dimension]} · </small>}{c.title}
+              <span className="grow">{label(c).dim && <small className="muted">{label(c).dim} · </small>}{label(c).t}
                 {c.state !== 'read' && c.pct > 0 && <span className="read-pct" style={{ '--p': `${Math.min(100, c.pct)}%` }} title={`قرأت ${Math.round(c.pct)}%`}><i /></span>}</span>
               {c.state !== 'read' && c.pct > 0 && <span className="chip">{Math.round(c.pct)}%</span>}
               {c.state === 'read' && a.quiz && !c.quiz && <span className="chip warn">بقي الاختبار</span>}

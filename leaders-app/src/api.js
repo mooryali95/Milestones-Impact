@@ -131,3 +131,21 @@ export const bootPreload = {
   set(obj) { preloaded = { ...(obj || {}) }; },
   take(key) { const v = preloaded[key]; delete preloaded[key]; return v; },
 };
+
+// ── الخروج من البوابات (التدقيق 2026-11-10، البند 8.3) ──
+// المشارك والخبير والمنسق جلسات مستقلة في المتصفح نفسه، فالخروج من واحدة كان يُبقي الأخرى مفتوحة على جهاز مشترك.
+// الخروج يسأل حين توجد جلسة دور آخر، ويُلغي كل جلسة على الخادم أيضًا لا من المتصفح وحده
+const ROLES = [
+  { key: 'participant', label: 'مشارك', store: session, send: (a) => call(a), action: 'logout' },
+  { key: 'expert', label: 'خبير', store: xpSession, send: (a) => xpCall(a), action: 'xp.logout' },
+  { key: 'org', label: 'منسق جهة', store: coordSession, send: (a) => coordCall(a), action: 'coord.logout' },
+];
+export const otherRoleSessions = (here) => ROLES.filter((r) => r.key !== here && r.store.get()).map((r) => r.label);
+export async function signOut(here) {
+  const others = otherRoleSessions(here);
+  const all = others.length > 0 && window.confirm(`أنت داخل على هذا الجهاز أيضًا بصفة ${others.join(' و')}.\n\nموافق: اخرج من الكل (الأنسب لجهاز مشترك).\nإلغاء: اخرج من هذه البوابة وحدها.`);
+  for (const r of ROLES.filter((x) => x.key === here || (all && x.store.get()))) {
+    if (r.store.get()) await r.send(r.action).catch(() => {});
+    r.store.clear();
+  }
+}

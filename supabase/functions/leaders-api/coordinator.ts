@@ -137,9 +137,16 @@ export async function dashboardFor(c: any) {
     perms.scores ? allFor(ids, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension')) : Promise.resolve([]),
   ]);
   const progressBy: Record<string, number> = {};
+  const stageBy: Record<string, string | null> = {};
   const queue = [...(rows as any[])];
   await Promise.all(Array.from({ length: 8 }, async () => {
-    for (let r = queue.shift(); r; r = queue.shift()) progressBy[r.id] = (await journeyFor(r)).progress;
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      const j: any = await journeyFor(r);
+      progressBy[r.id] = j.progress;
+      // المرحلة الجارية من الرحلة نفسها التي يراها المشارك (التدقيق 2026-11-10، البند 8.2): كانت الجهة ترى «معتمد المستوى»
+      // والمشارك نفسه في «التدريب»
+      stageBy[r.id] = (j.journey || []).find((s: any) => s.status === 'active')?.title_ar || null;
+    }
   }));
   const levelsBy: Record<string, Record<string, string>> = {};
   for (const l of levels as any[]) (levelsBy[l.participant_id] ||= {})[l.dimension] = l.level;
@@ -147,7 +154,7 @@ export async function dashboardFor(c: any) {
   const shared = new Set((rows as any[]).filter((r: any) => r.org_share_consented_at).map((r: any) => r.id));
 
   // الأرقام المجمّعة من كل مشاركي الجهة، والصفوف الفردية تمر عبر الصلاحيات (بلا «القائمة» لا صف واحد)
-  const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, levels: shared.has(p.id) ? levelsBy[p.id] || null : null }));
+  const full = d.participants.map((p: any) => ({ ...p, progress: progressBy[p.id] ?? 0, stage: stageBy[p.id] ?? null, levels: shared.has(p.id) ? levelsBy[p.id] || null : null }));
   const participants = full.map((p: any) => coordParticipant(p, perms)).filter(Boolean);
   // D18: المسار مشتق من المستويات، فيُحصى لمن خرجت مستوياته وحدهم (صلاحية المستويات وموافقة المشارك)،
   // لا من by_track الإداري الذي يعدّ الجميع

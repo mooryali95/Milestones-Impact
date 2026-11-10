@@ -513,6 +513,8 @@ a { text-decoration: none; color: inherit; }
   margin-bottom: 6px;
 }
 .page-title {
+  /* عنوان الصفحة عنصر h1 حقيقي لقارئ الشاشة والتنقل بالعناوين (التدقيق 2026-11-10، البند 9.15)، بشكله السابق */
+  margin: 0;
   font-family: var(--font-en);
   font-size: 1.9rem;
   font-weight: 500;

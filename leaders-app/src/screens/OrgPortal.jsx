@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
-import { coordCall, coordSession, setCoordExpired } from '../api.js';
+import { coordCall, coordSession, setCoordExpired, signOut } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
@@ -14,7 +14,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
@@ -124,7 +124,8 @@ function Initiatives({ list, outcomes }) {
       )}
       {msg && <div className="alert err">{msg}</div>}
       <div className="op-scroll"><table>
-        <thead><tr><th>المبادرة</th><th>القائد</th><th>النوع</th><th>الحالة</th><th>التنفيذ</th><th>تحقق المنافع</th><th>التكلفة</th><th /></tr></thead>
+        <caption className="sr-only">محفظة مبادرات الجهة</caption>
+        <thead><tr><th scope="col">المبادرة</th><th scope="col">القائد</th><th scope="col">النوع</th><th scope="col">الحالة</th><th scope="col">التنفيذ</th><th scope="col">تحقق المنافع</th><th scope="col">التكلفة</th><td /></tr></thead>
         <tbody>{list.map((x) => (
           <tr key={x.participant_id || x.initiative}>
             <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
@@ -147,12 +148,14 @@ function ImpactCard({ im, onReport }) {
   return (
     <section className="card op-impact">
       <div className="row between"><h3>أثر البرنامج على مشاركيك</h3>{onReport && c.paired > 0 && !im.suppressed && <button className="btn sm" onClick={onReport}>تقرير الأثر PDF</button>}</div>
-      <p className="small muted">{c.baseline || 0} أجروا القياس المبدئي، و{c.post || 0} أجروا البعدي، و{c.paired || 0} لديهم القياسان.</p>
+      {/* صيغة لا تتغير بالعدد (7.12 و8.5): «1 أجروا» و«0 أجروا» كانت خطأ في المطابقة */}
+      <p className="small muted">القياس المبدئي: {c.baseline || 0} · البعدي: {c.post || 0} · القياسان معًا: {c.paired || 0}</p>
       {im.caution && <div className="alert info small">{im.caution}</div>}
       {im.rows_withheld && <p className="small muted">تظهر نتائج من وافق من مشاركيك بأسمائهم حين لا يبقى غير موافق، أو يبلغ غير الموافقين خمسة على الأقل، فلا تُستنتج نتيجة أحد منهم من المتوسط.</p>}
       {im.suppressed ? <p className="small muted">تظهر المقارنة حين يكمل {im.suppressed} مشاركين على الأقل القياسين، حفاظًا على خصوصيتهم.</p> : c.paired > 0 ? (
         <div className="op-scroll"><table>
-          <thead><tr><th>الإطار</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسن موثوق</th></tr></thead>
+          <caption className="sr-only">أثر البرنامج في الجهة: قبل وبعد لكل إطار</caption>
+          <thead><tr><th scope="col">الإطار</th><th scope="col">قبل</th><th scope="col">بعد</th><th scope="col">الفرق</th><th scope="col">تحسن موثوق</th></tr></thead>
           <tbody>{DIMS.map(([k, en]) => {
             const x = im.cohort?.[k];
             if (!x) return null;
@@ -191,7 +194,7 @@ function Dashboard({ me, onLogout }) {
     exportWorkbook(
       { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
       head.map(([label, width]) => ({ label, width })),
-      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
+      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), p.stage || STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
         ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
     );
   };
@@ -223,7 +226,7 @@ function Dashboard({ me, onLogout }) {
           </div>
         </div>
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
-        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${org.seats} مقعد${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
+        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
@@ -250,7 +253,8 @@ function Dashboard({ me, onLogout }) {
         <div className="row between op-tools">
           <h3>المشاركون</h3>
           <div className="row">
-            <input className="input" aria-label="بحث" placeholder="بحث بالاسم أو المسمى…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
+            {/* عنوان ظاهر للبحث (8.6)، لا aria-label وحده */}
+            <label className="op-search"><span className="small">ابحث</span><input className="input" type="search" placeholder="بالاسم أو المسمى…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
             <select className="input" aria-label="المرحلة" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
               <option value="">كل المراحل</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
@@ -265,13 +269,15 @@ function Dashboard({ me, onLogout }) {
         <p className="small muted" aria-live="polite">{rows.length} من {kpis.total}</p>
         {/* على الجوال يصير كل مشارك بطاقة (styles.css: .op-people)، فلا جدول يُمرَّر أفقيًا ولا عمود مقصوص */}
         <div className="op-scroll"><table className="op-people">
-          <thead><tr><th>الاسم</th>{perms.scores && <th>المسار</th>}<th>المرحلة</th><th>الإنجاز</th>{perms.activity && <th>آخر دخول</th>}
-            {perms.contact && <th>التواصل</th>}{perms.scores && DIMS.map(([k, en]) => <th key={k}>{en}</th>)}</tr></thead>
+          {/* عنوان الجدول ورؤوس الأعمدة لقارئ الشاشة (8.6) */}
+          <caption className="sr-only">مشاركو {org.name}: {rows.length} من {kpis.total}</caption>
+          <thead><tr><th scope="col">الاسم</th>{perms.scores && <th scope="col">المسار</th>}<th scope="col">المرحلة</th><th scope="col">الإنجاز</th>{perms.activity && <th scope="col">آخر دخول</th>}
+            {perms.contact && <th scope="col">التواصل</th>}{perms.scores && DIMS.map(([k, en]) => <th key={k} scope="col">{en}</th>)}</tr></thead>
           <tbody>{rows.length ? rows.map((p) => (
             <tr key={p.id}>
               <td className="op-name"><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
               {perms.scores && <td data-label="المسار">{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
-              <td data-label="المرحلة"><span className="chip">{STATUS[p.status] || p.status}</span></td>
+              <td data-label="المرحلة"><span className="chip">{p.stage || STATUS[p.status] || p.status}</span></td>
               <td data-label="الإنجاز"><span><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</span></td>
               {perms.activity && <td data-label="آخر دخول">{fmt(p.last_login_at)}</td>}
               {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}
@@ -341,7 +347,7 @@ export default function OrgPortal() {
   }, []);
 
   const signedIn = (r) => { coordSession.set(r.token); setMe(r); };
-  const logout = async () => { await coordCall('coord.logout'); coordSession.clear(); setMe(null); };
+  const logout = async () => { await signOut('org'); setMe(null); };
 
   if (boot) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (me?.consent_needed) return <PortalConsent role="coordinator" onAccept={async () => { const r = await coordCall('coord.consent'); if (r.success) setMe((m) => ({ ...m, ...r })); return r; }} />;
