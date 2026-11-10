@@ -12,7 +12,7 @@ const Contacts = lazy(() => import('./screens/Contacts.jsx'));
 const Leaders = lazy(() => import('./screens/Leaders.jsx'));
 const Visits = lazy(() => import('./screens/Visits.jsx'));
 const Matrix = lazy(() => import('./screens/Matrix.jsx'));
-import { navigate, useRoute } from './route.js';
+import { navigate, parseRoute, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';
 
@@ -27,7 +27,8 @@ function Dashboard({ user, onUser, onLogout }) {
   // السياق من عنوان الصفحة، وإن خلا فآخر سياق في الجلسة
   const route = useRoute();
   const ctx = route.ctx || savedCtx();
-  useEffect(() => { if (!route.ctx) navigate({ ctx }, { replace: true }); }, [route.ctx, ctx]);
+  // يُقرأ العنوان لحظة التنفيذ لا من الحالة: تغيّر العنوان بين الرسم والأثر كان يعيد اللوحة إلى السياق المحفوظ
+  useEffect(() => { if (!route.ctx && !parseRoute(window.location.hash).ctx) navigate({ ctx }, { replace: true }); }, [route.ctx, ctx]);
   useEffect(() => { try { sessionStorage.setItem(CTX_KEY, ctx); } catch { /* */ } }, [ctx]);
   const setCtx = (c) => navigate({ ctx: c });
   const pending = usePending(ctx);
