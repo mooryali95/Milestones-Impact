@@ -130,6 +130,8 @@ export async function list() {
     })),
     cohorts: (cohorts.data || []).map((c: any) => ({ ...c, enrolled: enrolled[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: !teamRows.error })),
     organizations: orgs.data || [],
+    // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
+    team_ready: !teamRows.error,
   };
 }
 

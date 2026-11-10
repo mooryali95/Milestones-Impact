@@ -217,7 +217,7 @@ export const COHORT_STATUS = { planned: 'مخطط لها', open: 'التسجيل
 const INHERIT = 'كما في البرنامج';
 
 // حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, experts = [] }) {
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, experts = [], team = false }) {
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
     { name: 'name', label: 'اسم الدفعة' },
@@ -236,7 +236,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
       help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
     { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
       help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
-    { name: 'team_expert_ids', label: 'فريق الخبراء', type: 'multi', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
+    // يظهر حين يقول الخادم إن الفريق جاهز (team_ready): قبل نشر الدالة أو تطبيق الترحيل كان الحفظ يتجاهله بصمت
+    { name: 'team_expert_ids', label: 'فريق الخبراء', type: 'multi', show: () => team, options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
       help: 'خبراء يُعرضون على مشاركي هذه الدفعة أولًا حين يطلبون موجّهًا أو مستشارًا أو خبيرًا، ثم بقية الخبراء إن لم يكفِ الفريق. العضوية لا تمنح صلاحيات المستشار الأساسي.' },
     { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
       help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
