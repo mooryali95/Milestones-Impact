@@ -18,6 +18,13 @@ describe('قراءة رد الخادم', () => {
     expect((await parse(res(503))).code).toBe('busy');
     expect((await parse(res(502, { message: 'Service is temporarily unavailable' }))).code).toBe('busy');
   });
+  it('500 من البوابة أو وقت التشغيل (بلا حقل success) = مشغول بالعربية، و500 من الدالة نفسها يمر برمزه', async () => {
+    const gw = await parse(res(500, { message: 'Request failed due to an internal server error' }));
+    expect(gw).toMatchObject({ success: false, code: 'busy' });
+    expect(gw.message).not.toMatch(/[A-Za-z]/);
+    expect((await parse(res(500))).code).toBe('busy');
+    expect((await parse(res(500, { success: false, code: 'db_error', message: 'تعذّر الحفظ' }))).code).toBe('db_error');
+  });
   it('الردود العادية تمر كما هي', async () => {
     expect((await parse(res(200, { success: true, x: 1 }))).x).toBe(1);
     expect((await parse(res(401, { message: 'Invalid JWT' }))).message).toBe('Invalid JWT');

@@ -182,3 +182,60 @@ test('المشارك: بطاقة «جلستك» في رحلته بموعدها �
   await card.getByRole('button', { name: 'ادخل القاعة' }).click();
   await expect(page.getByRole('heading', { name: 'القاعة', exact: true })).toBeVisible();
 });
+
+test('الخبير: خمسون مشاركًا في قائمته بمن ينتظره أولًا، وبحث وتصفية وعرض مختصر، ونص الجملة في قائمة الاختيار', async ({ page }) => {
+  const items = Array.from({ length: 50 }, (_, i) => ({ id: `p${i}`, name: `${NAMES[i % NAMES.length]} ${i}`, first: NAMES[i % NAMES.length], title: 'مدير مشروع', org: i % 2 ? 'وزارة التجربة' : 'هيئة المثال', status: 'enrolled', cohort: 'نوفمبر', advisor: true, role_ar: null, level: 'intermediate', level_ar: 'متوسط', approved: true, stage: 'التدريب', progress: 20, late: 0, continuous: 60, needs: i === 37 ? 5 : i === 41 ? 2 : 0 }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const h = hall({ admin: true });
+    h.sentences = [{ id: 'k1', sort: 1, question: 'why', text_ar: 'المشروع الذي سلّم مخرجاته في موعدها مشروع ناجح بالضرورة.' }];
+    const replies = {
+      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
+      'xp.participants': { success: true, items, cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
+    };
+    await route.fulfill({ json: replies[b.action] || (b.action.startsWith('xp.hall') ? h : { success: true, items: [] }) });
+  });
+  await page.addInitScript(() => localStorage.setItem('mi_leaders_expert_session', 'x'.repeat(40)));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${APP}x`);
+  const mine = page.getByRole('region', { name: /مشاركوك/ });
+  const people = mine.locator('.xpp-person');
+  // عرض مختصر، ومن ينتظر الخبير في أوله بالأكثر انتظارًا
+  await expect(people).toHaveCount(12);
+  await expect(people.nth(0)).toContainText('5 بانتظارك');
+  await expect(people.nth(1)).toContainText('2 بانتظارك');
+  await mine.getByRole('button', { name: 'بانتظارك 2' }).click();
+  await expect(people).toHaveCount(2);
+  await mine.getByRole('button', { name: 'بانتظارك 2' }).click();
+  await mine.getByLabel('ابحث في مشاركيك').fill('هند');
+  await expect(people).toHaveCount(5);
+  await mine.getByLabel('ابحث في مشاركيك').fill('');
+  await mine.getByRole('button', { name: 'اعرض الكل (50)' }).click();
+  await expect(people).toHaveCount(50);
+  // قائمة الجملة تحمل نصها
+  await expect(page.getByRole('region', { name: 'القاعة الحية' }).getByLabel('الجملة المعروضة').locator('option').nth(1)).toContainText('المشروع الذي سلّم مخرجاته');
+});
+
+test('المشارك: دخول القاعة يُعاد وحده عند خطأ عابر من البوابة، ولا تظهر رسالة البوابة الإنجليزية', async ({ page }) => {
+  const srv = createMockServer();
+  Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
+  let joins = 0, inside = false;
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'hall.join') {
+      joins += 1;
+      if (joins === 1) return route.fulfill({ status: 500, json: { message: 'Request failed due to an internal server error' } });
+      inside = true;
+    }
+    if (b.action === 'hall.join' || b.action === 'hall.state') return route.fulfill({ json: { ...hall({ stage: 'enter' }), me: 'p7', inside } });
+    return route.fulfill({ json: srv.reply(b) });
+  });
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 't'.repeat(40)); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP);
+  await page.locator('[data-tour="nav-hall"]').locator('visible=true').first().click();
+  await page.getByRole('button', { name: 'ادخل القاعة' }).click();
+  await expect(page.locator('.hall-me')).toContainText('أنت في القاعة');
+  expect(joins).toBe(2);
+  await expect(page.getByText('internal server error')).toHaveCount(0);
+});

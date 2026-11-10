@@ -15,6 +15,7 @@ import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/le
 import PeerRequests from './PeerRequests.jsx';
 
 const PENDING_KEY = 'mi_leaders_hall_pending';
+const HALL_RETRY_MS = 800;
 
 // قاعة نموذجية للمعاينة فقط (لا تتصل بالخادم): جولة بفرقها الأربعة وقائدها وشخصيتها الافتراضية
 const PREVIEW_NAMES = ['سارة', 'خالد', 'نورة', 'فهد', 'ريم', 'عبدالله', 'هند', 'ماجد', 'لمى', 'سلطان', 'أمل', 'تركي'];
@@ -67,7 +68,9 @@ export default function Hall({ onBack }) {
 
   const act = async (action, body) => {
     setBusy(true); setErr('');
-    const r = action === 'katon.answer' ? await send(body) : await call(action, body);
+    let r = action === 'katon.answer' ? await send(body) : await call(action, body);
+    // الدخول ورفع اليد واختيار الفريق كتابات لا يضر تكرارها: إخفاق عابر من الشبكة أو البوابة يُعاد مرة قبل أن يراه المشارك
+    if (!r.success && action !== 'katon.answer' && (r.code === 'network' || r.code === 'busy')) { await new Promise((ok) => setTimeout(ok, HALL_RETRY_MS)); r = await call(action, body); }
     setBusy(false);
     if (!r.success) { if (!(action === 'katon.answer' && pending.current)) setErr(r.message); return; }
     if (action === 'katon.answer') { load(true); return; }

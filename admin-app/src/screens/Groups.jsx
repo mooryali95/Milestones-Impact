@@ -13,10 +13,12 @@ export default function CohortGroups({ cohort, onClose }) {
   const [d, setD] = useState(null);
   const [modes, setModes] = useState(cohort.stage_modes || {});
   const [busy, setBusy] = useState(false);
+  const [count, setCount] = useState('');   // عدد المجموعات للتوزيع الآلي؛ فارغ = نحو ستة في المجموعة
   const load = useCallback(async () => {
     const r = await L('admin.cohort-groups', { cohort_id: cohort.id });
     if (!r.success) { toast(r.message); onClose(); return; }
     setD(r); setModes(r.cohort.stage_modes || {});
+    setCount((c) => c || String(Math.max(1, Math.round(r.members.length / 6))));
   }, [cohort.id]); // toast وonClose من الأب تتغير كل عرض
   useEffect(() => { load(); }, [load]);
 
@@ -35,10 +37,9 @@ export default function CohortGroups({ cohort, onClose }) {
     toast(r.success ? 'حُفظ نمط العمل' : r.message);
   };
   const auto = async (by) => {
-    const n = await prompt(`كم مجموعة؟ (${d.members.length} مشارك)`, String(Math.max(1, Math.round(d.members.length / 6))));
-    if (!n) return;
-    if (d.groups.length && !(await confirm('يستبدل التوزيع الآلي المجموعات الحالية وأعضاءها. متابعة؟', { danger: true }))) return;
-    run('admin.cohort-groups-auto', { count: Number(n), by }, 'وُزِّع المشاركون؛ انقل من تشاء يدويًا');
+    const n = Math.min(d.members.length, Math.max(1, Math.round(Number(count)) || 1));
+    if (d.groups.length && !(await confirm(`يستبدل التوزيع الآلي المجموعات الحالية وأعضاءها بـ${n} مجموعات. متابعة؟`, { danger: true }))) return;
+    run('admin.cohort-groups-auto', { count: n, by }, 'وُزِّع المشاركون؛ انقل من تشاء يدويًا');
   };
   const add = async () => {
     const name = await prompt('اسم المجموعة', `المجموعة ${(d.groups.length || 0) + 1}`);
@@ -53,6 +54,8 @@ export default function CohortGroups({ cohort, onClose }) {
   };
 
   const lvl = (m) => LVL[overallLevel(m.levels)] || 'بلا قياس';
+  // توازن المستويات في المجموعة بنظرة: «تأسيسي 2 · متوسط 3 · احترافي 1»
+  const balance = (ms) => { const n = {}; ms.forEach((m) => { const k = lvl(m); n[k] = (n[k] || 0) + 1; }); return Object.entries(n).map(([k, v]) => `${k} ${v}`).join(' · '); };
   const unassigned = d?.members.filter((m) => !m.group_id) || [];
   const usesGroups = Object.values(modes).includes('groups') || cohort.project_mode === 'group';
 
@@ -81,6 +84,9 @@ export default function CohortGroups({ cohort, onClose }) {
               <div className="la-row between">
                 <h4>المجموعات <small className="la-muted">· {d.members.length} مشارك{unassigned.length ? ` · ${unassigned.length} بلا مجموعة` : ''}</small></h4>
                 <div className="la-row">
+                  <label className="la-row"><span className="la-muted">عدد المجموعات</span>
+                    <input type="number" inputMode="numeric" min="1" max={Math.max(1, d.members.length)} value={count} onChange={(e) => setCount(e.target.value)} aria-label="عدد المجموعات" style={{ width: 72 }} /></label>
+                  <small className="la-muted">{Number(count) > 0 ? `نحو ${Math.ceil(d.members.length / Math.min(d.members.length || 1, Math.round(Number(count))))} في المجموعة` : ''}</small>
                   <button className="la-link" disabled={busy || !d.members.length} onClick={() => auto('mixed')}>توزيع متنوع المستويات</button>
                   <button className="la-link" disabled={busy || !d.members.length} onClick={() => auto('level')}>توزيع متقارب المستوى</button>
                   <button className="btn-sm ghost" disabled={busy} onClick={add}>+ مجموعة</button>
@@ -95,6 +101,7 @@ export default function CohortGroups({ cohort, onClose }) {
                     <div key={g.id || 'none'} className={`la-card la-group${g.id ? '' : ' off'}`}>
                       <div className="la-row between"><b>{g.name} <small className="la-muted">({ms.length})</small></b>
                         {g.id && <span className="la-row"><button className="la-link" onClick={() => rename(g)}>تسمية</button><button className="la-link" onClick={() => remove(g)}>حذف</button></span>}</div>
+                      {ms.length > 0 && <small className="la-muted">{balance(ms)}</small>}
                       <ul className="la-reqs">{ms.map((m) => (
                         <li key={m.id}><span>{m.name} <small className="la-muted">{lvl(m)}</small></span>
                           <select aria-label={`مجموعة ${m.name}`} value={m.group_id || ''} disabled={busy} onChange={(e) => run('admin.cohort-group-assign', { participant_id: m.id, group_id: e.target.value || null })}>

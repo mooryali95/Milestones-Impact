@@ -1240,8 +1240,6 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .hall-mini summary{cursor:pointer;color:var(--muted);font-size:.95rem;min-height:44px;display:flex;align-items:center;gap:6px}
 /* الخروج ورابط الخصوصية في كل شاشة: هدف لمس كامل على أي جهاز، لا على pointer: coarse وحده */
 button.link.small.logout, a.link.small{min-height:44px;display:inline-flex;align-items:center}
-/* بحث الخبير في مشاركيه */
-.xpp-find{flex-wrap:wrap;gap:8px 14px}.xpp-find .input{flex:1 1 180px;min-width:0}.xpp-find .check{display:inline-flex;align-items:center;gap:6px;min-height:44px}
 /* طي الأقسام الثانوية في «رحلتي» على العمود الواحد؛ على الحاسب مفتوحة بلا سطر الطي */
 .j-fold{margin-top:12px}
 .j-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 16px;background:var(--paper,#fff);border:1px solid var(--line);border-radius:14px}
@@ -1453,3 +1451,5 @@ body:has(.tour) main{padding-bottom:260px}
 .j-session.live { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
 
 .ht-t { color: var(--muted); font-size: 12px; }
+
+.xpp-find .input { flex: 1 1 200px; min-width: 0; min-height: 44px; }

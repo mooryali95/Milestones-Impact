@@ -97,7 +97,8 @@ async function readShared(session: any) {
     ? ((await db.from('katon_answers').select('participant_id, sentence_id, choice, verdict, confidence, stances, note').eq('sentence_id', session.sentence_id)).data || [])
     : [];
   const topic = session.topic_id ? (await db.from('katon_topics').select('id, title_ar').eq('id', session.topic_id).maybeSingle()).data : null;
-  const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
+  // نص كل جملة يُقرأ مرة مع المشترك، ولا يخرج إلا للخبير (buildState): المشارك لا تصله الجمل القادمة
+  const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question, text_ar').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
   return {
     cohort, seat, answers, topic, sentences, sentence: (sentence as any).data, presence: presence.data || [],
     members: members.map((m: any) => ({ ...m, level: overallLevel(m.levels) })),
@@ -123,7 +124,9 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     session, sentence: sh.sentence, presence: sh.presence, answers: sh.answers, members,
     roles: sh.seat.roles, tables: sh.seat.tables, points: sh.points, viewer,
   });
-  const out: Body = { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic: sh.topic, sentences: sh.sentences };
+  // نص الجملة في قائمة الخبير وحده (يختار وهو يقرأ)؛ للمشارك المعرّف والترتيب ونوع السؤال فقط
+  const sentences = viewer.kind === 'admin' ? sh.sentences : (sh.sentences as any[]).map((x) => ({ id: x.id, sort: x.sort, question: x.question }));
+  const out: Body = { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic: sh.topic, sentences };
   // للخبير: الجلسة التي يُكتب فيها الحضور، ومن يستحقه لو أُغلقت الآن
   if (viewer.kind === 'admin') {
     const att = await attendanceOf(session, members.map((m: any) => m.id));
