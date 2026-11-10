@@ -8,7 +8,7 @@
 //   غير ذلك           ← الرحلة
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
-import React, { lazy, useCallback, useEffect, useState } from 'react';
+import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
 import { call, session, setExpiredHandler } from './api.js';
@@ -95,11 +95,16 @@ const Icon = ({ name }) => (
 
 // التنقل الواحد للمنصة: تبويبات في الشريط العلوي على الحاسب والتابلت، وشريط سفلي على الهاتف
 function Nav({ items, view, onGo, className }) {
+  // القسم المقفل يقول سبب قفله عند لمسه: الزر المعطّل صامت على الهاتف، وtitle لا يظهر باللمس
+  const [hint, setHint] = useState('');
+  useEffect(() => { if (!hint) return undefined; const t = setTimeout(() => setHint(''), 4000); return () => clearTimeout(t); }, [hint]);
   return (
     <nav className={className} aria-label="أقسام المنصة">
+      {hint && <p className="nav-hint" role="status">{hint}</p>}
       {items.map((it) => (
         <button key={it.key} type="button" data-tour={`nav-${it.key}`} className={`nav-item${it.locked ? ' locked' : ''}`} aria-current={view === it.key ? 'page' : undefined}
-          disabled={it.locked} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined} onClick={() => onGo(it.key)}>
+          aria-disabled={it.locked ? true : undefined} title={it.locked || undefined} aria-label={it.locked ? `${it.label}: ${it.locked}` : undefined}
+          onClick={() => (it.locked ? setHint(`«${it.label}» ${it.locked}`) : onGo(it.key))}>
           <Icon name={it.key} /><span>{it.label}{it.locked && <i className="nav-lock" aria-hidden="true"><Ico name="lock" size="12" /></i>}</span>
         </button>
       ))}
@@ -132,6 +137,14 @@ export default function App() {
 }
 
 // مسارات تطبيق المشارك نفسه: الرئيسية، ورابط الدخول من البريد
+// رمز الحضور الممسوح قبل الدخول يُحفظ ساعتين، فيُسجَّل الحضور بعد الدخول ولو فُتح رابط البريد في تبويب آخر
+const CHECKIN_KEY = 'mi_checkin';
+const checkinKeep = {
+  set: (t) => { try { localStorage.setItem(CHECKIN_KEY, JSON.stringify({ t, at: Date.now() })); } catch { /* تخزين محجوب: يبقى في الذاكرة */ } },
+  get: () => { try { const v = JSON.parse(localStorage.getItem(CHECKIN_KEY) || 'null'); return v && Date.now() - v.at < 2 * 3600e3 ? v.t : null; } catch { return null; } },
+  clear: () => { try { localStorage.removeItem(CHECKIN_KEY); } catch { /* لا شيء محفوظ */ } },
+};
+
 const PARTICIPANT_PATHS = ['/', '/verify', '/index.html'];
 
 function NotFound() {
@@ -140,7 +153,8 @@ function NotFound() {
       <section className="card stack" style={{ textAlign: 'center' }}>
         <h1 style={{ fontSize: 22 }}>هذه الصفحة غير موجودة</h1>
         <p className="muted">قد يكون الرابط ناقصًا أو قديمًا. إن وصلك في رسالة فانسخه كاملًا وجرّب مرة أخرى.</p>
-        <div className="row" style={{ justifyContent: 'center' }}><a className="btn" href="/">الرئيسية</a></div>
+        <div className="row" style={{ justifyContent: 'center' }}><a className="btn" href="/">بوابة المشاركين</a></div>
+        <p className="small"><a className="link" href="/expert">بوابة الخبراء</a> · <a className="link" href="/org">بوابة الجهات</a></p>
       </section>
     </div>
   );
@@ -188,6 +202,13 @@ function Participant() {
     history.replaceState(null, '', location.pathname + link.search + location.hash);
     return link.view;
   });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(() => {
+    const back = (e) => { const v = e.state?.view || 'home'; setView(v); window.scrollTo({ top: 0 }); };
+    window.addEventListener('popstate', back);
+    return () => window.removeEventListener('popstate', back);
+  }, []);
   const [lab, setLab] = useState(null);       // أدوات المختبر المفتوحة للمشارك، ونقاطه
   const [labOpen, setLabOpen] = useState(null);
   const [verifyError, setVerifyError] = useState('');
@@ -200,8 +221,8 @@ function Participant() {
   const [demo, setDemo] = useState(() => captureDemoLink() || demoPending());
   const [checkin, setCheckin] = useState(() => {
     const t = new URLSearchParams(location.search).get('checkin');
-    if (t) history.replaceState(null, '', '/');
-    return t;
+    if (t) { history.replaceState(null, '', '/'); checkinKeep.set(t); }
+    return t || checkinKeep.get();
   });
 
   useEffect(() => {
@@ -274,7 +295,9 @@ function Participant() {
   useEffect(() => { if (meId) loadLab(); else setLab(null); }, [meId, loadLab]);
   const hasLab = !!lab?.items?.length;
   // تغيير القسم يبدأ من أعلى الصفحة وينقل التركيز إلى المحتوى لقارئ الشاشة
-  const go = useCallback((v) => {
+  const go = useCallback((v, fromHistory = false) => {
+    // كل قسم خطوة في سجل المتصفح، فزر الرجوع يعيد إلى القسم السابق ولا يخرج من المنصة
+    if (!fromHistory && viewRef.current !== v) history.pushState({ view: v }, '');
     setView(v);
     window.scrollTo({ top: 0 });
     requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
@@ -317,18 +340,18 @@ function Participant() {
   const consentNeed = me?.participant?.consent?.needed ?? null;
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
-  else if (!me && linkChoice) screen = <SignIn pendingLink={linkChoice} onSignedIn={(r) => { setLinkChoice(null); setCheckin(null); accept(r); }} />;
+  else if (!me && linkChoice) screen = <SignIn pendingLink={linkChoice} onSignedIn={(r) => { setLinkChoice(null); accept(r); }} />;
   else if (!me && bootError) screen = (
     <div className="page narrow stack">
       <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />
       <button className="link small" onClick={() => { session.clear(); setBootError(''); }}>ادخل بحساب آخر</button>
     </div>
   );
-  else if (!me) screen = <SignIn onSignedIn={(r) => { setCheckin(null); accept(r); }} initialError={verifyError || (checkin ? 'سجّل دخولك أولًا، ثم امسح رمز الحضور مرة أخرى.' : '')} />;
+  else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError || (checkin ? 'سجّل دخولك، ونسجّل حضورك بعده مباشرة دون مسح الرمز مرة أخرى.' : '')} />;
   // D18: من لم يوافق قط يوافق مرة، ومن وافق قبل آخر نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل (الحالة من الخادم)
   else if (consentNeed === 'first' && !me.participant.is_demo) screen = <Consent consent={me.participant.consent} onAccepted={accept} />;
   else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
-  else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
+  else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}</>;

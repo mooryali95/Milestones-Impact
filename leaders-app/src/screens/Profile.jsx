@@ -31,7 +31,7 @@ function OrgVisibility() {
     <section className="card stack org-see" aria-labelledby="org-see-h">
       <h2 id="org-see-h" className="as-h3">ماذا ترى جهتك</h2>
       {!v.viewers ? <p className="muted">لا أحد من {d.org} يطّلع على رحلتك الآن.</p> : <>
-        <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
+        <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.viewers === 1 ? 'يرى' : v.viewers === 2 ? 'يريان' : 'يرون'} {v.list ? 'من رحلتك:' : 'أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
         {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{v.scores && k === 'scores' ? (d.share_consented ? `${h}؛ بموافقتك` : 'طلبت جهتك الاطلاع عليها ولا تصلها إلا بموافقتك أدناه') : h}</small></li>)}</ul>}
       </>}
       <label className="row small" style={{ gap: '.5rem', alignItems: 'center' }}>
@@ -100,6 +100,12 @@ function Devices() {
   );
 }
 
+// اسم يصلح للشهادة: كلمتان على الأقل، كل منهما حرفان فأكثر، بحروف عربية أو لاتينية
+export const certName = (v) => {
+  const w = String(v || '').trim().split(/\s+/);
+  return w.length >= 2 && w.every((x) => /^[\p{L}\p{M}.'’-]+$/u.test(x)) && w.filter((x) => x.replace(/[^\p{L}]/gu, '').length >= 2).length >= 2;
+};
+
 const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years_experience'];
 const LABEL = { full_name: 'الاسم الكامل', phone: 'رقم الجوال', job_title: 'المسمى الوظيفي', organization_name: 'جهة العمل', years_experience: 'سنوات الخبرة' };
 
@@ -142,6 +148,12 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const save = async (e) => {
     e.preventDefault();
     // الزر مفعّل دائمًا: زر معطّل لا يقول ما الناقص. الحفظ الناقص يسمّي الحقول ويذهب إلى أولها
+    // الاسم يُطبع على الشهادة ويُقفل عند إصدارها: اسمان على الأقل وبلا أرقام
+    if (!empty.length && !p.name_locked && !certName(f.full_name)) {
+      setError('اكتب اسمك الكامل كما تريده على الشهادة: اسمان على الأقل، بالحروف دون أرقام أو رموز.');
+      formRef.current?.querySelector('[name="full_name"]')?.focus();
+      return;
+    }
     if (empty.length) {
       setTried(true);
       setError(`بقي ${empty.length === 1 ? 'حقل واحد' : empty.length === 2 ? 'حقلان' : `${empty.length} حقول`}: ${empty.map((k) => LABEL[k]).join('، ')}.`);
@@ -253,8 +265,8 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       {!onboarding && (
         <section className="card stack" data-tour="security">
           <h2 className="as-h3">الدخول بالبصمة</h2>
-          {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {pk === 1 ? 'جهاز واحد' : `${pk} أجهزة`}. أضفه للجهاز الذي تستخدمه الآن إن لم يكن منها.</p>}
-          <PasskeyBanner settings onDone={() => setPk((n) => n + 1)} />
+          {pk > 0 && <p className="muted small">مفتاح المرور مفعّل على {countAr(pk, 'جهاز واحد', 'جهازين', 'أجهزة', 'جهازًا')}.</p>}
+          <PasskeyBanner settings more={pk > 0} onDone={() => setPk((n) => n + 1)} />
         </section>
       )}
       {!onboarding && me.participant.status !== 'completed' && <PreManager inSettings />}

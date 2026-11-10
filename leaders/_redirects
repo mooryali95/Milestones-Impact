@@ -1,8 +1,8 @@
 # روابط الجهات القصيرة: /j/<رمز> أو /j/<رمز>/<حملة>
 /j/:code/:campaign  /?org=:code&c=:campaign  302
 /j/:code            /?org=:code              302
-# أسماء تطلبها المتصفحات والأدوات تلقائيًا ولا ملف لها هنا (البند 4.2): تُحوَّل إلى ملفها الفعلي بدل صفحة التطبيق برمز 200
-/favicon.ico    /favicon.svg            301
-/manifest.json  /manifest.webmanifest   301
+# أسماء شائعة تطلبها المتصفحات والأدوات: تُخدم بملفها الحقيقي لا بصفحة التطبيق
+/favicon.ico    /favicon.svg           200
+/manifest.json  /manifest.webmanifest  200
 # تطبيق صفحة واحدة: كل المسارات (ومنها /verify) تفتح index.html
 /*  /index.html  200

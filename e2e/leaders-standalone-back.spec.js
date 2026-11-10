@@ -32,13 +32,13 @@ for (const path of ['/rate', '/sponsor', '/outcome']) {
   });
 }
 
-test('رابط لا تعرفه المنصة: صفحة «غير موجودة» بزر إلى الرئيسية، لا صفحة الدخول', async ({ page }) => {
+test('رابط لا تعرفه المنصة: صفحة «غير موجودة» بروابط إلى البوابات الثلاث، لا صفحة الدخول', async ({ page }) => {
   await mock(page);
   await page.goto(`${APP}/no-such-page`);
   await expect(page.getByRole('heading', { name: 'هذه الصفحة غير موجودة' })).toBeVisible();
   await expect(page.getByLabel('البريد الإلكتروني')).toHaveCount(0);
   await expect(page).toHaveTitle('صفحة غير موجودة · رحلة القادة');
-  await page.getByRole('main').getByRole('link', { name: 'الرئيسية' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'بوابة المشاركين' }).click();
   await expect(page).toHaveURL(`${APP}/`);
 });
 

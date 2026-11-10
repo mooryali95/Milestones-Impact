@@ -1,5 +1,5 @@
 // لوحة الخبير بعد تدقيق الإنتاج (المرحلة أ، 2026-11-10): التحميل في رحلة واحدة بهيكل بدل دائرة، وأسماء الأدوار،
-// وشهادة الساعات بعد أول جلسة، و«—» للتقييم الغائب، وخطوات البداية للخبير الجديد، ومنطقة إعلان لقارئ الشاشة.
+// وشهادة الساعات بعد أول جلسة، و«لم يكتمل» للتقييم الغائب، وخطوات البداية للخبير الجديد، ومنطقة إعلان لقارئ الشاشة.
 // الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
@@ -47,16 +47,16 @@ test('اللوحة في رحلة واحدة: هيكل أثناء التحميل�
   expect(calls.map((c) => c.action)).toEqual(['xp.dashboard']);
 });
 
-test('الرأس: أسماء الأدوار لا عددها، وتسمية عربية، وشهادة الساعات معطلة بلا ساعات، و«—» للتقييم الغائب', async ({ page }) => {
+test('الرأس: أسماء الأدوار لا عددها، وتسمية عربية، وشهادة الساعات معطلة بلا ساعات، و«لم يكتمل» للتقييم الغائب', async ({ page }) => {
   await mount(page, base);
   await page.goto(PORTAL);
   await expect(page.getByText('مستشارة · مستشار، موجّه')).toBeVisible();
-  await expect(page.getByText('شبكة خبراء البرنامج')).toBeVisible();
+  await expect(page.getByText('بوابة الخبراء')).toBeVisible();
   await expect(page.getByText('EXPERT PORTAL')).toHaveCount(0);
   const cert = page.getByRole('button', { name: 'شهادة ساعات الخبرة' });
   await expect(cert).toBeDisabled();
   await expect(cert).toHaveAccessibleDescription('تُتاح بعد أول جلسة منعقدة');
-  await expect(page.locator('.xpp-kpis b').nth(3)).toHaveText('—');
+  await expect(page.locator('.xpp-kpis b').nth(3)).toHaveText('لم يكتمل');
   // أهداف اللمس في الرأس 44 على الأقل (البند 6.5)
   for (const name of ['شهادة ساعات الخبرة', 'خروج']) {
     const box = await page.getByRole('button', { name }).boundingBox();

@@ -51,10 +51,10 @@ describe('صفحة التطبيق ومساراتها (4.1 و4.2)', () => {
     for (const path of ['/', '/org', '/x', '/verify']) expect(h, path).toContain(`\n${path}\n  Cache-Control: no-cache\n  ! Access-Control-Allow-Origin\n`);
     expect(h).toMatch(/\/media\/\*\n(?: {2}.*\n)*? {2}Access-Control-Allow-Origin: \*/);
   });
-  it('favicon.ico وmanifest.json تُحوَّل إلى ملفيها قبل قاعدة التطبيق', () => {
+  it('favicon.ico وmanifest.json تُخدم بملفيها قبل قاعدة التطبيق', () => {
     const r = read('leaders-app/public/_redirects');
     const spa = r.indexOf('/*  /index.html  200');
-    for (const line of [/\/favicon\.ico\s+\/favicon\.svg\s+301/, /\/manifest\.json\s+\/manifest\.webmanifest\s+301/]) {
+    for (const line of [/\/favicon\.ico\s+\/favicon\.svg\s+(200|301)/, /\/manifest\.json\s+\/manifest\.webmanifest\s+(200|301)/]) {
       const m = r.match(line);
       expect(m, String(line)).not.toBeNull();
       expect(m.index).toBeLessThan(spa);

@@ -34,7 +34,7 @@ function Onboarding({ expert, onOut, reload }) {
   const [edit, setEdit] = useState(expert.status === 'invited');
   return (
     <div className="page narrow">
-      <div className="row between"><p className="eyebrow">شبكة خبراء البرنامج</p>
+      <div className="row between"><p className="eyebrow">بوابة الخبراء</p>
         <span className="row"><AccountSwitch here="expert" light doors={expert.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
         <button className="link small" onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button></span></div>
       {edit
@@ -79,7 +79,7 @@ function SignIn({ onIn }) {
   return (
     <div className="page narrow">
       <form className="card stack xpp-in" onSubmit={step === 'email' ? send : verify}>
-        <p className="eyebrow">شبكة خبراء البرنامج</p>
+        <p className="eyebrow">بوابة الخبراء</p>
         <h1 className="as-h2">لوحة الخبير</h1>
         <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء. وإن كان مسجلًا في بوابة أخرى، يصلك بريد يدلّك عليها.`}</p>
         {step === 'email'
@@ -126,7 +126,7 @@ function RateParticipant({ item, criteria, onDone }) {
         </div>
       ))}
       <textarea className="input" rows={2} maxLength={1000} placeholder="ملاحظة للبرنامج عن تقدّمه (اختياري، لا يراها المشارك)" value={comment} onChange={(e) => setComment(e.target.value)} />
-      {err && <div className="alert err small">{err}</div>}
+      {err && <div className="alert err small" role="alert">{err}</div>}
       <button className="btn sm" disabled={busy || !keys.every((k) => v[k])} onClick={send}>{busy ? 'لحظة…' : 'احفظ التقييم'}</button>
     </div>
   );
@@ -324,13 +324,14 @@ function Dashboard({ onOut }) {
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [msg, setMsg] = useState('');
+  const [bad, setBad] = useState(false);   // رسالة خطأ لا تُعرض بعلامة النجاح
   // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
   const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
   useEffect(() => { load(); }, []);
   // ما جاء مجمّعًا يُستعمل مرة: فتح ملف مشارك ثم الرجوع يعيد تركيب الأقسام، فتطلب حالها الحالية لا نسخة التحميل الأول
   const openFile = (id) => { setD((x) => (x ? { ...x, preload: undefined } : x)); setView(id); };
   if (!d) return <DashboardSkeleton />;
-  if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
+  if (!d.success) return <div className="page narrow"><div className="alert err" role="alert">{d.message}</div></div>;
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
@@ -346,6 +347,7 @@ function Dashboard({ onOut }) {
 
   const respond = async (x, accept) => {
     const r = await xpCall('xp.respond', { id: x.id, accept });
+    setBad(!r.success);
     setMsg(r.success ? (accept ? `قبلت طلب ${x.participant.name}. تجده في «مشاركوك».` : 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.') : r.message);
     load(true);
   };
@@ -361,14 +363,14 @@ function Dashboard({ onOut }) {
       'لا جلسات منعقدة بعد'));
     if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`,
       subtitle: 'برنامج القادة', rows: [['الخبير', e.full_name], ['الساعات', String(d.stats.hours)], ['حتى تاريخ', fmt(new Date())]],
-      closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) setMsg(POPUP_BLOCKED);
+      closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) { setBad(true); setMsg(POPUP_BLOCKED); }
   };
 
   return (
     <div className="page wide xpp">
       <section className="hero">
         <div className="stack">
-          <p className="eyebrow">شبكة خبراء البرنامج</p>
+          <p className="eyebrow">بوابة الخبراء</p>
           <h1>أهلًا {e.full_name}</h1>
           <p className="muted">{[e.title, roles.join('، ')].filter(Boolean).join(' · ')}</p>
         </div>
@@ -378,17 +380,18 @@ function Dashboard({ onOut }) {
             title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
           {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
-          <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button>
+          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { await xpCall('xp.logout'); xpSession.clear(); onOut(); }}>خروج</button>
         </div>
       </section>
-      {/* منطقة إعلان واحدة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4) */}
-      <div role="status" aria-live="polite">{msg && <div className="banner"><span className="ico" aria-hidden="true">✓</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}</div>
+      {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}
+      <div role="status" aria-live="polite">{msg && !bad && <div className="banner"><span className="ico" aria-hidden="true">✓</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}</div>
+      {msg && bad && <div className="banner warn" role="alert"><span className="ico" aria-hidden="true">!</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
 
       <div className="xpp-kpis">
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
         <div><b>{d.stats.participants}</b><span>قائد خدمته</span></div>
         <div><b>{d.stats.upcoming}</b><span>جلسة قادمة</span></div>
-        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : '—'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count}` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
+        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : 'لم يكتمل'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count}` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
       </div>
 
       {offered.length > 0 && (
@@ -431,7 +434,7 @@ function Dashboard({ onOut }) {
             <div key={it.kind + it.id} className="xpp-torate">
               <div className="row between"><span><b>{it.who}</b> <small className="muted">{it.what} · {fmt(it.at)}</small></span>
                 {rating?.id !== it.id && <button className="btn ghost sm" onClick={() => setRating(it)}>قيّم</button>}</div>
-              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); setMsg('حُفظ تقييمك.'); load(true); }} />}
+              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); setBad(false); setMsg('حُفظ تقييمك.'); load(true); }} />}
             </div>
           ))}
         </section>

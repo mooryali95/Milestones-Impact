@@ -25,15 +25,22 @@ const READ_CHIP = Object.fromEntries(Object.entries(READ_STATUS).map(([k, t]) =>
 
 // الإطار يُذكر حين تتكرر عناوين الأبواب (القسم التمهيدي لكل إطار)، والتقدم الجزئي يظهر قبل اكتمال الباب
 const DIM_TITLE = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.title]));
+// قائمة الأبواب الطويلة تُطوى تحت عنوانها: العدد والشريط يكفيان للمتابعة، والتفصيل لمن يطلبه
+const READ_FOLD = 8;
+function ReadFold({ on, label, children }) {
+  if (!on) return children;
+  return <details className="pr-more"><summary>{label}</summary>{children}</details>;
+}
 function Reading({ a, onHandbook }) {
   const skimmed = a.chapters.some((c) => c.state === 'skimmed');
   const seen = new Set(); const dup = new Set();
   a.chapters.forEach((c) => { if (seen.has(c.title)) dup.add(c.title); seen.add(c.title); });
   return (
     <div className="act">
-      <div className="row between"><b className="small">قرأت {a.count} من {a.total} {a.total === 1 ? 'باب' : 'أبواب'}</b>
+      <div className="row between"><b className="small">قرأت {a.count} من {countAr(a.total, 'باب واحد', 'بابين', 'أبواب', 'بابًا')}</b>
         {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتيب</button>}</div>
       <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
+      <ReadFold on={a.chapters.length > READ_FOLD} label={`أبواب القراءة: ${countAr(a.total, 'باب واحد', 'بابان', 'أبواب', 'بابًا')}`}>
       <ul className="act-list">
         {a.chapters.map((c) => {
           const [cls, t] = READ_CHIP[c.state];
@@ -48,6 +55,7 @@ function Reading({ a, onHandbook }) {
           );
         })}
       </ul>
+      </ReadFold>
       {skimmed && <p className="h">الباب الذي تصفحته سريعًا لا يُحتسب. عد إليه واقرأه بتمعن.</p>}
     </div>
   );
@@ -131,7 +139,7 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { COACH_STATUS, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, countAr, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;

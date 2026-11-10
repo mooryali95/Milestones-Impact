@@ -1505,3 +1505,8 @@ body:has(.tour) main{padding-bottom:260px}
 .xpp-steps { margin: 0; padding-inline-start: 22px; display: grid; gap: 10px; line-height: 1.8; }
 .xpp-steps li.done { color: var(--muted); }
 .xpp-steps li.done b::after { content: ' ✓'; color: var(--ok); }
+/* سبب قفل القسم عند لمسه (الهاتف لا يعرض title) */
+.nav-item[aria-disabled="true"]{cursor:not-allowed}
+.nav-hint{position:fixed;inset-inline:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;margin:0 auto;max-width:420px;padding:10px 14px;border-radius:12px;background:var(--brand-graphite);color:var(--brand-cream);font-size:14px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+@media (min-width:900px){.nav-hint{bottom:auto;top:72px}}
+.banner.warn .ico{color:var(--bad)}
