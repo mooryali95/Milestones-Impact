@@ -257,18 +257,19 @@ function Dashboard({ me, onLogout }) {
           </div>
         </div>
         <p className="small muted" aria-live="polite">{rows.length} من {kpis.total}</p>
-        <div className="op-scroll"><table>
+        {/* على الجوال يصير كل مشارك بطاقة (styles.css: .op-people)، فلا جدول يُمرَّر أفقيًا ولا عمود مقصوص */}
+        <div className="op-scroll"><table className="op-people">
           <thead><tr><th>الاسم</th>{perms.scores && <th>المسار</th>}<th>المرحلة</th><th>الإنجاز</th>{perms.activity && <th>آخر دخول</th>}
             {perms.contact && <th>التواصل</th>}{perms.scores && DIMS.map(([k, en]) => <th key={k}>{en}</th>)}</tr></thead>
           <tbody>{rows.length ? rows.map((p) => (
             <tr key={p.id}>
-              <td><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
-              {perms.scores && <td>{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
-              <td><span className="chip">{STATUS[p.status] || p.status}</span></td>
-              <td><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</td>
-              {perms.activity && <td>{fmt(p.last_login_at)}</td>}
-              {perms.contact && <td className="ltr"><small>{p.email}<br />{p.phone}</small></td>}
-              {perms.scores && DIMS.map(([k]) => <td key={k}>{lvl(p.levels?.[k])}</td>)}
+              <td className="op-name"><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
+              {perms.scores && <td data-label="المسار">{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
+              <td data-label="المرحلة"><span className="chip">{STATUS[p.status] || p.status}</span></td>
+              <td data-label="الإنجاز"><span><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</span></td>
+              {perms.activity && <td data-label="آخر دخول">{fmt(p.last_login_at)}</td>}
+              {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}
+              {perms.scores && DIMS.map(([k, en]) => <td key={k} className="op-dim" data-label={en}>{lvl(p.levels?.[k])}</td>)}
             </tr>
           )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
         </table></div>

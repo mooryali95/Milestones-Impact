@@ -608,6 +608,18 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .op-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .op-table th { text-align: right; font-size: 12px; color: var(--muted); font-weight: 600; padding: 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .op-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+/* قائمة المشاركين على الجوال: بطاقة لكل مشارك، ووسم كل قيمة من data-label. الطباعة تبقى جدولًا */
+@media screen and (max-width: 640px) {
+  .op-people thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .op-people, .op-people tbody { display: block; }
+  .op-people tr { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .op-table .op-people td { grid-column: span 3; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding: 0; border: 0; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+  .op-people td[data-label]::before { content: attr(data-label); font-size: 12px; color: var(--muted); font-weight: 600; }
+  .op-table .op-people td.op-name, .op-table .op-people td.op-wide, .op-table .op-people td[colspan] { grid-column: 1 / -1; }
+  .op-table .op-people td.op-dim { grid-column: span 2; flex-direction: column; gap: 0; }
+  .op-people td.op-name b { font-size: 16px; }
+  .op-people td.op-name br { display: none; }
+}
 .op-prog { display: inline-block; width: 60px; height: 6px; border-radius: 99px; background: var(--mist); vertical-align: middle; overflow: hidden; }
 .op-prog i { display: block; height: 100%; background: var(--org, var(--copper)); }
 @media (max-width: 860px) { .op-kpis { grid-template-columns: repeat(2, 1fr); } .op-grid { grid-template-columns: 1fr; } }

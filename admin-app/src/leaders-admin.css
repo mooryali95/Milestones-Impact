@@ -583,7 +583,7 @@
 /* الأقسام في مجموعات: سطر لكل مجموعة على الحاسب، وتمرير أفقي واحد على الهاتف مع عنوان كل مجموعة */
 .la-tabs-grouped { flex-direction: column; gap: 8px; }
 .la-tab-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.la-tab-group-label { min-width: 64px; font-size: .72rem; font-weight: 700; color: var(--ink-faint, var(--brand-muted-soft)); letter-spacing: .02em; }
+.la-tab-group-label { min-width: 64px; font-size: .78rem; font-weight: 700; color: var(--ink-soft, var(--brand-ink-blue)); letter-spacing: .02em; }
 @media (max-width: 720px) {
   .la-tabs-grouped { flex-direction: row; overflow-x: auto; gap: 14px; mask-image: linear-gradient(to left, transparent 0, #000 24px); }
   .la-tab-group { flex-wrap: nowrap; flex: none; }
