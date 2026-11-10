@@ -10,4 +10,7 @@
   --st-warn: #A97A2E;    --st-warn-bg: #EFE7D8; --st-warn-dark: #C79A4B;
   --st-bad: #A8322D;     --st-bad-bg: #FBECEA;  --st-bad-dark: #E07A6E;
   --st-info: #12414E;    --st-info-bg: #EAF0F0; --st-info-dark: #8AA3A8;
+  /* نص صغير على الخلفية الفاتحة للحالة (شارة بخط 13): درجة أغمق تبلغ تباين 4.5 إلى 1 (WCAG 1.4.3).
+     --st-ok على خلفيته 4.4 و--st-warn 3.1، فلا يصلحان لنص الشارة */
+  --st-ok-text: #256B4D; --st-warn-text: #7A5518;
 }

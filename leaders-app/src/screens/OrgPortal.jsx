@@ -224,6 +224,8 @@ function Dashboard({ me, onLogout }) {
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
+      <NeedsYou d={d} />
+
       <div className="op-kpis">
         {[['انضموا هذا الأسبوع', kpis.joined_week], ['نشطون هذا الأسبوع', kpis.active_week], ['اعتُمد مسارهم', kpis.approved], ['أنهوا البرنامج', kpis.completed], ['متوسط الإنجاز', `${kpis.avg_progress}%`]]
           .map(([l, n]) => <div key={l} className="card op-kpi"><b>{n}</b><span className="small muted">{l}</span></div>)}
@@ -276,6 +278,39 @@ function Dashboard({ me, onLogout }) {
       </section>}
       <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط.</p>
     </div>
+  );
+}
+
+// ما يحتاج تدخل المنسق، أول اللوحة: كانت متفرقة في الرأس والجدول فتُعرض ولا توجّه. يُعدّ مما وصل اللوحة فعلًا
+// (بحسب صلاحياته)، ولا يظهر القسم إن لم يكن فيه شيء. «متوقف» من آخر دخول، فلا يُحسب إلا لمن له صلاحية النشاط.
+const STALE_DAYS = 14;
+const PRE_BASELINE = ['registered', 'profiled', 'assessing'];
+export function needsYou(d, now = Date.now()) {
+  const ps = d.permissions?.list === false ? [] : (d.participants || []);
+  const out = [];
+  const raters = (d.raters_pending || []).length;
+  if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أسفل هذا القسم' });
+  if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد' });
+  const notStarted = ps.filter((p) => PRE_BASELINE.includes(p.status)).length;
+  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', hint: 'صفِّ القائمة بالمرحلة لتراهم' });
+  if (d.permissions?.activity) {
+    const stale = ps.filter((p) => !['completed', 'withdrawn'].includes(p.status) && p.last_login_at && now - new Date(p.last_login_at).getTime() > STALE_DAYS * 864e5).length;
+    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, hint: 'رتّب القائمة بآخر نشاط لتراهم' });
+  }
+  return out;
+}
+function NeedsYou({ d }) {
+  const items = needsYou(d);
+  if (!items.length) return null;
+  return (
+    <section className="card op-todo" aria-labelledby="op-todo-h">
+      <h3 id="op-todo-h">يحتاج تدخلك</h3>
+      <ul>{items.map((x) => (
+        <li key={x.key}>
+          <span><b>{x.n}</b> {x.text}{x.hint && <small className="muted"> · {x.hint}</small>}</span>
+        </li>
+      ))}</ul>
+    </section>
   );
 }
 
