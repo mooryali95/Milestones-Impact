@@ -20,17 +20,22 @@ describe('نص فيديو المشارك', () => {
     for (const b of PARTICIPANT_BEATS) expect(b.title.split(/\s+/).length).toBeLessThanOrEqual(4);
   });
 
-  it('كل مقتطف نص متصل من خطوته في الجولة، يبدأ وينتهي عند حد كلمة', () => {
+  it('كل سطر نصٌّ مستقل بصيغة المخاطب (say) يُولَّد صوته، وما بقي من clips مقتطف حرفي من خطوته', () => {
     const d = Object.fromEntries(TOUR_STEPS.map((s) => [s.key, spoken(s).split(/\s+/)]));
     for (const l of PARTICIPANT_LINES) {
+      if (l.say) { expect(l.say.trim().length).toBeGreaterThan(0); continue; }
       expect(l.clips.length).toBeGreaterThan(0);
       for (const c of l.clips) {
         const w = c.split(/\s+/), t = d[l.step];
-        // الكلمة الأخيرة قد تُقتطع قبل علامة الوقف التي تليها في النص («جهته،» تنتهي «جهته»)
         const at = t.findIndex((_, k) => w.every((x, j) => t[k + j] === x || (j === w.length - 1 && t[k + j]?.replace(/[،؛.:؟!]$/, '') === x)));
         expect(at, `${l.step}: ${c}`).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+
+  it('صيغة المخاطب: لا «المشارك» يُتحدَّث عنه، ومدة الاعتماد يوما عمل (D04)', () => {
+    if (PARTICIPANT_LINES.every((l) => l.say)) expect(all).not.toMatch(/المشارك/);
+    expect(PARTICIPANT_LINES.find((l) => l.step === 'result').text).toMatch(/يومَي عمل|يومي عمل/);
   });
 
   it('نحو ثلاث دقائق كلامًا: بين 150 و260 كلمة', () => {
