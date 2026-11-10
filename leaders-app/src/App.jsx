@@ -119,9 +119,9 @@ const isVerify = () => location.pathname === '/v' || location.pathname.startsWit
 
 export default function App() {
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
-  if (location.pathname === '/rate') return <Shell tag="تقدير الأثر"><Rater /></Shell>;
-  if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة"><Sponsor /></Shell>;
-  if (location.pathname === '/outcome') return <Shell tag="تأكيد أثر المبادرة"><Outcome /></Shell>;
+  if (location.pathname === '/rate') return <Shell tag="تقدير الأثر" back={false}><Rater /></Shell>;
+  if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة" back={false}><Sponsor /></Shell>;
+  if (location.pathname === '/outcome') return <Shell tag="تأكيد أثر المبادرة" back={false}><Outcome /></Shell>;
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;
@@ -132,11 +132,27 @@ export default function App() {
 // رابط الوثائق القانونية في كل تذييل: المشارك والمقيّم والراعي والخبير والمنسق
 const LegalLink = () => <a className="link small" href={LEGAL_PATH.index}>الخصوصية والشروط</a>;
 
-function Shell({ tag, children }) {
+// الرجوع من الصفحات المستقلة (طلب الخبير، لوحة الخبير، لوحة الجهة، الوثائق، التحقق من شهادة): من جاء من داخل المنصة
+// يعود إلى حيث كان، ومن فتح الرابط مباشرة يذهب إلى رئيسيتها. بلا هذا لا مخرج من الصفحة إلا زر المتصفح.
+function BackLink() {
+  const inside = typeof document !== 'undefined' && document.referrer.startsWith(location.origin) && history.length > 1;
+  return (
+    <a className="topbar-back" href="/" onClick={(e) => { if (inside) { e.preventDefault(); history.back(); } }}>
+      <span aria-hidden="true">→</span> {inside ? 'رجوع' : 'الرئيسية'}
+    </a>
+  );
+}
+
+// back=false لصفحات الرمز التي تصل أصحابها بالبريد (المقيّم، والراعي، وتأكيد الأثر): ليسوا مشاركين،
+// ورئيسية المنصة صفحة دخول المشارك فلا تعنيهم
+function Shell({ tag, back = true, children }) {
   return (
     <>
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
-      <header className="topbar"><div className="topbar-in"><img src={logo} alt="Milestone Impact" /><span className="tag">{tag}</span><span className="spacer" /></div></header>
+      <header className="topbar"><div className="topbar-in">
+        {back ? <a className="topbar-logo" href="/" aria-label="Milestone Impact: الرئيسية"><img src={logo} alt="" /></a> : <img src={logo} alt="Milestone Impact" />}
+        <span className="tag">{tag}</span><span className="spacer" />{back && <BackLink />}
+      </div></header>
       <main id="main" tabIndex={-1}>{children}</main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة. <LegalLink /></footer>
     </>

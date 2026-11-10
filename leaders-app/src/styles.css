@@ -1488,3 +1488,8 @@ body:has(.tour) main{padding-bottom:260px}
 .j-later>summary::after{content:'';width:8px;height:8px;margin-inline-start:auto;border-inline-end:2px solid var(--slate);border-bottom:2px solid var(--slate);transform:rotate(45deg);transition:transform .15s}
 .j-later[open]>summary::after{transform:rotate(-135deg)}
 .j-later[open]>summary{margin-bottom:8px}
+/* الصفحات المستقلة: الشعار رابط إلى الرئيسية، ورابط رجوع ظاهر في الشريط */
+.topbar-logo{display:block;border-radius:6px}
+.topbar-back{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border-radius:10px;color:var(--mist);font-weight:600;font-size:14px;text-decoration:none;border:1px solid rgba(234,240,240,.28);white-space:nowrap}
+.topbar-back:hover{background:rgba(255,255,255,.08)}
+.topbar-logo:focus-visible,.topbar-back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
