@@ -183,25 +183,43 @@ function AdvisorReviews() {
 }
 
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
+const SEARCH_FROM = 8;
 function MyParticipants({ onOpen }) {
   const [d, setD] = useState(null);
   const load = () => xpCall('xp.participants').then(setD);
   useEffect(() => { load(); }, []);
   const decide = async (b) => { const r = await xpCall('xp.rater-confirm', b); if (r.success) load(); return r; };
+  const [q, setQ] = useState('');
+  const [only, setOnly] = useState(false);
+  // من ينتظر الخبير أولًا (تسليم بانتظاره ثم معلم متأخر)، ثم الباقون بترتيب الخادم. البحث والتصفية من ثمانية فأكثر
+  const urgent = (x) => (x.needs > 0 ? 2 : 0) + (x.late > 0 ? 1 : 0);
+  const all = d?.items || [];
+  const waiting = all.filter((x) => urgent(x) > 0).length;
+  const shown = all.map((x, i) => [x, i]).filter(([x]) => (!only || urgent(x) > 0) && (!q.trim() || String(x.name || '').includes(q.trim())))
+    .sort((a, b) => urgent(b[0]) - urgent(a[0]) || a[1] - b[1]).map(([x]) => x);
   return (
     <>
     <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
     <section className="card stack" aria-labelledby="xp-mine">
       <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
-        : d.items.map((x) => (
+        : <>
+          {d.items.length > SEARCH_FROM && (
+            <div className="row xpp-find">
+              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث بالاسم" aria-label="ابحث في مشاركيك بالاسم" />
+              <label className="check small"><input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} /> من ينتظرونك فقط{waiting ? ` (${waiting})` : ''}</label>
+            </div>
+          )}
+          {!shown.length && <p className="muted small">لا أحد يطابق البحث.</p>}
+          {shown.map((x) => (
           <div key={x.id} className="xpp-person">
             <div className="row between"><b>{x.name}</b>
               <span className="row">{x.needs > 0 && <span className="chip warn">{x.needs} بانتظارك</span>}{x.late > 0 && <span className="chip bad">{x.late} معلم متأخر</span>}
                 <button className="btn ghost sm" onClick={() => onOpen(x.id)}>افتح الملف</button></span></div>
             <small className="muted">{[x.cohort ? `دفعة ${x.cohort}` : null, x.advisor ? 'مستشارها' : x.role_ar, x.level_ar ? `${x.level_ar}${x.approved ? '' : ' (مبدئي)'}` : 'بلا قياس بعد', x.stage ? `المرحلة: ${x.stage}` : null, `${x.progress}٪`, x.continuous != null ? `المستمر ${x.continuous}٪` : null].filter(Boolean).join(' · ')}</small>
           </div>
-        ))}
+          ))}
+        </>}
     </section>
     </>
   );
@@ -344,6 +362,10 @@ function Dashboard({ onOut }) {
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
       <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
+      {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
+      <AdvisorReviews />
+      <PeerQueue say={setMsg} />
+
       <div className="xpp-cols">
         <MyParticipants onOpen={setView} />
         <section className="card stack">
@@ -353,9 +375,6 @@ function Dashboard({ onOut }) {
           )) : <p className="muted small">لا جلسات قادمة.</p>}
         </section>
       </div>
-
-      <AdvisorReviews />
-      <PeerQueue say={setMsg} />
 
       {toRate.length > 0 && (
         <section className="card stack">

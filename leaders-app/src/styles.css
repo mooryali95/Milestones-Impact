@@ -1240,6 +1240,19 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .hall-mini summary{cursor:pointer;color:var(--muted);font-size:.95rem;min-height:44px;display:flex;align-items:center;gap:6px}
 /* الخروج ورابط الخصوصية في كل شاشة: هدف لمس كامل على أي جهاز، لا على pointer: coarse وحده */
 button.link.small.logout, a.link.small{min-height:44px;display:inline-flex;align-items:center}
+/* بحث الخبير في مشاركيه */
+.xpp-find{flex-wrap:wrap;gap:8px 14px}.xpp-find .input{flex:1 1 180px;min-width:0}.xpp-find .check{display:inline-flex;align-items:center;gap:6px;min-height:44px}
+/* طي الأقسام الثانوية في «رحلتي» على العمود الواحد؛ على الحاسب مفتوحة بلا سطر الطي */
+.j-fold{margin-top:12px}
+.j-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 16px;background:var(--paper,#fff);border:1px solid var(--line);border-radius:14px}
+.j-fold>summary::-webkit-details-marker{display:none}
+.j-fold>summary::after{content:'';width:9px;height:9px;border-inline-end:2px solid var(--slate);border-bottom:2px solid var(--slate);transform:rotate(45deg);flex:none;transition:transform .15s}
+.j-fold[open]>summary::after{transform:rotate(-135deg)}
+.j-fold>summary b{font-size:1rem}
+.j-fold>summary .muted{margin-inline-start:auto;text-align:end}
+.j-fold[open]>summary{margin-bottom:8px}
+.j-fold .fold-h{display:none}
+@media (min-width:1120px){.j-fold>summary{display:none}.j-fold .fold-h{display:flex}.j-fold{margin-top:0}}
 /* الملف: الحقل الأساسي الناقص بعد محاولة الحفظ، والحقول الاختيارية المطوية في القبول */
 .input[aria-invalid="true"]{border-color:var(--bad);box-shadow:0 0 0 3px var(--st-bad-bg)}
 .more-fields>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px;color:var(--slate);font-weight:600}

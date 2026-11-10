@@ -43,6 +43,11 @@ test('منهج المسار: مواد مساري، وفتح الملف يُحت�
   });
   await page.goto(APP);
   await expect(page.getByText('أنجزت 1 من 2 من مواد مسارك')).toBeVisible();
+  // على العمود الواحد (دون 1120) «مسارك» مطوي في سطر بعنوانه، ويُفتح بالضغط
+  const track = page.locator('details.j-fold', { hasText: 'مسارك' }).first();
+  await expect(track).not.toHaveAttribute('open', '');
+  await expect(page.getByText('سفراء 2026')).toBeHidden();
+  await track.locator('summary').click();
   await expect(page.getByText('سفراء 2026')).toBeVisible();
   await expect(page.getByText('نموذج سجل المنافع')).toBeVisible();
   await expect(page.getByText('· اختياري')).toBeVisible();
