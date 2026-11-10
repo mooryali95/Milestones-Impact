@@ -14,11 +14,12 @@ import { advisedParticipantIds, effectiveAdvisorId } from './logic.js';
 
 type Body = Record<string, any>;
 
-// خبير مجموعة المشارك في دفعته، إن عُيّن. العمود قد لا يكون مطبّقًا بعد: غيابه أو خطأ قراءته = لا خبير مجموعة
+// خبير مجموعة المشارك في دفعته، إن عُيّن (العمود مطبّق منذ 2026-11-10). خطأ القراءة يوقف الطلب ولا يُفترض مستشار
+// الدفعة بدله: من يقيّم المشارك قرار صلاحية، فلا يُحسم بتخمين
 async function groupAdvisorId(cohortId: string | null | undefined, participantId: string | null | undefined): Promise<string | null> {
   if (!cohortId || !participantId) return null;
   const { data, error } = await db.from('cohort_group_members').select('cohort_groups(advisor_expert_id)').eq('cohort_id', cohortId).eq('participant_id', participantId).maybeSingle();
-  if (error) return null;
+  if (error) throw new Fail('تعذّر تحديد مستشار المشارك الآن، حاول بعد قليل', 503, 'busy');
   return (data as any)?.cohort_groups?.advisor_expert_id || null;
 }
 
@@ -74,13 +75,13 @@ export async function myParticipantIds(expertId: string) {
 }
 
 // يطبّق خبير المجموعة على قائمة مشاركي دفعاته: يخرج من له خبير مجموعة معتمد غيره، ويضيف أعضاء مجموعاته هو.
-// العمود قد لا يكون مطبّقًا بعد: خطأ القراءة يعيد القائمة كما هي.
+// خطأ القراءة يوقف الطلب: إعادة القائمة كما هي كانت توسّع صلاحية الخبير على أعضاء مجموعات لغيره.
 async function groupScoped(expertId: string, cohortIds: string[], myCohorts: string[]) {
   const [mine, inMyCohorts] = await Promise.all([
     db.from('cohort_groups').select('id, advisor_expert_id').eq('advisor_expert_id', expertId),
     myCohorts.length ? db.from('cohort_groups').select('id, advisor_expert_id').in('cohort_id', myCohorts).not('advisor_expert_id', 'is', null) : Promise.resolve({ data: [] as any[], error: null }),
   ]);
-  if (mine.error || inMyCohorts.error) return cohortIds;
+  if (mine.error || inMyCohorts.error) throw new Fail('تعذّر قراءة مجموعاتك الآن، حاول بعد قليل', 503, 'busy');
   const groups = new Map<string, string>();
   for (const g of [...(mine.data || []), ...(inMyCohorts.data || [])]) groups.set(g.id, g.advisor_expert_id);
   if (!groups.size) return cohortIds;

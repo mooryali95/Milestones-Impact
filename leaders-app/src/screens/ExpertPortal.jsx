@@ -10,6 +10,7 @@ import AccountSwitch from '../AccountSwitch.jsx';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
+import { captchaGate } from '../captcha.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import ExpertApply from './ExpertApply.jsx';
@@ -65,7 +66,7 @@ function SignIn({ onIn }) {
     e?.preventDefault(); setBusy(true); setErr('');
     const r = await xpCall('xp.auth-start', { email, captcha });
     setBusy(false);
-    if (r.code === 'captcha') { setCaptchaKey(r.site_key || ''); return setErr(r.site_key ? '' : r.message); }
+    if (r.code === 'captcha') { const g = captchaGate(r, captcha); setCaptchaKey(g.box); return setErr(g.error); }
     setCaptchaKey(null);
     if (r.success) setStep('code'); else setErr(r.message);
   };
@@ -85,7 +86,7 @@ function SignIn({ onIn }) {
           ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} /></label>}
         {err && <div className="alert err" role="alert">{err}<DoorButtons doors={doors} /></div>}
-        {step === 'email' && captchaKey && <Captcha siteKey={captchaKey} onToken={(t) => send(null, t)} onError={() => setErr('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />}
+        {step === 'email' && captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => send(null, t)} />}
         <button className="btn" disabled={busy}>{busy ? 'لحظة…' : step === 'email' ? 'أرسل الرمز' : 'دخول'}</button>
         {step === 'code' && <button type="button" className="link small" onClick={() => { setStep('email'); setCode(''); }}>غيّر البريد</button>}
         {step === 'email' && <>

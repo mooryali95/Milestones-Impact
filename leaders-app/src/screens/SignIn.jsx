@@ -1,11 +1,15 @@
 // ════════════════════════════════════════════════════════════════
-// الدخول والتسجيل: بريد ← (اسم لبريد جديد) ← رمز أو رابط · أو مفتاح مرور
+// الدخول والتسجيل: بريد ← رمز أو رابط ← (اسم لبريد جديد) · أو مفتاح مرور
 // ════════════════════════════════════════════════════════════════
+// الاسم يُطلب بعد إثبات ملكية البريد لا قبله، فالشاشة الأولى ترد بالشيء نفسه لكل بريد مسجلًا كان أو جديدًا
+// ولا يُعرف منها من سُجّل في البرنامج (التدقيق 2026-11-10). pendingLink: رابط البريد فُتح (/verify) ويحتاج
+// اختيار الوجهة أو الاسم، فتبدأ الشاشة منه.
 import React, { useEffect, useRef, useState } from 'react';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { call } from '../api.js';
 import { attribution } from '../attribution.js';
 import Captcha from '../Captcha.jsx';
+import { captchaGate } from '../captcha.js';
 import RoleChoice from '../RoleChoice.jsx';
 import OtherDoors from '../Doors.jsx';
 import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
@@ -21,14 +25,14 @@ const ConsentNote = ({ action }) => (
   </p>
 );
 
-export default function SignIn({ onSignedIn, initialError }) {
-  const [step, setStep] = useState('email');   // email | name | code
-  const [email, setEmail] = useState('');
+export default function SignIn({ onSignedIn, initialError, pendingLink }) {
+  const [step, setStep] = useState(pendingLink?.needsName ? 'name' : 'email');   // email | code | name | google
+  const [email, setEmail] = useState(pendingLink?.email || '');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [sponsor, setSponsor] = useState('');
   const [pendingGoogle, setPendingGoogle] = useState(null);
-  const [roles, setRoles] = useState(null);   // أدوار البريد الأخرى بعد التحقق: يختار صاحبه وجهته   // حساب Google جديد ينتظر تأكيد صاحبه
+  const [roles, setRoles] = useState(null);   // أدوار البريد الأخرى بعد التحقق: يختار صاحبه وجهته
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
@@ -36,9 +40,8 @@ export default function SignIn({ onSignedIn, initialError }) {
   const codeRef = useRef(null);
   const [org, setOrg] = useState(null);
   const [captchaKey, setCaptchaKey] = useState(null);
-  // تسجيل جديد: التصريح الذي يعيده الخادم بعد التحقق البشري يحمله إلى خطوة الاسم وإعادة الإرسال فلا يُحل التحدي مرتين
-  const [pass, setPass] = useState('');
-  const [registering, setRegistering] = useState(false);
+  // إثبات ملكية البريد (الرمز أو رابط البريد) يُحفظ لخطوة الاسم: الخادم لا يستهلكه حتى يُنشأ الحساب
+  const [proof, setProof] = useState(pendingLink ? { link: pendingLink.link } : null);
   const [via] = useState(attribution);
   // شاشة الانتقال: تظهر فور اكتمال الدخول من جهة المستخدم، وتبقى حتى تُفتح رحلته
   const [entering, setEntering] = useState(null);
@@ -60,35 +63,51 @@ export default function SignIn({ onSignedIn, initialError }) {
   const start = async (e, captcha) => {
     e?.preventDefault();
     setBusy(true); setError('');
-    const asNew = step === 'name' || (step === 'code' && registering);
-    const res = await call('auth.start', {
-      email, full_name: asNew ? name : undefined, phone: asNew ? phone : undefined,
-      sponsor_code: asNew && sponsor.trim() ? sponsor.trim() : undefined, ...via, captcha,
-      ...(asNew && pass ? { pass } : {}),
-    });
+    const res = await call('auth.start', { email, ...via, captcha });
     setBusy(false);
     // الخادم يطلب التحقق البشري: تظهر الأداة، وتعيد الطلب وحدها حين تكتمل
-    if (res.code === 'captcha') { setCaptchaKey(res.site_key || ''); return setError(res.site_key ? '' : res.message); }
+    if (res.code === 'captcha') { const g = captchaGate(res, captcha); setCaptchaKey(g.box); return setError(g.error); }
     setCaptchaKey(null);
     if (!res.success) return setError(res.message);
-    if (res.needs_name) { setPass(res.pass || ''); setRegistering(true); return setStep('name'); }
     setStep('code'); setCode(''); setWait(RESEND_SECONDS);
   };
 
-  const verify = async (value, confirm = false) => {
-    setBusy(true); setError(''); setEntering({ name: name.split(' ')[0] || '' });
-    const res = await call('auth.verify', { email, code: value, ...(confirm ? { confirm_new: true } : {}) });
+  // pr: { code } أو { link }. extra: confirm_new بعد اختيار المشاركة، وملف التسجيل الجديد من خطوة الاسم
+  const verify = async (pr, extra = {}) => {
+    setBusy(true); setError(''); setEntering({ name: (extra.full_name || '').split(' ')[0] });
+    const res = await call('auth.verify', { email, ...pr, ...extra });
     setBusy(false);
-    if (res.success && res.choose_role) { setEntering(null); setRoles({ list: res.roles, go: () => verify(value, true) }); return; }
+    if (res.success && res.choose_role) {
+      setEntering(null);
+      setRoles({ list: res.roles, go: () => { setRoles(null); verify(pr, { ...extra, confirm_new: true }); } });
+      return;
+    }
     if (res.success) return onSignedIn(res);
-    setEntering(null); setError(res.message); setCode('');
+    setEntering(null);
+    if (res.code === 'needs_name') { setProof(pr); setStep('name'); return; }
+    setError(res.message);
+    if (step === 'code') setCode('');
   };
 
   const onCode = (v) => {
     const digits = v.replace(/\D/g, '').slice(0, 6);
     setCode(digits);
-    if (digits.length === 6) verify(digits);
+    if (digits.length === 6) verify({ code: digits });
   };
+
+  // خطوة الاسم: الإثبات نفسه مع الملف، فيُنشأ الحساب ويُستهلك الرمز معًا
+  const register = (e) => {
+    e.preventDefault();
+    verify(proof, {
+      confirm_new: true, full_name: name.trim(), phone: phone.trim() || undefined,
+      sponsor_code: sponsor.trim() || undefined,
+    });
+  };
+  // رابط البريد لبريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
+  useEffect(() => {
+    if (pendingLink?.roles?.length) setRoles({ list: pendingLink.roles, go: () => { setRoles(null); verify({ link: pendingLink.link }, { confirm_new: true }); } });
+  }, []);
+  const restart = () => { setStep('email'); setError(''); setProof(null); setCode(''); setName(''); setPhone(''); };
 
   const passkey = async () => {
     setError('');
@@ -135,7 +154,7 @@ export default function SignIn({ onSignedIn, initialError }) {
   const captchaBox = captchaKey ? (
     <div className="stack">
       <p className="small muted">تحقّق سريع قبل إرسال الرمز.</p>
-      <Captcha siteKey={captchaKey} onToken={(t) => start(null, t)} onError={() => setError('تعذّر تحميل أداة التحقق. حدّث الصفحة وحاول مرة أخرى.')} />
+      <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => start(null, t)} />
     </div>
   ) : null;
 
@@ -181,11 +200,11 @@ export default function SignIn({ onSignedIn, initialError }) {
         )}
 
         {step === 'name' && (
-          <form className="stack" data-tour="doors" onSubmit={start}>
+          <form className="stack" data-tour="doors" onSubmit={register}>
             <div>
               <p className="eyebrow">تسجيل جديد</p>
               <h1>أهلًا بك في البرنامج</h1>
-              <p className="muted">خطوة واحدة قبل إرسال الرمز إلى <b className="ltr">{email}</b></p>
+              <p className="muted">تحقّقنا من بريدك <b className="ltr">{email}</b>. خطوة أخيرة لإنشاء حسابك.</p>
             </div>
             <label className="field">
               <span>الاسم الكامل</span>
@@ -198,9 +217,9 @@ export default function SignIn({ onSignedIn, initialError }) {
             </label>
             {newcomerExtras}
             {error && <div className="alert err">{error}</div>}
-            <ConsentNote action="أرسل الرمز" />
-            <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أرسل الرمز'}</button>
-            <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); setPass(''); setRegistering(false); }}>تغيير البريد</button>
+            <ConsentNote action="أنشئ حسابي" />
+            <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أنشئ حسابي'}</button>
+            <button type="button" className="link small" onClick={restart}>ابدأ من جديد</button>
           </form>
         )}
 
@@ -230,7 +249,7 @@ export default function SignIn({ onSignedIn, initialError }) {
               aria-label="رمز التحقق" value={code} onChange={(e) => onCode(e.target.value)} placeholder="••••••" disabled={busy} />
             {error && <div className="alert err">{error}</div>}
             <div className="row between small">
-              <button className="link" onClick={() => { setStep('email'); setError(''); setPass(''); setRegistering(false); }}>بريد آخر</button>
+              <button className="link" onClick={restart}>بريد آخر</button>
               {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>
                 : <button className="link" onClick={start} disabled={busy}>أعد إرسال الرمز</button>}
             </div>

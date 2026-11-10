@@ -208,17 +208,16 @@ async function participantFlow() {
       await cue('ببريدك', 'ببريده');
       await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
       await click(page.getByRole('button', { name: 'متابعة' }));
+      await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
+      // الاسم بعد الرمز (التدقيق 2026-11-10): البريد ثم الرمز ثم الاسم ورمز الجهة
+      await type(page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first(), '246810');
       await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
       await cue('رشّحتك', 'رمزها', 'ترشّحه');
       const sponsor = page.getByLabel(/رمز الجهة الراعية/);
       if (await sponsor.isVisible().catch(() => false)) await type(sponsor, 'HTR-2026');
-      await click(page.getByRole('button', { name: 'أرسل الرمز' }));
-      await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
       await cursorHide();
       await end();
-      await type(page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first(), '246810');
-      const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
-      if (await verify.isVisible().catch(() => false)) await click(verify);
+      await click(page.getByRole('button', { name: 'أنشئ حسابي' }));
       await page.locator('h1', { hasText: 'عرّفنا بك' }).first().waitFor({ timeout: 15000 });   // h3 البطاقة قد تحمل الاسم نفسه
       await cursorHide();
     },
@@ -318,15 +317,13 @@ async function tourFlow() {
   await atWord('ببريده');
   await type(page.getByLabel('البريد الإلكتروني'), 'sara@company.sa');
   await click(page.getByRole('button', { name: 'متابعة' }));
-  await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
-  await click(page.getByRole('button', { name: 'أرسل الرمز' }));
   await page.getByRole('heading', { name: 'أرسلنا لك رابطًا ورمزًا' }).waitFor();
-  await cursorHide();
-  await end();
   const code = page.locator('input[inputmode="numeric"], input[autocomplete="one-time-code"]').first();
   await type(code, '246810');
-  const verify = page.getByRole('button', { name: /تحقق|ادخل|متابعة/ }).first();
-  if (await verify.isVisible().catch(() => false)) await click(verify);
+  await type(page.getByLabel('الاسم الكامل'), 'سارة عبدالله الأحمد');
+  await cursorHide();
+  await end();
+  await click(page.getByRole('button', { name: 'أنشئ حسابي' }));
   await page.getByRole('heading', { name: /عرّفنا بك/ }).waitFor({ timeout: 15000 });
   await cursorHide();
 
