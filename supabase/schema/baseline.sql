@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110190000_leaders_cohort_experts
+-- as-of migration: 20261110200000_leaders_group_advisor
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -266,6 +266,7 @@ create table if not exists leaders.cohort_groups (
   name text not null,
   sort smallint default 0 not null,
   created_at timestamp with time zone default now() not null,
+  advisor_expert_id uuid,
   constraint cohort_groups_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80))),
   constraint cohort_groups_pkey PRIMARY KEY (id)
 );
@@ -2059,6 +2060,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.cohort_groups add constraint cohort_groups_advisor_expert_id_fkey FOREIGN KEY (advisor_expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.cohort_groups add constraint cohort_groups_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2619,6 +2624,8 @@ CREATE INDEX IF NOT EXISTS coaching_sessions_status_idx ON leaders.coaching_sess
 CREATE INDEX IF NOT EXISTS cohort_experts_expert ON leaders.cohort_experts USING btree (expert_id);
 
 CREATE INDEX IF NOT EXISTS cohort_group_members_group_idx ON leaders.cohort_group_members USING btree (group_id);
+
+CREATE INDEX IF NOT EXISTS cohort_groups_advisor ON leaders.cohort_groups USING btree (advisor_expert_id) WHERE (advisor_expert_id IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS cohort_groups_cohort_idx ON leaders.cohort_groups USING btree (cohort_id, sort);
 

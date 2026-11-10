@@ -2090,6 +2090,28 @@ export function teamFirst(ranked, teamIds) {
   const tagged = ranked.map((e) => ({ ...e, team: team.has(e.id) }));
   return [...tagged.filter((e) => e.team), ...tagged.filter((e) => !e.team)];
 }
+// المستشار الفعلي للمشارك: الأخص يغلب. خبير مجموعته إن عُيّن وكان معتمدًا، وإلا مستشار دفعته الأساسي.
+// محاسب واحد لكل مشارك: من له خبير مجموعة لا يصل عمله مستشار الدفعة. القاعة تبقى لمستشار الدفعة لأنها للدفعة كلها.
+/** @param {{ group?: string | null, cohort?: string | null }} ids @param {Iterable<string>} approved معرّفات الخبراء المعتمدين (نشط أو موقوف مؤقتًا) */
+export function effectiveAdvisorId(ids, approved) {
+  const ok = new Set(approved || []);
+  if (ids?.group && ok.has(ids.group)) return ids.group;
+  if (ids?.cohort && ok.has(ids.cohort)) return ids.cohort;
+  return null;
+}
+// مشاركو خبير بصفته مستشارًا: مشاركو دفعاته ممن ليس لهم خبير مجموعة معتمد غيره، ومعهم أعضاء المجموعات التي هو خبيرها.
+/** @param {string} expertId @param {string[]} cohortParticipantIds مشاركو الدفعات التي هو مستشارها الأساسي
+ *  @param {{ participant_id: string, advisor_expert_id: string | null }[]} memberships عضويات المجموعات ذات الخبير، في دفعاته وفي مجموعاته
+ *  @param {Iterable<string>} approved */
+export function advisedParticipantIds(expertId, cohortParticipantIds, memberships, approved) {
+  const ok = new Set(approved || []);
+  const groupOf = new Map();
+  for (const m of memberships || []) if (m.advisor_expert_id && ok.has(m.advisor_expert_id)) groupOf.set(m.participant_id, m.advisor_expert_id);
+  const out = new Set((cohortParticipantIds || []).filter((id) => !groupOf.has(id) || groupOf.get(id) === expertId));
+  for (const [pid, adv] of groupOf) if (adv === expertId) out.add(pid);
+  return [...out];
+}
+
 // قائمة فريق نظيفة من مدخل اللوحة: معرّفات فريدة، بحد أعلى يمنع قائمة بلا معنى
 export const TEAM_MAX = 30;
 export function cleanTeamIds(ids, isId) {
