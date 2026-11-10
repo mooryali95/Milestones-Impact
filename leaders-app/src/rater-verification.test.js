@@ -65,7 +65,8 @@ describe('الخادم', () => {
     const k = api('coordinator.ts');
     expect(k).toMatch(/if \(!coordPermissions\(c\.permissions\)\.list\) throw new Fail/);
     expect(k).toMatch(/\.eq\('organization_id', c\.organization_id\)\.maybeSingle\(\);\n\s+return !!data;/);
-    expect(k).toMatch(/r\.raters_pending = list \? await awaitingFor/);
+    expect(k).toMatch(/list \? awaitingFor\(\(r\.participants \|\| \[\]\)\.map/);
+    expect(k).toContain('r.raters_pending = raters;');
     const idx = api('index.ts');
     expect(idx).toContain("'xp.rater-confirm': (e, b) => FL.raterConfirm(e, b),");
     expect(idx).toContain("'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),");

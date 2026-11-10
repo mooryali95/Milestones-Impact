@@ -11,7 +11,7 @@
 import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
-import { call, session, setExpiredHandler } from './api.js';
+import { bootPreload, call, session, setExpiredHandler } from './api.js';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
@@ -274,8 +274,9 @@ function Participant() {
       return;
     }
     if (session.get()) {
-      const res = await call('me');
-      if (res.success) accept(res);
+      // الفتح الأول يجمع الرئيسية في رحلة واحدة (البند 7.5)، وتأخذ الأقسام ما يخصها منه مرة واحدة
+      const res = await call('me', { with_home: true });
+      if (res.success) { bootPreload.set(res.preload); accept(res); }
       else if (res.code === 'suspended') { session.clear(); setVerifyError(res.message); }
       else if (res.code !== 'session') setBootError(res.message || UNEXPECTED_ERROR);   // session: أزالها الحارس في call وأظهر الدخول برسالته
     }
@@ -289,7 +290,7 @@ function Participant() {
   // المختبر قسم مستقل: يظهر مدخله متى فُتح للمشارك أو لجهته شيء منه
   const meId = me?.participant?.id;
   const loadLab = useCallback(async () => {
-    const r = await call('lab.list');
+    const r = bootPreload.take('lab') || await call('lab.list');
     setLab(r.success ? { items: r.items, points: r.points } : null);
   }, []);
   useEffect(() => { if (meId) loadLab(); else setLab(null); }, [meId, loadLab]);

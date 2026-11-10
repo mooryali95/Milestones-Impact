@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
-import { TABS } from './screens/Leaders.jsx';
+import { TABS } from './leaders-tabs.js';
 
 const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
   ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, to: { ctx: 'leaders', tab: k } }))];

@@ -123,3 +123,11 @@ export async function xpCall(action, body = {}) {
   if (!res.success && (res.code === 'session' || res.code === 'suspended')) xpSession.clear();
   return res;
 }
+
+// ما يأتي مجمّعًا مع الحساب عند فتح المنصة (me مع with_home، البند 7.5): كل جزء يُؤخذ مرة واحدة ثم يُحذف،
+// فالقسم الذي يُعاد تركيبه بعد إجراء يطلب حاله الحالية لا نسخة الفتح الأول
+let preloaded = {};
+export const bootPreload = {
+  set(obj) { preloaded = { ...(obj || {}) }; },
+  take(key) { const v = preloaded[key]; delete preloaded[key]; return v; },
+};
