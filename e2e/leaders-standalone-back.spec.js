@@ -31,3 +31,40 @@ for (const path of ['/rate', '/sponsor', '/outcome']) {
     await expect(page.getByRole('banner').getByRole('link')).toHaveCount(0);
   });
 }
+
+test('رابط لا تعرفه المنصة: صفحة «غير موجودة» بزر إلى الرئيسية، لا صفحة الدخول', async ({ page }) => {
+  await mock(page);
+  await page.goto(`${APP}/no-such-page`);
+  await expect(page.getByRole('heading', { name: 'هذه الصفحة غير موجودة' })).toBeVisible();
+  await expect(page.getByLabel('البريد الإلكتروني')).toHaveCount(0);
+  await expect(page).toHaveTitle('صفحة غير موجودة · رحلة القادة');
+  await page.getByRole('main').getByRole('link', { name: 'الرئيسية' }).click();
+  await expect(page).toHaveURL(`${APP}/`);
+});
+
+test('/verify بلا رمز: صفحة الدخول بلا رسالة «الرمز منتهي»، ولا يُسأل الخادم', async ({ page }) => {
+  const actions = [];
+  await page.route(/functions\/v1\/leaders-api/, (r) => { actions.push(JSON.parse(r.request().postData() || '{}').action); return r.fulfill({ json: { success: false, message: 'الرابط أو الرمز منتهي' } }); });
+  await page.goto(`${APP}/verify`);
+  await expect(page.getByLabel('البريد الإلكتروني')).toBeVisible();
+  await expect(page.getByText('الرابط أو الرمز منتهي')).toHaveCount(0);
+  expect(actions).not.toContain('auth.verify');
+});
+
+test('عنوان التبويب يسمّي الصفحة', async ({ page }) => {
+  await mock(page);
+  await page.goto(`${APP}/x`);
+  await expect(page).toHaveTitle('لوحة الخبير · رحلة القادة');
+  await page.goto(`${APP}/org`);
+  await expect(page).toHaveTitle('لوحة الجهة · رحلة القادة');
+});
+
+test('روابط الدخول الصغيرة بمساحة لمس 44 على الجوال', async ({ page }) => {
+  await mock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${APP}/`);
+  for (const name of ['لوحة الخبير', 'لوحة الجهة']) {
+    const box = await page.getByRole('link', { name }).boundingBox();
+    expect(box.height, name).toBeGreaterThanOrEqual(44);
+  }
+});

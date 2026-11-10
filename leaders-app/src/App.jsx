@@ -126,7 +126,25 @@ export default function App() {
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;
   if (location.pathname === '/x') return <Shell tag="لوحة الخبير"><ExpertPortal /></Shell>;
   if (location.pathname === LEGAL_PATH.index || location.pathname.startsWith(`${LEGAL_PATH.index}/`)) return <Shell tag="الخصوصية والشروط"><Legal /></Shell>;
-  return isOrgPortal() ? <Shell tag="لوحة الجهة"><OrgPortal /></Shell> : <Participant />;
+  if (isOrgPortal()) return <Shell tag="لوحة الجهة"><OrgPortal /></Shell>;
+  // رابط لا تعرفه المنصة: صفحة تقول ذلك وتدل على الرئيسية، بدل صفحة الدخول تحت عنوان خاطئ
+  if (!PARTICIPANT_PATHS.includes(location.pathname)) return <Shell tag="صفحة غير موجودة"><NotFound /></Shell>;
+  return <Participant />;
+}
+
+// مسارات تطبيق المشارك نفسه: الرئيسية، ورابط الدخول من البريد
+const PARTICIPANT_PATHS = ['/', '/verify', '/index.html'];
+
+function NotFound() {
+  return (
+    <div className="page narrow">
+      <section className="card stack" style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: 22 }}>هذه الصفحة غير موجودة</h1>
+        <p className="muted">قد يكون الرابط ناقصًا أو قديمًا. إن وصلك في رسالة فانسخه كاملًا وجرّب مرة أخرى.</p>
+        <div className="row" style={{ justifyContent: 'center' }}><a className="btn" href="/">الرئيسية</a></div>
+      </section>
+    </div>
+  );
 }
 
 // رابط الوثائق القانونية في كل تذييل: المشارك والمقيّم والراعي والخبير والمنسق
@@ -146,6 +164,8 @@ function BackLink() {
 // back=false لصفحات الرمز التي تصل أصحابها بالبريد (المقيّم، والراعي، وتأكيد الأثر): ليسوا مشاركين،
 // ورئيسية المنصة صفحة دخول المشارك فلا تعنيهم
 function Shell({ tag, back = true, children }) {
+  // عنوان التبويب يسمّي الصفحة: «لوحة الخبير · رحلة القادة» بدل عنوان واحد لكل الصفحات
+  useEffect(() => { document.title = `${tag} · رحلة القادة`; }, [tag]);
   return (
     <>
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
@@ -218,6 +238,8 @@ function Participant() {
     if (location.pathname === '/verify') {
       const q = new URLSearchParams(location.search);
       history.replaceState(null, '', '/');
+      // /verify بلا بريد أو رمز: لم يأتِ من رابط دخول، فتُعرض صفحة الدخول بلا رسالة «الرمز منتهي» المضللة
+      if (!q.get('e') || !q.get('t')) { setBooting(false); return; }
       const res = await call('auth.verify', { email: q.get('e'), link: q.get('t') });
       // بريد خبير أو منسق جهة يسجّل لأول مرة: وجهة لوحته أولًا، والمشاركة باختياره (الرابط يبقى صالحًا)
       if (res.success && res.choose_role) { setLinkChoice({ roles: res.roles, email: q.get('e'), link: q.get('t') }); setBooting(false); return; }
