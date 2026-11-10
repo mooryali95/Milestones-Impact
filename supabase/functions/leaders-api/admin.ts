@@ -9,6 +9,7 @@ import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
+import { checkImport, IMPORT_MAX, importCounts } from './import.js';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
@@ -1027,6 +1028,45 @@ export async function createParticipant(a: Admin, b: Body) {
   }).select('*').single(), 'هذا البريد مسجل من قبل');
   await audit('admin', a.email, 'participant.create', 'participants', row.id, null, row);
   return { success: true, participant: row };
+}
+
+// ── استيراد المشاركين دفعة واحدة (جهة بخمسين مشاركًا لا تُدخَل واحدًا واحدًا) ──
+// dry_run: يتحقق ويعيد حال كل صف ولا يكتب. بدونه يضيف الصفوف الجاهزة وحدها، ولا يمس مسجلًا من قبل.
+// لا بريد يُرسل: المضاف يدخل بريده في صفحة الدخول فيصله رمزه كأي مشارك، والمنسق يشارك رابط الجهة.
+// المقاعد لا تُحجز هنا: يُثبَّت الراعي لكل مضاف بالمسار القائم (pinSponsorFor) فيأخذ مقعدًا إن بقي.
+export async function participantsImport(a: Admin, b: Body) {
+  requireWrite(a);
+  const rows = Array.isArray(b.rows) ? b.rows : [];
+  if (!rows.length) throw new Fail('لا صفوف في الجدول');
+  if (rows.length > IMPORT_MAX) throw new Fail(`الحد ${IMPORT_MAX} صفًا في المرة الواحدة`);
+  let org: any = null;
+  if (b.organization_id) {
+    org = must(await db.from('organizations').select('id, name, status').eq('id', String(b.organization_id)).maybeSingle());
+    if (!org) throw new Fail('الجهة غير موجودة', 404);
+  }
+  const emails = [...new Set(rows.map((r: any) => normalizeEmail(r?.email)).filter(isEmail))];
+  const existing = new Set<string>();
+  for (let i = 0; i < emails.length; i += 100) {
+    const found = must(await db.from('participants').select('email').in('email', emails.slice(i, i + 100))) as any[];
+    for (const f of found || []) existing.add(f.email);
+  }
+  const checked = checkImport(rows, existing) as any[];
+  if (b.dry_run) return { success: true, dry_run: true, rows: checked, counts: importCounts(checked), organization: org?.name || null };
+  const ready = checked.filter((r) => r.status === 'ok');
+  let seated = 0;
+  for (const r of ready) {
+    const { data, error } = await db.from('participants').insert({
+      email: r.email, full_name: r.full_name, phone: r.phone, job_title: r.job_title, source: 'import',
+      organization_name: org?.name || null, ...(org ? { organization_id: org.id, org_via: 'admin' } : {}),
+    }).select('id').single();
+    // سباق مع تسجيل ذاتي بالبريد نفسه بين الفحص والكتابة: يُعد مسجلًا ولا تفشل الدفعة
+    if (error || !data) { r.status = 'failed'; r.reason = 'تعذّرت إضافته؛ قد يكون سُجّل للتو'; continue; }
+    r.status = 'created';
+    if (org && await pinSponsorFor(data.id)) seated += 1;
+  }
+  const counts = importCounts(checked);
+  await audit('admin', a.email, 'participants.import', 'participants', org?.id || null, null, { organization: org?.name || null, counts, seated });
+  return { success: true, rows: checked, counts, seated, organization: org?.name || null };
 }
 
 // ── تذكير أسبوعي (يُشغّله pg_cron بسرّ LEADERS_CRON_SECRET) ──

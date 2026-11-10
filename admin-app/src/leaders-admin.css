@@ -706,3 +706,10 @@
 
 .hall-clock { font-variant-numeric: tabular-nums; font-size: 1.3rem; direction: ltr; }
 .hall-clock.over { color: var(--st-bad, #a33); font-size: 1rem; direction: rtl; }
+/* استيراد المشاركين */
+.la-import { width: min(880px, 96vw); max-height: 92vh; overflow-y: auto; }
+.la-import-hint { font-size: .86rem; color: var(--ink-soft); margin: 0; }
+.la-import-field { display: grid; gap: 4px; font-size: .82rem; font-weight: 600; }
+.la-import-field textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; font: inherit; font-weight: 400; }
+.la-import-table { max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.la-import-table .la-table { margin: 0; }
