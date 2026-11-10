@@ -52,6 +52,9 @@ export async function exportData(p: any) {
   }
   const consent = await db.from('consent_events').select('created_at, kind, version').eq('subject', 'participant').eq('subject_id', p.id).limit(EXPORT_ROW_CAP);
   if (consent.data?.length) data.consent_events = consent.data;
+  // إجابته عن استبيان سهولة الاستخدام: جدولها بمعرّف الدور لا بـparticipant_id، فتُقرأ هنا (وغياب الجدول لا يفشل النسخة)
+  const sus = await db.from('sus_responses').select('answers, score, comment, answered_at').eq('role', 'participant').eq('subject_id', p.id).limit(1);
+  if (sus.data?.length && sus.data[0].answers) data.sus_responses = sus.data;
   await audit('participant', p.id, 'participant.export', 'participants', p.id, null, { tables: Object.keys(data).length, rows: Object.values(data).reduce((n, r) => n + r.length, 0) });
   return {
     success: true,

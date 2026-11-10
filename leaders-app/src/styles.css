@@ -1473,3 +1473,10 @@ body:has(.tour) main{padding-bottom:260px}
 /* الأيقونات المرسومة تأخذ لون النص وتصطف مع سطره */
 .ico-svg{vertical-align:-.22em;flex:none}
 .banner .ico .ico-svg,.empty-state .ico .ico-svg{display:block}
+/* استبيان سهولة الاستخدام */
+.sus-list{margin:0;padding-inline-start:20px;display:grid;gap:14px}
+.sus-list p{margin:0 0 8px;font-size:15px}
+.sus-scale{display:flex;gap:8px}
+.sus-scale button{flex:1;max-width:64px;min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);font:inherit;font-weight:700;color:var(--fg);cursor:pointer}
+.sus-scale button.on{background:var(--graphite);border-color:var(--graphite);color:var(--mist)}
+.sus-legend{margin:0}

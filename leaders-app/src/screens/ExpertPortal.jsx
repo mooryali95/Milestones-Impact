@@ -5,6 +5,7 @@
 // وساعاته وتقييمه (بعد خمسة تقييمات)، ويقيّم المشارك، ويصدر شهادة ساعات خبرته.
 // لا يرى سعر ساعته ولا تكلفته ولا ملاحظات الإدارة: الخادم لا يرسلها أصلًا.
 import React, { useCallback, useEffect, useState } from 'react';
+import SusCard from '../SusCard.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
 import { xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
@@ -367,6 +368,7 @@ function Dashboard({ onOut }) {
       <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
+      <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" />
       <AdvisorReviews />
       <PeerQueue say={setMsg} />
 

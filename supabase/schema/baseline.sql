@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110150000_leaders_erasure_requests
+-- as-of migration: 20261110160000_leaders_sus_responses
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1512,6 +1512,24 @@ create table if not exists leaders.stage_requirements (
   constraint stage_requirements_program_code_key UNIQUE (program_id, code)
 );
 
+create table if not exists leaders.sus_responses (
+  id uuid default gen_random_uuid() not null,
+  role text not null,
+  subject_id uuid not null,
+  answers smallint[],
+  score numeric(5,1),
+  comment text,
+  snoozed_at timestamp with time zone,
+  answered_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint sus_responses_answers_check CHECK (((answers IS NULL) OR ((array_length(answers, 1) = 10) AND (1 <= ALL (answers)) AND (5 >= ALL (answers))))),
+  constraint sus_responses_comment_check CHECK (((comment IS NULL) OR (char_length(comment) <= 600))),
+  constraint sus_responses_role_check CHECK ((role = ANY (ARRAY['participant'::text, 'expert'::text, 'coordinator'::text]))),
+  constraint sus_responses_score_check CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (100)::numeric)))),
+  constraint sus_responses_pkey PRIMARY KEY (id),
+  constraint sus_responses_role_subject_id_key UNIQUE (role, subject_id)
+);
+
 create table if not exists leaders.track_profiles (
   key text not null,
   priority_dimension text not null,
@@ -2737,6 +2755,8 @@ CREATE INDEX IF NOT EXISTS stage_requirements_program_idx ON leaders.stage_requi
 
 CREATE INDEX IF NOT EXISTS stage_requirements_stage_idx ON leaders.stage_requirements USING btree (stage_key, sort);
 
+CREATE INDEX IF NOT EXISTS sus_responses_role ON leaders.sus_responses USING btree (role, answered_at);
+
 CREATE INDEX IF NOT EXISTS workshop_attendance_participant_idx ON leaders.workshop_attendance USING btree (participant_id);
 
 CREATE INDEX IF NOT EXISTS workshop_sessions_cohort_idx ON leaders.workshop_sessions USING btree (cohort_id);
@@ -2960,6 +2980,8 @@ alter table leaders.schema_migrations enable row level security;
 alter table leaders.sponsor_requests enable row level security;
 
 alter table leaders.stage_requirements enable row level security;
+
+alter table leaders.sus_responses enable row level security;
 
 alter table leaders.track_profiles enable row level security;
 

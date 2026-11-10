@@ -124,5 +124,23 @@ ok(first.success === true, 'creem-webhook يقبل التوقيع الصحيح �
 const again = await hook(raw, sig);
 ok(again.success === true && again.duplicate === true, 'الحدث نفسه لا يُعالَج مرتين', JSON.stringify(again));
 
+// استبيان سهولة الاستخدام SUS: الاستحقاق بعد أسبوع، والتأجيل، والإجابة مرة واحدة، والدرجة المحسوبة على الخادم
+const susNew = await seed(`sus-new-${Date.now()}@example.sa`, 'مشارك جديد');
+const susOld = await seed(`sus-old-${Date.now()}@example.sa`, 'مشارك منذ أسبوع');
+sql(`update leaders.participants set created_at = now() - interval '9 days' where id = ${q(susOld.pid)}`);
+const susA = await call('sus.state', {}, susNew.token);
+ok(susA.success && susA.ready && !susA.due, 'SUS: حساب جديد غير مستحق', JSON.stringify(susA));
+const susB = await call('sus.state', {}, susOld.token);
+ok(susB.success && susB.due, 'SUS: مستحق بعد أسبوع', JSON.stringify(susB));
+const susC = await call('sus.submit', { snooze: true }, susOld.token);
+const susD = await call('sus.state', {}, susOld.token);
+ok(susC.snoozed === true && susD.success && !susD.due && !susD.answered, 'SUS: التأجيل يخفي البطاقة ولا يُحسب إجابة', JSON.stringify(susD));
+const susE = await call('sus.submit', { answers: [5, 1, 5] }, susOld.token);
+ok(susE.status === 400, 'SUS: إجابة ناقصة تُرفض 400', JSON.stringify(susE));
+const susF = await call('sus.submit', { answers: [4, 1, 5, 2, 4, 1, 5, 1, 4, 2] }, susOld.token);
+ok(susF.success && sql(`select score from leaders.sus_responses where subject_id = ${q(susOld.pid)}`) === '87.5', 'SUS: الإجابة تُحفظ بدرجة 87.5', JSON.stringify(susF));
+const susG = await call('sus.submit', { answers: [4, 1, 5, 2, 4, 1, 5, 1, 4, 2] }, susOld.token);
+ok(susG.status === 409, 'SUS: إجابة ثانية تُرفض 409', JSON.stringify(susG));
+
 console.log(fails ? `\n✗ ${fails} فحوص فشلت` : '\n✓ المسارات الذهبية كلها سليمة');
 process.exit(fails ? 1 : 0);
