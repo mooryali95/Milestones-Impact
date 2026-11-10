@@ -234,9 +234,9 @@ export default function HallView({ view, me = null, onPerson, compact = false, t
       {tip && (
         <div className="hv-tip" role="tooltip" style={{
           position: 'absolute', left: `${(tip.at.x / 1600) * 100}%`, top: `${(tip.at.y / 900) * 100}%`, transform: 'translate(-50%,-118%)', pointerEvents: 'none',
-          background: '#0f2128f2', color: '#f3ead9', border: '1px solid #2a4651', borderRadius: 14, padding: '10px 14px', minWidth: 200, maxWidth: 270, fontSize: 13.5, lineHeight: 1.6, boxShadow: '0 18px 40px #0008', direction: 'rtl', zIndex: 5,
+          background: '#0f2128f2', color: '#f3ead9', border: '1px solid #2a4651', borderRadius: 14, padding: '10px 14px', minWidth: 200, maxWidth: 270, fontSize: 14, lineHeight: 1.6, boxShadow: '0 18px 40px #0008', direction: 'rtl', zIndex: 5,
         }}>
-          {(tip.p.persona || tip.p.team) && <span style={{ background: TEAM_COLOR[tip.p.persona ? 'persona' : tip.p.team], color: '#0d1b22', fontWeight: 600, fontSize: 12, padding: '2px 8px', borderRadius: 999 }}>
+          {(tip.p.persona || tip.p.team) && <span style={{ background: TEAM_COLOR[tip.p.persona ? 'persona' : tip.p.team], color: '#0d1b22', fontWeight: 600, fontSize: 14, padding: '2px 8px', borderRadius: 999 }}>
             {TEAM_AR[tip.p.persona ? 'persona' : tip.p.team]}{tip.p.table && !tip.p.persona ? ` · طاولة ${tip.p.table}` : ''}{tip.p.leader ? ' · قائد الجولة' : ''}</span>}
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 4 }}>{tip.p.name}</div>
           {(tip.p.title || tip.p.org) && <div style={{ color: '#93a8ad' }}>{[tip.p.title, tip.p.org].filter(Boolean).join(' · ')}</div>}
