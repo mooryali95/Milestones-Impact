@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR, OPT_AR, CONF_AR } from './HallView.jsx';
 import { HALL_SPLIT_AR, HALL_STAGE_AR } from '../../supabase/functions/leaders-api/hall.js';
+import { POLL_FAIL_LIMIT } from '../../leaders-app/src/hallPoll.js';
 
 const STEPS = ['enter', 'train', 'split', 'round', 'reveal'];
 export const HALL_UI_ADMIN = { card: 'la-card', row: 'la-row', muted: 'la-muted', chip: 'la-chip', link: 'la-link', btn: 'btn-sm primary', ghost: 'btn-sm ghost', fields: 'la-adj-row', ok: 'ok' };
@@ -19,12 +20,15 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
   const [sel, setSel] = useState(null);
   const [form, setForm] = useState({ mode: 'live', topic_id: '' });
   const ver = useRef(0);
+  const fails = useRef(0);
   const u = ui;
 
   const load = useCallback(async (force) => {
     if (!cohortId) return;
     const r = await call('state', { cohort_id: cohortId, since: force ? 0 : ver.current });
-    if (!r.success) return toast(r.message);
+    // إخفاق عابر في السؤال الدوري يصلحه السؤال التالي؛ يُبلَّغ عند أول تحميل، أو حين يتوالى (مرة لا كل ثانيتين)
+    if (!r.success) { fails.current += 1; if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message); return; }
+    fails.current = 0;
     if (r.unchanged) return;
     ver.current = r.session?.version || 0;
     setV(r);

@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
-import { pollPeriod } from '../hallPoll.js';
+import { pollPeriod, POLL_FAIL_LIMIT } from '../hallPoll.js';
 import { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
 import HallTeams from '../../../shared/hall/HallTeams.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
@@ -29,9 +29,13 @@ export default function Hall({ onBack }) {
   const [err, setErr] = useState('');
   const [ask, setAsk] = useState(null);   // اليد المرفوعة أو ملاحظة الجملة تصير طلب توجيه (المرحلة 8)
   const ver = useRef(0);
+  const fails = useRef(0);
+  const [pollErr, setPollErr] = useState('');
   const load = useCallback(async (force) => {
     const r = await call('hall.state', { since: force ? 0 : ver.current });
-    if (!r.success) { setErr(r.message); return; }
+    // أول تحميل يعرض خطأه فورًا (لا شيء على الشاشة غيره)، والسؤال الدوري لا يعرضه إلا إن توالى
+    if (!r.success) { fails.current += 1; if (force || fails.current >= POLL_FAIL_LIMIT) (force ? setErr : setPollErr)(r.message); return; }
+    fails.current = 0; setPollErr('');
     if (r.unchanged) return;
     ver.current = r.session?.version || 0;
     setV(r);
@@ -124,7 +128,7 @@ export default function Hall({ onBack }) {
           )}
         </>
       )}
-      {err && <ErrorBox message={err} />}
+      {(err || pollErr) && <ErrorBox message={err || pollErr} />}
       {/* سجل النشاط: طلبات التوجيه في الدفعة؛ في المسار الذاتي دائمًا، وفي الحية حين يُرفع طلب */}
       {v.inside && (ask || !live) && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
       <details className="hall-mini" open={!v.inside}>
