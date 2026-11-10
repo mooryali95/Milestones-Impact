@@ -20,28 +20,40 @@
   Cache-Control: public, max-age=0, must-revalidate
 
 # الصفحة ومسارات التطبيق (تُعاد كتابتها إلى index.html) تُفحص في كل زيارة فتظهر آخر نسخة فورًا
+# وبلا Access-Control-Allow-Origin: * الذي تضيفه Cloudflare Pages لكل ملف افتراضيًا (البند 4.1): الصفحة لا تُطلب من نطاق آخر
 /
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /org
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /x
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /verify
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /rate
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /sponsor
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /outcome
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /expert
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /offer
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /legal/*
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /j/*
   Cache-Control: no-cache
+  ! Access-Control-Allow-Origin
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 

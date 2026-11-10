@@ -5,8 +5,9 @@
 import React, { useEffect, useState } from 'react';
 import { SUS_ITEMS, SUS_SCALE, susValid } from '../../supabase/functions/leaders-api/sus.js';
 
-export default function SusCard({ call, stateAction = 'sus.state', submitAction = 'sus.submit' }) {
-  const [due, setDue] = useState(false);
+// initial: حالة الاستبيان إن جاءت مع طلب اللوحة المجمّع (لوحة الخبير)، فلا يُطلب الخادم مرة ثانية
+export default function SusCard({ call, stateAction = 'sus.state', submitAction = 'sus.submit', initial }) {
+  const [due, setDue] = useState(!!(initial?.success && initial.due));
   const [open, setOpen] = useState(false);
   const [answers, setAnswers] = useState(() => SUS_ITEMS.map(() => 0));
   const [comment, setComment] = useState('');
@@ -15,6 +16,7 @@ export default function SusCard({ call, stateAction = 'sus.state', submitAction 
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    if (initial) return undefined;
     let alive = true;
     call(stateAction).then((r) => { if (alive && r?.success && r.due) setDue(true); }).catch(() => {});
     return () => { alive = false; };
