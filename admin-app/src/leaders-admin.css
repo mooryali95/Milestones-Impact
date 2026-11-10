@@ -589,15 +589,27 @@
   .la-tab-group { flex-wrap: nowrap; flex: none; }
   .la-tab-group-label { min-width: 0; }
 }
-/* من 1100 فأعرض: عمود جانبي. كانت العشرون قسمًا أربعة صفوف تأخذ ثلث الشاشة الأولى فوق كل صفحة */
+/* عنوان المجموعة زر يطويها. في الشريط الأفقي (دون 1100) يبقى عنوانًا صغيرًا */
+.la-tab-group-label { background: none; border: 0; padding: 0; cursor: pointer; text-align: start; display: inline-flex; align-items: center; gap: 6px; }
+.la-tabs .la-tab-group-label { padding: 0; border-radius: 6px; background: none; color: var(--ink-soft, var(--brand-ink-blue)); font-size: .78rem; font-weight: 700; }
+.la-tab-group.shut > button:not(.la-tab-group-label) { display: none; }
+/* من 1100 فأعرض: عمود تنقل جانبي. تسلسل بصري واضح: عنوان مجموعة صغير هادئ، وبنود بوزن عادي، وقسم مفتوح واحد بارز.
+   (كانت العناوين والبنود بوزن واحد فلا يُعرف العنوان من البند، والعمود نصًا عائمًا بلا حدود) */
 @media (min-width: 1100px) {
-  .la-shell { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 28px; align-items: start; }
-  .la-shell > .la-tabs-grouped { position: sticky; top: 74px; margin-bottom: 0; gap: 16px; flex-wrap: nowrap; max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin; padding-inline-end: 4px; }
-  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; }
-  .la-shell .la-tab-group-label { margin-bottom: 4px; padding-inline-start: 12px; }
-  .la-shell .la-tab-group button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: start; padding: 7px 12px; border-radius: 10px; background: transparent; }
-  .la-shell .la-tab-group button:hover { background: var(--sand-light); }
-  .la-shell .la-tab-group button.on { background: var(--petrol-s); color: #fff; }
+  .la-shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .la-shell > .la-tabs-grouped { position: sticky; top: 74px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin;
+    background: #fff; border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px; }
+  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 1px; padding: 6px 0; }
+  .la-shell .la-tab-group + .la-tab-group { border-top: 1px solid var(--line); }
+  .la-shell .la-tabs .la-tab-group-label, .la-shell .la-tab-group-label { width: 100%; justify-content: space-between; min-height: 30px; padding: 4px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--ink-light); }
+  .la-shell .la-tab-group-label::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-inline-start: auto; }
+  .la-shell .la-tab-group.shut .la-tab-group-label::after { transform: rotate(135deg); }
+  .la-shell .la-tab-group-label:hover { color: var(--ink-soft); }
+  .la-shell .la-tab-group > button:not(.la-tab-group-label) { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; text-align: start; padding: 6px 10px; border-radius: 8px; background: transparent; font-weight: 500; font-size: .86rem; color: var(--ink); position: relative; }
+  .la-shell .la-tab-group.shut > button:not(.la-tab-group-label) { display: none; }
+  .la-shell .la-tab-group > button:not(.la-tab-group-label):hover { background: var(--sand-light); }
+  .la-shell .la-tab-group > button.on { background: var(--petrol-s); color: #fff; font-weight: 600; }
+  .la-shell .la-tab-group > button:focus-visible, .la-shell .la-tab-group-label:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
 }
 
 /* جدول المشاركين على الهاتف: بطاقة لكل مشارك، ولكل قيمة عنوانها من data-label */
@@ -714,3 +726,10 @@
 .la-import-table { max-height: 38vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 .la-import-table .la-table { margin: 0; }
 .ico-svg{vertical-align:-.22em;flex:none}
+/* القاعة الحية بلا دفعة مختارة */
+.hall-pick { max-width: 640px; display: grid; gap: 10px; }
+.hall-pick p { margin: 0; color: var(--ink-soft); }
+.hall-pick .hall-pick-k { font-weight: 600; color: var(--ink); margin-top: 6px; }
+.hall-pick-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.hall-pick-list button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; font-weight: 600; color: var(--ink); cursor: pointer; }
+.hall-pick-list button:hover { border-color: var(--petrol-s); background: var(--sand-light); }
