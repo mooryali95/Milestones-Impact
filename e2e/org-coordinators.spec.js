@@ -46,7 +46,8 @@ test('جهة جديدة: تحقق فوري، ثم إنشاء الجهة وحسا
   await f.getByLabel('رمز رابط الدعوة').fill('hx-2026');
   await expect(f.getByText('https://leaders.sunkvalue.com/j/hx-2026')).toBeVisible();
   await f.getByLabel('البريد').fill('lead@hx.sa');
-  await f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).click();
+  // منذ #261: كتابة بريد المنسق في جهة جديدة تفعّل حسابه ودعوته وحدها، فلا يُضغط المفتاح (الضغط كان يطفئه فيُحفظ بلا دعوة)
+  await expect(f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox')).toBeChecked();
   await f.getByRole('button', { name: 'إنشاء الجهة' }).click();
   await expect(page.getByRole('status')).toContainText('أُرسلت الدعوة إلى lead@hx.sa');
   expect(calls.find((c) => c.action === 'admin.save').row).toMatchObject({ name: 'هيئة الاختبار', color: '#2E7D5B', invite_code: 'hx-2026' });
