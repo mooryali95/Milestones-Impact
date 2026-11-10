@@ -2,6 +2,7 @@
 // حالات الشاشة المشتركة: هيكل التحميل، والفراغ، والخطأ مع إعادة المحاولة
 // ════════════════════════════════════════════════════════════════
 import React from 'react';
+import Ico from './Ico.jsx';
 
 // رسالة واحدة لكل نافذة حجبها المتصفح: ما حدث، وكيف تسمح، وماذا تفعل بعدها
 export const POPUP_BLOCKED = 'منع المتصفح فتح النافذة. اسمح بالنوافذ المنبثقة لهذا الموقع من شريط العنوان، ثم اضغط مرة أخرى.';
@@ -32,10 +33,10 @@ export function BookSkeleton() {
   );
 }
 
-export function Empty({ icon = '📭', title, hint, action }) {
+export function Empty({ icon = 'inbox', title, hint, action }) {
   return (
     <div className="empty-state">
-      <span className="ico" aria-hidden="true">{icon}</span>
+      <span className="ico" aria-hidden="true"><Ico name={icon} /></span>
       <b>{title}</b>
       {hint && <p className="small muted">{hint}</p>}
       {action}

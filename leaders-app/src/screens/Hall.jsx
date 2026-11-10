@@ -101,7 +101,7 @@ export default function Hall({ onBack }) {
 
   return (
     <div className="page wide stack hall-page" data-tour="hall">
-      <FirstOpen id="hall" icon="🏛️" title="القاعة حيّة داخل المنصة" lines={[
+      <FirstOpen id="hall" icon="hall" title="القاعة حيّة داخل المنصة" lines={[
         'حين يفتح الخبير جلسة تجد فريقك ودورك والجولة الحالية هنا دون أن تحدّث الصفحة.',
         'إجاباتك في الجولات للتعلم، ولا تدخل تقييمك المستمر ولا الختامي.',
         'سؤال لم تجد إجابته؟ اطرحه على أقرانك من «طلبات التوجيه» ويؤكد الخبير الإجابة.',

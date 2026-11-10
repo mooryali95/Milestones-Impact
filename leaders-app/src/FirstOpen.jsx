@@ -1,16 +1,17 @@
 // بطاقة أول فتح لشاشة (الكتيب، القاعة، المبادرة): ثلاث جمل وزر «فهمت»، تُغلق مرة واحدة بالمخزن المحلي
 // (راحة عرض لا حالة رحلة، كبطاقة الترحيب). لا جولة فقاعات: بطاقة واحدة لكل شاشة.
 import React, { useState } from 'react';
+import Ico from './Ico.jsx';
 import { firstOpenSeen } from './api.js';
 
-export default function FirstOpen({ id, title, lines, icon = '💡' }) {
+export default function FirstOpen({ id, title, lines, icon = 'bulb' }) {
   const store = firstOpenSeen(id);
   const [open, setOpen] = useState(() => !store.get());
   if (!open) return null;
   return (
     <div className="banner mist first-open" role="note">
       <div className="grow">
-        <b><span className="ico" aria-hidden="true">{icon}</span> {title}</b>
+        <b><span className="ico" aria-hidden="true"><Ico name={icon} /></span> {title}</b>
         <ol className="small">{lines.map((l) => <li key={l}>{l}</li>)}</ol>
       </div>
       <button type="button" className="btn ghost sm" onClick={() => { store.set(true); setOpen(false); }}>فهمت</button>

@@ -4,6 +4,7 @@
 // لا زر «أنجزته» هنا: كل نشاط يكتمل بدليله. القراءة بوقتها الفعلي،
 // والفيديو بما شوهد منه، والجلسة الجماعية بالتوثيق الذي اختاره المشرف، والفردية بتأكيد الموجّه.
 import React, { useEffect, useRef, useState } from 'react';
+import Ico from '../Ico.jsx';
 import { call } from '../api.js';
 import { downloadIcs } from '../ics.js';
 
@@ -249,7 +250,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
 }
 
 // ── منهج المسار: مواد البنك التي تخص مسار المشارك ──
-const CONTENT_ICON = { video: '▶', file: '📄', link: '🔗' };
+const CONTENT_ICON = { video: '▶', file: <Ico name="doc" />, link: <Ico name="link" /> };
 function Curriculum({ item, open, onRefresh }) {
   const [a, setA] = useState(item.activity);
   const [play, setPlay] = useState(null);
