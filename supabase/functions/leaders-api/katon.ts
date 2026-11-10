@@ -11,7 +11,7 @@ import {
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { approvalOf } from './logic.js';
 import { REPO_EDIT_AR } from './content-lock.js';
-import { hallGate } from './hall.ts';
+import { hallAnswered, hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
@@ -80,6 +80,7 @@ export async function answer(p: any, b: Body) {
   must(await db.from('katon_answers').upsert({
     participant_id: p.id, sentence_id: s.id, choice: null, verdict: a.verdict, confidence: a.confidence, stances: a.stances, note: a.note, updated_at: new Date().toISOString(),
   }));
+  if (gate.sessionId) await hallAnswered(gate.sessionId);
   return mine(p);
 }
 

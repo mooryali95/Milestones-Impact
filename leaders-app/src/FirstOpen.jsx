@@ -9,12 +9,11 @@ export default function FirstOpen({ id, title, lines, icon = '💡' }) {
   if (!open) return null;
   return (
     <div className="banner mist first-open" role="note">
-      <span className="ico" aria-hidden="true">{icon}</span>
       <div className="grow">
-        <b>{title}</b>
+        <b><span className="ico" aria-hidden="true">{icon}</span> {title}</b>
         <ol className="small">{lines.map((l) => <li key={l}>{l}</li>)}</ol>
       </div>
-      <button type="button" className="link small" onClick={() => { store.set(true); setOpen(false); }}>فهمت</button>
+      <button type="button" className="btn ghost sm" onClick={() => { store.set(true); setOpen(false); }}>فهمت</button>
     </div>
   );
 }
