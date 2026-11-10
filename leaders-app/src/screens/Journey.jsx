@@ -508,6 +508,18 @@ function Fold({ title, meta, children }) {
 
 const PhaseOpen = ({ children }) => children;
 
+// مراحل قادمة مقفلة: على الحاسب تُعرض كما هي، وعلى الشاشات الضيقة سطر واحد يُفتح
+function Later({ n, after, children }) {
+  const [narrow] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(NARROW).matches);
+  if (!narrow) return children;
+  return (
+    <details className="j-later">
+      <summary>{countAr(n, 'مرحلة قادمة', 'مرحلتان قادمتان', 'مراحل قادمة', 'مرحلة قادمة')} <span className="small muted">تُفتح بعد {after}</span></summary>
+      {children}
+    </details>
+  );
+}
+
 function Milestones({ list, summary }) {
   if (!list?.length) return null;
   return (
@@ -729,13 +741,26 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 <span className="small muted">{doneHere} من {stages.length}</span>
               </div>
               <div className="timeline">
-                {stages.map((s) => {
-                  order += 1;
+                {(() => {
+                  const card = (s) => {
+                    order += 1;
+                    return (
+                      <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                        onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} setToast={setToast} />
+                    );
+                  };
+                  // المراحل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير
+                  let cut = stages.length;
+                  while (here && cut > 0 && stages[cut - 1].status === 'locked' && !expanded.has(stages[cut - 1].key) && stages[cut - 1].key !== next?.stage.key) cut -= 1;
+                  const later = cut > 0 && stages.length - cut >= 2 ? stages.slice(cut) : [];
+                  const shown = later.length ? stages.slice(0, cut) : stages;
                   return (
-                    <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                      onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} setToast={setToast} />
+                    <>
+                      {shown.map(card)}
+                      {later.length > 0 && <Later n={later.length} after={shown[shown.length - 1].title_ar}>{later.map(card)}</Later>}
+                    </>
                   );
-                })}
+                })()}
               </div>
             </div>
             </Wrap>

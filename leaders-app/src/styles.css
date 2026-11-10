@@ -1480,3 +1480,11 @@ body:has(.tour) main{padding-bottom:260px}
 .sus-scale button{flex:1;max-width:64px;min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);font:inherit;font-weight:700;color:var(--fg);cursor:pointer}
 .sus-scale button.on{background:var(--graphite);border-color:var(--graphite);color:var(--mist)}
 .sus-legend{margin:0}
+/* الرئيسية على الشاشات الضيقة: الكتيب والمختبر في شريط التنقل فلا تتكرر بطاقتهما، والمراحل المقفلة القادمة سطر يُفتح */
+@media (max-width:1119px){.j-tools{display:none}}
+.j-later{margin:8px 0}
+.j-later>summary{list-style:none;cursor:pointer;min-height:48px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;border:1px dashed var(--line);border-radius:12px;font-weight:600}
+.j-later>summary::-webkit-details-marker{display:none}
+.j-later>summary::after{content:'';width:8px;height:8px;margin-inline-start:auto;border-inline-end:2px solid var(--slate);border-bottom:2px solid var(--slate);transform:rotate(45deg);transition:transform .15s}
+.j-later[open]>summary::after{transform:rotate(-135deg)}
+.j-later[open]>summary{margin-bottom:8px}
