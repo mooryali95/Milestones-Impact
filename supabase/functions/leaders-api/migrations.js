@@ -95,4 +95,5 @@ export const MIGRATIONS = [
   '20261107190000_leaders_v5_2_balance',
   '20261110100000_leaders_approval_two_working_days',
   '20261110120000_leaders_hall_tables',
+  '20261110130000_leaders_hall_timer',
 ];

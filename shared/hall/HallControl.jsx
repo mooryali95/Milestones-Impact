@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR, OPT_AR, CONF_AR } from './HallView.jsx';
 import { HALL_SPLIT_AR, HALL_STAGE_AR, publicView } from '../../supabase/functions/leaders-api/hall.js';
+import { useHallTimer, timerLabel } from './HallTimer.jsx';
 
 const STEPS = ['enter', 'train', 'split', 'round', 'reveal'];
 export const HALL_UI_ADMIN = { card: 'la-card', row: 'la-row', muted: 'la-muted', chip: 'la-chip', link: 'la-link', btn: 'btn-sm primary', ghost: 'btn-sm ghost', fields: 'la-adj-row', ok: 'ok' };
@@ -41,6 +42,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
     if (ok) toast(ok);
     ver.current = r.session?.version || 0; setV(r);
   };
+  const left = useHallTimer(v);
   const ask = (text, def) => (prompt ? prompt(text, def) : Promise.resolve(window.prompt(text, def ?? '')));
   const sure = (text) => (confirm ? confirm(text, { danger: true }) : Promise.resolve(window.confirm(text)));
   // الرجوع إلى مرحلة سابقة وإعادة التقسيم يغيّران ما يراه الخمسون في لحظة، فيُؤكَّدان
@@ -100,7 +102,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
           </div>
 
           {/* شاشة العرض بما يراه المشاركون: لا أحكام أفراد ولا توزيع قبل الكشف، فتُعرض على البروجكتر بأمان */}
-          <div className="hall-screen"><HallView view={publicView(v)} onPerson={(p) => setSel(p.id)} /></div>
+          <div className="hall-screen"><HallView view={publicView(v)} onPerson={(p) => setSel(p.id)} timer={timerLabel(left)} /></div>
           {canWrite && !v.revealed && v.sentence && v.distribution && (
             <p className={u.muted} aria-live="polite">لك وحدك قبل الكشف: أجاب {v.answered} من {v.total} · صحيحة {(v.distribution.true1 || 0) + (v.distribution.true2 || 0) + (v.distribution.true3 || 0)} · خاطئة {(v.distribution.false1 || 0) + (v.distribution.false2 || 0) + (v.distribution.false3 || 0)}. لا يظهر هذا على شاشة العرض.</p>
           )}
@@ -124,6 +126,13 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
                   <button className={u.btn} disabled={busy || !v.sentence || v.revealed} onClick={() => act('step', { session_id: sid, stage: 'reveal' })}>اكشف المفتاح</button>
                   <button className={u.ghost} disabled={busy || !v.sentence} onClick={() => act('step', { session_id: sid, next: true }, 'جولة جديدة وقائد جديد')}>الجملة التالية ↞</button>
                 </div>
+                {left != null && !v.revealed && (
+                  <div className={u.row} role="timer" aria-label="وقت الإجابة">
+                    <b className={`hall-clock${left === 0 ? ' over' : ''}`}>{timerLabel(left)}</b>
+                    <button className={u.ghost} disabled={busy} onClick={() => act('step', { session_id: sid, extend: 30 }, 'مُدّد الوقت 30 ثانية')}>+30 ثانية</button>
+                  </div>
+                )}
+                {left === 0 && !v.revealed && <small className={u.muted}>أُقفلت الإجابة. اكشف المفتاح أو مدّد الوقت.</small>}
                 {v.revealed && v.sentence?.explain_ar && <p className={u.muted}>{v.sentence.explain_ar}</p>}
               </section>
               <section className={u.card}>

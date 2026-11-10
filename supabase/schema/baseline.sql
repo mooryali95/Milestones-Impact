@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110120000_leaders_hall_tables
+-- as-of migration: 20261110130000_leaders_hall_timer
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -663,6 +663,7 @@ create table if not exists leaders.hall_sessions (
   created_by text,
   created_at timestamp with time zone default now() not null,
   closed_at timestamp with time zone,
+  phase_ends_at timestamp with time zone,
   constraint hall_sessions_code_check CHECK ((code ~ '^[0-9]{6}$'::text)),
   constraint hall_sessions_mode_check CHECK ((mode = ANY (ARRAY['live'::text, 'self'::text]))),
   constraint hall_sessions_persona_ar_check CHECK ((char_length(persona_ar) <= 200)),

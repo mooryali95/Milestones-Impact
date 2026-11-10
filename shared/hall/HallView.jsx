@@ -96,7 +96,7 @@ function personLabel(p, team) {
     !p.present && (p.joined ? 'خارج القاعة الآن' : 'لم يدخل القاعة بعد')].filter(Boolean).join('، ');
 }
 
-export default function HallView({ view, me = null, onPerson, compact = false }) {
+export default function HallView({ view, me = null, onPerson, compact = false, timer = '' }) {
   const [tip, setTip] = useState(null);
   const people = view?.people || [];
   const stage = view?.session?.stage || 'enter';
@@ -128,6 +128,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
           <text x="1100" y="68" textAnchor="start" direction="rtl" fill="#c79a4b" fontSize="17">
             {view?.topic?.title_ar ? `${view.topic.title_ar}${s && atTables ? ` · الجولة ${view.session.round} · ${Q_AR[s.question] || ''}` : ''}` : 'القاعة'}
           </text>
+          {timer && atTables && <text x="500" y="70" textAnchor="start" direction="ltr" fill="#f3ead9" fontSize="26" fontWeight="700" aria-hidden="true">{timer}</text>}
           <foreignObject x="500" y="80" width="600" height="100">
             <div xmlns="http://www.w3.org/1999/xhtml" style={{ color: '#f3ead9', font: `500 ${compact ? 24 : 21}px/1.6 'IBM Plex Sans Arabic',sans-serif`, direction: 'rtl', textAlign: 'right' }}>
               {stage === 'enter' ? `أهلًا بكم. ادخلوا القاعة من التطبيق${view?.session?.code ? ` برمز ${view.session.code}` : ''}`

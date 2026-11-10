@@ -4,7 +4,7 @@
 // التزامن بالسؤال الخفيف: كل تغيير يرفع version، والجهاز يرسل رقمه فيُرد عليه
 // «لا جديد» بقراءة واحدة، أو بالحالة كاملة حين تتغير. الحضور يتجدد مع كل سؤال.
 import { audit, db, Fail, must } from './core.ts';
-import { assignTables, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
+import { answersClosed, answerSeconds, assignTables, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
 import { overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
@@ -19,7 +19,13 @@ async function openSession(cohortId: string) {
 }
 async function bump(id: string, patch: Body = {}) {
   const cur = must(await db.from('hall_sessions').select('version').eq('id', id).single()) as any;
-  return must(await db.from('hall_sessions').update({ ...patch, version: cur.version + 1 }).eq('id', id).select(SESSION_COLS).single()) as any;
+  const res = await db.from('hall_sessions').update({ ...patch, version: cur.version + 1 }).eq('id', id).select(SESSION_COLS).single();
+  // phase_ends_at يأتي بالترحيل 20261110130000 (deploy-gate: tolerant): قبله تُكتب الحالة بلا المؤقت فتعمل القاعة بلا عدّ
+  if (res.error && 'phase_ends_at' in patch) {
+    const rest = { ...patch }; delete rest.phase_ends_at;
+    return must(await db.from('hall_sessions').update({ ...rest, version: cur.version + 1 }).eq('id', id).select(SESSION_COLS).single()) as any;
+  }
+  return must(res) as any;
 }
 
 // فرق الدفعة وطاولاتها. table_no يأتي بالترحيل 20261110120000؛ القراءة بـ* والكتابة بمحاولة ثانية بلا العمود،
@@ -137,6 +143,7 @@ export async function hallGate(p: any, sentenceId: string) {
   if (!inTopic) return { inHall: false };
   if ((s.revealed || []).includes(sentenceId)) throw new Fail('كُشف مفتاح هذه الجملة في القاعة؛ لا تُعدَّل الإجابة بعده', 409, 'revealed');
   if (s.mode === 'live' && s.sentence_id !== sentenceId) throw new Fail('أجب عن الجملة المعروضة الآن في القاعة', 409, 'not_current');
+  if (s.mode === 'live' && answersClosed(s.phase_ends_at, Date.now())) throw new Fail('انتهى وقت الإجابة عن هذه الجملة', 409, 'time_up');
   await bump(s.id);
   return { inHall: true };
 }
@@ -218,6 +225,14 @@ export async function step(a: Actor, b: Body) {
     const { data: pres } = await db.from('hall_presence').select('participant_id').eq('session_id', s.id);
     patch.leader_id = nextLeader(roles, s.leader_id, new Set((pres || []).map((x: any) => x.participant_id)));
   }
+  // المؤقت: يبدأ مع كل جملة تُعرض للإجابة، ويُمدَّد بطلب الخبير، ويُمحى خارج الجولة
+  const stage = patch.stage || s.stage;
+  const newSentence = !!patch.sentence_id && patch.sentence_id !== s.sentence_id;
+  if (Number(b.extend) > 0 && s.stage === 'round' && !patch.stage) {
+    patch.phase_ends_at = new Date(Math.max(Date.now(), s.phase_ends_at ? new Date(s.phase_ends_at).getTime() : 0) + answerSeconds(b.extend) * 1000).toISOString();
+  } else if (stage === 'round' && (patch.sentence_id || s.sentence_id) && (newSentence || s.stage !== 'round' || b.seconds)) {
+    patch.phase_ends_at = new Date(Date.now() + answerSeconds(b.seconds) * 1000).toISOString();
+  } else if (patch.stage && stage !== 'round') patch.phase_ends_at = null;
   const row = await bump(s.id, patch);
   await audit(a.actor || 'admin', a.email, 'hall.step', 'cohorts', s.cohort_id, null, { stage: row.stage, sentence: row.sentence_id, round: row.round });
   return adminState({ cohort_id: s.cohort_id });

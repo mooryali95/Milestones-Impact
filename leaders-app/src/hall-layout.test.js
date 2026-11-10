@@ -102,3 +102,39 @@ describe('طاولات القاعة', () => {
     expect(publicView({ ...v, revealed: true })).toMatchObject({ distribution: { true1: 3 } });
   });
 });
+
+// ── مؤقت الإجابة ──
+import { answersClosed, answerSeconds, clock, secondsLeft, HALL_GRACE_MS } from '../../supabase/functions/leaders-api/logic.js';
+
+describe('مؤقت القاعة', () => {
+  const end = '2026-11-10T10:01:30.000Z', t = new Date(end).getTime();
+  it('يعدّ إلى وقت الخادم ولا ينزل تحت الصفر، وبلا وقت نهاية لا مؤقت', () => {
+    expect(secondsLeft(end, t - 90000)).toBe(90);
+    expect(secondsLeft(end, t - 400)).toBe(1);
+    expect(secondsLeft(end, t + 5000)).toBe(0);
+    expect(secondsLeft(null, t)).toBeNull();
+    expect(clock(90)).toBe('1:30');
+    expect(clock(5)).toBe('0:05');
+  });
+  it('الإجابة تُقبل حتى مهلة بعد النهاية ثم تُقفل، وبلا مؤقت لا تُقفل', () => {
+    expect(answersClosed(end, t + HALL_GRACE_MS - 1)).toBe(false);
+    expect(answersClosed(end, t + HALL_GRACE_MS + 1)).toBe(true);
+    expect(answersClosed(null, t)).toBe(false);
+  });
+  it('مدة الإجابة 90 افتراضًا ومحصورة بين 20 و600', () => {
+    expect(answerSeconds(undefined)).toBe(90);
+    expect(answerSeconds(5)).toBe(20);
+    expect(answerSeconds(45)).toBe(45);
+    expect(answerSeconds(9999)).toBe(600);
+  });
+  it('الحالة تحمل وقت النهاية في الجولة قبل الكشف وحدها، وساعة الخادم دائمًا', () => {
+    const base = { id: 's', revealed: [], round: 1, version: 1, leader_id: null, persona_id: null, phase_ends_at: end };
+    const sentence = { id: 'x', key: 'true', question: 'why', text_ar: 'جملة', tasks: {} };
+    const args = { sentence, members: [], roles: {}, presence: [], answers: [], points: {}, viewer: { kind: 'participant', id: 'a' }, now: t - 1000 };
+    const v = hallView({ ...args, session: { ...base, stage: 'round' } });
+    expect(v.session.ends_at).toBe(end);
+    expect(v.now).toBe(new Date(t - 1000).toISOString());
+    expect(hallView({ ...args, session: { ...base, stage: 'reveal', revealed: ['x'] } }).session.ends_at).toBeNull();
+    expect(hallView({ ...args, session: { ...base, stage: 'train' } }).session.ends_at).toBeNull();
+  });
+});

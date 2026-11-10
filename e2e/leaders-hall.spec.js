@@ -97,3 +97,45 @@ test('الخبير: شاشة العرض آمنة قبل الكشف، وإعاد�
   await list.locator('.hall-row').first().click();
   await expect(region.locator('.hall-person')).toContainText('طاولة');
 });
+
+test('المشارك: مؤقت الجولة يعدّ من وقت الخادم، والإجابة تُؤكَّد، وما لم يصل يُعاد إرساله وحده', async ({ page }) => {
+  const srv = createMockServer();
+  Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
+  const sent = [];
+  let fail = true, answered = false;
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'katon.answer') {
+      sent.push(b);
+      if (fail) return route.fulfill({ status: 503, body: '' });
+      answered = true;
+      return route.fulfill({ json: { success: true } });
+    }
+    if (b.action !== 'hall.state') return route.fulfill({ json: srv.reply(b) });
+    const h = hall();
+    // ساعة الخادم متأخرة ساعة عن ساعة الجهاز: العدّ يتبع الخادم لا الجهاز
+    const now = Date.now() - 3600_000;
+    h.now = new Date(now).toISOString();
+    h.session.ends_at = new Date(now + 75_000).toISOString();
+    h.session.version = answered ? 4 : 3;
+    h.people.find((p) => p.id === 'p7').answered = answered;
+    if (answered) Object.assign(h.people.find((p) => p.id === 'p7'), { choice: 'false', confidence: 2 });
+    return route.fulfill({ json: { ...h, me: 'p7', inside: true } });
+  });
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 't'.repeat(40)); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP);
+  await page.locator('[data-tour="nav-hall"]').locator('visible=true').first().click();
+  const timer = page.getByRole('timer');
+  await expect(timer).toHaveText(/^1:1\d$/);
+  // الخادم مشغول: الإجابة تُحفظ ويُقال ذلك، ولا رسالة خطأ
+  await page.getByRole('radio', { name: 'خاطئة' }).click();
+  await page.getByRole('radio', { name: /واثق/ }).click();
+  const receipt = page.locator('.hall-receipt');
+  await expect(receipt).toContainText('محفوظة على جهازك');
+  // يعود الخادم: التحديث التالي يعيد الإرسال بلا ضغطة من المشارك
+  fail = false;
+  await expect(receipt).toContainText('استُلمت إجابتك', { timeout: 15_000 });
+  expect(sent.at(-1)).toMatchObject({ sentence_id: 'k1', verdict: 'false', confidence: 2 });
+  expect(await page.evaluate(() => localStorage.getItem('mi_leaders_hall_pending'))).toBeNull();
+});

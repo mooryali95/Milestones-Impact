@@ -9,8 +9,11 @@ import { ErrorBox } from '../ui.jsx';
 import { pollPeriod } from '../hallPoll.js';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
+import { useHallTimer, timerLabel } from '../../../shared/hall/HallTimer.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 import PeerRequests from './PeerRequests.jsx';
+
+const PENDING_KEY = 'mi_leaders_hall_pending';
 
 // قاعة نموذجية للمعاينة فقط (لا تتصل بالخادم): جولة بفرقها الأربعة وقائدها وشخصيتها الافتراضية
 const PREVIEW_NAMES = ['سارة', 'خالد', 'نورة', 'فهد', 'ريم', 'عبدالله', 'هند', 'ماجد', 'لمى', 'سلطان', 'أمل', 'تركي'];
@@ -28,22 +31,40 @@ export default function Hall({ onBack }) {
   const [err, setErr] = useState('');
   const [ask, setAsk] = useState(null);   // اليد المرفوعة أو ملاحظة الجملة تصير طلب توجيه (المرحلة 8)
   const ver = useRef(0);
+  // الإجابة لا تضيع: ما تعذّر إرساله (شبكة أو خادم مشغول) يُحفظ على الجهاز ويُعاد مع كل تحديث حتى يُستلم
+  const [receipt, setReceipt] = useState(null);   // { sentence_id, state: 'sent' | 'pending' }
+  const pending = useRef(null);
+  const send = useCallback(async (payload) => {
+    const r = await call('katon.answer', payload);
+    if (r.success) { pending.current = null; try { localStorage.removeItem(PENDING_KEY); } catch { /* وضع خاص */ } setReceipt({ sentence_id: payload.sentence_id, state: 'sent' }); return r; }
+    if (r.code === 'network' || r.code === 'busy') {
+      pending.current = payload; try { localStorage.setItem(PENDING_KEY, JSON.stringify(payload)); } catch { /* وضع خاص */ }
+      setReceipt({ sentence_id: payload.sentence_id, state: 'pending' });
+    } else { pending.current = null; try { localStorage.removeItem(PENDING_KEY); } catch { /* وضع خاص */ } setReceipt(null); }
+    return r;
+  }, []);
+  useEffect(() => { try { pending.current = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch { pending.current = null; } }, []);
   const load = useCallback(async (force) => {
     const r = await call('hall.state', { since: force ? 0 : ver.current });
     if (!r.success) { setErr(r.message); return; }
+    if (pending.current) {
+      const sent = await send(pending.current);
+      if (sent.success) { const again = await call('hall.state', { since: 0 }); if (again.success && !again.unchanged) { ver.current = again.session?.version || 0; setV(again); } return; }
+    }
     if (r.unchanged) return;
     ver.current = r.session?.version || 0;
     setV(r);
-  }, []);
+  }, [send]);
   const period = pollPeriod(v);
+  const left = useHallTimer(v);
   useEffect(() => { load(true); }, [load]);
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) load(); }, period); return () => clearInterval(t); }, [load, period]);
 
   const act = async (action, body) => {
     setBusy(true); setErr('');
-    const r = await call(action, body);
+    const r = action === 'katon.answer' ? await send(body) : await call(action, body);
     setBusy(false);
-    if (!r.success) { setErr(r.message); return; }
+    if (!r.success) { if (!(action === 'katon.answer' && pending.current)) setErr(r.message); return; }
     if (action === 'katon.answer') { load(true); return; }
     ver.current = r.session?.version || 0; setV(r);
   };
@@ -67,7 +88,8 @@ export default function Hall({ onBack }) {
   const me = v.people.find((p) => p.id === v.me);
   const s = v.sentence, st = v.session.stage;
   const live = v.session.mode === 'live';
-  const canAnswer = s && !v.revealed && (st === 'round' || !live);
+  const timeUp = live && left === 0;
+  const canAnswer = s && !v.revealed && (st === 'round' || !live) && !timeUp;
 
   return (
     <div className="page wide stack hall-page" data-tour="hall">
@@ -113,7 +135,10 @@ export default function Hall({ onBack }) {
 
           {s && (st === 'round' || st === 'reveal' || !live) && (
             <section className="card stack">
-              <span className="chip">{Q_AR[s.question]}</span>
+              <div className="row between">
+                <span className="chip">{Q_AR[s.question]}</span>
+                {left != null && !v.revealed && <b className={`hall-clock${left <= 10 ? ' soon' : ''}${left === 0 ? ' over' : ''}`} role="timer" aria-label={left > 0 ? `بقي ${left} ثانية للإجابة` : 'انتهى وقت الإجابة'}>{timerLabel(left)}</b>}
+              </div>
               <p className="kt-text">{s.text_ar}</p>
               {/* حكم بثقة مدرَّجة ووسوم موقف (CBM الثلاثي)؛ me.choice هو الحكم وme.confidence درجته */}
               <KatonAnswer compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
@@ -122,6 +147,11 @@ export default function Hall({ onBack }) {
                 <div className="banner"><span className="ico">{me?.points > 0 ? '✓' : '•'}</span>
                   <div className="grow">المفتاح: <b>{s.key === 'true' ? 'صحيحة' : s.key === 'false' ? 'خاطئة' : 'رأي'}</b>{me?.points != null ? ` · نقاطك ${me.points > 0 ? '+' : ''}${me.points}` : ''}{s.explain_ar ? `. ${s.explain_ar}` : ''}</div></div>
               )}
+              <p className="hall-receipt" role="status" aria-live="polite">
+                {!v.revealed && receipt?.sentence_id === s.id && receipt.state === 'pending' ? <span className="warn">لم تصل إجابتك بعد. محفوظة على جهازك ونعيد إرسالها تلقائيًا.</span>
+                  : !v.revealed && me?.answered ? <span className="ok">✓ استُلمت إجابتك. تستطيع تعديلها حتى ينتهي الوقت.</span>
+                    : timeUp && !v.revealed ? <span className="muted">انتهى وقت الإجابة. بانتظار كشف المفتاح.</span> : null}
+              </p>
               {!v.revealed && <p className="small muted">أجاب {v.answered} من {v.total}. اختيارات زملائك تظهر بعد الكشف.</p>}
             </section>
           )}
@@ -132,7 +162,7 @@ export default function Hall({ onBack }) {
       {v.inside && (ask || !live) && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
       <details className="hall-mini" open={!v.inside}>
         <summary>منظور القاعة</summary>
-        <HallView view={v} me={v.me} compact />
+        <HallView view={v} me={v.me} compact timer={timerLabel(left)} />
       </details>
     </div>
   );

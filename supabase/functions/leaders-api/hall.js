@@ -17,6 +17,18 @@ export const HALL_TEAM_TASK_AR = {
 export const HALL_STAGE_AR = { enter: 'الدخول', train: 'التدريب', split: 'التقسيم', round: 'الجولة', reveal: 'الكشف', closed: 'أُغلقت' };
 export const HALL_SPLIT_AR = { mixed: 'آلي متنوع المستويات', level: 'آلي متقارب المستوى', choose: 'يختار كل مشارك فريقه', manual: 'يدوي من الخبير' };
 export const HALL_PRESENT_SECONDS = 25;
+// مؤقت الإجابة: وقت نهايته في الخادم (hall_sessions.phase_ends_at)، والأجهزة تعدّ إليه بفرق ساعتها عن ساعة الخادم.
+// الإجابة تُقبل حتى HALL_GRACE_MS بعد النهاية (إجابة أُرسلت في الثانية الأخيرة لا تضيع)، ثم تُقفل حتى يمدّد الخبير أو يكشف.
+export const HALL_ANSWER_SECONDS = 90;
+export const HALL_ANSWER_MIN = 20;
+export const HALL_ANSWER_MAX = 600;
+export const HALL_GRACE_MS = 3000;
+export const answerSeconds = (v) => Math.min(HALL_ANSWER_MAX, Math.max(HALL_ANSWER_MIN, Math.round(Number(v)) || HALL_ANSWER_SECONDS));
+/** الثواني الباقية (صفر فما فوق) أو null حين لا مؤقت؛ now ساعة الخادم بالميلي ثانية @param {string|null|undefined} endsAt @param {number} now */
+export const secondsLeft = (endsAt, now) => (endsAt ? Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000)) : null);
+/** @param {string|null|undefined} endsAt @param {number} now */
+export const answersClosed = (endsAt, now) => !!endsAt && now > new Date(endsAt).getTime() + HALL_GRACE_MS;
+export const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
 // تقسيم على الفرق الأربع: القيادة أصغرها (ربع حجم غيرها تقريبًا، ولا تقل عن واحد)
 export function splitTeams(members, method = 'mixed') {
@@ -135,12 +147,13 @@ export function hallView({ session, sentence, members, roles, tables = {}, prese
     session: {
       id: session.id, mode: session.mode, stage: session.stage, round: session.round, version: session.version,
       split_method: session.split_method, persona_ar: session.persona_ar, code: isAdmin ? session.code : undefined,
+      ends_at: session.stage === 'round' && !revealed ? session.phase_ends_at || null : null,
     },
     sentence: sentence ? {
       id: sentence.id, sort: sentence.sort, question: sentence.question, text_ar: sentence.text_ar, tasks: sentence.tasks || {},
       ...(revealed ? { key: sentence.key, explain_ar: sentence.explain_ar } : {}),
     } : null,
-    revealed,
+    revealed, now: new Date(now).toISOString(),
     people, teams,
     tables: [...new Set(people.map((p) => p.table).filter(Boolean))].sort((x, y) => x - y).map((no) => {
       const ps = people.filter((p) => p.table === no);
