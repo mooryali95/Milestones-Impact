@@ -53,8 +53,8 @@ export const STAGES = [
   {
     id: 3, title: 'صدق المحتوى', gain: 0.6,
     checks: [
-      { id: 'm3.labs-coverage', title: 'لكل باب من الأبواب الـ27 مختبر واحد على الأقل', kind: 'auto' },
-      { id: 'm3.baseline-coverage', title: 'لكل باب فقرة في أداة القياس المبدئي المفعّلة', kind: 'auto' },
+      { id: 'm3.labs-coverage', title: 'لكل باب تعليمي من الأبواب الـ18 مختبر واحد على الأقل', kind: 'auto' },
+      { id: 'm3.baseline-coverage', title: 'لكل باب تعليمي فقرة في أداة القياس المبدئي المفعّلة', kind: 'auto' },
       { id: 'm3.foundation-access', title: 'لا فقرة قياس للتأسيسي على باب محجوب عنه', kind: 'auto' },
       { id: 'm3.public-sector', title: 'لا «مانح» في متن إطار الأثر (تسييق القطاع العام)', kind: 'auto' },
       { id: 'm3.concepts', title: 'سجل المفاهيم يجتاز حارسه', kind: 'auto' },
@@ -85,6 +85,10 @@ export const STAGES = [
 ];
 
 // ما لا قيمة افتراضية له: مفتاح التوقيع (لا شهادة بدونه)، وقناة التنبيه (لا إنذار بغير البريد). البقية لها افتراضي آمن في docs/SECRETS.md
+// الأبواب التعليمية: ستة لكل إطار (ch1 إلى ch6). المقدمة وباب المختبرات والخاتمة أبواب هيكلية لا تدرّس مفهومًا يُقاس،
+// فاستُثنيت من شرطي المختبر والفقرة بقرار المالك في 2026-11-10 (القرار 5 في خطة الوصول إلى 90% v2)
+export const TEACHING_CHAPTERS = 18;
+
 export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'];
 
 // الحكم على نقطة: pass أو fail أو unknown (تعذّر الفحص)، مع سبب بجملة
@@ -254,12 +258,12 @@ export async function collect() {
       return { ok: !missing.length, reason: missing.length ? `بلا إصدار: ${missing.map((r) => r.name).join('، ')}` : 'كل دفعة جارية بإصدار مثبّت' };
     });
   await q('m3.labs-coverage', `select count(*) total, count(*) filter (where exists (select 1 from leaders.lab_items l where l.active and l.dimension = m.dimension and l.chapter_key = m.chapter_key)) covered
-      from (select distinct dimension, chapter_key from leaders.handbook_modules) m`,
-    ([r]) => ({ ok: +r.total >= 27 && +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا لها مختبر` }));
+      from (select distinct dimension, chapter_key from leaders.handbook_modules where chapter_key ~ '^ch[0-9]+$') m`,
+    ([r]) => ({ ok: +r.total >= TEACHING_CHAPTERS && +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا تعليميًا لها مختبر` }));
   await q('m3.baseline-coverage', `select count(*) total, count(*) filter (where exists (select 1 from leaders.questions q join leaders.instruments i on i.id = q.instrument_id
       where i.kind = 'baseline' and i.active and q.active and q.dimension = m.dimension and q.chapter_key = m.chapter_key)) covered
-      from (select distinct dimension, chapter_key from leaders.handbook_modules) m`,
-    ([r]) => ({ ok: +r.total >= 27 && +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا لها فقرة مبدئية` }));
+      from (select distinct dimension, chapter_key from leaders.handbook_modules where chapter_key ~ '^ch[0-9]+$') m`,
+    ([r]) => ({ ok: +r.total >= TEACHING_CHAPTERS && +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا تعليميًا لها فقرة مبدئية` }));
   await q('m3.foundation-access', `select distinct q.code from leaders.questions q join leaders.instruments i on i.id = q.instrument_id
       join leaders.handbook_modules m on m.dimension = q.dimension and m.chapter_key = q.chapter_key
       where i.active and q.active and coalesce(q.min_level, 'beginner') = 'beginner' and coalesce(m.min_level, 'beginner') <> 'beginner'`,
