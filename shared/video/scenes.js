@@ -20,15 +20,15 @@ export const VIDEO = {
 // والرحلة). intro-p1 النسخة الصامتة بصيغة المخاطب تبقى للرجوع. الجولة الكاملة VIDEO أعلاه تبقى لصفحة البرنامج حتى يُنقل رابطها
 // بعد تأكيد فرع mi-home، وللعروض.
 export const PARTICIPANT_VIDEO = {
-  file: 'intro-p4',
-  seconds: 155,
+  file: 'intro-p5',
+  seconds: 168,
   fps: 24,
   width: 1280,
   height: 720,
   maxBytes: 24 * 1024 * 1024,
   label: 'شاهد كيف تسير رحلتك',
-  duration_ar: 'دقيقتان ونصف',
-  in_ar: 'في دقيقتين ونصف',
+  duration_ar: 'ثلاث دقائق',
+  in_ar: 'في ثلاث دقائق',
   title: 'كيف تسير رحلتك في برنامج القادة',
 };
 
