@@ -9,7 +9,7 @@ import { L, LVL } from '../leaders.js';
 import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
 import Form from '../Form.jsx';
 import { CertOverride } from '../cert.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
 import CohortGroups from './Groups.jsx';
 import { FinalConfig } from './FinalEval.jsx';
@@ -162,6 +162,7 @@ export default function Programs({ canWrite, onEditJourney }) {
         <table className="data-table">
           <thead><tr><th>الدفعة</th><th>الجهة</th><th>البرنامج</th><th>النسخة</th><th>المدة</th><th>الحالة</th><th>المسجلون</th><th /></tr></thead>
           <tbody>
+            {!d.cohorts.length && <tr><td colSpan={8}><Empty compact title="لا دفعات بعد" hint="الدفعة تجمع مشاركي جهة في برنامج بمواعيده ومستشاره. بلا دفعة لا قاعة حية ولا جلسات.">{canWrite && <button className="btn-sm primary" type="button" onClick={() => editCohort()}>+ دفعة جديدة</button>}</Empty></td></tr>}
             {d.cohorts.map((c) => {
               const v = versionOf(c), latest = latestOf(c.program_id);
               return (

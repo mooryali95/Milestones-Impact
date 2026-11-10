@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { useUI, Spinner } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
 
@@ -174,7 +174,7 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
         <div className="la-row cps-filter">{FILTERS.map(([k, l]) => <button key={k} className={status === k ? 'on' : ''} onClick={() => { setList(null); setStatus(k); }}>{l}</button>)}</div>
       </div>
       <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتيب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
-      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !list.capstones.length ? <p className="la-muted">لا وثائق في هذه الحالة.</p> : (
+      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !list.capstones.length ? <Empty compact title="لا وثائق في هذه الحالة" hint="غيّر الحالة من الأعلى لترى ما هو قيد البناء أو المعتمد." /> : (
         <table className="la-table">
           <thead><tr><th>المبادرة</th><th>القائد</th><th>الجهة</th><th>النوع</th><th>الحالة</th><th>الجاهزية</th><th>المعيار</th><th>سُلّمت</th></tr></thead>
           <tbody>{list.capstones.map((x) => (

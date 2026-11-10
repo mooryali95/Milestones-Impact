@@ -733,3 +733,9 @@
 .hall-pick-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .hall-pick-list button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; font-weight: 600; color: var(--ink); cursor: pointer; }
 .hall-pick-list button:hover { border-color: var(--petrol-s); background: var(--sand-light); }
+/* الحالة الفارغة الموحدة (ui.jsx: Empty) */
+.la-blank { text-align: center; padding: 48px 24px; display: grid; gap: 8px; justify-items: center; }
+.la-blank.compact { padding: 24px 16px; }
+.la-blank b { font-size: 1rem; color: var(--ink); }
+.la-blank p { margin: 0; max-width: 56ch; color: var(--ink-soft); font-size: .88rem; }
+.la-blank-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }

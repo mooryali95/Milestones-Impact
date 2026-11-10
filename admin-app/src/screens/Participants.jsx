@@ -8,7 +8,7 @@ import Form from '../Form.jsx';
 import {
   date, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useUI, Empty } from '../ui.jsx';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { Submission } from './Handbook.jsx';
@@ -146,7 +146,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         <tbody>
           {!list ? <tr className="loading-row"><td colSpan={9}><Spinner /></td></tr>
             : error ? <tr><td colSpan={9}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
-              : !shown.length ? <tr><td colSpan={9} className="la-empty">{all.length ? 'لا نتائج لهذه الفلاتر. جرّب مسحها.' : 'لا مشاركين بعد'}</td></tr>
+              : !shown.length ? <tr><td colSpan={9}>{all.length ? <Empty compact title="لا نتائج لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
                 : shown.map((p) => {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);

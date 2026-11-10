@@ -15,7 +15,8 @@ describe('وسائط تطبيق القادة لا يتغير اسم منشور �
       expect(Object.keys(files).length, dir).toBeGreaterThan(0);
       expect(compare(m, files), dir).toEqual({ changed: [], unknown: [] });
     }
-  });
+  // يحسب بصمات نحو 280 ميغابايت (المصدر والمبني): المهلة الافتراضية 5 ثوانٍ كانت تُتجاوز حين تعمل الاختبارات كلها معًا
+  }, 60_000);
   it('المقارنة تميّز الاسم المعدَّل من الجديد، والبيان ببصمات sha256', () => {
     expect(compare({ files: { a: 'h1', b: 'h2' } }, { a: 'h1', b: 'x', c: 'h3' })).toEqual({ changed: ['b'], unknown: ['c'] });
     expect(Object.values(m.files).every((h) => /^[0-9a-f]{64}$/.test(h))).toBe(true);

@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { L, DIM, LVL } from '../leaders.js';
 import Form from '../Form.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useUI } from '../ui.jsx';
 
 import { KINDS } from '../../../supabase/functions/leaders-api/lab.js';
 const KIND = KINDS;
@@ -79,7 +79,7 @@ function Items({ data, reload, canWrite }) {
       <h3>الأدوات والمواقف ({data.items.length})</h3>
       <table className="la-table">
         <thead><tr><th>الأداة</th><th>تظهر</th><th>جرّبها</th><th>متوسط أفضل نتيجة</th><th>أتقنها ({data.mastery}%)</th><th>مفعّلة</th></tr></thead>
-        <tbody>{data.items.map((it) => (
+        <tbody>{!data.items.length && <tr><td colSpan={6}><Empty compact title="لا أدوات في المختبر بعد" hint="تظهر هنا أدوات العمل ومواقف المحاكاة بعد إضافتها إلى المحتوى، مع من جرّبها ومن أتقنها." /></td></tr>}{data.items.map((it) => (
           <tr key={it.id} className={it.active ? '' : 'off'}>
             <td><b>{it.title_ar}</b><br /><small className="la-muted">{KIND[it.kind]} · {DIM[it.dimension]} · من مستوى {LVL[it.min_level]} · {it.minutes} دقيقة · {it.points} نقطة</small></td>
             <td>
