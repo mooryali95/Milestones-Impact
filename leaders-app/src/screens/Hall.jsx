@@ -7,7 +7,8 @@ import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
 import { pollPeriod } from '../hallPoll.js';
-import HallView, { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
+import HallTeams from '../../../shared/hall/HallTeams.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 import PeerRequests from './PeerRequests.jsx';
@@ -58,7 +59,7 @@ export default function Hall({ onBack }) {
         <section className="card stack hall-preview" data-tour="hall" aria-label="معاينة القاعة">
           <div><p className="eyebrow">معاينة</p><h2 className="as-h3">هكذا تبدو القاعة حين تُفتح</h2>
             <p className="muted small">بعد التدريب يُقسَّم الحضور إلى أربعة فرق: الدعم والقيادة والتوجيه والتقييم، ولكل جولة قائد يتبدّل (التاج)، وشخصية افتراضية كراعي المشروع. ترفع يدك من جوالك، ولا تظهر اختيارات زملائك قبل الكشف.</p></div>
-          <HallView view={PREVIEW} compact />
+          <HallTeams view={PREVIEW} />
         </section>
         <button className="btn ghost" onClick={onBack}>رحلتي</button>
       </div>
@@ -127,8 +128,8 @@ export default function Hall({ onBack }) {
       {/* سجل النشاط: طلبات التوجيه في الدفعة؛ في المسار الذاتي دائمًا، وفي الحية حين يُرفع طلب */}
       {v.inside && (ask || !live) && <PeerRequests preset={ask} onDone={() => setAsk(null)} />}
       <details className="hall-mini" open={!v.inside}>
-        <summary>منظور القاعة</summary>
-        <HallView view={v} me={v.me} compact />
+        <summary>الفرق والحضور</summary>
+        <HallTeams view={v} me={v.me} />
       </details>
     </div>
   );

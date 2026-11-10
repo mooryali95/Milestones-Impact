@@ -21,6 +21,26 @@ const DIST = [
 const Q_AR = { why: 'لماذا', what: 'ماذا', how: 'كيف', absent: 'ماذا لو', who: 'من', when: 'متى' };
 const TABLES = { lead: { x: 800, y: 395, rx: 120, ry: 42 }, support: { x: 470, y: 570, rx: 150, ry: 52 }, guide: { x: 1130, y: 570, rx: 150, ry: 52 }, eval: { x: 800, y: 740, rx: 170, ry: 58 }, persona: { x: 1250, y: 330, rx: 70, ry: 26 } };
 const R = 22;
+const ARC_MAX = 5;
+// محيط القطع الناقص تقريبًا (Ramanujan)، ونصف قطر مقعد يترك فراغًا بين الجارين
+const perimeter = (a, b) => Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+// n نقطة على القطع الناقص بمسافات قوسية متساوية (الزوايا المتساوية تزحم المقاعد عند طرفيه لأنه مفلطح)، من أعلاه
+const RINGS = new Map();
+function ringPoints(n, rx, ry) {
+  const key = `${n}:${rx}:${ry}`;
+  if (RINGS.has(key)) return RINGS.get(key);
+  const STEPS = 720, pts = [], acc = [0];
+  for (let i = 0; i <= STEPS; i++) { const a = (2 * Math.PI * i) / STEPS - Math.PI / 2; pts.push({ x: Math.cos(a) * rx, y: Math.sin(a) * ry }); }
+  for (let i = 1; i <= STEPS; i++) acc.push(acc[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const out = []; let j = 0;
+  for (let k = 0; k < n; k++) { const target = (acc[STEPS] * (k + 0.5)) / n; while (acc[j] < target) j += 1; out.push(pts[j]); }
+  RINGS.set(key, out);
+  return out;
+}
+export const seatRadius = (n, rx, ry) => Math.max(11, Math.min(R, perimeter(rx, ry) / n / 2.25));
+
+// خط الشاشة يتبع طول الجملة: القصيرة أكبر، والطويلة تبقى في سطورها الثلاثة
+const screenFont = (stage, s) => { const n = stage === 'round' || stage === 'reveal' ? (s?.text_ar || '').length : 40; return n <= 90 ? 30 : n <= 160 ? 26 : n <= 230 ? 22 : 19; };
 
 function gridLines() {
   const out = [];
@@ -34,18 +54,36 @@ const GRID = gridLines();
 function layout(people, stage) {
   const atTables = ['split', 'round', 'reveal'].includes(stage);
   const pos = {};
-  people.forEach((p, i) => {
-    if (stage === 'enter' || (!atTables && !p.joined)) { pos[p.id] = { x: 1475 - (i % 4) * 30, y: 760 - Math.floor(i / 4) * 0 }; return; }
-    if (!atTables || (!p.team && !p.persona)) {
-      const row = Math.floor(i / 7), col = i % 7; const y = 430 + row * 110; const t = (y - 250) / 630; const w = 760 + 300 * t;
-      pos[p.id] = { x: 800 - w / 2 + col * (w / 6), y }; return;
+  // أمام المنصة (الدخول والتدريب): صفوف تتسع لكل الحاضرين داخل الأرضية، والدائرة تصغر مع العدد
+  const floor = people.filter((p) => !atTables && p.joined);
+  const cols = Math.max(7, Math.ceil(floor.length / 5)), rows = Math.max(1, Math.ceil(floor.length / cols));
+  const gap = Math.min(110, 420 / rows);
+  const loose = people.filter((p) => atTables && !p.team && !p.persona);
+  const waiting = people.filter((p) => !atTables && !p.joined);
+  people.forEach((p) => {
+    // من لم يدخل بعد: عند الباب في صفوف صغيرة
+    if (!atTables && !p.joined) { const i = waiting.indexOf(p); pos[p.id] = { x: 1500 - (i % 4) * 24, y: 690 - Math.floor(i / 4) * 24, r: 11 }; return; }
+    if (!atTables) {
+      const i = floor.indexOf(p), row = Math.floor(i / cols), col = i % cols; const y = 400 + row * gap; const t = (y - 250) / 630; const w = 760 + 300 * t;
+      pos[p.id] = { x: 800 - w / 2 + (cols > 1 ? col * (w / (cols - 1)) : w / 2), y, r: Math.max(11, Math.min(R, w / cols / 2.4, gap / 2.4)) }; return;
     }
+    // بلا فريق بعد التقسيم: صف على حافة الأرضية الأمامية، لا فوق الطاولات
+    if (!p.team && !p.persona) { const i = loose.indexOf(p); pos[p.id] = { x: 130 + (i % 12) * 42, y: 850 - Math.floor(i / 12) * 40, r: 16 }; return; }
     const team = p.persona ? 'persona' : p.team;
     const mates = people.filter((q) => (q.persona ? 'persona' : q.team) === team);
     const k = mates.indexOf(p), n = mates.length, t = TABLES[team];
-    if (team === 'persona') { pos[p.id] = { x: t.x, y: t.y - 18 }; return; }
-    const a = Math.PI * (0.12 + 0.76 * (k + 0.5) / n);
-    pos[p.id] = { x: t.x + Math.cos(Math.PI - a) * (t.rx + 12), y: t.y - Math.sin(a) * (t.ry + 30) };
+    if (team === 'persona') { pos[p.id] = { x: t.x, y: t.y - 18, r: R }; return; }
+    // حتى خمسة: قوس خلف الطاولة كما في النموذج. فوقها: حلقة حول الطاولة كلها، ونصف قطر الدائرة يصغر
+    // حتى لا تتراكب (14 في الفريق عند 50 مشاركًا كانت تتراكب فلا يُقرأ حرف ولا علامة إجابة)
+    if (n <= ARC_MAX) {
+      const a = Math.PI * (0.12 + 0.76 * (k + 0.5) / n);
+      pos[p.id] = { x: t.x + Math.cos(Math.PI - a) * (t.rx + 12), y: t.y - Math.sin(a) * (t.ry + 30), r: R };
+      return;
+    }
+    const rx = t.rx + 34, ry = t.ry + 36;
+    const r = seatRadius(n, rx, ry);
+    const at = ringPoints(n, rx, ry)[k];
+    pos[p.id] = { x: t.x + at.x, y: t.y + at.y, r };
   });
   return pos;
 }
@@ -56,6 +94,8 @@ function personLabel(p, team) {
   return [p.name, team && TEAM_AR[team], p.leader && 'قائد الجولة', p.choice && `حكمه: ${OPT_AR[p.choice]}`,
     !p.present && (p.joined ? 'خارج القاعة الآن' : 'لم يدخل القاعة بعد')].filter(Boolean).join('، ');
 }
+
+export { layout as hallLayout };
 
 export default function HallView({ view, me = null, onPerson, compact = false }) {
   const [tip, setTip] = useState(null);
@@ -81,59 +121,69 @@ export default function HallView({ view, me = null, onPerson, compact = false })
         <polygon points="250,250 1350,250 1560,880 40,880" fill="url(#hvSpot)" />
 
         <g opacity={view?.session?.mode === 'self' ? 0.4 : 1}>
-          <rect x="470" y="34" width="660" height="190" rx="14" fill="url(#hvScreen)" stroke="#c79a4b" strokeOpacity=".55" />
-          <text x="1100" y="68" textAnchor="start" direction="rtl" fill="#c79a4b" fontSize="17">
+          <rect x="330" y="20" width="940" height="212" rx="14" fill="url(#hvScreen)" stroke="#c79a4b" strokeOpacity=".55" />
+          <text x="1240" y="54" textAnchor="start" direction="rtl" fill="#c79a4b" fontSize="22">
             {view?.topic?.title_ar ? `${view.topic.title_ar} · الجولة ${view.session.round}${s ? ` · ${Q_AR[s.question] || ''}` : ''}` : 'القاعة'}
           </text>
-          <foreignObject x="500" y="80" width="600" height="100">
-            <div xmlns="http://www.w3.org/1999/xhtml" style={{ color: '#f3ead9', font: `500 ${compact ? 24 : 21}px/1.6 'IBM Plex Sans Arabic',sans-serif`, direction: 'rtl', textAlign: 'right' }}>
+          <foreignObject x="360" y="64" width="880" height="118">
+            <div xmlns="http://www.w3.org/1999/xhtml" style={{ color: '#f3ead9', font: `500 ${screenFont(stage, s)}px/1.5 'IBM Plex Sans Arabic',sans-serif`, direction: 'rtl', textAlign: 'right', maxHeight: 118, overflow: 'hidden' }}>
               {stage === 'enter' ? `أهلًا بكم. ادخلوا القاعة من التطبيق${view?.session?.code ? ` برمز ${view.session.code}` : ''}`
                 : stage === 'train' ? 'التدريب: الجميع أمام المنصة'
                   : s ? s.text_ar : 'اختر جملة لتبدأ الجولة'}
             </div>
           </foreignObject>
-          {dist && atTables && s && DIST.map(([k, of], i) => {
-            const x = 1096 - i * 68, y = 186, hit = view.revealed && s.key === k, miss = view.revealed && (k === 'true' || k === 'false') && s.key !== k;
-            return (
-              <g key={k}><rect x={x - 31} y={y} width="62" height="30" rx="8" fill={hit ? '#2c5a43' : miss ? '#5a2e2a' : '#1a3139'} stroke="#2a4651" />
-                <text x={x} y={y + 20} textAnchor="middle" fontSize="13" fill="#f3ead9">{GLYPH[k]} {of(dist)}<title>{OPT_AR[k]}</title></text></g>
-            );
-          })}
+          {dist && atTables && s && (() => {
+            // الأحكام الثلاثة دائمًا، ووسوم الموقف التي اختارها أحد فقط؛ كل خانة باسمها لا برمز وحده
+            const chips = DIST.map(([k, of]) => [k, of(dist)]).filter(([k, n]) => ['true', 'false', 'none'].includes(k) || n > 0);
+            const w = Math.min(150, 880 / chips.length - 8);
+            return chips.map(([k, n], i) => {
+              const x = 1240 - w / 2 - i * (w + 8), y = 188, hit = view.revealed && s.key === k, miss = view.revealed && (k === 'true' || k === 'false') && s.key !== k;
+              return (
+                <g key={k}><rect x={x - w / 2} y={y} width={w} height="34" rx="9" fill={hit ? '#2c5a43' : miss ? '#5a2e2a' : '#1a3139'} stroke="#2a4651" />
+                  <text x={x} y={y + 23} textAnchor="middle" fontSize={w < 110 ? 13 : 16} fill="#f3ead9">{OPT_AR[k]} <tspan fontWeight="700" fill="#e6c78d">{n}</tspan></text></g>
+              );
+            });
+          })()}
           <path d="M560,236 L1040,236 L1080,262 L520,262 Z" fill="#203a43" stroke="#2a4651" />
-          <text x="800" y="255" textAnchor="middle" fill="#93a8ad" fontSize="13">منصة المدرّب{view ? ` · أجاب ${view.answered} من ${view.total}` : ''}</text>
+          <text x="800" y="256" textAnchor="middle" fill="#c5d2d5" fontSize="16">منصة المدرّب{view ? ` · أجاب ${view.answered} من ${view.total}` : ''}</text>
         </g>
 
         {Object.entries(TABLES).map(([k, t]) => (
           <g key={k} opacity={atTables ? 1 : 0} style={{ transition: 'opacity .6s' }}>
             <ellipse cx={t.x} cy={t.y + 10} rx={t.rx} ry={t.ry} fill="#0b171c" opacity=".6" />
             <ellipse cx={t.x} cy={t.y} rx={t.rx} ry={t.ry} fill="#1d3640" stroke={TEAM_COLOR[k]} strokeWidth="2" />
-            <text x={t.x} y={k === 'persona' ? t.y + t.ry + 20 : t.y + 6} textAnchor="middle" fill={TEAM_COLOR[k]} fontSize={k === 'persona' ? 14 : 18}>{TEAM_AR[k]}</text>
-            {k !== 'persona' && view?.teams?.[k]?.score != null && <text x={t.x} y={t.y + t.ry + 26} textAnchor="middle" fill="#93a8ad" fontSize="14">رصيد الفريق {view.teams[k].score > 0 ? '+' : ''}{view.teams[k].score}</text>}
-            {k !== 'persona' && stage === 'round' && s?.tasks?.[k] && <text x={t.x} y={t.y + t.ry + 26} textAnchor="middle" fill="#93a8ad" fontSize="13">{s.tasks[k]}</text>}
+            <text x={t.x} y={k === 'persona' ? t.y + t.ry + 22 : t.y + (view?.teams?.[k]?.score != null || (stage === 'round' && s?.tasks?.[k]) ? -2 : 7)} textAnchor="middle" fill={TEAM_COLOR[k]} fontSize={k === 'persona' ? 16 : 22} fontWeight="600">{TEAM_AR[k]}</text>
+            {k !== 'persona' && view?.teams?.[k]?.score != null && <text x={t.x} y={t.y + 22} textAnchor="middle" fill="#c5d2d5" fontSize="16">رصيد الفريق {view.teams[k].score > 0 ? '+' : ''}{view.teams[k].score}</text>}
+            {k !== 'persona' && stage === 'round' && s?.tasks?.[k] && (
+              <foreignObject x={t.x - t.rx + 22} y={t.y + 4} width={(t.rx - 22) * 2} height={t.ry - 6}>
+                <div xmlns="http://www.w3.org/1999/xhtml" style={{ color: '#c5d2d5', font: "400 14px/1.35 'IBM Plex Sans Arabic',sans-serif", direction: 'rtl', textAlign: 'center', overflow: 'hidden', maxHeight: t.ry - 6 }}>{s.tasks[k]}</div>
+              </foreignObject>
+            )}
           </g>
         ))}
-        {stage === 'enter' && <g><rect x="1430" y="700" width="90" height="150" rx="6" fill="#0f2128" stroke="#2a4651" /><text x="1475" y="870" textAnchor="middle" fill="#93a8ad" fontSize="13">باب القاعة</text></g>}
+        {!atTables && <g><rect x="1405" y="560" width="120" height="290" rx="6" fill="#0f2128" stroke="#2a4651" /><text x="1465" y="872" textAnchor="middle" fill="#c5d2d5" fontSize="16">لم يدخلوا بعد</text></g>}
 
         {people.map((p) => {
           const at = pos[p.id] || { x: 1475, y: 760 };
+          const r = at.r || R, k = r / R;
           const team = p.persona ? 'persona' : p.team;
           const col = atTables && team ? TEAM_COLOR[team] : '#93a8ad';
           const mine = me && p.id === me;
           return (
             <g key={p.id} tabIndex={0} role={onPerson ? 'button' : 'img'} aria-label={personLabel(p, team)}
-              style={{ transform: `translate(${at.x}px,${at.y}px)`, transition: 'transform .9s cubic-bezier(.6,.05,.25,1)', cursor: onPerson ? 'pointer' : 'default', opacity: p.present || stage === 'enter' ? 1 : 0.45 }}
+              style={{ transform: `translate(${at.x}px,${at.y}px)`, transition: 'transform .9s cubic-bezier(.6,.05,.25,1)', cursor: onPerson ? 'pointer' : 'default', opacity: p.present || (stage === 'enter' && !p.joined) ? 1 : 0.45 }}
               onMouseEnter={() => setTip({ p, at })} onMouseLeave={() => setTip(null)} onFocus={() => setTip({ p, at })} onBlur={() => setTip(null)}
               onClick={() => onPerson?.(p)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPerson?.(p); } }}>
-              {mine && <circle r={R + 7} fill="none" stroke="#e6c78d" strokeWidth="2" strokeDasharray="4 4" />}
-              <circle r={R} fill={atTables && team ? `${col}55` : '#28434d'} stroke={col} strokeWidth="1.5" />
-              <text y="6" textAnchor="middle" fill="#f3ead9" fontSize="16" fontWeight="600">{p.name.charAt(0)}</text>
-              {p.leader && atTables && <text y={-R - 8} textAnchor="middle" fontSize="20" fill="#e6c78d">♔</text>}
-              {p.hand && <text x={-R + 2} y={-R + 4} textAnchor="middle" fontSize="18">✋</text>}
+              {mine && <circle r={r + 7} fill="none" stroke="#e6c78d" strokeWidth="2" strokeDasharray="4 4" />}
+              <circle r={r} fill={atTables && team ? `${col}55` : '#28434d'} stroke={col} strokeWidth="1.5" />
+              <text y={6 * k} textAnchor="middle" fill="#f3ead9" fontSize={Math.round(16 * k)} fontWeight="600">{p.name.charAt(0)}</text>
+              {p.leader && atTables && <text y={-r - 8} textAnchor="middle" fontSize={Math.round(20 * k)} fill="#e6c78d">♔</text>}
+              {p.hand && <text x={-r + 2} y={-r + 4} textAnchor="middle" fontSize={Math.round(18 * k)}>✋</text>}
               {(p.choice || p.answered) && atTables && (
-                <g><circle cx={R - 2} cy={-R + 2} r="11" fill="#0d1b22" stroke="#c79a4b" />
-                  <text x={R - 2} y={-R + 7} textAnchor="middle" fontSize="13" fill="#e6c78d">{p.choice ? GLYPH[p.choice] : '•'}</text></g>
+                <g><circle cx={r - 2} cy={-r + 2} r={Math.max(7, 11 * k)} fill="#0d1b22" stroke="#c79a4b" />
+                  <text x={r - 2} y={-r + 2 + 5 * k} textAnchor="middle" fontSize={Math.max(9, Math.round(13 * k))} fill="#e6c78d">{p.choice ? GLYPH[p.choice] : '•'}</text></g>
               )}
-              {p.points != null && <text y={R + 20} textAnchor="middle" fontSize="13" fontWeight="600" fill={p.points < 0 ? '#d9705f' : '#6fbf8c'}>{p.points > 0 ? '+' : ''}{p.points}</text>}
+              {p.points != null && <text y={r + 16} textAnchor="middle" fontSize="13" fontWeight="600" fill={p.points < 0 ? '#d9705f' : '#6fbf8c'}>{p.points > 0 ? '+' : ''}{p.points}</text>}
             </g>
           );
         })}
