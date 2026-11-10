@@ -75,7 +75,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'offer.respond': E.offerRespond,
   // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
   // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
-  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(),
+  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
     pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
     policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
@@ -273,6 +273,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.activities': () => V.overview(),
   'admin.workshop-save': (a, b) => A.writer(a, V.workshopSave, b),
   'admin.workshop-delete': (a, b) => A.writer(a, V.workshopDelete, b),
+  'admin.workshop-invite': (a, b) => A.writer(a, V.workshopInvite, b),
   'admin.workshop-qr': (_a, b) => V.workshopQr(b),
   'admin.workshop-attendance': (_a, b) => V.workshopAttendance(b),
   'admin.workshop-mark': (a, b) => A.writer(a, V.workshopMark, b),

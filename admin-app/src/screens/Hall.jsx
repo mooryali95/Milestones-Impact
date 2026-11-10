@@ -32,7 +32,7 @@ function PeerRequests({ cohortId }) {
 }
 
 export default function Hall({ canWrite }) {
-  const { toast, prompt } = useUI();
+  const { toast, prompt, confirm } = useUI();
   const [cohorts, setCohorts] = useState(null);
   const [cid, setCid] = useState(() => { try { return localStorage.getItem('hall.cohort') || ''; } catch { return ''; } });
   useEffect(() => { L('admin.programs').then((r) => setCohorts(r.success ? r.cohorts.filter((c) => c.status !== 'closed') : [])); }, []);
@@ -46,7 +46,7 @@ export default function Hall({ canWrite }) {
           <option value="">اختر الدفعة</option>
           {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select></label>
-      <HallControl cohortId={cid} call={call} canWrite={canWrite} toast={toast} prompt={prompt} />
+      <HallControl cohortId={cid} call={call} canWrite={canWrite} toast={toast} prompt={prompt} confirm={confirm} />
       <PeerRequests cohortId={cid} />
     </div>
   );

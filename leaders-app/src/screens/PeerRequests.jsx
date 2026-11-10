@@ -46,7 +46,7 @@ export default function PeerRequests({ preset = null, onDone }) {
     <section className="card stack pr" data-tour="peer" aria-labelledby="pr-h">
       <div className="row between">
         <h3 id="pr-h">طلبات التوجيه</h3>
-        {!open && <button className="btn sm" onClick={() => setOpen(true)}>اطلب توجيهًا</button>}
+        {!open && <button className="btn ghost sm" onClick={() => setOpen(true)}>اطلب توجيهًا</button>}
       </div>
       <p className="small muted">{d.supervision_ar}{d.team_ar ? ` · أنت في ${d.team_ar}` : ''}{d.advisor ? ` · مستشارك: ${d.advisor}` : ''}. ما يؤكّده الخبير من إسهامك لزملائك يُحسب لك في التقييم المستمر.</p>
       {msg?.ok && <div className="banner"><span className="ico">✓</span><div className="grow">{msg.ok}</div></div>}

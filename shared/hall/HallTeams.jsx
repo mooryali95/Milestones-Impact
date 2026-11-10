@@ -8,7 +8,7 @@ import React from 'react';
 import { TEAM_AR, TEAM_COLOR, GLYPH, OPT_AR } from './HallView.jsx';
 
 const ORDER = ['lead', 'support', 'guide', 'eval'];
-const mark = (p) => [p.leader && 'قائد الجولة', p.hand && 'رفع يده', p.choice ? `حكمه ${OPT_AR[p.choice]}` : p.answered && 'أجاب',
+const mark = (p) => [p.table && !p.persona && `طاولة ${p.table}`, p.leader && 'قائد الجولة', p.hand && 'رفع يده', p.choice ? `حكمه ${OPT_AR[p.choice]}` : p.answered && 'أجاب',
   !p.present && (p.joined ? 'خارج القاعة الآن' : 'لم يدخل بعد')].filter(Boolean).join('، ');
 
 function Person({ p, me }) {
@@ -16,6 +16,7 @@ function Person({ p, me }) {
     <li className={`ht-p${p.id === me ? ' me' : ''}${p.present ? '' : ' away'}`} aria-label={[p.name, mark(p)].filter(Boolean).join('، ')}>
       {p.leader && <span aria-hidden="true">♔</span>}
       <span>{p.name}{p.id === me ? ' (أنت)' : ''}</span>
+      {p.table && !p.persona && <small className="ht-t">طاولة {p.table}</small>}
       {p.hand && <span aria-hidden="true">✋</span>}
       {(p.choice || p.answered) && <span className="ht-a" aria-hidden="true">{p.choice ? GLYPH[p.choice] : '✓'}</span>}
       {p.points != null && <b className={p.points < 0 ? 'neg' : 'pos'} dir="ltr">{p.points > 0 ? '+' : ''}{p.points}</b>}
