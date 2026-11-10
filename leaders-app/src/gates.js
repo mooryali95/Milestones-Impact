@@ -21,6 +21,10 @@ export function gateStage(me, key) {
   return journey.find((s) => (s.items || []).some((i) => i.code === GATE_CODE[key])) || journey.find((s) => s.key === key) || null;
 }
 
+// الحق في بند (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ.
+// القاعدة الواحدة لتوجيه App.jsx ولنص الترحيب في Onboarding.jsx
+export const hasAccess = (me, item) => !me?.access || !!me.access[item];
+
 // قسم «أثري» يُفتح حين تُفتح المرحلة التي فيها القياس البعدي (E-POST)، بالحكم نفسه الذي
 // يطبقه الخادم في requirePostOpen: الأثر طور لا مرحلة، فلا يُبحث عن مرحلة باسمه
 export function impactOpen(me) {

@@ -140,6 +140,10 @@ export function bindAnswers(fields, answers, initiative) {
 // اسم المبادرة من مصدره الوحيد: حقل title في بطاقة المبادرة
 export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || '').trim() || null;
 
+// D18: الوثيقة كما تصل الجهة أو راعي المبادرة: مستواها العام ومسارها (بمحور أولويته) مشتقان من المستويات،
+// فلا يبقيان إلا بموافقة المشارك، ومع صلاحية المستويات حين يطّلع منسق الجهة
+export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : { ...doc, meta: { ...doc.meta, level: null, track: null } });
+
 export const norm = (t) => String(t || '').replace(/\(.*?\)/g, '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const SYNONYMS = [['الخطر', 'البند', 'الوصف'], ['الاجراء', 'الاستجابه', 'التدخل'], ['المسؤول', 'المالك'], ['المؤشر', 'المقياس']].map((g) => g.map(norm));
 // أقرب عمود في المصدر لعمود الهدف: نفس الاسم، أو اسم يحتوي الآخر

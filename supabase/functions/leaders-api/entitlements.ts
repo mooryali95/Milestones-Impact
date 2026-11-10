@@ -5,22 +5,25 @@
 // كل مشارك، وتُثبَّت قيمة لاحقة إن تغيّر السعر بينهما. الآن كل مسار ربط (تسجيل برمز أو نطاق،
 // رمز يكتبه المشارك، ربط آلي بالنطاق، نقل من الإدارة، قبول طلب رعاية) يثبّت فورًا، وaccess()
 // يبقى احتياطًا لمن رُبط قبل هذا التغيير. وحدة مستقلة حتى لا تدور الاستيرادات (admin ↔ payments).
-import { audit, CONFIG, db, Fail, sendMail } from './core.ts';
+import { alertOps, audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 
 export type Item = 'assessment' | 'program';
 export const ITEMS: Item[] = ['assessment', 'program'];
 
+// خطأ القراءة يرمي: لا يصير البندان مجانيين بعطل عابر. والافتراضي (الدفع مطفأ) لصف غائب حقًا، ويُسجَّل
 export async function settings() {
-  const { data } = await db.from('payment_settings').select('*').eq('id', true).maybeSingle();
-  return data || { enabled: false, currency: 'USD', assessment_cents: 100, program_cents: 9900 };
+  const data = must(await db.from('payment_settings').select('*').eq('id', true).maybeSingle(), 'تعذّر قراءة إعداد الدفع');
+  if (data) return data;
+  console.error('payment_settings: لا صف إعداد، فالدفع مطفأ');
+  return { enabled: false, currency: 'USD', assessment_cents: 100, program_cents: 9900 };
 }
 
 // القيمة التعاقدية تُثبَّت على بند البرنامج (والقياس صفر)، فمجموع ما للمشارك = سعر جهته لحظة ربطه، بعملة الإعداد يومذاك.
 // D20: التثبيت يستهلك مقعدًا من عقد الجهة بفحص ذري في القاعدة (leaders.pin_sponsor_seat): قفل صف الجهة، ومدة العقد،
-// والمقاعد، ثم البندان في المعاملة نفسها. قبل ترحيل 20261107130000 يُثبَّت كما كان بلا فحص، والضبط يدوي.
-export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'inactive' | 'legacy';
+// والمقاعد، ثم البندان في المعاملة نفسها. تعذّر الفحص لا يمنح شيئًا: ينبّه المالك ويرمي 503، ويُعاد التثبيت لاحقًا.
+export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'inactive';
 export const SEAT_BLOCKED: PinResult[] = ['full', 'before', 'after'];
 export const SEAT_ALERTS = [0.8, 1];
 
@@ -40,24 +43,10 @@ export async function pinSponsor(p: { id: string }, org: { id: string; name: str
     if (SEAT_BLOCKED.includes(r)) await holdSponsorship(p.id, org, r);
     return r;
   }
-  if (!['PGRST202', '42883'].includes(String(error.code))) { console.error('pin sponsor', error.message); throw new Fail('تعذّر تثبيت إعفاء الراعي', 500, 'db_error'); }
-  // قبل الترحيل: السلوك السابق بلا فحص المقاعد
-  const rows = ITEMS.map((item) => ({
-    participant_id: p.id, item, source: 'sponsor', organization_id: org.id, granted_by: 'sponsor', note: org.name,
-    value_cents: item === 'program' ? value : 0, currency,
-  }));
-  for (const r of rows) {
-    const { error: e1 } = await db.from('entitlements').insert(r);
-    if (e1 && e1.code === '23505') continue;   // للمشارك حق حي في هذا البند من قبل (دفع أو منحة أو تثبيت سابق)
-    if (e1 && e1.code === '42703') {            // عمود currency قبل ترحيله: نثبّت بلا عملة بدل أن نفشل
-      const { currency: _c, ...legacy } = r;
-      const { error: e2 } = await db.from('entitlements').insert(legacy);
-      if (e2 && e2.code !== '23505') { console.error('pin sponsor', e2.message); throw new Fail('تعذّر تثبيت إعفاء الراعي', 500, 'db_error'); }
-      continue;
-    }
-    if (e1) { console.error('pin sponsor', e1.message); throw new Fail('تعذّر تثبيت إعفاء الراعي', 500, 'db_error'); }
-  }
-  return 'legacy';
+  // أي خطأ (ومنه دالة غائبة من ذاكرة PostgREST بعد ترحيل): لا تثبيت بلا فحص المقاعد
+  console.error('pin sponsor', error.code, error.message);
+  await alertOps('seat_check_unavailable', { participant: p.id, org: org.id, code: error.code ?? null, message: String(error.message || '').slice(0, 200) });
+  throw new Fail('تعذّر تثبيت إعفاء الراعي', 503, 'seat_check_unavailable');
 }
 
 // «رعاية بانتظار الاعتماد» (D20): طلب للإدارة بنوعه، وإخطار المنسق والإدارة فورًا. المشارك لا يرى بوابة دفع،

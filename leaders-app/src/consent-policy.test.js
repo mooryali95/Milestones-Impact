@@ -53,13 +53,19 @@ describe('حالة الموافقة', () => {
 describe('الخادم', () => {
   const p = api('participant.ts');
   it('كل موافقة في جدول المشارك وفي السجل التاريخي، والتجديد بنوعه، ومشاركة الجهة كذلك', () => {
-    expect(p).toMatch(/async function recordConsent\(participantId: string, kind: 'accept' \| 'renew' = 'accept'\) \{\n\s+const ok = await setConsent\([^\n]+consent_version: POLICY_VERSION \}\);\n\s+await logConsent\('participant', participantId, kind\);/);
+    // السطر التاريخي أولًا: إن تعذّر لم تُكتب الموافقة في جدول المشارك
+    expect(p).toMatch(/async function recordConsent\(participantId: string, kind: 'accept' \| 'renew' = 'accept'\) \{\n\s+await logConsent\('participant', participantId, kind\);\n\s+await setConsent\([^\n]+consent_version: POLICY_VERSION \}\);/);
     expect(p).toMatch(/await recordConsent\(p\.id, before\.needed === 'renew' \? 'renew' : 'accept'\);/);
     expect(p).toMatch(/await logConsent\('participant', p\.id, share \? 'org_share_on' : 'org_share_off'\);/);
     expect(p).toMatch(/consent: 'consented_at' in p \? consentState\(p\.consent_version, p\.consented_at\) : undefined,/);
     const core = api('core.ts');
     expect(core).toMatch(/from\('consent_events'\)\.insert\(\{ subject, subject_id: subjectId, kind, version: POLICY_DIGEST\.version, text_digest: POLICY_DIGEST\.sha256 \}\)/);
-    expect(core).toMatch(/error\.code !== '42P01'/);
+    // تعذّر السطر يرمي فيفشل الطلب قبل أثره في السجل، ولا استثناء لجدول غائب
+    expect(core).not.toMatch(/42P01|PGRST205/);
+    expect(core).toMatch(/throw new Fail\('تعذّر تسجيل موافقتك الآن، حاول بعد قليل', 503, 'consent_unavailable'\);/);
+    const consent = (f) => api(f).slice(api(f).indexOf('logConsent('));
+    expect(consent('coordinator.ts')).toMatch(/^logConsent\('coordinator', c\.id, 'accept'\);\n\s+await audit\(/);
+    expect(consent('experts.ts')).toMatch(/^logConsent\('expert', e\.id, 'accept'\);\n\s+await audit\(/);
   });
   it('ما يعتمد على الجديد وحده يُحجب حتى التجديد، والرحلة لا', () => {
     expect(CONSENT_GATED).toEqual(['rater.invite', 'sponsor.request', 'me.sponsor-code']);
@@ -92,9 +98,10 @@ describe('الواجهة', () => {
     expect(r({ consent: { needed: null, notice: true } })).toContain('غير جوهري');
     expect(r({ consent: { needed: null, notice: false } })).toBe('');
   });
-  it('البوابة في التطبيق، والخادم الأقدم بلا حالة يُعامل كما كان', () => {
+  it('البوابة في التطبيق من حالة الخادم وحدها', () => {
     const app = read('leaders-app/src/App.jsx');
-    expect(app).toMatch(/const consentNeed = me\?\.participant\?\.consent \? me\.participant\.consent\.needed : me\?\.participant\?\.consented_at === null \? 'first' : null;/);
+    expect(app).toMatch(/const consentNeed = me\?\.participant\?\.consent\?\.needed \?\? null;/);
+    expect(app).not.toMatch(/الخادم الأقدم/);
     expect(app).toMatch(/consentNeed === 'renew' && !me\.participant\.is_demo && !consentLater\) screen = <Consent/);
     expect(app).toMatch(/<PolicyBanner consent=\{me\.participant\.consent\} deferred=\{consentLater\}/);
   });
@@ -117,8 +124,8 @@ describe('نص الوثائق', () => {
 
 describe('ترحيل 20261107160000_leaders_consent_events', () => {
   const SQL = read('supabase/migrations/20261107160000_leaders_consent_events.sql');
-  it('متسامح، ويُكتب ولا يُعدَّل ولا يُحذف ولا يُفرَّغ، وإعادته آمنة', async () => {
-    expect(gateOf(SQL).gate).toBe('tolerant');
+  it('حاجب بعد تطبيقه، ويُكتب ولا يُعدَّل ولا يُحذف ولا يُفرَّغ، وإعادته آمنة', async () => {
+    expect(gateOf(SQL, '20261107160000_leaders_consent_events').gate).toBe('blocking');   // مطبّق على الإنتاج: الوسم في ملفه منتهٍ ولا يُمس الملف
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create role anon; create role authenticated;`);

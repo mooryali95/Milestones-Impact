@@ -93,4 +93,5 @@ export const MIGRATIONS = [
   '20261107170000_leaders_rater_verification',
   '20261107180000_leaders_content_releases',
   '20261107190000_leaders_v5_2_balance',
+  '20261110100000_leaders_approval_two_working_days',
 ];

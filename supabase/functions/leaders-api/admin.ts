@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, missingColumn, must, publicDb, sendMail, storage } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
@@ -928,8 +928,7 @@ export async function save(a: Admin, b: Body) {
     row.updated_at = new Date().toISOString();
   }
 
-  // ختم المصدر (20261107100000_leaders_content_provenance): بريد المشرف ووقت الحفظ. قبل الترحيل
-  // لا عمود updated_by، فيُعاد الحفظ بلا ختم (قراءة متسامحة)
+  // ختم المصدر (D01، 20261107100000_leaders_content_provenance): بريد المشرف ووقت الحفظ، إلزامي فلا يُحفظ بلا ختم
   const stamp: Body = STAMPED.has(b.entity) ? { updated_at: new Date().toISOString(), updated_by: a.email } : {};
   const write = (extra: Body) => {
     if (isNew) return db.from(e.table).insert({ ...row, ...extra }).select('*').single();
@@ -937,10 +936,7 @@ export async function save(a: Admin, b: Body) {
     for (const k of e.key) q = q.eq(k, b.row[k]);
     return q.select('*').single();
   };
-  let res = await write(stamp);
-  if (res.error && Object.keys(stamp).length && missingColumn(res.error)) res = await write({ updated_at: row.updated_at ?? stamp.updated_at });
-  if (res.error && missingColumn(res.error)) res = await write({});
-  const saved = must(res, isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
+  const saved = must(await write(stamp), isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
   const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
   if (runningReason) await audit('admin', a.email, 'placement_model.running-change', 'placement_model', '1', before, { reason: runningReason });

@@ -20,7 +20,7 @@ const LvlChips = ({ k }) => {
 function Board({ tracks, onOpen }) {
   const tr = tracks.tracks || [];
   const st = tracks.track_stats || {};
-  if (!tr.length) return <div className="la-note">جدول المسارات غير موجود بعد (الترحيل leaders-007-tracks).</div>;
+  if (!tr.length) return <div className="la-note">لا مسارات في القاعدة بعد.</div>;
   const byKey = Object.fromEntries(tr.map((t) => [t.key, t]));
   const sum = (f) => Object.values(st).reduce((a, x) => a + (x[f] || 0), 0);
   const used = tr.filter((t) => st[t.key]?.total).length;

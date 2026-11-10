@@ -32,19 +32,25 @@ jobs:
           ping admin-api ping
           ping user-api ping
       # Cloudflare قد يحجب عناوين مشغّلات GitHub على النطاق (403 مع server: cloudflare) وهذا ليس تعطلًا؛
-      # عندها يُفحص النشر نفسه على pages.dev (أصل Cloudflare Pages بلا قواعد النطاق). غير ذلك يُفشل السير.
+      # عندها يُفحص النشر نفسه على pages.dev (أصل Cloudflare Pages بلا قواعد النطاق)، ولا يُقبل إلا بعنوان صفحة
+      # فيه Milestone Impact، فلا يمر موقع آخر على العنوان نفسه. غير ذلك يُفشل السير.
+      # mi.sunkvalue.com بلا بديل حتى يُعرف اسم مشروعه الحقيقي على pages.dev من Cloudflare: mi-home.pages.dev موقع شركة أخرى.
       - name: Sites answer
         run: |
           probe() {
             code=$(curl -s --max-time 20 -o /dev/null -D /tmp/h -A "MilestoneImpactProbe/1.0 (+https://mi.sunkvalue.com)" -w '%{http_code}' "$1")
             echo "$1 -> $code"
             if [ "$code" = 200 ]; then return 0; fi
-            if [ "$code" = 403 ] && grep -qi '^server: cloudflare' /tmp/h && [ -n "$2" ]; then
+            if [ "$code" = 403 ] && grep -qi '^server: cloudflare' /tmp/h; then
+              if [ -z "$2" ]; then echo "::error::$1 حُجب بـ403 من Cloudflare لعنوان المشغّل ولا بديل له على pages.dev؛ أضف قاعدة التخطي لوكيل المسبار (RUNBOOK §3)"; return 1; fi
               echo "::warning::$1 حُجب بـ403 من Cloudflare لعنوان المشغّل (ليس تعطلًا)؛ يُفحص النشر على $2"
-              code2=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$2"); echo "$2 -> $code2"; test "$code2" = 200; return
+              code2=$(curl -s --max-time 20 -o /tmp/b -w '%{http_code}' "$2"); echo "$2 -> $code2"
+              test "$code2" = 200 || return 1
+              grep -qi '<title>[^<]*Milestone Impact' /tmp/b || { echo "::error::$2 لا يحمل عنوانه Milestone Impact؛ ليس نشر المنصة"; return 1; }
+              return 0
             fi
             return 1
           }
           probe https://leaders.sunkvalue.com/ https://mi-leaders.pages.dev/
-          probe https://mi.sunkvalue.com/ https://mi-home.pages.dev/
+          probe https://mi.sunkvalue.com/
           probe https://admin.sunkvalue.com/ https://mi-admin.pages.dev/

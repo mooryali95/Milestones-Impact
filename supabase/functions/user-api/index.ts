@@ -107,8 +107,7 @@ async function issueOtp(sb: SB, email: string, ip: string | null): Promise<Respo
   const code = randomCode();
   const exp = new Date(Date.now() + OTP_TTL_MS).toISOString();
   const row = { email, otp_code: await otpHash(email, code), verified: false, expires_at: exp };
-  let ins = await sb.from("email_otps").insert({ ...row, ip }).select("id").limit(1);
-  if (ins.error && (ins.error.code === "PGRST204" || ins.error.code === "42703")) ins = await sb.from("email_otps").insert(row).select("id").limit(1);   // قبل ترحيل 20261107120000
+  const ins = await sb.from("email_otps").insert({ ...row, ip }).select("id").limit(1);
   if (ins.error) throw ins.error;
   const r = await sendEmail(sb, email, `رمز التحقق: ${code} — مصفوفة التأثير`, otpHtml(code), "code");
   if (r.ok) return null;
@@ -136,12 +135,16 @@ async function humanCheck(body: Record<string, unknown>, ip: string | null): Pro
   return ok ? null : json({ success: false, code: "captcha", site_key: TURNSTILE_SITE, message: token ? "تعذّر التحقق، أعد المحاولة" : "أكّد أنك لست برنامجًا آليًا" }, 400);
 }
 
-// حد الشبكة في اليوم: يتسع لقاعة ورشة، ويضبطه المالك بـ USER_OTP_PER_IP_DAY
+// حد الشبكة في اليوم: يتسع لقاعة ورشة، ويضبطه المالك بـ USER_OTP_PER_IP_DAY. تعذّر العد يفشل مغلقًا
 async function networkLimit(sb: SB, ip: string | null): Promise<Response | null> {
   if (!ip) return null;
   const since = new Date(Date.now() - 864e5).toISOString();
   const { count, error } = await sb.from("email_otps").select("id", { count: "exact", head: true }).eq("ip", ip).gte("created_at", since);
-  if (error || (count ?? 0) < OTP_PER_IP_DAY) return null;
+  if (error) {
+    console.error("user-api: network limit unreadable", error.message);
+    return json({ success: false, code: "rate", message: "تعذّر التحقق من حد الطلبات الآن. ادخل بمفتاح المرور، أو حاول بعد قليل" }, 429);
+  }
+  if ((count ?? 0) < OTP_PER_IP_DAY) return null;
   return json({ success: false, code: "rate", message: "طلبات كثيرة اليوم من هذه الشبكة. ادخل بمفتاح المرور، أو حاول غدًا" }, 429);
 }
 

@@ -44,11 +44,13 @@ describe('سجل الترحيلات', () => {
     expect(seed).not.toMatch(/\('20261105100000_contact_requests_via_function'\)/);
     expect(seed.match(/\('20261105110000_leaders_schema_migrations'\)/g)).toHaveLength(1);
   });
-  it('فحص الصحة يقرأ السجل ويقارنه بالقائمة، ويستدل بالأثر قبله', () => {
+  it('فحص الصحة يقرأ السجل ويقارنه بالقائمة، وتعذّر السجل يظهر ولا يُستدل بالأثر', () => {
     const sys = api('system.ts');
     expect(sys).toMatch(/from\('schema_migrations'\)\.select\('name'\)/);
     expect(sys).toMatch(/MIGRATIONS\.filter\(\(n\) => !applied\.has\(n\)\)/);
     expect(sys).toMatch(/migrations_ledger: mig\.ledger/);
+    expect(sys).not.toMatch(/MARKERS|async function present\(/);
+    expect(sys).toMatch(/h\.migrations_ledger \? \[\] : \['تعذّرت قراءة سجل الترحيلات/);
   });
 });
 
@@ -62,8 +64,8 @@ describe('اللقطة والتثبيت', () => {
     expect(base).not.toMatch(/backup_2026/);
   });
   it('الراعي يُثبَّت عند كل مسار ربط، بعملة', () => {
-    // العملة من الإعداد لحظة التثبيت، تمر إلى الدالة الذرية (D20) وإلى المسار السابق قبل ترحيلها
-    expect(api('entitlements.ts')).toMatch(/const currency = s\.currency \|\| 'USD';[\s\S]*p_currency: currency[\s\S]*value_cents: item === 'program' \? value : 0, currency,/);
+    // العملة من الإعداد لحظة التثبيت، تمر إلى الدالة الذرية (D20) وحدها
+    expect(api('entitlements.ts')).toMatch(/const currency = s\.currency \|\| 'USD';[\s\S]*p_currency: currency/);
     const participant = api('participant.ts');
     expect(participant.match(/pinSponsorFor\(/g)?.length).toBeGreaterThanOrEqual(4);
     expect(api('admin.ts')).toMatch(/if \(target\) for \(const id of moved\) if \(await pinSponsorFor\(id\)\)/);

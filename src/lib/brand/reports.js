@@ -13,7 +13,7 @@ import { DIM_AR, DIM_SHORT as DIM_EN, FUNNEL as BASE_FUNNEL, LEVEL_AR as LVL } f
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '·');
 
 // تقرير الجهة. audience: 'admin' (كامل بمصادر الانضمام) أو 'coordinator' (بصلاحياته فقط)
-// d: { org, participants, funnel, by_track, by_via, by_campaign?, by_site?, kpis?, permissions? }
+// d: { org, participants, funnel, by_track, track_titles?, by_via, by_campaign?, by_site?, kpis?, permissions? }
 export function orgReport(d, audience = 'admin') {
   const o = d.org;
   const ps = d.participants || [];
@@ -26,17 +26,20 @@ export function orgReport(d, audience = 'admin') {
     active_week: ps.filter((p) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
     approved: f.approved || 0, completed: f.completed || 0,
   };
-  const titleOf = (key) => ps.find((p) => p.track === key)?.track_title || key;
-  const tracks = Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]);
+  // D18: المسار مشتق من المستويات، فلا يظهر للمنسق إلا مع صلاحية المستويات (والخادم يحصره فيمن وافق)،
+  // ومفتاحه الداخلي لا يُعرض له عنوانًا
+  const showTrack = audience !== 'coordinator' || !!perms.scores;
+  const titleOf = (key) => d.track_titles?.[key] || ps.find((p) => p.track === key)?.track_title || (audience === 'coordinator' ? 'مسار' : key);
+  const tracks = showTrack ? Object.entries(d.by_track || {}).sort((a, b) => b[1] - a[1]) : [];
   const showProgress = ps.some((p) => typeof p.progress === 'number');
 
-  const cols = [{ label: 'الاسم' }, { label: 'المسمى' }, { label: 'المسار' }, { label: 'المرحلة' }];
+  const cols = [{ label: 'الاسم' }, { label: 'المسمى' }, ...(showTrack ? [{ label: 'المسار' }] : []), { label: 'المرحلة' }];
   if (showProgress) cols.push({ label: 'الإنجاز', width: '26mm' });
   cols.push({ label: 'آخر دخول' });
   if (audience === 'coordinator' && perms.contact) cols.push({ label: 'البريد', ltr: true });
   if (audience === 'coordinator' && perms.scores) cols.push({ label: 'المستويات' });
   const rows = ps.map((p) => {
-    const r = [raw(`<b style="font-weight:400">${esc(p.full_name)}</b>`), p.job_title || '', p.track_title || p.track || '·', STATUS[p.status] || p.status];
+    const r = [raw(`<b style="font-weight:400">${esc(p.full_name)}</b>`), p.job_title || '', ...(showTrack ? [p.track_title || (audience === 'coordinator' ? '' : p.track) || '·'] : []), STATUS[p.status] || p.status];
     if (showProgress) r.push(raw(progress(p.progress || 0)));
     r.push(fmt(p.last_login_at));
     if (audience === 'coordinator' && perms.contact) r.push(p.email || '');
@@ -53,7 +56,7 @@ export function orgReport(d, audience = 'admin') {
       ...(k.avg_progress != null ? [{ value: `${k.avg_progress}%`, label: 'متوسط الإنجاز' }] : [{ value: k.completed ?? 0, label: 'أنهوا البرنامج' }]),
     ])),
     section('Journey', 'مسار الرحلة', chain(FUNNEL.map(([key, label, en]) => ({ value: f[key] || 0, label, en }))), 'عدد من بلغ كل مرحلة من مراحل البرنامج.'),
-    section('Tracks', 'التوزيع على المسارات', bars(tracks.map(([key, n]) => ({ label: titleOf(key), value: n })), k.total)),
+    ...(audience === 'admin' || tracks.length ? [section('Tracks', 'التوزيع على المسارات', bars(tracks.map(([key, n]) => ({ label: titleOf(key), value: n })), k.total))] : []),
     section('Sources', 'طريقة الانضمام', bars(Object.entries(d.by_via || {}).sort((a, b) => b[1] - a[1]).map(([key, n]) => ({ label: VIA[key] || key, value: n })), k.total)),
     ...(audience === 'admin' && Object.keys(d.by_campaign || {}).length
       ? [section('Campaigns', 'الحملات', bars(Object.entries(d.by_campaign).sort((a, b) => b[1] - a[1]).map(([key, n]) => ({ label: key, value: n })), k.total, { ltr: true }))] : []),

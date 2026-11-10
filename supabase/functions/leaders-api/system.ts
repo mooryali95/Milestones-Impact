@@ -1,9 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // حالة النظام وزيارات الموقع (للإدارة)
 // ════════════════════════════════════════════════════════════════
-// الترحيلات تُشغَّل يدويًا، فلا سجل لما طُبّق منها. الفحص هنا يسأل القاعدة
-// عن أثر كل ترحيل (جدول أو عمود أنشأه)، فيظهر في اللوحة ما لم يُشغَّل بعد،
-// ومعه الأسرار الناقصة واستهلاك البريد اليوم.
+// ما طُبّق من الترحيلات في سجل leaders.schema_migrations (تُطبَّق بسير migrate.yml)، فيظهر في اللوحة
+// ما لم يُطبَّق بعد مقارنًا بمجلد الترحيلات، ومعه الأسرار الناقصة واستهلاك البريد اليوم.
 import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
@@ -11,31 +10,6 @@ import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATIONS } from './migrations.js';
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
-
-// [ملف الترحيل، الجدول في مخطط leaders، عمود يدل عليه]
-const MARKERS: [string, string, string][] = [
-  ['20261023090000_leaders_reminders', 'participants', 'reminded_at'],
-  ['20261023120000_org_coordinators', 'org_coordinators', 'id'],
-  ['20261023150000_certificates', 'certificates', 'id'],
-  ['20261023170000_org_certificates', 'organizations', 'cert'],
-  ['20261023190000_handbook_exports', 'handbook_exports', 'id'],
-  ['20261024120000_leaders_item_bank_v3', 'questions', 'chapter_key'],
-  ['20261024150000_leaders_post_assessment', 'raters', 'id'],
-  ['20261024150000_leaders_verified_activities', 'video_progress', 'participant_id'],
-  ['20261024170000_leaders_activity_modes', 'workshop_sessions', 'join_url'],
-  ['20261024190000_leaders_programs', 'programs', 'id'],
-  ['20261024200000_leaders_content_bank', 'content_items', 'id'],
-  ['20261025100000_leaders_program_certificate', 'organizations', 'has_logo'],
-  ['20261026090000_leaders_assessment_v4', 'raters', 'phase'],
-  ['20261029120000_leaders_capstone', 'capstones', 'participant_id'],
-  ['20261031140000_leaders_capstone_tracking', 'capstone_updates', 'id'],
-  ['20261031150000_leaders_level_fit', 'backup_20261031_level_fit', 'kind'],
-];
-
-async function present(table: string, column: string, schema: any = db) {
-  const { error } = await schema.from(table).select(column, { head: true, count: 'exact' }).limit(1);
-  return !error;
-}
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -69,17 +43,12 @@ export async function ping() {
 }
 
 // ما لم يُطبَّق من الترحيلات: من سجل leaders.schema_migrations مقارنًا بقائمة المجلد (migrations.js المولَّد).
-// قبل تطبيق ترحيل السجل نفسه يُستدل بأثر الترحيلات القديمة (MARKERS) كما كان.
+// تعذّر قراءة السجل لا يُقرأ «لا شيء ناقص»: ledger false، وتعرضه النظرة العامة وتقرير الأسبوع
 async function missingMigrations() {
   const { data, error } = await db.from('schema_migrations').select('name');
-  if (!error) {
-    const applied = new Set((data || []).map((r: any) => r.name));
-    return { ledger: true, missing: MIGRATIONS.filter((n) => !applied.has(n)) };
-  }
-  const checks = await Promise.all(MARKERS.map(async ([file, t, c]) => ({ file, ok: await present(t, c) })));
-  const analytics = await present('page_views', 'id', publicDb);
-  const missing = [...checks, { file: '20261025200000_site_analytics', ok: analytics }].filter((m) => !m.ok).map((m) => m.file);
-  return { ledger: false, missing: [...missing, '20261105110000_leaders_schema_migrations'] };
+  if (error) { console.error('schema_migrations:', error.message); return { ledger: false, missing: [] as string[] }; }
+  const applied = new Set((data || []).map((r: any) => r.name));
+  return { ledger: true, missing: MIGRATIONS.filter((n) => !applied.has(n)) };
 }
 
 export async function health() {
@@ -138,7 +107,7 @@ export async function visits(b: Record<string, any> = {}) {
     publicDb.rpc('analytics_pages', { ...args, p_limit: 15 }),
     publicDb.rpc('analytics_sources', args),
   ]);
-  if (daily.error) return { success: false, code: 'not_ready', message: 'جدول الزيارات غير موجود بعد. شغّل ترحيل 20261025200000_site_analytics.sql' };
+  if (daily.error) { console.error('analytics_daily:', daily.error.message); return { success: false, code: 'db_error', message: 'تعذّرت قراءة الزيارات الآن، حاول بعد قليل' }; }
   const src = (sources.data || []) as any[];
   return {
     success: true, days, site,
@@ -203,15 +172,16 @@ export async function weeklyHealth() {
     count(db.from('participant_requirements').select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted')),
   ]);
   const issues = [
-    ...h.missing_migrations.map((f) => `ترحيل لم يُشغَّل: ${f}.sql`),
+    ...(h.migrations_ledger ? [] : ['تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق']),
+    ...h.missing_migrations.map((f) => `ترحيل لم يُطبَّق: ${f}.sql`),
     ...h.missing_secrets.map((k) => `سر ناقص في leaders-api: ${k}`),
-    ...(h.mail.today >= h.mail.cap * 0.8 ? [`رسائل الرموز في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap}`] : []),
+    ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`رسائل الرموز في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap}`] : []),
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),
   ];
   await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],
     [PARTICIPANT_STATUS.pending_approval, String(pending)], ['متطلبات للمراجعة', String(submitted)],
-    ['رسائل الرموز آخر 24 ساعة', `${h.mail.today} من ${h.mail.cap}`],
+    ['رسائل الرموز آخر 24 ساعة', h.mail.today == null ? 'غير مقروءة' : `${h.mail.today} من ${h.mail.cap}`],
   ], issues));
   return { sent: true, issues: issues.length };
 }

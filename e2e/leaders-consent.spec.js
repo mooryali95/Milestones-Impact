@@ -1,6 +1,7 @@
 // الطبقة القانونية في منصة القادة: شاشة الموافقة لمن سبق تسجيله، وصفحات الخصوصية والشروط
 // والاسترداد، ومفتاح مشاركة المستويات مع الجهة من «ملفي». الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
+import { consentState, POLICY_VERSION } from '../supabase/functions/leaders-api/labels.js';
 
 const APP = 'http://localhost:4304/';
 const base = {
@@ -22,7 +23,8 @@ test('من سبق تسجيله يرى شاشة الموافقة مرة، وقب�
     const b = JSON.parse(route.request().postData() || '{}');
     sent.push(b.action);
     if (b.action === 'consent.accept') consented = '2026-11-05T09:00:00Z';
-    const me = { ...base, participant: { ...base.participant, consented_at: consented } };
+    // حالة الموافقة كما يحسبها الخادم (participant.ts mePayload)، فالتطبيق لم يعد يشتقها من consented_at وحده
+    const me = { ...base, participant: { ...base.participant, consented_at: consented, consent: consentState(consented && POLICY_VERSION, consented) } };
     const r = { me, 'consent.accept': me, certificate: { success: true, certificate: null } }[b.action];
     await route.fulfill({ json: r ?? { success: true } });
   });
@@ -40,7 +42,7 @@ test('من سبق تسجيله يرى شاشة الموافقة مرة، وقب�
 test('صفحات الخصوصية والشروط والاسترداد بلا دخول، بتبويباتها', async ({ page }) => {
   await page.goto(APP + 'legal/privacy');
   await expect(page.getByRole('heading', { name: 'سياسة خصوصية برنامج القادة' })).toBeVisible();
-  await expect(page.getByText('مستوياتك في الأبعاد الثلاثة لا تصل جهتك إلا بموافقتك')).toBeVisible();
+  await expect(page.getByText('مسارك ومستوياتك في الأبعاد الثلاثة لا تصل جهتك إلا بموافقتك')).toBeVisible();
   await page.getByRole('link', { name: 'الاسترداد' }).first().click();
   await expect(page.getByRole('heading', { name: 'سياسة الاسترداد لبرنامج القادة' })).toBeVisible();
   await page.goto(APP + 'legal/terms');
@@ -68,7 +70,7 @@ test('مشاركة المستويات مع الجهة: مفتاح في «ملف�
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
   await expect(page.getByRole('heading', { name: 'ماذا ترى جهتك' })).toBeVisible();
   await expect(page.getByText('لا تصلها إلا بموافقتك أدناه')).toBeVisible();
-  const box = page.getByRole('checkbox', { name: /أوافق على اطلاع شركة المعالم على مستوياتي/ });
+  const box = page.getByRole('checkbox', { name: /أوافق على اطلاع شركة المعالم على مساري ومستوياتي/ });
   await expect(box).not.toBeChecked();
   await box.check();
   await expect(box).toBeChecked();

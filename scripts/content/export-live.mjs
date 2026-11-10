@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// تصدير المحتوى الحي قراءةً ومقارنته بالمستودع (D01)، وهو كشف الانحراف المحلي ما دامت Actions موقوفة.
+// تصدير المحتوى الحي قراءةً ومقارنته بالمستودع (D01)، وهو كشف الانحراف، يُشغَّل محليًا بالرمز (لا سير له في Actions بعد).
 //   SUPABASE_ACCESS_TOKEN=... node scripts/content/export-live.mjs                 يصدّر ويطبع تقرير الفرق
 //   node scripts/content/export-live.mjs --from=.content-live/<التاريخ>/live.json  يعيد المقارنة من تصدير سابق
 //   ... --check                       رمز 1 إن وُجد أي فرق (كشف الانحراف)

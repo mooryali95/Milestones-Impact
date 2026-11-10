@@ -25,7 +25,7 @@ function OrgVisibility() {
   if (!d?.success || !d.org) return null;
   const v = d.visibility || {};
   const open = Object.entries(VIEWER_PERM_AR).filter(([k]) => v[k]);
-  // المستويات لا تصل الجهة إلا بموافقة المشارك: مفتاح واحد يملكه هو (null = الخادم لم يُرحَّل بعد، فلا مفتاح)
+  // المستويات لا تصل الجهة إلا بموافقة المشارك: مفتاح واحد يملكه هو
   const share = async (on) => { setBusy(true); setD((x) => ({ ...x, share_consented: on })); const r = await call('org.share-consent', { share: on }); setBusy(false); if (!r.success) load(); };   // تفاؤلي، ويُرجَع عند الفشل
   return (
     <section className="card stack org-see" aria-labelledby="org-see-h">
@@ -34,12 +34,10 @@ function OrgVisibility() {
         <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.list ? 'يرون من رحلتك:' : 'يرون أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
         {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{v.scores && k === 'scores' ? (d.share_consented ? `${h}؛ بموافقتك` : 'طلبت جهتك الاطلاع عليها ولا تصلها إلا بموافقتك أدناه') : h}</small></li>)}</ul>}
       </>}
-      {d.share_consented != null && (
-        <label className="row small" style={{ gap: '.5rem', alignItems: 'center' }}>
-          <input type="checkbox" checked={!!d.share_consented} disabled={busy} onChange={(e) => share(e.target.checked)} />
-          <span>أوافق على اطلاع {d.org} على مستوياتي في الأبعاد الثلاثة (تأسيسي أو متوسط أو احترافي). أستطيع سحب الموافقة في أي وقت.</span>
-        </label>
-      )}
+      <label className="row small" style={{ gap: '.5rem', alignItems: 'center' }}>
+        <input type="checkbox" checked={!!d.share_consented} disabled={busy} onChange={(e) => share(e.target.checked)} />
+        <span>أوافق على اطلاع {d.org} على مساري ومستوياتي في الأبعاد الثلاثة (تأسيسي أو متوسط أو احترافي)، وعلى ظهور مساري ومستواي العام في وثيقة مبادرتي لجهتي ولراعي مبادرتي. أستطيع سحب الموافقة في أي وقت.</span>
+      </label>
       <p className="small muted">لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.</p>
     </section>
   );

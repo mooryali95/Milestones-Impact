@@ -47,9 +47,10 @@ jobs:
           node scripts/db/migrations-list.mjs --check
           # لقطة البنية المودعة = اللقطة + ترحيلاتها (بناء محلي في PGlite)؛ الحية تُفحص ليليًا في schema-check.yml
           node scripts/db/snapshot.mjs --from-migrations --check
-          # بنك القياس v5 وv5.1 مولَّد من مصادره ومتحقق منه (الأطوال، مسميات الأُطر، التقارب مع كتيب v3)
-          node scripts/questions/build-v5.mjs > /dev/null && node scripts/questions/build-v5_1.mjs > /dev/null
-          git diff --exit-code --stat -- supabase/content/questions/v5 supabase/content/questions/v5.1 supabase/migrations/20261102100000_leaders_instruments_v5.sql supabase/migrations/20261102100100_leaders_activate_v5.sql supabase/migrations/20261105150000_leaders_v5_1_pre_activation.sql
+          # بنك القياس v5 وv5.1 وv5.2 مولَّد من مصادره ومتحقق منه (الأطوال، مسميات الأُطر، التقارب مع كتيب v3).
+          # وترحيلاته مطبّقة فمجمّدة ببصماتها (applied-manifest.test.js): مصدر معدَّل يفشل هنا، ومعه ترحيله المعاد توليده هناك
+          node scripts/questions/build-v5.mjs > /dev/null && node scripts/questions/build-v5_1.mjs > /dev/null && node scripts/questions/build-v5_2.mjs > /dev/null
+          git diff --exit-code --stat -- supabase/content/questions/v5 supabase/content/questions/v5.1 supabase/content/questions/v5.2 supabase/migrations/20261102100000_leaders_instruments_v5.sql supabase/migrations/20261102100100_leaders_activate_v5.sql supabase/migrations/20261105150000_leaders_v5_1_pre_activation.sql supabase/migrations/20261107190000_leaders_v5_2_balance.sql
           node scripts/questions/verify-v5.mjs > /dev/null && node scripts/questions/verify-v5_1.mjs > /dev/null
           # بنك «كاتون»: الترحيل مولَّد من مصدره، والبنك يجتاز حارس الصياغة
           node scripts/katon/build-cbm-migration.mjs > /tmp/katon_cbm.sql && diff -q /tmp/katon_cbm.sql supabase/migrations/20261105160000_leaders_katon_cbm.sql

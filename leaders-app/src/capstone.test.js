@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   bindAnswers, canSubmit, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
-  parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
+  docLevelsFor, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
 import { priorityFor, rubricPriority, activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
@@ -238,6 +238,26 @@ describe('الوثيقة الاحترافية', () => {
   it('الاعتماد يخفي فحوص الاتساق', () => {
     const { body } = capstoneReport({ ...doc, meta: { ...doc.meta, status: 'approved' } });
     expect(body).not.toContain('فحوص الاتساق');
+  });
+  // D18: مستوى الوثيقة ومسارها مشتقان من المستويات، فلا يصلان الجهة ولا الراعي بلا موافقة المشارك
+  it('وثيقة الجهة والراعي بلا موافقة: لا مستوى ولا مسار ولا محور أولوية', () => {
+    const full = { ...doc, meta: { ...doc.meta, status: 'approved', level: 'advanced', track: { title: 'ملف التعريف الخاص', priority: 'impact' } } };
+    const hidden = docLevelsFor(full, false);
+    expect(hidden.meta).toMatchObject({ level: null, track: null, initiative: full.meta.initiative });
+    expect(full.meta.level).toBe('advanced');
+    const html = (d) => { const { meta, body } = capstoneReport(d); return documentHtml(meta, body); };
+    expect(html(hidden)).not.toContain('مستوى احترافي');
+    expect(html(hidden)).not.toContain('ملف التعريف الخاص');
+    expect(html(docLevelsFor(full, true))).toContain('مستوى احترافي');
+    expect(html(docLevelsFor(full, true))).toContain('ملف التعريف الخاص');
+  });
+  it('الخادم: وثيقة المنسق بصلاحية المستويات وموافقة المشارك، ووثيقة الراعي بالموافقة', () => {
+    const src = readFileSync(resolve(process.cwd(), 'supabase/functions/leaders-api/capstone.ts'), 'utf8');
+    expect(src).toMatch(/const show = coordPermissions\(permissions\)\.scores && !!p\.org_share_consented_at;\n\s+return \{ success: true, doc: await withTracking\(docLevelsFor\(await recordFor\(p, 'org'\), show\), p\.id\) \};/);
+    expect(src).toMatch(/doc: docLevelsFor\(await recordFor\(c\.participants, 'sponsor'\), !!c\.participants\?\.org_share_consented_at\)/);
+    expect(src).toMatch(/export async function orgDoc\(orgId: string, b: Body, permissions: unknown = null\)/);
+    const index = readFileSync(resolve(process.cwd(), 'supabase/functions/leaders-api/index.ts'), 'utf8');
+    expect(index).toMatch(/'coord\.capstone': \(c, b\) => X\.orgDoc\(c\.organization_id, b, c\.permissions\)/);
   });
 });
 
