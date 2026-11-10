@@ -9,7 +9,8 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary } from './logic.js';
+import { cleanExpert, cleanRating, expertPublic, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
@@ -184,7 +185,7 @@ async function candidates(need: any, participantId: string, tried: string[] = []
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
     db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
-    db.from('participants').select('email').eq('id', participantId).maybeSingle(),
+    db.from('participants').select('id, email, organization_id').eq('id', participantId).maybeSingle(),
   ]);
   // الخبير لا يُرشَّح لنفسه حين يكون مشاركًا بالبريد نفسه
   const self = String((me as any)?.email || '').toLowerCase();
@@ -196,7 +197,21 @@ async function candidates(need: any, participantId: string, tried: string[] = []
   };
   const r = tally(reqs), u = tally(upcoming), served = new Set((past || []).map((x: any) => x.expert_id));
   const ratings = await ratingsBy((experts || []).map((e: any) => e.id));
-  return rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id), rating: ratings[e.id] || null })), need, tried);
+  const ranked = rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id), rating: ratings[e.id] || null })), need, tried);
+  return teamFirst(ranked, await cohortTeam(me));
+}
+
+// فريق دفعة المشارك: مستشارها الأساسي وخبراء cohort_experts. الجدول قد لا يكون مطبّقًا بعد، فغيابه فريق فارغ
+// والعرض كما كان. خطأ القراءة لا يوقف طلب الخبير: يُعرض الترتيب العام.
+export async function cohortTeam(p: any): Promise<string[]> {
+  if (!p?.id) return [];
+  try {
+    const { cohort } = await cohortOf(p);
+    const c: any = cohort;
+    if (!c?.id) return [];
+    const { data } = await db.from('cohort_experts').select('expert_id').eq('cohort_id', c.id);
+    return [...new Set([c.advisor_expert_id, ...(data || []).map((x: any) => x.expert_id)].filter(Boolean))] as string[];
+  } catch { return []; }
 }
 
 // معاينة الترشيح للإدارة قبل الإسناد، بتفصيل النقاط
@@ -611,6 +626,8 @@ const publicCard = (e: any) => ({
   id: e.id, full_name: e.full_name, title: e.title || null, bio: e.bio ? String(e.bio).slice(0, 280) : null,
   years: e.years_experience ?? null, sectors: (e.sectors || []).slice(0, 3), languages: e.languages || [],
   rating: e.rating?.visible ? { avg: e.rating.avg, count: e.rating.count } : null,
+  // من فريق دفعة المشارك: تقولها الواجهة بجوار اسمه
+  team: !!e.team,
 });
 
 const consultRole = (r: any) => (CONSULT_ROLES.includes(r) ? r : 'coach');

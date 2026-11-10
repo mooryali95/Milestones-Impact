@@ -102,4 +102,5 @@ export const MIGRATIONS = [
   '20261110160000_leaders_sus_responses',
   '20261110170000_leaders_katon_impact_leadership',
   '20261110180000_leaders_capstone_card_gate',
+  '20261110190000_leaders_cohort_experts',
 ];

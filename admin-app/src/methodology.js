@@ -236,6 +236,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
       help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
     { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
       help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
+    { name: 'team_expert_ids', label: 'فريق الخبراء', type: 'multi', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
+      help: 'خبراء يُعرضون على مشاركي هذه الدفعة أولًا حين يطلبون موجّهًا أو مستشارًا أو خبيرًا، ثم بقية الخبراء إن لم يكفِ الفريق. العضوية لا تمنح صلاحيات المستشار الأساسي.' },
     { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
       help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
@@ -269,7 +271,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', team_expert_ids: c.team_expert_ids || [], hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
   delete v.schedule; delete v.stage_modes;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;
