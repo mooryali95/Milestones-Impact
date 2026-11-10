@@ -5,6 +5,9 @@
 //   1. لا جهاز يبقى على حالة قديمة بعد أن تهدأ القاعة (كل جهاز يرى عدد المجيبين والأيدي كما في القاعدة).
 //   2. رقم الإصدار لا يضيع منه تغيير (تغييران متزامنان لا يأخذان الرقم نفسه).
 //   3. كل الحاضرين في الحضور، وكلهم مقسَّمون، وكل إجاباتهم محفوظة.
+//   4. الطاولات: لكل مشارك رقم طاولة محفوظ، من خمسة إلى سبعة في الطاولة، يثبت طوال الجلسة ويراه على جهازه.
+//   5. المؤقت: وقت نهاية الإجابة من الخادم مع كل جولة، وبعد انتهائه ومهلته تُرفض الإجابة (time_up).
+//   6. الحضور: القاعة تلتقط جلسة الورشة الجارية، وعند الإغلاق يُكتب حضور من شارك في workshop_attendance بطريقة hall.
 // يفشل برمز خروج 1 عند أي خطأ في السلامة أو تجاوز حدود الزمن.
 //   DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres API_URL=http://127.0.0.1:54321 node scripts/integration/hall-load.mjs --devices=50
 // الخيارات: --devices=50 · --rounds=3 · --round-seconds=12 · --fn-url=<عنوان الدالة مباشرة> · --p95=<حد زمن الرد بالملي ثانية> · --json=<ملف التقرير>
@@ -86,6 +89,10 @@ const devices = [];
   sql(`insert into leaders.enrollments (participant_id, cohort_id, status) values ${enr.join(',')}`);
   sql(`insert into leaders.placements (participant_id, dimension, level, source, approved_at, approved_by) values ${pls.join(',')}`);
 }
+// جلسة ورشة جارية للدفعة: القاعة تلتقطها عند الفتح، وفيها يُكتب الحضور عند الإغلاق
+const workshopReq = sql(`select id from leaders.stage_requirements where kind = 'workshop' order by sort limit 1`);
+if (!workshopReq) { console.error('لا متطلب ورشة مزروع (T-ATTEND) لربط جلسة القاعة به'); process.exit(2); }
+const workshopId = sql(`insert into leaders.workshop_sessions (requirement_id, title_ar, starts_at, ends_at, secret, cohort_id) values (${q(workshopReq)}, ${q(`يوم تدريبي ${run}`)}, now() - interval '10 minutes', now() + interval '3 hours', ${q(randomBytes(16).toString('hex'))}, ${q(cohortId)}) returning id`);
 const adminToken = randomBytes(32).toString('base64url');
 sql(`insert into public.api_sessions (token_hash, kind, subject, meta, expires_at) values (${q(sha(adminToken))}, 'admin', 'load@test', '{"email":"load@test","role":"super_admin","method":"passkey"}', now() + interval '1 hour')`);
 const admin = (action, body = {}) => call(action, body, adminToken, ADMIN_ORIGIN);
@@ -144,6 +151,8 @@ const started = Date.now();
 const opened = await admin('admin.hall-open', { cohort_id: cohortId, topic_id: topicId, mode: 'live' });
 ok(opened.success === true && opened.session?.stage === 'enter', 'الخبير يفتح القاعة', JSON.stringify(opened).slice(0, 200));
 const sessionId = opened.session?.id;
+ok(opened.attendance?.workshop?.id === workshopId, 'القاعة التقطت جلسة الورشة الجارية للحضور', JSON.stringify(opened.attendance || null));
+ok(sql(`select coalesce(workshop_session_id::text, '') from leaders.hall_sessions where id = ${q(sessionId)}`) === workshopId, 'الربط بجلسة الورشة محفوظ في القاعدة');
 const loops = devices.map(pollLoop);
 const v0 = live().version;
 await Promise.all(devices.map(async (d) => { await sleep(Math.random() * 4000); await act(d, 'hall.join', {}); }));
@@ -160,11 +169,41 @@ ok(split.success === true && split.session?.stage === 'split', 'التقسيم �
 ok(Number(sql(`select count(*) from leaders.cohort_roles where cohort_id = ${q(cohortId)}`)) === N, `كل الحاضرين (${N}) في فريق`);
 await sleep(POLL_FAST_MS * 2);
 
+// 2ب) الطاولات: محفوظة لكل مشارك، من خمسة إلى سبعة، وكل طاولة من فريق واحد، وكل جهاز يرى طاولته
+const seatsNow = () => Object.fromEntries(sql(`select participant_id || '|' || team || '|' || coalesce(table_no::text, '') from leaders.cohort_roles where cohort_id = ${q(cohortId)}`).split('\n').map((l) => { const [id, team, no] = l.split('|'); return [id, { team, no: Number(no) || null }]; }));
+const seats0 = seatsNow();
+ok(Object.values(seats0).every((x) => x.no), `الطاولات: لكل من الـ${N} رقم طاولة محفوظ`, `${Object.values(seats0).filter((x) => !x.no).length} بلا طاولة`);
+{
+  const sizes = {}, teams = {};
+  for (const x of Object.values(seats0)) { sizes[x.no] = (sizes[x.no] || 0) + 1; (teams[x.no] ||= new Set()).add(x.team); }
+  const ns = Object.values(sizes);
+  // القيادة أصغر الفرق (ثُمن العدد)، فطاولتها قد تقل عن خمسة في الأعداد الصغيرة؛ الحد الأدنى يُفحص من 40 مشاركًا
+  ok(Math.max(...ns) <= 7 && (N < 40 || Math.min(...ns) >= 5), `الطاولات: ${ns.length} طاولة، في كل منها من خمسة إلى سبعة`, `الأحجام ${ns.sort((a, b) => a - b).join(',')}`);
+  ok(Object.values(teams).every((t) => t.size === 1), 'الطاولات: كل طاولة من فريق واحد');
+}
+await settle();
+ok(devices.every((d) => (d.view?.people || []).find((p) => p.id === d.id)?.table === seats0[d.id].no), 'الطاولات: كل جهاز يرى رقم طاولته المحفوظ');
+// نقل مشارك إلى فريق آخر من الخبير: يترك طاولته ويُلحق بطاولة من فريقه الجديد، ولا يتحرك غيره
+{
+  const mover = devices[0], to = seats0[mover.id].team === 'eval' ? 'guide' : 'eval';
+  const moved = await admin('admin.hall-assign', { session_id: sessionId, participant_id: mover.id, team: to });
+  const after = seatsNow();
+  const teamTables = new Set(Object.entries(seats0).filter(([, x]) => x.team === to).map(([, x]) => x.no));
+  ok(moved.success === true && after[mover.id].team === to && teamTables.has(after[mover.id].no), `النقل: المشارك انتقل إلى طاولة من فريقه الجديد (${after[mover.id].no})`, JSON.stringify(after[mover.id]));
+  ok(Object.keys(seats0).every((id) => id === mover.id || after[id].no === seats0[id].no), 'النقل: لم تتغير طاولة أحد غيره');
+}
+const seats1 = seatsNow();
+
 // 3) الجولات: الكل يجيب في أوقات متفرقة داخل الجولة، وخُمسهم يرفع يده، ثم الكشف، ثم الجملة التالية
 for (let r = 0; r < ROUNDS; r++) {
   const step = r === 0 ? await admin('admin.hall-step', { session_id: sessionId, stage: 'round' }) : await admin('admin.hall-step', { session_id: sessionId, next: true });
   ok(step.success === true && step.session?.stage === 'round', `الجولة ${r + 1}: تبدأ`, JSON.stringify(step).slice(0, 200));
   const sid = live().sentence;
+  // المؤقت يملكه الخادم: وقت نهاية في الرد وفي القاعدة، بعد الآن وضمن المدة الافتراضية
+  {
+    const left = (new Date(step.session?.ends_at || 0).getTime() - new Date(step.now || 0).getTime()) / 1000;
+    ok(left > 60 && left <= 91, `الجولة ${r + 1}: المؤقت من الخادم (${Math.round(left)} ثانية)`, `ends_at ${step.session?.ends_at} · now ${step.now}`);
+  }
   await sleep(POLL_FAST_MS + 500);   // الأجهزة تلتقط الجملة
   const raisers = devices.filter((d) => d.i % 5 === r % 5);
   const vBefore = live().version;
@@ -179,6 +218,19 @@ for (let r = 0; r < ROUNDS; r++) {
   ok(live().version - vBefore === bumps, `الجولة ${r + 1}: ${bumps} تغييرًا متزامنًا رفعت الإصدار ${bumps} مرة`, `ارتفع ${live().version - vBefore}: ضاعت ${bumps - (live().version - vBefore)}`);
   await settle();
   consistent(`الجولة ${r + 1} بعد الإجابات`, { answered: N, hands: raisers.length });
+  // آخر جولة: بعد انتهاء الوقت ومهلته تُرفض الإجابة برمز time_up، ثم يمدّد الخبير فتُقبل (طلبان خارج القياس)
+  if (r === ROUNDS - 1) {
+    const raw = async (d, body) => (await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(process.env.ANON_KEY ? { apikey: process.env.ANON_KEY, Authorization: `Bearer ${process.env.ANON_KEY}` } : {}) }, body: JSON.stringify({ action: 'katon.answer', ...body, token: d.token }) })).json().catch(() => ({}));
+    const again = { sentence_id: sid, verdict: 'true', confidence: 1, stances: [] };
+    sql(`update leaders.hall_sessions set phase_ends_at = now() - interval '30 seconds' where id = ${q(sessionId)}`);
+    const late = await raw(devices[1], again);
+    ok(late.success === false && late.code === 'time_up', 'المؤقت: الإجابة بعد انتهاء الوقت تُرفض (time_up)', JSON.stringify(late).slice(0, 160));
+    const more = await admin('admin.hall-step', { session_id: sessionId, extend: 30 });
+    ok(more.success === true && new Date(more.session?.ends_at || 0).getTime() > new Date(more.now || 0).getTime(), 'المؤقت: التمديد يفتح الإجابة من جديد', JSON.stringify(more.session || null).slice(0, 160));
+    const fine = await raw(devices[1], again);
+    ok(fine.success === true, 'المؤقت: الإجابة بعد التمديد تُقبل', JSON.stringify(fine).slice(0, 160));
+    await settle();
+  }
   const reveal = await admin('admin.hall-step', { session_id: sessionId, stage: 'reveal' });
   ok(reveal.success === true && reveal.revealed === true, `الجولة ${r + 1}: الكشف`, JSON.stringify(reveal).slice(0, 160));
   await Promise.all(raisers.map((d) => act(d, 'hall.hand', { raised: false })));
@@ -187,9 +239,17 @@ for (let r = 0; r < ROUNDS; r++) {
   ok(devices.every((d) => d.view?.revealed === true && d.view?.sentence?.key != null), `الجولة ${r + 1}: كل جهاز يرى المفتاح بعد الكشف`);
 }
 
-// 4) الإغلاق: الأجهزة تعود إلى «لا قاعة مفتوحة»
+// الطاولات ثبتت طوال الجولات
+{
+  const end = seatsNow();
+  ok(Object.keys(seats1).every((id) => end[id]?.no === seats1[id].no && end[id]?.team === seats1[id].team), 'الطاولات: ثبتت أرقامها وفرقها طوال الجولات');
+}
+
+// 4) الإغلاق: يُكتب حضور من شارك في حضور الورشة، والأجهزة تعود إلى «لا قاعة مفتوحة»
 const closed = await admin('admin.hall-close', { session_id: sessionId });
 ok(closed.success === true, 'الخبير يغلق القاعة', JSON.stringify(closed).slice(0, 160));
+ok(closed.attendance?.written === N && closed.attendance?.rounds === ROUNDS, `الحضور: الإغلاق يبلّغ بكتابة ${N} حاضرًا عن ${ROUNDS} جولات`, JSON.stringify(closed.attendance || null));
+ok(Number(sql(`select count(*) from leaders.workshop_attendance where session_id = ${q(workshopId)} and method = 'hall'`)) === N, `الحضور: ${N} صفًّا بطريقة hall في حضور الورشة`);
 await sleep(POLL_FAST_MS * 2);
 for (const d of devices) d.stop = true;
 await Promise.all(loops);
@@ -222,6 +282,7 @@ const out = arg('json', '');
 if (out) writeFileSync(out, JSON.stringify({ devices: N, rounds: ROUNDS, seconds, total, per_hour: perHour, polls_per_device: Math.round(polls.ms.length / N), rows, fails }, null, 2));
 
 // ── التنظيف: ما زُرع لهذا التشغيل وحده ──
+sql(`delete from leaders.workshop_sessions where id = ${q(workshopId)}`);
 sql(`delete from leaders.participants where email like ${q(`${run}-%`)}`);
 sql(`delete from leaders.cohorts where id = ${q(cohortId)}`);
 sql(`delete from public.api_sessions where subject = 'load@test'`);
