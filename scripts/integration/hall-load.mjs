@@ -98,6 +98,7 @@ sql(`insert into public.api_sessions (token_hash, kind, subject, meta, expires_a
 const admin = (action, body = {}) => call(action, body, adminToken, ADMIN_ORIGIN);
 
 let fails = 0;
+const finalFails = [];   // كتابات أخفقت بعد إعادة المحاولة: هذه ما يراه المشارك خطأً
 const ok = (cond, msg, extra = '') => { console.log(`${cond ? '✓' : '✗'} ${msg}${cond ? '' : ` ${extra}`}`); if (!cond) fails += 1; };
 
 // ── الجهاز: يسأل بالفاصل الذي يحسبه التطبيق من حال القاعة، ويحمل رقم إصداره كما يفعل Hall.jsx ──
@@ -117,8 +118,14 @@ async function pollLoop(d) {
   }
 }
 // الإجراء في التطبيق: hall.join وhall.hand يعيدان الحالة، وkaton.answer يتبعه تحميل كامل (since: 0)
+// كما في Hall.jsx: الدخول واليد يُعادان مرة عند إخفاق لم تجب عنه الدالة (شبكة أو 5xx من البوابة)، والإجابة تُعاد حتى تُستلم.
+// الإخفاق العابر يبقى مسجّلًا في القياس ويُحدّ بنسبة، والحكم على أن الكتابة نجحت في النهاية
+let retried = 0;
+const transient = (r) => r.success !== true && !('success' in r);
 async function act(d, action, body) {
-  const r = await call(action, body, d.token);
+  let r = await call(action, body, d.token);
+  for (let i = 0; transient(r) && i < (action === 'katon.answer' ? 3 : 1); i += 1) { retried += 1; await sleep(800); r = await call(action, body, d.token); }
+  if (r.success !== true) finalFails.push(`${action}: ${r.code || ''} ${String(r.message || 'بلا رد').slice(0, 80)}`);
   if (action === 'katon.answer') { if (r.success) absorb(d, await call('hall.state', { since: 0 }, d.token)); return r; }
   absorb(d, r);
   return r;
@@ -158,7 +165,7 @@ const v0 = live().version;
 await Promise.all(devices.map(async (d) => { await sleep(Math.random() * 4000); await act(d, 'hall.join', {}); }));
 ok(Number(sql(`select count(*) from leaders.hall_presence where session_id = ${q(sessionId)}`)) === N, `الحضور: ${N} في القاعدة`, `دخل ${sql(`select count(*) from leaders.hall_presence where session_id = ${q(sessionId)}`)} · أخطاء hall.join: ${rec('hall.join').errors.join(' | ') || 'لا خطأ مسجّل'}`);
 // كل انضمام يرفع الإصدار مرة: إن ضاع رفع فقد أخذ تغييران الرقم نفسه، وجهاز سأل بينهما يبقى على القديم
-ok(live().version - v0 === N, `${N} انضمامًا متزامنًا رفعت الإصدار ${N} مرة`, `ارتفع ${live().version - v0} فقط: ضاعت ${N - (live().version - v0)}`);
+{ const up = live().version - v0; ok(up >= N && up <= N + retried, `${N} انضمامًا متزامنًا رفعت الإصدار ${N} مرة${retried ? ` (وأُعيدت ${retried})` : ''}`, `ارتفع ${up}: ${up < N ? `ضاعت ${N - up}` : `زاد ${up - N} على الإعادات ${retried}`}`); }
 await settle();
 consistent('بعد الدخول');
 ok(devices.every((d) => (d.view?.people || []).filter((p) => p.joined).length === N), `كل جهاز يرى ${N} منضمًّا`);
@@ -206,7 +213,7 @@ for (let r = 0; r < ROUNDS; r++) {
   }
   await sleep(POLL_FAST_MS + 500);   // الأجهزة تلتقط الجملة
   const raisers = devices.filter((d) => d.i % 5 === r % 5);
-  const vBefore = live().version;
+  const vBefore = live().version, retriedBefore = retried;
   await Promise.all(devices.map(async (d) => {
     await sleep(Math.random() * ROUND_S * 1000);
     if (raisers.includes(d)) await act(d, 'hall.hand', { raised: true });
@@ -215,7 +222,7 @@ for (let r = 0; r < ROUNDS; r++) {
   const saved = Number(sql(`select count(*) from leaders.katon_answers where sentence_id = ${q(sid)} and participant_id in (select participant_id from leaders.enrollments where cohort_id = ${q(cohortId)})`));
   ok(saved === N, `الجولة ${r + 1}: ${N} إجابة محفوظة`, `المحفوظ ${saved}`);
   const bumps = N + raisers.length;
-  ok(live().version - vBefore === bumps, `الجولة ${r + 1}: ${bumps} تغييرًا متزامنًا رفعت الإصدار ${bumps} مرة`, `ارتفع ${live().version - vBefore}: ضاعت ${bumps - (live().version - vBefore)}`);
+  { const up = live().version - vBefore, again = retried - retriedBefore; ok(up >= bumps && up <= bumps + again, `الجولة ${r + 1}: ${bumps} تغييرًا متزامنًا رفعت الإصدار ${bumps} مرة${again ? ` (وأُعيدت ${again})` : ''}`, `ارتفع ${up}: ${up < bumps ? `ضاعت ${bumps - up}` : `زاد ${up - bumps} على الإعادات ${again}`}`); }
   await settle();
   consistent(`الجولة ${r + 1} بعد الإجابات`, { answered: N, hands: raisers.length });
   // آخر جولة: بعد انتهاء الوقت ومهلته تُرفض الإجابة برمز time_up، ثم يمدّد الخبير فتُقبل (طلبان خارج القياس)
@@ -271,12 +278,16 @@ const detail = [...stats.entries()].filter(([, s]) => s.errors.length).map(([a, 
 // الدوال 500 عابرًا تحت الحمل (واحد من نحو 1900 في CI): يُقبل ما دام نادرًا وأصلحه السؤال التالي قبل أن يراه المشارك
 const fromFunction = [...stats.values()].reduce((a, s) => a + s.fromFunction, 0);
 const writeErrors = errors - polls.errors.length;
+const writes = total - polls.ms.length;
 const worst = Math.max(0, ...devices.map((d) => d.worstRun || 0));
 ok(fromFunction === 0, 'الدالة لم ترد خطأً على أي طلب', detail);
-ok(writeErrors === 0, 'لا كتابة فاشلة (دخول، يد، إجابة، أوامر الخبير)', detail);
+// الكتابة قد يردّها 500 عابر من البوابة كما يُردّ سؤال الحالة (أصاب hall.hand في التشغيلة 42765858455 وhall.join في 42778001878):
+// التطبيق يعيدها، فالحكم ألا تخفق كتابة بعد الإعادة، وأن يبقى العابر نادرًا (واحد بالمئة من الكتابات)
+ok(finalFails.length === 0, 'لا كتابة أخفقت بعد إعادة المحاولة (دخول، يد، إجابة)', finalFails.slice(0, 3).join(' · '));
+ok(writeErrors <= Math.max(1, Math.ceil(writes * 0.01)), `إخفاقات الكتابة العابرة ${writeErrors} من ${writes} (الحد واحد بالمئة)، أُعيدت ${retried}`, detail);
 ok(polls.errors.length <= Math.ceil(polls.ms.length * 0.005), `إخفاقات سؤال الحالة العابرة ${polls.errors.length} من ${polls.ms.length} (الحد نصف بالمئة)`, detail);
 ok(worst < POLL_FAIL_LIMIT, `لا جهاز توالت إخفاقاته حتى حد العرض ${POLL_FAIL_LIMIT} (الأسوأ ${worst})`);
-if (polls.errors.length) console.log(`  إخفاقات عابرة من البوابة: ${detail}`);
+if (errors) console.log(`  إخفاقات عابرة من البوابة: ${detail}`);
 if (P95_LIMIT) for (const r of rows) ok(r.p95 <= P95_LIMIT, `${r.action}: p95 ${r.p95} م.ث ضمن ${P95_LIMIT}`);
 const out = arg('json', '');
 if (out) writeFileSync(out, JSON.stringify({ devices: N, rounds: ROUNDS, seconds, total, per_hour: perHour, polls_per_device: Math.round(polls.ms.length / N), rows, fails }, null, 2));

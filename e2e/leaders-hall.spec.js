@@ -215,3 +215,27 @@ test('الخبير: خمسون مشاركًا في قائمته بمن ينتظ�
   // قائمة الجملة تحمل نصها
   await expect(page.getByRole('region', { name: 'القاعة الحية' }).getByLabel('الجملة المعروضة').locator('option').nth(1)).toContainText('المشروع الذي سلّم مخرجاته');
 });
+
+test('المشارك: دخول القاعة يُعاد وحده عند خطأ عابر من البوابة، ولا تظهر رسالة البوابة الإنجليزية', async ({ page }) => {
+  const srv = createMockServer();
+  Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
+  let joins = 0, inside = false;
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'hall.join') {
+      joins += 1;
+      if (joins === 1) return route.fulfill({ status: 500, json: { message: 'Request failed due to an internal server error' } });
+      inside = true;
+    }
+    if (b.action === 'hall.join' || b.action === 'hall.state') return route.fulfill({ json: { ...hall({ stage: 'enter' }), me: 'p7', inside } });
+    return route.fulfill({ json: srv.reply(b) });
+  });
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 't'.repeat(40)); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP);
+  await page.locator('[data-tour="nav-hall"]').locator('visible=true').first().click();
+  await page.getByRole('button', { name: 'ادخل القاعة' }).click();
+  await expect(page.locator('.hall-me')).toContainText('أنت في القاعة');
+  expect(joins).toBe(2);
+  await expect(page.getByText('internal server error')).toHaveCount(0);
+});
