@@ -1,1 +1,8 @@
-{}
+{
+  "m1.restore-drill": {
+    "by": "Claude Code بتكليف المالك: تمرين آلي كامل في Actions (restore-drill.yml، وظيفة legacy، والتشفير ما زال متماثلًا)",
+    "at": "2026-11-10",
+    "evidence": "https://github.com/mooryali95/Milestones-Impact/actions/runs/42748865236",
+    "note": "نسخة 2026-11-10T03:20:34Z (التشغيل 42748640463): البصمات تطابق، وفُك التشفير، واستعادة بلا خطأ غير متوقع، والصفوف تطابق لحظة النسخ (participants 4، placements 9، audit_log 69، contact_requests 8، auth.users 2). RPO 0 ساعة وزمن الاستعادة 2 ثانية. لم يشمل الدلو الخاص leaders-private لأن SUPABASE_SERVICE_ROLE_KEY غير مضبوط في أسرار GitHub. بعد الانتقال إلى المفتاح العام يجري المالك التمرين شهريًا من جهازه."
+  }
+}

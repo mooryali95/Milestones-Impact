@@ -29,7 +29,7 @@ export const STAGES = [
       { id: 'm1.secrets', title: 'أسرار الدوال بلا افتراضي مضبوطة: مفتاح توقيع الشهادات وقناة التنبيه', kind: 'auto' },
       { id: 'm1.ci-main', title: 'آخر CI على main أخضر', kind: 'auto' },
       { id: 'm1.probe', title: 'المسبار الساعي أخضر في آخر 3 ساعات', kind: 'auto' },
-      { id: 'm1.backup-nightly', title: 'نسخة ليلية ناجحة خارج GitHub في آخر 30 ساعة', kind: 'auto' },
+      { id: 'm1.backup-nightly', title: 'نسخة حديثة كاملة مشفّرة في R2 (خارج GitHub) يثبتها الفحص اليومي في آخر 36 ساعة', kind: 'auto' },
       { id: 'm1.supabase-backups', title: 'نسخ Supabase اليومية مفعّلة (خطة مدفوعة)', kind: 'auto' },
       { id: 'm1.resend-plan', title: 'خطة Resend تكفي ضعف الدفعة يوميًا، وSPF وDKIM وDMARC سليمة', kind: 'attest' },
       { id: 'm1.restore-drill', title: 'تمرين استعادة ناجح في آخر 35 يومًا', kind: 'attest', maxAgeDays: 35 },
@@ -200,13 +200,16 @@ export async function collect() {
   });
   f['m1.ci-main'] = await safe(() => lastRun('ci.yml', null, ['push']));
   f['m1.probe'] = await safe(() => lastRun('probe.yml', 3));
-  // النجاح وحده لا يكفي: السير يتخطى النسخ إن غابت الأسرار وينتهي «ناجحًا»
+  // النجاح وحده لا يكفي: خطوة النسخ تنجح وتحفظ النسخة في GitHub وحده إن غابت أسرار R2 (تحذير لا فشل).
+  // الدليل على وصولها خارج GitHub هو الفحص اليومي في restore-drill.yml (وظيفة r2): يقرأ latest.json من الدلو
+  // ويتحقق من العمر والبيان والتشفير، ويُتخطى إن لم يُضبط R2.
   f['m1.backup-nightly'] = await safe(async () => {
-    const r = await lastRun('backup.yml', 30, ['schedule', 'workflow_dispatch']);
-    if (!r.ok) return r;
+    const r = await lastRun('restore-drill.yml', 36, ['schedule', 'workflow_dispatch']);
+    if (!r.run) return r;
     const jobs = (await gh(`/actions/runs/${r.run.id}/jobs`)).jobs || [];
-    const dump = jobs.flatMap((j) => j.steps || []).find((st) => /^Dump, encrypt/.test(st.name));
-    return dump?.conclusion === 'success' ? { ok: true, reason: `${r.reason}، والنسخ إلى R2 تمّ` } : { ok: false, reason: `${r.reason} لكن خطوة النسخ ${dump?.conclusion || 'غائبة'} (أسرار R2 أو المفتاح ناقصة)` };
+    const check = jobs.filter((j) => j.name === 'r2').flatMap((j) => j.steps || []).find((st) => /^The latest backup is fresh/.test(st.name));
+    if (check?.conclusion === 'success' && r.ok) return { ok: true, reason: `${r.reason}، وفحص R2 وجد نسخة حديثة كاملة مشفّرة` };
+    return { ok: false, reason: check?.conclusion === 'skipped' || !check ? 'لا نسخة في R2: أسرار R2 غير مضبوطة في GitHub (النسخ في أدوات GitHub وحدها)' : `فحص R2 ${check.conclusion} (${r.reason})` };
   });
   f['m1.supabase-backups'] = await safe(async () => {
     const b = await supa('/database/backups');
