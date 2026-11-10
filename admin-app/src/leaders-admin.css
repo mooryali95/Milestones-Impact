@@ -589,6 +589,16 @@
   .la-tab-group { flex-wrap: nowrap; flex: none; }
   .la-tab-group-label { min-width: 0; }
 }
+/* من 1100 فأعرض: عمود جانبي. كانت العشرون قسمًا أربعة صفوف تأخذ ثلث الشاشة الأولى فوق كل صفحة */
+@media (min-width: 1100px) {
+  .la-shell { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .la-shell > .la-tabs-grouped { position: sticky; top: 74px; margin-bottom: 0; gap: 16px; flex-wrap: nowrap; max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin; padding-inline-end: 4px; }
+  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; }
+  .la-shell .la-tab-group-label { margin-bottom: 4px; padding-inline-start: 12px; }
+  .la-shell .la-tab-group button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: start; padding: 7px 12px; border-radius: 10px; background: transparent; }
+  .la-shell .la-tab-group button:hover { background: var(--sand-light); }
+  .la-shell .la-tab-group button.on { background: var(--petrol-s); color: #fff; }
+}
 
 /* جدول المشاركين على الهاتف: بطاقة لكل مشارك، ولكل قيمة عنوانها من data-label */
 @media (max-width: 600px) {
