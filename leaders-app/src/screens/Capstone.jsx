@@ -12,9 +12,11 @@ import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
-import { PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { MAX_REVISIONS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
+
+const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
 
 const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.reviewed, c: 'ok' }
   : s.status === 'submitted' ? { t: SUBMISSION_STATUS.submitted, c: 'gold' }
@@ -95,7 +97,8 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       <FirstOpen id="capstone" icon="compass" title="مبادرتك على عملك الحقيقي" lines={[
         'اختر مشروعًا من عملك، وفصول الوثيقة تتبع نطاق ما تقوده كما حددته في ملفك.',
         'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تسلّمها.',
-        'ملاحظات المستشار تعيد الوثيقة إليك هنا مع ما يحتاج تعديلًا، ثم تعتمد.',
+        // قاعدة التحسين من مصدرها (MAX_REVISIONS): تُقال قبل التسليم لا بعده
+        `بعد التسليم لك ${REVISIONS_AR} بعد ملاحظات المستشار، ثم يقرر بدرجتها. فسلّمها حين تكتمل.`,
       ]} />
       <section className="cp-hero">
         <div className="cp-hero-main">
@@ -198,6 +201,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               <>
                 <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'سلّم الوثيقة للمستشار'}</button>
                 {!d.can_submit && d.blocker && <small className="muted">{d.blocker}</small>}
+                {d.can_submit && <small className="muted">بعد التسليم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي.</small>}
               </>
             )}
           </section>

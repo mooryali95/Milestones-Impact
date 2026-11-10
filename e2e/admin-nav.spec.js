@@ -56,3 +56,14 @@ test('قائمة مشاركين فارغة تقول ما يظهر فيها وت�
   await blank.getByRole('button', { name: 'أضف مشاركين من قائمة' }).click();
   await expect(page.getByRole('dialog', { name: 'استيراد مشاركين' })).toBeVisible();
 });
+
+test('الجهات والدفعات فارغتين: شرح وزر الإضافة بدل مساحة بيضاء أو جدول برؤوسه', async ({ page }) => {
+  await open(page, '#/leaders/orgs', []);
+  const orgs = page.locator('.la-blank');
+  await expect(orgs).toContainText('لا جهات بعد');
+  await expect(orgs.getByRole('button', { name: '+ جهة جديدة' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
+  const cohorts = page.locator('.la-blank');
+  await expect(cohorts).toContainText('لا دفعات بعد');
+  await expect(cohorts.getByRole('button', { name: '+ دفعة جديدة' })).toBeVisible();
+});
