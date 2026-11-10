@@ -47,7 +47,7 @@ export default function ImportParticipants({ orgs, onClose }) {
                 {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select></label>
             <label className="la-import-field"><span>الجدول</span>
-              <textarea rows={6} dir="auto" value={text} onChange={(e) => edit(e.target.value)} placeholder={'سارة الأحمد\tsara@example.sa\t0551234567\tمديرة مشاريع'} /></label>
+              <textarea rows={6} dir="auto" value={text} onChange={(e) => edit(e.target.value)} placeholder={'سارة الأحمد\tsara@example.sa\tمديرة مشاريع'} /></label>
             <input type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="ملف CSV" onChange={onFile} />
           </>
         )}
