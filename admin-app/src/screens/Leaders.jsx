@@ -55,6 +55,11 @@ export default function Leaders({ canWrite, pending }) {
   // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
   useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
   const [status, setStatus] = useState('');
+  // المجموعات المطوية تُحفظ لهذا المتصفح: كل مدير يبقي أمامه ما يستعمله
+  const [shut, setShut] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('la.nav.shut') || '[]')); } catch { return new Set(); } });
+  const toggleGroup = (g) => setShut((prev) => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); try { localStorage.setItem('la.nav.shut', JSON.stringify([...n])); } catch { /* اختياري */ } return n; });
+  const pendingOf = (k) => (k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0) || 0;
+  const groupPending = (keys) => keys.reduce((n, k) => n + pendingOf(k), 0);
   const [catalog, setCatalog] = useState(null);
   const [programId, setProgramId] = useState(null);
 
@@ -113,10 +118,13 @@ export default function Leaders({ canWrite, pending }) {
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
         {TAB_GROUPS.map(([g, keys]) => (
-          <div key={g} className="la-tab-group" role="group" aria-label={g}>
-            <span className="la-tab-group-label">{g}</span>
+          <div key={g} className={`la-tab-group${shut.has(g) && !keys.includes(tab) ? ' shut' : ''}`} role="group" aria-label={g}>
+            {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية */}
+            <button type="button" className="la-tab-group-label" aria-label={`مجموعة ${g}`} aria-expanded={!(shut.has(g) && !keys.includes(tab))} onClick={() => toggleGroup(g)}>
+              {g}{shut.has(g) && !keys.includes(tab) && groupPending(keys) > 0 && <span className="la-badge">{groupPending(keys)}</span>}
+            </button>
             {keys.map((k) => {
-              const n = k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0;
+              const n = pendingOf(k);
               return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}</button>;
             })}
           </div>

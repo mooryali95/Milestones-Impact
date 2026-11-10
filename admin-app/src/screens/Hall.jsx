@@ -38,7 +38,30 @@ export default function Hall({ canWrite }) {
   useEffect(() => { L('admin.programs').then((r) => setCohorts(r.success ? r.cohorts.filter((c) => c.status !== 'closed') : [])); }, []);
   const call = useCallback((key, body) => L(ACTION[key], body), []);
   const pickCohort = (id) => { setCid(id); try { localStorage.setItem('hall.cohort', id); } catch { /* اختياري */ } };
+  // دفعة واحدة مفتوحة تُختار وحدها، ودفعة محفوظة لم تعد في القائمة تُنسى
+  useEffect(() => {
+    if (!cohorts) return;
+    if (cid && !cohorts.some((c) => c.id === cid)) pickCohort('');
+    else if (!cid && cohorts.length === 1) pickCohort(cohorts[0].id);
+  }, [cohorts]);
   if (!cohorts) return <Spinner />;
+  // بلا دفعة مختارة: الصفحة تقول ما القاعة وتعرض الدفعات أزرارًا، بدل قائمة منسدلة وحدها في صفحة فارغة
+  if (!cid) {
+    return (
+      <div className="hall-admin">
+        <section className="la-card hall-pick" aria-labelledby="hall-pick-h">
+          <h3 id="hall-pick-h">القاعة الحية</h3>
+          <p>جلسة مباشرة لدفعة واحدة: توزيع الطاولات، وعرض الجمل، ومتابعة الإجابات والحضور لحظة بلحظة.</p>
+          {cohorts.length > 0 ? (
+            <>
+              <p className="hall-pick-k">اختر الدفعة التي تدير قاعتها</p>
+              <div className="hall-pick-list">{cohorts.map((c) => <button key={c.id} type="button" className="btn-sm" onClick={() => pickCohort(c.id)}>{c.name}</button>)}</div>
+            </>
+          ) : <p className="hall-pick-k">لا دفعة مفتوحة. أنشئ دفعة من «البرامج والدفعات» ثم عد إلى هنا.</p>}
+        </section>
+      </div>
+    );
+  }
   return (
     <div className="hall-admin">
       <label className="la-row"><span>الدفعة</span>
