@@ -103,9 +103,16 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByText('الرمز غير صحيح')).toBeVisible();
   await page.getByLabel('رمز التحقق').fill('246810');
 
-  // الملف: الحفظ معطل حتى تكتمل الحقول الأساسية
+  // الملف: الزر مفعّل دائمًا، والحفظ الناقص يسمّي الحقول الناقصة ويذهب إلى أولها. والاختياري مطوي في القبول
   const save = page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' });
-  await expect(save).toBeDisabled();
+  await expect(save).toBeEnabled();
+  await expect(page.getByLabel(/رابط LinkedIn/)).toBeHidden();
+  await save.click();
+  await expect(page.getByText('بقي 4 حقول: رقم الجوال، المسمى الوظيفي، جهة العمل، سنوات الخبرة.')).toBeVisible();
+  await expect(page.getByLabel('رقم الجوال')).toBeFocused();
+  await expect(page.getByLabel('رقم الجوال')).toHaveAttribute('aria-invalid', 'true');
+  await page.getByText('أضف المزيد الآن').click();
+  await expect(page.getByLabel(/رابط LinkedIn/)).toBeVisible();
   await page.getByLabel('رقم الجوال').fill('0500000000');
   await page.getByLabel('المسمى الوظيفي').fill('مديرة مشاريع');
   await page.getByLabel('جهة العمل').fill('جهة الاختبار');

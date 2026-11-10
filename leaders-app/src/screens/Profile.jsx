@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // الملف الشخصي: المرحلة الأولى في الرحلة، ويُعدَّل لاحقًا من الرحلة
 // ════════════════════════════════════════════════════════════════
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { PasskeyBanner, PreManager } from './Journey.jsx';
 import { gateDone } from '../gates.js';
 import SponsorNote from '../SponsorNote.jsx';
@@ -101,6 +101,7 @@ function Devices() {
 }
 
 const REQUIRED = ['full_name', 'phone', 'job_title', 'organization_name', 'years_experience'];
+const LABEL = { full_name: 'الاسم الكامل', phone: 'رقم الجوال', job_title: 'المسمى الوظيفي', organization_name: 'جهة العمل', years_experience: 'سنوات الخبرة' };
 
 export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const p = me.participant;
@@ -115,10 +116,15 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [tried, setTried] = useState(false);   // بعد أول محاولة حفظ ناقصة تُعلَّم الحقول الناقصة في مواضعها
+  const formRef = useRef(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
-  const filled = REQUIRED.filter((k) => String(f[k]).trim() !== '').length;
-  const ready = filled === REQUIRED.length;
+  const empty = REQUIRED.filter((k) => String(f[k]).trim() === '');
+  const filled = REQUIRED.length - empty.length;
+  const bad = (k) => tried && empty.includes(k);
+  // سمة الحقل الناقص: يقرؤها قارئ الشاشة ويلوّنها styles.css
+  const need = (k) => ({ required: true, name: k, 'aria-invalid': bad(k) || undefined });
 
   const pickCv = async (e) => {
     const file = e.target.files?.[0];
@@ -135,6 +141,13 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
 
   const save = async (e) => {
     e.preventDefault();
+    // الزر مفعّل دائمًا: زر معطّل لا يقول ما الناقص. الحفظ الناقص يسمّي الحقول ويذهب إلى أولها
+    if (empty.length) {
+      setTried(true);
+      setError(`بقي ${empty.length === 1 ? 'حقل واحد' : empty.length === 2 ? 'حقلان' : `${empty.length} حقول`}: ${empty.map((k) => LABEL[k]).join('، ')}.`);
+      formRef.current?.querySelector(`[name="${empty[0]}"]`)?.focus();
+      return;
+    }
     setBusy(true); setError('');
     // الاسم المقفل لا يُرسل، فلا يرفض الخادم بقية التعديلات
     const { full_name, name_en, ...rest } = f;
@@ -143,55 +156,22 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
     if (!res.success) return setError(res.message);
     // لا نجاح صامت: إن حُفظ ولم يكتمل الملف قلنا ما بقي بدل أن تبقى الشاشة كما هي
     if (onboarding && !gateDone(res, 'profile')) {
-      const LABEL = { full_name: 'الاسم الكامل', phone: 'رقم الجوال', job_title: 'المسمى الوظيفي', organization_name: 'جهة العمل', years_experience: 'سنوات الخبرة' };
       const missing = REQUIRED.filter((k) => res.participant?.[k] == null || String(res.participant[k]).trim() === '').map((k) => LABEL[k]);
       return setError(`حُفظت بياناتك. ${missing.length ? `بقي: ${missing.join('، ')}.` : 'تعذّر الانتقال الآن، حدّث الصفحة أو تواصل معنا.'}`);
     }
     onSaved(res);
   };
 
-  return (
-    <div className="page narrow">
-      {onboarding && (
-        <div className="stack" style={{ marginBottom: 18 }}>
-          <div className="row between small">
-            <span className="muted">{filled} من {REQUIRED.length} حقول أساسية</span>
-          </div>
-          {/* تقدّم ممنوح: التسجيل نفسه خطوة منجزة، فلا يبدأ الشريط من الصفر */}
-          <div className="bar"><i style={{ width: `${20 + (filled / REQUIRED.length) * 80}%` }} /></div>
-        </div>
-      )}
-      <form className="card stack" data-tour="profile-form" onSubmit={save}>
-        <div>
-          <h1 style={{ fontSize: 22 }}>{onboarding ? `أهلًا ${p.full_name.split(' ')[0]}، عرّفنا بك` : 'ملفي الشخصي'}</h1>
-          {onboarding && <p className="muted">هذه البيانات تساعد المستشار على فهم سياقك قبل اعتماد مسارك. تستغرق دقيقتين.</p>}
-        </div>
-
-        <div className="grid2">
-          <label className="field"><span>الاسم الكامل <em>(كما يظهر في الشهادة)</em></span>
-            <input className="input" required value={f.full_name} onChange={set('full_name')} autoComplete="name" readOnly={p.name_locked} /></label>
-          <label className="field"><span>الاسم بالإنجليزية <em>(للشهادة)</em></span>
-            <input className="input ltr" value={f.name_en} onChange={set('name_en')} placeholder="Sarah Abdullah Alahmad" autoComplete="off" lang="en" readOnly={p.name_locked} /></label>
-          {p.name_locked && <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>اسمك مقفل لأن شهادتك صدرت به. لتصحيحه تواصل مع إدارة البرنامج لإعادة إصدارها.</p>}
-          <label className="field"><span>رقم الجوال</span>
-            <input className="input ltr" required type="tel" value={f.phone} onChange={set('phone')} placeholder="05XXXXXXXX" autoComplete="tel" /></label>
-          <label className="field"><span>المسمى الوظيفي</span>
-            <input className="input" required value={f.job_title} onChange={set('job_title')} autoComplete="organization-title" /></label>
-          <label className="field"><span>جهة العمل <em>(حيث تعمل، وقد تختلف عن الجهة الراعية)</em></span>
-            <input className="input" required value={f.organization_name} onChange={set('organization_name')} autoComplete="organization" /></label>
-          <label className="field"><span>القطاع <em>(اختياري)</em></span>
-            <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
-          <label className="field"><span>سنوات الخبرة</span>
-            <input className="input" required type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
-          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتيب)</em></span>
-            <select className="input" value={f.work_scope} onChange={set('work_scope')}>
-              <option value="">لم أحدد بعد</option>
-              <option value="project">مشروع أو أكثر</option>
-              <option value="program">برنامج من مشاريع مترابطة</option>
-              <option value="portfolio">محفظة مشاريع وبرامج</option>
-            </select></label>
-        </div>
-
+  const nameEn = (
+    <label className="field"><span>الاسم بالإنجليزية <em>(للشهادة)</em></span>
+      <input className="input ltr" value={f.name_en} onChange={set('name_en')} placeholder="Sarah Abdullah Alahmad" autoComplete="off" lang="en" readOnly={p.name_locked} /></label>
+  );
+  const sectorField = (
+    <label className="field"><span>القطاع <em>(اختياري)</em></span>
+      <input className="input" value={f.sector} onChange={set('sector')} placeholder="حكومي، خاص، غير ربحي…" /></label>
+  );
+  const extras = (
+    <>
         <label className="field"><span>رابط LinkedIn <em>(اختياري)</em></span>
           <input className="input ltr" type="url" value={f.linkedin_url} onChange={set('linkedin_url')} placeholder="https://www.linkedin.com/in/…" /></label>
         <label className="field"><span>نبذة مختصرة <em>(اختياري)</em></span>
@@ -207,10 +187,62 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             {hasCv && <span className="chip ok">✓ {cvName || 'مرفوعة'}</span>}
           </div>
         </div>
+    </>
+  );
+
+  return (
+    <div className="page narrow">
+      {onboarding && (
+        <div className="stack" style={{ marginBottom: 18 }}>
+          <div className="row between small">
+            <span className="muted">{filled} من {REQUIRED.length} حقول أساسية</span>
+          </div>
+          {/* تقدّم ممنوح: التسجيل نفسه خطوة منجزة، فلا يبدأ الشريط من الصفر */}
+          <div className="bar"><i style={{ width: `${20 + (filled / REQUIRED.length) * 80}%` }} /></div>
+        </div>
+      )}
+      <form className="card stack" data-tour="profile-form" onSubmit={save} noValidate ref={formRef}>
+        <div>
+          <h1 style={{ fontSize: 22 }}>{onboarding ? `أهلًا ${p.full_name.split(' ')[0]}، عرّفنا بك` : 'ملفي الشخصي'}</h1>
+          {onboarding && <p className="muted">هذه البيانات تساعد المستشار على فهم سياقك قبل اعتماد مسارك. تستغرق دقيقتين.</p>}
+        </div>
+
+        <div className="grid2">
+          <label className="field"><span>الاسم الكامل <em>(كما يظهر في الشهادة)</em></span>
+            <input className="input" {...need('full_name')} value={f.full_name} onChange={set('full_name')} autoComplete="name" readOnly={p.name_locked} /></label>
+          {!onboarding && nameEn}
+          {p.name_locked && <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>اسمك مقفل لأن شهادتك صدرت به. لتصحيحه تواصل مع إدارة البرنامج لإعادة إصدارها.</p>}
+          <label className="field"><span>رقم الجوال</span>
+            <input className="input ltr" {...need('phone')} type="tel" value={f.phone} onChange={set('phone')} placeholder="05XXXXXXXX" autoComplete="tel" /></label>
+          <label className="field"><span>المسمى الوظيفي</span>
+            <input className="input" {...need('job_title')} value={f.job_title} onChange={set('job_title')} autoComplete="organization-title" /></label>
+          <label className="field"><span>جهة العمل <em>(حيث تعمل، وقد تختلف عن الجهة الراعية)</em></span>
+            <input className="input" {...need('organization_name')} value={f.organization_name} onChange={set('organization_name')} autoComplete="organization" /></label>
+          {!onboarding && sectorField}
+          <label className="field"><span>سنوات الخبرة</span>
+            <input className="input" {...need('years_experience')} type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
+          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتيب)</em></span>
+            <select className="input" value={f.work_scope} onChange={set('work_scope')}>
+              <option value="">لم أحدد بعد</option>
+              <option value="project">مشروع أو أكثر</option>
+              <option value="program">برنامج من مشاريع مترابطة</option>
+              <option value="portfolio">محفظة مشاريع وبرامج</option>
+            </select></label>
+        </div>
+
+        {onboarding ? (
+          <details className="more-fields">
+            <summary>أضف المزيد الآن <em>(اختياري، ويبقى متاحًا في «ملفي»)</em></summary>
+            <div className="stack">
+              <div className="grid2">{nameEn}{sectorField}</div>
+              {extras}
+            </div>
+          </details>
+        ) : extras}
 
         {error && <div className="alert err">{error}</div>}
         <div className="row">
-          <button className="btn gold" disabled={busy || uploading || !ready}>
+          <button className="btn gold" disabled={busy || uploading}>
             {busy ? 'جارٍ الحفظ…' : onboarding ? 'حفظ والانتقال لتحديد المستوى' : 'حفظ'}
           </button>
           {!onboarding && <button type="button" className="btn ghost" onClick={onCancel}>رجوع</button>}
