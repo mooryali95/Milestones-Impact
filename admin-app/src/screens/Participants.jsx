@@ -2,6 +2,7 @@
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
 import {
@@ -58,6 +59,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const [picked, setPicked] = useState(() => new Set());
   const [moveTo, setMoveTo] = useState('');
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // القائمة كاملة مرة واحدة (حتى 500)، والفلترة كلها في المتصفح فتستجيب فورًا
   const load = useCallback(async () => {
@@ -116,6 +118,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         actions={<>
           <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel{shown.length !== all.length ? ` (${shown.length})` : ''}</button>
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
+          {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
       {erasures.length > 0 && (
         <div className="la-bulk" role="status">
@@ -161,6 +164,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                 })}
         </tbody>
       </table></div>
+      {importing && <ImportParticipants orgs={orgs} onClose={(added) => { setImporting(false); if (added) { toast('أُضيف المشاركون'); load(); } }} />}
       {adding && (
         <Form title="إضافة مشارك"
           fields={[{ name: 'full_name', label: 'الاسم' }, { name: 'email', label: 'البريد', type: 'email', dir: 'ltr' }, { name: 'organization_name', label: 'الجهة' }, { name: 'job_title', label: 'المسمى' }]}

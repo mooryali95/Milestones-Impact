@@ -241,6 +241,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.stage-override': A.stageOverride,
   'admin.stage-create': A.stageCreate,
   'admin.create-participant': A.createParticipant,
+  'admin.participants-import': A.participantsImport,
   'admin.participant-save': A.participantSave,
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
