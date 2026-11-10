@@ -14,7 +14,10 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { minutesAr, QR_WINDOW, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+import { minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+
+// عنوان المتطلب برموزه مملوءة كما يراه المشارك: «حضور الأيام التدريبية (أربعة أيام)» لا «({days:T-ATTEND})» (التدقيق 2026-11-10، البند 9.9)
+const reqTitle = (r) => renderJourneyText(r?.title_ar || '', { reqs: r ? [r] : [] });
 
 const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 const SESSION_FIELDS = [
@@ -85,7 +88,7 @@ function Attendance({ id, canWrite, onClose }) {
       <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label="الحضور" style={{ maxWidth: 720 }}>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <h3>{d.session.title_ar} · {d.people.filter((p) => p.attendance).length} من {d.people.length}</h3>
-          <p className="la-muted">{d.requirement.title_ar} · {when(d.session.starts_at)}</p>
+          <p className="la-muted">{reqTitle(d.requirement)} · {when(d.session.starts_at)}</p>
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>الجهة</th><th>الحضور</th><th /></tr></thead>
             <tbody>{d.people.map((p) => (
@@ -132,7 +135,7 @@ function Workshops({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              <div><b>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
               {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
@@ -187,7 +190,7 @@ function Coaching({ data, reload, canWrite }) {
     // الخبراء النشطون بدور الموجّه: الجلسة تُنسب للمختار، وفارغ = حسابك إن كان لك ملف خبير بالبريد نفسه
     const coaches = (ex.experts || []).filter((e) => e.status === 'active' && e.roles.includes('coach'));
     setForm({
-      title: `جلسة يدوية: ${r.title_ar}`,
+      title: `جلسة يدوية: ${reqTitle(r)}`,
       fields: [
         { name: 'participant_id', label: 'المشارك', type: 'select', options: Object.fromEntries(list.map((p) => [p.id, `${p.full_name} · ${p.email}`])) },
         ...(coaches.length ? [{ name: 'expert_id', label: 'الموجّه', type: 'select', empty: 'أنا (بريد حسابي)', options: Object.fromEntries(coaches.map((e) => [e.id, e.full_name])) }] : []),
@@ -212,7 +215,7 @@ function Coaching({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{r.title_ar}</b> <small className="la-muted"><code>{r.code}</code> · {sessionsAr(c.sessions_required || SESSION_DEFAULTS.sessions_required)} · {minutesAr(c.minutes || SESSION_DEFAULTS.minutes)} · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
+              <div><b>{reqTitle(r)}</b> <small className="la-muted"><code>{r.code}</code> · {sessionsAr(c.sessions_required || SESSION_DEFAULTS.sessions_required)} · {minutesAr(c.minutes || SESSION_DEFAULTS.minutes)} · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
               <div className="la-row">
                 {c.booking_url ? <span className="la-chip ok">الحجز عبر {c.provider === 'calendly' ? 'Calendly' : 'Cal.com'}</span> : <span className="la-chip warn">بلا رابط حجز</span>}
                 {canWrite && c.instant_url && c.mode !== 'in_person' && (r.instant_open

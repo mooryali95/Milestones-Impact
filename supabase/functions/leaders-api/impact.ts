@@ -11,6 +11,7 @@ import { requirementIdByCode } from './programs.ts';
 import {
   compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
+  linkAfterDecisionOk, LINK_CLOSED_AR,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -371,6 +372,8 @@ async function raterFrom(t: unknown) {
   const r = must(await db.from('raters').select('*, participants(full_name)').eq('token_hash', await hash(token)).maybeSingle()) as any;
   if (!r || r.status === 'revoked') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
   if (new Date(r.expires_at) < new Date() && r.status !== 'submitted') throw new Fail('انتهت صلاحية الرابط، اطلب دعوة جديدة', 410, 'expired');
+  // بعد الإرسال: اطلاع محدود المدة (4.5)
+  if (r.status === 'submitted' && !linkAfterDecisionOk(r.submitted_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
   return r;
 }
 
@@ -430,7 +433,8 @@ export async function raterSubmit(b: Body) {
 // ── الإدارة: تقرير الأثر للدفعة أو للجهة ──
 export async function adminReport(b: Body) {
   const people = await all((f, t) => {
-    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)');
+    // حساب العرض خارج إحصاءات الأثر كما في النظرة العامة (التدقيق 2026-11-10، البند 9.8: 6 هنا مقابل 5 هناك)
+    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false);
     if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
     if (b.participant_id) q = q.eq('id', String(b.participant_id));
     return q.order('id').range(f, t);

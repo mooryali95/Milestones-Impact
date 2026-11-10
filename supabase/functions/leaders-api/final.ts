@@ -72,9 +72,13 @@ export async function save(a: Actor, b: Body) {
   if (!p) throw new Fail('المشارك غير موجود', 404);
   const { program, components, record, ctx } = await sources(p);
   if (record?.status === 'approved') throw new Fail('التقييم معتمد؛ أعد فتحه أولًا لتعديله', 409);
-  let adjust;
+  let adjust: any;
   try { adjust = cleanAdjust(b.adjust || {}, components, ctx); } catch (err) { throw new Fail((err as Error).message); }
   const live = computeFinal(components, program.final_eval, adjust, ctx);
+  // من حفظ تعديلًا يُسجَّل، ولو في مسودة رفعها غيره بعده، فلا يعتمد ما عدّله (4.6). القائمة يكتبها الخادم وحده
+  const touched = Object.keys(adjust.components || {}).length > 0 || !!adjust.score || !!adjust.decision;
+  const prior = Array.isArray(record?.adjust?.edited_by) ? record.adjust.edited_by : [];
+  adjust = { ...adjust, edited_by: touched ? [...new Set([...prior, String(a.email).toLowerCase()])] : prior };
   const submit = b.submit === true;
   if (submit && !live.decision) throw new Fail(`لا يُقترح قرار والتغطية ${live.coverage}٪ دون الحد ${live.config.min_coverage}٪. اكتمل: ${live.missing.join('، ') || '—'}، أو حدد القرار بنفسك بتعليل`);
   const now = new Date().toISOString();

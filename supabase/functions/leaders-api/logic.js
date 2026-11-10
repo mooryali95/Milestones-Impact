@@ -382,6 +382,17 @@ export function completionSource(r) {
 // يبني الرحلة كما يراها المشارك: كل مرحلة بحالتها ومتطلباتها.
 // المرحلة تكتمل حين تكتمل متطلباتها الإلزامية، والمرحلة الأولى غير
 // المكتملة هي الحالية، وما بعدها مقفل. لا قفز فوق مرحلة.
+// استبانة أيام التدريب تُفتح بعد الحضور لا قبله (التدقيق 2026-11-10، البند 7.8): «رأيك في أيام التدريب ✓» مع «حضرت 0 من 4».
+// في مرحلة فيها بند حضور (ورشة موثقة، kind: workshop) تنتظر الاستبانة غير المرسلة أول حضور مسجل. ما أُرسل قبل هذا يبقى كما هو.
+export const SURVEY_WAITS_AR = 'تُفتح بعد حضورك أول يوم تدريبي، فرأيك يكون فيما حضرته';
+export function gateSurveys(items) {
+  const attend = items.find((i) => i.kind === 'workshop');
+  if (!attend) return items;
+  const attended = attend.activity ? Number(attend.activity.count || 0) > 0 : attend.status === 'done';
+  if (attended) return items;
+  return items.map((i) => (i.kind === 'survey' && i.status !== 'done' ? { ...i, waits: SURVEY_WAITS_AR } : i));
+}
+
 // ctx (اختياري): قواعد الفتح الزمنية وتدخل الأدمن لهذا المشارك — انظر resolveStages
 export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date() }) {
   const sorted = [...stages].filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort);
@@ -400,7 +411,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
       });
     const doneCount = items.filter((i) => i.status === 'done').length;
-    return { ...stage, items, done: doneCount, total: items.length };
+    return { ...stage, items: gateSurveys(items), done: doneCount, total: items.length };
   });
   return resolveStages(withItems, { overrides, cohortStart, today });
 }
@@ -886,6 +897,13 @@ export function readingVerdict(row) {
   return { state, pct: state === 'read' ? 100 : Math.min(pct, 99), seconds: row.active_seconds, expected };
 }
 export const READING_STATE_AR = { read: 'قرأ', skimmed: 'تصفّح سريعًا', partial: 'قراءة جزئية', unread: 'لم يقرأ' };
+
+// إتمام الباب بتعريف الرحلة نفسه (readingStatus): قراءة فعلية ثم الاختبار. مصدر واحد للكتيب والرحلة،
+// فلا يقول أحدهما «أتممت» والآخر «لم يقرأ» عن الباب نفسه.
+export function chapterCompletion(verdict, quizDone) {
+  const read = verdict?.state === 'read';
+  return { reading: { state: verdict?.state || 'unread', pct: verdict?.pct || 0 }, complete: read && !!quizDone };
+}
 
 // يضيف نبضة قراءة إلى السجل. الثواني المرسلة لا تتجاوز الزمن الفعلي
 // منذ النبضة السابقة، فلا يمكن تضخيم الوقت بإرسال أرقام كبيرة.
@@ -2139,3 +2157,27 @@ export function ratingSummary(rows = []) {
   const avg = n ? Math.round((rows.reduce((a, r) => a + Number(r.overall), 0) / n) * 10) / 10 : null;
   return { avg, count: n, visible: n >= MIN_RATINGS };
 }
+
+// ── الاسم على الشهادة (التدقيق 2026-11-10، البند 7.3) ──
+// مصدر واحد للواجهة والخادم: اسمان على الأقل بالحروف (مع التشكيل والفواصل المعتادة في الأسماء)، كل منهما حرفان فأكثر،
+// بلا أرقام ولا رموز. الإنجليزي بالحروف اللاتينية واسمان على الأقل. والمسمى ثلاثة أحرف على الأقل.
+export function certNameOk(v) {
+  const w = String(v || '').trim().split(/\s+/);
+  return w.length >= 2 && w.every((x) => /^[\p{L}\p{M}.'’-]+$/u.test(x)) && w.filter((x) => x.replace(/[^\p{L}]/gu, '').length >= 2).length >= 2;
+}
+export function certNameEnOk(v) {
+  const t = String(v || '').trim();
+  return /^[A-Za-z][A-Za-z .'-]{1,119}$/.test(t) && certNameOk(t);
+}
+export const JOB_TITLE_MIN = 3;
+
+// ── روابط الاستعمال الواحد بعد القرار (التدقيق 2026-11-10، البند 4.5) ──
+// رابط المقيّم والراعي ومؤكد الأثر وعرض الخدمة كان يبقى يعرض القرار واسم المشارك بلا نهاية. بعد القرار يبقى صالحًا
+// للاطلاع 30 يومًا ثم يُرد بأنه انتهى. قبل القرار تحكمه مهلته الأصلية كما كانت.
+export const LINK_AFTER_DECISION_DAYS = 30;
+export function linkAfterDecisionOk(decidedAt, now = Date.now()) {
+  if (!decidedAt) return true;
+  const t = Date.parse(decidedAt);
+  return !Number.isFinite(t) || now - t <= LINK_AFTER_DECISION_DAYS * 864e5;
+}
+export const LINK_CLOSED_AR = 'انتهت مدة الاطلاع على هذا الرابط بعد تسجيل القرار. إن احتجت شيئًا فراسلنا.';

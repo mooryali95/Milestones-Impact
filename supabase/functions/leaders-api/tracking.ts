@@ -7,7 +7,7 @@
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail } from './core.ts';
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award } from './participant.ts';
-import { isEmail, normalizeEmail } from './logic.js';
+import { isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail } from './logic.js';
 import {
   CHECKPOINTS, cleanUpdate, HEALTH, latestState, M_STATUS, periodOf, portfolioOutcomes, trackingPlan, trackingSummary,
   UPDATE_POINTS, VERIFIED_POINTS, VERIFY,
@@ -127,6 +127,8 @@ async function verifyFrom(tk: unknown) {
   if (!u) throw new Fail('الرابط غير صالح أو استُبدل بطلب أحدث', 404, 'invalid');
   u.participants = must(await db.from('participants').select('id, full_name, email').eq('id', u.participant_id).maybeSingle());
   if (u.verify_status === 'pending' && new Date(u.verify_expires_at) < new Date()) throw new Fail('انتهت صلاحية الرابط، يرسل القائد المراجعة من جديد ليصلك رابط آخر', 410, 'expired');
+  // بعد القرار: اطلاع محدود المدة (4.5)
+  if (u.verify_status && u.verify_status !== 'pending' && !linkAfterDecisionOk(u.verify_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
   return u;
 }
 

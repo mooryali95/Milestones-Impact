@@ -104,4 +104,5 @@ export const MIGRATIONS = [
   '20261110180000_leaders_capstone_card_gate',
   '20261110190000_leaders_cohort_experts',
   '20261110200000_leaders_group_advisor',
+  '20261110210000_leaders_name_confirmation',
 ];

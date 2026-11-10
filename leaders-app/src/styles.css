@@ -1510,3 +1510,8 @@ body:has(.tour) main{padding-bottom:260px}
 .nav-hint{position:fixed;inset-inline:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;margin:0 auto;max-width:420px;padding:10px 14px;border-radius:12px;background:var(--brand-graphite);color:var(--brand-cream);font-size:14px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 @media (min-width:900px){.nav-hint{bottom:auto;top:72px}}
 .banner.warn .ico{color:var(--bad)}
+/* «هكذا يظهر اسمك» قبل الشهادة (تدقيق الإنتاج 2026-11-10، البند 7.3) */
+.name-confirm { margin-top: 8px; padding: 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface); }
+.name-confirm-preview { display: grid; gap: 4px; padding: 12px; border-radius: 8px; background: var(--paper, transparent); text-align: center; }
+.name-confirm-preview b { font-size: 22px; color: var(--graphite); }
+.name-confirm-preview .ltr { font-size: 17px; letter-spacing: .02em; }
