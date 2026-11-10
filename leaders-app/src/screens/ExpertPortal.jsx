@@ -341,6 +341,9 @@ function Dashboard({ onOut }) {
         </section>
       )}
 
+      {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
+      <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
+
       <div className="xpp-cols">
         <MyParticipants onOpen={setView} />
         <section className="card stack">
@@ -353,7 +356,6 @@ function Dashboard({ onOut }) {
 
       <AdvisorReviews />
       <PeerQueue say={setMsg} />
-      <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
 
       {toRate.length > 0 && (
         <section className="card stack">

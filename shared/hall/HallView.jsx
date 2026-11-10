@@ -19,7 +19,7 @@ const DIST = [
   ...['question', 'research', 'idea', 'can', 'believe', 'assume'].map((k) => [k, (d) => d[k] || 0]),
 ];
 const Q_AR = { why: 'لماذا', what: 'ماذا', how: 'كيف', absent: 'ماذا لو', who: 'من', when: 'متى' };
-const TABLES = { lead: { x: 800, y: 395, rx: 120, ry: 42 }, support: { x: 470, y: 570, rx: 150, ry: 52 }, guide: { x: 1130, y: 570, rx: 150, ry: 52 }, eval: { x: 800, y: 740, rx: 170, ry: 58 }, persona: { x: 1250, y: 330, rx: 70, ry: 26 } };
+const TABLES = { lead: { x: 800, y: 395, rx: 120, ry: 42 }, support: { x: 470, y: 570, rx: 150, ry: 52 }, guide: { x: 1130, y: 570, rx: 150, ry: 52 }, eval: { x: 800, y: 740, rx: 170, ry: 58 }, persona: { x: 1250, y: 305, rx: 70, ry: 26 } };
 const R = 22;
 
 function gridLines() {
@@ -37,6 +37,22 @@ export const DOOR_MAX = 8;
 const SEATS_ARC = 8;
 const FLOOR_TOP = 420, FLOOR_BOTTOM = 840;
 const floorWidth = (y) => 760 + 300 * ((y - 250) / 630);
+// مواضع الطاولات المرقّمة: صفوف على الأرضية، والطاولة 1 أعلى اليمين (اتجاه القراءة)، وحول كل طاولة حلقة مقاعد كاملة.
+// صف واحد حتى 4 طاولات، وصفّان حتى 8، وثلاثة لما زاد (حتى 15 طاولة، أي نحو مئة مشارك).
+const TABLE_RX = 70, TABLE_RY = 24, SEAT_RX = TABLE_RX + 30, SEAT_RY = TABLE_RY + 30;
+export function tableSlots(nos) {
+  const list = [...nos].sort((x, y) => x - y);
+  const rows = list.length <= 4 ? 1 : list.length <= 8 ? 2 : 3;
+  const per = Math.ceil(list.length / rows);
+  const ys = rows === 1 ? [615] : rows === 2 ? [510, 720] : [460, 615, 770];
+  const out = {};
+  list.forEach((no, i) => {
+    const row = Math.floor(i / per), col = i % per, inRow = Math.min(per, list.length - row * per);
+    const y = ys[row], t = (y - 250) / 630, left = 250 - 210 * t, w = 1100 + 420 * t;
+    out[no] = { x: left + w - (col + 0.5) * (w / inRow), y };
+  });
+  return out;
+}
 export function layout(people, stage) {
   const atTables = ['split', 'round', 'reveal'].includes(stage);
   const pos = {};
@@ -51,8 +67,16 @@ export function layout(people, stage) {
     pos[p.id] = { x: 800 - w / 2 + col * (w / (cols - 1)), y };
   });
   door.forEach((p, i) => { pos[p.id] = i < DOOR_MAX ? { x: 1500 - (i % 2) * 50, y: 830 - Math.floor(i / 2) * 50 } : null; });
+  const numbered = people.some((p) => seated(p) && !p.persona && p.table);
+  const slots = numbered ? tableSlots(new Set(people.filter((p) => seated(p) && !p.persona && p.table).map((p) => p.table))) : null;
   people.filter(seated).forEach((p) => {
     const team = p.persona ? 'persona' : p.team;
+    if (numbered && !p.persona && p.table) {
+      const mates = people.filter((q) => !q.persona && q.table === p.table);
+      const a = (2 * Math.PI * mates.indexOf(p)) / mates.length - Math.PI / 2, c = slots[p.table];
+      pos[p.id] = { x: c.x + Math.cos(a) * SEAT_RX, y: c.y + Math.sin(a) * SEAT_RY };
+      return;
+    }
     const mates = people.filter((q) => (q.persona ? 'persona' : q.team) === team);
     const k = mates.indexOf(p), n = mates.length, t = TABLES[team];
     if (team === 'persona') { pos[p.id] = { x: t.x, y: t.y - 18 }; return; }
@@ -68,7 +92,7 @@ export function layout(people, stage) {
 // ما تعرضه بطاقة الشخص عند المرور يصل قارئ الشاشة في اسمه: الفريق والقيادة والحكم والحضور.
 // الشخص زر حين يكون لاختياره أثر (لوحة الميسّر)، وإلا صورة موسومة تُبلغ بالتركيز كما تُبلغ بالمرور
 function personLabel(p, team) {
-  return [p.name, team && TEAM_AR[team], p.leader && 'قائد الجولة', p.choice && `حكمه: ${OPT_AR[p.choice]}`,
+  return [p.name, team && TEAM_AR[team], p.table && !p.persona && `طاولة ${p.table}`, p.leader && 'قائد الجولة', p.choice && `حكمه: ${OPT_AR[p.choice]}`,
     !p.present && (p.joined ? 'خارج القاعة الآن' : 'لم يدخل القاعة بعد')].filter(Boolean).join('، ');
 }
 
@@ -80,6 +104,9 @@ export default function HallView({ view, me = null, onPerson, compact = false })
   const pos = useMemo(() => layout(people, stage), [people, stage]);
   const s = view?.sentence;
   const dist = view?.distribution;
+  // الطاولات المرقّمة حين يصل رقمها مع المشاركين (view.tables من الخادم)، وإلا طاولات الفرق الأربع
+  const numbered = atTables && (view?.tables?.length > 0) && people.some((p) => p.table);
+  const slots = useMemo(() => (numbered ? tableSlots(view.tables.map((t) => t.no)) : {}), [numbered, view?.tables]);
   const waiting = people.filter((p) => !p.joined && !(atTables && (p.team || p.persona))).length;
 
   return (
@@ -119,7 +146,21 @@ export default function HallView({ view, me = null, onPerson, compact = false })
           <text x="800" y="255" textAnchor="middle" fill="#93a8ad" fontSize="13">منصة المدرّب{s && atTables ? ` · أجاب ${view.answered} من ${view.total}` : view && !atTables ? ` · دخل ${people.length - waiting} من ${people.length}` : ''}</text>
         </g>
 
-        {Object.entries(TABLES).map(([k, t]) => (
+        {numbered && view.tables.map((t) => {
+          const c = slots[t.no]; if (!c) return null;
+          return (
+            <g key={t.no}>
+              <ellipse cx={c.x} cy={c.y + 8} rx={TABLE_RX} ry={TABLE_RY} fill="#0b171c" opacity=".6" />
+              <ellipse cx={c.x} cy={c.y} rx={TABLE_RX} ry={TABLE_RY} fill="#1d3640" stroke={TEAM_COLOR[t.team]} strokeWidth="2" />
+              <text x={c.x} y={c.y + 1} textAnchor="middle" fill="#f3ead9" fontSize="16" fontWeight="600">طاولة {t.no}</text>
+              <text x={c.x} y={c.y + 16} textAnchor="middle" fill={TEAM_COLOR[t.team]} fontSize="12">{TEAM_AR[t.team]}</text>
+            </g>
+          );
+        })}
+        {numbered && Object.entries(view.teams || {}).map(([k, t], i) => (
+          <text key={k} x={1180 - i * 250} y="872" textAnchor="middle" fill={TEAM_COLOR[k]} fontSize="14">{TEAM_AR[k]} · {t.count}{t.score != null ? ` · رصيده ${t.score > 0 ? '+' : ''}${t.score}` : ''}</text>
+        ))}
+        {Object.entries(TABLES).filter(([k]) => !numbered || k === 'persona').map(([k, t]) => (
           <g key={k} opacity={atTables ? 1 : 0} style={{ transition: 'opacity .6s' }}>
             <ellipse cx={t.x} cy={t.y + 10} rx={t.rx} ry={t.ry} fill="#0b171c" opacity=".6" />
             <ellipse cx={t.x} cy={t.y} rx={t.rx} ry={t.ry} fill="#1d3640" stroke={TEAM_COLOR[k]} strokeWidth="2" />
@@ -161,7 +202,7 @@ export default function HallView({ view, me = null, onPerson, compact = false })
           background: '#0f2128f2', color: '#f3ead9', border: '1px solid #2a4651', borderRadius: 14, padding: '10px 14px', minWidth: 200, maxWidth: 270, fontSize: 13.5, lineHeight: 1.6, boxShadow: '0 18px 40px #0008', direction: 'rtl', zIndex: 5,
         }}>
           {(tip.p.persona || tip.p.team) && <span style={{ background: TEAM_COLOR[tip.p.persona ? 'persona' : tip.p.team], color: '#0d1b22', fontWeight: 600, fontSize: 12, padding: '2px 8px', borderRadius: 999 }}>
-            {TEAM_AR[tip.p.persona ? 'persona' : tip.p.team]}{tip.p.leader ? ' · قائد الجولة' : ''}</span>}
+            {TEAM_AR[tip.p.persona ? 'persona' : tip.p.team]}{tip.p.table && !tip.p.persona ? ` · طاولة ${tip.p.table}` : ''}{tip.p.leader ? ' · قائد الجولة' : ''}</span>}
           <div style={{ fontWeight: 600, fontSize: 15, marginTop: 4 }}>{tip.p.name}</div>
           {(tip.p.title || tip.p.org) && <div style={{ color: '#93a8ad' }}>{[tip.p.title, tip.p.org].filter(Boolean).join(' · ')}</div>}
           {tip.p.level && <div style={{ color: '#93a8ad' }}>المستوى: {LVL_AR[tip.p.level]}</div>}

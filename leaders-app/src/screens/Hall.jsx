@@ -94,6 +94,10 @@ export default function Hall({ onBack }) {
                 <b>{me?.persona ? `تتقمّص: ${v.session.persona_ar || 'الشخصية الافتراضية'}` : me?.team ? TEAM_AR[me.team] : st === 'enter' ? 'أنت في القاعة. تبدأ الجلسة حين يفتحها الخبير' : st === 'train' ? 'التدريب أولًا للجميع' : 'بانتظار التقسيم'}</b>
                 {me?.leader && <span className="chip gold"> ♔ قائد الجولة</span>}
                 {me?.team && <p className="small muted">{(s?.tasks || {})[me.team] || HALL_TEAM_TASK_AR[me.team]}</p>}
+                {me?.table && !me.persona && (
+                  <p className="hall-table"><b>طاولة {me.table}</b>
+                    <span className="small muted"> · معك: {v.people.filter((p) => p.table === me.table && p.id !== me.id && !p.persona).map((p) => p.name).join('، ') || 'لا أحد بعد'}</span></p>
+                )}
               </div>
               <span className="row">
                 <button className={`btn sm ${me?.hand ? '' : 'ghost'}`} disabled={busy} onClick={() => act('hall.hand', { raised: !me?.hand })} aria-pressed={!!me?.hand}>✋ {me?.hand ? 'أنزل يدك' : 'ارفع يدك'}</button>

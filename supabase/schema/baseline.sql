@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261110100000_leaders_approval_two_working_days
+-- as-of migration: 20261110120000_leaders_hall_tables
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -266,6 +266,8 @@ create table if not exists leaders.cohort_roles (
   participant_id uuid not null,
   team text not null,
   updated_at timestamp with time zone default now() not null,
+  table_no smallint,
+  constraint cohort_roles_table_no_check CHECK (((table_no IS NULL) OR ((table_no >= 1) AND (table_no <= 99)))),
   constraint cohort_roles_team_check CHECK ((team = ANY (ARRAY['support'::text, 'lead'::text, 'guide'::text, 'eval'::text]))),
   constraint cohort_roles_pkey PRIMARY KEY (cohort_id, participant_id)
 );

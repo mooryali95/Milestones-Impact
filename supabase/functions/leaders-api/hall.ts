@@ -4,7 +4,7 @@
 // التزامن بالسؤال الخفيف: كل تغيير يرفع version، والجهاز يرسل رقمه فيُرد عليه
 // «لا جديد» بقراءة واحدة، أو بالحالة كاملة حين تتغير. الحضور يتجدد مع كل سؤال.
 import { audit, db, Fail, must } from './core.ts';
-import { HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
+import { assignTables, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
 import { overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
@@ -22,12 +22,39 @@ async function bump(id: string, patch: Body = {}) {
   return must(await db.from('hall_sessions').update({ ...patch, version: cur.version + 1 }).eq('id', id).select(SESSION_COLS).single()) as any;
 }
 
+// فرق الدفعة وطاولاتها. table_no يأتي بالترحيل 20261110120000؛ القراءة بـ* والكتابة بمحاولة ثانية بلا العمود،
+// فتعمل الدالة قبل الترحيل (الطاولات تُشتق ولا تُحفظ) وبعده (deploy-gate: tolerant).
+async function seats(cohortId: string) {
+  const rows = ((await db.from('cohort_roles').select('*').eq('cohort_id', cohortId)).data || []) as any[];
+  return {
+    roles: Object.fromEntries(rows.map((r) => [r.participant_id, r.team])) as Record<string, string>,
+    tables: Object.fromEntries(rows.filter((r) => r.table_no).map((r) => [r.participant_id, r.table_no])) as Record<string, number>,
+  };
+}
+async function saveSeats(cohortId: string, roles: Record<string, string>, tables: Record<string, number>, only?: string[]) {
+  const now = new Date().toISOString();
+  const ids = only || Object.keys(roles);
+  if (!ids.length) return;
+  const rows = ids.map((participant_id) => ({ cohort_id: cohortId, participant_id, team: roles[participant_id], table_no: tables[participant_id] ?? null, updated_at: now }));
+  const { error } = await db.from('cohort_roles').upsert(rows);
+  if (error) must(await db.from('cohort_roles').upsert(rows.map(({ table_no, ...r }) => r)));
+}
+// يضع مشاركًا في فريق (ويُلحقه بأصغر طاولاته) ويحفظ مقعده وحده
+async function seatOne(cohortId: string, participantId: string, team: string) {
+  const cur = await seats(cohortId);
+  const roles = { ...cur.roles, [participantId]: team };
+  const stored = { ...cur.tables };
+  delete stored[participantId];
+  const tables = assignTables(roles, stored);
+  await saveSeats(cohortId, roles, tables, [participantId]);
+}
+
 // الحالة الكاملة لطرف
 async function buildState(session: any, viewer: { kind: 'participant' | 'admin'; id?: string }) {
   const cohort = must(await db.from('cohorts').select('*').eq('id', session.cohort_id).single()) as any;
-  const [members, roles, presence, sentence, prog] = await Promise.all([
+  const [members, seat, presence, sentence, prog] = await Promise.all([
     cohortMembers(cohort),
-    db.from('cohort_roles').select('participant_id, team').eq('cohort_id', cohort.id),
+    seats(cohort.id),
     db.from('hall_presence').select('participant_id, last_seen, hand').eq('session_id', session.id),
     session.sentence_id ? db.from('katon_sentences').select('*').eq('id', session.sentence_id).maybeSingle() : Promise.resolve({ data: null }),
     db.from('programs').select('katon_points').eq('id', cohort.program_id).maybeSingle(),
@@ -40,7 +67,7 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
   const view = hallView({
     session, sentence: (sentence as any).data, presence: presence.data || [], answers,
     members: members.map((m: any) => ({ ...m, level: overallLevel(m.levels) })),
-    roles: Object.fromEntries((roles.data || []).map((r: any) => [r.participant_id, r.team])),
+    roles: seat.roles, tables: seat.tables,
     points: katonPoints((prog as any).data?.katon_points), viewer,
   });
   return { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic, sentences };
@@ -66,6 +93,17 @@ export async function join(p: any) {
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) throw new Fail('لا قاعة مفتوحة لدفعتك الآن', 404);
   must(await db.from('hall_presence').upsert({ session_id: s.id, participant_id: p.id, last_seen: new Date().toISOString() }));
+  // المتأخر بعد تقسيم آلي: يُلحق بأصغر طاولة في القاعة (من غير فريق القيادة)، ويستطيع الخبير نقله
+  if (['split', 'round', 'reveal'].includes(s.stage) && (s.split_method === 'mixed' || s.split_method === 'level')) {
+    const cur = await seats(cohort.id);
+    if (!cur.roles[p.id]) {
+      const all = assignTables(cur.roles, cur.tables);
+      const size = new Map<number, { team: string; n: number }>();
+      for (const [id, no] of Object.entries(all)) { const t = size.get(no) || { team: cur.roles[id], n: 0 }; t.n++; size.set(no, t); }
+      const pick = [...size.entries()].filter(([, t]) => t.team !== 'lead').sort((a, b) => a[1].n - b[1].n || a[0] - b[0])[0];
+      await seatOne(cohort.id, p.id, pick ? pick[1].team : 'support');
+    }
+  }
   await bump(s.id);
   return state(p, {});
 }
@@ -85,7 +123,7 @@ export async function pick(p: any, b: Body) {
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s || s.stage !== 'split' || s.split_method !== 'choose') throw new Fail('اختيار الفريق غير متاح الآن', 409);
   if (!HALL_TEAMS.includes(b.team)) throw new Fail('اختر أحد الفرق الأربعة');
-  must(await db.from('cohort_roles').upsert({ cohort_id: cohort.id, participant_id: p.id, team: b.team, updated_at: new Date().toISOString() }));
+  await seatOne(cohort.id, p.id, b.team);
   await bump(s.id);
   return state(p, {});
 }
@@ -195,8 +233,9 @@ export async function split(a: Actor, b: Body) {
     const ids = new Set((pres || []).map((x: any) => x.participant_id));
     const members = (await cohortMembers(cohort)).filter((m: any) => !ids.size || ids.has(m.id));
     const roles = splitTeams(members, method);
-    const now = new Date().toISOString();
-    if (Object.keys(roles).length) must(await db.from('cohort_roles').upsert(Object.entries(roles).map(([participant_id, team]) => ({ cohort_id: s.cohort_id, participant_id, team, updated_at: now }))));
+    // تقسيم جديد يعني طاولات جديدة؛ والترتيب بالمستوى فتتنوع المستويات داخل الطاولة
+    const byLevel = [...members].sort((x: any, y: any) => String(overallLevel(x.levels)).localeCompare(String(overallLevel(y.levels)))).map((m: any) => m.id);
+    await saveSeats(s.cohort_id, roles, assignTables(roles, {}, byLevel));
     const leader = Object.entries(roles).find(([, t]) => t === 'lead')?.[0] || null;
     await bump(s.id, { stage: 'split', split_method: method, leader_id: leader });
   } else {
@@ -211,7 +250,7 @@ export async function assign(a: Actor, b: Body) {
   if (!isUuid(b.participant_id)) throw new Fail('اختر المشارك');
   if (b.team) {
     if (!HALL_TEAMS.includes(b.team)) throw new Fail('فريق غير معروف');
-    must(await db.from('cohort_roles').upsert({ cohort_id: s.cohort_id, participant_id: b.participant_id, team: b.team, updated_at: new Date().toISOString() }));
+    await seatOne(s.cohort_id, String(b.participant_id), b.team);
   }
   const patch: Body = {};
   if (b.leader === true) patch.leader_id = b.participant_id;

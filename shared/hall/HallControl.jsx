@@ -7,17 +7,19 @@
 // يقيّد الخبير بدفعاته. أصناف CSS تُمرَّر (ui) لأن للتطبيقين نظامي أنماط مختلفين.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR, OPT_AR, CONF_AR } from './HallView.jsx';
-import { HALL_SPLIT_AR, HALL_STAGE_AR } from '../../supabase/functions/leaders-api/hall.js';
+import { HALL_SPLIT_AR, HALL_STAGE_AR, publicView } from '../../supabase/functions/leaders-api/hall.js';
 
 const STEPS = ['enter', 'train', 'split', 'round', 'reveal'];
 export const HALL_UI_ADMIN = { card: 'la-card', row: 'la-row', muted: 'la-muted', chip: 'la-chip', link: 'la-link', btn: 'btn-sm primary', ghost: 'btn-sm ghost', fields: 'la-adj-row', ok: 'ok' };
 export const HALL_UI_APP = { card: 'card stack', row: 'row', muted: 'muted small', chip: 'chip', link: 'link small', btn: 'btn sm', ghost: 'btn ghost sm', fields: 'row', ok: 'gold' };
 
-export default function HallControl({ cohortId, call, canWrite = true, toast = () => {}, prompt, ui = HALL_UI_ADMIN }) {
+export default function HallControl({ cohortId, call, canWrite = true, toast = () => {}, prompt, confirm, ui = HALL_UI_ADMIN }) {
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sel, setSel] = useState(null);
   const [form, setForm] = useState({ mode: 'live', topic_id: '' });
+  const [q, setQ] = useState('');
+  const [only, setOnly] = useState('all');
   const ver = useRef(0);
   const u = ui;
 
@@ -39,7 +41,18 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
     if (ok) toast(ok);
     ver.current = r.session?.version || 0; setV(r);
   };
-  const ask = (q, def) => (prompt ? prompt(q, def) : Promise.resolve(window.prompt(q, def ?? '')));
+  const ask = (text, def) => (prompt ? prompt(text, def) : Promise.resolve(window.prompt(text, def ?? '')));
+  const sure = (text) => (confirm ? confirm(text, { danger: true }) : Promise.resolve(window.confirm(text)));
+  // الرجوع إلى مرحلة سابقة وإعادة التقسيم يغيّران ما يراه الخمسون في لحظة، فيُؤكَّدان
+  const goStage = async (k) => {
+    if (STEPS.indexOf(k) < STEPS.indexOf(v.session.stage) && !(await sure(`ترجع القاعة من «${HALL_STAGE_AR[v.session.stage]}» إلى «${HALL_STAGE_AR[k]}» عند كل المشاركين. متابعة؟`))) return;
+    act('step', { session_id: v.session.id, stage: k });
+  };
+  const doSplit = async (k) => {
+    const seated = (v.people || []).filter((p) => p.team).length;
+    if (seated && (k === 'mixed' || k === 'level') && !(await sure(`${seated} مشاركًا في فرقهم وطاولاتهم الآن. التوزيع الآلي يعيد توزيعهم جميعًا ويغيّر طاولاتهم. متابعة؟`))) return;
+    act('split', { session_id: v.session.id, method: k }, k === 'choose' ? 'يختار المشاركون فرقهم الآن من جوالاتهم' : 'وُزّعت الفرق والطاولات');
+  };
 
   if (!cohortId) return null;
   if (!v) return <p className={u.muted}>جارٍ التحميل…</p>;
@@ -80,22 +93,26 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
           <div className="hall-stage-bar">
             {sess.mode === 'live' && STEPS.map((k, i) => (
               <button key={k} className={`step${sess.stage === k ? ' on' : ''}`} disabled={!canWrite || busy || (k === 'reveal' && !v.sentence)}
-                onClick={() => act('step', { session_id: sid, stage: k })}><b>{'١٢٣٤٥'[i]}</b>{HALL_STAGE_AR[k]}</button>
+                onClick={() => goStage(k)}><b>{i + 1}</b>{HALL_STAGE_AR[k]}</button>
             ))}
             <span className="grow" />
-            {canWrite && <button className={u.link} onClick={() => document.querySelector('.hall-screen')?.requestFullscreen?.().catch(() => {})}>ملء الشاشة</button>}
+            {canWrite && <button className={u.ghost} onClick={() => document.querySelector('.hall-screen')?.requestFullscreen?.().catch(() => {})}>اعرض على الشاشة الكبيرة</button>}
           </div>
 
-          <div className="hall-screen"><HallView view={v} onPerson={(p) => setSel(p.id)} /></div>
+          {/* شاشة العرض بما يراه المشاركون: لا أحكام أفراد ولا توزيع قبل الكشف، فتُعرض على البروجكتر بأمان */}
+          <div className="hall-screen"><HallView view={publicView(v)} onPerson={(p) => setSel(p.id)} /></div>
+          {canWrite && !v.revealed && v.sentence && v.distribution && (
+            <p className={u.muted} aria-live="polite">لك وحدك قبل الكشف: أجاب {v.answered} من {v.total} · صحيحة {(v.distribution.true1 || 0) + (v.distribution.true2 || 0) + (v.distribution.true3 || 0)} · خاطئة {(v.distribution.false1 || 0) + (v.distribution.false2 || 0) + (v.distribution.false3 || 0)}. لا يظهر هذا على شاشة العرض.</p>
+          )}
 
           {canWrite && (
             <div className="hall-controls">
               <section className={u.card}>
                 <h4>التقسيم</h4>
                 <div className={`${u.row} wrap`}>{Object.entries(HALL_SPLIT_AR).map(([k, l]) => (
-                  <button key={k} className={sess.split_method === k ? u.btn : u.ghost} disabled={busy} onClick={() => act('split', { session_id: sid, method: k }, k === 'choose' ? 'يختار المشاركون فرقهم الآن من جوالاتهم' : 'وُزّعت الفرق')}>{l}</button>
+                  <button key={k} className={sess.split_method === k ? u.btn : u.ghost} disabled={busy} onClick={() => doSplit(k)}>{l}</button>
                 ))}</div>
-                <small className={u.muted}>التوزيع الآلي على الحاضرين. القيادة أصغر الفرق، وقائد الجولة يتبدّل مع كل جولة.</small>
+                <small className={u.muted}>التوزيع الآلي على الحاضرين: أربعة فرق، وكل فريق طاولات من خمسة إلى سبعة. القيادة أصغر الفرق، وقائد الجولة يتبدّل مع كل جولة، والمتأخر يُلحق بأصغر طاولة.</small>
               </section>
               <section className={u.card}>
                 <h4>الجملة</h4>
@@ -119,11 +136,35 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
             </div>
           )}
 
+          {(() => {
+            const FILTERS = [['all', 'الكل', () => true], ['hand', '✋ رفعوا أيديهم', (p) => p.hand], ['pending', 'لم يجيبوا', (p) => p.present && !p.answered], ['away', 'خارج القاعة', (p) => !p.present], ['free', 'بلا فريق', (p) => !p.team]];
+            const term = q.trim();
+            const rows = v.people.filter((p) => FILTERS.find((f) => f[0] === only)[2](p) && (!term || p.name.includes(term)));
+            return (
+              <section className={`${u.card} hall-list`} aria-label="المشاركون في القاعة">
+                <div className={`${u.row} wrap`}>
+                  <h4>المشاركون <small className={u.muted}>· {rows.length} من {v.people.length}</small></h4>
+                  <input className="input hall-search" type="search" aria-label="ابحث باسم المشارك" placeholder="ابحث بالاسم" value={q} onChange={(e) => setQ(e.target.value)} />
+                </div>
+                <div className={`${u.row} wrap`} role="group" aria-label="تصفية المشاركين">{FILTERS.map(([k, l, f]) => (
+                  <button key={k} className={only === k ? u.btn : u.ghost} aria-pressed={only === k} onClick={() => setOnly(k)}>{l}{k !== 'all' ? ` ${v.people.filter(f).length}` : ''}</button>
+                ))}</div>
+                <ul className="hall-rows">{rows.map((p) => (
+                  <li key={p.id}><button className={`hall-row${sel === p.id ? ' on' : ''}`} onClick={() => setSel(p.id)}>
+                    <i style={{ background: p.team ? TEAM_COLOR[p.team] : 'transparent' }} /><b>{p.name}</b>
+                    <span className={u.muted}>{[p.team ? TEAM_AR[p.team] : 'بلا فريق', p.table ? `طاولة ${p.table}` : null, p.leader ? 'القائد ♔' : null, p.hand ? '✋' : null, !p.present ? 'خارج القاعة' : null].filter(Boolean).join(' · ')}</span>
+                  </button></li>
+                ))}</ul>
+                {!rows.length && <p className={u.muted}>لا أحد بهذه التصفية.</p>}
+              </section>
+            );
+          })()}
+
           {person && (
             <aside className={`${u.card} hall-person`} aria-live="polite">
               <div className={`${u.row} between`}><h3>{person.name}</h3><button className={u.link} onClick={() => setSel(null)}>إغلاق</button></div>
               <p className={u.muted}>{[person.title, person.org].filter(Boolean).join(' · ')}</p>
-              <p>{person.team ? TEAM_AR[person.team] : 'بلا فريق'}{person.leader ? ' · قائد الجولة ♔' : ''}{person.persona ? ` · يتقمّص: ${sess.persona_ar || ''}` : ''}</p>
+              <p>{person.team ? TEAM_AR[person.team] : 'بلا فريق'}{person.table ? ` · طاولة ${person.table}` : ''}{person.leader ? ' · قائد الجولة ♔' : ''}{person.persona ? ` · يتقمّص: ${sess.persona_ar || ''}` : ''}</p>
               {(person.choice || person.stances?.length > 0) && <p>
                 {person.choice ? `حكمه: ${person.choice === 'true' ? 'صحيحة' : 'خاطئة'}${person.confidence ? ` (${CONF_AR[person.confidence]})` : ''}` : 'بلا حكم'}
                 {person.stances?.length ? ` · موقفه: ${person.stances.map((k) => OPT_AR[k]).join('، ')}` : ''}{person.note ? ` · «${person.note}»` : ''}</p>}
