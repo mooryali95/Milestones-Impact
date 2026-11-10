@@ -76,8 +76,15 @@ async function attendanceOf(session: any, memberIds: string[]) {
   return hallAttendance(revealed, answers as any[], memberIds);
 }
 
-// الحالة الكاملة لطرف
-async function buildState(session: any, viewer: { kind: 'participant' | 'admin'; id?: string }) {
+// ما تشترك فيه كل الأجهزة من حالة القاعة: يُقرأ من القاعدة مرة لكل إصدار ويُشارك بين السائلين.
+// كل تغيير يرفع الإصدار فتسأل الأجهزة كلها معًا: كان كل جهاز يعيد القراءة كاملة (تسعة استعلامات في خمسين جهازًا
+// لكل إجابة أو يد)، فبلغ عامل الدالة حد زمن المعالج تحت الحمل وسقطت طلبات جارية (سير التكامل 42771852517).
+// الآن الطلبات المتزامنة على الإصدار نفسه تنتظر قراءة واحدة. المخزن داخل العامل وحده ولا يُكتب فيه إلا المقروء.
+// المدة قصيرة لأن الحضور (last_seen) يتجدد بلا رفع إصدار، ومقياس «حاضر» نافذته HALL_PRESENT_SECONDS.
+const SHARED_TTL_MS = 4000;
+const SHARED_MAX = 20;
+const shared = new Map<string, { version: number; at: number; data: Promise<any> }>();
+async function readShared(session: any) {
   const cohort = must(await db.from('cohorts').select('*').eq('id', session.cohort_id).single()) as any;
   const [members, seat, presence, sentence, prog] = await Promise.all([
     cohortMembers(cohort),
@@ -91,13 +98,32 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
     : [];
   const topic = session.topic_id ? (await db.from('katon_topics').select('id, title_ar').eq('id', session.topic_id).maybeSingle()).data : null;
   const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
-  const view = hallView({
-    session, sentence: (sentence as any).data, presence: presence.data || [], answers,
+  return {
+    cohort, seat, answers, topic, sentences, sentence: (sentence as any).data, presence: presence.data || [],
     members: members.map((m: any) => ({ ...m, level: overallLevel(m.levels) })),
-    roles: seat.roles, tables: seat.tables,
-    points: katonPoints((prog as any).data?.katon_points), viewer,
+    points: katonPoints((prog as any).data?.katon_points),
+  };
+}
+function sharedState(session: any) {
+  const hit = shared.get(session.id);
+  if (hit && hit.version === session.version && Date.now() - hit.at < SHARED_TTL_MS) return hit.data;
+  const data = readShared(session);
+  shared.set(session.id, { version: session.version, at: Date.now(), data });
+  // قراءة فشلت لا تبقى في المخزن فيرثها من بعدها
+  data.catch(() => { if (shared.get(session.id)?.data === data) shared.delete(session.id); });
+  if (shared.size > SHARED_MAX) for (const [k, v] of shared) if (Date.now() - v.at > SHARED_TTL_MS) shared.delete(k);
+  return data;
+}
+
+// الحالة الكاملة لطرف: المشترك من المخزن، وما يراه هذا الطرف (hallView) يُحسب له وحده
+async function buildState(session: any, viewer: { kind: 'participant' | 'admin'; id?: string }) {
+  const sh = await sharedState(session);
+  const { cohort, members } = sh;
+  const view = hallView({
+    session, sentence: sh.sentence, presence: sh.presence, answers: sh.answers, members,
+    roles: sh.seat.roles, tables: sh.seat.tables, points: sh.points, viewer,
   });
-  const out: Body = { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic, sentences };
+  const out: Body = { success: true, ...view, cohort: { id: cohort.id, name: cohort.name }, topic: sh.topic, sentences: sh.sentences };
   // للخبير: الجلسة التي يُكتب فيها الحضور، ومن يستحقه لو أُغلقت الآن
   if (viewer.kind === 'admin') {
     const att = await attendanceOf(session, members.map((m: any) => m.id));
@@ -107,9 +133,22 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
   return out;
 }
 
+// دفعة المشارك لسؤال الحالة الدوري: تُحفظ في العامل ثواني، فالسؤال كل ثلاث ثوانٍ لا يعيد قراءة تسجيلاته وكل الدفعات.
+// الأفعال (دخول، يد، اختيار فريق، إجابة) تقرأ الدفعة من القاعدة دائمًا، فمن نُقل من دفعته يرى أثره مع أول فعل أو بعد المدة.
+const COHORT_TTL_MS = 15000;
+const cohortMemo = new Map<string, { at: number; cohort: any }>();
+async function pollCohort(p: any) {
+  const hit = cohortMemo.get(p.id);
+  if (hit && Date.now() - hit.at < COHORT_TTL_MS) return hit.cohort;
+  const { cohort } = await cohortOf(p);
+  if (cohortMemo.size > 2000) cohortMemo.clear();
+  cohortMemo.set(p.id, { at: Date.now(), cohort: cohort || null });
+  return cohort || null;
+}
+
 // ── للمشارك ──
 export async function state(p: any, b: Body) {
-  const { cohort } = await cohortOf(p);
+  const cohort = await pollCohort(p);
   if (!cohort) return { success: true, session: null };
   const s = await openSession(cohort.id);
   if (!s) return { success: true, session: null };
