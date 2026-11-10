@@ -165,12 +165,13 @@ function ImpactCard({ im, onReport }) {
 }
 
 function Dashboard({ me, onLogout }) {
-  const [d, setD] = useState(null);
+  // ما جاء مع الهوية (preload) يُعرض فورًا، وإعادة التحميل بعد إجراء تطلب اللوحة وحدها (البند 8.1)
+  const [d, setD] = useState(me.preload?.dashboard ?? null);
   const [f, setF] = useState({ q: '', status: '', track: '' });
   const [sort, setSort] = useState('name');
   const [msg, setMsg] = useState('');
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
-  useEffect(load, []);
+  useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
   if (!d) return <JourneySkeleton />;
@@ -227,7 +228,7 @@ function Dashboard({ me, onLogout }) {
       <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
       <NeedsYou d={d} />
-      <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" />
+      <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" initial={me.preload?.sus} />
 
       <div className="op-kpis">
         {[['انضموا هذا الأسبوع', kpis.joined_week], ['نشطون هذا الأسبوع', kpis.active_week], ['اعتُمد مسارهم', kpis.approved], ['أنهوا البرنامج', kpis.completed], ['متوسط الإنجاز', `${kpis.avg_progress}%`]]
@@ -332,7 +333,7 @@ export default function OrgPortal() {
         const r = await coordCall('coord.auth-verify', { email: q.get('e'), link: q.get('t') });
         if (r.success) { coordSession.set(r.token); setMe(r); } else setError(r.message);
       } else if (coordSession.get()) {
-        const r = await coordCall('coord.me');
+        const r = await coordCall('coord.me', { with_dashboard: true });
         if (r.success) setMe(r);
       }
       setBoot(false);

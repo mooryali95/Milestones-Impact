@@ -1,34 +1,37 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
-import Orgs from './Orgs.jsx';
-import Participants from './Participants.jsx';
-import Certificates from './Certificates.jsx';
-import Overview from './Overview.jsx';
-import Tracks from './Tracks.jsx';
-import { Assessment, Journey, Levels } from './Methodology.jsx';
-import Handbook from './Handbook.jsx';
-import Lab from './Lab.jsx';
-import Activities from './Activities.jsx';
-import Impact from './Impact.jsx';
-import Capstones from './Capstones.jsx';
-import Programs from './Programs.jsx';
-import KatonBank from './Katon.jsx';
-import Payments from './Payments.jsx';
-import HallScreen from './Hall.jsx';
-import ContentBank from './ContentBank.jsx';
-import Experts from './Experts.jsx';
-import MailGallery from './MailGallery.jsx';
+// كل قسم يُحمَّل عند أول فتح له (التدقيق 2026-11-10، البند 9.13): كانت الأقسام الاثنان والعشرون في الحزمة الرئيسية
+// (515 ك.ب)، فينتظر المدير تنزيلها كلها ليرى النظرة العامة
+const named = (load, key) => lazy(() => load().then((m) => ({ default: m[key] })));
+const Orgs = lazy(() => import('./Orgs.jsx'));
+const Participants = lazy(() => import('./Participants.jsx'));
+const Certificates = lazy(() => import('./Certificates.jsx'));
+const Overview = lazy(() => import('./Overview.jsx'));
+const Tracks = lazy(() => import('./Tracks.jsx'));
+const Assessment = named(() => import('./Methodology.jsx'), 'Assessment');
+const Journey = named(() => import('./Methodology.jsx'), 'Journey');
+const Levels = named(() => import('./Methodology.jsx'), 'Levels');
+const Handbook = lazy(() => import('./Handbook.jsx'));
+const Lab = lazy(() => import('./Lab.jsx'));
+const Activities = lazy(() => import('./Activities.jsx'));
+const Impact = lazy(() => import('./Impact.jsx'));
+const Capstones = lazy(() => import('./Capstones.jsx'));
+const Programs = lazy(() => import('./Programs.jsx'));
+const KatonBank = lazy(() => import('./Katon.jsx'));
+const Payments = lazy(() => import('./Payments.jsx'));
+const HallScreen = lazy(() => import('./Hall.jsx'));
+const ContentBank = lazy(() => import('./ContentBank.jsx'));
+const Experts = lazy(() => import('./Experts.jsx'));
+const MailGallery = lazy(() => import('./MailGallery.jsx'));
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
-import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { TABS } from '../leaders-tabs.js';
 
-export const TABS = [
-  ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'],
-];
+// الأقسام وأسماؤها في ملف صغير يقرؤه شريط البحث (Palette) دون أن يجرّ الأقسام كلها إلى الحزمة الرئيسية
+export { TABS };
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
@@ -130,7 +133,7 @@ export default function Leaders({ canWrite, pending }) {
           </div>
         ))}
       </nav>
-      <div className="la-body">{body}</div>
+      <div className="la-body"><Suspense fallback={<Spinner />}>{body}</Suspense></div>
       </div>
     </div>
   );

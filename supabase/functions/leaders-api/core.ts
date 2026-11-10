@@ -61,6 +61,9 @@ const cors = (origin: string | null) => ({
   'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins).includes(origin) ? origin : CONFIG.origins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  // الطلب التمهيدي (OPTIONS) يُخزَّن في المتصفح يومًا بدل أن يسبق كل طلب إلى الخادم (التدقيق 2026-11-10، البند 8.1).
+  // المتصفحات تقصره على حدها (Chrome ساعتان)، وهو مكسب لكل البوابات
+  'Access-Control-Max-Age': '86400',
   'Vary': 'Origin',
 });
 

@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
-import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
+import { bootPreload, call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
 import IntroVideo from '../IntroVideo.jsx';
 import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OnboardingNextCard } from '../Onboarding.jsx';
@@ -608,6 +608,8 @@ function Continuous({ c }) {
 
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab }) {
   const { journey, profile, participant } = me;
+  // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
+  const [susFirst] = useState(() => bootPreload.take('sus'));
   const current = journey.find((s) => s.status === 'active');
   const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
   const [toast, setToast] = useState('');
@@ -670,7 +672,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       </section>
       {(participant.status === 'completed' || ['pass', 'pass_notes'].includes(me.final?.decision)) && <CertificateCard participant={participant} />}
       <RateExpert />
-      {approved && <SusCard call={call} />}
+      {approved && <SusCard call={call} initial={susFirst} />}
       {approved && me.group && (
         <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مبادرة مجموعتكم واحدة، ووثيقة كل عضو يكتبها بنفسه وتُقيَّم باسمه.' : ''}</div></div>
       )}

@@ -4,7 +4,7 @@
 // ثلاثة معايير من 1 إلى 5 (RATE_TO_EXPERT من الخادم). يرى الخبير المتوسط
 // فقط بعد خمسة تقييمات، فلا يُعرف رأي أحد بعينه.
 import React, { useEffect, useState } from 'react';
-import { call } from '../api.js';
+import { bootPreload, call } from '../api.js';
 
 function Stars({ label, value, onChange }) {
   return (
@@ -18,13 +18,15 @@ function Stars({ label, value, onChange }) {
 }
 
 export default function RateExpert() {
-  const [d, setD] = useState(null);
+  // ما جاء مع الحساب عند الفتح يُعرض فورًا ويُؤخذ مرة واحدة (البند 7.5)
+  const [first] = useState(() => bootPreload.take('ratings'));
+  const [d, setD] = useState(first ?? null);
   const [v, setV] = useState({});
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const load = () => call('ratings.pending').then((r) => { setD(r); setV({}); setComment(''); });
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!first) load(); }, []);
   if (!d?.success || !d.items?.length) return msg ? <div className="banner"><span className="ico">✓</span><div className="grow">{msg}</div></div> : null;
   const it = d.items[0];
   const keys = Object.keys(d.criteria);

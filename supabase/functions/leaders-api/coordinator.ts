@@ -201,18 +201,22 @@ export async function impactFor(c: any) {
   };
 }
 export async function dashboard(c: any) {
-  const r: any = await dashboardFor(c);
-  r.impact = await impactFor(c);
+  // الأجزاء المستقلة متوازية (التدقيق 2026-11-10، البند 8.1): كانت الملخص ثم الأثر ثم المبادرات ثم المقيّمون واحدًا بعد آخر
+  const list = coordPermissions(c.permissions).list;
+  const [r, impact, inits]: any[] = await Promise.all([dashboardFor(c), impactFor(c), initiativesFor(c.organization_id)]);
+  r.impact = impact;
   // محفظة مبادرات الدفعة: المعتمدة وحدها، فالمسودة عمل المشارك قبل أن يكتمل
   // والأسماء فيها لمن يرى قائمة المشاركين فقط
-  const list = coordPermissions(c.permissions).list;
-  r.initiatives = (await initiativesFor(c.organization_id)).filter((x: any) => x.status === 'approved')
+  r.initiatives = inits.filter((x: any) => x.status === 'approved')
     .map((x: any) => (list ? x : { ...x, participant_id: null, full_name: null }));
   // أثر المبادرات في الجهة: من ملخص المتابعة نفسه الذي يراه القائد والمستشار
   r.outcomes = portfolioOutcomes(r.initiatives.map((x: any) => ({ summary: x.tracking, cost: x.cost })));
   // D19: مقيّمون بانتظار تأكيد المنسق، لمن يرى قائمة المشاركين
-  r.raters_pending = list ? await awaitingFor((r.participants || []).map((p: any) => p.id)) : [];
-  await audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id);
+  const [raters] = await Promise.all([
+    list ? awaitingFor((r.participants || []).map((p: any) => p.id)) : Promise.resolve([]),
+    audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id),
+  ]);
+  r.raters_pending = raters;
   return r;
 }
 

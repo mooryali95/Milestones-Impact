@@ -51,6 +51,8 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  // الطلب التمهيدي يُخزَّن في المتصفح بدل أن يسبق كل طلب (تدقيق الإنتاج 2026-11-10، البندان 8.1 و9.13)
+  "Access-Control-Max-Age": "86400",
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });

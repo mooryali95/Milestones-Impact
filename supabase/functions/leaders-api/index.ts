@@ -98,8 +98,26 @@ function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   return 'program';
 }
 
+// فعل مشارك ببواباته كلها (حساب العرض، والدفع، وتجديد الموافقة) كما في معالج الطلب، لاستعماله داخل طلب مجمّع
+async function asAction(action: string, p: any, b: Body, sid: string, ctx: any) {
+  if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
+  const need = payGate(action, b);
+  if (need) await Y.requireAccess(p, need);
+  if (CONSENT_GATED.includes(action) && 'consented_at' in p && consentState(p.consent_version, p.consented_at).needed) {
+    throw new Fail('جدّد موافقتك على سياسة الخصوصية المحدّثة أولًا، من الشريط أعلى رحلتك', 428, 'consent_renew');
+  }
+  return participant[action](p, b, sid, ctx);
+}
+
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
-  'me': (p) => P.me(p),
+  // with_home: رئيسية المشارك في رحلة واحدة (البند 7.5): الحساب ثم المختبر وتقييم الخبير واستبيان السهولة كانت طلبًا
+  // ثم ثلاثة بعده. كل جزء يمر بالبوابات نفسها التي يمر بها لو طُلب وحده (asAction)، ونتيجته كما لو طُلب وحده
+  'me': async (p, b, sid, ctx) => {
+    const m: any = await P.me(p);
+    if (b.with_home !== true || !m?.success) return m;
+    const [lab, ratings, sus] = await Promise.all(['lab.list', 'ratings.pending', 'sus.state'].map((a) => settle(a, asAction(a, p, {}, sid, ctx))));
+    return { ...m, preload: { lab, ratings, sus } };
+  },
   'sus.state': (p) => SU.state('participant', p),
   'sus.submit': (p, b) => SU.submit('participant', p, b),
   'org.logo': (p) => P.orgLogo(p),
@@ -243,7 +261,14 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
 };
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
-  'coord.me': (c) => C.me(c),
+  // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة
+  // طلبات متتالية. لا لوحة قبل الموافقة، ولكل جزء نتيجته كما لو طُلب وحده
+  'coord.me': async (c, b) => {
+    const m: any = await C.me(c);
+    if (b.with_dashboard !== true || m.consent_needed) return m;
+    const [dashboard, sus] = await Promise.all([settle('coord.dashboard', C.dashboard(c)), settle('coord.sus-state', SU.state('coordinator', c))]);
+    return { ...m, preload: { dashboard, sus } };
+  },
   'coord.consent': (c) => C.consent(c),
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
