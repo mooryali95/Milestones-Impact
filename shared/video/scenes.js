@@ -20,8 +20,8 @@ export const VIDEO = {
 // والرحلة). intro-p1 النسخة الصامتة بصيغة المخاطب تبقى للرجوع. الجولة الكاملة VIDEO أعلاه تبقى لصفحة البرنامج حتى يُنقل رابطها
 // بعد تأكيد فرع mi-home، وللعروض.
 export const PARTICIPANT_VIDEO = {
-  file: 'intro-p5',
-  seconds: 168,
+  file: 'intro-p6',
+  seconds: 170,
   fps: 24,
   width: 1280,
   height: 720,
