@@ -42,8 +42,9 @@ export function splitTeams(members, method = 'mixed') {
 // order: ترتيب المعرّفات عند التوزيع الأول (متنوع المستويات مثلًا)، وإلا أبجديًا فيثبت الناتج.
 export const HALL_TABLE_SIZE = 6;
 export const HALL_TABLE_MAX = 7;
-/** @param {Record<string,string>} roles @param {Record<string,number>} [stored] @param {string[]|null} [order] */
+/** @param {Record<string,string>} roles @param {Record<string,number>} [stored] @param {string[]|null} [order] @returns {Record<string,number>} */
 export function assignTables(roles, stored = {}, order = null) {
+  /** @type {Record<string,number>} */
   const out = {};
   const tables = new Map();
   const known = Object.keys(roles || {}).sort();
