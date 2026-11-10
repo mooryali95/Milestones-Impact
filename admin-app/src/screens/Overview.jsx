@@ -8,6 +8,7 @@ import { LVLS } from '../methodology.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
 import ReqQueue from './ReqQueue.jsx';
+import SusPanel from './SusPanel.jsx';
 import { OrgSelect } from './Participants.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -290,6 +291,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
           <button key={k} className="la-pill" onClick={() => onStatus(k)}>{l} <b>{st(k)}</b></button>
         ))}</div>
       </section>
+      <SusPanel />
     </>
   );
 }

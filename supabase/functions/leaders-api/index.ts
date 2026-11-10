@@ -42,6 +42,7 @@ import { switchTo } from './switch.ts';
 import * as V2 from './advisor.ts';
 import * as PR from './peer.ts';
 import * as FL from './file.ts';
+import * as SU from './sus.ts';
 
 type Body = Record<string, any>;
 
@@ -87,7 +88,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save',
   'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
-  'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
+  'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
@@ -98,6 +99,8 @@ function payGate(action: string, b: Body): 'assessment' | 'program' | null {
 
 const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   'me': (p) => P.me(p),
+  'sus.state': (p) => SU.state('participant', p),
+  'sus.submit': (p, b) => SU.submit('participant', p, b),
   'org.logo': (p) => P.orgLogo(p),
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
@@ -180,6 +183,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
+  'xp.sus-state': (e) => SU.state('expert', e),
+  'xp.sus-submit': (e, b) => SU.submit('expert', e, b),
   // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
   'xp.participants': (e) => FL.participants(e),
   'xp.participant': (e, b) => FL.participant(e, b),
@@ -207,6 +212,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
   'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
   'coord.dashboard': (c) => C.dashboard(c),
   'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b, c.permissions),
+  'coord.sus-state': (c) => SU.state('coordinator', c),
+  'coord.sus-submit': (c, b) => SU.submit('coordinator', c, b),
   'coord.logout': (_c, _b, sid) => C.logout(sid),
 };
 
@@ -233,6 +240,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participant-save': A.participantSave,
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
+  'admin.sus': () => SU.adminSummary(),
   'admin.catalog': (_a, b) => A.catalog(b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),

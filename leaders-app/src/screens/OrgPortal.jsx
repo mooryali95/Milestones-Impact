@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر يأتي من الخادم مصفّى بصلاحيات المنسق؛ لا تعديل هنا.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
@@ -225,6 +226,7 @@ function Dashboard({ me, onLogout }) {
       <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
       <NeedsYou d={d} />
+      <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" />
 
       <div className="op-kpis">
         {[['انضموا هذا الأسبوع', kpis.joined_week], ['نشطون هذا الأسبوع', kpis.active_week], ['اعتُمد مسارهم', kpis.approved], ['أنهوا البرنامج', kpis.completed], ['متوسط الإنجاز', `${kpis.avg_progress}%`]]

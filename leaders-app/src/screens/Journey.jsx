@@ -4,6 +4,7 @@
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
 import React, { useEffect, useState } from 'react';
+import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
 import { call, lastRead, nextSeen, uploadFile, welcomeSeen } from '../api.js';
@@ -615,6 +616,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       </section>
       {participant.status === 'completed' && <CertificateCard />}
       <RateExpert />
+      {approved && <SusCard call={call} />}
       {approved && me.group && (
         <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مشروعكم مشترك، وكل عضو يسهم في وثيقته.' : ''}</div></div>
       )}

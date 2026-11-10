@@ -98,4 +98,5 @@ export const MIGRATIONS = [
   '20261110120000_leaders_hall_tables',
   '20261110130000_leaders_hall_timer',
   '20261110140000_leaders_hall_attendance',
+  '20261110160000_leaders_sus_responses',
 ];
