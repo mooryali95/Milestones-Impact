@@ -156,7 +156,7 @@ ok(sql(`select coalesce(workshop_session_id::text, '') from leaders.hall_session
 const loops = devices.map(pollLoop);
 const v0 = live().version;
 await Promise.all(devices.map(async (d) => { await sleep(Math.random() * 4000); await act(d, 'hall.join', {}); }));
-ok(Number(sql(`select count(*) from leaders.hall_presence where session_id = ${q(sessionId)}`)) === N, `الحضور: ${N} في القاعدة`);
+ok(Number(sql(`select count(*) from leaders.hall_presence where session_id = ${q(sessionId)}`)) === N, `الحضور: ${N} في القاعدة`, `دخل ${sql(`select count(*) from leaders.hall_presence where session_id = ${q(sessionId)}`)} · أخطاء hall.join: ${rec('hall.join').errors.join(' | ') || 'لا خطأ مسجّل'}`);
 // كل انضمام يرفع الإصدار مرة: إن ضاع رفع فقد أخذ تغييران الرقم نفسه، وجهاز سأل بينهما يبقى على القديم
 ok(live().version - v0 === N, `${N} انضمامًا متزامنًا رفعت الإصدار ${N} مرة`, `ارتفع ${live().version - v0} فقط: ضاعت ${N - (live().version - v0)}`);
 await settle();
@@ -182,10 +182,10 @@ ok(Object.values(seats0).every((x) => x.no), `الطاولات: لكل من ال
   ok(Object.values(teams).every((t) => t.size === 1), 'الطاولات: كل طاولة من فريق واحد');
 }
 await settle();
-ok(devices.every((d) => (d.view?.people || []).find((p) => p.id === d.id)?.table === seats0[d.id].no), 'الطاولات: كل جهاز يرى رقم طاولته المحفوظ');
+ok(devices.every((d) => seats0[d.id] && (d.view?.people || []).find((p) => p.id === d.id)?.table === seats0[d.id].no), 'الطاولات: كل جهاز يرى رقم طاولته المحفوظ', `${devices.filter((d) => !seats0[d.id]).length} جهازًا بلا مقعد في القاعدة`);
 // نقل مشارك إلى فريق آخر من الخبير: يترك طاولته ويُلحق بطاولة من فريقه الجديد، ولا يتحرك غيره
 {
-  const mover = devices[0], to = seats0[mover.id].team === 'eval' ? 'guide' : 'eval';
+  const mover = devices.find((d) => seats0[d.id]), to = seats0[mover.id].team === 'eval' ? 'guide' : 'eval';
   const moved = await admin('admin.hall-assign', { session_id: sessionId, participant_id: mover.id, team: to });
   const after = seatsNow();
   const teamTables = new Set(Object.entries(seats0).filter(([, x]) => x.team === to).map(([, x]) => x.no));
