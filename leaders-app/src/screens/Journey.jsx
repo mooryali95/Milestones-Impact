@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
@@ -212,11 +212,20 @@ export const stageCount = (stage) => {
 
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
+  // بعد «أنجزته» أو «تراجع» يُستبدل الزر بنقيضه، فيعود التركيز إليه (أو إلى البند إن لم يبق زر) لا إلى أول الصفحة
+  const li = useRef(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    (li.current?.querySelector('.actions button:not([disabled])') || li.current)?.focus();
+  }, [item.status]);
   const act = async (extra) => {
     setBusy(true);
     const res = await call('requirement.update', { requirement_id: item.id, ...extra });
     setBusy(false);
     if (res.success) {
+      refocus.current = true;
       onUpdate(res);
       if (!extra.undo) setToast(item.needs_review ? 'أُرسل للمستشار للمراجعة' : 'أحسنت، خطوة منجزة');
     } else setToast(res.message);
@@ -238,7 +247,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
   const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
 
   return (
-    <li className={`item ${item.status}`}>
+    <li ref={li} tabIndex={-1} className={`item ${item.status}`}>
       <span className="box" aria-hidden="true">{mark}</span>
       <div className="grow">
         <div className="row between">

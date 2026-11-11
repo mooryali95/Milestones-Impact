@@ -1,6 +1,7 @@
 // فحص الجاهزية، رئيسية المشارك. الخلفية مُحاكاة.
 // p-entry-6 «خطوتك التالية» كانت تنزل تحت دعوة المدير والترحيب ومفتاح المرور على الهاتف.
-// p-capstone-7 بطاقة دعوة المدير المخفية كانت تطلب impact.mine (حساب ثبات الدفعة كلها) في كل فتح للرئيسية.import { test, expect } from '@playwright/test';
+// p-capstone-7 بطاقة دعوة المدير المخفية كانت تطلب impact.mine (حساب ثبات الدفعة كلها) في كل فتح للرئيسية.// p-entry-7 بعد «أنجزته» يُستبدل الزر بـ«تراجع» فكان التركيز يضيع إلى أول الصفحة.
+import { test, expect } from '@playwright/test';
 import { createMockServer } from '../shared/video/mock-server.js';
 
 const APP = 'http://localhost:4304/';
@@ -66,4 +67,10 @@ test('p-capstone-7: البطاقة الظاهرة تطلب حالتها كما �
   await openHome(page, srv);
   await expect(page.getByText(INVITE)).toBeVisible();
   expect(srv.calls).toContain('impact.mine');
+});
+
+test('p-entry-7: بعد «أنجزته» يكون التركيز على «تراجع» لا على أول الصفحة', async ({ page }) => {
+  await openHome(page, homeServer());
+  await page.getByRole('button', { name: 'أنجزته', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: 'تراجع' })).toBeFocused();
 });

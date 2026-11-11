@@ -87,7 +87,8 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
     setEntering(null);
     if (res.code === 'needs_name') { setProof(pr); setStep('name'); return; }
     setError(res.message);
-    if (step === 'code') setCode('');
+    // الحقل للقراءة فقط أثناء التحقق لا معطّل، فلا يفقد التركيز؛ ويعود إليه فارغًا لإدخال الرمز من جديد
+    if (step === 'code') { setCode(''); codeRef.current?.focus(); }
   };
 
   const onCode = (v) => {
@@ -193,7 +194,7 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
               <input className="input ltr" type="email" inputMode="email" autoComplete="username webauthn" required
                 value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
             </label>
-            {error && <div className="alert err">{error}</div>}
+            {error && <div className="alert err" role="alert">{error}</div>}
             <button className="btn block" disabled={busy || !email}>{busy ? 'لحظة…' : 'متابعة'}</button>
             {browserSupportsWebAuthn() && (
               <button type="button" className="btn ghost block" onClick={passkey} disabled={busy}>الدخول بمفتاح المرور</button>
@@ -218,7 +219,7 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
                 onChange={(e) => setPhone(e.target.value)} placeholder="05XXXXXXXX" />
             </label>
             {newcomerExtras}
-            {error && <div className="alert err">{error}</div>}
+            {error && <div className="alert err" role="alert">{error}</div>}
             <ConsentNote action="أنشئ حسابي" />
             <button className="btn block" disabled={busy || name.trim().length < 3}>{busy ? 'لحظة…' : 'أنشئ حسابي'}</button>
             <button type="button" className="link small" onClick={restart}>ابدأ من جديد</button>
@@ -233,7 +234,7 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
               <p className="muted">ننشئ لك حساب مشارك في برنامج القادة.</p>
             </div>
             {newcomerExtras}
-            {error && <div className="alert err">{error}</div>}
+            {error && <div className="alert err" role="alert">{error}</div>}
             <ConsentNote action="أنشئ حسابي مشاركًا" />
             <button className="btn block" disabled={busy || !!entering}>أنشئ حسابي مشاركًا</button>
             <button type="button" className="link small" onClick={() => { setStep('email'); setPendingGoogle(null); setError(''); }}>رجوع</button>
@@ -248,8 +249,8 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
               <p className="muted">أرسلناهما إلى <b className="ltr">{email}</b>. اضغط الرابط، أو أدخل الرمز هنا.</p>
             </div>
             <input ref={codeRef} className="input code-input" inputMode="numeric" autoComplete="one-time-code"
-              aria-label="رمز التحقق" value={code} onChange={(e) => onCode(e.target.value)} placeholder="••••••" disabled={busy} />
-            {error && <div className="alert err">{error}</div>}
+              aria-label="رمز التحقق" value={code} onChange={(e) => onCode(e.target.value)} placeholder="••••••" readOnly={busy} aria-busy={busy} />
+            {error && <div className="alert err" role="alert">{error}</div>}
             <div className="row between small">
               <button className="link" onClick={restart}>بريد آخر</button>
               {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>

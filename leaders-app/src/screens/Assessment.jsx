@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Ico from '../Ico.jsx';
 import { call } from '../api.js';
+import { ErrorBox } from '../ui.jsx';
 import { DIMENSIONS, dimOf, TIERS } from '../labels.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { BEHAVIOR_NA_MESSAGE, BEHAVIOR_NA_RULE, behaviorNaCounts, behaviorNaExcess, isBehaviorNa, MAX_BEHAVIOR_NA } from '../../../supabase/functions/leaders-api/logic.js';
@@ -39,9 +40,17 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const [idx, setIdx] = useState(0);
   const [mode, setMode] = useState('intro');   // intro | q | break | review
   const [saving, setSaving] = useState(0);
-  const [failed, setFailed] = useState(null);
+  // إجابات لم يحفظها الخادم (فحص الجاهزية p-entry-4): تبقى حتى تُحفظ ولا تمحوها إجابة سؤال آخر، ولا تُعد في «أجبت»
+  // ولا في المراجعة، فلا يُرسل القياس قبلها. تُعاد وحدها حين يعود الاتصال، وبعد كل حفظ ناجح، وعند بلوغ المراجعة
+  const [pending, setPending] = useState({});
+  const pendingRef = useRef({});
+  pendingRef.current = pending;
+  const seq = useRef({});
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const timer = useRef(null);
+  // التركيز ينتقل إلى نص السؤال الجديد (أو عنوان الفاصل والمراجعة)، فلا يضيع إلى أول الصفحة حين تُستبدل البطاقة
+  const focusRef = useRef(null);
   // حد «لا ينطبق» في الممارسة يفرضه الخادم على المبدئي وحده (assessmentSubmit)، فتعرضه الشاشة قبل الإرسال لا بعده:
   // naBlock سؤال رُدّ فيه اختيار زائد، وreturnTo وجهة التقدم بعد تصحيح: المراجعة إن جاء منها، أو السؤال الذي أرسله إلى العبارة الأخرى
   const naLimit = !post;
@@ -71,19 +80,38 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
       setIdx(first === -1 ? res.questions.length - 1 : first);
     })();
     return () => clearTimeout(timer.current);
-  }, [kind]);
+  }, [kind, attempt]);
+  useEffect(() => { if (mode !== 'intro') focusRef.current?.focus(); }, [idx, mode]);
 
   const qs = data?.questions || [];
   const q = qs[idx];
-  const answered = qs.filter((x) => isComplete(x, answers, before)).length;
+  // المجاب ما حفظه الخادم: إجابة لم تُحفظ تُعرض مختارة ولا تُعد
+  const saved = (x) => isComplete(x, answers, before) && !pending[x.id];
+  const answered = qs.filter(saved).length;
   const resumed = answered > 0;
 
-  const save = useCallback(async (question, k, b = null) => {
-    setSaving((n) => n + 1);
+  // retry: إعادة إرسال ما لم يُحفظ، فلا تستدعي إعادة غيرها. ورد قديم لسؤال أُجيب بعده من جديد يُهمل (seq)
+  const save = useCallback(async (question, k, b = null, retry = false) => {
+    const n = (seq.current[question.id] || 0) + 1;
+    seq.current[question.id] = n;
+    setSaving((x) => x + 1);
     const res = await call('assessment.answer', { assessment_id: data.assessment.id, question_id: question.id, k, ...(question.retro ? { before: b } : {}) });
-    setSaving((n) => n - 1);
-    if (!res.success) setFailed({ question, k, b, message: res.message });
+    setSaving((x) => x - 1);
+    if (seq.current[question.id] !== n) return;
+    if (!res.success) { setPending((p) => ({ ...p, [question.id]: { question, k, b, message: res.message } })); return; }
+    setPending(({ [question.id]: _done, ...rest }) => rest);
+    if (!retry) {
+      for (const p of Object.values(pendingRef.current)) if (p.question.id !== question.id) save(p.question, p.k, p.b, true);
+    }
   }, [data]);
+  const retryAll = useCallback(() => {
+    for (const p of Object.values(pendingRef.current)) save(p.question, p.k, p.b, true);
+  }, [save]);
+  useEffect(() => {
+    window.addEventListener('online', retryAll);
+    return () => window.removeEventListener('online', retryAll);
+  }, [retryAll]);
+  useEffect(() => { if (mode === 'review') retryAll(); }, [mode, retryAll]);
 
   const goNext = useCallback((from) => {
     const next = from + 1;
@@ -97,8 +125,10 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     if (!q) return;
     setAnswers((a) => ({ ...a, [q.id]: k }));
     if (q.retro) setBefore((x) => ({ ...x, [q.id]: b }));
-    setFailed(null);
+    setError('');
     if (k == null) return;
+    // الإجابة الجديدة تحل محل ما لم يُحفظ لهذا السؤال وحده؛ وإن فشل حفظها عادت إلى القائمة
+    setPending(({ [q.id]: _old, ...rest }) => rest);
     save(q, k, b);
     clearTimeout(timer.current);
     if (!isComplete(q, { [q.id]: k }, { [q.id]: b })) return;
@@ -147,14 +177,26 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
       if (fresh.success) { setAnswers(fresh.answers || {}); setBefore(fresh.before || {}); }
       setBusy(false); setIdx(at); setReturnTo('review'); return setMode('q');
     }
+    // الخادم يرى سؤالًا بلا إجابة لا تراه الشاشة: الإجابات من الخادم، ثم إلى أول سؤال ناقص ورسالته فوقه
+    if (res.code === 'incomplete') {
+      const fresh = await call('assessment.get', { kind });
+      if (fresh.success) {
+        const a = fresh.answers || {};
+        const bf = fresh.before || {};
+        setAnswers(a); setBefore(bf); setPending({});
+        const first = qs.findIndex((x) => !isComplete(x, a, bf));
+        if (first >= 0) { setBusy(false); setError(res.message); setIdx(first); return setMode('q'); }
+      }
+    }
     setBusy(false);
     setError(res.message);
   };
 
+  // فشل التحميل: إعادة المحاولة من الشاشة نفسها، فالتطبيق المثبت على الهاتف بلا زر تحديث (فحص الجاهزية p-entry-5)
   if (error && !data) {
     return (
       <div className="page narrow stack">
-        <div className="alert err">{error}</div>
+        <ErrorBox message={error} onRetry={() => { setError(''); setAttempt((n) => n + 1); }} />
         {onBack && <div className="row"><button className="btn ghost" onClick={onBack}>→ رحلتي</button></div>}
       </div>
     );
@@ -166,13 +208,15 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const secIndex = q ? SECTIONS.findIndex((d) => d.key === secOf(q)) : SECTIONS.length - 1;
   const sectionState = (i) => {
     const inSec = qs.filter((x) => secOf(x) === SECTIONS[i].key);
-    if (inSec.every((x) => isComplete(x, answers, before)) && (mode === 'review' || i < secIndex)) return 'done';
+    if (inSec.every(saved) && (mode === 'review' || i < secIndex)) return 'done';
     return i === secIndex && mode !== 'review' ? 'on' : '';
   };
   const sectionPct = (i) => {
     const inSec = qs.filter((x) => secOf(x) === SECTIONS[i].key);
-    return inSec.length ? Math.round((inSec.filter((x) => isComplete(x, answers, before)).length / inSec.length) * 100) : 0;
+    return inSec.length ? Math.round((inSec.filter(saved).length / inSec.length) * 100) : 0;
   };
+  const unsaved = Object.values(pending);
+  const unsavedAr = countAr(unsaved.length, 'إجابة واحدة', 'إجابتان', 'إجابات', 'إجابة');
   const header = (
     <>
       <div className="quiz-head">
@@ -215,7 +259,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
         {header}
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
-          <h2>{line.title}</h2>
+          <h2 ref={focusRef} tabIndex={-1}>{line.title}</h2>
           <p className="muted">أكملت قسم {secTitle(prev)}. {line.next}</p>
           <button className="btn gold" onClick={() => setMode('q')}>واصل إلى {secTitle(secOf(q))}</button>
         </div>
@@ -228,22 +272,26 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     // تجاوز حد «لا ينطبق» يُعرض هنا بموضعه، لا رفضًا بعد «أرسل»
     const naOver = naLimit && !missing.length ? behaviorNaExcess(qs, answers) : [];
     const naSecs = [...new Set(naOver.map((id) => secTitle(secOf(qs.find((x) => x.id === id)))))];
+    // ما لم يحفظه الخادم يُسمّى هنا ولا يُرسل القياس قبله: كانت المراجعة تقول «أنهيت» ويرد الخادم «بقي سؤال»
+    const unsavedNow = !missing.length && unsaved.length > 0;
     return (
       <div className="page quiz">
         {header}
         <div className="card milestone-card stack">
           <div className="badge"><span>★</span></div>
-          <h2>{missing.length ? `بقي ${missing.length} من الأسئلة` : naOver.length ? 'راجع «لا ينطبق» قبل الإرسال' : 'أنهيت الأسئلة كلها'}</h2>
+          <h2 ref={focusRef} tabIndex={-1}>{missing.length ? `بقي ${missing.length} من الأسئلة` : unsavedNow ? `لم تُحفظ ${unsavedAr} بعد` : naOver.length ? 'راجع «لا ينطبق» قبل الإرسال' : 'أنهيت الأسئلة كلها'}</h2>
           <p className="muted">{missing.length
             ? 'أجب عنها لتظهر نتيجتك.'
+            : unsavedNow ? 'تعذّر حفظها بسبب الاتصال، وتُعاد المحاولة حين يعود. يُفتح الإرسال بعد حفظها.'
             : naOver.length ? `${BEHAVIOR_NA_MESSAGE}، واخترته في أكثر من عبارة في قسم ${naSecs.join(' وقسم ')}. غيّر ما زاد إلى أقرب تكرار لما تفعله.`
             : post ? 'أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها، ثم ادعُ مديرك ليقدّر التغير من موقعه.'
               : 'أرسل إجاباتك لتظهر نتيجتك المبدئية في الأطر الثلاثة فورًا، ثم يراجعها المستشار ويعتمد مسارك.'}</p>
-          {error && <div className="alert err">{error}</div>}
+          {error && <div className="alert err" role="alert">{error}</div>}
           {saving > 0 && <p className="saving">جارٍ حفظ آخر إجابة…</p>}
           <div className="row" style={{ justifyContent: 'center' }}>
             {missing.length
               ? <button className="btn gold" onClick={() => { setIdx(qs.indexOf(missing[0])); setMode('q'); }}>أكمل الناقص</button>
+              : unsavedNow ? <button className="btn gold" disabled={saving > 0} onClick={retryAll}>{saving > 0 ? 'جارٍ الحفظ…' : 'أعد حفظها'}</button>
               : naOver.length ? <button className="btn gold" onClick={() => { setIdx(qs.findIndex((x) => x.id === naOver[0])); setReturnTo('review'); setMode('q'); }}>اذهب إلى العبارة</button>
               : <button className="btn gold" disabled={busy || saving > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : post ? 'أرسل واعرض ما تغيّر' : 'أرسل واعرض نتيجتي'}</button>}
             <button className="btn ghost" onClick={() => { setIdx(qs.length - 1); setMode('q'); }}>راجع إجاباتي</button>
@@ -266,7 +314,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <span className="chip dark">{secTitle(secOf(q))}</span>
           {q.tier !== 'transfer' && <span className="chip gold">{TIERS[q.tier] || ''}</span>}
         </div>
-        <p className="q-text">{q.text}</p>
+        <p className="q-text" ref={focusRef} tabIndex={-1}>{q.text}</p>
         {q.help && <p className="q-help">{q.help}</p>}
         {!q.help && <div style={{ height: 12 }} />}
         {q.tier === 'behavior' && qs[idx - 1]?.tier !== 'behavior' && <p className="q-help">لا إجابة صحيحة هنا: اختر ما تفعله فعلًا{naLimit ? `، و${BEHAVIOR_NA_RULE}` : ''}.</p>}
@@ -300,14 +348,16 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
             {naOther >= 0 && <> <button className="link" onClick={() => { setReturnTo((r) => (r === 'review' ? r : idx)); setIdx(naOther); }}>اذهب إليها</button></>}
           </div>
         )}
-        {failed && (
-          <div className="alert err" style={{ marginTop: 14 }}>
-            {failed.message} <button className="link" onClick={() => { const f = failed; setFailed(null); save(f.question, f.k, f.b); }}>أعد المحاولة</button>
+        {error && <div className="alert err" role="alert" style={{ marginTop: 14 }}>{error}</div>}
+        {unsaved.length > 0 && (
+          <div className="alert err" role="alert" style={{ marginTop: 14 }}>
+            لم تُحفظ {unsavedAr} بعد. {unsaved[unsaved.length - 1].message}{' '}
+            <button className="link" disabled={saving > 0} onClick={retryAll}>أعد المحاولة</button>
           </div>
         )}
         <div className="quiz-nav">
           <button className="link small" disabled={idx === 0} onClick={() => { setReturnTo((r) => (r === 'review' ? r : null)); setIdx(idx - 1); }}>السابق</button>
-          <span className="saving">{saving > 0 ? 'جارٍ الحفظ…' : answered ? 'محفوظ ✓' : ''}</span>
+          <span className="saving">{saving > 0 ? 'جارٍ الحفظ…' : answered && !unsaved.length ? 'محفوظ ✓' : ''}</span>
           {isComplete(q, answers, before)
             ? <button className="link small" onClick={() => { setReturnTo((r) => (r === 'review' ? r : null)); goNext(idx); }}>التالي</button>
             : <span />}

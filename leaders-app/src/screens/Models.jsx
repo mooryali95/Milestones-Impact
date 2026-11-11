@@ -3,8 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // كل نموذج أداة عمل يملؤها المشارك على مشروعه الحقيقي: مسودة تُحفظ،
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
+import { ErrorBox } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
 import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
@@ -21,21 +22,22 @@ const STATUS = {
 const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
-function Field({ f, value, onChange, locked, initiative, imp }) {
+// id للحقل الذي تسمّيه <label htmlFor>، وlabelId لما لا تسمّيه label (مجموعة الاختيار والجدول) فيُسمّى بـaria-labelledby
+function Field({ f, value, onChange, locked, initiative, imp, id, labelId }) {
   // حقل اسم المشروع مصدره بطاقة المبادرة: يُعرض ولا يُكتب هنا
   if (f.bind === 'initiative') {
     return (
       <div className="mf-bound">
-        <input className="input" disabled value={initiative || value || ''} placeholder="—" />
+        <input id={id} className="input" disabled value={initiative || value || ''} placeholder="—" />
         {!initiative && <small className="muted">اكتب اسم المبادرة في «بطاقة المبادرة» فيظهر هنا وفي كل نماذجك.</small>}
       </div>
     );
   }
   if (f.type === 'select') {
     return (
-      <div className="seg-opts">
+      <div className="seg-opts" role="radiogroup" aria-labelledby={labelId}>
         {f.options.map((o) => (
-          <button key={o} type="button" disabled={locked} className={value === o ? 'on' : ''} onClick={() => onChange(o)}>{o}</button>
+          <button key={o} type="button" role="radio" aria-checked={value === o} disabled={locked} className={value === o ? 'on' : ''} onClick={() => onChange(o)}>{o}</button>
         ))}
       </div>
     );
@@ -46,7 +48,7 @@ function Field({ f, value, onChange, locked, initiative, imp }) {
     const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? r.map((c, j) => (j === ci ? v : c)) : r)));
     return (
       <div className="mtable-wrap">
-        <table className="mtable">
+        <table className="mtable" aria-labelledby={labelId}>
           <thead><tr><th>#</th>{cols.map((c) => <th key={c}>{c}</th>)}{!locked && <th />}</tr></thead>
           <tbody>
             {rows.map((r, ri) => (
@@ -70,8 +72,8 @@ function Field({ f, value, onChange, locked, initiative, imp }) {
       </div>
     );
   }
-  if (f.type === 'textarea') return <textarea className="input" rows={4} disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-  return <input className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+  if (f.type === 'textarea') return <textarea id={id} className="input" rows={4} disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+  return <input id={id} className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
 }
 
 // استيراد صفوف من جدول نموذج آخر (مصدرها الوحيد)، لقطة يعدّلها المشارك بعدها
@@ -106,15 +108,18 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   const [msg, setMsg] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const uid = useId();
 
   useEffect(() => {
     call('models.get', { id }).then((r) => {
       if (!r.success) return setMsg({ err: r.message });
+      setMsg(null);
       setD(r);
       setAnswers(r.submission?.answers || {});
       if (r.submission?.updated_at) setSavedAt(new Date(r.submission.updated_at));
     });
-  }, [id]);
+  }, [id, attempt]);
 
   const s = d?.submission;
   // فصل في وثيقة مسلّمة أو معتمدة: يُقرأ ولا يُعدَّل حتى تعود الوثيقة
@@ -132,7 +137,15 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   // مغادرة الشاشة قبل أن يلحقها الحفظ التلقائي تدفع المسودة، وإغلاق الصفحة يحذّر
   useUnsavedGuard(dirty && !!auto, () => call('models.save', { id: d.model.id, answers, submit: false }));
 
-  if (!d) return msg ? <div className="alert err">{msg.err}</div> : <div className="center-load"><div className="spinner" /></div>;
+  // فشل التحميل: إعادة المحاولة والرجوع، لا رسالة وحدها (فحص الجاهزية p-entry-5)
+  if (!d) {
+    return msg ? (
+      <div className="stack">
+        <ErrorBox message={msg.err} onRetry={() => { setMsg(null); setAttempt((n) => n + 1); }} />
+        {onBack && <div className="row"><button className="link small" onClick={onBack}>→ {backLabel}</button></div>}
+      </div>
+    ) : <div className="center-load"><div className="spinner" /></div>;
+  }
   const m = d.model;
   const locked = s?.status === 'reviewed' || capLocked;
   const initiative = d.initiative;
@@ -201,10 +214,13 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </header>
           {m.fields.map((f, i) => {
             const ok = filledOf(f, answers[f.key], initiative);
+            // التسمية مربوطة بالحقل: htmlFor لحقل الكتابة، وaria-labelledby لمجموعة الاختيار والجدول (فحص الجاهزية p-entry-8)
+            const fid = `${uid}-${f.key}`;
+            const single = f.bind === 'initiative' || !['select', 'table'].includes(f.type);
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
-                <label><span className="mf-n">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{f.hint}</small>}</span></label>
-                <Field f={f} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
+                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{f.hint}</small>}</span></label>
+                <Field f={f} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
               </div>
             );
           })}
