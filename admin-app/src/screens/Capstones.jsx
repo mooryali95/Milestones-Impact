@@ -37,15 +37,20 @@ function Review({ d, canWrite, onSaved, onFailed }) {
   const canReturn = (c.revisions || 0) < d.max_revisions;
   // بلا بريد صحيح للراعي لا يُطلب تأييد: القبول اعتماد دون تأييد بسبب مكتوب (الراعي اختياري)
   const noSponsor = !d.sponsor_email;
+  // سبب الاعتماد دون تأييد بحد الخادم نفسه (عشرة أحرف، capstone.ts)؛ وكان وجود أي سبب يلغي التأكيد فيُعتمد نهائيًا بنقرة
+  const why = waive.trim();
+  const waiveShort = (noSponsor || !!why) && why.length < 10;
   const send = async (decision) => {
     if (decision === 'return' && !(await confirm('تُعاد الوثيقة للمشارك ليحسّنها، وهذا التحسين الوحيد المتاح له. متابعة؟'))) return;
-    if (decision === 'accept' && !waive && !(await confirm('تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها في الجهة. متابعة؟'))) return;
+    if (decision === 'accept' && !(await confirm(why
+      ? 'تُعتمد الوثيقة نهائيًا دون تأييد الراعي: تُمنح نقاط الاعتماد ويُبلَّغ المشارك بالبريد، ولا يُتراجع عن ذلك. متابعة؟'
+      : 'تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها في الجهة. متابعة؟'))) return;
     setBusy(decision);
-    const r = await L('admin.capstone-review', { participant_id: d.participant_id, decision, scores, notes, note, waive_sponsor: decision === 'accept' ? waive : '' });
+    const r = await L('admin.capstone-review', { participant_id: d.participant_id, decision, scores, notes, note, waive_sponsor: decision === 'accept' ? why : '' });
     setBusy('');
     // أي خطأ يعيد تحميل الوثيقة، فلا تبقى الشاشة على حالة تغيّرت على الخادم
     if (!r.success) { toast(r.message); onFailed(); return; }
-    toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : waive ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
+    toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : why ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
     refreshPending();
     onSaved(r);
   };
@@ -69,7 +74,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
         {noSponsor && <p className="la-muted" role="note">لا بريد صحيح للراعي في بطاقة المبادرة، فلا يُطلب تأييده. اكتب سبب الاعتماد دون تأييد{canReturn ? '، أو أعدها للمشارك ليضيف بريد الراعي' : ''}.</p>}
         <label className="cps-note">اعتماد دون تأييد الراعي ({noSponsor ? 'إلزامي' : 'اختياري'}، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>
         <div className="la-row">
-          <button className="btn-sm primary" disabled={noSponsor && waive.trim().length < 10} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : waive ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
+          <button className="btn-sm primary" disabled={waiveShort} title={waiveShort ? 'سبب الاعتماد دون تأييد عشرة أحرف على الأقل' : undefined} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : why ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
           {canReturn && <button className="btn-sm ghost" onClick={() => send('return')}>{busy === 'return' ? 'لحظة…' : 'إعادة للتحسين'}</button>}
           {!canReturn && <small className="la-muted">استُنفد التحسين المتاح، فالقرار قبول بالمعيار.</small>}
         </div>
