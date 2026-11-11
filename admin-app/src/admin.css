@@ -1151,6 +1151,8 @@ a { text-decoration: none; color: inherit; }
 
 /* ── نافذة التأكيد والإدخال (مطابقة لـ admin/assets/dialog.js) ── */
 .mid-ov{position:fixed;inset:0;background:rgba(6,30,44,.55);backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+/* النافذة نفسها تأخذ التركيز عند فتحها ليُقرأ عنوانها (ui.jsx)؛ حلقة التركيز لعناصرها لا لإطارها */
+[aria-modal="true"][tabindex="-1"]:focus{outline:none}
 .mid-box{background:var(--off-white,#fff);color:var(--ink,#123);border-radius:14px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:22px}
 .mid-msg{line-height:1.8;font-size:.95rem;margin:0 0 16px;white-space:pre-line}
 .mid-in{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line,#ccd);border-radius:9px;font:inherit;margin-bottom:16px}

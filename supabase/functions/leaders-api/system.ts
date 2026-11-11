@@ -7,7 +7,8 @@ import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publ
 import { requireWrite } from './admin.ts';
 import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { PARTICIPANT_STATUS } from './labels.js';
-import { MIGRATIONS } from './migrations.js';
+import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
+import { launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 
@@ -42,13 +43,13 @@ export async function ping() {
   return { success: true, db_ms: Date.now() - t0, mail: !!CONFIG.resendKey, at: new Date().toISOString() };
 }
 
-// ما لم يُطبَّق من الترحيلات: من سجل leaders.schema_migrations مقارنًا بقائمة المجلد (migrations.js المولَّد).
+// ما لم يُطبَّق من الترحيلات: من سجل leaders.schema_migrations مقارنًا بقائمة المجلد (migrations.js المولَّد)، بوسم بوابة
+// النشر (readiness.js، كما تقرؤه بوابات المراحل): الحاجب والمتسامح يُطبَّقان، والمؤجل بقرار لا يُطلب تطبيقه.
 // تعذّر قراءة السجل لا يُقرأ «لا شيء ناقص»: ledger false، وتعرضه النظرة العامة وتقرير الأسبوع
 async function missingMigrations() {
   const { data, error } = await db.from('schema_migrations').select('name');
-  if (error) { console.error('schema_migrations:', error.message); return { ledger: false, missing: [] as string[] }; }
-  const applied = new Set((data || []).map((r: any) => r.name));
-  return { ledger: true, missing: MIGRATIONS.filter((n) => !applied.has(n)) };
+  if (error) { console.error('schema_migrations:', error.message); return { ledger: false, pending: [] as { name: string; gate: string; note: string }[] }; }
+  return { ledger: true, pending: pendingMigrations(MIGRATIONS, (data || []).map((r: any) => r.name), MIGRATION_GATES) };
 }
 
 export async function health() {
@@ -62,37 +63,35 @@ export async function health() {
     LEADERS_TURNSTILE_SECRET: !!CONFIG.turnstileSecret && !!CONFIG.turnstileSite,
     // D05: بلا مفتاح التوقيع المستقل لا تصدر شهادة
     LEADERS_CERT_SIGNING_KEY: certKeys().key.length >= 32,
+    // قناة التنبيه الفوري (alertWebhook)؛ بوابة المراحل تشترطها مع مفتاح التوقيع (REQUIRED_SECRETS في readiness.js)
+    LEADERS_ALERT_WEBHOOK: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'),
   };
   return {
     success: true,
     readiness: await readiness().catch(() => []),
-    missing_migrations: mig.missing, migrations_ledger: mig.ledger,
+    // missing_migrations: ما يُطبَّق (الحاجب والمتسامح) كما تقرؤه لوحة قبل هذا الحقل؛ pending_migrations: الكل بوسمه
+    missing_migrations: mig.pending.filter((m) => m.gate !== 'deferred').map((m) => m.name), pending_migrations: mig.pending, migrations_ledger: mig.ledger,
     missing_secrets: Object.entries(secrets).filter(([, ok]) => !ok).map(([k]) => k),
     mail: { today: mail, cap: CONFIG.mailDailyCap },
   };
 }
 
-// جاهزية الإطلاق: إعدادات تُضبط من اللوحة قبل أول دفعة، كل بند بمكان ضبطه
+// جاهزية الإطلاق: إعدادات اللوحة قبل أول دفعة، وبنود الإطلاق التجريبي (م2) للجهات ودفعاتها، كل بند بمكان ضبطه.
+// الأحكام والنصوص في readiness.js، وبوابات المراحل تحكم بها على الصفوف نفسها
 async function readiness() {
-  const [{ data: ins }, { data: cert }, { count: programs }] = await Promise.all([
+  const [ins, cert, programs, orgs, cohorts, sessions, prog] = await Promise.all([
     db.from('instruments').select('key, kind, active, version, created_at'),
     db.from('certificate_settings').select('*').eq('id', 1).maybeSingle(),
     db.from('programs').select('id', { count: 'exact', head: true }).eq('is_default', true),
+    db.from('organizations').select('id, name, status').eq('status', 'active'),
+    db.from('cohorts').select('*'),
+    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true),
+    db.from('programs').select('final_eval').eq('is_default', true).maybeSingle(),
   ]);
-  const list = (ins || []) as any[];
-  const newest = (kind: string) => list.filter((x) => x.kind === kind).sort((a, b) => (b.version ?? 0) - (a.version ?? 0) || String(b.created_at).localeCompare(String(a.created_at)))[0];
-  const active = (kind: string) => list.find((x) => x.kind === kind && x.active);
-  const base = active('baseline'), latest = newest('baseline');
-  const c: any = cert || {};
-  return [
-    { key: 'baseline', ok: !!base && base.key === latest?.key, where: 'assessment',
-      label: base ? (base.key === latest?.key ? `القياس القبلي المفعّل ${base.key}` : `المفعّل ${base.key} وأحدث نسخة ${latest.key}`) : 'لا قياس قبلي مفعّل' },
-    { key: 'post', ok: !!active('post'), where: 'assessment',
-      label: active('post') ? `القياس البعدي المفعّل ${active('post').key}` : 'القياس البعدي غير مفعّل، فلا يُقاس الأثر في نهاية البرنامج' },
-    { key: 'program', ok: (programs ?? 0) > 0, where: 'programs', label: programs ? 'برنامج افتراضي محدد' : 'لا برنامج افتراضي، فالدفعات الجديدة بلا قالب' },
-    { key: 'certificate', ok: c.enabled !== false && !!c.signatory?.name && !!c.hours, where: 'certs',
-      label: c.enabled === false ? 'الشهادات معطلة' : !c.signatory?.name ? 'الشهادة بلا موقّع' : !c.hours ? 'الشهادة بلا عدد ساعات' : 'الشهادة مكتملة الإعداد' },
-  ];
+  const setup = setupReadiness({ instruments: ins.data || [], certificate: cert.data, defaultPrograms: programs.count ?? 0 });
+  // بنود م2 تحتاج قراءاتها كلها: قراءة تعذّرت لا تُعرض «لا دفعة» ولا «لم يُحفظ»
+  if ([orgs, cohorts, sessions, prog].some((r) => r.error)) return setup;
+  return [...setup, ...launchReadiness({ organizations: orgs.data || [], cohorts: cohorts.data || [], sessions: sessions.data || [], finalEval: (prog.data as any)?.final_eval ?? null })];
 }
 
 // زيارات الموقع: آخر days يومًا (7 إلى 90)، وموقع واحد أو الكل
@@ -173,7 +172,9 @@ export async function weeklyHealth() {
   ]);
   const issues = [
     ...(h.migrations_ledger ? [] : ['تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق']),
-    ...h.missing_migrations.map((f) => `ترحيل لم يُطبَّق: ${f}.sql`),
+    // المؤجل بقرار لا يحتاج تدخلًا: يُذكر في حالة النظام في اللوحة وحدها
+    ...h.pending_migrations.filter((m) => m.gate === 'blocking').map((m) => `ترحيل حاجب لم يُطبَّق: ${m.name}.sql`),
+    ...h.pending_migrations.filter((m) => m.gate === 'tolerant').map((m) => `ترحيل لم يُطبَّق تعمل الدوال قبله وبعده: ${m.name}.sql`),
     ...h.missing_secrets.map((k) => `سر ناقص في leaders-api: ${k}`),
     ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`رسائل الرموز في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap}`] : []),
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),

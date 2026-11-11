@@ -50,6 +50,62 @@ test('الإدارة: سجل الشهادات وإلغاء شهادة بسبب',
   await expect.poll(() => calls.find((c) => c.action === 'admin.certificate-revoke')).toMatchObject({ id: 'c1', reason: 'صدرت بالخطأ' });
 });
 
+test('المؤشرات من إحصاء الخادم بلا حسابات الاختبار، والسجل يُظهر الاختبار بشارته', async ({ page }) => {
+  const row = (id, serial, status, extra = {}) => ({ id, serial, status, name_ar: `مشارك ${id}`, org_name: null, issued_at: snap.issued_at, participant_id: `p-${id}`, ...extra });
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const r = {
+      'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
+      'admin.participants': { success: true, participants: [] },
+      'admin.cert-settings': { success: true, settings: { enabled: true, program_ar: 'برنامج القادة', program_en: 'Leaders Program', hours: 48, signatory: null } },
+      // ثلاثة صفوف في السجل، أحدها لحساب اختبار: الإحصاء يعدّ اثنين
+      'admin.certificates': { success: true, checks: 0,
+        certificates: [row('c1', 'MI-LDR-2026-AAAAA1', 'valid'), row('c2', 'MI-LDR-2026-AAAAA2', 'valid', { is_test: true }), row('c3', 'MI-LDR-2026-AAAAA3', 'replaced')],
+        stats: { total: 2, valid: 1, suspended: 0, revoked: 0, replaced: 1 } },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
+  });
+  await page.goto('http://localhost:4303/');
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.locator('.la-tabs').getByRole('button', { name: 'الشهادات' }).click();
+  const kpi = (label) => page.locator('.ce-kpis .stat-card').filter({ hasText: label }).locator('.stat-value');
+  await expect(kpi('الشهادات الصادرة')).toHaveText('2');
+  await expect(kpi('سارية')).toHaveText('1');
+  await expect(kpi('ملغاة أو مستبدلة')).toHaveText('1');
+  await expect(page.getByRole('row').filter({ hasText: 'MI-LDR-2026-AAAAA2' })).toContainText('اختبار');
+  await expect(page.getByRole('row').filter({ hasText: 'MI-LDR-2026-AAAAA1' })).not.toContainText('اختبار');
+});
+
+test('الإصدار التلقائي: الوصف يقول إن التوقف يحجب، ومن لم تصدر شهادته ظاهر بطريق إصدارها', async ({ page }) => {
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const r = {
+      'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
+      'admin.participants': { success: true, participants: [] },
+      'admin.cert-settings': { success: true, settings: { enabled: false, program_ar: 'برنامج القادة', program_en: 'Leaders Program', hours: 48, signatory: null },
+        held: [{ participant_id: 'p9', full_name: 'منى السالم', awaiting_name: false }, { participant_id: 'p8', full_name: 'عمر علي', awaiting_name: true }] },
+      'admin.certificates': { success: true, checks: 0, certificates: [], stats: { total: 0, valid: 0, suspended: 0, revoked: 0, replaced: 0 } },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: false, message: 'غير متوقع' } });
+  });
+  await page.goto('http://localhost:4303/');
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.locator('.la-tabs').getByRole('button', { name: 'الشهادات' }).click();
+  await expect(page.getByText('الإصدار التلقائي متوقف')).toBeVisible();
+  await expect(page.getByText('إيقاف الإصدار التلقائي يحجب شهادة كل من يُعتمد تقييمه أثناء التوقف، وإعادة تفعيله لا تصدر ما حُجب.')).toBeVisible();
+  const held = page.getByRole('note', { name: 'لم تصدر شهاداتهم' });
+  await expect(held).toContainText('اعتُمد تقييمهم الختامي بنجاح ولم تصدر شهاداتهم (2)');
+  await expect(held.getByRole('listitem').filter({ hasText: 'منى السالم' })).toContainText('لم تصدر شهادته');
+  await expect(held.getByRole('listitem').filter({ hasText: 'عمر علي' })).toContainText('ينتظر تأكيد اسمه');
+  await expect(held).toContainText('بإعادة فتح تقييمه الختامي من ملفه واعتماده والإصدار مفعّل');
+});
+
 test('شهادة الجهة: يُحفظ التخصيص وحده، والفارغ يُورث من العام', async ({ page }) => {
   const calls = [];
   const org = { id: 'o1', name: 'هيئة التطوير', color: '#12414E', invite_code: 'hd01', status: 'active', domains: [], cert: { hours: 30 },

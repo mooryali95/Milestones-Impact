@@ -6,7 +6,7 @@
 // • FinalConfig: إعداد البرنامج (الأوزان، طريقة القياس النهائي، قواعد التغطية، حدود القرار، الاعتماد واللجنة).
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
 
@@ -36,7 +36,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
     const r = await L(action, { participant_id: participantId, ...body });
     setBusy(false);
     if (!r.success) return toast(r.message);
-    toast(ok); load();
+    toast(r.notice || ok); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
   };
   const voteReturn = async () => {
     const note = await prompt('سبب الإعادة (يصل لمن رفع التقييم):', '');
@@ -137,6 +137,8 @@ export function FinalConfig({ program, onClose }) {
   const { toast } = useUI();
   const [c, setC] = useState(() => finalConfig(program.final_eval));
   const [busy, setBusy] = useState(false);
+  const close = useGuardedClose(JSON.stringify(c) !== JSON.stringify(finalConfig(program.final_eval)), () => onClose());
+  useEscape(close);
   const total = Object.values(c.weights).reduce((a, b) => a + Number(b || 0), 0);
   const save = async () => {
     setBusy(true);
@@ -150,7 +152,7 @@ export function FinalConfig({ program, onClose }) {
   const m = (k, v) => setC({ ...c, measure: { ...c.measure, [k]: v } });
   const g = (k, v) => setC({ ...c, measure: { ...c.measure, gain_scores: { ...c.measure.gain_scores, [k]: v } } });
   return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label="إعداد التقييم الختامي">
         <h3>التقييم الختامي: «{program.name}» <small className="la-muted">· إصدار المعادلة {c.version}{c.effective_from ? ` منذ ${when(c.effective_from)}` : ''}</small></h3>
         <p className="la-muted">الأوزان نسبية (المجموع {total}). قبل انتهاء الدفعة يُعاد توزيع وزن المكوّن الغائب؛ وبعدها يُحسب المشروع والقياس الغائبان صفرًا بإعلان. كل حفظ يرفع الإصدار، والتقييمات المرفوعة تبقى بلقطة إصدارها.</p>
@@ -189,7 +191,7 @@ export function FinalConfig({ program, onClose }) {
           <label className="field"><span>أعضاء اللجنة بالبريد (فارغ = أي حساب إدارة)</span><textarea rows={2} value={Array.isArray(c.committee) ? c.committee.join(', ') : c.committee || ''} onChange={(e) => setC({ ...c, committee: e.target.value })} /></label>
         </>}
         <label className="field"><span>فرق تعديل الدرجة الذي يحتاج توقيعين</span><input type="number" min="1" max="100" value={c.large_adjust} onChange={(e) => setC({ ...c, large_adjust: e.target.value })} /></label>
-        <div className="la-row"><button className="btn-sm primary" disabled={busy} onClick={save}>حفظ</button><button className="btn-sm ghost" onClick={() => onClose()}>إلغاء</button></div>
+        <div className="la-row"><button className="btn-sm primary" disabled={busy} onClick={save}>حفظ</button><button className="btn-sm ghost" onClick={close}>إلغاء</button></div>
       </div>
     </div>
   );

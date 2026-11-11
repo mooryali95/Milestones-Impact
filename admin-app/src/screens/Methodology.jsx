@@ -4,7 +4,7 @@
 // كلها تقرأ من admin.catalog وتكتب عبر admin.save / admin.delete / admin.reorder.
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
-import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
+import { DIM, DIM_EN, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -204,8 +204,8 @@ export function Assessment({ catalog, reload, canWrite }) {
 }
 
 // ══ معيار التسكين وحاسبته ══
-function PlacementModel({ model, reload, canWrite }) {
-  const { toast } = useUI();
+function PlacementModel({ model, running, reload, canWrite }) {
+  const { toast, prompt } = useUI();
   const [m, setM] = useState(() => ({ ...MODEL_DEFAULT, ...model }));
   const [p, setP] = useState({ knowledge: 75, skill: 25, behavior: 69 });
   const [out, setOut] = useState(null);
@@ -219,7 +219,8 @@ function PlacementModel({ model, reload, canWrite }) {
   const store = async () => {
     if (+m.min_advanced <= +m.min_intermediate) return toast('حد الاحترافي يجب أن يكون أعلى من حد المتوسط');
     const row = { id: 1, ...Object.fromEntries(Object.keys(MODEL_DEFAULT).map((k) => [k, Number(m[k])])) };
-    const r = await L('admin.save', { entity: 'placement_model', row });
+    const r = await withRunningReason((extra) => L('admin.save', { entity: 'placement_model', row, ...extra }), prompt);
+    if (r.cancelled) return;
     toast(r.success ? 'حُفظ معيار التسكين. يسري على القياسات القادمة ويظهر مقترحه لكل مشارك' : r.message);
     if (r.success) reload();
   };
@@ -227,6 +228,7 @@ function PlacementModel({ model, reload, canWrite }) {
   return (
     <section className="la-card la-model">
       <h3>معيار التسكين</h3>
+      {running && <div className="la-note" role="note">{placementLockAr(running)}</div>}
       <p className="la-muted">لكل إطار مؤشر مركّب من 100 = متوسط موزون لجوانبه الثلاثة. يُمنح المستوى بالمؤشر، بشرط ألا يقل أي جانب عن حد أدنى، فلا تُخفي قوة جانب فجوة في آخر. والحالة الحدّية تظهر لك لتحسمها بحكمك. يسري التعديل على القياسات القادمة، ويظهر مقترحه فورًا في صفحة كل مشارك.</p>
       <div className="la-model-grid">
         <div><h4>1. أوزان الجوانب</h4>{f('w_skill', 'المواقف', 'الأصدق تنبؤًا بالأداء')}{f('w_knowledge', 'المعرفة', 'الفهم والمفاهيم')}{f('w_behavior', 'الممارسة', 'تقدير ذاتي يميل للتضخم')}</div>
@@ -260,7 +262,9 @@ export function Levels({ catalog, reload, canWrite }) {
   return (
     <>
       <section className="la-card">
-        <h3>خلايا المصفوفة: ما يقرؤه المشارك عن مستواه ومساره</h3>
+        <h3>خلايا المصفوفة: مرجع الفريق لكل مستوى في كل إطار</h3>
+        {/* لا تصل المشارك: mePayload يرسل الخلايا للإدارة والخبير وحدهما (التدقيق 2026-11-11، admin-program-7) */}
+        <p className="la-muted">لا تظهر للمشارك: يرى مستواه العام وملف تعريف مساره. عنوان المسار في الخلية يراه الخبير في ملف المشارك، والوصف مرجع للفريق هنا.</p>
         <div className="la-cells">
           <div />
           {DIMS.map((d) => <div key={d} className="la-ch">{DIM_EN[d]}<small>{DIM[d]}</small></div>)}
@@ -279,7 +283,7 @@ export function Levels({ catalog, reload, canWrite }) {
         </div>
       </section>
       {/* معيار التسكين المركّب وحده؛ قواعد level_rules القديمة أُزيلت (الترحيل 20261030140000) */}
-      <PlacementModel model={catalog.placement_model?.[0] || { id: 1, ...MODEL_DEFAULT }} reload={reload} canWrite={canWrite} />
+      <PlacementModel model={catalog.placement_model?.[0] || { id: 1, ...MODEL_DEFAULT }} running={catalog.running_cohort} reload={reload} canWrite={canWrite} />
       {editor}
     </>
   );

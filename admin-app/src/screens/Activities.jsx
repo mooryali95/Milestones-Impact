@@ -30,12 +30,18 @@ const SESSION_FIELDS = [
   { name: 'ends_at', label: 'تنتهي', type: 'datetime' },
   { name: 'active', label: 'مفعّلة', type: 'check' },
 ];
-// الجلسة لدفعة بعينها، أو لكل الدفعات التي تتبع برنامج المتطلب
-const sessionFields = (cohorts) => cohorts.length < 2 ? SESSION_FIELDS : [
-  { name: 'cohort_id', label: 'الدفعة', type: 'select', empty: 'كل الدفعات', options: Object.fromEntries(cohorts.map((c) => [c.id, c.name])),
-    help: 'لكل دفعة مواعيدها وقاعاتها. الجلسة العامة تظهر لكل الدفعات.' },
-  ...SESSION_FIELDS,
-];
+// الجلسة لدفعة بعينها، أو لكل الدفعات التي تتبع برنامج المتطلب. الحقل يظهر متى كانت للبرنامج دفعة واحدة على الأقل:
+// كان يختفي مع الدفعة الوحيدة، فتُحفظ الجلسة عامة بلا دعوة ولا تذكير، ويفك تحريرها ربطًا قائمًا (التدقيق 2026-11-11، admin-program-3).
+// current: دفعة الجلسة المحررة إن لم تعد في القائمة (القائمة للدفعات غير المغلقة)، فلا تظهر «كل الدفعات» مكانها
+const sessionFields = (cohorts, current = null) => {
+  const options = Object.fromEntries(cohorts.map((c) => [c.id, c.name]));
+  if (current && !options[current]) options[current] = 'دفعة مغلقة';
+  return !Object.keys(options).length ? SESSION_FIELDS : [
+    { name: 'cohort_id', label: 'الدفعة', type: 'select', empty: 'كل الدفعات', options,
+      help: 'لكل دفعة مواعيدها وقاعاتها، ودعوتها بملف التقويم وتذكيرها قبل يوم وقبل ساعة يصلان أعضاءها. الجلسة العامة تظهر لكل الدفعات بلا دعوة ولا تذكير.' },
+    ...SESSION_FIELDS,
+  ];
+};
 const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
 const MODE_AR = SESSION_MODE_AR;
 const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'warn', attended: 'ok', no_show: 'bad', cancelled: '' }).map(([k, tone]) => [k, [COACH_STATUS_ADMIN[k], tone]]));
@@ -130,13 +136,12 @@ function Workshops({ data, reload, canWrite }) {
       {reqs.map((r) => {
         const list = data.workshops.filter((s) => s.requirement_id === r.id);
         const cohorts = (data.cohorts || []).filter((c) => c.program_id === r.program_id);
-        const fields = sessionFields(cohorts);
-        const cohortName = (id) => cohorts.find((c) => c.id === id)?.name;
+        const cohortName = (id) => cohorts.find((c) => c.id === id)?.name || 'دفعة مغلقة';
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
               <div><b>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
-              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields, values: { active: true, mode: 'in_person' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
+              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts), values: { active: true, mode: 'in_person', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
@@ -152,7 +157,7 @@ function Workshops({ data, reload, canWrite }) {
                       {canWrite && s.cohort_id && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields, values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: sessionFields(cohorts, s.cohort_id), values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>

@@ -108,6 +108,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .btn-logout { padding: 0.3rem 0.65rem; border: 1px solid rgba(255,255,255,0.22); border-radius: 2px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); font-family: var(--font-ar); font-size: 0.72rem; cursor: pointer; transition: background 0.2s; }
 .btn-logout:active { background: rgba(255,255,255,0.15); }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+/* النافذة الحوارية نفسها تأخذ التركيز احتياطًا حين لا عنصر فيها يقبله (useDialog)؛ لا إطار حولها كلها */
+[role="dialog"]:focus, [role="alertdialog"]:focus { outline: none; }
 [role="button"] { cursor: pointer; }
 .skip-link { position: absolute; right: 12px; top: -48px; z-index: 1000; background: #0B272F; color: #fff; padding: 8px 14px; border-radius: 6px; }
 .skip-link:focus { top: 12px; }
@@ -171,6 +173,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .fg input:focus { border-color: var(--mi);  background: var(--bg-card); }
 .fg-err input { border-color: var(--err); }
 .fg-msg { font-size: 0.72rem; color: var(--err); margin-top: 0.22rem; }
+.auth-privacy { font-size: 0.72rem; color: var(--text-secondary); line-height: 1.7; margin-top: 0.75rem; text-align: center; }
+.auth-privacy a { color: var(--mi-d); font-weight: 600; }
 .fg-err input:focus { border-color: var(--err);  }
 
 /* ════════════════════════════════════════
@@ -353,7 +357,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .sum-track-head { font-weight:700; margin-bottom:0.28rem; font-size:0.88rem; }
 .sum-track-item { display:flex; justify-content:space-between; padding:0.18rem 0; font-size:0.76rem; border-bottom:1px solid rgba(0,0,0,0.03); }
 .output-tab-hint { text-align:center; padding:0.55rem; background:rgba(74,122,58,0.06); border-radius: 2px; font-size:0.78rem; color:var(--ok); margin-bottom:0.75rem; cursor:pointer; border:1px solid rgba(74,122,58,0.15); }
-.output-card { background:var(--bg-card); border-radius:var(--r-lg); padding:1.2rem;  margin-bottom:0.9rem; border:2px solid var(--mi); }
+/* الجدول بأعمدته السبعة أعرض من الهاتف، والصفحة تقص ما يتجاوزها: البطاقة تُمرَّر أفقيًا فيبلغ المشارك عمود الحالة */
+.output-card { background:var(--bg-card); border-radius:var(--r-lg); padding:1.2rem;  margin-bottom:0.9rem; border:2px solid var(--mi); overflow-x:auto; }
 .output-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.9rem; flex-wrap:wrap; gap:0.5rem; }
 .output-header h3 { font-family:var(--font-ar); font-size:1.1rem; color:var(--mi-d); }
 .output-info { display:grid; grid-template-columns:repeat(3,1fr); gap:0.45rem; margin-bottom:0.85rem; padding:0.7rem; background:rgba(20, 73, 94,0.04); border-radius: 2px; }
@@ -439,6 +444,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .demo-intro { background:rgba(139,105,20,0.06); border-radius: 2px; padding:0.8rem 0.9rem; margin-bottom:0.85rem; border-right:3px solid var(--gold-d); }
 .demo-intro-title { font-weight:700; color:var(--gold-d); margin-bottom:0.22rem; font-size:0.83rem; display:flex; align-items:center; gap:0.32rem; }
 .demo-intro-text { font-size:0.76rem; color:var(--text-secondary); line-height:1.65; }
+.demo-privacy { font-size:0.72rem; color:var(--text-secondary); line-height:1.65; margin-top:0.45rem; padding-top:0.45rem; border-top:1px solid rgba(139,105,20,0.15); }
+.demo-privacy a { color:var(--gold-d); font-weight:600; }
 .demo-card { background:var(--bg-card); border-radius: 2px; margin-bottom:0.75rem; border:1px solid var(--border); overflow:hidden; }
 .demo-card-header { display:flex; align-items:center; gap:0.5rem; padding:0.72rem 0.9rem; border-bottom:1px solid var(--border); background:var(--bg-deep); }
 .demo-card-num { width:26px; height:26px; border-radius:50%; background:#8B6914; color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; }
@@ -479,7 +486,9 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .empty { text-align:center; padding:2.5rem 1rem; }
 .empty h3 { font-family:var(--font-ar); font-size:1.1rem; color:var(--text); margin-bottom:0.3rem; }
 .empty p { color:var(--text-secondary); font-size:0.83rem; line-height:1.65; }
-.toast { position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%); background:#1C1A17; color:#fff; padding:0.65rem 1.2rem; border-radius: 2px; font-size:0.82rem; z-index:2000; animation:slideUp 0.3s ease, fadeOut 0.3s ease 2.5s forwards;  max-width:88vw; text-align:center; white-space:nowrap; }
+/* الإشعار عرضه بقدر نصه حتى 88vw ثم يلتف، فلا يفيض الاسم الطويل خارج الشاشة.
+   يتوسط بالهوامش لا بـ translateX: حركة الظهور تكتب transform فكانت تزيحه نصف عرضه يمينًا */
+.toast { position:fixed; bottom:5.5rem; left:0; right:0; margin:0 auto; background:#1C1A17; color:#fff; padding:0.65rem 1.2rem; border-radius: 2px; font-size:0.82rem; z-index:2000; animation:slideUp 0.3s ease, fadeOut 0.3s ease 2.5s forwards;  width:max-content; max-width:88vw; text-align:center; white-space:normal; overflow-wrap:anywhere; }
 .confirm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45);   display:flex; align-items:center; justify-content:center; z-index:3000; padding:1.5rem; animation:fadeIn 0.2s; }
 .confirm-box { background:var(--bg-card); border-radius:var(--r-xl); padding:1.8rem; max-width:360px; width:100%;  animation:slideUp 0.3s; text-align:center; }
 .confirm-box h3 { font-family:var(--font-ar); font-size:1.2rem; color:var(--text); margin-bottom:0.55rem; }
@@ -495,7 +504,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 @keyframes slideR { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
-@keyframes fadeOut { to{opacity:0;transform:translateX(-50%) translateY(8px)} }
+@keyframes fadeOut { to{opacity:0;transform:translateY(8px)} }
 
 
 
@@ -533,6 +542,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .nav-user { max-width:85px; }
   .sec { padding:0.85rem 0.85rem 0; }
   .sec-pb { padding-bottom:calc(5.5rem + env(safe-area-inset-bottom)); }
+  /* التذييل آخر الصفحة تحت شريط التبويب الثابت: يُفسح له فتظهر روابط الخصوصية والحقوق */
+  .app-footer { padding-bottom:calc(4.5rem + env(safe-area-inset-bottom)); }
   .mx-cells-grid { grid-template-columns:repeat(2,1fr); }
   .cell { min-height:86px; padding:0.65rem 0.7rem; }
   .cell-name { font-size:0.77rem; }

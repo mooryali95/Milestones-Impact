@@ -61,6 +61,51 @@ describe('دورة الشهادة من التقييم الختامي', () => {
   });
 });
 
+describe('حساب العرض وحسابات الاختبار في الشهادات', () => {
+  const list = cert.slice(cert.indexOf('export async function list('), cert.indexOf('export async function get('));
+  it('المؤشرات بمرشح الإحصاءات نفسه (forStats)، لا بعدّ صفوف السجل', () => {
+    expect(cert).toContain("import { forStats } from './admin.ts';");
+    expect(list).toContain("forStats(db.from('participants').select('id, certificates!inner(status)'))");
+    expect(list).toMatch(/return \{ success: true, certificates, checks: count \?\? 0, stats \};/);
+    const ui = read('admin-app/src/screens/Certificates.jsx');
+    expect(ui).toMatch(/const st = d\?\.stats \|\|/);
+    expect(ui).not.toMatch(/\{d\?\.success \? all\.length : '·'\}/);
+  });
+  it('السجل بلا حساب العرض وبشارة الاختبار، وشهادات الشخص بعينه كلها', () => {
+    expect(list).toContain('participants!inner(is_demo, is_test)');
+    expect(list).toContain("if (person) q = q.eq('participant_id', person); else q = q.eq('participants.is_demo', false);");
+    expect(list).toContain('is_test: !!p?.is_test');
+  });
+  it('لا بريد شهادة ولا بريد قرار لحساب العرض', () => {
+    const ins = cert.slice(cert.indexOf('async function insertCertificate('), cert.indexOf('// ── دورة الشهادة من التقييم الختامي'));
+    expect(ins).toMatch(/if \(p\.email && !p\.is_demo\) sendMail\(p\.email, 'شهادة إتمامك بنجاح/);
+    const vote = final.slice(final.indexOf('export async function vote('), final.indexOf('export async function reopen('));
+    expect(vote).toMatch(/if \(p\.email && !p\.is_demo\) sendMail\(p\.email, FINAL_MAIL_SUBJECT\[decision\]/);
+  });
+});
+
+describe('إيقاف الإصدار التلقائي لا يحجب بصمت', () => {
+  it('الحجب يُسجَّل ويرجع حاله، والبريد لا يَعِد، والمعتمِد يرى الحال', () => {
+    const on = cert.slice(cert.indexOf('export async function onFinalApproved('), cert.indexOf('export async function suspendForReopen('));
+    expect(on).toMatch(/if \(!cfg\.enabled\) \{\n\s+await audit\('system', by, 'certificate\.skipped-disabled'[\s\S]*return \{ skipped: 'disabled' \};/);
+    const vote = final.slice(final.indexOf('export async function vote('), final.indexOf('export async function reopen('));
+    expect(vote).toContain('return { failed: true }; });');
+    expect(vote).toContain('const held = !!(certificate?.skipped || certificate?.failed);');
+    expect(vote).toContain('finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held })');
+    expect(vote).toContain('notice: certificateNotice(certificate)');
+    expect(read('admin-app/src/screens/FinalEval.jsx')).toContain('toast(r.notice || ok); load();');
+    // تأكيد الاسم يعيد الشهادة الصادرة وحدها، لا الانتظار ولا الحجب
+    expect(read('supabase/functions/leaders-api/index.ts')).toContain('return { ...r, certificate: (certificate as any)?.serial ? certificate : null };');
+  });
+  it('من لم تصدر شهادته يظهر في لوحة الشهادات', () => {
+    expect(cert).toMatch(/async function heldCertificates\(\) \{[\s\S]*\.eq\('status', 'approved'\)\.in\('decision', PASSING\)[\s\S]*\.in\('status', \['valid', 'suspended', 'revoked'\]\)/);
+    // الملغاة بعد آخر اعتماد (استرداد أو إلغاء يدوي) ليست «لم تصدر»، والحالات كلها في certificates_test.ts
+    expect(cert).toContain("(c.status === 'revoked' && !(Date.parse(c.revoked_at) < (last.get(c.participant_id) ?? -Infinity)))");
+    expect(cert).toMatch(/computed_hours: programHours\(def\.requirements\), held \};/);
+    expect(read('admin-app/src/screens/Certificates.jsx')).toContain('setHeld(r.held || [])');
+  });
+});
+
 describe('ترحيل 20261107140000_leaders_certificate_suspended', () => {
   const SQL = read('supabase/migrations/20261107140000_leaders_certificate_suspended.sql');
   it('حاجب بعد تطبيقه، ويقبل المعلّقة، وإعادته آمنة', async () => {

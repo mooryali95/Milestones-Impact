@@ -11,6 +11,7 @@ import {
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { approvalOf } from './logic.js';
 import { REPO_EDIT_AR } from './content-lock.js';
+import { KATON_ENABLED } from './labels.js';
 import { hallAnswered, hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
@@ -28,8 +29,13 @@ async function pointsFor(p: any) {
   return katonPoints(data?.katon_points);
 }
 
+// «كاتون» مخفي عن المشاركين (KATON_ENABLED): الخادم يقفله أيضًا، ولا يبقى منه إلا الإجابة داخل القاعة.
+// كان katon.mine يعيد نص كل جملة منشورة، ومنها جمل القاعة القادمة، ومفاتيحها لمن أجاب عن جمل موضوعها كلها
+const KATON_OFF_AR = '«كاتون» غير متاح الآن؛ تجد جمله في القاعة حين يفتحها خبيرك';
+
 // ── للمشارك ──
 export async function mine(p: any) {
+  if (!KATON_ENABLED) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
   await approved(p);
   const [tp, ss, ans, pts] = await Promise.all([
     db.from('katon_topics').select('id, key, title_ar, dimension, layers, sort').eq('status', 'published').order('sort'),
@@ -65,22 +71,32 @@ export async function answer(p: any, b: Body) {
   await approved(p);
   const s = must(await db.from('katon_sentences').select('id, topic_id, katon_topics!inner(status)').eq('id', String(b.sentence_id || '')).maybeSingle()) as any;
   if (!s) throw new Fail('الجملة غير متاحة', 404);
-  // في القاعة يفتح الخبير موضوع الجلسة ولو لم يُنشر بعد، ويقفل ما كشف مفتاحه
+  // في القاعة يفتح الخبير موضوع الجلسة، وقفل الإجابة كله في hallGate: الكشف والجملة المعروضة والوقت
   const gate = await hallGate(p, s.id);
-  if (!gate.inHall && s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
+  if (!gate.inHall) {
+    if (!KATON_ENABLED) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
+    if (s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
+  }
   let a;
   try { a = cleanAnswer(b); } catch (err) { throw new Fail((err as Error).message); }
-  // بعد كشف المفتاح لا تعديل
-  const [{ data: sents }, { data: mineAns }] = await Promise.all([
-    db.from('katon_sentences').select('id').eq('topic_id', s.topic_id),
-    db.from('katon_answers').select('sentence_id').eq('participant_id', p.id),
-  ]);
-  const have = new Set((mineAns || []).map((x: any) => x.sentence_id));
-  if ((sents || []).every((x: any) => have.has(x.id))) throw new Fail('أتممت هذا الموضوع وكُشف مفتاحه؛ لا تُعدَّل الإجابات بعده', 409, 'revealed');
+  // خارج القاعة: إتمام جمل الموضوع يكشف مفتاحه (mine)، فلا تعديل بعده. داخلها لا يُكشف شيء بالإتمام،
+  // فلا يسري هذا القفل (كان يرفض كل تعديل على آخر جملة برسالة «كُشف مفتاحه» والخبير لم يكشفه)
+  if (!gate.inHall) {
+    const [{ data: sents }, { data: mineAns }] = await Promise.all([
+      db.from('katon_sentences').select('id').eq('topic_id', s.topic_id),
+      db.from('katon_answers').select('sentence_id').eq('participant_id', p.id),
+    ]);
+    const have = new Set((mineAns || []).map((x: any) => x.sentence_id));
+    if ((sents || []).every((x: any) => have.has(x.id))) throw new Fail('أتممت هذا الموضوع وكُشف مفتاحه؛ لا تُعدَّل الإجابات بعده', 409, 'revealed');
+  }
   must(await db.from('katon_answers').upsert({
     participant_id: p.id, sentence_id: s.id, choice: null, verdict: a.verdict, confidence: a.confidence, stances: a.stances, note: a.note, updated_at: new Date().toISOString(),
   }));
-  if (gate.sessionId) await hallAnswered(gate.sessionId);
+  // في القاعة يكفي الاستلام: الجهاز يعيد hall.state، وما يُكشف يقرره الخبير وحده (لا بنك الجمل ولا مفاتيحها)
+  if (gate.inHall) {
+    await hallAnswered(gate.sessionId as string);
+    return { success: true };
+  }
   return mine(p);
 }
 
@@ -91,7 +107,8 @@ export async function adminList(b: Body) {
   const [tp, ss, ans, prog] = await Promise.all([
     db.from('katon_topics').select('*').order('sort'),
     db.from('katon_sentences').select('*').order('sort'),
-    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances'),
+    // إجابات حساب العرض (الجولة الحية في الورش) لا تدخل إحصاء البنود (server-sec-5)
+    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances, participants!inner(is_demo)').eq('participants.is_demo', false),
     programId ? db.from('programs').select('id, name, katon_points').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const bySent = new Map<string, any[]>();

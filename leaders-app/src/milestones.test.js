@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cleanMilestone, cleanSchedule, distributeSchedule, milestoneDue, milestoneStatuses, milestoneSummary } from '../../supabase/functions/leaders-api/logic.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, latinDigits, milestoneDue, milestoneStatuses, milestoneSummary } from '../../supabase/functions/leaders-api/logic.js';
 
 const stages = [
   { key: 'intro', sort: 1, duration_days: 1 },
@@ -64,5 +66,26 @@ describe('المدة الحرة والمعالم', () => {
     expect(by.b).toMatchObject({ status: 'done', late_days: 10 });
     expect(by.c).toMatchObject({ status: 'done', late_days: 2 });
     expect(milestoneSummary(r)).toMatchObject({ total: 2, done: 2, late: 0, done_late: 1, max_done_late: 10 });
+  });
+
+  // التدقيق 2026-11-11 (admin-program-6): تاريخ التمديد بأرقام عربية كان يُحفظ null فيُلغى التمديد ويقال «تم»
+  it('تمديد المعلم لمشارك: الأرقام العربية تُقبل، والفارغ يلغي التمديد، وغير الصالح يُرفض برسالة', () => {
+    expect(latinDigits('٢٠٢٦-١٢-٠١')).toBe('2026-12-01');
+    expect(latinDigits('۲۰۲۶')).toBe('2026');
+    expect(cleanDueOverride('٢٠٢٦-١٢-٠١')).toBe('2026-12-01');
+    expect(cleanDueOverride(' 2026-12-01 ')).toBe('2026-12-01');
+    expect(cleanDueOverride('')).toBeNull();
+    expect(cleanDueOverride(null)).toBeNull();
+    for (const bad of ['2026/12/01', '2026-02-30', '2026-13-01', '١/١٢/٢٠٢٦', 'غدًا']) expect(() => cleanDueOverride(bad), bad).toThrow(/2026-12-01/);
+  });
+  it('الخادم يرفض التاريخ غير الصالح برسالة بدل حفظ null، والواجهة تمدد بحقل تاريخ وتلغي بزر صريح', () => {
+    const root = join(__dirname, '../..');
+    const server = readFileSync(join(root, 'supabase/functions/leaders-api/programs.ts'), 'utf8');
+    expect(server).toMatch(/if \('due_override' in b\) \{\s*try \{ rec\.due_override = cleanDueOverride\(b\.due_override\); \} catch \(err\) \{ throw new Fail/);
+    expect(server).not.toMatch(/due_override = \/\^\\d\{4\}/);
+    const ui = readFileSync(join(root, 'admin-app/src/screens/Milestones.jsx'), 'utf8');
+    expect(ui).toMatch(/\{ name: 'due_override', label: 'الموعد الجديد', type: 'date' \}/);
+    expect(ui).not.toMatch(/\(YYYY-MM-DD\)/);
+    expect(ui).toMatch(/due_override: null \}\)/);
   });
 });

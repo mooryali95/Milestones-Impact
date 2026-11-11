@@ -498,7 +498,8 @@
 .sub-stars span { font-size: 1.9rem; color: rgba(10,42,61,.18); }
 .sub-stars label.on span { color: var(--gold); }
 .sub-stars label:hover span { color: var(--gold-light); }
-.stars-c { color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
+/* اسم درجة السلّم نصًا (ratingLabel): لون النص لا الذهبي الباهت، وبلا تباعد يقطع الحروف العربية */
+.stars-c { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .rank-chip { padding: 4px 12px; border-radius: 14px; font-size: .76rem; font-weight: 700; color: var(--brand-graphite); background: linear-gradient(135deg, var(--gold), var(--gold-light)); }
 .la-book-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .la-book-kpis span { display: grid; padding: 10px 12px; border-radius: 10px; background: var(--sand-light); font-size: .74rem; color: var(--ink-light); }
@@ -623,9 +624,10 @@
 }
 
 /* قواعد المرحلة: سطر واحد على بطاقتها، ولون بحسب النوع */
-.la-rule { font-size: .8rem; margin: 4px 0 6px; padding: 3px 10px; border-radius: 999px; display: inline-block; background: var(--st-warn-bg); color: var(--st-warn-dark); }
-.la-rule.on_demand { background: var(--st-info-bg); color: var(--st-info-dark); }
-.la-rule.optional { background: var(--st-ok-bg); color: var(--st-ok-dark); }
+/* نص صغير على خلفية فاتحة: -text أو اللون الأساسي حين يبلغ 4.5 إلى 1 (status.css)؛ و-dark للأرضية الداكنة وحدها */
+.la-rule { font-size: .8rem; margin: 4px 0 6px; padding: 3px 10px; border-radius: 999px; display: inline-block; background: var(--st-warn-bg); color: var(--st-warn-text); }
+.la-rule.on_demand { background: var(--st-info-bg); color: var(--st-info); }
+.la-rule.optional { background: var(--st-ok-bg); color: var(--st-ok-text); }
 .la-multi { border: 1px solid var(--st-warn-bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 4px; }
 .la-multi legend { font-size: .85rem; padding: 0 4px; }
 .la-stage.available { border-inline-start: 3px solid var(--st-info); }
@@ -636,7 +638,7 @@
 .la-group .la-reqs li { gap: 6px; }
 .la-group select { max-width: 130px; }
 .la-big { font-size: 1.4rem; }
-.la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad-dark); font-size: .85rem; }
+.la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad); font-size: .85rem; }
 .la-adj { display: grid; gap: 4px; min-width: 160px; }
 .la-adj input { width: 100%; }
 .la-adj-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
@@ -655,6 +657,9 @@
 /* تحكم القاعة يُشغَّل واقفًا أمام شاشة أو من لوحي: لا هدف أقصر من 40 بكسل */
 .hall-admin .la-link, .hall-admin .btn-sm, .hall-admin select.input, .hall-stage-bar .step { min-height: 40px; box-sizing: border-box; }
 .hall-admin .la-link, .hall-stage-bar .step { display: inline-flex; align-items: center; }
+/* حقول فتح القاعة: العنوان فوق القائمة، والقائمة بعرض حاويتها لا بطول أطول خياراتها، فلا تفيض الصفحة على الجوال */
+.hall-admin .field { display: grid; gap: 4px; min-width: 0; }
+.hall-admin select.input { width: 100%; max-width: 100%; min-width: 0; }
 .hall-screen:fullscreen { display: grid; place-items: center; padding: 2vh 2vw; }
 .hall-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 10px; }
 .hall-controls h4 { margin: 0 0 8px; }

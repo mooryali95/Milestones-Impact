@@ -9,7 +9,7 @@ import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
-import { checkImport, IMPORT_MAX, importCounts } from './import.js';
+import { checkImport, importCounts, importLimitIssue } from './import.js';
 import { trackProject } from './capstone.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
@@ -710,6 +710,8 @@ export async function catalog(b: Body = {}) {
   out.lab_links = labs || [];
   out.track_stats = await trackStats();
   out.book_stats = await bookStats();
+  // D07: دفعة جارية تقفل معيار التسكين (save أدناه)؛ تُعرض قبل التعديل لا بعد الضغط على حفظ
+  out.running_cohort = await runningCohort(null);
   return out;
 }
 
@@ -1050,7 +1052,8 @@ export async function participantsImport(a: Admin, b: Body) {
   requireWrite(a);
   const rows = Array.isArray(b.rows) ? b.rows : [];
   if (!rows.length) throw new Fail('لا صفوف في الجدول');
-  if (rows.length > IMPORT_MAX) throw new Fail(`الحد ${IMPORT_MAX} صفًا في المرة الواحدة`);
+  const over = importLimitIssue(rows.length);
+  if (over) throw new Fail(over);
   let org: any = null;
   if (b.organization_id) {
     org = must(await db.from('organizations').select('id, name, status').eq('id', String(b.organization_id)).maybeSingle());

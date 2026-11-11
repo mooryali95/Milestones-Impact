@@ -10,6 +10,7 @@
 //   anchor: stage_end | stage_start | cohort_start | cohort_end | date
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
+import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -84,6 +85,17 @@ export function cleanMilestone(raw, stageKeys) {
     weight: Number.isFinite(Number(r.weight)) && r.weight !== '' && r.weight != null ? Math.max(0, Math.min(100, Math.round(Number(r.weight)))) : null,
     active: r.active !== false,
   };
+}
+
+
+// تمديد موعد معلم لمشارك: فارغ = إلغاء التمديد (null)، وإلا يوم صحيح بصيغة 2026-12-01 بأي أرقام.
+// غير ذلك يُرفض برسالة، ولا يُحفظ null بصمت فيُلغى التمديد ويقال «تم» (التدقيق 2026-11-11، admin-program-6)
+export function cleanDueOverride(raw) {
+  const s = latinDigits(raw).trim();
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  if (!ISO.test(s) || toIso(Date.UTC(y, m - 1, d)) !== s) throw new Error('اكتب الموعد الجديد يومًا صحيحًا بصيغة سنة-شهر-يوم، مثل 2026-12-01');
+  return s;
 }
 
 // تاريخ استحقاق المعلم لدفعة: من نقطة ارتكازه في جدولها، أو null إن لم يتحدد بعد

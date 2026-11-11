@@ -69,3 +69,20 @@ describe('الواجهة لا تمحو الأرقام المشرقية', () => {
     expect(s).toContain("k === 'years_experience' ? latinDigits(e.target.value).replace(/\\D/g, '').slice(0, 2)");
   });
 });
+
+// مصدر واحد لتحويل الأرقام (digits.js): كانت الجولة ب-1 قد أضافت نسخة ثانية في milestones.js لتمديد المعلم
+describe('تحويل الأرقام مصدر واحد', () => {
+  it('لا تعريف لـ latinDigits إلا في digits.js، وlogic.js والمعالم يستوردانه', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(__dirname, '../../supabase/functions/leaders-api');
+    const defs = readdirSync(dir).filter((f) => /\.(js|ts)$/.test(f) && !/_test\./.test(f))
+      .filter((f) => /(const|function)\s+latinDigits\b/.test(readFileSync(join(dir, f), 'utf8')));
+    expect(defs).toEqual(['digits.js']);
+    expect(readFileSync(join(dir, 'milestones.js'), 'utf8')).toContain("import { latinDigits } from './digits.js';");
+    expect(readFileSync(join(dir, 'logic.js'), 'utf8')).toContain("export { latinDigits, codeDigits } from './digits.js';");
+    const { cleanDueOverride } = await import('../../supabase/functions/leaders-api/logic.js');
+    expect(cleanDueOverride('٢٠٢٦-١٢-٠١')).toBe('2026-12-01');
+    expect(latinDigits('۱۲۳')).toBe('123');
+  });
+});

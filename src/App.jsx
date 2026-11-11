@@ -19,7 +19,7 @@ import { RegisterScreen, ResumeScreen } from './screens/auth';
 import { SITES } from '../supabase/functions/_shared/sites.js';
 const ADMIN_MATRIX_URL = `${SITES.admin}/#/matrix`;
 import { CSS } from './styles/appCss';
-import useDemographics, { DEMO_KEY } from './hooks/useDemographics';
+import useDemographics, { DEMO_KEY, demoRowHasData } from './hooks/useDemographics';
 import usePublicContent from './hooks/usePublicContent';
 import { buildProcs } from './lib/procs';
 import useCooldown from './hooks/useCooldown';
@@ -153,10 +153,31 @@ export default function App() {
   }, []);
 
   const {
-    demoScreen, setDemoScreen, demoRows, setDemoRows, demoSaving, demoLoading,
+    demoScreen, setDemoScreen, demoRows, setDemoRows, demoSaving, demoLoading, demoDirty,
     loadDemoData, saveDemoData, updateDemoRow, addDemoRow, removeDemoRow,
   } = useDemographics({ sessionToken, showToast, onSessionEnd: () => doLogout() });
   const openDemoScreen = () => { loadDemoData(); setDemoScreen(true); setSelectedCell(null); };
+  // الخروج من التحليل (رجوع، أو نقر خارجه، أو Esc): مباشرة إن حُفظ كل شيء، وإلا سؤال قبل أن تضيع التعديلات
+  const closeDemoScreen = () => {
+    if (!demoDirty) { setDemoScreen(false); return; }
+    setConfirmAction({
+      title: "الخروج دون حفظ؟",
+      message: "لديك تعديلات في التحليل الديموغرافي لم تُحفظ، وتضيع إن خرجت الآن.",
+      confirmLabel: "الخروج دون حفظ",
+      cancelLabel: "العودة للتحرير",
+      onConfirm: () => { setConfirmAction(null); setDemoScreen(false); },
+    });
+  };
+  // حذف شخص أُدخلت بياناته يُؤكَّد أولًا، والصف الفارغ يُحذف مباشرة
+  const askRemoveDemoRow = (row, idx) => {
+    if (demoRows.length <= 1 || !demoRowHasData(row)) { removeDemoRow(row.id); return; }
+    setConfirmAction({
+      title: `حذف ${row.name?.trim() || `الشخص ${idx + 1}`}؟`,
+      message: "تُحذف بياناته من التحليل، ويثبت الحذف عند حفظ التحليل.",
+      confirmLabel: "حذف",
+      onConfirm: () => { setConfirmAction(null); removeDemoRow(row.id); },
+    });
+  };
 
   // ── Apply a verified user session returned by user-api ──
   const applyUserSession = (res) => {
@@ -580,7 +601,7 @@ export default function App() {
         <div className="nav-center">
           <div className="tabs">
             {userTabs.map(([k,v]) => (
-              <button key={k} className={`tab ${tab===k?"on":""}`} onClick={() => setTab(k)}>{v}</button>
+              <button key={k} className={`tab ${tab===k?"on":""}`} aria-current={tab===k ? "page" : undefined} onClick={() => setTab(k)}>{v}</button>
             ))}
           </div>
         </div>
@@ -602,7 +623,7 @@ export default function App() {
       <div className="bottom-bar">
         <div className="bottom-bar-inner">
           {userTabs.map(([k,v,icon]) => (
-            <button key={k} className={`bb-btn ${tab===k?"on":""}`} onClick={()=>setTab(k)}>
+            <button key={k} className={`bb-btn ${tab===k?"on":""}`} aria-current={tab===k ? "page" : undefined} onClick={()=>setTab(k)}>
               {/* label={null} — الاسم المرئي تحتها يكفي قارئ الشاشة */}
               <span className="bb-icon"><Icon name={icon} size={20} label={null}/></span>
               <span className="bb-label">{v}</span>
@@ -610,6 +631,10 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* المعلم الرئيسي وعنوان الصفحة لقارئ الشاشة؛ الشريطان أعلاه وأسفله تنقّل */}
+      <main id="main">
+      <h1 className="sr-only">مصفوفة التأثير: خطتي</h1>
 
       {/* ════ MATRIX TAB ════ */}
       {tab === "matrix" && (
@@ -687,6 +712,7 @@ export default function App() {
           user={user}
         />
       )}
+      </main>
 
       {/* ══ Modal ══ */}
       {selectedCell && (
@@ -730,10 +756,10 @@ export default function App() {
           appContent={appContent}
           demoRows={demoRows}
           demoSaving={demoSaving}
-          removeDemoRow={removeDemoRow}
+          askRemoveDemoRow={askRemoveDemoRow}
           saveDemoData={saveDemoData}
           screen={screen}
-          setDemoScreen={setDemoScreen}
+          closeDemoScreen={closeDemoScreen}
           updateDemoRow={updateDemoRow}
         />
       )}

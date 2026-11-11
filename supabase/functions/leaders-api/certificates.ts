@@ -6,7 +6,8 @@
 // الوحيد التعليق أو الإلغاء بتعليل وصلاحية super. تحفظ لقطة ثابتة لكل ما يظهر على الشهادة وتقفل الاسم.
 // التوقيع HMAC للحقول الحاكمة بمفتاح مستقل عن ملح الجلسات بمعرّف مفتاح (kid)، فتدوير الملح لا يبطل شهادة،
 // وتدوير المفتاح لا يبطل ما صدر. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
-import { alertOps, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
+import { alertOps, all, allFor, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
+import { forStats } from './admin.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
 import { displayTitles } from './profiles.ts';
 import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
@@ -178,7 +179,8 @@ async function insertCertificate(p: any, by: string | null, final: FinalRef | nu
     if (!error) {
       if (!p.name_locked_at) await db.from('participants').update({ name_locked_at: issuedAt }).eq('id', p.id);
       await audit(by ? 'admin' : 'system', by, 'certificate.issue', 'certificates', data.id, null, { serial });
-      sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
+      // حساب العرض لا يصله بريد من أي مسار (demo.ts)، كبريد تأكيد الاسم
+      if (p.email && !p.is_demo) sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
         .catch((e) => console.error('certificate mail:', e));
       return data;
     }
@@ -210,7 +212,12 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
     return { id: suspended.id, serial: suspended.snapshot?.serial };
   }
   if (suspended) await setStatus(suspended.id, 'replaced', by || 'system', 'اعتماد ختامي جديد');
-  if (!cfg.enabled) return null;
+  // الإصدار التلقائي متوقف: لا تصدر، ولا يمر ذلك بصمت. يُسجَّل، ويرجع حاله فيراه المعتمِد ولا يَعِد البريد بالشهادة،
+  // ويبقى صاحبها في «لم تصدر شهاداتهم» بلوحة الشهادات (held) حتى تصدر
+  if (!cfg.enabled) {
+    await audit('system', by, 'certificate.skipped-disabled', 'participants', participantId, null, { decision: final.decision });
+    return { skipped: 'disabled' };
+  }
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
   // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm)
   if (!p.name_confirmed_at) {
@@ -220,6 +227,15 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
     return { awaiting_name: true };
   }
   return insertCertificate(p, by, final);
+}
+
+// ما يُبلَّغ به المعتمِد حين يكتمل الاعتماد: حال الشهادة كما انتهت، لا «سُجل اعتمادك» وحده
+export function certificateNotice(c: any) {
+  if (c?.serial) return `اعتُمد التقييم، والشهادة ${c.serial} سارية`;
+  if (c?.awaiting_name) return 'اعتُمد التقييم، وتصدر الشهادة حين يؤكد المشارك اسمه';
+  if (c?.skipped) return 'اعتُمد التقييم، ولم تصدر الشهادة لأن الإصدار التلقائي متوقف. تجد المشارك في «الشهادات» ضمن من لم تصدر شهاداتهم';
+  if (c?.failed) return 'اعتُمد التقييم، وتعذّر إصدار الشهادة، وأُبلغ فريق التشغيل';
+  return 'اعتُمد التقييم';
 }
 
 // بعد تأكيد الاسم: إن كان التقييم الختامي معتمدًا بقرار ناجح ولا شهادة سارية، تصدر الآن بقرار التقييم نفسه
@@ -290,16 +306,25 @@ export async function mine(p: any) {
 }
 
 // ── للإدارة ──
+// السجل قائمة تشغيلية: حساب العرض خارجه، وحساب الاختبار فيه بشارته (is_test). وشهادات شخص بعينه تُعاد كلها.
+// المؤشرات إحصاء: تُعدّ بمرشح الإحصاءات نفسه (forStats)، فلا يدخلها حساب العرض ولا حساب الاختبار
 export async function list(b: Body) {
+  const person = b.participant_id ? String(b.participant_id) : null;
   let q = db.from('certificates')
-    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_id:snapshot->org->>id, org_name:snapshot->org->>name')
+    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_id:snapshot->org->>id, org_name:snapshot->org->>name, participants!inner(is_demo, is_test)')
     .order('issued_at', { ascending: false }).limit(1000);
+  if (person) q = q.eq('participant_id', person); else q = q.eq('participants.is_demo', false);
   if (b.status) q = q.eq('status', String(b.status));
-  if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
   if (b.organization_id) q = q.eq('snapshot->org->>id', String(b.organization_id));
-  const { data } = await q;
-  const { count } = await db.from('certificate_checks').select('id', { count: 'exact', head: true });
-  return { success: true, certificates: data || [], checks: count ?? 0 };
+  const [{ data }, { count }, counted] = await Promise.all([
+    q,
+    db.from('certificate_checks').select('id', { count: 'exact', head: true }),
+    all((f, t) => forStats(db.from('participants').select('id, certificates!inner(status)')).order('id').range(f, t)),
+  ]);
+  const stats: Record<string, number> = { total: 0, valid: 0, suspended: 0, revoked: 0, replaced: 0 };
+  for (const p of counted) for (const c of p.certificates || []) { stats.total += 1; stats[c.status] = (stats[c.status] || 0) + 1; }
+  const certificates = (data || []).map(({ participants: p, ...c }: any) => ({ ...c, is_test: !!p?.is_test }));
+  return { success: true, certificates, checks: count ?? 0, stats };
 }
 
 export async function get(b: Body) {
@@ -372,7 +397,8 @@ export async function reissueOrg(a: Actor, b: Body) {
 }
 
 // معاينة بالمصدر نفسه الذي يُصدر منه: إعداد عام أو برنامج أو جهة، باسم تجريبي.
-// program_cert مسودة البرنامج، وcert مسودة الجهة؛ الغائب يُقرأ من المحفوظ
+// program_cert مسودة البرنامج، وcert مسودة الجهة؛ الغائب يُقرأ من المحفوظ.
+// ونوعها نوع كل إصدار جديد (D05): «شهادة إتمام بنجاح» بقرار اجتاز، لا «شهادة مشاركة» القديمة
 export async function preview(b: Body) {
   const [cfg, org, saved] = await Promise.all([settings(), orgRow(b.organization_id), programCert(b.program_id || await defaultProgramId())]);
   const draft = b.settings ? { ...cfg, ...cleanProfile(b.settings) } : cfg;
@@ -381,22 +407,48 @@ export async function preview(b: Body) {
   const now = new Date().toISOString();
   return {
     success: true,
-    certificate: snapshotOf({
-      serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
-      track: { title_ar: 'القيادة من خلال الآخرين', title_en: 'Leading Through Others' }, start: now, end: now,
-      org, profile: profileFor(draft, prCert, cert),
-    }),
+    certificate: {
+      ...snapshotOf({
+        serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
+        track: { title_ar: 'القيادة من خلال الآخرين', title_en: 'Leading Through Others' }, start: now, end: now,
+        org, profile: profileFor(draft, prCert, cert),
+      }),
+      kind: 'completion_success', decision: 'pass',
+    },
   };
 }
 
+// من اعتُمد تقييمه الختامي بنجاح ولا شهادة سارية أو معلّقة له: ينتظر تأكيد اسمه، أو حُجبت شهادته لتوقف الإصدار
+// أو تعذّرها. يُعرض في لوحة الشهادات فلا يُحجب أحد بصمت. حساب العرض خارجه كبقية القوائم.
+// ومن أُلغيت شهادته بعد آخر اعتماد له (استرداد الرسوم أو إلغاء يدوي) صدرت شهادته ثم أُلغيت عمدًا، فليس منهم،
+// وحالها بسببها في سجل الشهادات: لا يُقال «لم تصدر» ولا يُدلّ على إصدار جديد يخالف الإلغاء. والإلغاء قبل آخر
+// اعتماد (بقرار ختامي سابق مثلًا) لا يُخرجه، فذلك الاعتماد نفسه كان سيصدر شهادة جديدة لو كان الإصدار مفعّلًا
+export async function heldCertificates() {
+  const fe = await all((f, t) => db.from('final_evaluations').select('participant_id, decided_at, participants!inner(full_name, name_confirmed_at, is_demo)')
+    .eq('status', 'approved').in('decision', PASSING).eq('participants.is_demo', false).order('participant_id').range(f, t));
+  if (!fe.length) return [];
+  const ids = [...new Set(fe.map((r: any) => r.participant_id as string))];
+  const certs = await allFor(ids, () => db.from('certificates').select('participant_id, status, revoked_at').in('status', ['valid', 'suspended', 'revoked']));
+  // آخر اعتماد ناجح لكل مشارك (قد يكون له أكثر من برنامج)
+  const last = new Map<string, number>();
+  for (const r of fe) last.set(r.participant_id, Math.max(last.get(r.participant_id) ?? -Infinity, Date.parse(r.decided_at) || -Infinity));
+  // الملغاة تُخرجه ما لم يثبت أنها أُلغيت قبل آخر اعتماد، فلا يُدلّ على إصدار عند الشك
+  const issued = new Set(certs.filter((c: any) => c.status === 'valid' || c.status === 'suspended'
+    || (c.status === 'revoked' && !(Date.parse(c.revoked_at) < (last.get(c.participant_id) ?? -Infinity)))).map((c: any) => c.participant_id));
+  const out = new Map<string, any>();
+  for (const r of fe) if (!issued.has(r.participant_id)) out.set(r.participant_id, { participant_id: r.participant_id, full_name: r.participants?.full_name, awaiting_name: !r.participants?.name_confirmed_at });
+  return [...out.values()];
+}
+
 export async function settingsGet() {
-  const [orgs, progs] = await Promise.all([
+  const [orgs, progs, held] = await Promise.all([
     db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
     db.from('programs').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
+    heldCertificates(),
   ]);
   // ما ستكتبه الشهادة إن تُرك حقل الساعات فارغًا: من أنشطة البرنامج الافتراضي
   const def = await journeyDefinition({});
-  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0, computed_hours: programHours(def.requirements) };
+  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0, computed_hours: programHours(def.requirements), held };
 }
 
 export async function settingsSave(a: Actor, b: Body) {

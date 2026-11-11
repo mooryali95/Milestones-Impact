@@ -15,6 +15,11 @@ import { advisorCohorts, advisorOf } from './advisor.ts';
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 const MAX_OPEN = 10;
+// حساب العرض (is_demo، واحد بقيد participants_one_demo) دفعته الافتراضية هي المفتوحة الحقيقية، فلا يشاركها طلبات التوجيه:
+// يرى طلباته وحده ولا يراها مشارك ولا خبير ولا قائمة الإدارة، ولا يجيب عن طلب حقيقي ولا يُجاب عن طلبه، ولا يصل مستشارها
+// بريد عنه (advisorOf بلا مستشار له). ويبقى يرفع طلبه ويراه، كما تعرضه الجولة الحية في الورشة (server-sec-5)
+const REQ_COLS = '*, participants!inner(full_name, is_demo)';
+const sameSide = (p: any, r: any) => !!p?.is_demo === !!r?.participants?.is_demo;
 
 async function cohortCtx(p: any) {
   const { cohort } = await cohortOf(p);
@@ -27,8 +32,9 @@ async function teamOf(cohortId: string, participantId: string) {
 }
 async function answersFor(requestIds: string[]) {
   if (!requestIds.length) return [] as any[];
-  const { data } = await db.from('peer_answers').select('*, participants(full_name), experts(full_name)').in('request_id', requestIds).order('created_at');
-  return data || [];
+  const { data } = await db.from('peer_answers').select('*, participants(full_name, is_demo), experts(full_name)').in('request_id', requestIds).order('created_at');
+  // إجابة كتبها حساب العرض عن طلب حقيقي قبل العزل لا تُعرض ولا تُحسب في حالة الطلب
+  return (data || []).filter((a: any) => !a.participants?.is_demo);
 }
 const answerView = (a: any, viewerId: string | null) => ({
   id: a.id, text: a.text, status: a.status, status_ar: (PEER_ANSWER_STATUS_AR as Record<string, string>)[a.status], expert_note: a.expert_note || null,
@@ -58,7 +64,7 @@ export async function list(p: any) {
   const supervision = cleanSupervision(cohort.supervision);
   const [team, adv, { data: reqs }] = await Promise.all([
     teamOf(cohort.id, p.id), advisorOf(p),
-    db.from('peer_requests').select('*, participants(full_name)').eq('cohort_id', cohort.id).order('created_at', { ascending: false }).limit(100),
+    db.from('peer_requests').select(REQ_COLS).eq('cohort_id', cohort.id).eq('participants.is_demo', !!p.is_demo).order('created_at', { ascending: false }).limit(100),
   ]);
   const visible = (reqs || []).filter((r: any) => r.participant_id === p.id || r.status === 'confirmed' || (supervision !== 'expert_only' && (!r.target_team || r.target_team === team)));
   const answers = await answersFor(visible.map((r: any) => r.id));
@@ -97,8 +103,8 @@ export async function ask(p: any, b: Body) {
 export async function answer(p: any, b: Body) {
   const cohort = await cohortCtx(p);
   const supervision = cleanSupervision(cohort.supervision);
-  const r = must(await db.from('peer_requests').select('*').eq('id', String(b.request_id || '')).eq('cohort_id', cohort.id).maybeSingle()) as any;
-  if (!r) throw new Fail('الطلب غير موجود', 404);
+  const r = must(await db.from('peer_requests').select('*, participants(is_demo)').eq('id', String(b.request_id || '')).eq('cohort_id', cohort.id).maybeSingle()) as any;
+  if (!r || !sameSide(p, r)) throw new Fail('الطلب غير موجود', 404);
   const team = await teamOf(cohort.id, p.id);
   const block = answerBlock(r, { id: p.id, team }, supervision);
   if (block) throw new Fail(block, 403);
@@ -128,15 +134,15 @@ async function cohortsOf(e: any) {
 }
 async function requestFor(e: any, requestId: unknown) {
   const { ids } = await cohortsOf(e);
-  const r = must(await db.from('peer_requests').select('*').eq('id', String(requestId || '')).maybeSingle()) as any;
-  if (!r || !ids.has(r.cohort_id)) throw new Fail('هذا الطلب ليس من دفعاتك', 403);
+  const r = must(await db.from('peer_requests').select('*, participants(is_demo)').eq('id', String(requestId || '')).maybeSingle()) as any;
+  if (!r || !ids.has(r.cohort_id) || r.participants?.is_demo) throw new Fail('هذا الطلب ليس من دفعاتك', 403);
   return r;
 }
 
 export async function expertList(e: any) {
   const { cohorts, ids } = await cohortsOf(e);
   if (!ids.size) return { success: true, advisor: false, cohorts: [], items: [] };
-  const { data: reqs } = await db.from('peer_requests').select('*, participants(full_name)').in('cohort_id', [...ids]).neq('status', 'closed').order('created_at', { ascending: false }).limit(200);
+  const { data: reqs } = await db.from('peer_requests').select(REQ_COLS).in('cohort_id', [...ids]).eq('participants.is_demo', false).neq('status', 'closed').order('created_at', { ascending: false }).limit(200);
   const answers = await answersFor((reqs || []).map((r: any) => r.id));
   const items = (reqs || []).map((r: any) => ({
     ...requestView(r, answers.filter((a: any) => a.request_id === r.id), null),
@@ -193,7 +199,7 @@ export async function expertClose(e: any, b: Body) {
 // ── للإدارة: قراءة طلبات دفعة ──
 export async function adminList(b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
-  const { data: reqs } = await db.from('peer_requests').select('*, participants(full_name)').eq('cohort_id', String(b.cohort_id)).order('created_at', { ascending: false }).limit(200);
+  const { data: reqs } = await db.from('peer_requests').select(REQ_COLS).eq('cohort_id', String(b.cohort_id)).eq('participants.is_demo', false).order('created_at', { ascending: false }).limit(200);
   const answers = await answersFor((reqs || []).map((r: any) => r.id));
   return { success: true, items: (reqs || []).map((r: any) => requestView(r, answers.filter((a: any) => a.request_id === r.id), null)) };
 }

@@ -8,6 +8,7 @@ import { call, fmtDate, ROLE_LABELS, session } from '../api.js';
 import { passkeyCancelled, passkeyCreate, passkeySupported } from '../passkey.js';
 import { useEscape, useUI } from '../ui.jsx';
 import QRCode from 'qrcode';
+import { isSuperAdminUser } from '../leaders.js';
 
 const METHOD = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة', email: 'رمز البريد' };
 
@@ -306,7 +307,7 @@ export default function Settings({ user, onUser, onClose }) {
             <Totp user={user} onUser={onUser} />
             <Security onUser={onUser} />
           </div>
-          {(user.role_id || user.role) === 'super_admin' && <Users me={user} />}
+          {isSuperAdminUser(user) && <Users me={user} />}
         </div>
       </div>
     </div>

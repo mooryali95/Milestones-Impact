@@ -230,6 +230,7 @@ function PlotStep({ step, value, onChange, result }) {
   const [sel, setSel] = useState(null);
   const n = step.size;
   const at = (src, x, y) => step.items.filter((it) => { const p = src?.[it.id]; return p && p[0] === x && p[1] === y; });
+  // لمس عنصر موضوع والتحديد على غيره يضع المحدد في خانته (العنصر يغطي أغلب الخانة، وللخانة الواحدة أحيانًا عنصران في الحل)
   const place = (x, y) => { if (!sel || result) return; onChange({ ...a, [sel]: [x, y] }); setSel(null); };
   const left = step.items.filter((it) => !a[it.id]);
   const rows = Array.from({ length: n }, (_, i) => n - 1 - i);
@@ -256,7 +257,7 @@ function PlotStep({ step, value, onChange, result }) {
                 return (
                   <button key={it.id} type="button" disabled={!!result}
                     className={`lab-token sm${sel === it.id ? ' on' : ''}${ok === null ? '' : ok ? ' is-ok' : ' is-bad'}`}
-                    onClick={(e) => { e.stopPropagation(); setSel(it.id); }}>{it.label}</button>
+                    onClick={(e) => { e.stopPropagation(); if (sel && sel !== it.id) place(x, y); else setSel(sel === it.id ? null : it.id); }}>{it.label}</button>
                 );
               })}
               {result && at(result.solution, x, y).filter((it) => !at(a, x, y).includes(it)).map((it) => (

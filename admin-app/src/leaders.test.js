@@ -54,3 +54,19 @@ describe('L: اسم الإجراء والتوكن لا يكتب فوقهما ج�
     expect(fn).not.toMatch(/\bb\.action\b/);
   });
 });
+
+// المدير الأعلى مصدر واحد (مراجعة الجولة أ على admin-core-3، وb5): كانت ثلاث نسخ من الشرط في ثلاث شاشات
+describe('المدير الأعلى: شرط واحد', () => {
+  it('isSuperAdminUser يقرأ role_id أو role، والشاشات تستعمله', async () => {
+    const { isSuperAdminUser } = await import('./leaders.js');
+    expect([isSuperAdminUser({ role_id: 'super_admin' }), isSuperAdminUser({ role: 'super_admin' }), isSuperAdminUser({ role_id: 'admin' }), isSuperAdminUser(null)])
+      .toEqual([true, true, false, false]);
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    for (const f of ['screens/Settings.jsx', 'screens/OrgForm.jsx']) {
+      const s = readFileSync(join(__dirname, f), 'utf8');
+      expect(s, f).toContain('isSuperAdminUser(');
+      expect(s, f).not.toMatch(/role_id \|\| \w+\??\.role\)\s*[!=]==\s*'super_admin'/);
+    }
+  });
+});

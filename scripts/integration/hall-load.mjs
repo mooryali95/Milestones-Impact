@@ -121,12 +121,18 @@ async function pollLoop(d) {
 // كما في Hall.jsx: الدخول واليد يُعادان مرة عند إخفاق لم تجب عنه الدالة (شبكة أو 5xx من البوابة)، والإجابة تُعاد حتى تُستلم.
 // الإخفاق العابر يبقى مسجّلًا في القياس ويُحدّ بنسبة، والحكم على أن الكتابة نجحت في النهاية
 let retried = 0;
+// رد katon.answer في القاعة استلام وحده: كان يحمل بنك «كاتون» بنصوص الجمل القادمة ومفتاح آخر جولة قبل كشفها
+let answerExtra = 0;
 const transient = (r) => r.success !== true && !('success' in r);
 async function act(d, action, body) {
   let r = await call(action, body, d.token);
   for (let i = 0; transient(r) && i < (action === 'katon.answer' ? 3 : 1); i += 1) { retried += 1; await sleep(800); r = await call(action, body, d.token); }
   if (r.success !== true) finalFails.push(`${action}: ${r.code || ''} ${String(r.message || 'بلا رد').slice(0, 80)}`);
-  if (action === 'katon.answer') { if (r.success) absorb(d, await call('hall.state', { since: 0 }, d.token)); return r; }
+  if (action === 'katon.answer') {
+    if (r.success && Object.keys(r).some((k) => k !== 'success')) answerExtra += 1;
+    if (r.success) absorb(d, await call('hall.state', { since: 0 }, d.token));
+    return r;
+  }
   absorb(d, r);
   return r;
 }
@@ -249,6 +255,7 @@ for (let r = 0; r < ROUNDS; r++) {
     const leaked = devices.filter((d) => (d.view?.sentences || []).some((x) => 'text_ar' in x));
     ok(devices.every((d) => (d.view?.sentences || []).length > 0) && !leaked.length, 'قائمة الجمل عند المشاركين بلا نصوص الجمل القادمة', `${leaked.length} جهازًا وصله نص`);
     ok((reveal.sentences || []).length > 0 && (reveal.sentences || []).every((x) => typeof x.text_ar === 'string'), 'قائمة الجمل عند الخبير بنصوصها', JSON.stringify(reveal.sentences || []).slice(0, 120));
+    ok(answerExtra === 0, 'رد الإجابة في القاعة استلام وحده، بلا جمل ولا مفاتيح', `${answerExtra} ردًا حمل غير success`);
   }
 }
 

@@ -135,7 +135,10 @@ export function hallView({ session, sentence, members, roles, tables = {}, prese
   const revealed = !!(sentence && (session.revealed || []).includes(sentence.id));
   const isAdmin = viewer?.kind === 'admin';
   const present = new Map((presence || []).map((p) => [p.participant_id, p]));
-  const ansBy = new Map((answers || []).filter((a) => sentence && a.sentence_id === sentence.id).map((a) => [a.participant_id, a]));
+  // إجابات أعضاء القاعة وحدهم: كاتون مشترك بين الدفعات، فمن أجاب الجملة نفسها خارجها (دفعة أخرى، أو حساب العرض)
+  // لا يدخل توزيع جولتها المعروض على الشاشة (server-sec-5)
+  const memberIds = new Set((members || []).map((m) => m.id));
+  const ansBy = new Map((answers || []).filter((a) => sentence && a.sentence_id === sentence.id && memberIds.has(a.participant_id)).map((a) => [a.participant_id, a]));
   const people = (members || []).map((m) => {
     const pr = present.get(m.id);
     const a = ansBy.get(m.id);
@@ -150,7 +153,8 @@ export function hallView({ session, sentence, members, roles, tables = {}, prese
       // الحكم (صحيحة/خاطئة) بدرجة ثقته ووسوم الموقف؛ لا تظهر للزملاء قبل الكشف
       answered: !!a, choice: na && showChoice ? na.verdict : null, confidence: na && showChoice ? na.confidence : null, stances: na && showChoice ? na.stances : [],
       points: a && revealed ? katonScore(na, sentence.key, points) : null,
-      ...(isAdmin && a?.note ? { note: a.note } : {}),
+      // الملاحظة للخبير ولصاحبها وحده: بدونها كان حقلها يفرغ عند صاحبها فيرسل تعديله التالي note فارغة تمحوها على الخادم
+      ...((isAdmin || m.id === viewer?.id) && a?.note ? { note: a.note } : {}),
     };
   });
   const answered = people.filter((p) => p.answered).length;

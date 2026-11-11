@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import FirstOpen from '../FirstOpen.jsx';
 import { BRAND } from '../../../shared/js/brand.js';
 import { call, lastRead } from '../api.js';
-import { BookSkeleton, POPUP_BLOCKED } from '../ui.jsx';
+import { BookSkeleton, ErrorBox, POPUP_BLOCKED } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { POINTS } from '../../../supabase/functions/leaders-api/logic.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
@@ -422,8 +422,12 @@ export default function Handbook({ me, lab, onLab, onBack }) {
   const [shield, setShield] = useState(false);
   const [toast, setToast] = useState('');
   const [reading, setReading] = useState(null);
+  const [attempt, setAttempt] = useState(0);   // «حاول مرة أخرى» بعد فشل تحميل باب: يعيد الطلب ولو لم يتغير الباب
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  // التمرير إلى رأس الباب بعد رسمه لا قبله: اللوحة تكبر عند الرسم (بعد تحميل الخطوط)، والتمرير قبله كان ينتهي
+  // على الجوال عند اختبار الباب، لأن المتصفح يثبّت ما في الشاشة حين يكبر ما فوقه (scroll anchoring)
+  const scrollFor = useRef(null);
   useReadingTracker(tab === 'read' && data && data.chapter.id === current ? current : null, canvasRef, shield || loading, setReading);
 
   const loadToc = useCallback(async (first) => {
@@ -445,14 +449,15 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       setLoading(true);
       const r = await call('handbook.chapter', { id: current });
       setLoading(false);
-      if (!r.success) return setError(r.message);
+      // الفشل لا يُبقي الباب السابق ونصه واختباره تحت عنوان الباب الجديد
+      if (!r.success) { setData(null); setReading(null); return setError(r.message); }
       setError('');
+      scrollFor.current = r.chapter.id;
       setData(r);
       setReading(r.reading || null);
       lastRead.set({ id: current, title: r.chapter.title });
-      document.querySelector('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })();
-  }, [current, tab]);
+  }, [current, tab, attempt]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -474,6 +479,10 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       name: toc?.name || me.participant.full_name, part: `${PART[data.chapter.dimension]} · ${dimOf(data.chapter.dimension).title}`,
       partEn: PART_EN[data.chapter.dimension], no: pad(inPart || 1), word: WORDS[(inPart || 1) - 1] || String(inPart), folio: `${i + 1} / ${list.length}`,
     }, logo);
+    if (scrollFor.current === data.chapter.id) {
+      scrollFor.current = null;
+      canvasRef.current?.closest('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, [data, toc, me]);
 
   useEffect(() => {
@@ -636,11 +645,14 @@ export default function Handbook({ me, lab, onLab, onBack }) {
                 {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
               </div>
             )}
-            <div hidden={current === COVER} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
-              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} />
+            <div hidden={current === COVER || (!data && !loading)} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
+              {/* اللوحة صورة لا يقرؤها قارئ الشاشة؛ وصفها يدله على النسخة الشخصية القائمة (نص مسجل بعلامة مائية)، ولا نص للباب في DOM
+                  حتى يحسم المالك القرار 9 (وضع قراءة نصي بطلب مسجل، ux-05) */}
+              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} aria-describedby="hb-text-note" />
+              <p id="hb-text-note" className="sr-only">صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتيب، ففيها أبوابك كلها نصًا في نافذة جديدة.</p>
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
-            {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
+            {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
             {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={onLab} />}
             <div className="row between book-nav">

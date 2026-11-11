@@ -59,6 +59,48 @@ test('حالة النظام في النظرة العامة: ترحيلات وأ�
   await expect(note).toContainText('70 من 80');
 });
 
+test('حالة النظام: المؤجل بقرار لا يُطلب تطبيقه، والحاجب والمتسامح كلٌّ بسطره (ops-4)', async ({ page }) => {
+  await setup(page, {
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
+    'admin.health': { success: true, missing_migrations: ['20261201100000_blocking_one', '20261201110000_tolerant_one'], migrations_ledger: true,
+      pending_migrations: [
+        { name: '20261201100000_blocking_one', gate: 'blocking', note: '' },
+        { name: '20261201110000_tolerant_one', gate: 'tolerant', note: 'الدالة تتحمل غياب العمود' },
+        { name: '20261201120000_deferred_one', gate: 'deferred', note: 'بقرار D99 بعد توقيع اللجنة' },
+      ],
+      missing_secrets: ['LEADERS_ALERT_WEBHOOK'], mail: { today: 0, cap: 80 } },
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  const note = page.getByRole('status').filter({ hasText: 'حالة النظام' });
+  const line = (t) => note.locator('p').filter({ hasText: t });
+  await expect(line('قبل نشر الدوال')).toContainText('20261201100000_blocking_one.sql');
+  await expect(line('في أقرب نافذة')).toContainText('20261201110000_tolerant_one.sql');
+  await expect(line('مؤجلة بقرار')).toContainText('20261201120000_deferred_one.sql');
+  await expect(line('مؤجلة بقرار')).toContainText('بقرار D99 بعد توقيع اللجنة');
+  // لا سطر يطلب تطبيق المؤجل
+  await expect(note.locator('p').filter({ hasText: 'migrate.yml' }).filter({ hasText: 'deferred_one' })).toHaveCount(0);
+  await expect(note).toContainText('LEADERS_ALERT_WEBHOOK');
+});
+
+test('جاهزية الإطلاق: بنود الإطلاق التجريبي من الخادم، والبند الذي يُضبط خارج اللوحة بلا زر ضبط', async ({ page }) => {
+  await setup(page, {
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
+    'admin.health': { success: true, missing_migrations: [], missing_secrets: [], mail: { today: 0, cap: 80 }, readiness: [
+      { key: 'certificate', ok: true, where: 'certs', label: 'الشهادة مكتملة الإعداد' },
+      { key: 'advisor', ok: false, where: 'programs', label: 'دفعات جهات بلا مستشار أساسي: دفعة أ' },
+      { key: 'release-pinned', ok: false, where: null, label: 'دفعات جارية بلا إصدار محتوى مثبّت (يُثبَّت بترحيل إصدار المحتوى): دفعة أ' },
+    ] },
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  const card = page.getByRole('region', { name: 'جاهزية الإطلاق' });
+  await expect(card).toContainText('1 من 3');
+  await expect(card.locator('li').filter({ hasText: 'إصدار محتوى' }).getByRole('button')).toHaveCount(0);
+  await card.locator('li').filter({ hasText: 'مستشار أساسي' }).getByRole('button', { name: 'اضبطه' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs/);
+});
+
 test('اتجاه البرنامج: هذا الأسبوع مقارنة بالماضي، والجدول من الأحدث', async ({ page }) => {
   const w = (week, joined, assessed, approved, active) => ({ week, joined, assessed, approved, active });
   await setup(page, {

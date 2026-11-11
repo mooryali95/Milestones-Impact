@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import { CONTACT_EMAIL } from '../../supabase/functions/leaders-api/labels.js';
+import { SITES } from '../../supabase/functions/_shared/sites.js';
 
 // لا طرف خارجي للإشعار: إشعار الخطة المقدَّمة من user-api (D14). كان يُرسل إلى Lambda في us-east-1.
 
@@ -11,6 +12,12 @@ import { CONTACT_EMAIL } from '../../supabase/functions/leaders-api/labels.js';
 // المصدر الوحيد للحقيقة هو shared/css/mi-tokens.css؛ هذه نسخة حرفية منه.
 // وسيلة التواصل العامة الوحيدة: البريد. لا رقم هاتف منشور. مصدرها قاموس المسميات.
 export const CONTACT = { email: CONTACT_EMAIL };
+
+// وثائق منتج المصفوفة النظامية على الموقع الأم (لبرنامج القادة وثائقه المستقلة في /legal هناك)
+export const LEGAL = {
+  privacy: `${SITES.mi}/privacy.html`,
+  terms: `${SITES.mi}/terms.html`,
+};
 
 export const BRAND = {
   // الأسماء الرسمية

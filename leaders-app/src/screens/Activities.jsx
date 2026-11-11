@@ -150,14 +150,26 @@ import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
+  qr: 'امسح رمز الحضور الذي يعرضه المدرب في الجلسة بكاميرا جوالك.',
   join: 'انضم إلى الجلسة من هنا، ويُسجل حضورك عند الانضمام.',
   manual: 'يسجل المدرب حضورك في الجلسة.',
+  auto: 'يُحتسب حضورك تلقائيًا بانتهاء الجلسة.',
 };
+// رقاقة الجلسة: حضرت، أو انتهت بلا حضور، أو جارية الآن، أو قادمة (كانت الجارية تُوسم «قادمة»)
+function SessionChip({ s }) {
+  const now = Date.now();
+  if (s.attended) return <span className="chip ok">حضرت ✓</span>;
+  if (Date.parse(s.ends_at) < now) return <span className="chip bad">لم يُسجل حضور</span>;
+  if (Date.parse(s.starts_at) <= now) return <span className="chip gold">جارية الآن</span>;
+  return <span className="chip">قادمة</span>;
+}
 
 function Workshop({ item, open, setToast }) {
   const a = item.activity;
   const [busy, setBusy] = useState('');
   const upcoming = a.sessions.filter((s) => !s.attended && new Date(s.ends_at) > new Date());
+  // رمز QR يشرحه نص البند نفسه غالبًا (help_ar فوق النشاط)، فلا يُكرر تحته
+  const hint = a.verify === 'qr' && item.help_ar ? null : VERIFY_HINT[a.verify];
   const join = async (s) => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
     setBusy(s.id);
@@ -179,13 +191,12 @@ function Workshop({ item, open, setToast }) {
               <span className="chip">{MODE_CHIP[s.mode]}</span>
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
-              {s.attended ? <span className="chip ok">حضرت ✓</span>
-                : new Date(s.ends_at) < new Date() ? <span className="chip bad">لم يُسجل حضور</span> : <span className="chip">قادمة</span>}
+              <SessionChip s={s} />
             </li>
           ))}
         </ul>
       ) : <p className="h">ستظهر هنا مواعيد الجلسات وطريقتها حين تُجدول.</p>}
-      {upcoming.length > 0 && VERIFY_HINT[a.verify] && <p className="h">{VERIFY_HINT[a.verify]}</p>}
+      {upcoming.length > 0 && hint && <p className="h">{hint}</p>}
     </div>
   );
 }

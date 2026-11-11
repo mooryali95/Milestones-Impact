@@ -6,8 +6,9 @@
 // show(قيم) ← يظهر الحقل ويُحفظ فقط حين تعيد true (حقول تتبع نوعًا مختارًا) · datetime ← تاريخ ووقت محليان يُحفظان ISO
 // check ← قيمة منطقية · multi ← مربعات اختيار من options تُحفظ مصفوفة مفاتيح · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
+// الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
 import React, { useState } from 'react';
-import { useEscape, useUI } from './ui.jsx';
+import { useEscape, useGuardedClose, useUI } from './ui.jsx';
 
 // ISO ← قيمة حقل datetime-local بتوقيت المتصفح
 const toLocal = (iso) => {
@@ -18,15 +19,17 @@ const toLocal = (iso) => {
 
 export default function Form({ title, fields, values = {}, onSave, onDelete, onClose }) {
   const { confirm } = useUI();
-  const [v, setV] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
+  const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
     f.type === 'check' ? !!values[f.name]
       : f.type === 'options' ? (Array.isArray(values[f.name]) && values[f.name].length ? values[f.name] : [{ label: '', score: 0 }, { label: '', score: 0 }])
         : f.type === 'datetime' ? toLocal(values[f.name])
           : f.type === 'multi' ? (Array.isArray(values[f.name]) ? values[f.name] : [])
           : values[f.name] ?? ''])));
+  const [v, setV] = useState(start);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  useEscape(onClose);
+  const close = useGuardedClose(JSON.stringify(v) !== JSON.stringify(start), () => onClose());
+  useEscape(close);
 
   const set = (name) => (e) => setV({ ...v, [name]: e.target.value });
   const submit = async (e) => {
@@ -54,7 +57,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
   };
 
   return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form className="la-form mi-form" role="dialog" aria-modal="true" aria-label={title} onSubmit={submit}>
         <h3>{title}</h3>
         {fields.filter((f) => !f.show || f.show(v)).map((f) => {
@@ -114,7 +117,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
         {error && <div className="la-err" role="alert">{error}</div>}
         <div className="la-row">
           <button className="btn-sm primary" type="submit" disabled={busy}>حفظ</button>
-          <button className="btn-sm ghost" type="button" onClick={() => onClose()}>إلغاء</button>
+          <button className="btn-sm ghost" type="button" onClick={close}>إلغاء</button>
           {onDelete && <><span style={{ flex: 1 }} /><button className="btn-sm danger" type="button" onClick={remove} disabled={busy}>حذف</button></>}
         </div>
       </form>

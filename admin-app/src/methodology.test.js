@@ -36,3 +36,14 @@ describe('المنهجية', () => {
     expect(lines('1. أول\n- ثانٍ\n\n•  ثالث')).toEqual(['أول', 'ثانٍ', 'ثالث']);
   });
 });
+
+// admin-program-7 (مراجعة الجولة ب-1): نموذج تحرير الخلية كان يقول «الوصف للمشارك» والشاشة نفسها تقول إن الخلايا لا تصل المشارك
+describe('خلايا المصفوفة في المنهجية: نص صادق', () => {
+  it('حقل وصف الخلية لا يَعِد بظهوره للمشارك', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(__dirname, 'methodology.js'), 'utf8');
+    expect(src).not.toContain("'الوصف للمشارك'");
+    expect(src).toContain('لا يظهر للمشارك');
+  });
+});

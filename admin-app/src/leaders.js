@@ -66,3 +66,25 @@ export function filterPeople(list, { q = '', track = '' }) {
   return list.filter((p) => (!track || trackOfPlacements(p.placements) === track || p.track === track)
     && (!s || [p.full_name, p.email, p.job_title, p.organization_name, trackOfPlacements(p.placements) || p.track].join(' ').toLowerCase().includes(s)));
 }
+
+// ── ما يُقفل أثناء دفعة جارية (D07 وD06): معيار التسكين وإعداداته، وإعداد التقييم الختامي ──
+// يقبله الخادم من المدير العام وحده بتعليل مكتوب يُحفظ في السجل (cohort_running). كانت الرسالة تَعِد بالاستثناء
+// ولا مكان في اللوحة لكتابة التعليل (التدقيق 2026-11-11، admin-program-2).
+export const RUNNING_REASON_MIN = 10;
+// المدير الأعلى: مصدر واحد لكل شاشة (الإعدادات، ونموذج الجهة، وتعليل الدفعة الجارية)
+export const isSuperAdminUser = (u) => (u?.role_id || u?.role) === 'super_admin';
+export const isSuperAdmin = () => isSuperAdminUser(session.load()?.user);
+export const placementLockAr = (cohort) => `دفعة «${cohort}» جارية، فمعيار التسكين وإعدادات الحكم بالتغير مقفلة أثناءها: لا يعدّلها إلا المدير العام بتعليل مكتوب يُحفظ في السجل.`;
+// send(extra) يرسل الطلب. عند cohort_running يُسأل المدير العام عن التعليل ويُعاد الإرسال به؛ ولغيره تبقى رسالة الخادم.
+// الإلغاء يعيد { cancelled: true } فلا يُعرض خطأ.
+export async function withRunningReason(send, ask, superAdmin = isSuperAdmin()) {
+  const r = await send({});
+  if (r.success || r.code !== 'cohort_running' || !superAdmin) return r;
+  let short = '';
+  for (;;) {
+    const reason = await ask(`${r.message}.${short} بصفتك المدير العام اكتب تعليل التعديل (${RUNNING_REASON_MIN} أحرف على الأقل)، ويُحفظ في السجل:`, '', { ok: 'احفظ بالتعليل' });
+    if (reason === null) return { success: false, cancelled: true };
+    if (reason.trim().length >= RUNNING_REASON_MIN) return send({ reason: reason.trim() });
+    short = ' التعليل أقصر من المطلوب.';
+  }
+}

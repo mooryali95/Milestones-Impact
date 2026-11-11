@@ -141,9 +141,11 @@ const rubricFields = [
 ];
 
 export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
-  const { toast, prompt } = useUI();
-  const [rub, setRub] = useState(null);
-  const rate = (m) => setRub({
+  const { toast, prompt, confirm } = useUI();
+  // نافذة واحدة لاعتماد الإنجاز بالمعيار ولتمديد الموعد؛ ok رسالة نجاحها
+  const [form, setForm] = useState(null);
+  const rate = (m) => setForm({
+    ok: 'تم',
     title: `${m.done ? 'تقييم' : 'اعتماد إنجاز'}: ${m.title_ar}`, fields: rubricFields,
     values: Object.fromEntries(Object.entries(m.scores || {}).map(([k, v]) => [`r_${k}`, String(v)])),
     onSave: (v) => L('admin.participant-milestone', {
@@ -159,11 +161,20 @@ export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
     toast(r.success ? ok : r.message);
     if (r.success) onDone();
   };
-  const extend = async (m) => {
-    const d = await prompt(`موعد جديد لـ«${m.title_ar}» لهذا المشارك وحده (YYYY-MM-DD)، أو اتركه فارغًا لإلغاء التمديد:`, m.due || '');
-    if (d === null) return;
-    const r = await L('admin.participant-milestone', { participant_id: p.id, milestone_id: m.id, due_override: d.trim() || null });
-    toast(r.success ? 'تم' : r.message);
+  // التمديد بحقل تاريخ (قيمته 2026-12-01 أيًا كانت لوحة المفاتيح)، وإلغاؤه زر صريح؛ كان نصًا حرًا يُلغي
+  // التمديد بصمت حين يُكتب التاريخ بأرقام عربية ويقول «تم» (التدقيق 2026-11-11، admin-program-6)
+  const extend = (m) => setForm({
+    title: `تمديد «${m.title_ar}» لهذا المشارك وحده`, ok: 'مُدّد الموعد لهذا المشارك',
+    fields: [{ name: 'due_override', label: 'الموعد الجديد', type: 'date' }],
+    values: { due_override: m.due || '' },
+    onSave: (v) => (v.due_override
+      ? L('admin.participant-milestone', { participant_id: p.id, milestone_id: m.id, due_override: v.due_override })
+      : Promise.resolve({ success: false, message: 'اختر الموعد الجديد' })),
+  });
+  const unextend = async (m) => {
+    if (!(await confirm(`إلغاء تمديد «${m.title_ar}» لهذا المشارك؟ يعود موعده إلى موعد دفعته.`))) return;
+    const r = await L('admin.participant-milestone', { participant_id: p.id, milestone_id: m.id, due_override: null });
+    toast(r.success ? 'أُلغي التمديد' : r.message);
     if (r.success) onDone();
   };
   return (
@@ -179,11 +190,12 @@ export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
             {!m.done && <button className="la-link" onClick={() => rate(m)}>اعتمد الإنجاز</button>}
             {m.done && <button className="la-link" onClick={() => rate(m)}>{Object.keys(m.scores || {}).length ? 'عدّل التقييم' : 'قيّم بالمعيار'}</button>}
             {m.done && m.done_at && <button className="la-link" onClick={() => act(m, { done: false }, 'أُلغي')}>إلغاء الاعتماد</button>}
-            {!m.done && <button className="la-link" onClick={() => extend(m)}>مدّد له</button>}
+            {!m.done && <button className="la-link" onClick={() => extend(m)}>{m.extended ? 'عدّل التمديد' : 'مدّد له'}</button>}
+            {!m.done && m.extended && <button className="la-link" onClick={() => unextend(m)}>ألغِ التمديد</button>}
           </span>}
         </li>
       ))}</ul>
-      {rub && <Form {...rub} onClose={(saved) => { setRub(null); if (saved) { toast('تم'); onDone(); } }} />}
+      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast(form.ok); onDone(); } }} />}
     </section>
   );
 }

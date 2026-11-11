@@ -5,6 +5,7 @@
 // (leaders-app/src/logic.test.js) ويُستورد كما هو في دالة الحافة.
 
 import { DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
+import { latinDigits } from './digits.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -459,12 +460,8 @@ export function seededShuffle(list, seed) {
 export const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
 export const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 254;
 
-// الأرقام العربية المشرقية (٠-٩) والفارسية (۰-۹) إلى 0-9. لوحة المفاتيح العربية تكتبها، و\d في JavaScript لا يطابقها،
-// فكان رمز الدخول يُمحى والجوال يُرفض (فحص الجاهزية p-entry-1). المصدر الواحد لكل رقم يكتبه الإنسان في الواجهة أو يصل الخادم.
-// U+0660 وU+06F0 ينتهيان بصفر، فآخر أربع بتات في كل منهما هي قيمة الرقم.
-export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 15));
-// رمز الدخول كما يُكتب أو يُلصق في حقله: ستة أرقام لاتينية (randomCode في core.ts)، في دخول المشارك والجهة والخبير
-export const codeDigits = (v) => latinDigits(v).replace(/\D/g, '').slice(0, 6);
+// الأرقام كما يكتبها الإنسان: digits.js مصدرها الوحيد (latinDigits وcodeDigits)، تُصدَّر من هنا لكل من يستورد logic.js
+export { latinDigits, codeDigits } from './digits.js';
 // رابط دعوة الخبير: /x#invite=<البريد مرمّزًا>.<الرمز>. يبنيه الخادم ويقرؤه البوابة من هنا وحده، فلا تختلف صيغتاهما
 // (اختلفتا من #167: الخادم يرمّز «@» إلى %40 والبوابة تشترط «@» صريحة، فلم يُقرأ رابط قط).
 // الرمز base64url بلا نقاط، فالفصل عند آخر نقطة يحفظ نقاط البريد؛ والبريد يُقبل مرمّزًا أو مفكوكًا إن فكّه برنامج البريد
@@ -2184,6 +2181,30 @@ export function advisedParticipantIds(expertId, cohortParticipantIds, membership
   for (const m of memberships || []) if (m.advisor_expert_id && ok.has(m.advisor_expert_id)) groupOf.set(m.participant_id, m.advisor_expert_id);
   const out = new Set((cohortParticipantIds || []).filter((id) => !groupOf.has(id) || groupOf.get(id) === expertId));
   for (const [pid, adv] of groupOf) if (adv === expertId) out.add(pid);
+  return [...out];
+}
+// مشاركو الدفعات التي هو مستشارها الأساسي، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة (كان advisor.ts يقرأ
+// تسجيلات كل مرشح وكل الدفعات بالتتابع، قراءتين لكل مشارك). القاعدة نفسها: من سُجّل في إحداها بأي حالة، ومن تقع دفعته
+// الفعلية (pickCohort) على إحداها وهو في نطاقها: جهتها لدفعة جهة، والجميع للمفتوحة، ولا أحد لدفعة بلا جهة غير مفتوحة.
+/** @param {{ id: string, organization_id?: string | null, is_default?: boolean }[]} mine دفعاته
+ *  @param {any[]} cohorts كل الدفعات (مدخل pickCohort)
+ *  @param {{ participant_id: string, cohort_id: string, status?: string, created_at?: string }[]} enrollments كل التسجيلات
+ *  @param {{ id: string, organization_id?: string | null }[]} candidates المرشحون بالتبعية، بلا حساب العرض */
+export function advisorCohortParticipantIds(mine, cohorts, enrollments, candidates) {
+  const mineById = new Map((mine || []).map((c) => [c.id, c]));
+  const out = new Set();
+  const byP = new Map();
+  for (const e of enrollments || []) {
+    if (mineById.has(e.cohort_id)) out.add(e.participant_id);
+    if (!byP.has(e.participant_id)) byP.set(e.participant_id, []);
+    byP.get(e.participant_id).push(e);
+  }
+  const inScope = (c, p) => (c.organization_id ? p.organization_id === c.organization_id : !!c.is_default);
+  for (const p of candidates || []) {
+    if (out.has(p.id)) continue;
+    const c = mineById.get(pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id);
+    if (c && inScope(c, p)) out.add(p.id);
+  }
   return [...out];
 }
 

@@ -12,6 +12,13 @@ import { Spinner, useUI } from '../ui.jsx';
 import { ChapterEditor } from './Handbook.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 
+// ما يصل المشارك من هوية المسار (trackView في participant.ts): حين يكون للمسار ملف تعريف يرى عنوانه ووصفه
+// وتوجيه رحلته مكان هذه الحقول، فتصير داخلية للإدارة؛ وأولويات التطوير تصله من المسار دائمًا.
+// كانت الصفحة تقول إن العنوان وحده داخلي (التدقيق 2026-11-11، admin-program-7)
+const PROFILE_REPLACES = new Set(['title_ar', 'summary_ar', 'journey_ar']);
+const trackFields = (profile) => (!profile ? TRACK_FIELDS
+  : TRACK_FIELDS.map((f) => (PROFILE_REPLACES.has(f.name) ? { ...f, help: 'داخلي للإدارة: يرى المشارك نص ملف التعريف مكانه' } : f)));
+
 const LvlChips = ({ k }) => {
   const lv = trackLevels(k);
   return DIMS.map((d) => <span key={d} className={`la-lvl ${lv[d]}`}>{DIM_EN[d][0]} {LVL[lv[d]]}</span>);
@@ -117,9 +124,10 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
         </div>
         {r.profile && (
           <div className="la-track-profile">
-            <small className="la-muted">ما يراه المشارك: ملف التعريف «{r.profile.title_ar}» ({r.profile.title_en}). العنوان أعلاه داخلي للإدارة.</small>
+            <small className="la-muted">ما يراه المشارك: ملف التعريف «{r.profile.title_ar}» ({r.profile.title_en}) بعنوانه ووصفه وتوجيه رحلته، مكان الاسم و«لمن صُمّم» و«توجيه الرحلة» أعلاه، فتلك داخلية للإدارة. أما أولويات التطوير فتصل المشارك كما تحررها هنا. نصوص ملف التعريف معتمدة، تُعدَّل بطلب إلى فريق المحتوى لا من هذه اللوحة.</small>
             <p>{r.profile.summary_ar}</p>
             {r.strengths && <p className="la-muted">{r.strengths}</p>}
+            {r.profile.journey_ar && <ul>{lines(r.profile.journey_ar).map((x, i) => <li key={i}>{x}</li>)}</ul>}
           </div>
         )}
       </section>
@@ -165,7 +173,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
       </section>
       {chapter && <ChapterEditor m={chapter} catalog={catalog} canWrite={canWrite} onClose={(saved) => { setChapter(null); if (saved) { load(); onSaved(); } }} />}
       {editing && (
-        <Form title={`مسار ${t.key}`} fields={TRACK_FIELDS} values={t}
+        <Form title={`مسار ${t.key}`} fields={trackFields(r.profile)} values={t}
           onSave={(row) => L('admin.save', { entity: 'tracks', row: { key: t.key, ...row } })}
           onClose={(saved) => { setEditing(false); if (saved) { toast('تم الحفظ'); load(); onSaved(); } }} />
       )}

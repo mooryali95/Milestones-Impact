@@ -1,19 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { checkImport, IMPORT_MAX, importCounts, parseImport } from '../../supabase/functions/leaders-api/import.js';
+import { checkImport, IMPORT_MAX, importCounts, importLimitIssue, parseImport } from '../../supabase/functions/leaders-api/import.js';
 
 describe('استيراد المشاركين: القراءة', () => {
   it('لصق Excel بعلامة الجدولة، وسطر العناوين لا يُحسب', () => {
     const rows = parseImport('الاسم\tالبريد\tالجوال\tالمسمى\nسارة الأحمد\tSara@Example.sa\t0551234567\tمديرة مشاريع\nعمر علي\tomar@example.sa');
     expect(rows).toEqual([
-      { full_name: 'سارة الأحمد', email: 'Sara@Example.sa', phone: '0551234567', job_title: 'مديرة مشاريع' },
-      { full_name: 'عمر علي', email: 'omar@example.sa', phone: '', job_title: '' },
+      { line: 2, full_name: 'سارة الأحمد', email: 'Sara@Example.sa', phone: '0551234567', job_title: 'مديرة مشاريع' },
+      { line: 3, full_name: 'عمر علي', email: 'omar@example.sa', phone: '', job_title: '' },
     ]);
   });
   it('CSV بفاصلة أو فاصلة منقوطة، وبأي ترتيب للأعمدة', () => {
     expect(parseImport('sara@example.sa,"سارة الأحمد",+966551234567')[0]).toMatchObject({ full_name: 'سارة الأحمد', email: 'sara@example.sa', phone: '+966551234567' });
     expect(parseImport('0551234567;عمر علي;omar@example.sa;مهندس')[0]).toMatchObject({ full_name: 'عمر علي', email: 'omar@example.sa', phone: '0551234567', job_title: 'مهندس' });
   });
-  it('سطر بلا بريد يُهمل', () => { expect(parseImport('اسم فقط\n\n  ')).toEqual([]); });
+  it('السطر الأول بلا بريد ولا جوال سطر عناوين يُهمل', () => { expect(parseImport('اسم فقط\n\n  ')).toEqual([]); });
+  it('سطر الفواصل وحدها فارغ: لا يُعرض صفًا ولا يأخذ مكان سطر العناوين', () => {
+    expect(parseImport(',,\n;;\n"",""\n\t\t\n,,,')).toEqual([]);
+    // سطر فارغ بالفواصل في أول الجدول لا يستهلك موضع العناوين، والصفوف الفارغة بين الأقسام لا تظهر «ناقصة»
+    const rows = parseImport(',,,\nالاسم,البريد\nسارة الأحمد,sara@example.sa\n,,\nعمر علي,omar@example.sa\n;;;');
+    expect(rows.map((r) => [r.line, r.full_name, r.email])).toEqual([[3, 'سارة الأحمد', 'sara@example.sa'], [5, 'عمر علي', 'omar@example.sa']]);
+    expect(importCounts(checkImport(rows))).toEqual({ ok: 2 });
+  });
+  it('الصفوف الفارغة التي يكتبها Excel في آخر الملف لا تُحسب في الحد', () => {
+    const csv = ['الاسم,البريد', ...Array.from({ length: IMPORT_MAX }, (_, i) => `مشارك ${i},p${i}@example.sa`), ...Array(10).fill(',,,')].join('\n');
+    const rows = parseImport(csv);
+    expect(rows).toHaveLength(IMPORT_MAX);
+    expect(importLimitIssue(rows.length)).toBe('');
+  });
+  it('البريد المعيب أو الغائب لا يُسقط الصف: يبقى برقم سطره ويظهر ناقصًا', () => {
+    const rows = parseImport('الاسم\tالبريد\nسارة الأحمد\tsara@example.sa\nخالد العتيبي\tkhaled@example\n\nمنى السالم\tmona@@example.sa\nعمر علي\t0551234567\nريم الحربي\treem.example.sa');
+    expect(rows.map((r) => [r.line, r.full_name, r.email])).toEqual([
+      [2, 'سارة الأحمد', 'sara@example.sa'], [3, 'خالد العتيبي', 'khaled@example'], [5, 'منى السالم', 'mona@@example.sa'],
+      [6, 'عمر علي', ''], [7, 'ريم الحربي', ''],
+    ]);
+    const out = checkImport(rows);
+    expect(out.map((r) => [r.line, r.status, r.reason || null])).toEqual([
+      [2, 'ok', null], [3, 'invalid', 'البريد غير صحيح'], [5, 'invalid', 'البريد غير صحيح'], [6, 'invalid', 'البريد مطلوب'], [7, 'invalid', 'البريد مطلوب'],
+    ]);
+    expect(importCounts(out)).toEqual({ ok: 1, invalid: 4 });
+  });
 });
 
 describe('استيراد المشاركين: التحقق', () => {
@@ -33,5 +58,13 @@ describe('استيراد المشاركين: التحقق', () => {
   it('لا يتجاوز الحد', () => {
     const many = Array.from({ length: IMPORT_MAX + 20 }, (_, i) => ({ full_name: `مشارك ${i}`, email: `p${i}@example.sa` }));
     expect(checkImport(many)).toHaveLength(IMPORT_MAX);
+  });
+  it('فوق الحد رسالة واحدة توقف الإرسال، وعند الحد لا رسالة', () => {
+    expect(importLimitIssue(IMPORT_MAX)).toBe('');
+    expect(importLimitIssue(IMPORT_MAX + 20)).toBe(`في الجدول ${IMPORT_MAX + 20} صفًا، والحد ${IMPORT_MAX} صفًا في المرة الواحدة. قسّمه دفعات.`);
+  });
+  it('رقم السطر يعبر إلى الخادم ويعود، وما ليس رقمًا صحيحًا يُترك فارغًا', () => {
+    const out = checkImport([{ line: 4, full_name: 'سارة الأحمد', email: 'sara@example.sa' }, { line: 'x', full_name: 'عمر علي', email: 'omar@example.sa' }]);
+    expect(out.map((r) => r.line)).toEqual([4, null]);
   });
 });

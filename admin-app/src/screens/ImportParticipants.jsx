@@ -5,7 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { L } from '../leaders.js';
 import { useEscape } from '../ui.jsx';
-import { checkImport, IMPORT_MAX, IMPORT_STATUS_AR, importCounts, parseImport } from '../../../supabase/functions/leaders-api/import.js';
+import { checkImport, IMPORT_MAX, IMPORT_STATUS_AR, importCounts, importLimitIssue, parseImport } from '../../../supabase/functions/leaders-api/import.js';
 
 const TONE = { ok: 'ok', created: 'ok', invalid: 'warn', duplicate: 'warn', failed: 'warn', exists: '' };
 
@@ -19,6 +19,8 @@ export default function ImportParticipants({ orgs, onClose }) {
 
   const parsed = useMemo(() => parseImport(text), [text]);
   const local = useMemo(() => checkImport(parsed), [parsed]);
+  // فوق الحد يُوقف قبل الإرسال برسالة الخادم نفسها، فلا تَعِد المعاينة بما يُرفض
+  const over = importLimitIssue(parsed.length);
   const rows = server?.rows || local;
   const counts = server?.counts || importCounts(local);
   const done = server && !server.dry_run;
@@ -56,18 +58,19 @@ export default function ImportParticipants({ orgs, onClose }) {
           <>
             <div className="la-pills" aria-label="ملخص الصفوف">{Object.entries(counts).map(([k, n]) => <span key={k} className={`la-chip ${TONE[k]}`}>{IMPORT_STATUS_AR[k]} {n}</span>)}</div>
             <div className="la-import-table"><table className="la-table">
-              <thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>المسمى</th><th>الحال</th></tr></thead>
+              <thead><tr><th>السطر</th><th>الاسم</th><th>البريد</th><th>الجوال</th><th>المسمى</th><th>الحال</th></tr></thead>
               <tbody>{rows.map((r, i) => (
-                <tr key={`${r.email}-${i}`}><td>{r.full_name || '·'}</td><td dir="ltr">{r.email}</td><td dir="ltr">{r.phone || '·'}</td><td>{r.job_title || '·'}</td>
+                <tr key={`${r.email}-${i}`}><td>{r.line ?? '·'}</td><td>{r.full_name || '·'}</td><td dir="ltr">{r.email}</td><td dir="ltr">{r.phone || '·'}</td><td>{r.job_title || '·'}</td>
                   <td><span className={`la-chip ${TONE[r.status]}`}>{IMPORT_STATUS_AR[r.status]}</span>{r.reason && <small> {r.reason}</small>}</td></tr>
               ))}</tbody>
             </table></div>
           </>
         )}
         {text.trim() && !parsed.length && <p className="la-err" role="alert">لم أجد صفًا فيه بريد صحيح.</p>}
+        {over && !done && <p className="la-err" role="alert">{over}</p>}
         {error && <p className="la-err" role="alert">{error}</p>}
         <div className="la-row">
-          {!done && !server && <button type="button" className="btn-sm primary" disabled={busy || !parsed.length} onClick={() => run(true)}>تحقق من المسجلين</button>}
+          {!done && !server && <button type="button" className="btn-sm primary" disabled={busy || !parsed.length || !!over} onClick={() => run(true)}>تحقق من المسجلين</button>}
           {!done && server?.dry_run && <button type="button" className="btn-sm primary" disabled={busy || !(counts.ok > 0)} onClick={() => run(false)}>أضف {counts.ok || 0} مشاركًا</button>}
           <button type="button" className="btn-sm ghost" onClick={() => onClose(done)}>{done ? 'تم' : 'إلغاء'}</button>
         </div>

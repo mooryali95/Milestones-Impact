@@ -5,7 +5,7 @@
 // للدفعة، ومن تغيّر تغيرًا موثوقًا، وتثليث المصادر لكل مشارك، وإعدادات
 // الحكم. لا يُعرض فرق خام دون هامش خطأ القياس.
 import React, { useCallback, useEffect, useState } from 'react';
-import { DIM, DIM_EN, DIMS, L, LVL } from '../leaders.js';
+import { DIM, DIM_EN, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import Outcomes from './Outcomes.jsx';
@@ -24,16 +24,20 @@ const SETTINGS = [
   ['rci_practice', 'أثر تكرار الأسئلة على المواقف (نقاط، يُقدَّر من البيانات حين تكفي)', 0.5],
 ];
 
-function Settings({ model, onSaved, canWrite }) {
-  const { toast } = useUI();
+function Settings({ model, running, onSaved, canWrite }) {
+  const { toast, prompt } = useUI();
   const [f, setF] = useState(() => Object.fromEntries(SETTINGS.map(([k]) => [k, model?.[k] ?? ''])));
   const save = async () => {
-    const r = await L('admin.save', { entity: 'placement_model', row: { id: 1, ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, Number(v)])) } });
+    // الإعدادات في صف معيار التسكين نفسه، فتُقفل معه أثناء دفعة جارية
+    const row = { id: 1, ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, Number(v)])) };
+    const r = await withRunningReason((extra) => L('admin.save', { entity: 'placement_model', row, ...extra }), prompt);
+    if (r.cancelled) return;
     toast(r.success ? 'حُفظت الإعدادات' : r.message); if (r.success) onSaved();
   };
   return (
     <section className="la-card">
       <h3>إعدادات الحكم بالتغير</h3>
+      {running && <div className="la-note" role="note">{placementLockAr(running)}</div>}
       <p className="la-muted">التغير الموثوق = الفرق مقسومًا على خطأ الفرق المعياري (Jacobson و Truax)، ولا يُعدّ حقيقيًا قبل 1.96 بعد خصم أثر التكرار (Chelune). حين تبلغ الدفعة العدد الأدنى يحل ثبات الأداة الفعلي (ألفا كرونباخ) وانحرافها المعياري محل القيم الافتراضية تلقائيًا.</p>
       <div className="la-model-grid">
         {SETTINGS.map(([k, label, step]) => (
@@ -219,7 +223,7 @@ export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, ca
       <Reaction s={r.reaction} />
       <Outcomes org={org} onOpen={onCapstone} />
       <People list={r.participants} onPerson={onPerson} />
-      {catalog?.success && <Settings model={catalog.placement_model?.[0]} canWrite={canWrite} onSaved={() => { reload(); load(); }} />}
+      {catalog?.success && <Settings model={catalog.placement_model?.[0]} running={catalog.running_cohort} canWrite={canWrite} onSaved={() => { reload(); load(); }} />}
     </>
   );
 }

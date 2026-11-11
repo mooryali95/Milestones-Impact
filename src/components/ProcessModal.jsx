@@ -1,5 +1,5 @@
-import React, { useCallback, useRef } from "react";
-import { pressable, useDialogFocus, useEscape } from "../lib/a11y";
+import React, { useRef } from "react";
+import { pressable, useDialog } from "../lib/a11y";
 import Skeleton from "./Skeleton";
 import Icon from "./Icon";
 import { gregorianToHijri } from "../lib/dateUtils";
@@ -29,15 +29,16 @@ const ProcessModal = (p) => {
     toggleConfirm,
   } = p;
 
-  useEscape(useCallback(() => { setSelectedCell(null); setHighlightedKeys([]); }, [setSelectedCell, setHighlightedKeys]));
-  const dialogRef = useRef(null);
-  // إن زالت الشريحة التي فتحتها يعود التركيز إلى خلية العملية نفسها في المصفوفة
+  const box = useRef(null);
+  // التركيز على النافذة نفسها فيُقرأ اسم العملية أولًا، ويعود إليها إن عُرضت عملية أخرى فيها،
+  // وإن زالت الشريحة التي فتحتها يعود عند الإغلاق إلى خلية العملية نفسها في المصفوفة
   const procKey = selectedCell.key;
-  useDialogFocus(dialogRef, procKey, () => document.querySelector(`.cell[data-proc="${procKey}"]`));
+  useDialog(box, () => { setSelectedCell(null); setHighlightedKeys([]); },
+    { self: true, key: procKey, fallback: () => document.querySelector(`.cell[data-proc="${procKey}"]`) });
   return (
       (
         <div className="overlay" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>
-          <div className="modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={selectedCell.nameAr} onClick={e=>e.stopPropagation()}>
+          <div ref={box} className="modal" role="dialog" aria-modal="true" aria-label={selectedCell.nameAr} tabIndex={-1} onClick={e=>e.stopPropagation()}>
             <div className="modal-pull"/>
             <button className="modal-x" aria-label="إغلاق تفاصيل العملية" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
