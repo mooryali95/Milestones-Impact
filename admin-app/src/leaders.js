@@ -71,7 +71,9 @@ export function filterPeople(list, { q = '', track = '' }) {
 // يقبله الخادم من المدير العام وحده بتعليل مكتوب يُحفظ في السجل (cohort_running). كانت الرسالة تَعِد بالاستثناء
 // ولا مكان في اللوحة لكتابة التعليل (التدقيق 2026-11-11، admin-program-2).
 export const RUNNING_REASON_MIN = 10;
-export const isSuperAdmin = () => { const u = session.load()?.user; return (u?.role_id || u?.role) === 'super_admin'; };
+// المدير الأعلى: مصدر واحد لكل شاشة (الإعدادات، ونموذج الجهة، وتعليل الدفعة الجارية)
+export const isSuperAdminUser = (u) => (u?.role_id || u?.role) === 'super_admin';
+export const isSuperAdmin = () => isSuperAdminUser(session.load()?.user);
 export const placementLockAr = (cohort) => `دفعة «${cohort}» جارية، فمعيار التسكين وإعدادات الحكم بالتغير مقفلة أثناءها: لا يعدّلها إلا المدير العام بتعليل مكتوب يُحفظ في السجل.`;
 // send(extra) يرسل الطلب. عند cohort_running يُسأل المدير العام عن التعليل ويُعاد الإرسال به؛ ولغيره تبقى رسالة الخادم.
 // الإلغاء يعيد { cancelled: true } فلا يُعرض خطأ.

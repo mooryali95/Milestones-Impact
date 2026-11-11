@@ -4,7 +4,7 @@
 // الحفظ يكتب الجهة ثم منسقها (إن فُعّل حساب الاطلاع) في خطوة واحدة للمدير.
 // الحذف لا يتم إلا بعد عرض أثره وكتابة اسم الجهة، والإيقاف هو البديل المقترح.
 import React, { useEffect, useMemo, useState } from 'react';
-import { domainsOf, inviteUrl, L, orgColor } from '../leaders.js';
+import { domainsOf, inviteUrl, L, orgColor, isSuperAdminUser } from '../leaders.js';
 import { session } from '../api.js';
 import { hostOf, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
 import { useEscape, useUI } from '../ui.jsx';
@@ -207,7 +207,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
   // إلغاء حساب المنسق القائم للمدير العام وحده (الخادم يرفضه لغيره)، فلا يُطفأ المفتاح لغيره ليوحي بإلغاء لن يتم،
   // ويُدَل على «إيقاف الحساب» المسموح له (تدقيق الجاهزية، admin-core-3)
   const me = session.load()?.user;
-  const keepAccount = !!coordinator && (me?.role_id || me?.role) !== 'super_admin';
+  const keepAccount = !!coordinator && !isSuperAdminUser(me);
 
   const close = async (saved) => {
     if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;

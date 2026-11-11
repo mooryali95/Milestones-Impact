@@ -10,6 +10,7 @@
 //   anchor: stage_end | stage_start | cohort_start | cohort_end | date
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
+import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -86,9 +87,6 @@ export function cleanMilestone(raw, stageKeys) {
   };
 }
 
-// الأرقام العربية الهندية (٠-٩) والفارسية (۰-۹) إلى لاتينية: لوحات المفاتيح العربية في الحاسب والجوال تكتبها افتراضيًا.
-// عامة، لا تخص المعالم؛ تُصدَّر من logic.js لمن يحتاجها.
-export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
 
 // تمديد موعد معلم لمشارك: فارغ = إلغاء التمديد (null)، وإلا يوم صحيح بصيغة 2026-12-01 بأي أرقام.
 // غير ذلك يُرفض برسالة، ولا يُحفظ null بصمت فيُلغى التمديد ويقال «تم» (التدقيق 2026-11-11، admin-program-6)
