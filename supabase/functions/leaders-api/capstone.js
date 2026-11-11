@@ -396,5 +396,16 @@ export function canSubmit(state) {
   return { ok: true };
 }
 
+// من أعاد الوثيقة المعادة: الأحدث بين رفض الراعي ومراجعة المستشار. حالة الراعي لا تُصفَّر بإعادة التسليم
+// (تبقى في السجل)، فبعد «قبول ← رفض الراعي ← إعادة تسليم ← إعادة من المستشار» كانت الواجهة تعرض ملاحظة الراعي
+// القديمة وتخفي ملاحظات المستشار الجديدة على التحسين الوحيد المتاح (p-capstone-2، تدقيق 2026-11-11).
+/** @param {{ status?: string, review?: { reviewed_at?: string | null } | null, sponsor?: { status?: string | null, at?: string | null } | null }} c */
+export function returnedBy(c) {
+  if (c?.status !== 'returned') return null;
+  if (c.sponsor?.status !== 'declined') return 'advisor';
+  const reviewed = Date.parse(c.review?.reviewed_at || ''), declined = Date.parse(c.sponsor.at || '');
+  return reviewed > declined ? 'advisor' : 'sponsor';
+}
+
 // الإطار الذي ينتمي إليه كل فصل، لترتيب الفهرس وألوانه
 export const dimensionIndex = (d) => Math.max(0, DIMENSIONS.indexOf(d));

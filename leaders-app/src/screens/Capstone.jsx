@@ -13,7 +13,7 @@ import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
-import { MAX_REVISIONS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 
@@ -129,7 +129,8 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       )}
       {d.track?.brief && <div className="card cp-brief"><span className="mg-cap">توجيه مسارك</span><p>{d.track.brief}</p></div>}
 
-      {c.status === 'returned' && (c.sponsor?.status === 'declined' ? (
+      {/* الأحدث بين رفض الراعي ومراجعة المستشار، لا رفض راعٍ قديم بقي في السجل */}
+      {c.status === 'returned' && (returnedBy(c) === 'sponsor' ? (
         <div className="card cp-review bad"><h2>ملاحظات راعي المبادرة</h2><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التسليم.</small></div>
       ) : c.review && (
         <div className="card cp-review bad">
