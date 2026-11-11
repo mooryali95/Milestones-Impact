@@ -710,6 +710,8 @@ export async function catalog(b: Body = {}) {
   out.lab_links = labs || [];
   out.track_stats = await trackStats();
   out.book_stats = await bookStats();
+  // D07: دفعة جارية تقفل معيار التسكين (save أدناه)؛ تُعرض قبل التعديل لا بعد الضغط على حفظ
+  out.running_cohort = await runningCohort(null);
   return out;
 }
 

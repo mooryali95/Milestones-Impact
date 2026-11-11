@@ -94,3 +94,30 @@ test.describe('جلسات برنامج بدفعة واحدة (admin-program-3)',
     await expect.poll(() => calls.filter((c) => c.action === 'admin.workshop-save')[1]?.row).toMatchObject({ id: 'w1', cohort_id: '11111111-1111-1111-1111-111111111111' });
   });
 });
+
+test.describe('معيار التسكين أثناء دفعة جارية (admin-program-2)', () => {
+  const catalog = {
+    success: true, journey_stages: [], stage_requirements: [], instruments: [], locked_instruments: [], questions: [], tracks: [], track_stats: {},
+    grid_cells: [], level_rules: [], running_cohort: 'دفعة نوفمبر',
+    placement_model: [{ id: 1, w_knowledge: 30, w_skill: 45, w_behavior: 25, min_intermediate: 55, min_advanced: 80, floor_intermediate: 25, floor_advanced: 50, borderline: 5 }],
+  };
+  const LOCKED = { success: false, code: 'cohort_running', message: 'دفعة «دفعة نوفمبر» جارية. معيار التسكين مقفل أثناءها إلا للمدير الأعلى بتعليل مكتوب' };
+  const save = (b) => (String(b.reason || '').length >= 10 ? { success: true } : LOCKED);
+  test('القفل ظاهر قبل التعديل، والمدير العام يحفظ بتعليل يُرسل مع الطلب', async ({ page }) => {
+    const calls = await open(page, '#/leaders/levels', { 'admin.catalog': catalog, 'admin.save': save }, { name: 'مدير', email: 'a@x', role_id: 'super_admin' });
+    await expect(page.getByRole('note').filter({ hasText: 'دفعة «دفعة نوفمبر» جارية، فمعيار التسكين وإعدادات الحكم بالتغير مقفلة أثناءها' })).toBeVisible();
+    await page.getByRole('button', { name: 'حفظ المعيار' }).click();
+    const ask = page.getByRole('dialog').filter({ hasText: 'بصفتك المدير العام اكتب تعليل التعديل' });
+    await ask.getByRole('textbox').fill('خفض الحد بعد مراجعة لجنة القياس');
+    await ask.getByRole('button', { name: 'احفظ بالتعليل' }).click();
+    await expect.poll(() => calls.filter((c) => c.action === 'admin.save').map((c) => c.reason ?? null)).toEqual([null, 'خفض الحد بعد مراجعة لجنة القياس']);
+    await expect(page.getByRole('status').filter({ hasText: 'حُفظ معيار التسكين' })).toBeVisible();
+  });
+  test('مدير النظام يرى رسالة الخادم ولا يُسأل عن تعليل لا يُقبل منه', async ({ page }) => {
+    const calls = await open(page, '#/leaders/levels', { 'admin.catalog': catalog, 'admin.save': save });
+    await page.getByRole('button', { name: 'حفظ المعيار' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'مقفل أثناءها إلا للمدير الأعلى' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(calls.filter((c) => c.action === 'admin.save')).toHaveLength(1);
+  });
+});
