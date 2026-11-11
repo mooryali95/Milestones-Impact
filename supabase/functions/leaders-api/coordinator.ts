@@ -10,7 +10,7 @@ import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
-import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, normalizeEmail, normalizePhone } from './logic.js';
+import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -67,7 +67,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
     if (ch) {
       // المحاولة تُحجز ذريًا قبل المقارنة (الملحق 1، M2)
       await reserveCodeAttempt('coordinator_challenges', ch);
-      if (ch.code_hash !== await hash(String(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
+      if (ch.code_hash !== await hash(latinDigits(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
     }
   }
   if (!ch || ch.consumed_at || new Date(ch.expires_at) < new Date()) throw new Fail('الرابط أو الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');

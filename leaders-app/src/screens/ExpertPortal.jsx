@@ -13,6 +13,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { POPUP_BLOCKED, Skel } from '../ui.jsx';
 import { CONTACT_EMAIL, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
+import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -84,7 +85,7 @@ function SignIn({ onIn }) {
         <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء. وإن كان مسجلًا في بوابة أخرى، يصلك بريد يدلّك عليها.`}</p>
         {step === 'email'
           ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} /></label>}
+          : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(codeDigits(e.target.value))} /></label>}
         {err && <div className="alert err" role="alert">{err}<DoorButtons doors={doors} /></div>}
         {step === 'email' && captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => send(null, t)} />}
         <button className="btn" disabled={busy}>{busy ? 'لحظة…' : step === 'email' ? 'أرسل الرمز' : 'دخول'}</button>

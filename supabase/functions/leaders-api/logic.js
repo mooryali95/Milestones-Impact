@@ -445,9 +445,16 @@ export function seededShuffle(list, seed) {
 export const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
 export const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 254;
 
+// الأرقام العربية المشرقية (٠-٩) والفارسية (۰-۹) إلى 0-9. لوحة المفاتيح العربية تكتبها، و\d في JavaScript لا يطابقها،
+// فكان رمز الدخول يُمحى والجوال يُرفض (فحص الجاهزية p-entry-1). المصدر الواحد لكل رقم يكتبه الإنسان في الواجهة أو يصل الخادم.
+// U+0660 وU+06F0 ينتهيان بصفر، فآخر أربع بتات في كل منهما هي قيمة الرقم.
+export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 15));
+// رمز الدخول كما يُكتب أو يُلصق في حقله: ستة أرقام لاتينية (randomCode في core.ts)، في دخول المشارك والجهة والخبير
+export const codeDigits = (v) => latinDigits(v).replace(/\D/g, '').slice(0, 6);
+
 // جوال سعودي أو دولي، يُحفظ بصيغة موحدة تبدأ بـ +
 export function normalizePhone(p) {
-  const d = String(p || '').replace(/[^\d+]/g, '');
+  const d = latinDigits(p || '').replace(/[^\d+]/g, '');
   if (!d) return null;
   if (/^05\d{8}$/.test(d)) return '+966' + d.slice(1);
   if (/^5\d{8}$/.test(d)) return '+966' + d;
@@ -2013,7 +2020,7 @@ import { resolveStages } from './journey.js';
 export const EXPERT_ROLES = ['coach', 'advisor', 'specialist', 'assessor', 'mentor'];
 const pickSet = (v, allowed) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => allowed.includes(x)))];
 const txt = (v, max) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
-const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(latinDigits(v).trim())); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
 // الحقول التي يكتبها الخبير بنفسه (طلب الانضمام) أو الإدارة. withAdmin يضيف السعر والملاحظة
 export function cleanExpert(b, { withAdmin = false } = {}) {
   const out = {

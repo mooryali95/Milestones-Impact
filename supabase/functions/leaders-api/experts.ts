@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertStats, googleIdentity, isEmail, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -472,7 +472,7 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
   if (!ch || new Date(ch.expires_at) < new Date()) throw new Fail('الرمز منتهي، اطلب رمزًا جديدًا', 400, 'expired');
   // المحاولة تُحجز ذريًا قبل المقارنة (الملحق 1، M2)
   await reserveCodeAttempt('expert_challenges', ch);
-  if (ch.code_hash !== await hash(String(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
+  if (ch.code_hash !== await hash(latinDigits(b.code || '').trim())) throw new Fail('الرمز غير صحيح', 400, 'code');
   const { data: used } = await db.from('expert_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', ch.id).is('consumed_at', null).select('id');
   if (!used?.length) throw new Fail('الرمز مستخدم من قبل', 400, 'used');
   const { data: e } = await db.from('experts').select('*').eq('id', ch.expert_id).maybeSingle();

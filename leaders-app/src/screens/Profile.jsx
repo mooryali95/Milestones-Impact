@@ -7,7 +7,7 @@ import { gateDone } from '../gates.js';
 import SponsorNote from '../SponsorNote.jsx';
 import { call, uploadFile } from '../api.js';
 import { countAr, VIEWER_PERM_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { certNameOk } from '../../../supabase/functions/leaders-api/logic.js';
+import { certNameOk, latinDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
 const METHOD = { email_code: 'رمز البريد', email_link: 'رابط البريد', passkey: 'مفتاح المرور' };
 const deviceOf = (ua = '') => {
@@ -123,7 +123,8 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
   const [error, setError] = useState('');
   const [tried, setTried] = useState(false);   // بعد أول محاولة حفظ ناقصة تُعلَّم الحقول الناقصة في مواضعها
   const formRef = useRef(null);
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  // سنوات الخبرة أرقام فقط، والمشرقية منها (٠-٩) تُحوَّل: حقل type=number كان يُفرغ نفسه بها فيُرفض الحفظ
+  const set = (k) => (e) => setF({ ...f, [k]: k === 'years_experience' ? latinDigits(e.target.value).replace(/\D/g, '').slice(0, 2) : e.target.value });
 
   const empty = REQUIRED.filter((k) => String(f[k]).trim() === '');
   const filled = REQUIRED.length - empty.length;
@@ -231,7 +232,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
             <input className="input" {...need('organization_name')} value={f.organization_name} onChange={set('organization_name')} autoComplete="organization" /></label>
           {!onboarding && sectorField}
           <label className="field"><span>سنوات الخبرة</span>
-            <input className="input" {...need('years_experience')} type="number" min="0" max="60" inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
+            <input className="input" {...need('years_experience')} inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
           <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتيب)</em></span>
             <select className="input" value={f.work_scope} onChange={set('work_scope')}>
               <option value="">لم أحدد بعد</option>

@@ -11,7 +11,7 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, missingFields, modelsFor } from './logic.js';
+import { DIMENSIONS, fieldsFor, latinDigits, missingFields, modelsFor } from './logic.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -187,14 +187,14 @@ function table(model, answers, fieldKey) {
 }
 
 export function parseNumber(v) {
-  const s = String(v ?? '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[٬,\s]/g, '').replace('٫', '.').replace(/[^\d.-]/g, '');
+  const s = latinDigits(v).replace(/[٬,\s]/g, '').replace('٫', '.').replace(/[^\d.-]/g, '');
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
 }
 
 // تاريخ بصيغة 2026-03-15 أو 15/3/2026، وإلا null
 export function parseDate(v) {
-  const s = String(v ?? '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).trim();
+  const s = latinDigits(v).trim();
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
   if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
   m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
