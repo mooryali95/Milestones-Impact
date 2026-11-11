@@ -42,6 +42,18 @@ const world = () => ({
   participants: [P],
   programs: [{ id: 'prog', is_default: true, name: 'البرنامج', final_eval: null }],
   cohorts: [{ id: 'c1', name: 'الدفعة', is_default: true, organization_id: null, status: 'running', program_id: 'prog', starts_on: '2026-10-01' }],
+  // مراحل البرنامج ومتطلباته ومعلمه: بدونها تُبنى رحلة فارغة فلا تقارن المقارنةُ شيئًا
+  journey_stages: [
+    { program_id: 'prog', key: 'start', sort: 1, title_ar: 'البداية', active: true },
+    { program_id: 'prog', key: 'path', sort: 2, title_ar: 'المسار', active: true },
+  ],
+  stage_requirements: [
+    { id: 'r1', program_id: 'prog', stage_key: 'start', code: 'P-INFO', kind: 'auto', sort: 1, title_ar: 'الملف', active: true },
+    { id: 'r2', program_id: 'prog', stage_key: 'start', code: 'A-DONE', kind: 'auto', sort: 2, title_ar: 'القياس', active: true },
+    { id: 'r3', program_id: 'prog', stage_key: 'path', code: 'AP-OK', kind: 'auto', sort: 1, title_ar: 'اعتماد المسار', active: true },
+    { id: 'r4', program_id: 'prog', stage_key: 'path', code: 'P-PROJECT', kind: 'auto', sort: 2, title_ar: 'المبادرة', active: true },
+  ],
+  program_milestones: [{ id: 'm1', program_id: 'prog', active: true, sort: 1, complete: 'stage', stage_key: 'start', title_ar: 'إتمام البداية' }],
   placements: [
     { participant_id: 'p1', dimension: 'milestone', level: 'L2', approved_at: '2026-10-05T08:00:00Z' },
     { participant_id: 'p1', dimension: 'impact', level: 'L1', approved_at: '2026-10-05T08:00:00Z' },
@@ -64,10 +76,18 @@ Deno.test('الرحلة الخفيفة للوحة الجهة: النتيجة ن�
 
   assertEquals(used(b), used(a));
   assert(a.journey.length > 0, 'الرحلة محسوبة فعلًا لا فارغة');
+  // البنود محسومة من حال المشارك (ملفه وقياسه واعتماد مساره، والمبادرة لم تُسمَّ)، والتقدم والمعلم محسوبان
+  assertEquals(a.journey.map((s: any) => [s.key, s.items.map((i: any) => [i.code, i.status])]),
+    [['start', [['P-INFO', 'done'], ['A-DONE', 'done']]], ['path', [['AP-OK', 'done'], ['P-PROJECT', 'pending']]]]);
+  assert(a.progress > 0 && a.progress < 100, 'التقدم محسوب من الرحلة');
+  assertEquals(a.milestones.map((m: any) => m.id), ['m1']);
   assertEquals([b.group, b.continuous], [null, null]);
-  for (const t of ['cohort_group_members', 'handbook_progress', 'model_submissions', 'expert_ratings', 'lab_attempts', 'peer_answers']) {
+  for (const t of ['cohort_group_members', 'handbook_progress', 'expert_ratings', 'lab_attempts', 'peer_answers']) {
     assert(full.reads.includes(t), `الحساب الكامل يقرأ ${t}`);
     assert(!lite.reads.includes(t), `الحساب الخفيف لا يقرأ ${t}`);
   }
+  // النماذج تُقرأ في الرحلة نفسها لاسم المبادرة (initiativeFor)، والنماذج المقيَّمة للتقييم المستمر في الكامل وحده
+  const models = (reads: string[]) => reads.filter((t) => t === 'model_submissions').length;
+  assertEquals([models(full.reads), models(lite.reads)], [2, 1]);
   assert(lite.reads.length < full.reads.length);
 });
