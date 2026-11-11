@@ -70,6 +70,17 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const done = d.sections.filter((s) => s.complete).length;
   const failing = d.checks.filter((x) => !x.ok);
 
+  // الفصل يُفتح والصفحة قائمة خلفه (فلا يدفع حارس المغادرة الحفظ)، ثم تُحمَّل من جديد عند الرجوع فتستبدل الملخص
+  // بنسخة الخادم: يُحفظ الملخص المعدَّل قبل فتح الفصل، وإن تعذّر بقي في مكانه برسالة (p-capstone-3)
+  const openSection = async (id) => {
+    if (summaryDirty) {
+      setBusy('summary'); setMsg(null);
+      const r = await call('capstone.summary', { summary });
+      setBusy('');
+      if (!r.success) return setMsg({ err: `لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: ${r.message}` });
+    }
+    setOpen(id);
+  };
   const saveSummary = async () => {
     setBusy('summary'); setMsg(null);
     const r = await call('capstone.summary', { summary });
@@ -150,7 +161,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
           {c.review?.note && <p className="muted">{c.review.note}</p>}
         </div>
       )}
-      {c.status === 'approved' && <Tracking />}
+      {c.status === 'approved' && <Tracking owner={me.participant.id} />}
       {c.status !== 'approved' && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
@@ -177,7 +188,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               const st = SECTION_STATE(s);
               return (
                 <li key={s.id}>
-                  <button className={`cp-sec${s.complete ? ' done' : ''}`} onClick={() => setOpen(s.id)}>
+                  <button className={`cp-sec${s.complete ? ' done' : ''}`} disabled={busy === 'summary'} onClick={() => openSection(s.id)}>
                     <span className="cp-n">{String(i + 1).padStart(2, '0')}</span>
                     <span className="model-icon sm">{s.icon}</span>
                     <span className="cp-t"><b>{s.title}</b><small>{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}</small></span>

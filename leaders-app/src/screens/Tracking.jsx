@@ -6,7 +6,7 @@
 // يقيس كل المنافع ويؤكدها راعي المبادرة. الملخص من الخادم وحده.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
-import { useUnsavedGuard } from '../unsaved.js';
+import { drafts, useUnsavedGuard } from '../unsaved.js';
 import ChooseExpert from './ChooseExpert.jsx';
 
 const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
@@ -24,17 +24,35 @@ function draftFrom(t, current) {
   };
 }
 
-export default function Tracking() {
+// owner: معرّف المشارك، يميّز مسودته في الجلسة عن مسودة حساب آخر في التبويب نفسه
+export default function Tracking({ owner = '' }) {
   const [d, setD] = useState(null);
   const [v, setV] = useState(null);
+  // النموذج كما فُتح، لمعرفة هل تغيّر فيه شيء
+  const [base, setBase] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   // النموذج مغلق، أو مفتوح لتحديث الشهر («update») أو لمراجعة الأثر («checkpoint»)
   const [open, setOpen] = useState('');
   const apply = (r) => { setD(r); if (r.success) setV(draftFrom(r.tracking, r.current)); };
-  useEffect(() => { call('tracking.get').then(apply); }, []);
-  // التحديث الشهري يُحفظ بزر واحد؛ إغلاق الصفحة والنموذج مفتوح يحذّر
-  useUnsavedGuard(open);
+  const key = `tracking:${owner}`;
+  useEffect(() => {
+    call('tracking.get').then((r) => {
+      apply(r);
+      // ما تُرك في النموذج حين غادر الشاشة يعود لشهره نفسه، ما دام التحديث ممكنًا (p-capstone-3، تدقيق 2026-11-11)
+      const saved = drafts.take(key);
+      const s = r.success ? r.tracking.summary : null;
+      const locked = r.current?.verify && ['pending', 'confirmed'].includes(r.current.verify.status);
+      if (!saved?.v || !s || saved.period !== s.current || !s.can_update || locked || !['update', 'checkpoint'].includes(saved.mode)
+        || (saved.mode === 'checkpoint' && !s.due.checkpoint)) return;
+      setV(draftFrom(r.tracking, saved.v)); setBase(''); setOpen(saved.mode);
+      setMsg({ info: 'أعدنا ما كتبته قبل أن تغادر الصفحة، ولم يُحفظ بعد. راجعه ثم احفظه.' });
+    });
+  }, []);
+  // التحديث الشهري يُحفظ بزر واحد، وحفظ مراجعة الأثر يرسل إلى الراعي، فلا يُحفظ آليًا: إغلاق الصفحة وفي النموذج
+  // تعديل يحذّر، ومغادرة الشاشة داخل التطبيق تبقي ما كُتب مسودة في الجلسة تعود عند الرجوع
+  const dirty = !!open && !!v && JSON.stringify(v) !== base;
+  useUnsavedGuard(dirty, () => drafts.save(key, { period: d?.tracking?.summary?.current, mode: open, v }));
 
   if (!d) return <section className="card"><div className="spinner" /></section>;
   if (!d.success) return null;
@@ -46,7 +64,10 @@ export default function Tracking() {
   const verifying = d.current?.verify && ['pending', 'confirmed'].includes(d.current.verify.status);
   const editable = s.can_update && !verifying;
   const cp = open === 'checkpoint' ? checkpoint : null;
-  const start = (mode) => { setV(draftFrom(t, mode === 'checkpoint' && redo ? redo : d.current)); setMsg(null); setOpen(mode); };
+  const start = (mode) => {
+    const first = draftFrom(t, mode === 'checkpoint' && redo ? redo : d.current);
+    setV(first); setBase(JSON.stringify(first)); setMsg(null); setOpen(mode);
+  };
   const monthLabel = d.current ? `عدّل تحديث ${monthName(s.current)}` : `حدّث متابعة ${monthName(s.current)}`;
   const setM = (k, patch) => setV({ ...v, milestones: { ...v.milestones, [k]: { ...v.milestones[k], ...patch } } });
   const setB = (k, patch) => setV({ ...v, benefits: { ...v.benefits, [k]: { ...v.benefits[k], ...patch } } });
@@ -100,6 +121,7 @@ export default function Tracking() {
 
       {open && v && (
         <div className="tr-form">
+          {msg?.info && <div className="alert info" role="status">{msg.info}</div>}
           {cp && <div className="alert info">{cp.title}: اكتب القيمة الحالية لكل منفعة، وما تغيّر فعلًا في الجهة ودليله. يصل الراعي رابطًا يؤكد به الأرقام.</div>}
           <h3>المعالم</h3>
           {t.state.milestones.map((m) => (

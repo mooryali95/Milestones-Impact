@@ -62,3 +62,75 @@ test('الوثيقة المعادة تعرض ملاحظات من أعادها آ
   await expect(page.getByRole('heading', { name: 'ملاحظات راعي المبادرة' })).toBeVisible();
   await expect(page.getByText('ملاحظة الراعي القديمة: قلّص النطاق')).toBeVisible();
 });
+
+// p-capstone-3: الصفحة تبقى قائمة خلف الفصل المفتوح فلا يدفع حارس المغادرة الحفظ، ثم تُحمَّل عند الرجوع فتستبدل الملخص
+const MODEL = { success: true, initiative: 'رقمنة خدمات المستفيدين', capstone: { locked: false }, submission: null,
+  model: { id: 'm-wbs', key: 'wbs', title_ar: 'هيكل تجزئة العمل', dimension: 'milestone', min_level: 'beginner', points: 10, summary_ar: '', fields: [] } };
+test('الملخص التنفيذي يُحفظ قبل فتح فصل، ويبقى بعد الرجوع', async ({ page }) => {
+  let saved = '';
+  const calls = await open(page, {
+    'capstone.get': () => capstone({ capstone: { summary: saved } }),
+    'capstone.summary': (b) => { saved = b.summary; return { success: true }; },
+    'models.get': MODEL,
+  });
+  await toCapstone(page);
+  const box = page.getByRole('textbox', { name: 'الملخص التنفيذي' });
+  await box.fill('المشكلة: انتظار المستفيد عشرة أيام. الحل: خدمة رقمية.');
+  await page.getByRole('button', { name: /هيكل تجزئة العمل/ }).click();
+  await page.getByRole('button', { name: '→ وثيقة مبادرتك' }).click();
+  await expect(box).toHaveValue('المشكلة: انتظار المستفيد عشرة أيام. الحل: خدمة رقمية.');
+  const order = calls.map((c) => c.action);
+  expect(order.indexOf('capstone.summary')).toBeGreaterThan(-1);
+  expect(order.indexOf('capstone.summary')).toBeLessThan(order.indexOf('models.get'));
+});
+
+test('تعذّر حفظ الملخص: لا يُفتح الفصل ويبقى النص برسالة', async ({ page }) => {
+  await open(page, { 'capstone.summary': { success: false, message: 'تعذّر الاتصال' }, 'models.get': MODEL });
+  await toCapstone(page);
+  const box = page.getByRole('textbox', { name: 'الملخص التنفيذي' });
+  await box.fill('نص لم يُحفظ بعد');
+  await page.getByRole('button', { name: /هيكل تجزئة العمل/ }).click();
+  await expect(page.getByText('لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: تعذّر الاتصال')).toBeVisible();
+  await expect(box).toHaveValue('نص لم يُحفظ بعد');
+});
+
+// متابعة الشهر: حفظها بزر (ومراجعة الأثر ترسل إلى الراعي) فلا تُحفظ آليًا، وكانت مغادرة الشاشة تُسقط النموذج كله
+function tracking() {
+  const current = new Date().toISOString().slice(0, 7);
+  return {
+    summary: {
+      day: 40, active: true, current, health: 'green', health_title: 'على المسار',
+      milestones: { total: 1, done: 0, due: 0, late: 0, at_risk: 0, on_time: null }, benefits: { total: 1, measured: 0, realization: null },
+      updates: 0, last_at: null, due: { update: true, checkpoint: null, resubmit: false }, can_update: true, checkpoints: [],
+    },
+    plan: { start: null, end: null },
+    state: {
+      milestones: [{ key: 'm0', title: 'الإطلاق', due: '2027-01-01', status: 'on_track' }],
+      benefits: [{ key: 'b0', title: 'رضا المستفيد', indicator: 'نسبة الرضا', baseline: '60', target: '80', numeric: true, value: '', realization: null }],
+    },
+    updates: [], statuses: { on_track: 'في موعده', at_risk: 'معرّض للتأخر', late: 'متأخر', done: 'تحقق', dropped: 'أُلغي بقرار' },
+    health: { green: 'على المسار' }, checkpoints: [],
+  };
+}
+test('متابعة الشهر: ما كُتب ولم يُحفظ يعود بعد التنقل بين الشاشات، ولا يُرسل آليًا', async ({ page }) => {
+  const calls = await open(page, {
+    'capstone.get': capstone({ capstone: { status: 'approved', status_title: 'معتمد' } }),
+    'tracking.get': { success: true, tracking: tracking(), current: null },
+  });
+  await toCapstone(page);
+  await page.getByRole('button', { name: /حدّث متابعة/ }).click();
+  await page.getByRole('textbox', { name: 'ما جرى هذا الشهر' }).fill('أطلقنا النسخة التجريبية في فرعين');
+  await page.getByRole('textbox', { name: 'القيمة الحالية لـرضا المستفيد' }).fill('71');
+  await page.getByRole('button', { name: 'رحلتي' }).first().click();
+  await toCapstone(page);
+  await expect(page.getByText('أعدنا ما كتبته قبل أن تغادر الصفحة، ولم يُحفظ بعد.')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'ما جرى هذا الشهر' })).toHaveValue('أطلقنا النسخة التجريبية في فرعين');
+  await expect(page.getByRole('textbox', { name: 'القيمة الحالية لـرضا المستفيد' })).toHaveValue('71');
+  expect(calls.map((c) => c.action)).not.toContain('tracking.save');
+  // والمسودة تعود مرة واحدة: بعد الإلغاء والتنقل لا ترجع
+  await page.getByRole('button', { name: 'إلغاء' }).click();
+  await page.getByRole('button', { name: 'رحلتي' }).first().click();
+  await toCapstone(page);
+  await expect(page.getByRole('button', { name: /حدّث متابعة/ })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'ما جرى هذا الشهر' })).toHaveCount(0);
+});
