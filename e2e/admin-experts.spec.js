@@ -59,6 +59,16 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-set-status')).toMatchObject({ id: 'e2', status: 'active' });
 });
 
+// التدقيق 2026-11-11 (admin-eval-13): صف الخبير كان يُفتح بالفأرة وحدها، فلا طريق بلوحة المفاتيح لملف الخبير
+test('شبكة الخبراء: صف الخبير يبلغه التبويب ويُفتح بـEnter', async ({ page }) => {
+  await admin(page);
+  const row = page.locator('.ex-table tbody tr').filter({ hasText: 'خالد العتيبي' });
+  await expect(row).toHaveAttribute('tabindex', '0');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'خالد العتيبي' })).toBeVisible();
+});
+
 test('إضافة خبير بدعوة، والسعر حقل إداري', async ({ page }) => {
   const calls = await admin(page);
   await page.getByRole('button', { name: '+ خبير' }).click();
