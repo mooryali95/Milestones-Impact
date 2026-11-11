@@ -181,3 +181,29 @@ Deno.test('دورة طلب الرعاية وإلغائه: ثلاثة طلبات 
     });
   } finally { restore(); unconfig(); }
 });
+
+// server-sec-3: المسمى يكتبه صاحب الملف، فلا يدخل بريد المالك وسمًا (رابط تصيّد أو صورة تتبع من مرسل المنصة)
+Deno.test('ملف الخبير المدعو: المسمى يصل المالك نصًا مرمّزًا لا رابطًا', async () => {
+  const unconfig = configure();
+  const tables: Record<string, Row[]> = { experts: [{ id: 'ex1', email: 'invited@example.com', status: 'invited', source: 'admin' }], audit_log: [], mail_events: [] };
+  const restore = install(tables);
+  const real = globalThis.fetch;
+  const sent: { to: string; html: string }[] = [];
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    if (String(url).includes('resend.com')) {
+      const b = JSON.parse(String(init?.body));
+      sent.push({ to: b.to[0], html: b.html });
+      return new Response(JSON.stringify({ id: 're_1' }));
+    }
+    return new Response('ok');
+  }) as typeof fetch;
+  try {
+    const title = '<a href="https://evil.example/login">راجع الطلب من هنا</a><img src="https://evil.example/t.gif">';
+    await E.portalProfileSave(tables.experts[0], form('invited@example.com', { title }));
+    await new Promise((r) => setTimeout(r, 20));   // تنبيه المالك يُرسل بلا انتظار
+    assertEquals(sent.map((m) => m.to), ['owner@example.com']);
+    const html = sent[0].html;
+    assert(!html.includes('<a href="https://evil') && !html.includes('<img src="https://evil'), 'لا وسم من المسمى في البريد');
+    assert(html.includes('&lt;a href=&quot;https://evil.example/login&quot;&gt;'), 'المسمى يظهر نصًا مرمّزًا');
+  } finally { globalThis.fetch = real; restore(); unconfig(); }
+});

@@ -50,11 +50,12 @@ const requestView = (r: any, answers: any[], viewerId: string | null) => ({
   answers: answers.map((a) => answerView(a, viewerId)),
 });
 
+// text نص عادي لا HTML: يُرمَّز هنا مرة لكل من يستدعيها، فاسم الخبير وغيره لا يدخل البريد وسومًا (server-sec-3)
 async function mailAsker(requestId: string, subject: string, text: string) {
   const { data: r } = await db.from('peer_requests').select('participants(email, full_name)').eq('id', requestId).maybeSingle();
   const p = (r as any)?.participants;
   if (!p?.email) return;
-  await sendMail(p.email, subject, mailShell(`أهلًا ${firstName(p.full_name)}`, mailText(text) + mailButton(SITES.leaders, 'افتح رحلتك'))).catch(() => {});
+  await sendMail(p.email, subject, mailShell(`أهلًا ${firstName(p.full_name)}`, mailText(esc(text)) + mailButton(SITES.leaders, 'افتح رحلتك'))).catch(() => {});
 }
 
 // ── للمشارك ──
