@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:4302';
 const FN = /supabase\.co\/functions\/v1\/user-api/;
+const KEYS = ['creation', 'innovation', 'establishment', 'making'].flatMap((t) => [1, 2, 3, 4].map((p) => `${t}-${p}`));
 
 // جلسة محفوظة محليًا، والخادم يعيد التسجيل نفسه، ويحفظ ما يُرسل إليه
 async function seed(page, registration = {}) {
@@ -120,4 +121,55 @@ test('تذييل التطبيق وشاشة التحليل الديموغرافي
   const demo = page.getByRole('dialog', { name: 'التحليل الديموغرافي' });
   await expect(demo.locator('.demo-privacy')).toContainText('لا يحق لك مشاركتها');
   await expect(demo.locator('.demo-privacy').getByRole('link', { name: 'سياسة الخصوصية' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/privacy.html');
+});
+
+// ── visitor-9: الهاتف: عمود الحالة في النموذج النهائي يُبلغ بالتمرير، والإشعار الطويل يلتف ──
+
+test('على الهاتف يُمرَّر جدول النموذج النهائي حتى عمود الحالة', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const dates = Object.fromEntries(KEYS.map((k, i) => [k, `2099-0${1 + (i % 9)}-${10 + i}`]));
+  await seed(page, { dates, confirmed: { 'creation-1': true }, submitted: true });
+  await page.goto(BASE + '/#/output');
+  const th = page.locator('.output-table th', { hasText: 'الحالة' });
+  await expect(th).toBeAttached();
+  const r = await th.evaluate((el) => {
+    // أقرب حاوية يمررها المستخدم أفقيًا (overflow-x: auto أو scroll) وفيها ما يتجاوزها
+    let box = el.parentElement;
+    while (box && !(['auto', 'scroll'].includes(getComputedStyle(box).overflowX) && box.scrollWidth > box.clientWidth)) box = box.parentElement;
+    if (!box || box === document.body || box === document.documentElement) return { scroller: false };
+    box.scrollLeft = -box.scrollWidth; // RTL: آخر الأعمدة في أقصى اليسار
+    const a = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    return { scroller: true, inside: a.left >= b.left - 1 && a.right <= b.right + 1, onScreen: a.left >= 0 && a.right <= innerWidth };
+  });
+  expect(r).toEqual({ scroller: true, inside: true, onScreen: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('الإشعار الطويل يلتف داخل الشاشة ولا يفيض عنها', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(FN, async (route) => {
+    const body = route.request().postDataJSON();
+    const res = body.action === 'verify'
+      ? { success: true, mode: 'new', token: 't', registration: { id: 'r1', name: body.name, phone: body.phone, email: body.email, dates: {}, confirmed: {} } }
+      : { success: true, mode: 'new' };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(res) });
+  });
+  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
+  // ترحيب باسم من 75 حرفًا (الحد 80): كان سطرًا واحدًا يتجاوز حافة الشاشة
+  await page.locator('#reg-name').fill('عبدالرحمن بن عبدالعزيز بن محمد بن عبدالله بن سليمان بن إبراهيم آل عبدالرحمن');
+  await page.locator('#reg-phone').fill('0500000000');
+  await page.locator('#reg-email').fill('user@example.com');
+  await page.getByRole('button', { name: /إرسال رمز التحقق/ }).click();
+  await page.locator('#reg-otp').fill('123456');
+  await page.getByRole('button', { name: /تحقق/ }).click();
+  const toast = page.locator('.toast', { hasText: 'تم تسجيلك بنجاح' });
+  await expect(toast).toBeVisible();
+  const r = await toast.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return { left: b.left >= 0, right: b.right <= innerWidth, fits: el.scrollWidth <= el.clientWidth + 1, wide: b.width > innerWidth * 0.6 };
+  });
+  expect(r).toEqual({ left: true, right: true, fits: true, wide: true });
 });
