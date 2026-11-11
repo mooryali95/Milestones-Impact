@@ -597,7 +597,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     group, project_mode: def.cohort?.project_mode || 'individual', final,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
-      : { ...continuous, events: continuous.events.map(({ comment: _c, ...e }: any) => e) },
+      : continuous && { ...continuous, events: (continuous.events || []).map(({ comment: _c, ...e }: any) => e) },
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'

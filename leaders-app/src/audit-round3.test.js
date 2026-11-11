@@ -60,7 +60,7 @@ describe('8.3 الخروج من الأدوار', () => {
     // السؤال نافذة من التطبيق بثلاثة أزرار (فحص الجاهزية p-entry-9)، والتراجع لا يُخرج
     expect(api).not.toContain('window.confirm');
     expect(read('leaders-app/src/App.jsx')).toContain("if (!(await askSignOut('participant'))) return;");
-    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain("if (await askSignOut('org')) setMe(null);");
+    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain("if (await askSignOut('org')) { setMe(null); setBootError(''); }");
     expect(read('leaders-app/src/screens/ExpertPortal.jsx').match(/if \(await askSignOut\('expert'\)\) onOut\(\);/g)).toHaveLength(2);
   });
 });
