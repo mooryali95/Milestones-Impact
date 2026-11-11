@@ -24,11 +24,16 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
   const [only, setOnly] = useState('all');
   const ver = useRef(0);
   const fails = useRef(0);
+  // تسلسل الإجراءات: سؤال دوري تزامن مع إجراء (أُرسل قبل اكتماله) يحمل حالة أقدم من نتيجة الإجراء فيُهمل،
+  // وإلا أعاد القاعة المغلقة مفتوحة حتى السؤال التالي (التُقط في CI بعد عودة Actions، 2026-11-11)
+  const seq = useRef(0);
   const u = ui;
 
   const load = useCallback(async (force) => {
     if (!cohortId) return;
+    const at = seq.current;
     const r = await call('state', { cohort_id: cohortId, since: force ? 0 : ver.current });
+    if (at !== seq.current) return;
     // إخفاق عابر في السؤال الدوري يصلحه السؤال التالي؛ يُبلَّغ عند أول تحميل، أو حين يتوالى (مرة لا كل ثانيتين)
     if (!r.success) { fails.current += 1; if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message); return; }
     fails.current = 0;
@@ -40,7 +45,9 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
 
   const act = async (key, body, ok) => {
     setBusy(true);
+    seq.current += 1;
     const r = await call(key, body);
+    seq.current += 1;
     setBusy(false);
     if (!r.success) return toast(r.message);
     if (ok) toast(ok);

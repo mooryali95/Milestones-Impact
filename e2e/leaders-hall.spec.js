@@ -54,6 +54,7 @@ test('المشارك: يرى رقم طاولته وفريقه وزملاء طا�
 
 test('الخبير: شاشة العرض آمنة قبل الكشف، وإعادة التقسيم والرجوع مرحلة بتأكيد، والمشاركون بالبحث والتصفية', async ({ page }) => {
   const calls = [];
+  let isClosed = false;
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b.action);
@@ -62,7 +63,10 @@ test('الخبير: شاشة العرض آمنة قبل الكشف، وإعاد�
       'xp.participants': { success: true, items: [], cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
     };
     const closed = { success: true, session: null, topics: [], workshops: [], attendance: { written: 31, eligible: 31, rounds: 3, workshop: 'اليوم التدريبي الأول', reason: null } };
-    await route.fulfill({ json: replies[b.action] || (b.action === 'xp.hall-close' ? closed : b.action.startsWith('xp.hall') ? hall({ admin: true }) : { success: true, items: [] }) });
+    // بعد الإغلاق يرد السؤال الدوري بقاعة مغلقة كما يفعل الخادم، لا بالقاعة المفتوحة
+    if (b.action === 'xp.hall-close') isClosed = true;
+    const state = isClosed ? { success: true, session: null, topics: [], workshops: [] } : hall({ admin: true });
+    await route.fulfill({ json: replies[b.action] || (b.action === 'xp.hall-close' ? closed : b.action.startsWith('xp.hall') ? state : { success: true, items: [] }) });
   });
   await page.addInitScript(() => localStorage.setItem('mi_leaders_expert_session', 'x'.repeat(40)));
   await page.setViewportSize({ width: 390, height: 844 });
@@ -238,4 +242,54 @@ test('المشارك: دخول القاعة يُعاد وحده عند خطأ ع
   await expect(page.locator('.hall-me')).toContainText('أنت في القاعة');
   expect(joins).toBe(2);
   await expect(page.getByText('internal server error')).toHaveCount(0);
+});
+
+// سؤال دوري أُرسل قبل اكتمال الإغلاق ويرد بعده يحمل القاعة مفتوحة: يُهمل ولا يعيدها مفتوحة (التُقط في CI، 2026-11-11)
+test('الخبير: سؤال دوري متزامن مع الإغلاق لا يعيد القاعة مفتوحة', async ({ page }) => {
+  let closed = false;
+  let inflight = 0;
+  let staleServed = 0;
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const replies = {
+      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
+      'xp.participants': { success: true, items: [], cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
+    };
+    if (b.action === 'xp.hall-close') {
+      closed = true;
+      return route.fulfill({ json: { success: true, session: null, topics: [], workshops: [], attendance: { written: 31, eligible: 31, rounds: 3, workshop: 'اليوم التدريبي الأول', reason: null } } });
+    }
+    if (b.action === 'xp.hall') {
+      // ما سُئل قبل الإغلاق يُجاب متأخرًا بحالته القديمة (مفتوحة)، وما بعده مغلقًا
+      if (closed) return route.fulfill({ json: { success: true, session: null, topics: [], workshops: [] } });
+      inflight += 1;
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.fulfill({ json: hall({ admin: true }) });
+      inflight -= 1;
+      if (closed) staleServed += 1;
+      return undefined;
+    }
+    return route.fulfill({ json: replies[b.action] || { success: true, items: [] } });
+  });
+  await page.addInitScript(() => localStorage.setItem('mi_leaders_expert_session', 'x'.repeat(40)));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${APP}x`);
+  const region = page.getByRole('region', { name: 'القاعة الحية' });
+  await expect(region).toContainText('رمز الدخول', { timeout: 10_000 });
+  // أغلق والسؤال الدوري التالي في الطريق
+  await expect.poll(() => inflight, { timeout: 5000 }).toBeGreaterThan(0);
+  page.once('dialog', (d) => d.accept('إغلاق'));
+  await region.getByRole('button', { name: 'إغلاق القاعة' }).click();
+  await expect(region).toContainText('لا قاعة مفتوحة لهذه الدفعة');
+  // من لحظة الإغلاق: هل عادت القاعة مفتوحة ولو لحظة؟ (السؤال التالي يصلحها بعد ثانيتين، فالفحص بالمراقبة لا بالانتظار)
+  await page.evaluate(() => {
+    window.__reopened = false;
+    const el = document.getElementById('xp-hall').closest('section');
+    new MutationObserver(() => { if (el.textContent.includes('رمز الدخول')) window.__reopened = true; }).observe(el, { childList: true, subtree: true, characterData: true });
+  });
+  // الرد القديم وصل بعد الإغلاق
+  await expect.poll(() => staleServed, { timeout: 5000 }).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__reopened)).toBe(false);
+  await expect(region).toContainText('لا قاعة مفتوحة لهذه الدفعة');
 });
