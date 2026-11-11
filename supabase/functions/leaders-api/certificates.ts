@@ -419,15 +419,24 @@ export async function preview(b: Body) {
 }
 
 // من اعتُمد تقييمه الختامي بنجاح ولا شهادة سارية أو معلّقة له: ينتظر تأكيد اسمه، أو حُجبت شهادته لتوقف الإصدار
-// أو تعذّرها. يُعرض في لوحة الشهادات فلا يُحجب أحد بصمت. حساب العرض خارجه كبقية القوائم
-async function heldCertificates() {
-  const fe = await all((f, t) => db.from('final_evaluations').select('participant_id, participants!inner(full_name, name_confirmed_at, is_demo)')
+// أو تعذّرها. يُعرض في لوحة الشهادات فلا يُحجب أحد بصمت. حساب العرض خارجه كبقية القوائم.
+// ومن أُلغيت شهادته بعد آخر اعتماد له (استرداد الرسوم أو إلغاء يدوي) صدرت شهادته ثم أُلغيت عمدًا، فليس منهم،
+// وحالها بسببها في سجل الشهادات: لا يُقال «لم تصدر» ولا يُدلّ على إصدار جديد يخالف الإلغاء. والإلغاء قبل آخر
+// اعتماد (بقرار ختامي سابق مثلًا) لا يُخرجه، فذلك الاعتماد نفسه كان سيصدر شهادة جديدة لو كان الإصدار مفعّلًا
+export async function heldCertificates() {
+  const fe = await all((f, t) => db.from('final_evaluations').select('participant_id, decided_at, participants!inner(full_name, name_confirmed_at, is_demo)')
     .eq('status', 'approved').in('decision', PASSING).eq('participants.is_demo', false).order('participant_id').range(f, t));
   if (!fe.length) return [];
   const ids = [...new Set(fe.map((r: any) => r.participant_id as string))];
-  const have = new Set((await allFor(ids, () => db.from('certificates').select('participant_id').in('status', ['valid', 'suspended']))).map((c: any) => c.participant_id));
+  const certs = await allFor(ids, () => db.from('certificates').select('participant_id, status, revoked_at').in('status', ['valid', 'suspended', 'revoked']));
+  // آخر اعتماد ناجح لكل مشارك (قد يكون له أكثر من برنامج)
+  const last = new Map<string, number>();
+  for (const r of fe) last.set(r.participant_id, Math.max(last.get(r.participant_id) ?? -Infinity, Date.parse(r.decided_at) || -Infinity));
+  // الملغاة تُخرجه ما لم يثبت أنها أُلغيت قبل آخر اعتماد، فلا يُدلّ على إصدار عند الشك
+  const issued = new Set(certs.filter((c: any) => c.status === 'valid' || c.status === 'suspended'
+    || (c.status === 'revoked' && !(Date.parse(c.revoked_at) < (last.get(c.participant_id) ?? -Infinity)))).map((c: any) => c.participant_id));
   const out = new Map<string, any>();
-  for (const r of fe) if (!have.has(r.participant_id)) out.set(r.participant_id, { participant_id: r.participant_id, full_name: r.participants?.full_name, awaiting_name: !r.participants?.name_confirmed_at });
+  for (const r of fe) if (!issued.has(r.participant_id)) out.set(r.participant_id, { participant_id: r.participant_id, full_name: r.participants?.full_name, awaiting_name: !r.participants?.name_confirmed_at });
   return [...out.values()];
 }
 

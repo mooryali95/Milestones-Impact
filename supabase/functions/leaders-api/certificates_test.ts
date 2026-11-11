@@ -1,7 +1,7 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { certificateNotice, checkCertificate, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
+const { certificateNotice, checkCertificate, heldCertificates, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
 const { db, Fail, finalDecisionMail } = await import('./core.ts');
 
 const K1 = 'k1-'.padEnd(40, 'a');
@@ -48,14 +48,25 @@ Deno.test('معاينة النموذج «شهادة إتمام بنجاح» بق
   assert(r.certificate.serial.endsWith('-SAMPLE'));
 });
 
-// قاعدة مُحاكاة لجدول بعينه: كل استعلام يعيد ما في tables[table]، والإدراج يُسجَّل في log. تُعاد الأصلية بعد الاختبار
+// قاعدة مُحاكاة لجدول بعينه: كل استعلام يعيد ما في tables[table]، والإدراج يُسجَّل في log. تُعاد الأصلية بعد الاختبار.
+// إن كان ما في الجدول صفوفًا رُشّحت بـ eq وin على الأعمدة المباشرة كما تفعل القاعدة، وأعمدة الجداول المضمّنة تُترك
 function fakeDb(tables: Record<string, unknown>, log: [string, any][]) {
   const orig = db.from;
   (db as any).from = (table: string) => {
+    const where: ((r: any) => boolean)[] = [];
     const q: any = new Proxy({}, {
       get: (_t, k) => k === 'then'
-        ? (res: any, rej: any) => Promise.resolve({ data: tables[table] ?? null, error: null }).then(res, rej)
-        : (...args: any[]) => { if (k === 'insert' || k === 'update') log.push([table, args[0]]); return q; },
+        ? (res: any, rej: any) => {
+          const data = tables[table] ?? null;
+          return Promise.resolve({ data: Array.isArray(data) ? data.filter((r) => where.every((w) => w(r))) : data, error: null }).then(res, rej);
+        }
+        : (...args: any[]) => {
+          if (k === 'insert' || k === 'update') log.push([table, args[0]]);
+          const [col, v] = args;
+          if (k === 'eq' && !/[.>]/.test(col)) where.push((r) => r[col] === v);
+          if (k === 'in' && !/[.>]/.test(col)) where.push((r) => v.includes(r[col]));
+          return q;
+        },
     });
     return q;
   };
@@ -85,4 +96,34 @@ Deno.test('بريد القرار لا يَعِد بشهادة لم تصدر، و
   assert(certificateNotice({ awaiting_name: true }).includes('حين يؤكد المشارك اسمه'));
   assert(certificateNotice({ failed: true }).includes('تعذّر إصدار الشهادة'));
   assertEquals(certificateNotice(null), 'اعتُمد التقييم');
+});
+
+// قائمة «لم تصدر شهاداتهم» تقول الحقيقة: من أُلغيت شهادته بعد اعتماده (استرداد الرسوم أو إلغاء يدوي) صدرت شهادته
+// ثم أُلغيت عمدًا، فلا يظهر فيها ولا يُدلّ على إعادة إصداره. الإلغاء قبل آخر اعتماد لا يُخرجه، ولا الاستبدال
+Deno.test('من أُلغيت شهادته بعد اعتماده ليس ممن لم تصدر شهاداتهم، ومن أُلغيت قبل آخر اعتماد له منهم', async () => {
+  const fe = (participant_id: string, decided_at: string | null, confirmed = true) => ({
+    participant_id, decided_at, status: 'approved', decision: 'pass',
+    participants: { full_name: `مشارك ${participant_id}`, name_confirmed_at: confirmed ? '2026-10-01T08:00:00+00:00' : null, is_demo: false },
+  });
+  const restore = fakeDb({
+    final_evaluations: [
+      fe('refund', '2026-11-01T10:00:00+00:00'), fe('manual', '2026-11-01T10:00:00+00:00'), fe('earlier', '2026-11-08T10:00:00+00:00'),
+      fe('two-programs', '2026-11-01T10:00:00+00:00'), fe('two-programs', '2026-11-09T10:00:00+00:00'),
+      fe('replaced', '2026-11-01T10:00:00+00:00'), fe('awaiting', '2026-11-01T10:00:00+00:00', false), fe('valid', '2026-11-01T10:00:00+00:00'),
+      fe('no-date', null), { ...fe('returned', '2026-11-01T10:00:00+00:00'), status: 'returned' },
+    ],
+    certificates: [
+      { participant_id: 'refund', status: 'revoked', revoked_at: '2026-11-05T09:00:00.123456+00:00' }, // استرداد الرسوم بعد الاعتماد
+      { participant_id: 'manual', status: 'revoked', revoked_at: '2026-11-01T10:00:05+00:00' }, // «صدرت بالخطأ» بعد الاعتماد بلحظات
+      { participant_id: 'earlier', status: 'revoked', revoked_at: '2026-11-03T09:00:00+00:00' }, // بقرار ختامي سابق، ثم اعتُمد ناجحًا
+      { participant_id: 'two-programs', status: 'revoked', revoked_at: '2026-11-05T09:00:00+00:00' }, // بين اعتمادين، وآخرهما بعده
+      { participant_id: 'replaced', status: 'replaced', revoked_at: '2026-11-01T10:00:01+00:00' }, // استُبدلت المعلّقة ثم حُجب الإصدار
+      { participant_id: 'valid', status: 'valid', revoked_at: null },
+      { participant_id: 'no-date', status: 'revoked', revoked_at: '2026-11-05T09:00:00+00:00' }, // لا يُعرف وقت الاعتماد: لا يُدلّ على إصدار
+    ],
+  }, []);
+  try {
+    const held = await heldCertificates();
+    assertEquals(held.map((h: any) => [h.participant_id, h.awaiting_name]), [['earlier', false], ['two-programs', false], ['replaced', false], ['awaiting', true]]);
+  } finally { restore(); }
 });

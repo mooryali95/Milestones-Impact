@@ -98,7 +98,9 @@ describe('إيقاف الإصدار التلقائي لا يحجب بصمت', ()
     expect(read('supabase/functions/leaders-api/index.ts')).toContain('return { ...r, certificate: (certificate as any)?.serial ? certificate : null };');
   });
   it('من لم تصدر شهادته يظهر في لوحة الشهادات', () => {
-    expect(cert).toMatch(/async function heldCertificates\(\) \{[\s\S]*\.eq\('status', 'approved'\)\.in\('decision', PASSING\)[\s\S]*\.in\('status', \['valid', 'suspended'\]\)/);
+    expect(cert).toMatch(/async function heldCertificates\(\) \{[\s\S]*\.eq\('status', 'approved'\)\.in\('decision', PASSING\)[\s\S]*\.in\('status', \['valid', 'suspended', 'revoked'\]\)/);
+    // الملغاة بعد آخر اعتماد (استرداد أو إلغاء يدوي) ليست «لم تصدر»، والحالات كلها في certificates_test.ts
+    expect(cert).toContain("(c.status === 'revoked' && !(Date.parse(c.revoked_at) < (last.get(c.participant_id) ?? -Infinity)))");
     expect(cert).toMatch(/computed_hours: programHours\(def\.requirements\), held \};/);
     expect(read('admin-app/src/screens/Certificates.jsx')).toContain('setHeld(r.held || [])');
   });
