@@ -93,7 +93,7 @@ describe('إيقاف الإصدار التلقائي لا يحجب بصمت', ()
     expect(vote).toContain('const held = !!(certificate?.skipped || certificate?.failed);');
     expect(vote).toContain('finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held })');
     expect(vote).toContain('notice: certificateNotice(certificate)');
-    expect(read('admin-app/src/screens/FinalEval.jsx')).toContain('toast(r.notice || ok); load();');
+    expect(read('admin-app/src/screens/FinalEval.jsx')).toContain("toast(r.notice || (typeof ok === 'function' ? ok(r) : ok)); load();");
     // تأكيد الاسم يعيد الشهادة الصادرة وحدها، لا الانتظار ولا الحجب
     expect(read('supabase/functions/leaders-api/index.ts')).toContain('return { ...r, certificate: (certificate as any)?.serial ? certificate : null };');
   });

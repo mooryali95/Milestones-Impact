@@ -284,6 +284,13 @@ export function approvalState(votes, config, { largeAdjust = false } = {}) {
   return { done: yes >= need, returned: no >= majority, need, yes, no, large_adjust: largeAdjust };
 }
 
+// إشعار الصوت من حال التقييم الفعلية بعده (رد vote)، لا نص ثابت: صوت إعادة واحد لا يعيد التقييم في لجنة
+// الأغلبية قبل بلوغها، ولا في طريقة الخبير بعد اعتماد سابق (التدقيق 2026-11-11)
+export function voteNoticeAr(vote, status, approval = {}) {
+  if (vote === 'return') return status === 'returned' ? 'أُعيد للمراجعة' : `سُجّلت إعادتك، والتقييم ما زال بانتظار الاعتماد (أصوات الإعادة ${approval.no ?? 1}، والاعتماد ${approval.yes ?? 0} من ${approval.need ?? 1})`;
+  return status === 'approved' ? 'اعتُمد التقييم' : `سُجل اعتمادك: ${approval.yes ?? 1} من ${approval.need ?? 1}`;
+}
+
 // من عدّل التقييم: من رفعه ومن حفظ تعديلًا عليه في مسودة (adjust.edited_by). كلهم لا يعتمدون ما عدّلوه
 export function finalEditors(record) {
   const list = [record?.submitted_by, ...(Array.isArray(record?.adjust?.edited_by) ? record.adjust.edited_by : [])];

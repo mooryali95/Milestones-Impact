@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L, withRunningReason } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
-import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
+import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED, voteNoticeAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
 const when = (d) => (d ? new Date(d).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' }) : '');
@@ -31,19 +31,24 @@ export function FinalEvalCard({ participantId, canWrite }) {
   const locked = !canWrite || status === 'approved' || status === 'pending';
   const setComp = (k, f, v) => setAdj({ ...adj, components: { ...adj.components, [k]: { ...(adj.components?.[k] || {}), [f]: v } } });
   const clearComp = (k) => { const c = { ...adj.components }; delete c[k]; setAdj({ ...adj, components: c }); };
+  // ok نص النجاح، أو دالة تبنيه من رد الخادم (حال التقييم الفعلية بعد الصوت)
   const run = async (action, body, ok) => {
     setBusy(true);
     const r = await L(action, { participant_id: participantId, ...body });
     setBusy(false);
     if (!r.success) return toast(r.message);
-    toast(r.notice || ok); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
+    toast(r.notice || (typeof ok === 'function' ? ok(r) : ok)); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
   };
   const voteApprove = async () => {
-    if (await confirm(finalApproveConfirm(live, d.approval), { ok: 'اعتمد' })) run('admin.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك');
+    if (await confirm(finalApproveConfirm(live, d.approval), { ok: 'اعتمد' })) run('admin.final-eval-vote', { vote: 'approve' }, (r) => voteNoticeAr('approve', r.status, r.approval));
   };
   const voteReturn = async () => {
     const note = await prompt('سبب الإعادة (يصل لمن رفع التقييم):', '');
-    if (note) run('admin.final-eval-vote', { vote: 'return', note }, 'أُعيد للمراجعة');
+    if (note) run('admin.final-eval-vote', { vote: 'return', note }, (r) => voteNoticeAr('return', r.status, r.approval));
+  };
+  const withdraw = async () => {
+    if (!(await confirm('يعود التقييم مسودة وتسقط الأصوات المسجلة عليه، فتعدّله ثم ترفعه للاعتماد من جديد. متابعة؟'))) return;
+    run('admin.final-eval-save', { adjust: adj }, 'سُحب التقييم وعاد مسودة');
   };
   const reopen = async () => {
     const note = await prompt('سبب إعادة فتح التقييم المعتمد:', '');
@@ -119,6 +124,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
           {status === 'pending' && <>
             <button className="btn-sm primary" disabled={busy || !!d.vote_block} title={d.vote_block || ''} onClick={voteApprove}>اعتمد</button>
             <button className="btn-sm ghost" disabled={busy || !!d.vote_block} onClick={voteReturn}>أعِد للمراجعة</button>
+            {d.can_withdraw && <button className="btn-sm ghost" disabled={busy} onClick={withdraw}>اسحب للتعديل</button>}
             <small className="la-muted">{FINAL_APPROVAL_AR[live.config.approval]}{d.approval.large_adjust ? ' + توقيع ثانٍ للتعديل الكبير' : ''}: {d.approval.yes} من {d.approval.need}</small>
             {d.vote_block && <small className="la-muted">{d.vote_block}</small>}
           </>}
