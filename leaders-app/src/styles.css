@@ -1194,6 +1194,15 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .tr-log li p { margin: 0; color: var(--muted); }
 .tr-log .chip { justify-self: start; }
 .tr-scroll { overflow-x: auto; }
+/* تأكيد الأثر على الجوال: بطاقة لكل منفعة، ووسم كل قيمة من data-label، فالأرقام المطلوب تأكيدها كلها في الإطار */
+@media screen and (max-width: 640px) {
+  .oc-benefits thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .oc-benefits, .oc-benefits tbody { display: block; min-width: 0; }
+  .oc-benefits tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .mtable.oc-benefits td { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  .mtable.oc-benefits td.oc-title { grid-column: 1 / -1; font-weight: 600; }
+  .oc-benefits td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 14px; }
+}
 .tr-ms { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 14px; }
 .tr-ms small { color: var(--muted); }
 .cx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }

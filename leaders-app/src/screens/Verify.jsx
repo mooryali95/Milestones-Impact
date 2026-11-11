@@ -48,7 +48,7 @@ export default function Verify() {
   const c = r?.certificate;
   return (
     <div className="vf">
-      <p className="eyebrow" style={{ textAlign: 'center' }}>التحقق من الشهادات · Certificate verification</p>
+      <h1 className="eyebrow" style={{ textAlign: 'center' }}>التحقق من الشهادات · Certificate verification</h1>
       <div className="vf-card" aria-live="polite" data-tour="verify">
         {serial && !r && <div className="spinner" aria-label="جارٍ التحقق" style={{ margin: '20px auto' }} />}
         {r && !r.success && <p className="muted">{r.message}</p>}

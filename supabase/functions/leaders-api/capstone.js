@@ -201,6 +201,12 @@ export function parseDate(v) {
   if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
   return null;
 }
+// التاريخ كما يقرؤه الراعي: «1 مارس 2027» بالتقويم الميلادي وأرقام لاتينية كبقية المنصة، لا 2027-03-01 خامًا
+// يتقلب ترتيبه في السطر العربي (links-expert-7). ما لا يُفهم تاريخًا يُعرض كما كُتب
+export function dateAr(v) {
+  const ts = parseDate(v ?? '');
+  return ts == null ? String(v ?? '') : new Date(ts).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 const codeOf = (v) => String(v || '').trim().replace(/\s+/g, '').toUpperCase();
 const listCodes = (v) => String(v || '').split(/[،,;\s]+/).map(codeOf).filter(Boolean);
