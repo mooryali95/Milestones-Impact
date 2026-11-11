@@ -90,3 +90,34 @@ test('حقول التسجيل تقبل التعبئة التلقائية وتُ�
   await page.locator('#reg-name').fill('م');
   await expect(page.locator('#reg-name')).not.toHaveAttribute('aria-invalid', 'true');
 });
+
+// ── visitor-6: إشعار الخصوصية عند الجمع، وروابط الوثائق في التذييلين ──
+
+test('التسجيل يعرض إشعار الخصوصية برابط السياسة والشروط', async ({ page }) => {
+  await page.route(/supabase\.co\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  const footer = page.locator('.lp-footer');
+  await expect(footer.getByRole('link', { name: 'سياسة الخصوصية' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/privacy.html');
+  await expect(footer.getByRole('link', { name: 'شروط الخدمة' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/terms.html');
+  await page.getByRole('button', { name: 'بدء الرحلة' }).first().click();
+  const notice = page.locator('.auth-privacy');
+  await expect(notice).toBeVisible();
+  await expect(notice.getByRole('link', { name: 'سياسة الخصوصية' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/privacy.html');
+  await expect(notice.getByRole('link', { name: 'شروط الخدمة' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/terms.html');
+});
+
+test('تذييل التطبيق وشاشة التحليل الديموغرافي يحيلان إلى سياسة الخصوصية', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seed(page);
+  await page.goto(BASE + '/');
+  const link = page.locator('.app-footer').getByRole('link', { name: 'سياسة الخصوصية' });
+  await expect(link).toHaveAttribute('href', 'https://mi.sunkvalue.com/privacy.html');
+  // على الهاتف لا يغطيه شريط التبويب الثابت أسفل الشاشة
+  await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
+  expect(await link.evaluate((el) => { const b = el.getBoundingClientRect(); return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2) === el; })).toBe(true);
+  await page.locator('.cell', { hasText: 'تحليل ديموغرافي' }).click();
+  await page.getByRole('button', { name: /ابدأ تحليلك الديموغرافي/ }).click();
+  const demo = page.getByRole('dialog', { name: 'التحليل الديموغرافي' });
+  await expect(demo.locator('.demo-privacy')).toContainText('لا يحق لك مشاركتها');
+  await expect(demo.locator('.demo-privacy').getByRole('link', { name: 'سياسة الخصوصية' })).toHaveAttribute('href', 'https://mi.sunkvalue.com/privacy.html');
+});

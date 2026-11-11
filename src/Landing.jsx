@@ -2,6 +2,7 @@ import React from "react";
 import Wordmark from "./components/Wordmark";
 import MILogo from "./MILogo";
 import { SITES } from '../supabase/functions/_shared/sites.js';
+import { LEGAL } from './config/constants';
 
 export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
   return (
@@ -90,6 +91,8 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
 .lp-cta-final-sub{color:rgba(232,226,217,.6);font-size:.9rem;margin-bottom:2.5rem;letter-spacing:1px;}
 .lp-footer{padding:2rem;border-top:1px solid rgba(199,154,75,.1);text-align:center;background:#0D0D0F;}
 .lp-footer-text{font-size:.68rem;color:rgba(232,226,217,.55);letter-spacing:2px;line-height:2;}
+.lp-footer-links{margin-top:.5rem;font-size:.75rem;color:rgba(232,226,217,.55);}
+.lp-footer-links a{color:rgba(232,226,217,.8);}
 @keyframes lp-fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
 .lp-a1{animation:lp-fade-up .9s ease both;}
 .lp-a2{animation:lp-fade-up .9s .15s ease both;}
@@ -225,6 +228,9 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-footer-text">
           MILESTONE IMPACT © {new Date().getFullYear()}<br/>
           جميع الحقوق محفوظة • لا يُسمح بإعادة النشر أو التوزيع
+        </div>
+        <div className="lp-footer-links">
+          <a href={LEGAL.privacy}>سياسة الخصوصية</a> • <a href={LEGAL.terms}>شروط الخدمة</a>
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { useDialog } from "../lib/a11y";
 import Skeleton from "../components/Skeleton";
 import Icon from "../components/Icon";
+import { LEGAL } from "../config/constants";
 
 // ════════════════════════════════════════════════════════════════
 // DEMOGRAPHICS — شاشة التحليل الديموغرافي
@@ -45,6 +46,11 @@ const DemographicsScreen = (p) => {
             <div className="demo-intro">
               <div className="demo-intro-title"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> {appContent.demo_intro_title || 'ما هذا النموذج؟'}</div>
               <div className="demo-intro-text">{appContent.demo_intro_text || 'هذه خريطة شبكتك البشرية.'}</div>
+              {/* بيانات أشخاص آخرين: تنبيه ثابت لا يغيّره محتوى الإدارة */}
+              <div className="demo-privacy">
+                أدخل عن كل شخص ما يلزم تحليلك فقط، ولا تُدخل بيانات لا يحق لك مشاركتها. يُحفظ التحليل في حسابك وفق{" "}
+                <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>.
+              </div>
             </div>
 
             {/* Person Cards */}

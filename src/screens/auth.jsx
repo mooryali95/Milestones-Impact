@@ -2,7 +2,7 @@ import React from "react";
 import Wordmark from "../components/Wordmark";
 import MILogo from "../MILogo";
 import AuthLeft from "../components/AuthLeft";
-import { BRAND } from "../config/constants";
+import { BRAND, LEGAL } from "../config/constants";
 import { CSS } from "../styles/appCss";
 
 // ════════════════════════════════════════════════════════════════
@@ -51,6 +51,11 @@ export const RegisterScreen = ({
               <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label htmlFor="reg-phone">رقم الجوال</label><input id="reg-phone" type="tel" autoComplete="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} {...errAttrs("reg-phone", regErrors.phone)} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg" id="reg-phone-err">{regErrors.phone}</div>}</div>
               <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label htmlFor="reg-email">البريد الإلكتروني</label><input id="reg-email" type="email" autoComplete="email" placeholder="email@example.com" value={user.email} maxLength={254} {...errAttrs("reg-email", regErrors.email)} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg" id="reg-email-err">{regErrors.email}</div>}</div>
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
+              {/* إشعار عند الجمع: لماذا تُطلب البيانات وأين تفاصيل معالجتها. تُفتح الوثيقتان في نافذة جديدة فلا يضيع ما كُتب */}
+              <p className="auth-privacy">
+                نستخدم اسمك وجوالك وبريدك لإنشاء حسابك وإرسال رمز التحقق ومتابعة خطتك. للتفاصيل:{" "}
+                <a href={LEGAL.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> و<a href={LEGAL.terms} target="_blank" rel="noopener noreferrer">شروط الخدمة</a>.
+              </p>
             </form>
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
               لديك حساب؟ <button style={{background:"none",border:"none",color:"var(--mi-d)",fontFamily:"var(--font-ar)",fontSize:"0.8rem",cursor:"pointer",fontWeight:600}} onClick={() => { setScreen("resume"); setOtpStep("form"); }}>استئناف الجلسة</button>

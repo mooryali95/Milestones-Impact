@@ -173,6 +173,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .fg input:focus { border-color: var(--mi);  background: var(--bg-card); }
 .fg-err input { border-color: var(--err); }
 .fg-msg { font-size: 0.72rem; color: var(--err); margin-top: 0.22rem; }
+.auth-privacy { font-size: 0.72rem; color: var(--text-secondary); line-height: 1.7; margin-top: 0.75rem; text-align: center; }
+.auth-privacy a { color: var(--mi-d); font-weight: 600; }
 .fg-err input:focus { border-color: var(--err);  }
 
 /* ════════════════════════════════════════
@@ -441,6 +443,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .demo-intro { background:rgba(139,105,20,0.06); border-radius: 2px; padding:0.8rem 0.9rem; margin-bottom:0.85rem; border-right:3px solid var(--gold-d); }
 .demo-intro-title { font-weight:700; color:var(--gold-d); margin-bottom:0.22rem; font-size:0.83rem; display:flex; align-items:center; gap:0.32rem; }
 .demo-intro-text { font-size:0.76rem; color:var(--text-secondary); line-height:1.65; }
+.demo-privacy { font-size:0.72rem; color:var(--text-secondary); line-height:1.65; margin-top:0.45rem; padding-top:0.45rem; border-top:1px solid rgba(139,105,20,0.15); }
+.demo-privacy a { color:var(--gold-d); font-weight:600; }
 .demo-card { background:var(--bg-card); border-radius: 2px; margin-bottom:0.75rem; border:1px solid var(--border); overflow:hidden; }
 .demo-card-header { display:flex; align-items:center; gap:0.5rem; padding:0.72rem 0.9rem; border-bottom:1px solid var(--border); background:var(--bg-deep); }
 .demo-card-num { width:26px; height:26px; border-radius:50%; background:#8B6914; color:#fff; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; flex-shrink:0; }
@@ -535,6 +539,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   .nav-user { max-width:85px; }
   .sec { padding:0.85rem 0.85rem 0; }
   .sec-pb { padding-bottom:calc(5.5rem + env(safe-area-inset-bottom)); }
+  /* التذييل آخر الصفحة تحت شريط التبويب الثابت: يُفسح له فتظهر روابط الخصوصية والحقوق */
+  .app-footer { padding-bottom:calc(4.5rem + env(safe-area-inset-bottom)); }
   .mx-cells-grid { grid-template-columns:repeat(2,1fr); }
   .cell { min-height:86px; padding:0.65rem 0.7rem; }
   .cell-name { font-size:0.77rem; }
