@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -30,6 +30,8 @@ export const APPLY_ALERT_HOURS = 6;
 export async function apply(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
+  const fieldError = expertFieldError(b);
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b);
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
   if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
@@ -98,6 +100,8 @@ export async function adminGet(_a: Admin, b: Body) {
 // إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم
 export async function adminSave(a: Admin, b: Body) {
   requireWrite(a);
+  const fieldError = expertFieldError(b, { withAdmin: true });
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b, { withAdmin: true });
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسم الخبير');
   const phone = b.phone ? normalizePhone(b.phone) : null;
@@ -588,6 +592,8 @@ export async function portalDashboard(e: any) {
 // الخبير قبل اعتماده يستكمل ملفه بأسئلة الخبير نفسها في طلب الانضمام، فينتقل «مدعو» إلى «بانتظار المراجعة»
 export async function portalProfileSave(e: any, b: Body) {
   if (portalWorking(e)) throw new Fail('ملفك معتمد؛ تعديله من الإدارة', 409);
+  const fieldError = expertFieldError(b);
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b);
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
   if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
