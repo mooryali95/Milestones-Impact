@@ -118,3 +118,19 @@ describe('المطّلعون المتعددون', () => {
     expect(orgVisibility([], now).viewers).toBe(0);
   });
 });
+
+// قاعدة واحدة لحساب الاختبار (بلاغ المالك 2026-11-11): «1 من 50 مقعدًا» والخريطة والمؤشرات صفر لأن الحساب الوحيد حساب اختبار.
+// خارج الإحصاءات في كل موضع، ومنها مقاعد بوابة الجهة ومن ينتظر قرار الرعاية وكشف الجهة المالي في الإدارة
+it('حساب الاختبار خارج مقاعد بوابة الجهة وكشفها المالي، وعدده يعود للبوابة', () => {
+  const api = (f) => readFileSync(join(__dirname, '../../supabase/functions/leaders-api', f), 'utf8');
+  const coord = api('coordinator.ts');
+  expect(coord).toMatch(/from\('participants'\)\.select\('id'\)\.eq\('organization_id', c\.organization_id\)\.eq\('is_test', true\)/);
+  expect(coord).toContain('filter((id: string) => !testIds.has(id))');
+  expect(coord).toMatch(/seats_used: seatsUsed, seats_waiting: waiting, test_accounts: testIds\.size/);
+  expect(coord).not.toMatch(/seatsUsed = new Set\(\(seated/);
+  const fin = api('payments.ts').split('export async function adminOrgFinance')[1].split('\nexport ')[0];
+  expect(fin).toMatch(/forStats\(db\.from\('participants'\)/);
+  // والبوابة تذكر العدد بصيغته
+  const portal = readFileSync(join(__dirname, 'screens/OrgPortal.jsx'), 'utf8');
+  expect(portal).toContain("countAr(kpis.test_accounts, 'حساب اختبار واحد', 'حسابا اختبار', 'حسابات اختبار', 'حساب اختبار')} خارج الإحصاءات");
+});

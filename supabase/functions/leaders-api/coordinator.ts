@@ -170,11 +170,17 @@ export async function dashboardFor(c: any) {
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
   // استهلاك مقاعد العقد (D20): من ثبتت رعايته، ومن ينتظر قرار الرعاية لامتلائها أو لخروجه عن مدة العقد
-  const [{ data: seated }, { count: waiting }] = await Promise.all([
+  // وحساب الاختبار (is_test) خارجها كما هو خارج بقية أرقام اللوحة (forStats): كانت الترويسة تقول «1 من 50 مقعدًا»
+  // وخريطة الرحلة والمؤشرات صفر لأن الحساب الوحيد حساب اختبار (بلاغ المالك 2026-11-11). عدده يعود للبوابة لتذكره بصدق
+  const [{ data: seated }, { data: pending }, { data: tests }] = await Promise.all([
     db.from('entitlements').select('participant_id').eq('organization_id', c.organization_id).eq('source', 'sponsor').is('revoked_at', null),
-    db.from('sponsor_requests').select('id', { count: 'exact', head: true }).eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { count: 0 } : r)),
+    db.from('sponsor_requests').select('participant_id').eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { data: [] } : r)),
+    db.from('participants').select('id').eq('organization_id', c.organization_id).eq('is_test', true),
   ]);
-  const seatsUsed = new Set((seated || []).map((e: any) => e.participant_id)).size;
+  const testIds = new Set((tests || []).map((t: any) => t.id));
+  const counted = (list: any[] | null) => new Set((list || []).map((e: any) => e.participant_id).filter((id: string) => !testIds.has(id))).size;
+  const seatsUsed = counted(seated);
+  const waiting = counted(pending);
   // خريطة الرحلة (قرار المالك 2026-11-11): مراحل برنامج دفعة الجهة، ومن يقف عند كل منها من الرحلات المحسوبة أعلاه نفسها.
   // الأسماء لصلاحية «القائمة»، وما ينقص كل شخص لصلاحية «النشاط»، وإلا أسباب مجمّعة بلا أسماء
   const def: any = await journeyDefinition({ organization_id: c.organization_id });
@@ -201,7 +207,7 @@ export async function dashboardFor(c: any) {
       // عدد مجمّع من الصفوف الأصلية: يظهر ولو لم تُمنح صلاحية النشاط الفردي
       active_week: (rows as any[]).filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
       approved: d.funnel.approved, completed: d.funnel.completed, avg_progress: avg,
-      seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting ?? 0,
+      seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting, test_accounts: testIds.size,
     },
     participants,
     journey_map,

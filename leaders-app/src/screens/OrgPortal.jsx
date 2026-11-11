@@ -278,7 +278,9 @@ function Dashboard({ me, onLogout }) {
           </div>
         </div>
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
-        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
+        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small>
+          {/* حساب الاختبار خارج كل أرقام اللوحة ومقاعدها (forStats)، فيُذكر عدده هنا بصدق ولا يُترك فرقًا بلا تفسير */}
+          {kpis.test_accounts > 0 && <small className="op-test">{countAr(kpis.test_accounts, 'حساب اختبار واحد', 'حسابا اختبار', 'حسابات اختبار', 'حساب اختبار')} خارج الإحصاءات</small>}</div>
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={decideRater} />
 
