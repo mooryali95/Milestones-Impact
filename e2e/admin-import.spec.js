@@ -52,3 +52,29 @@ test('قبل نشر الخادم: رسالة تقول ما يحدث', async ({ p
   await dlg.getByRole('button', { name: 'تحقق من المسجلين' }).click();
   await expect(dlg.getByRole('alert')).toContainText('الاستيراد يعمل بعد نشر تحديث الخادم');
 });
+
+test('البريد المعيب لا يُسقط الصف: يظهر ناقصًا برقم سطره ويُرسل للتحقق', async ({ page }) => {
+  const { calls, dlg } = await open(page, (b) => {
+    const rows = checkImport(b.rows);
+    return { success: true, dry_run: true, rows, counts: importCounts(rows), organization: null };
+  });
+  await dlg.locator('textarea').fill('الاسم\tالبريد\nسارة الأحمد\tsara@example.sa\nخالد العتيبي\tkhaled@example\nمنى السالم\tmona@@example.sa');
+  await expect(dlg.getByLabel('ملخص الصفوف')).toContainText('جاهز 1');
+  await expect(dlg.getByLabel('ملخص الصفوف')).toContainText('ناقص أو غير صحيح 2');
+  const bad = dlg.getByRole('row').filter({ hasText: 'khaled@example' });
+  await expect(bad).toContainText('البريد غير صحيح');
+  await expect(bad.getByRole('cell').first()).toHaveText('3');
+  await expect(dlg.getByRole('row').filter({ hasText: 'mona@@example.sa' }).getByRole('cell').first()).toHaveText('4');
+  await dlg.getByRole('button', { name: 'تحقق من المسجلين' }).click();
+  await expect(dlg.getByRole('button', { name: 'أضف 1 مشاركًا' })).toBeVisible();
+  expect(calls[0].rows.map((r) => r.line)).toEqual([2, 3, 4]);
+});
+
+test('فوق الحد: رسالة واضحة قبل الإرسال، وزر التحقق معطل', async ({ page }) => {
+  const { calls, dlg } = await open(page, () => ({ success: false, message: 'لا يُتوقع طلب' }));
+  const many = Array.from({ length: 301 }, (_, i) => `مشارك رقم ${i}\tp${i}@example.sa`).join('\n');
+  await dlg.locator('textarea').fill(many);
+  await expect(dlg.getByRole('alert')).toContainText('في الجدول 301 صفًا، والحد 300 صفًا في المرة الواحدة. قسّمه دفعات.');
+  await expect(dlg.getByRole('button', { name: 'تحقق من المسجلين' })).toBeDisabled();
+  expect(calls).toHaveLength(0);
+});
