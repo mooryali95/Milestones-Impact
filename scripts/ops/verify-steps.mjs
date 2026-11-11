@@ -1,8 +1,8 @@
-// خطوات التحقق المحلي الكامل، بالترتيب نفسه الذي يجريه build-and-test في ci.yml.
+// خطوات التحقق المحلي الكامل، بالترتيب نفسه الذي تجريه وظيفتا checks وweb في ci.yml (هناك بانتقاء ما تغيّر، وهنا كلها).
 // المصدر الواحد لأمر npm run verify (scripts/ops/verify.mjs)، ويحرس verify-parity.test.js
-// أن كل أمر في build-and-test موجود هنا بنصه، فلا يمر طلب دمج بفحص ناقص ما دامت Actions موقوفة (D16).
+// أن كل أمر في checks وweb موجود هنا بنصه، فلا يمر طلب دمج بفحص ناقص ما دامت Actions موقوفة (D16).
 //
-// الحقل ci: الأمر موجود في ci.yml بنصه. الخطوات بلا ci إضافات D16 لا يجريها build-and-test بعد
+// الحقل ci: الأمر موجود في ci.yml بنصه (e2e: تغطيه مجموعات e2e-groups.mjs الأربع). الخطوات بلا ci إضافات D16 لا تجريها checks بعد
 // (الأسرار في الملفات، وثغرات حزم الإنتاج)، أو خطوات تحتاج سرًا لا يوجد محليًا.
 export const STEPS = [
   { id: 'generated', title: 'الملفات المولّدة تطابق مصادرها', ci: true, cmds: [
@@ -33,10 +33,12 @@ export const STEPS = [
     'npm run admin:build',
     'git add -N admin && git diff --exit-code --stat -- admin',
   ] },
-  { id: 'e2e', title: 'رحلات المتصفح', ci: true, cmds: ['npm run e2e'] },
+  // في CI تُشغَّل بمجموعاتها (scripts/ops/e2e-groups.mjs run <group>) بحسب ما تغيّر، والمجموعات الأربع تغطي كل ملف
+  { id: 'e2e', title: 'رحلات المتصفح', ci: true, ciVia: 'node scripts/ops/e2e-groups.mjs run', cmds: ['npm run e2e'] },
   // يحتاج SUPABASE_ACCESS_TOKEN، فيُجرى في وظيفة deploy قبل النشر. محليًا يُذكر مُتخطّى بسببه.
   { id: 'function-secrets', title: 'أسرار الدخول مضبوطة على المشروع (أسماء فقط)', needsToken: true, cmds: ['node scripts/ops/function-secrets.mjs --require=signin'] },
 ];
 
 // أوامر build-and-test التي لا تفحص شيئًا: تثبيت الحزم والمتصفح
-export const CI_SETUP = [/^npm ci\b/, /^npx playwright install\b/];
+// وأسطر نقل المخرجات بين الخطوات (>> "$GITHUB_OUTPUT")
+export const CI_SETUP = [/^npm ci\b/, /^npx playwright install\b/, />> "\$GITHUB_OUTPUT"$/];

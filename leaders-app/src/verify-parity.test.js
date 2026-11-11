@@ -32,17 +32,20 @@ function runLines(yml, job) {
   return out;
 }
 
-describe('npm run verify يطابق build-and-test في ci.yml', () => {
-  const ci = runLines(read('.github/workflows/ci.yml'), 'build-and-test');
+describe('npm run verify يطابق checks وweb في ci.yml', () => {
+  const yml = read('.github/workflows/ci.yml');
+  const ci = [...runLines(yml, 'checks'), ...runLines(yml, 'web')];
   const local = STEPS.flatMap((s) => s.cmds);
+  const via = STEPS.filter((s) => s.ciVia).map((s) => s.ciVia);
   it('كل أمر فحص في CI موجود بنصه في خطوات التحقق المحلي', () => {
-    const checks = ci.filter((c) => !CI_SETUP.some((re) => re.test(c)));
+    const checks = ci.filter((c) => !CI_SETUP.some((re) => re.test(c)) && !via.some((v) => c.includes(v)));
     expect(checks.length).toBeGreaterThan(20);
     expect(checks.filter((c) => !local.includes(c))).toEqual([]);
   });
-  it('كل خطوة محلية موسومة ci موجودة في CI، وما لا يوسم يحتاج سرًا', () => {
+  it('كل خطوة محلية موسومة ci موجودة في CI (بنصها أو بمشغّلها المنتقي)، وما لا يوسم يحتاج سرًا', () => {
     for (const s of STEPS) {
-      if (s.ci) expect(s.cmds.filter((c) => !ci.includes(c)), s.id).toEqual([]);
+      if (s.ciVia) expect(ci.some((c) => c.includes(s.ciVia)), s.id).toBe(true);
+      else if (s.ci) expect(s.cmds.filter((c) => !ci.includes(c)), s.id).toEqual([]);
       else expect(s.needsToken, s.id).toBe(true);
     }
   });

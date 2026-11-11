@@ -157,7 +157,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'profile.confirm-name': async (p) => {
     const r: any = await P.confirmName(p);
     const certificate = await Z.issueAfterNameConfirm(p.id);
-    return { ...r, certificate: certificate && !certificate.awaiting_name ? certificate : null };
+    return { ...r, certificate: certificate && !('awaiting_name' in certificate) ? certificate : null };
   },
   'upload.url': P.uploadUrl,
   'cv.attach': P.cvAttach,

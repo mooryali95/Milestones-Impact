@@ -1,13 +1,13 @@
 name: Production probe
 
-# مسبار احتياطي كل ساعة: طلب حقيقي إلى كل دالة تخدم واجهة (leaders-api وadmin-api وuser-api)
+# مسبار احتياطي كل ثلاث ساعات (كان كل ساعة حتى 2026-11-11؛ خُفّض لترشيد دقائق Actions، فكل تشغيل يُحتسب دقيقة كاملة): طلب حقيقي إلى كل دالة تخدم واجهة (leaders-api وadmin-api وuser-api)
 # يمر بالقاعدة، وصفحات المنصات الثلاث. فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
 # جدولة GitHub قد تتأخر ساعات، فالمراقب الخارجي كل 5 دقائق (RUNBOOK.md) هو الأساس
 # وهذا شبكة أمان له.
 
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: '23 */3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       PROJECT_REF: eormhcupwgwpllhrfxxg
       SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0

@@ -1,0 +1,20 @@
+name: Node and cached dependencies
+description: >-
+  Node من .nvmrc، وnode_modules من ذاكرة GitHub بمفتاح package-lock.json وإصدار Node.
+  لا يُشغَّل npm ci إلا حين يتغير القفل أو تنتهي الذاكرة.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - id: modules
+      uses: actions/cache@v5
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+    - name: Install dependencies (cache miss only)
+      if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --no-audit --no-fund

@@ -20,6 +20,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
@@ -32,16 +33,16 @@ jobs:
             echo "::notice::SUPABASE_ACCESS_TOKEN is not set; deploy by hand (RUNBOOK.md)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.skip != 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.gate.outputs.skip != 'true'
         with:
           node-version: '20'
       # CLI من npm لا من GitHub Releases (كما في ci.yml وintegration.yml)
       - name: Install Supabase CLI
         if: steps.gate.outputs.skip != 'true'
-        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
+        run: npm i -g supabase@3.1.0 --no-audit --no-fund && supabase --version
       # كما في ci.yml: ترحيل حاجب غير مطبّق يوقف النشر. التراجع إلى إيداع أقدم يمر لأن ترحيلاته مطبّقة،
       # والإيداعات السابقة لهذه البوابة بلا السكربت فتُتخطى.
       - name: Pending migrations block deploy

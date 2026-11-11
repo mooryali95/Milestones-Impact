@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 // إعداد Vite
 // ════════════════════════════════════════════════════════════════
 // outDir = 'build' لا 'dist' الافتراضي. مشروع mi-matrix على Cloudflare
-// مضبوط على مجلد إخراج اسمه build (راجع DEPLOY-MATRIX.md)، وتغيير
+// مضبوط على مجلد إخراج اسمه build (راجع docs/archive/DEPLOY-MATRIX.md)، وتغيير
 // الاسم هنا يعني تغييراً يدوياً في لوحة Cloudflare — والبناء يسقط
 // صامتاً بينهما. المجلد يبقى build فلا يُمَسّ إعداد النشر.
 

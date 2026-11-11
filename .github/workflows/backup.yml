@@ -22,6 +22,7 @@ permissions:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
@@ -41,16 +42,16 @@ jobs:
             echo "::notice::SUPABASE_DB_URL or an encryption key (BACKUP_PUBLIC_KEY, or BACKUP_PASSPHRASE) is not set; no backup taken."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.skip != 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.gate.outputs.skip != 'true'
         with:
           node-version: '20'
       - name: Dump, encrypt at the source, and upload to R2
         if: steps.gate.outputs.skip != 'true'
         run: bash scripts/ops/backup.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.gate.outputs.skip != 'true'
         with:
           name: backup-${{ github.run_id }}

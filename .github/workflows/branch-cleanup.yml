@@ -1,0 +1,89 @@
+name: Branch cleanup
+
+# صيانة الفروع يدويًا (بطلب المالك 2026-11-11): يحذف الفرع الذي يثبت أن عمله في main، ويُبقي ما سواه ويذكر سببه.
+# - يُبقي دائمًا: main وrelease، وكل فرع له طلب دمج مفتوح، وما في keep.
+# - يحذف: فرعًا كل إيداعاته في main (compare: behind أو identical)، أو فرعًا رأسه رأس طلب دُمج (الدمج بالضغط).
+# - extra: فروع راجعها المالك أو وكيله (عملها في main بإيداعات أخرى) تُحذف وإن لم يثبت ذلك آليًا.
+# - archive: أزواج «فرع=وسم»، يُوسم رأس الفرع ثم يُحذف، فلا يضيع عمل لم يُدمج.
+# الوضع الافتراضي dry-run يطبع الخطة وحدها. حذف فرع له طلب يُستعاد بزر «Restore branch» في صفحة الطلب.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run = الخطة وحدها · apply = التنفيذ'
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      keep:
+        description: فروع تبقى مهما كانت حالتها (مفصولة بمسافة)
+        type: string
+        default: claude/zen-bell-zac0x2
+      extra:
+        description: فروع مراجَعة تُحذف وإن لم يثبت دمجها آليًا (مفصولة بمسافة)
+        type: string
+        default: ''
+      archive:
+        description: أزواج فرع=وسم، يُوسم رأس الفرع ثم يُحذف (مفصولة بمسافة)
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      MODE: ${{ inputs.mode }}
+      KEEP: ${{ inputs.keep }}
+      EXTRA: ${{ inputs.extra }}
+      ARCHIVE: ${{ inputs.archive }}
+    steps:
+      - name: Plan and (in apply mode) delete
+        run: |
+          set -euo pipefail
+          default=$(gh api "repos/$R" --jq .default_branch)
+          in_list() { case " $2 " in *" $1 "*) return 0;; esac; return 1; }
+          declare -A ARCH; for p in $ARCHIVE; do ARCH["${p%%=*}"]="${p#*=}"; done
+          deleted=0; kept=0
+          {
+            echo "## تنظيف الفروع ($MODE)"; echo
+            echo "| الفرع | القرار | السبب |"; echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          row() { echo "| \`$1\` | $2 | $3 |" >> "$GITHUB_STEP_SUMMARY"; echo "$2  $1  ($3)"; }
+          gh api --paginate "repos/$R/branches?per_page=100" --jq '.[] | "\(.name) \(.commit.sha)"' > branches.txt
+          while read -r b tip; do
+            if [ "$b" = "$default" ] || [ "$b" = "release" ]; then row "$b" "يبقى" "فرع أساسي"; kept=$((kept+1)); continue; fi
+            if in_list "$b" "$KEEP"; then row "$b" "يبقى" "في قائمة keep"; kept=$((kept+1)); continue; fi
+            prs=$(gh api -X GET "repos/$R/pulls" -f state=all -f head="$OWNER:$b" -f per_page=100 --jq '[.[] | {n: .number, s: .state, m: (.merged_at != null), h: .head.sha}]')
+            open=$(echo "$prs" | jq -r '[.[] | select(.s == "open") | "#\(.n)"] | join(" ")')
+            if [ -n "$open" ]; then row "$b" "يبقى" "طلب مفتوح $open"; kept=$((kept+1)); continue; fi
+            reason=""
+            if [ -n "${ARCH[$b]:-}" ]; then
+              reason="أرشيف في الوسم ${ARCH[$b]}"
+              if [ "$MODE" = "apply" ]; then gh api "repos/$R/git/refs" -f ref="refs/tags/${ARCH[$b]}" -f sha="$tip" > /dev/null; fi
+            else
+              status=$(gh api "repos/$R/compare/$default...$tip" --jq .status 2>/dev/null || echo unknown)
+              merged_head=$(echo "$prs" | jq -r --arg t "$tip" '[.[] | select(.m and .h == $t) | "#\(.n)"] | join(" ")')
+              if [ "$status" = "behind" ] || [ "$status" = "identical" ]; then reason="كل إيداعاته في $default"
+              elif [ -n "$merged_head" ]; then reason="رأسه رأس طلب مدموج $merged_head"
+              elif in_list "$b" "$EXTRA"; then reason="مراجَع (extra)"
+              fi
+            fi
+            if [ -z "$reason" ]; then row "$b" "يبقى" "عمل لم يثبت دمجه"; kept=$((kept+1)); continue; fi
+            if [ "$MODE" = "apply" ]; then gh api -X DELETE "repos/$R/git/refs/heads/$b" > /dev/null; row "$b" "حُذف" "$reason"
+            else row "$b" "سيُحذف" "$reason"; fi
+            deleted=$((deleted+1))
+          done < branches.txt
+          { echo; echo "**المحذوف أو المخطط حذفه:** $deleted · **الباقي:** $kept"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "deleted/planned=$deleted kept=$kept"

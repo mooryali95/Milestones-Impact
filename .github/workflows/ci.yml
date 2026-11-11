@@ -1,44 +1,93 @@
 name: CI
 
-# Lint + test + build on every push and PR, then (on main only) the deploy
-# gate: the edge functions are deployed and the `release` branch is advanced
-# to the tested commit. Cloudflare Pages builds production from `release`
-# (set as the production branch of each project), so a red check never
-# reaches production. Rollback and manual deploys: RUNBOOK.md.
+# الفحوص على كل طلب دمج وكل دفع إلى main، ثم (على main وحده) بوابة النشر: الدوال، ثم دفع فرع release
+# إلى الإيداع المفحوص. Cloudflare Pages تبني الإنتاج من release، فلا يصل الإنتاج فحص أحمر. التراجع والنشر اليدوي: RUNBOOK.md.
+#
+# الترشيد (2026-11-11، بطلب المالك):
+# - ما يمسه التعديل وحده: وظيفة changes تقرر بـ scripts/ops/ci-changes.mjs، والمسودات والمراجعات (docs/audit...) لا تشغّل شيئًا.
+# - لا فحص مرتين للمحتوى نفسه: الطلب الأخضر يسجّل بصمة شجرته (ci-pass-<tree>)، والدفع إلى main بالشجرة نفسها ينشر بلا إعادة.
+# - الاعتماديات من الذاكرة: node_modules ومتصفح Playwright وDeno.
+# - وظيفتان تشغّلان ما يلزم بالخطوات: checks (الوحدات والمولّدات والدوال) وweb (البناء والرحلات).
+# - npm run verify يبقى يشغّل كل شيء محليًا، ويحرس verify-parity.test.js أن كل أمر هنا موجود هناك.
 
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/audit/**', 'docs/assessment/**', 'docs/prototypes/**', 'docs/workshop/**']
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ['docs/audit/**', 'docs/assessment/**', 'docs/prototypes/**', 'docs/workshop/**']
+  workflow_dispatch:
 
-# Cancel superseded runs on the same ref to save minutes.
+# طلب الدمج: الدفعة الأحدث تلغي الأقدم. main: تنتظر، فلا يُقطع نشر في منتصفه.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  build-and-test:
+  changes:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tree: ${{ steps.tree.outputs.tree }}
+      tested: ${{ steps.dedupe.outputs.tested }}
+      checks: ${{ steps.decide.outputs.checks }}
+      functions: ${{ steps.decide.outputs.functions }}
+      matrix: ${{ steps.decide.outputs.matrix }}
+      leaders: ${{ steps.decide.outputs.leaders }}
+      admin: ${{ steps.decide.outputs.admin }}
+      e2e_site: ${{ steps.decide.outputs.e2e_site }}
+      e2e_groups: ${{ steps.decide.outputs.e2e_groups }}
+      web: ${{ steps.decide.outputs.web }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # عمق 2: على طلب الدمج HEAD إيداع الدمج التجريبي وأبوه الأول قاعدته
+      - uses: actions/checkout@v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          fetch-depth: 2
+      - id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+      # على main: شجرة اجتازت طلب دمج أخضر (والقاعدة لم تتحرك بعده) لا تُفحص ثانية
+      - id: dedupe
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=ci-pass-${{ steps.tree.outputs.tree }}&per_page=1" --jq '[.artifacts[] | select(.expired == false)] | length' || echo 0)
+          if [ "$n" -gt 0 ]; then echo "tested=true" >> "$GITHUB_OUTPUT"; echo "::notice::هذه الشجرة اجتازت CI في طلب الدمج؛ لا إعادة للفحوص."; fi
+      - id: decide
+        run: |
+          if [ "${{ steps.dedupe.outputs.tested }}" = "true" ]; then
+            out="checks=false functions=false matrix=false leaders=false admin=false e2e_site=false e2e_groups=[]"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            out=$(git diff --name-only HEAD^1 HEAD | node scripts/ops/ci-changes.mjs)
+          elif [ "${{ github.event_name }}" = "push" ] && git fetch --no-tags --depth=1 origin "${{ github.event.before }}" 2>/dev/null; then
+            out=$(git diff --name-only "${{ github.event.before }}" HEAD | node scripts/ops/ci-changes.mjs)
+          else
+            out=$(node scripts/ops/ci-changes.mjs --all)
+          fi
+          echo "$out" | tr ' ' '\n' >> "$GITHUB_OUTPUT"
+          echo "$out" | tr ' ' '\n'
+          # وظيفة web تعمل إن لزم بناء أو رحلة
+          if echo "$out" | grep -qE '^(matrix|leaders|admin)=true|^e2e_groups=\[.+\]'; then echo "web=true" >> "$GITHUB_OUTPUT"; fi
 
-      # `npm ci` now that a lockfile is committed. It was not, while the
-      # project used react-scripts: its loose peer deps produced a lockfile
-      # that `npm ci` rejected. Vite's tree resolves cleanly, so the build
-      # is reproducible again.
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+  # الملفات المولّدة، والأسرار، وثغرات الحزم، وLint، والوحدات، والدوال (أنواعها واختبارات Deno عند تغيّرها)
+  checks:
+    needs: changes
+    if: needs.changes.outputs.checks == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/node-deps
 
       # يمسك المراجع غير المعرّفة — أخطاء تشغيلية لا يكشفها البناء.
-      # (فقدان استيراد عند نقل كود بين ملفات هو أشهر صورها.)
-      # النسخ المولّدة من shared/ (ومنها analytics.js في public/) يجب
-      # أن تطابق مصدرها — وإلا نُشرت نسخةٌ قديمة دون أن يلحظ أحد.
+      # النسخ المولّدة من shared/ (ومنها analytics.js في public/) يجب أن تطابق مصدرها — وإلا نُشرت نسخةٌ قديمة دون أن يلحظ أحد.
       - name: Generated files are in sync
         run: |
           python3 shared/build-css.py > /dev/null
@@ -73,53 +122,124 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # أنواع دالة leaders-api: صفر أخطاء، فأي خطأ جديد يُكتشف قبل النشر
+      # أنواع الدوال واختبارات Deno حين تتغير الدوال وحدها. ذاكرة Deno مخزّنة.
       - uses: denoland/setup-deno@v2
+        if: needs.changes.outputs.functions == 'true'
         with:
           deno-version: v2.x
+          cache: true
+          cache-hash: ${{ hashFiles('supabase/functions/**/*.ts', 'supabase/functions/**/deno.json') }}
       # none: deno لا يعيد ترتيب node_modules، وإلا اختلف ناتج Vite بعده عن البناء المودع
       - name: Typecheck all edge functions
+        if: needs.changes.outputs.functions == 'true'
         run: deno check --node-modules-dir=none supabase/functions/*/index.ts
 
       # اختبارات Deno للوحدات التي لا تختبرها vitest: توقيع Google، مفاتيح المرور، توقيع Creem
       - name: Deno unit tests
+        if: needs.changes.outputs.functions == 'true'
         # --node-modules-dir=none: لا يكتب في node_modules (الكتابة فيه تكسر Playwright بنسختين من المكتبة)
         run: deno test --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/
 
       - name: Test
         run: npm test
 
+  # البناء والمبني المودع يطابق مصدره، ثم رحلات المتصفح بمجموعات ما تغيّر (scripts/ops/e2e-groups.mjs)
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/node-deps
+
       - name: Build
+        if: needs.changes.outputs.matrix == 'true' || needs.changes.outputs.e2e_site == 'true'
         run: npm run build
 
       - name: Build leaders app
+        if: needs.changes.outputs.leaders == 'true'
         run: npm run leaders:build
 
       # mi-leaders ينشر مجلد leaders/ المودع كما هو، فيجب أن يطابق المصدر
       - name: Leaders build is committed
+        if: needs.changes.outputs.leaders == 'true'
         run: git add -N leaders && git diff --exit-code --stat -- leaders
 
       - name: Build admin app
+        if: needs.changes.outputs.admin == 'true'
         run: npm run admin:build
 
       # mi-admin ينشر admin/ كما هو، فيجب أن يطابق admin/ المودع مصدره
       - name: Admin build is committed
+        if: needs.changes.outputs.admin == 'true'
         run: git add -N admin && git diff --exit-code --stat -- admin
 
-      # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)
+      # متصفح Playwright من الذاكرة بإصداره؛ مكتبات النظام وحدها عند الإصابة
+      - name: Playwright version
+        id: pw
+        if: needs.changes.outputs.e2e_groups != '[]'
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        id: browsers
+        if: needs.changes.outputs.e2e_groups != '[]'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browser
+        if: needs.changes.outputs.e2e_groups != '[]' && steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+      - name: Install Playwright system libraries
+        if: needs.changes.outputs.e2e_groups != '[]' && steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
-      - name: End-to-end tests
-        run: npm run e2e
+      # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)، كل مجموعة بخوادمها وحدها
+      - name: End-to-end tests (selected groups)
+        if: needs.changes.outputs.e2e_groups != '[]'
+        env:
+          E2E_PREBUILT: '1'
+          GROUPS: ${{ join(fromJSON(needs.changes.outputs.e2e_groups), ' ') }}
+        run: for g in $GROUPS; do node scripts/ops/e2e-groups.mjs run "$g" || exit 1; done
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # حالة واحدة للطلب، وبصمة الشجرة المفحوصة ليتخطى الدفع إلى main الفحص نفسه
+  ci-ok:
+    needs: [changes, checks, web]
+    if: always() && github.event_name == 'pull_request' && needs.changes.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: All required jobs passed or were not needed
+        run: |
+          for r in "${{ needs.changes.result }}" "${{ needs.checks.result }}" "${{ needs.web.result }}"; do
+            case "$r" in success|skipped) ;; *) echo "::error::وظيفة انتهت بـ $r"; exit 1;; esac
+          done
+      - run: echo "${{ needs.changes.outputs.tree }}" > tree.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ci-pass-${{ needs.changes.outputs.tree }}
+          path: tree.txt
+          retention-days: 14
 
   # ── بوابة النشر: على main وبعد خضرة الفحوص فقط ──
-  # الدوال الست أولًا (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم مسبار حقيقي لكل دالة تخدم واجهة،
+  # الدوال أولًا حين تغيّرت منذ آخر نشر (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم مسبار حقيقي لكل دالة تخدم واجهة،
   # ثم يُدفع فرع release فتبني Cloudflare Pages المنصات منه. لا شيء يصل الإنتاج إن احمرّ فحص.
   deploy:
-    needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    needs: [changes, checks, web]
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.changes.result == 'success' &&
+      (needs.checks.result == 'success' || needs.checks.result == 'skipped') &&
+      (needs.web.result == 'success' || needs.web.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -128,22 +248,43 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
+      SUPABASE_CLI: 3.1.0
       # المفتاح العام (anon) كما في الواجهات؛ الدالة تتحقق من JWT فلا تقبل طلبًا بلا مفتاح
       SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      # الدوال تُنشر حين تغيّرت منذ آخر إيداع وصل الإنتاج (فرع release)، لا منذ الدفعة السابقة وحدها
+      - name: Functions changed since the last release?
+        id: fn
+        run: |
+          # بلا فرع النشر (أو تعذّر جلبه) تُنشر الدوال: الشك ينشر
+          if git fetch --no-tags --depth=1 origin release 2>/dev/null && git diff --quiet FETCH_HEAD "$GITHUB_SHA" -- supabase/functions; then
+            echo "::notice::لم تتغير الدوال منذ آخر نشر؛ تُترقّى الواجهات وحدها."
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v7
         if: env.SUPABASE_ACCESS_TOKEN != ''
         with:
-          node-version: '20'
-      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub فيفشل عند 504 أو حد المعدل (كما في integration.yml)
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub فيفشل عند 504 أو حد المعدل (كما في integration.yml).
+      # بإصدار مثبّت ومخزّن، فلا يتغير سلوك النشر بإصدار جديد ولا يُنزَّل في كل مرة.
+      - uses: actions/cache@v5
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        with:
+          path: ~/.supabase-cli
+          key: supabase-cli-${{ runner.os }}-${{ env.SUPABASE_CLI }}
       - name: Install Supabase CLI
-        if: env.SUPABASE_ACCESS_TOKEN != ''
-        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        run: |
+          [ -x ~/.supabase-cli/bin/supabase ] || npm i -g supabase@$SUPABASE_CLI --prefix ~/.supabase-cli --no-audit --no-fund
+          echo "$HOME/.supabase-cli/bin" >> "$GITHUB_PATH"
+          ~/.supabase-cli/bin/supabase --version
       # منذ المرحلة ل1 يفشل التحقق البشري مغلقًا: نشر الدوال بلا مفتاحَي Turnstile (أو بلا الفلفل أو مفتاح البريد)
       # يوقف الدخول برمز البريد، فيتوقف النشر هنا برسالة واضحة قبل أن يمس الإنتاج. الأسماء فقط، لا قيم.
       - name: Sign-in secrets are set on the project (names only)
-        if: env.SUPABASE_ACCESS_TOKEN != ''
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         run: node scripts/ops/function-secrets.mjs --require=signin
       # لا تُنشر دالة قبل ترحيل تعتمد عليه: كل ترحيل في المستودع غير مطبّق في الإنتاج يوقف النشر
       # ما لم يوسم tolerant أو deferred في سطوره الأولى (scripts/ops/pending-migrations.mjs). قراءة فقط.
@@ -151,7 +292,7 @@ jobs:
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: node scripts/ops/pending-migrations.mjs
       - name: Deploy edge functions
-        if: env.SUPABASE_ACCESS_TOKEN != ''
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         run: |
           # نشر كل دالة بثلاث محاولات: واجهة Supabase ترد أحيانًا 401 أو 5xx عابرة وسط السلسلة (حدث في 2026-11-05)
           deploy() {
