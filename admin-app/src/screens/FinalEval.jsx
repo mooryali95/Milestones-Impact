@@ -148,7 +148,9 @@ export function FinalConfig({ program, onClose }) {
     const r = await L('admin.final-eval-config', { program_id: program.id, config: c });
     setBusy(false);
     if (!r.success) return toast(r.message);
-    toast(`حُفظ إعداد التقييم الختامي (الإصدار ${r.config?.version ?? ''})`); onClose(true);
+    // أعضاء اللجنة كما قرأهم الخادم فعلًا، فلا يُظن الاعتماد مقصورًا على من لم يُحفظ
+    const members = r.config?.approval !== 'expert' && r.config?.committee?.length ? `، أعضاء اللجنة: ${r.config.committee.join('، ')}` : r.config?.approval !== 'expert' ? '، والاعتماد لأي حساب إدارة' : '';
+    toast(`حُفظ إعداد التقييم الختامي (الإصدار ${r.config?.version ?? ''})${members}`); onClose(true);
   };
   const w = (k, v) => setC({ ...c, weights: { ...c.weights, [k]: v } });
   const t = (k, v) => setC({ ...c, thresholds: { ...c.thresholds, [k]: v } });

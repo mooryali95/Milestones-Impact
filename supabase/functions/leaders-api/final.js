@@ -62,7 +62,9 @@ export const FINAL_DEFAULTS = {
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 const intIn = (v, d, a, b) => (Number.isFinite(num(v)) ? clamp(Math.round(num(v)), a, b) : d);
-const emailList = (v) => [...new Set((Array.isArray(v) ? v : String(v || '').split(/[\s,،;]+/)).map((e) => String(e).trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 20);
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const listTokens = (v) => (Array.isArray(v) ? v : String(v || '').split(/[\s,،;]+/)).map((e) => String(e ?? '').trim()).filter(Boolean);
+const emailList = (v) => [...new Set(listTokens(v).map((e) => e.toLowerCase()).filter((e) => EMAIL_RE.test(e)))].slice(0, 20);
 
 // إعداد البرنامج كما يُقرأ: الافتراضي لكل ما لم يُضبط
 export function finalConfig(raw) {
@@ -99,6 +101,10 @@ export function cleanFinalConfig(raw, previous = null, now = new Date().toISOStr
   if (!Object.values(c.sources).some((w) => w > 0)) throw new Error('أعطِ وزنًا لمصدر واحد على الأقل في التقييم المستمر');
   const t = c.thresholds;
   if (!(t.pass > t.pass_notes && t.pass_notes > t.extend)) throw new Error('حدود القرار تنازلية: الاجتياز > الاجتياز بملاحظات > التمديد');
+  // أعضاء اللجنة بالبريد وحده: كان ما ليس بريدًا يسقط بصمت، فإن سقط الكل فرغت اللجنة وصار الاعتماد لأي حساب إدارة
+  // (التدقيق 2026-11-11). فيُرفض الحفظ ويُسمّى ما ليس بريدًا
+  const notEmail = listTokens(raw?.committee).filter((e) => !EMAIL_RE.test(e));
+  if (notEmail.length) throw new Error(`أعضاء اللجنة يُكتبون بالبريد. ليست بريدًا: ${notEmail.slice(0, 5).join('، ')}`);
   if (c.approval !== 'expert' && c.committee.length && c.committee.length < c.committee_size) throw new Error(`أعضاء اللجنة المسمّون (${c.committee.length}) أقل من حجمها (${c.committee_size})`);
   const g = c.measure.gain_scores;
   if (!(g.up >= g.flat && g.flat >= g.down)) throw new Error('درجات المكسب تنازلية: صاعد ≥ مستقر ≥ هابط');
