@@ -29,7 +29,8 @@ export default function Tracking() {
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [open, setOpen] = useState(false);
+  // النموذج مغلق، أو مفتوح لتحديث الشهر («update») أو لمراجعة الأثر («checkpoint»)
+  const [open, setOpen] = useState('');
   const apply = (r) => { setD(r); if (r.success) setV(draftFrom(r.tracking, r.current)); };
   useEffect(() => { call('tracking.get').then(apply); }, []);
   // التحديث الشهري يُحفظ بزر واحد؛ إغلاق الصفحة والنموذج مفتوح يحذّر
@@ -40,20 +41,26 @@ export default function Tracking() {
   const t = d.tracking;
   const s = t.summary;
   const checkpoint = s.due.checkpoint ? t.checkpoints.find((c) => c.key === s.due.checkpoint) : null;
+  // مراجعة اعترض عليها الراعي أو لم يعد رابطه صالحًا: تُصحَّح في صفها وتُرسل من جديد، ولو كان من شهر سابق
+  const redo = s.due.resubmit ? t.updates.find((u) => u.checkpoint === s.due.checkpoint) || null : null;
   const verifying = d.current?.verify && ['pending', 'confirmed'].includes(d.current.verify.status);
   const editable = s.can_update && !verifying;
+  const cp = open === 'checkpoint' ? checkpoint : null;
+  const start = (mode) => { setV(draftFrom(t, mode === 'checkpoint' && redo ? redo : d.current)); setMsg(null); setOpen(mode); };
+  const monthLabel = d.current ? `عدّل تحديث ${monthName(s.current)}` : `حدّث متابعة ${monthName(s.current)}`;
   const setM = (k, patch) => setV({ ...v, milestones: { ...v.milestones, [k]: { ...v.milestones[k], ...patch } } });
   const setB = (k, patch) => setV({ ...v, benefits: { ...v.benefits, [k]: { ...v.benefits[k], ...patch } } });
 
   const save = async () => {
-    if (checkpoint && !window.confirm(`تُرسل «${checkpoint.title}» إلى راعي المبادرة ليؤكد الأرقام، ولا تُعدَّل حتى يرد. متابعة؟`)) return;
+    if (cp && !window.confirm(`تُرسل «${cp.title}» إلى راعي المبادرة ليؤكد الأرقام، ولا تُعدَّل حتى يرد. متابعة؟`)) return;
     setBusy(true); setMsg(null);
-    const r = await call('tracking.save', { ...v, checkpoint: !!checkpoint });
+    const r = await call('tracking.save', { ...v, checkpoint: !!cp });
     setBusy(false);
     if (!r.success) return setMsg({ err: r.message });
     apply(r);
-    setOpen(false);
-    setMsg({ ok: r.invited ? 'أُرسلت المراجعة، ووصل الراعي رابط تأكيد الأرقام.' : 'حُفظ تحديث هذا الشهر.' });
+    setOpen('');
+    setMsg(r.mail_failed ? { warn: 'حُفظت المراجعة، وتعذّر إرسال الرابط إلى الراعي الآن. أعد إرسالها بعد قليل.' }
+      : { ok: r.invited ? 'أُرسلت المراجعة، ووصل الراعي رابط تأكيد الأرقام.' : 'حُفظ تحديث هذا الشهر.' });
   };
 
   return (
@@ -75,19 +82,25 @@ export default function Tracking() {
       </div>
 
       <ol className="tr-cps">{s.checkpoints.map((c) => <li key={c.key} className={c.status}><b>{c.title}</b><small>{c.verify_title || CP_STATUS[c.status]}</small></li>)}</ol>
-      {d.current?.verify?.status === 'disputed' && <div className="alert err">اعترض الراعي على الأرقام: «{d.current.verify.note}». صحّحها ثم أرسل المراجعة من جديد.</div>}
+      {msg?.warn ? <div className="alert err">{msg.warn}</div>
+        : redo?.verify?.status === 'disputed' ? <div className="alert err">اعترض الراعي على أرقام «{checkpoint.title}»: «{redo.verify.note}». صحّحها ثم أرسل المراجعة من جديد.</div>
+          : redo && <div className="alert info">لم يؤكد الراعي أرقام «{checkpoint.title}»، ورابطه لم يعد صالحًا. أرسل المراجعة من جديد ليصله رابط آخر.</div>}
       {msg?.ok && <div className="alert ok">{msg.ok}</div>}
 
       {editable && !open && (
-        <button className={`btn ${checkpoint || s.due.update ? 'gold' : 'ghost'}`} onClick={() => setOpen(true)}>
-          {checkpoint ? `ابدأ ${checkpoint.title}` : d.current ? `عدّل تحديث ${monthName(s.current)}` : `حدّث متابعة ${monthName(s.current)}`}
-        </button>
+        <div className="row">
+          <button className={`btn ${checkpoint || s.due.update ? 'gold' : 'ghost'}`} onClick={() => start(checkpoint ? 'checkpoint' : 'update')}>
+            {checkpoint ? `${redo ? 'أعد إرسال' : 'ابدأ'} ${checkpoint.title}` : monthLabel}
+          </button>
+          {/* المراجعة المعادة من شهر سابق لا تحجب تحديث الشهر الجاري */}
+          {redo && redo.period !== s.current && <button className="btn ghost" onClick={() => start('update')}>{monthLabel}</button>}
+        </div>
       )}
-      {verifying && <p className="muted small">{d.current.verify.title}: بانتظار تأكيد الراعي.</p>}
+      {verifying && <p className="muted small">{d.current.verify.status === 'confirmed' ? 'أكّد الراعي أرقام هذه المراجعة.' : 'المراجعة عند الراعي ليؤكد الأرقام، ولا تُعدَّل حتى يرد.'}</p>}
 
       {open && v && (
         <div className="tr-form">
-          {checkpoint && <div className="alert info">{checkpoint.title}: اكتب القيمة الحالية لكل منفعة، وما تغيّر فعلًا في الجهة ودليله. يصل الراعي رابطًا يؤكد به الأرقام.</div>}
+          {cp && <div className="alert info">{cp.title}: اكتب القيمة الحالية لكل منفعة، وما تغيّر فعلًا في الجهة ودليله. يصل الراعي رابطًا يؤكد به الأرقام.</div>}
           <h3>المعالم</h3>
           {t.state.milestones.map((m) => (
             <div key={m.key} className="tr-row">
@@ -110,7 +123,7 @@ export default function Tracking() {
             </div>
           ))}
 
-          <label className="field"><span>{checkpoint ? 'ما الذي تغيّر فعلًا في الجهة، وما دليله' : 'ما جرى هذا الشهر'}</span>
+          <label className="field"><span>{cp ? 'ما الذي تغيّر فعلًا في الجهة، وما دليله' : 'ما جرى هذا الشهر'}</span>
             <textarea className="input" rows={4} maxLength={2000} value={v.narrative} onChange={(e) => setV({ ...v, narrative: e.target.value })} /></label>
           <div className="tr-two">
             <label className="field"><span>ما يعيقك</span><textarea className="input" rows={2} maxLength={1000} value={v.blockers} onChange={(e) => setV({ ...v, blockers: e.target.value })} /></label>
@@ -118,8 +131,8 @@ export default function Tracking() {
           </div>
           {msg?.err && <div className="alert err">{msg.err}</div>}
           <div className="row">
-            <button className="btn gold" disabled={busy} onClick={save}>{busy ? 'لحظة…' : checkpoint ? 'أرسل المراجعة للراعي' : 'احفظ التحديث'}</button>
-            <button className="btn ghost" disabled={busy} onClick={() => { setOpen(false); setV(draftFrom(t, d.current)); setMsg(null); }}>إلغاء</button>
+            <button className="btn gold" disabled={busy} onClick={save}>{busy ? 'لحظة…' : cp ? 'أرسل المراجعة للراعي' : 'احفظ التحديث'}</button>
+            <button className="btn ghost" disabled={busy} onClick={() => { setOpen(''); setV(draftFrom(t, d.current)); setMsg(null); }}>إلغاء</button>
           </div>
         </div>
       )}
