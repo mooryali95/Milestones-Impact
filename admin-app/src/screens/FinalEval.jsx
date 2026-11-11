@@ -8,13 +8,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
-import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
+import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
 const when = (d) => (d ? new Date(d).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 export function FinalEvalCard({ participantId, canWrite }) {
-  const { toast, prompt } = useUI();
+  const { toast, prompt, confirm } = useUI();
   const [d, setD] = useState(null);
   const [adj, setAdj] = useState({ components: {} });
   const [busy, setBusy] = useState(false);
@@ -37,6 +37,9 @@ export function FinalEvalCard({ participantId, canWrite }) {
     setBusy(false);
     if (!r.success) return toast(r.message);
     toast(r.notice || ok); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
+  };
+  const voteApprove = async () => {
+    if (await confirm(finalApproveConfirm(live, d.approval), { ok: 'اعتمد' })) run('admin.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك');
   };
   const voteReturn = async () => {
     const note = await prompt('سبب الإعادة (يصل لمن رفع التقييم):', '');
@@ -114,7 +117,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
             <button className="btn-sm primary" disabled={busy} onClick={() => run('admin.final-eval-save', { adjust: adj, submit: true }, 'رُفع للاعتماد')}>ارفع للاعتماد</button>
           </>}
           {status === 'pending' && <>
-            <button className="btn-sm primary" disabled={busy || !!d.vote_block} title={d.vote_block || ''} onClick={() => run('admin.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك')}>اعتمد</button>
+            <button className="btn-sm primary" disabled={busy || !!d.vote_block} title={d.vote_block || ''} onClick={voteApprove}>اعتمد</button>
             <button className="btn-sm ghost" disabled={busy || !!d.vote_block} onClick={voteReturn}>أعِد للمراجعة</button>
             <small className="la-muted">{FINAL_APPROVAL_AR[live.config.approval]}{d.approval.large_adjust ? ' + توقيع ثانٍ للتعديل الكبير' : ''}: {d.approval.yes} من {d.approval.need}</small>
             {d.vote_block && <small className="la-muted">{d.vote_block}</small>}

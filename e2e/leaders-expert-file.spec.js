@@ -112,6 +112,15 @@ test('مشاركو الخبير وملف المشارك: المطلوب الآن
   const fin = page.getByRole('region', { name: 'التقييم الختامي' });
   await expect(fin).toContainText('بانتظار الاعتماد');
   await expect(fin).toContainText('78٪');
+  // الاعتماد يُبلغ المشارك ويصدر الشهادة فورًا، فيسبقه تأكيد يذكر الدرجة والقرار؛ والتراجع لا يرسل شيئًا (links-expert-4)
+  const asked = [];
+  page.once('dialog', (dl) => { asked.push(dl.message()); dl.dismiss(); });
+  await fin.getByRole('button', { name: 'اعتمد' }).click();
+  await expect.poll(() => asked.length).toBe(1);
+  expect(asked[0]).toContain('78٪ · اجتاز');
+  expect(asked[0]).toContain('يُبلغ المشارك بالقرار الآن وتصدر شهادته');
+  expect(s.calls.find((c) => c.action === 'xp.final-eval-vote')).toBeUndefined();
+  page.once('dialog', (dl) => dl.accept());
   await fin.getByRole('button', { name: 'اعتمد' }).click();
   await expect.poll(() => s.calls.find((c) => c.action === 'xp.final-eval-vote')).toMatchObject({ participant_id: 'p1', vote: 'approve' });
   await expect(fin).toContainText('معتمد');

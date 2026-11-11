@@ -283,3 +283,13 @@ export function finalEditors(record) {
   const list = [record?.submitted_by, ...(Array.isArray(record?.adjust?.edited_by) ? record.adjust.edited_by : [])];
   return [...new Set(list.filter(Boolean).map((e) => String(e).toLowerCase()))];
 }
+
+// نص التأكيد قبل «اعتمد» في البوابة واللوحة (links-expert-4): الاعتماد الذي يكمل العدد يُبلغ المشارك ويصدر الشهادة
+// فورًا (final.ts vote)، ولا يُتراجع عنه إلا بإعادة فتح من الإدارة؛ فلا يقع بنقرة خاطئة. «أعِد للمراجعة» بلا تأكيد
+export function finalApproveConfirm(live, approval) {
+  const what = `${live?.score != null ? `${live.score}٪` : 'بلا درجة'} · ${FINAL_DECISION_AR[live?.decision] || 'بلا قرار'}`;
+  const yes = (approval?.yes || 0) + 1, need = approval?.need || 1;
+  if (yes < need) return `تعتمد التقييم الختامي (${what}). يُسجَّل توقيعك (${yes} من ${need})، ويُحسم القرار حين يكتمل العدد. متابعة؟`;
+  const cert = ['pass', 'pass_notes'].includes(live?.decision) ? ' وتصدر شهادته' : '';
+  return `تعتمد التقييم الختامي (${what}). بتوقيعك يكتمل الاعتماد، فيُبلغ المشارك بالقرار الآن${cert}، ولا يُتراجع عنه إلا بإعادة فتح من الإدارة. متابعة؟`;
+}

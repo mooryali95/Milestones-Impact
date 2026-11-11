@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { xpCall } from '../api.js';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
 import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
+import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, finalApproveConfirm, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
 const MS_CHIP = { done: 'ok', late: 'bad', due_soon: 'gold', on_time: '', unscheduled: '' };
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
@@ -106,7 +106,7 @@ function FinalEval({ pid, f, advisor, reload }) {
           <button className="btn sm" disabled={busy} onClick={() => run('xp.final-eval-save', { adjust: adj, submit: true }, 'رُفع للاعتماد')}>ارفع للاعتماد</button>
         </>}
         {status === 'pending' && <>
-          <button className="btn sm" disabled={busy || !!f.vote_block} title={f.vote_block || ''} onClick={() => run('xp.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك')}>اعتمد</button>
+          <button className="btn sm" disabled={busy || !!f.vote_block} title={f.vote_block || ''} onClick={() => { if (window.confirm(finalApproveConfirm(live, f.approval))) run('xp.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك'); }}>اعتمد</button>
           <input className="input" aria-label="سبب الإعادة" placeholder="سبب الإعادة (يصل لمن رفعه)" value={ret} onChange={(e) => setRet(e.target.value)} />
           <button className="btn ghost sm" disabled={busy || !!f.vote_block || ret.trim().length < 10} onClick={() => run('xp.final-eval-vote', { vote: 'return', note: ret }, 'أُعيد للمراجعة')}>أعِد للمراجعة</button>
           <small className="muted">{FINAL_APPROVAL_AR[live.config?.approval]}: {f.approval?.yes} من {f.approval?.need}{f.vote_block ? ` · ${f.vote_block}` : ''}</small>
