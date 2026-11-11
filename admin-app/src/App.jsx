@@ -78,23 +78,41 @@ function Dashboard({ user, onUser, onLogout }) {
 
 export default function App() {
   const [user, setUser] = useState(() => session.load()?.user || null);
+  // انتهاء الجلسة لا يفك اللوحة: تبقى الشاشة وما كُتب في نماذجها تحت نافذة إعادة الدخول،
+  // ثم يُعاد الحفظ من حيث توقف (تدقيق الجاهزية admin-core-8). مدة الجلسة نفسها لا تتغير
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
-    setExpiredHandler(() => setUser(null));
-    setLeadersExpired(() => setUser(null));
+    setExpiredHandler(() => setExpired(true));
+    setLeadersExpired(() => setExpired(true));
   }, []);
 
-  const signedIn = (token, u) => { session.save(token, u); setUser(u); };
+  // من يدخل بحساب آخر تُفتح له اللوحة من جديد (المفتاح بالبريد)، فلا يرث ما فتحه غيره
+  const signedIn = (token, u) => { session.save(token, u); setUser(u); setExpired(false); };
   const patchUser = useCallback((patch) => { session.patchUser(patch); setUser((u) => ({ ...u, ...patch })); }, []);
   const logout = async () => {
     await call('logout').catch(() => {});
     session.clear();
     setUser(null);
+    setExpired(false);
   };
 
   return (
     <UIProvider>
-      {user ? <Dashboard user={user} onUser={patchUser} onLogout={logout} /> : <Login onSignedIn={signedIn} />}
+      {user ? (
+        <>
+          {/* inert="" (React 18) يخرج اللوحة من التركيز والنقر ما دامت نافذة إعادة الدخول ظاهرة */}
+          <div inert={expired ? '' : undefined}>
+            <Dashboard key={user.email} user={user} onUser={patchUser} onLogout={logout} />
+          </div>
+          {expired && (
+            <div className="reauth-overlay" role="dialog" aria-modal="true" aria-label="انتهت الجلسة">
+              <Login onSignedIn={signedIn} initialEmail={user.email}
+                notice="انتهت جلستك. ادخل من جديد لتكمل، وما كتبته في الشاشة باقٍ كما هو، فأعد الحفظ بعد الدخول." />
+            </div>
+          )}
+        </>
+      ) : <Login onSignedIn={signedIn} />}
     </UIProvider>
   );
 }
