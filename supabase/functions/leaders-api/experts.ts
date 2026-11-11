@@ -299,8 +299,12 @@ export async function adminAssign(a: Admin, b: Body) {
   return { success: true, request_id: req.id, ...r };
 }
 
-export async function adminRequests() {
-  const { data } = await db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)').order('created_at', { ascending: false }).limit(300);
+// b.participant_id (اختياري): طلبات مشارك واحد لملفه، لا طلبات الجميع تُصفّى في المتصفح
+// (وكانت آخر 300 طلب وحدها، فقد يغيب منها طلب قديم له)
+export async function adminRequests(b: Body = {}) {
+  let q = db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)');
+  if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
+  const { data } = await q.order('created_at', { ascending: false }).limit(300);
   return { success: true, requests: data || [] };
 }
 

@@ -276,7 +276,8 @@ function SponsorRequests({ canWrite, onPerson, onChange }) {
 export function PersonAccess({ participantId, canWrite }) {
   const { toast } = useUI();
   const [d, setD] = useState(null);
-  const load = useCallback(async () => setD(await L('admin.payments')), []);
+  // حقوق هذا المشارك وحده (admin-core-12)، لا لوحة المدفوعات كلها
+  const load = useCallback(async () => setD(await L('admin.payments', { participant_id: participantId })), [participantId]);
   useEffect(() => { load(); }, [load]);
   if (!d?.success) return null;
   const mine = d.entitlements.filter((e) => e.participant_id === participantId && !e.revoked_at);

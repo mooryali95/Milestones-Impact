@@ -31,7 +31,8 @@ export function ExpertAssign({ participantId, canWrite }) {
   const [m, setM] = useState(null);
   const [busy, setBusy] = useState(false);
   const loadReqs = useCallback(async () => {
-    const r = await L('admin.expert-requests');
+    const r = await L('admin.expert-requests', { participant_id: participantId });
+    // التصفية هنا تبقى حارسًا إن رد خادم أقدم بطلبات الجميع
     setReqs((r.requests || []).filter((x) => x.participant_id === participantId));
   }, [participantId]);
   useEffect(() => { loadReqs(); }, [loadReqs]);

@@ -71,7 +71,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   useEffect(() => { load(); }, [load]);
   // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
   const [erasures, setErasures] = useState([]);
-  useEffect(() => { L('admin.erasures', {}).then((r) => setErasures(r.success ? r.items || [] : [])); }, [list]);
+  // بعد كل تحميل للقائمة مرة واحدة: list تبدأ null ثم تُملأ، فكان يُطلب مرتين عند الفتح
+  useEffect(() => { if (list) L('admin.erasures', {}).then((r) => setErasures(r.success ? r.items || [] : [])); }, [list]);
 
   const all = list || [];
   const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
