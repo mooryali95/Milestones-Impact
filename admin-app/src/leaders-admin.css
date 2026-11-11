@@ -624,9 +624,10 @@
 }
 
 /* قواعد المرحلة: سطر واحد على بطاقتها، ولون بحسب النوع */
-.la-rule { font-size: .8rem; margin: 4px 0 6px; padding: 3px 10px; border-radius: 999px; display: inline-block; background: var(--st-warn-bg); color: var(--st-warn-dark); }
-.la-rule.on_demand { background: var(--st-info-bg); color: var(--st-info-dark); }
-.la-rule.optional { background: var(--st-ok-bg); color: var(--st-ok-dark); }
+/* نص صغير على خلفية فاتحة: -text أو اللون الأساسي حين يبلغ 4.5 إلى 1 (status.css)؛ و-dark للأرضية الداكنة وحدها */
+.la-rule { font-size: .8rem; margin: 4px 0 6px; padding: 3px 10px; border-radius: 999px; display: inline-block; background: var(--st-warn-bg); color: var(--st-warn-text); }
+.la-rule.on_demand { background: var(--st-info-bg); color: var(--st-info); }
+.la-rule.optional { background: var(--st-ok-bg); color: var(--st-ok-text); }
 .la-multi { border: 1px solid var(--st-warn-bg); border-radius: 10px; padding: 8px 12px; display: grid; gap: 4px; }
 .la-multi legend { font-size: .85rem; padding: 0 4px; }
 .la-stage.available { border-inline-start: 3px solid var(--st-info); }
@@ -637,7 +638,7 @@
 .la-group .la-reqs li { gap: 6px; }
 .la-group select { max-width: 130px; }
 .la-big { font-size: 1.4rem; }
-.la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad-dark); font-size: .85rem; }
+.la-flags { margin: 6px 0; padding-inline-start: 18px; color: var(--st-bad); font-size: .85rem; }
 .la-adj { display: grid; gap: 4px; min-width: 160px; }
 .la-adj input { width: 100%; }
 .la-adj-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
