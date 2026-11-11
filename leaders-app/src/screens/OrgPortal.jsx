@@ -9,14 +9,14 @@ import AccountSwitch from '../AccountSwitch.jsx';
 import JourneyMap from '../JourneyMap.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { askSignOut } from '../SignOutDialog.jsx';
-import { filterRows, sortRows } from '../coord.js';
+import { filterRows, sortRows, stageOf, stageOptions, isStale, NOT_STARTED, PRE_BASELINE, STALE, STALE_DAYS } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
@@ -173,7 +173,7 @@ function ImpactCard({ im, onReport }) {
 function Dashboard({ me, onLogout }) {
   // ما جاء مع الهوية (preload) يُعرض فورًا، وإعادة التحميل بعد إجراء تطلب اللوحة وحدها (البند 8.1)
   const [d, setD] = useState(me.preload?.dashboard ?? null);
-  const [f, setF] = useState({ q: '', status: '', track: '' });
+  const [f, setF] = useState({ q: '', stage: '', track: '' });
   const [sort, setSort] = useState('name');
   const [msg, setMsg] = useState('');
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
@@ -197,7 +197,7 @@ function Dashboard({ me, onLogout }) {
     exportWorkbook(
       { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
       head.map(([label, width]) => ({ label, width })),
-      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), p.stage || STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
+      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), stageOf(p), p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
         ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
     );
   };
@@ -206,6 +206,17 @@ function Dashboard({ me, onLogout }) {
     const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
     const { meta, body } = orgReport({ ...d, participants: rows }, 'coordinator');
     if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
+  };
+  // الانتقال إلى قسم بعينه: على الجوال تبدأ القائمة بعد شاشات من البطاقات (org-7)، فيُمرَّر إليها ويُنقل التركيز
+  const goTo = (id) => requestAnimationFrame(() => {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el?.focus({ preventScroll: true });
+  });
+  const show = (s) => {
+    if (s.to) return goTo(s.to);
+    setF({ q: '', track: '', stage: s.stage });
+    goTo('op-people-h');
   };
   const printImpact = async () => {
     const win = window.open('', '_blank');
@@ -224,6 +235,7 @@ function Dashboard({ me, onLogout }) {
           <div className="row">
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
+            {perms.list !== false && <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={() => goTo('op-people-h')}>إلى قائمة المشاركين</button>}
             <AccountSwitch here="org" doors={me.switch_to} doSwitch={(to) => coordCall('coord.switch', { to })} />
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
@@ -233,7 +245,7 @@ function Dashboard({ me, onLogout }) {
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
 
-      <NeedsYou d={d} />
+      <NeedsYou d={d} onShow={show} />
       <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" initial={me.preload?.sus} />
 
       <div className="op-kpis">
@@ -257,12 +269,15 @@ function Dashboard({ me, onLogout }) {
 
       {perms.list === false ? <section className="card"><h3>المشاركون</h3><p className="muted">صلاحيتك أرقام مجمّعة عن مشاركي جهتك، بلا أسماء ولا صفوف فردية.</p></section> : <section className="card op-table">
         <div className="row between op-tools">
-          <h3>المشاركون</h3>
+          <h3 id="op-people-h" tabIndex={-1}>المشاركون</h3>
           <div className="row">
             {/* عنوان ظاهر للبحث (8.6)، لا aria-label وحده */}
             <label className="op-search"><span className="small">ابحث</span><input className="input" type="search" placeholder="بالاسم أو المسمى…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
-            <select className="input" aria-label="المرحلة" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
-              <option value="">كل المراحل</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {/* المرشّح على ما يعرضه عمود «المرحلة» نفسه (org-2)، ومعه خيار يجمع من لم يكمل القياس المبدئي */}
+            <select className="input" aria-label="المرحلة" value={f.stage} onChange={(e) => setF({ ...f, stage: e.target.value })}>
+              <option value="">كل المراحل</option><option value={NOT_STARTED}>لم يكملوا القياس المبدئي</option>
+              {perms.activity && <option value={STALE}>لم يدخلوا منذ {STALE_DAYS} يومًا</option>}
+              {stageOptions(d.participants, (d.journey_map?.stages || []).map((s) => s.title)).map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             {tracks.length > 0 && <select className="input" aria-label="المسار" value={f.track} onChange={(e) => setF({ ...f, track: e.target.value })}>
               <option value="">كل المسارات</option>{tracks.map(([k]) => <option key={k} value={k}>{titleOf(k)}</option>)}
@@ -283,7 +298,7 @@ function Dashboard({ me, onLogout }) {
             <tr key={p.id}>
               <td className="op-name"><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
               {perms.scores && <td data-label="المسار">{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
-              <td data-label="المرحلة"><span className="chip">{p.stage || STATUS[p.status] || p.status}</span></td>
+              <td data-label="المرحلة"><span className="chip">{stageOf(p)}</span></td>
               <td data-label="الإنجاز"><span><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</span></td>
               {perms.activity && <td data-label="آخر دخول">{fmt(p.last_login_at)}</td>}
               {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}
@@ -299,23 +314,23 @@ function Dashboard({ me, onLogout }) {
 
 // ما يحتاج تدخل المنسق، أول اللوحة: كانت متفرقة في الرأس والجدول فتُعرض ولا توجّه. يُعدّ مما وصل اللوحة فعلًا
 // (بحسب صلاحياته)، ولا يظهر القسم إن لم يكن فيه شيء. «متوقف» من آخر دخول، فلا يُحسب إلا لمن له صلاحية النشاط.
-const STALE_DAYS = 14;
-const PRE_BASELINE = ['registered', 'profiled', 'assessing'];
+// show: ما يعرضهم بنقرة (org-7): بطاقة المقيّمين، أو مرشّح القائمة الذي يحصرهم
 export function needsYou(d, now = Date.now()) {
   const ps = d.permissions?.list === false ? [] : (d.participants || []);
   const out = [];
   const raters = (d.raters_pending || []).length;
-  if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أسفل هذا القسم' });
+  // بطاقة التأكيد تُعرض قبل هذا القسم، فالتلميح «أعلاه» (org-7)
+  if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أعلى هذا القسم', show: { to: 'ra-h' } });
   if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد' });
   const notStarted = ps.filter((p) => PRE_BASELINE.includes(p.status)).length;
-  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', hint: 'صفِّ القائمة بالمرحلة لتراهم' });
+  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', show: { stage: NOT_STARTED } });
   if (d.permissions?.activity) {
-    const stale = ps.filter((p) => !['completed', 'withdrawn'].includes(p.status) && p.last_login_at && now - new Date(p.last_login_at).getTime() > STALE_DAYS * 864e5).length;
-    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, hint: 'رتّب القائمة بآخر نشاط لتراهم' });
+    const stale = ps.filter((p) => isStale(p, now)).length;
+    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, show: { stage: STALE } });
   }
   return out;
 }
-function NeedsYou({ d }) {
+function NeedsYou({ d, onShow }) {
   const items = needsYou(d);
   if (!items.length) return null;
   return (
@@ -324,6 +339,7 @@ function NeedsYou({ d }) {
       <ul>{items.map((x) => (
         <li key={x.key}>
           <span><b>{x.n}</b> {x.text}{x.hint && <small className="muted"> · {x.hint}</small>}</span>
+          {x.show && <button type="button" className="btn ghost sm" onClick={() => onShow(x.show)}>{x.show.to ? 'انتقل إليها' : 'اعرضهم في القائمة'}</button>}
         </li>
       ))}</ul>
     </section>

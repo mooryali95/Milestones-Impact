@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { coordParticipant, coordPermissions } from '../../supabase/functions/leaders-api/logic.js';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
+import { PARTICIPANT_STATUS } from '../../supabase/functions/leaders-api/labels.js';
+import { stageOf } from './coord.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -13,7 +15,14 @@ describe('لوحة الجهة', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
     expect(c).toContain("stageBy[r.id] = (j.journey || []).find((s: any) => s.status === 'active')?.title_ar || null;");
     expect(coordParticipant({ id: 'p', full_name: 'س', status: 'approved', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
-    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain('{p.stage || STATUS[p.status] || p.status}');
+    // stageOf في coord.js مصدر واحد للعمود وملف Excel ومرشّح «المرحلة» (org-2)
+    expect(read('leaders-app/src/coord.js')).toContain('export const stageOf = (p) => p.stage || PARTICIPANT_STATUS[p.status] || p.status;');
+    expect(stageOf({ stage: 'التدريب', status: 'enrolled' })).toBe('التدريب');
+    expect(stageOf({ stage: null, status: 'withdrawn' })).toBe(PARTICIPANT_STATUS.withdrawn);
+    const o = read('leaders-app/src/screens/OrgPortal.jsx');
+    expect(o).toContain('<td data-label="المرحلة"><span className="chip">{stageOf(p)}</span></td>');
+    expect(o).toContain("...(perms.scores ? [p.track_title || ''] : []), stageOf(p), p.progress,");
+    expect(o).not.toContain('p.stage ||');
   });
   it('org-1 المنسحب والموقوف بلا مرحلة جارية، فتظهر حالتهما في اللوحة وExcel كما في التقرير المطبوع', () => {
     // رحلتهما تبقى محسوبة بمرحلتها النشطة (الإدارة تغيّر الحالة وحدها)، فكانت اللوحة تعرض «التدريب» لمن انسحب

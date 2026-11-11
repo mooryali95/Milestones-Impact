@@ -49,7 +49,7 @@ export function RatersAwaiting({ items, onDecide }) {
   };
   return (
     <section className="card stack raters-awaiting" aria-labelledby="ra-h">
-      <h2 className="as-h3" id="ra-h">مقيّمون بانتظار تأكيدك <small className="muted">· {items.length}</small></h2>
+      <h2 className="as-h3" id="ra-h" tabIndex={-1}>مقيّمون بانتظار تأكيدك <small className="muted">· {items.length}</small></h2>
       <p className="small muted">بريد المقيّم عام أو من غير نطاق الجهة، أو المشارك فردي. تأكد أنه يعمل معه فعلًا: تقديره يدخل حكم «تغير مؤكد» وتقرير الأثر للجهة.</p>
       {msg && <div className="alert" role="status">{msg}</div>}
       {items.map((x) => (
