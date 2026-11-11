@@ -5,19 +5,23 @@
 // توزيع آلي متنوع أو متقارب المستوى، ثم نقل أي مشارك يدويًا.
 import React, { useCallback, useEffect, useState } from 'react';
 import { L, LVL } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { overallLevel, WORK_MODE_AR } from '../../../supabase/functions/leaders-api/logic.js';
+
+// نمط العمل للمقارنة: المحدد وحده وبترتيب ثابت، فاختيار «غير محدد» ثم الرجوع لا يُعدّ تعديلًا
+const modesKey = (m) => JSON.stringify(Object.keys(m || {}).filter((k) => m[k]).sort().map((k) => [k, m[k]]));
 
 export default function CohortGroups({ cohort, onClose }) {
   const { toast, prompt, confirm } = useUI();
   const [d, setD] = useState(null);
   const [modes, setModes] = useState(cohort.stage_modes || {});
+  const [savedModes, setSavedModes] = useState(() => modesKey(cohort.stage_modes));
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState('');   // عدد المجموعات للتوزيع الآلي؛ فارغ = نحو ستة في المجموعة
   const load = useCallback(async () => {
     const r = await L('admin.cohort-groups', { cohort_id: cohort.id });
     if (!r.success) { toast(r.message); onClose(); return; }
-    setD(r); setModes(r.cohort.stage_modes || {});
+    setD(r); setModes(r.cohort.stage_modes || {}); setSavedModes(modesKey(r.cohort.stage_modes));
     setCount((c) => c || String(Math.max(1, Math.round(r.members.length / 6))));
   }, [cohort.id]); // toast وonClose من الأب تتغير كل عرض
   useEffect(() => { load(); }, [load]);
@@ -34,6 +38,7 @@ export default function CohortGroups({ cohort, onClose }) {
     setBusy(true);
     const r = await L('admin.cohort-save', { id: cohort.id, stage_modes: modes });
     setBusy(false);
+    if (r.success) setSavedModes(modesKey(modes));
     toast(r.success ? 'حُفظ نمط العمل' : r.message);
   };
   const auto = async (by) => {
@@ -59,9 +64,12 @@ export default function CohortGroups({ cohort, onClose }) {
   const balance = (ms) => { const n = {}; ms.forEach((m) => { const k = lvl(m); n[k] = (n[k] || 0) + 1; }); return Object.entries(n).map(([k, v]) => `${k} ${v}`).join(' · '); };
   const unassigned = d?.members.filter((m) => !m.group_id) || [];
   const usesGroups = Object.values(modes).includes('groups') || cohort.project_mode === 'group';
+  // إغلاق واحد لـEsc والنقر خارجها و«إغلاق»: يسأل إن بقي نمط عمل لم يُحفظ، ويُعيد التحميل لأن المجموعات تُحفظ فورًا
+  const close = useGuardedClose(modesKey(modes) !== savedModes, () => onClose(true));
+  useEscape(close);
 
   return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="la-form mi-form wide" role="dialog" aria-modal="true" aria-label="المجموعات ونمط العمل">
         <h3>المجموعات ونمط العمل: «{cohort.name}»</h3>
         {!d ? <Spinner /> : (
@@ -124,7 +132,7 @@ export default function CohortGroups({ cohort, onClose }) {
                 })}
               </div>
             </section>
-            <div className="la-row"><button className="btn-sm ghost" onClick={() => onClose(true)}>إغلاق</button></div>
+            <div className="la-row"><button className="btn-sm ghost" onClick={close}>إغلاق</button></div>
           </>
         )}
       </div>

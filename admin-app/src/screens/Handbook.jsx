@@ -12,7 +12,7 @@ import {
   applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
-import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { RUBRIC_SCALE, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
@@ -392,6 +392,8 @@ export function Submission({ id, canWrite, onClose }) {
   const [feedback, setFeedback] = useState('');
   const [bonus, setBonus] = useState(0);
   const [err, setErr] = useState('');
+  // ما كتبه المقيّم ولم يعتمده: Esc والنقر خارجها و«إغلاق» تسأل قبل أن يضيع
+  const close = useGuardedClose(!!x && (rating !== (x.rating || 0) || feedback !== (x.feedback_ar || '') || String(bonus) !== String(x.bonus || 0)), () => onClose());
   useEffect(() => {
     L('admin.submission', { id }).then((r) => {
       if (!r.success) { toast(r.message); return onClose(); }
@@ -401,7 +403,7 @@ export function Submission({ id, canWrite, onClose }) {
   if (!x) return <div className="mid-ov"><Spinner /></div>;
   const m = x.learning_models;
   const submit = async (btn) => {
-    if (btn === 'cancel') return onClose();
+    if (btn === 'cancel') return close();
     if (btn === 'reviewed' && !rating) return setErr('اختر تقييمًا من 1 إلى 5');
     if (btn === 'returned' && !feedback.trim()) return setErr('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
     const r = await L('admin.review-submission', { id: x.id, status: btn, rating: rating || undefined, feedback, bonus });
@@ -410,7 +412,7 @@ export function Submission({ id, canWrite, onClose }) {
     onClose(true);
   };
   return (
-    <Studio label={`تقييم عمل ${x.participants.full_name}`} onClose={() => onClose()} onSubmit={submit} two>
+    <Studio label={`تقييم عمل ${x.participants.full_name}`} onClose={close} onSubmit={submit} two>
       <header className="hb-ed-head">
         <div className="hb-ed-name"><small>{m.title_ar} · {DIM_EN[m.dimension]}</small><b className="sub-who">{x.participants.full_name}</b>
           <small className="sub-meta">{[x.participants.job_title, x.participants.organization_name].filter(Boolean).join(' · ')} · سُلّم {date(x.submitted_at)}</small></div>

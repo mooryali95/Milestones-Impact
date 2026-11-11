@@ -5,7 +5,7 @@
 // الجديدة، ومعاينتها، وإلغاء شهادة، أو إعادة إصدارها لتصحيح الاسم.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
@@ -70,10 +70,13 @@ function SettingsCard({ canWrite }) {
 }
 
 function Reissue({ c, onClose, onDone }) {
-  const [v, setV] = useState({ name_ar: c.name_ar || '', name_en: c.name_en || '', reason: '' });
+  const [start] = useState(() => ({ name_ar: c.name_ar || '', name_en: c.name_en || '', reason: '' }));
+  const [v, setV] = useState(start);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  useEscape(onClose);
+  // صندوقها .mid-box مثل نافذة التأكيد، فكان شرط Esc القديم يتجاهلها؛ Esc الآن للعليا وحدها (ui.jsx)
+  const close = useGuardedClose(JSON.stringify(v) !== JSON.stringify(start), () => onClose());
+  useEscape(close);
   const go = async (e) => {
     e.preventDefault();
     if (!v.reason.trim()) return setErr('اكتب سبب إعادة الإصدار');
@@ -83,7 +86,7 @@ function Reissue({ c, onClose, onDone }) {
     if (r.success) onDone(r.certificate?.serial); else setErr(r.message);
   };
   return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form className="mid-box ce-reissue" role="dialog" aria-modal="true" aria-label="إعادة إصدار الشهادة" onSubmit={go}>
         <p className="mid-msg">إعادة إصدار <span dir="ltr">{c.serial}</span></p>
         <p className="la-muted">تُعلَّم الحالية «مستبدلة» وتشير صفحة تحققها إلى الجديدة، ويصل المشارك بريد بالشهادة الجديدة.</p>
@@ -93,7 +96,7 @@ function Reissue({ c, onClose, onDone }) {
         {err && <small className="of-err" role="alert">{err}</small>}
         <div className="mid-act">
           <button className="mid-btn ok" disabled={busy}>{busy ? 'لحظة…' : 'إعادة الإصدار'}</button>
-          <button type="button" className="mid-btn" onClick={onClose}>إلغاء</button>
+          <button type="button" className="mid-btn" onClick={close}>إلغاء</button>
         </div>
       </form>
     </div>

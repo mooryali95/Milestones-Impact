@@ -8,6 +8,7 @@ import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
 import { TABS } from './leaders-tabs.js';
+import { useEscape } from './ui.jsx';
 
 const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
   ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, to: { ctx: 'leaders', tab: k } }))];
@@ -49,11 +50,12 @@ export default function Palette() {
   }, [open]); // eslint-disable-line
 
   const hits = useMemo(() => (q.trim() ? rank(q, items || SECTIONS) : SECTIONS.slice(0, 8)), [q, items]);
+  // Esc من المستند لا من عنصر النافذة: كان لا يغلقها إن خرج التركيز منها (والتركيز وعودته إلى ما فتحها من ui.jsx)
+  useEscape(() => setOpen(false), open);
   if (!open) return null;
   const go = (h) => { if (!h) return; setOpen(false); navigate(h.to); window.scrollTo({ top: 0 }); };
   const key = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); setI((x) => Math.min(x + 1, hits.length - 1)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setI((x) => Math.min(x + 1, hits.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setI((x) => Math.max(x - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); go(hits[i]); }
   };

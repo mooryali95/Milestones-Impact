@@ -9,7 +9,7 @@ import { L, LVL } from '../leaders.js';
 import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
 import Form from '../Form.jsx';
 import { CertOverride } from '../cert.jsx';
-import { Empty, Spinner, useUI } from '../ui.jsx';
+import { Empty, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
 import CohortGroups from './Groups.jsx';
 import { FinalConfig } from './FinalEval.jsx';
@@ -39,6 +39,10 @@ export default function Programs({ canWrite, onEditJourney }) {
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
   useEffect(() => { load(); }, [load]);
+  // نافذتا «قارن» والشهادة تُغلقان بـEsc كغيرهما، والشهادة تسأل قبل أن يضيع تعديلها
+  const closeCert = useGuardedClose(!!cert && JSON.stringify(cert.value) !== JSON.stringify(cert.p.cert || {}), () => setCert(null));
+  useEscape(() => setCompare(null), !!compare);
+  useEscape(closeCert, !!cert);
   if (!d) return <Spinner />;
   if (!d.success) return <div className="la-err" role="alert">{d.message}</div>;
 
@@ -198,7 +202,7 @@ export default function Programs({ canWrite, onEditJourney }) {
         </div>
       )}
       {cert && (
-        <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && setCert(null)}>
+        <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && closeCert()}>
           <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label={`شهادة ${cert.p.name}`}>
             <h3>شهادة «{cert.p.name}»</h3>
             <CertOverride cert={cert.value} onChange={(value) => setCert({ ...cert, value })} base={cert.base} what="البرنامج"
@@ -206,7 +210,7 @@ export default function Programs({ canWrite, onEditJourney }) {
               preview={{ program_id: cert.p.id, program_cert: cert.value }} />
             <div className="la-row">
               <button className="btn-sm primary" onClick={saveCert}>حفظ</button>
-              <button className="btn-sm ghost" onClick={() => setCert(null)}>إلغاء</button>
+              <button className="btn-sm ghost" onClick={closeCert}>إلغاء</button>
             </div>
           </div>
         </div>
