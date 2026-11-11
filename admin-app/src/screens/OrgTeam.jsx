@@ -44,7 +44,7 @@ export default function OrgTeam({ orgId, canWrite }) {
   return (
     <section className="la-card ot" aria-labelledby="ot-h">
       {head}
-      <p className="la-muted small">الفريق يُربط بالجهة عبر دفعاتها: لكل دفعة مستشارها وفريقها ومجموعاتها.</p>
+      <p className="la-muted small">الفريق يُربط بالجهة عبر دفعاتها: لكل دفعة مستشارها وفريقها ومجموعاتها. يرى منسق الجهة أسماء الفريق وأدواره بلا وسائل تواصل إن مُنح «فريق البرنامج».</p>
       {!all.length ? (
         <Empty compact title="لا دفعة للجهة بعد" hint="مشاركو الجهة في الدفعة المفتوحة الآن. أنشئ دفعتها من «البرامج والدفعات» ثم كوّن فريقها هنا." />
       ) : (

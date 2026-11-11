@@ -789,19 +789,24 @@ export function cleanAnswers(fields, answers) {
 // ── منسق الجهة ──
 // صلاحيات العرض الافتراضية: بلا درجات ولا وسائل تواصل، والتصدير مسموح
 export const COORD_DEFAULTS = { list: true, scores: false, contact: false, activity: false, export: true };
-export function coordPermissions(p) {
+// team: «فريق البرنامج» (أسماء الخبراء وأدوارهم، بلا وسائل تواصل)، مفتاح في JSON الصلاحيات نفسه بلا ترحيل (قرار المالك 2026-11-11).
+// صلاحية أُضيفت بعد إنشاء حسابات قائمة: إن لم تُحفظ صراحة فافتراضها من القالب (مفعّلة إلا لقالب الموارد البشرية)
+export function coordPermissions(p, template) {
   const x = p && typeof p === 'object' ? p : {};
-  return { list: x.list !== false, scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false };
+  return { list: x.list !== false, scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false,
+    team: 'team' in x ? x.team === true : template !== 'hr' };
 }
 // قوالب المطّلعين: نقطة بداية تُضبط بعدها كل صلاحية وحدها (القالب «مخصّص» حين تختلف عنه)
 export const COORD_TEMPLATES = {
-  executive: { list: false, scores: false, contact: false, activity: false, export: false },
-  program: { list: true, scores: false, contact: false, activity: true, export: true },
-  hr: { list: true, scores: false, contact: true, activity: false, export: true },
+  executive: { list: false, scores: false, contact: false, activity: false, export: false, team: true },
+  program: { list: true, scores: false, contact: false, activity: true, export: true, team: true },
+  hr: { list: true, scores: false, contact: true, activity: false, export: true, team: false },
 };
 export function templateOf(perms) {
   const p = coordPermissions(perms);
-  return Object.keys(COORD_TEMPLATES).find((k) => Object.entries(COORD_TEMPLATES[k]).every(([x, v]) => p[x] === v)) || 'custom';
+  // حساب قائم قبل صلاحية الفريق لا يصير «مخصّصًا» لغيابها: افتراضها يتبع قالبه
+  const saved = (k) => !!perms && typeof perms === 'object' && k in perms;
+  return Object.keys(COORD_TEMPLATES).find((k) => Object.entries(COORD_TEMPLATES[k]).every(([x, v]) => (x === 'team' && !saved(x)) || p[x] === v)) || 'custom';
 }
 // المطّلع نافذ ما لم يُوقف أو تنتهِ مدته أو تتوقف جهته
 export const viewerActive = (c, now = Date.now()) => !!c && c.status !== 'suspended' && (!c.expires_at || Date.parse(c.expires_at) > now)
@@ -2304,6 +2309,28 @@ export function teamCoverage(cohort, members, groups, approved) {
     groups: (groups || []).length,
     groups_without_expert: (groups || []).filter((g) => !(g.advisor_expert_id && ok.has(g.advisor_expert_id))).length,
     ungrouped: ms.filter((m) => !m.group_id).length,
+  };
+}
+// فريق البرنامج كما يراه منسق الجهة (قرار المالك 2026-11-11): الاسم والمسمى والأدوار، والنبذة القصيرة للمستشار،
+// بلا بريد ولا جوال (التواصل عبر إدارة البرنامج). المعتمدون وحدهم. والمجموعات بأسمائها وأعدادها وخبرائها،
+// وأسماء أعضائها لمن يرى قائمة المشاركين وحده. بلا صلاحية «فريق البرنامج» لا شيء
+/** @param {{ cohort: any, rows: ReturnType<typeof teamRows>, experts: any[], groups: any[], members: { id: string, name: string, group_id?: string | null }[] }} d
+ *  @param {{ team?: boolean, list?: boolean }} perms */
+export function coordTeamView({ cohort, rows, experts, groups, members }, perms) {
+  if (!perms?.team) return null;
+  const ok = new Map((experts || []).filter((e) => ['active', 'paused'].includes(e.status)).map((e) => [e.id, e]));
+  const card = (e) => ({ full_name: e.full_name, title: e.title || null, roles: e.roles || [] });
+  const adv = (rows || []).find((r) => r.advisor && ok.has(r.expert_id));
+  const ms = members || [];
+  return {
+    cohort: { name: cohort?.name || '', starts_on: cohort?.starts_on || null, ends_on: cohort?.ends_on || null },
+    advisor: adv ? { ...card(ok.get(adv.expert_id)), bio: ok.get(adv.expert_id).bio ? String(ok.get(adv.expert_id).bio).slice(0, 280) : null } : null,
+    team: (rows || []).filter((r) => !r.advisor && ok.has(r.expert_id)).map((r) => ({ ...card(ok.get(r.expert_id)), groups: r.groups.map((g) => g.name) })),
+    groups: (groups || []).map((g) => {
+      const inG = ms.filter((m) => m.group_id === g.id);
+      return { name: g.name, count: inG.length, expert: ok.get(g.advisor_expert_id)?.full_name || null, ...(perms.list ? { members: inG.map((m) => m.name) } : {}) };
+    }),
+    participants: ms.length,
   };
 }
 // مدة الدفعة، وهي مدة التكليف فيها: صياغة واحدة للوحة الإدارة وبوابة الخبير وبريد التكليف. التاريخ يوم بلا ساعة،

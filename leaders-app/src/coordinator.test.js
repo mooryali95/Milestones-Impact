@@ -10,8 +10,9 @@ const p = {
 
 describe('coordPermissions', () => {
   it('الافتراضي: بلا درجات ولا تواصل ولا نشاط، والتصدير مسموح', () => {
-    expect(coordPermissions(null)).toEqual({ list: true, scores: false, contact: false, activity: false, export: true });
-    expect(coordPermissions({ scores: 'yes', activity: 1, export: false })).toEqual({ list: true, scores: false, contact: false, activity: false, export: false });
+    // team («فريق البرنامج»): افتراضها مفعّلة إلا لقالب الموارد البشرية (coord-team.test.js)
+    expect(coordPermissions(null)).toEqual({ list: true, scores: false, contact: false, activity: false, export: true, team: true });
+    expect(coordPermissions({ scores: 'yes', activity: 1, export: false })).toEqual({ list: true, scores: false, contact: false, activity: false, export: false, team: true });
   });
 });
 

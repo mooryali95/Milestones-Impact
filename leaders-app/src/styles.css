@@ -631,6 +631,12 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .op-people td.op-name br { display: none; }
 }
 /* لوحة الجهة: ما يحتاج تدخل المنسق، أعلى اللوحة */
+/* فريق البرنامج في بوابة الجهة: أسماء وأدوار بلا تواصل */
+.op-team { margin-top: 16px; } .op-team h3 { margin: 0; font-size: 16px; } .op-team h4 { margin: 0; font-size: 15px; }
+.op-team-cohort { display: grid; gap: 10px; } .op-team-cohort + .op-team-cohort { border-top: 1px solid var(--line); padding-top: 12px; }
+.op-team-adv { display: grid; gap: 2px; } .op-team-adv p { margin: 4px 0 0; }
+.op-team-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .op-team-list li { overflow-wrap: anywhere; }
+.op-team-group summary { cursor: pointer; } .op-team-group p { margin: 6px 0 0; }
 .op-todo { margin-top: 16px; border-inline-start: 4px solid var(--org, var(--copper)); }
 .op-todo h3 { margin: 0 0 8px; font-size: 16px; }
 .op-todo ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

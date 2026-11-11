@@ -13,7 +13,7 @@ import { type AssignmentMail, audit, db, Fail, must, sendMail, teamAssignedMail 
 import { cohortMembers } from './programs.ts';
 import { adminSave as expertCreate } from './experts.ts';
 import { firstName } from './hall.js';
-import { assignmentScopeAr, capacityOf, cohortPeriodAr, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
 import { EXPERT_ROLE_AR } from './labels.js';
 
 type Body = Record<string, any>;
@@ -194,6 +194,19 @@ export async function teamRemove(a: Admin, b: Body) {
   if (groups.length) must(await db.from('cohort_groups').update({ advisor_expert_id: null }).in('id', groups.map((g) => g.id)), 'تعذّرت إزالة خبير المجموعة');
   await audit('admin', a.email, 'team.remove', 'cohorts', c.id, { expert_id: id, advisor: c.advisor_expert_id === id, groups: groups.map((g) => g.id) }, null);
   return { success: true, cleared: { advisor: c.advisor_expert_id === id, groups: groups.length } };
+}
+
+// ── منسق الجهة: «فريق البرنامج» لدفعات جهته غير المغلقة (قرار المالك 2026-11-11) ──
+// الجهة من جلسة المنسق لا من الطلب. ما يخرج يمر بـcoordTeamView وحده: أسماء وأدوار بلا تواصل، وأسماء الأعضاء بصلاحية القائمة
+export async function coordTeam(orgId: string, perms: { team?: boolean; list?: boolean }) {
+  if (!perms?.team || !orgId) return null;
+  const msg = 'تعذّر قراءة فريق البرنامج الآن، حاول بعد قليل';
+  const cohorts = (must(await db.from('cohorts').select('*').eq('organization_id', orgId).neq('status', 'closed').order('created_at', { ascending: false }), msg) as any[]) || [];
+  const states = await Promise.all(cohorts.map((c) => cohortState(c)));
+  const rows = cohorts.map((c, i) => teamRows(c, states[i].team, states[i].groups));
+  const ids = [...new Set(rows.flat().map((r) => r.expert_id))];
+  const experts = ids.length ? (must(await db.from('experts').select('id, full_name, title, status, roles, bio').in('id', ids), msg) as any[]) : [];
+  return cohorts.map((c, i) => coordTeamView({ cohort: c, rows: rows[i], experts, groups: states[i].groups, members: states[i].members }, perms));
 }
 
 // ── تكليفات خبير: للإدارة في ملفه، وللخبير في «تكليفاتي» ──

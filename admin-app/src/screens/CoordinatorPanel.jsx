@@ -8,10 +8,12 @@ import { VIEWER_PERM_AR, VIEWER_TEMPLATE_AR } from '../../../supabase/functions/
 import { COORD_TEMPLATES } from '../../../supabase/functions/leaders-api/logic.js';
 
 const ST = { invited: ['دُعي ولم يدخل بعد', 'warn'], active: ['فعّال', 'ok'], suspended: ['موقوف', 'bad'] };
-const PERMS = Object.entries(VIEWER_PERM_AR).map(([k, [l, h]]) => [k, l, h]);
+// «فريق البرنامج» ليست من بيانات المشاركين، فلا تُذكر للمشارك في «ماذا ترى جهتك» (VIEWER_PERM_AR) وتُضبط هنا بجانبها
+const PERMS = [...Object.entries(VIEWER_PERM_AR).map(([k, [l, h]]) => [k, l, h]),
+  ['team', 'فريق البرنامج', 'أسماء المستشار والخبراء وأدوارهم ومجموعاتهم، بلا وسائل تواصل']];
 const TEMPLATE_HINT = {
-  executive: 'أرقام مجمّعة ومحفظة المبادرات المعتمدة، بلا أسماء',
-  program: 'قائمة المشاركين وتقدّمهم ونشاطهم',
+  executive: 'أرقام مجمّعة ومحفظة المبادرات المعتمدة، بلا أسماء مشاركين، وفريق البرنامج',
+  program: 'قائمة المشاركين وتقدّمهم ونشاطهم، وفريق البرنامج',
   hr: 'قائمة المشاركين والتواصل معهم',
 };
 const dayInput = (iso) => (iso ? String(iso).slice(0, 10) : '');
@@ -44,6 +46,11 @@ function Preview({ orgId, id, onClose }) {
                     {d.permissions.scores && <td>{p.levels ? Object.values(p.levels).length : 0}/3</td>}</tr>
                 ))}</tbody>
               </table></div>}
+              {Array.isArray(d.program_team) && d.program_team.length > 0 && (
+                <div className="cp-preview-team"><h4>فريق البرنامج</h4>
+                  {d.program_team.map((t) => <p key={t.cohort.name} className="la-muted small">{t.cohort.name}: {[t.advisor?.full_name, ...t.team.map((x) => x.full_name)].filter(Boolean).join('، ') || 'لا فريق بعد'} · بلا وسائل تواصل</p>)}</div>
+              )}
+              {d.permissions.team === false && <p className="la-muted">بلا صلاحية «فريق البرنامج»: لا يرى أسماء المستشار والخبراء.</p>}
             </>
           )}
         </div>
