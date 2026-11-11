@@ -268,6 +268,25 @@ describe('الوثيقة الاحترافية', () => {
   });
 });
 
+// التدقيق 2026-11-11 (admin-eval-2): القبول بلا بريد راعٍ كان يكتب «مقبولة» والدرجة ثم يرمي خطأ الدعوة
+describe('قبول المستشار لا يُحفظ جزئيًا', () => {
+  const src = readFileSync(resolve(process.cwd(), 'supabase/functions/leaders-api/capstone.ts'), 'utf8');
+  const review = src.slice(src.indexOf('export async function adminReview'), src.indexOf('export async function adminSponsor'));
+  it('بريد الراعي وسبب التنازل يُفحصان قبل كتابة القبول والدرجة', () => {
+    const write = review.indexOf("status: 'accepted'");
+    expect(write).toBeGreaterThan(0);
+    for (const guard of ["if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي')", 'if (!waive && !sponsorEmailOf(charter)) throw new Fail(NO_SPONSOR_EMAIL_AR']) {
+      expect(review.indexOf(guard)).toBeGreaterThan(0);
+      expect(review.indexOf(guard)).toBeLessThan(write);
+    }
+  });
+  it('تعذر الدعوة بعد الحفظ يعيد الوثيقة بحالتها مع تنبيه، والشاشة تعرف غياب الراعي سلفًا', () => {
+    expect(review).toMatch(/try \{ await inviteSponsor\(p, c, charter\); \}\s+catch \(e\) \{/);
+    expect(review).toContain('warning: `قُبلت الوثيقة ولم يُرسل طلب التأييد: ${why}`');
+    expect(src).toContain('sponsor_email: sponsorEmailOf(state.charter),');
+  });
+});
+
 describe('مواءمة المستوى والمسار', () => {
   const models = [
     { key: 'initiative-charter', title_ar: 'بطاقة المبادرة', dimension: 'milestone', min_level: 'beginner', capstone_sort: 10, scopes: [], fields: [] },

@@ -89,7 +89,7 @@ test('المستشار: يقيّم الأبعاد الستة ثم يقبل وي�
     const replies = {
       'admin.orgs': { success: true, orgs: [], unassigned: {} },
       'admin.capstones': { success: true, items: [] },
-      'admin.capstone': { success: true, doc, capstone: { status: 'submitted', revisions: 0 }, readiness: 100, sections: sections(true), checks: [], leader: { score: 82, weights: { quizzes: 20, lab: 20, capstone: 40, participation: 20 }, parts: { quizzes: 80 } }, max_revisions: 1, priority: 'milestone', rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', '4'] })) },
+      'admin.capstone': { success: true, doc, capstone: { status: 'submitted', revisions: 0 }, readiness: 100, sections: sections(true), checks: [], leader: { score: 82, weights: { quizzes: 20, lab: 20, capstone: 40, participation: 20 }, parts: { quizzes: 80 } }, max_revisions: 1, priority: 'milestone', rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', '4'] })), sponsor_email: 'khalid@jiha.sa' },
       'admin.capstone-review': { success: true, doc, capstone: { status: 'accepted', revisions: 0, score: 100 }, readiness: 100, sections: sections(true), checks: [], leader: null, max_revisions: 1 },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
@@ -107,6 +107,64 @@ test('المستشار: يقيّم الأبعاد الستة ثم يقبل وي�
   await expect.poll(() => calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ participant_id: 'p1', decision: 'accept' });
   const scores = calls.find((c) => c.action === 'admin.capstone-review').scores;
   expect(Object.values(scores)).toEqual([4, 4, 4, 4, 4, 4]);
+});
+
+// التدقيق 2026-11-11 (admin-eval-2): القبول بلا بريد راعٍ كان يحفظ القبول والدرجة ثم يرمي خطأ،
+// والشاشة تبقى على «بانتظار مراجعتك» بنموذج لم يعد صالحًا
+function reviewServer({ sponsorEmail, review }) {
+  const calls = [];
+  const s = { status: 'submitted' };
+  const doc = { meta: { initiative: 'رقمنة خدمات المستفيدين', participant: { name: 'سارة الأحمد' }, org: { name: 'جهة التجربة' }, scope_title: 'مشروع', track: { title: 'مسار التنفيذ المؤثر' } }, sections: [] };
+  const capstone = () => ({
+    success: true, doc, capstone: { status: s.status, revisions: 0, ...(s.status === 'submitted' ? {} : { score: 100 }) }, readiness: 100, sections: sections(true), checks: [], leader: null,
+    max_revisions: 1, priority: 'milestone', rubric: RUBRIC.map((title, i) => ({ key: `k${i}`, title, anchors: ['1', '2', '3', '4'] })), sponsor_email: sponsorEmail,
+  });
+  const route = async (r) => {
+    const b = JSON.parse(r.request().postData() || '{}');
+    calls.push(b);
+    const replies = { 'admin.orgs': { success: true, orgs: [], unassigned: {} }, 'admin.capstones': { success: true, capstones: [] } };
+    if (b.action === 'admin.capstone') return r.fulfill({ json: capstone() });
+    if (b.action === 'admin.capstone-review') return r.fulfill({ json: review(s, b, capstone) });
+    return r.fulfill({ json: replies[b.action] ?? { success: true } });
+  };
+  return { calls, route };
+}
+async function openReview(page, srv) {
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, srv.route);
+  await page.goto(ADMIN);
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مستشار', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.evaluate(() => { location.hash = '#/leaders/capstones/p1'; });
+  await expect(page.getByRole('heading', { name: 'رقمنة خدمات المستفيدين' })).toBeVisible();
+  for (const title of RUBRIC) await page.getByRole('radiogroup', { name: title }).getByRole('radio').last().click();
+}
+
+test('المستشار: وثيقة بلا بريد راعٍ تُقبل وتُعتمد دون تأييد بسبب مكتوب، لا بطلب تأييد يفشل', async ({ page }) => {
+  const srv = reviewServer({ sponsorEmail: null, review: (s, b, capstone) => { s.status = 'approved'; return capstone(); } });
+  await openReview(page, srv);
+  await expect(page.getByRole('note')).toContainText('لا بريد صحيح للراعي في بطاقة المبادرة');
+  await expect(page.getByRole('button', { name: 'قبول وطلب تأييد الراعي' })).toHaveCount(0);
+  const accept = page.getByRole('button', { name: 'قبول واعتماد دون راعٍ' });
+  await expect(accept).toBeDisabled();
+  await page.getByLabel(/اعتماد دون تأييد الراعي \(إلزامي/).fill('مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها');
+  await accept.click();
+  await expect(page.getByText('اعتُمدت الوثيقة')).toBeVisible();
+  expect(srv.calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ decision: 'accept', waive_sponsor: 'مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها' });
+  await expect(page.getByRole('button', { name: /قبول/ })).toHaveCount(0);
+});
+
+test('المستشار: خطأ القبول يعيد تحميل الوثيقة، فلا يبقى نموذج مراجعة لحالة تغيرت على الخادم', async ({ page }) => {
+  // خادم يكتب القبول ثم يفشل (حد البريد مثلًا): بعد الخطأ تظهر الوثيقة مقبولة بلوحة تأييد الراعي
+  const srv = reviewServer({ sponsorEmail: 'khalid@jiha.sa', review: (s) => { s.status = 'accepted'; return { success: false, message: 'بلغت الرسائل حدها اليومي، وتصل بعد ساعات' }; } });
+  await openReview(page, srv);
+  await page.getByRole('button', { name: 'قبول وطلب تأييد الراعي' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect(page.getByText('بلغت الرسائل حدها اليومي، وتصل بعد ساعات')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'تأييد الراعي' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'إعادة للتحسين' })).toHaveCount(0);
+  expect(srv.calls.filter((c) => c.action === 'admin.capstone').length).toBe(2);
 });
 
 test('الراعي: يقرأ ملخص المبادرة من رابطه ويؤيدها، والطلب بتعديل يلزمه ملاحظة', async ({ page }) => {

@@ -26,7 +26,7 @@ async function openDoc(doc, toast) {
   if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
 
-function Review({ d, canWrite, onSaved }) {
+function Review({ d, canWrite, onSaved, onFailed }) {
   const { toast, confirm } = useUI();
   const c = d.capstone;
   const [scores, setScores] = useState(() => c.scores || {});
@@ -35,14 +35,17 @@ function Review({ d, canWrite, onSaved }) {
   const [waive, setWaive] = useState('');
   const [busy, setBusy] = useState('');
   const canReturn = (c.revisions || 0) < d.max_revisions;
+  // بلا بريد صحيح للراعي لا يُطلب تأييد: القبول اعتماد دون تأييد بسبب مكتوب (الراعي اختياري)
+  const noSponsor = !d.sponsor_email;
   const send = async (decision) => {
     if (decision === 'return' && !(await confirm('تُعاد الوثيقة للمشارك ليحسّنها، وهذا التحسين الوحيد المتاح له. متابعة؟'))) return;
     if (decision === 'accept' && !waive && !(await confirm('تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها في الجهة. متابعة؟'))) return;
     setBusy(decision);
     const r = await L('admin.capstone-review', { participant_id: d.participant_id, decision, scores, notes, note, waive_sponsor: decision === 'accept' ? waive : '' });
     setBusy('');
-    if (!r.success) return toast(r.message);
-    toast(decision === 'return' ? 'أُعيدت للمشارك' : waive ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد');
+    // أي خطأ يعيد تحميل الوثيقة، فلا تبقى الشاشة على حالة تغيّرت على الخادم
+    if (!r.success) { toast(r.message); onFailed(); return; }
+    toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : waive ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
     refreshPending();
     onSaved(r);
   };
@@ -63,9 +66,10 @@ function Review({ d, canWrite, onSaved }) {
           </div>
         ))}
         <label className="cps-note">خلاصتك للمشارك<textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        <label className="cps-note">اعتماد دون تأييد الراعي (اختياري، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>
+        {noSponsor && <p className="la-muted" role="note">لا بريد صحيح للراعي في بطاقة المبادرة، فلا يُطلب تأييده. اكتب سبب الاعتماد دون تأييد{canReturn ? '، أو أعدها للمشارك ليضيف بريد الراعي' : ''}.</p>}
+        <label className="cps-note">اعتماد دون تأييد الراعي ({noSponsor ? 'إلزامي' : 'اختياري'}، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>
         <div className="la-row">
-          <button className="btn-sm primary" onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : waive ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
+          <button className="btn-sm primary" disabled={noSponsor && waive.trim().length < 10} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : waive ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
           {canReturn && <button className="btn-sm ghost" onClick={() => send('return')}>{busy === 'return' ? 'لحظة…' : 'إعادة للتحسين'}</button>}
           {!canReturn && <small className="la-muted">استُنفد التحسين المتاح، فالقرار قبول بالمعيار.</small>}
         </div>
@@ -155,7 +159,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
         </section>
       </div>
 
-      {c.status === 'submitted' && <Review d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} />}
+      {c.status === 'submitted' && <Review d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} onFailed={load} />}
       {c.status === 'approved' && <TrackingPanel t={d.doc.tracking} />}
       {c.status === 'accepted' && <Sponsor d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} />}
     </div>
