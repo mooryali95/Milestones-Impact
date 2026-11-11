@@ -11,7 +11,7 @@ import { TEAM_AR, TEAM_COLOR, Q_AR } from '../../../shared/hall/HallView.jsx';
 import HallTeams from '../../../shared/hall/HallTeams.jsx';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { useHallTimer, timerLabel } from '../../../shared/hall/HallTimer.jsx';
-import { HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
+import { HALL_ATTEND_SHARE, HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 import PeerRequests from './PeerRequests.jsx';
 
 const PENDING_KEY = 'mi_leaders_hall_pending';
@@ -167,6 +167,8 @@ export default function Hall({ onBack }) {
                     : timeUp && !v.revealed ? <span className="muted">انتهى وقت الإجابة. بانتظار كشف المفتاح.</span> : null}
               </p>
               {!v.revealed && <p className="small muted">أجاب {v.answered} من {v.total}. اختيارات زملائك تظهر بعد الكشف.</p>}
+              {/* إغلاق القاعة الحية يكتب الحضور لمن أجاب عن هذه النسبة من الجولات المكشوفة (hall.ts close) */}
+              {live && <p className="small muted">يُسجَّل حضورك في اليوم التدريبي حين تجيب عن {Math.round(HALL_ATTEND_SHARE * 100)}% من الجولات على الأقل.</p>}
             </section>
           )}
         </>

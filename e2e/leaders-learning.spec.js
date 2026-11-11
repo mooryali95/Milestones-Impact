@@ -54,6 +54,11 @@ test('القاعة: وسم رفضه الخادم يعود إلى ما استُل
   await expect(page.locator('.hall-receipt')).toContainText('تستطيع تعديلها حتى يُكشف المفتاح');
 });
 
+test('القاعة الحية: يعرف المشارك أن إجاباته تسجّل حضوره، ونسبتها من مصدرها', async ({ page }) => {
+  await openHall(page, { choice: 'false', confidence: 2, stances: [] }, () => ({ success: true }));
+  await expect(page.getByText('يُسجَّل حضورك في اليوم التدريبي حين تجيب عن 60% من الجولات على الأقل.')).toBeVisible();
+});
+
 test('القاعة: ملاحظة المشارك تبقى في حقلها وتُرسل مع تعديل الثقة، فلا تُمحى على الخادم', async ({ page }) => {
   const note = 'كيف نقيس الأثر في جهة لا تجمع بيانات خط الأساس؟';
   const calls = await openHall(page, { choice: 'false', confidence: 2, stances: ['question'], note }, () => ({ success: true }));
@@ -64,5 +69,25 @@ test('القاعة: ملاحظة المشارك تبقى في حقلها وتُ�
   expect(calls.find((c) => c.action === 'katon.answer')).toMatchObject({ sentence_id: 'k3', verdict: 'false', confidence: 3, stances: ['question'], note });
   await expect(field).toHaveValue(note);
   await expect(page.getByRole('button', { name: 'ارفعها طلب توجيه لفريقك' })).toBeVisible();
+});
+
+// ── الحضور ──
+test('الحضور: الجلسة الجارية «جارية الآن» لا «قادمة»، وطريقة التسجيل الآلية مذكورة', async ({ page }) => {
+  const at = (h) => new Date(Date.now() + h * 36e5).toISOString();
+  await signedIn(page, (b, srv) => {
+    if (b.action !== 'me') return null;
+    const r = srv.reply(b);
+    r.journey.find((st) => st.key === 'training').items.push({ id: 'w1', code: 'T-DAYS', kind: 'workshop', title_ar: 'الأيام التدريبية', required: true, status: 'pending',
+      activity: { type: 'workshop', done: false, count: 0, total: 2, verify: 'auto', sessions: [
+        { id: 's1', title: 'اليوم الأول', mode: 'in_person', location: 'قاعة التدريب', starts_at: at(-2), ends_at: at(3), attended: false, open: true, can_join: false },
+        { id: 's2', title: 'اليوم الثاني', mode: 'in_person', location: 'قاعة التدريب', starts_at: at(22), ends_at: at(27), attended: false, open: false, can_join: false },
+      ] } });
+    return r;
+  });
+  await page.setViewportSize({ width: 1100, height: 1400 });
+  await page.goto(APP);
+  await expect(page.locator('.act-list li', { hasText: 'اليوم الأول' })).toContainText('جارية الآن');
+  await expect(page.locator('.act-list li', { hasText: 'اليوم الثاني' })).toContainText('قادمة');
+  await expect(page.getByText('يُحتسب حضورك تلقائيًا بانتهاء الجلسة.')).toBeVisible();
 });
 
