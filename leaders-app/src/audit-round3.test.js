@@ -77,3 +77,18 @@ describe('لوحة الإدارة', () => {
     expect(h).not.toMatch(/^ {2}#/m);
   });
 });
+
+// «خارج البرنامج» مصدر واحد (OUT_OF_PROGRAM/inProgram في logic.js، مراجعة الجولة أ): كانت القائمة مكررة في activities.ts
+// وadmin.ts، وكانت دعوات الجلسات تستبعد المنسحب وحده فيُدعى الموقوف.
+describe('خارج البرنامج: مصدر واحد', () => {
+  const src = (f) => readFileSync(join(__dirname, '../../supabase/functions/leaders-api', f), 'utf8');
+  it('لا قائمة منسوخة للمنسحب والموقوف، والدعوات والحضور والقمع على inProgram', () => {
+    for (const f of ['activities.ts', 'admin.ts', 'coordinator.ts', 'journey-map.js']) {
+      expect(src(f), f).not.toMatch(/\[\s*'withdrawn',\s*'suspended'\s*\]/);
+      expect(src(f), f).not.toMatch(/status === 'withdrawn' \|\| r\.status === 'suspended'/);
+    }
+    expect(src('activities.ts')).toContain("(m) => m.email && inProgram(m.status)");
+    expect(src('activities.ts')).toContain('e.approved === 3 && inProgram(e.status)');
+    expect(src('admin.ts')).toContain('withdrawn: rows.filter((r) => !inProgram(r.status)).length');
+  });
+});

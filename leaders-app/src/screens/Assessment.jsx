@@ -104,9 +104,10 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     if (!isComplete(q, { [q.id]: k }, { [q.id]: b })) return;
     const at = idx;
     timer.current = setTimeout(() => {
+      // عودة رقمية إلى سؤال آخر فقط؛ إن كانت إلى السؤال نفسه (تنقّل يدوي بعدها) فالتقدم الطبيعي (مراجعة الجولة أ)
       if (returnTo === 'review') setMode('review');
-      else if (returnTo != null) { setReturnTo(null); setIdx(returnTo); }
-      else goNext(at);
+      else if (returnTo != null && returnTo !== at) { setReturnTo(null); setIdx(returnTo); }
+      else { setReturnTo(null); goNext(at); }
     }, ADVANCE_MS);
   }, [q, idx, save, goNext, returnTo]);
   const choose = useCallback((k) => {
@@ -305,10 +306,10 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           </div>
         )}
         <div className="quiz-nav">
-          <button className="link small" disabled={idx === 0} onClick={() => setIdx(idx - 1)}>السابق</button>
+          <button className="link small" disabled={idx === 0} onClick={() => { setReturnTo((r) => (r === 'review' ? r : null)); setIdx(idx - 1); }}>السابق</button>
           <span className="saving">{saving > 0 ? 'جارٍ الحفظ…' : answered ? 'محفوظ ✓' : ''}</span>
           {isComplete(q, answers, before)
-            ? <button className="link small" onClick={() => goNext(idx)}>التالي</button>
+            ? <button className="link small" onClick={() => { setReturnTo((r) => (r === 'review' ? r : null)); goNext(idx); }}>التالي</button>
             : <span />}
         </div>
       </div>

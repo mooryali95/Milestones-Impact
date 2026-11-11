@@ -875,7 +875,9 @@ export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curr
 // أسئلة الاستبانة من إعدادها: سطر لكل سؤال؛ «(نص)» في أوله سؤال مفتوح، و«(نص اختياري)» مفتوح لا يُلزم،
 // وما عداه تقدير من 1 إلى 5. المصدر الواحد للأسئلة للواجهة والخادم معًا.
 // سطور الأسئلة كما تُقرأ وكما تُحفظ (cleanConfig): بلا فراغات ولا سطور فارغة، وعشرون سؤالًا أقصى
-const surveyLines = (config) => String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20);
+export const SURVEY_MAX = 20;
+const allSurveyLines = (config) => String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean);
+const surveyLines = (config) => allSurveyLines(config).slice(0, SURVEY_MAX);
 export function surveyQuestions(config) {
   return surveyLines(config).map((line, i) => {
     const m = line.match(/^\((نص(?: اختياري)?)\)\s*(.+)$/);
@@ -1303,8 +1305,10 @@ export function cleanConfig(kind, cfg, prev = {}) {
   // الاستبانة: أسئلتها هي إعدادها كله. بلا هذا الفرع كان كل حفظ (ولو لتصحيح العنوان) يمحوها،
   // واستبانة بلا سؤال تبقى بندًا معلقًا عند المشارك بلا فعل (التدقيق 2026-11-11)
   if (kind === 'survey') {
-    const lines = surveyLines(c);
+    // الحد يُرفض صراحة لا يُقص: القص كان يحذف السؤال الحادي والعشرين وما بعده ويقول «تم الحفظ» (مراجعة الجولة أ)
+    const lines = allSurveyLines(c);
     if (!lines.length) throw new Error('اكتب سؤالًا واحدًا على الأقل للاستبانة');
+    if (lines.length > SURVEY_MAX) throw new Error(`الحد الأقصى للاستبانة عشرون سؤالًا، وكتبت ${lines.length}`);
     return { questions: lines.join('\n') };
   }
   return {};

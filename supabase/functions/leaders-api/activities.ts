@@ -8,7 +8,7 @@ import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './pr
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
-  contentApplies, contentState, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
+  contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf,
 } from './logic.js';
 
@@ -386,7 +386,7 @@ export async function workshopAttendance(b: Body) {
   }
   const present = Object.fromEntries((att || []).map((a: any) => [a.participant_id, a]));
   const people = Object.values(by)
-    .filter((e: any) => (e.approved === 3 && !['withdrawn', 'suspended'].includes(e.status) && requirementApplies(r, e.levels) && inCohort(e)) || present[e.id])
+    .filter((e: any) => (e.approved === 3 && inProgram(e.status) && requirementApplies(r, e.levels) && inCohort(e)) || present[e.id])
     .map((e: any) => ({ id: e.id, full_name: e.full_name, email: e.email, organization_name: e.organization_name, attendance: present[e.id] || null }))
     .sort((x: any, y: any) => String(x.full_name).localeCompare(String(y.full_name), 'ar'));
   return { success: true, session: s, requirement: { id: r.id, title_ar: r.title_ar }, people };
@@ -476,7 +476,8 @@ async function workshopRecipients(s: any) {
   if (!s.cohort_id) return [];
   const cohort = (await db.from('cohorts').select('*').eq('id', s.cohort_id).maybeSingle()).data as any;
   if (!cohort) return [];
-  return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && m.status !== 'withdrawn');
+  // المنسحب والموقوف خارج البرنامج (inProgram مصدر واحد): لا دعوة ولا تذكير (كان الموقوف يُدعى)
+  return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && inProgram(m.status));
 }
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   const people = await workshopRecipients(s);

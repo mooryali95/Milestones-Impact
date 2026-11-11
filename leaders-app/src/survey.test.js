@@ -22,7 +22,7 @@ describe('الاستبانة تكتمل من إجاباتها', () => {
   });
 });
 
-import { cleanConfig } from '../../supabase/functions/leaders-api/logic.js';
+import { cleanConfig, SURVEY_MAX } from '../../supabase/functions/leaders-api/logic.js';
 import { formToReq, reqToForm } from '../../admin-app/src/methodology.js';
 // التدقيق 2026-11-11 (admin-program-1): cleanConfig بلا فرع للاستبانة كانت تعيد {} فتُمحى الأسئلة عند كل حفظ
 describe('حفظ متطلب الاستبانة يحفظ أسئلتها', () => {
@@ -32,6 +32,13 @@ describe('حفظ متطلب الاستبانة يحفظ أسئلتها', () => {
     expect(surveyQuestions(saved).map((q) => q.type)).toEqual(['rating', 'text']);
     expect(() => cleanConfig('survey', { questions: ' \n ' })).toThrow('اكتب سؤالًا واحدًا على الأقل');
     expect(() => cleanConfig('survey', {})).toThrow('اكتب سؤالًا واحدًا على الأقل');
+  });
+  // مراجعة الجولة أ: القص عند عشرين كان يحذف ما بعده ويقول «تم الحفظ»، فالحد يُرفض صراحة
+  it('أكثر من عشرين سؤالًا يُرفض برسالة، ولا يُقص بصمت', () => {
+    const lines = (n) => Array.from({ length: n }, (_, i) => `سؤال ${i + 1}`).join('\n');
+    expect(SURVEY_MAX).toBe(20);
+    expect(surveyQuestions(cleanConfig('survey', { questions: lines(20) }))).toHaveLength(20);
+    expect(() => cleanConfig('survey', { questions: lines(23) })).toThrow('الحد الأقصى للاستبانة عشرون سؤالًا، وكتبت 23');
   });
   it('تعديل عنوان T-REACT وحده من نموذج اللوحة لا يمحو أسئلته', () => {
     const req = { id: 'r1', code: 'T-REACT', kind: 'survey', title_ar: 'رأيك في أيام التدريب', config: { questions: cfg.questions } };

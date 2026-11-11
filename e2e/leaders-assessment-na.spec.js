@@ -122,3 +122,23 @@ test('رفض الخادم too_many_na يسمّي العبارات: تُحدَّ�
   await page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }).click();
   await expect.poll(() => srv.submits).toBe(2);
 });
+
+// مراجعة الجولة أ: بعد «اذهب إليها» ثم تنقّل يدوي بـ«التالي» بقيت وجهة العودة قديمة، فاختيار إجابة في السؤال الذي عاد
+// إليه المشارك يُبقيه مكانه بلا تقدم. الآن التنقل اليدوي يُسقط وجهة العودة، والعودة إلى السؤال نفسه تقدّم طبيعي.
+test('بعد «اذهب إليها» ثم «التالي» يدويًا يتقدم السؤال التالي بالإجابة لا يعلق مكانه', async ({ page }) => {
+  const srv = server();
+  await open(page, srv);
+  await page.getByRole('button', { name: 'ابدأ' }).click();
+  await page.getByRole('radio', { name: NA }).click();
+  await expect(page.getByText(QUESTIONS[1].text)).toBeVisible();
+  await page.getByRole('radio', { name: NA }).click();
+  const note = page.getByRole('alert').filter({ hasText: 'وفي هذا القسم عبارة أخرى اخترته فيها' });
+  await note.getByRole('button', { name: 'اذهب إليها' }).click();
+  await expect(page.getByText(QUESTIONS[0].text)).toBeVisible();
+  // يُبقي «لا ينطبق» على الأولى ويعود بنفسه
+  await page.getByRole('button', { name: 'التالي' }).click();
+  await expect(page.getByText(QUESTIONS[1].text)).toBeVisible();
+  await page.getByRole('radio', { name: /غالبًا/ }).click();
+  await expect(page.getByText(QUESTIONS[2].text)).toBeVisible();
+  expect(srv.answers()).toEqual([['m1', 5], ['m2', 3]]);
+});
