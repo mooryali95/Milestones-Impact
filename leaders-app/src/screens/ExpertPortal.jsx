@@ -11,7 +11,7 @@ import { signOut, xpCall, xpSession } from '../api.js';
 import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
-import { POPUP_BLOCKED, Skel } from '../ui.jsx';
+import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
 import { CONTACT_EMAIL, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
@@ -144,23 +144,23 @@ function AdvisorReviews({ initial }) {
   const [open, setOpen] = useState(null);
   const [f, setF] = useState({ rating: 0, feedback: '' });
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [note, say] = useNotice();
   const load = () => xpCall('xp.reviews').then(setD);
   useEffect(() => { if (!initial) load(); }, []);
   if (!d?.success || !d.advisor) return null;
   const pending = d.items.filter((x) => x.status === 'submitted');
   const done = d.items.filter((x) => x.status !== 'submitted').slice(0, 8);
   const send = async (x, status) => {
-    setBusy(true); setMsg('');
+    setBusy(true); say(null);
     const r = await xpCall('xp.review', { id: x.id, status, rating: f.rating || null, feedback: f.feedback });
     setBusy(false);
-    if (r.success) { setOpen(null); setF({ rating: 0, feedback: '' }); setMsg(status === 'returned' ? 'أُعيد للمشارك بملاحظتك.' : 'اعتُمد التسليم.'); load(); } else setMsg(r.message);
+    if (r.success) { setOpen(null); setF({ rating: 0, feedback: '' }); say(status === 'returned' ? 'أُعيد للمشارك بملاحظتك.' : 'اعتُمد التسليم.'); load(); } else say(r.message, true);
   };
   return (
     <section className="card stack">
       <h2 className="as-h3">بانتظار تقييمك <small className="muted">· {pending.length}</small></h2>
       <p className="small muted">أنت المستشار الأساسي لدفعة هؤلاء المشاركين؛ يصلك ما يسلّمونه هنا وبالبريد، والإدارة ترى ما تقيّمه.</p>
-      <div role="status" aria-live="polite">{msg && <div className="banner"><span className="grow">{msg}</span></div>}</div>
+      <Notice note={note} onClose={() => say(null)} reveal />
       {!pending.length && <p className="muted small">لا تسليمات معلّقة الآن.</p>}
       {pending.map((x) => (
         <div key={x.id} className="xpp-torate">
@@ -236,11 +236,12 @@ function MyParticipants({ onOpen, initial }) {
 }
 
 // طلبات الأقران في دفعات الخبير (المرحلة 8): يؤكّد أو يصحّح أو يخفي إجابات الزملاء، ويجيب بنفسه
-function PeerQueue({ say, initial }) {
+function PeerQueue({ initial }) {
   const [d, setD] = useState(initial ?? null);
   const [note, setNote] = useState({});
   const [reply, setReply] = useState({});
   const [busy, setBusy] = useState(false);
+  const [result, say] = useNotice();
   const load = () => xpCall('xp.peer-list').then(setD);
   useEffect(() => { if (!initial) load(); }, []);
   if (!d?.success || !d.advisor) return null;
@@ -248,7 +249,7 @@ function PeerQueue({ say, initial }) {
     setBusy(true);
     const r = await xpCall(action, body);
     setBusy(false);
-    if (!r.success) return say(r.message);
+    if (!r.success) return say(r.message, true);
     say(ok); setD(r);
   };
   const open = d.items.filter((x) => x.status !== 'confirmed');
@@ -256,6 +257,7 @@ function PeerQueue({ say, initial }) {
     <section className="card stack" aria-labelledby="xp-peer">
       <h2 className="as-h3" id="xp-peer">طلبات الأقران <small className="muted">· {d.pending} إجابة بانتظار تأكيدك</small></h2>
       <p className="small muted">{d.cohorts.map((c) => `${c.name}: ${c.supervision_ar}`).join(' · ')}. ما تؤكّده يُحسب لصاحبه في التقييم المستمر، وما تصحّحه يُحسب جزئيًا بملاحظتك.</p>
+      <Notice note={result} onClose={() => say(null)} reveal />
       {!open.length && <p className="muted small">لا طلبات مفتوحة الآن.</p>}
       {open.map((r) => (
         <div key={r.id} className="xpp-torate">
@@ -282,14 +284,17 @@ function PeerQueue({ say, initial }) {
 }
 
 // القاعة من البوابة (المرحلة 9): دفعات المستشار وحدها، بالمكوّن المشترك مع اللوحة
-function ExpertHall({ cohorts, say }) {
+function ExpertHall({ cohorts }) {
   const [cid, setCid] = useState(cohorts[0]?.id || '');
+  // ما تقوله القاعة (toast(نص، خطأ؟)) يُعرض في بطاقتها. بلا reveal: السؤال الدوري قد يبلّغ إخفاقًا والخبير في قسم آخر
+  const [note, say] = useNotice();
   const call = useCallback((key, body) => xpCall(HALL_ACTION[key], body), []);
   if (!cohorts.length) return null;
   return (
     <section className="card stack" aria-labelledby="xp-hall">
       <div className="row between"><h2 className="as-h3" id="xp-hall">القاعة الحية</h2>
         <select className="input" aria-label="الدفعة" value={cid} onChange={(e) => setCid(e.target.value)}>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+      <Notice note={note} onClose={() => say(null)} />
       <HallControl cohortId={cid} call={call} toast={say} ui={HALL_UI_APP} />
     </section>
   );
@@ -327,8 +332,7 @@ function Dashboard({ onOut }) {
   const [view, setView] = useState(null);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
-  const [msg, setMsg] = useState('');
-  const [bad, setBad] = useState(false);   // رسالة خطأ لا تُعرض بعلامة النجاح
+  const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
   // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
   const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
   useEffect(() => { load(); }, []);
@@ -351,8 +355,7 @@ function Dashboard({ onOut }) {
 
   const respond = async (x, accept) => {
     const r = await xpCall('xp.respond', { id: x.id, accept });
-    setBad(!r.success);
-    setMsg(r.success ? (accept ? `قبلت طلب ${x.participant.name}. تجده في «مشاركوك».` : 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.') : r.message);
+    say(r.success ? (accept ? `قبلت طلب ${x.participant.name}. تجده في «مشاركوك».` : 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.') : r.message, !r.success);
     load(true);
   };
   const certificate = async () => {
@@ -367,7 +370,7 @@ function Dashboard({ onOut }) {
       'لا جلسات منعقدة بعد'));
     if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`,
       subtitle: 'برنامج القادة', rows: [['الخبير', e.full_name], ['الساعات', String(d.stats.hours)], ['حتى تاريخ', fmt(new Date())]],
-      closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) { setBad(true); setMsg(POPUP_BLOCKED); }
+      closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) say(POPUP_BLOCKED, true);
   };
 
   return (
@@ -388,8 +391,7 @@ function Dashboard({ onOut }) {
         </div>
       </section>
       {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}
-      <div role="status" aria-live="polite">{msg && !bad && <div className="banner"><span className="ico" aria-hidden="true">✓</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}</div>
-      {msg && bad && <div className="banner warn" role="alert"><span className="ico" aria-hidden="true">!</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
+      <Notice note={note} onClose={() => say(null)} />
 
       <div className="xpp-kpis">
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
@@ -413,12 +415,12 @@ function Dashboard({ onOut }) {
       {isNew && <FirstSteps e={e} />}
 
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
-      <ExpertHall cohorts={d.advisor_cohorts || []} say={setMsg} />
+      <ExpertHall cohorts={d.advisor_cohorts || []} />
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
       <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" initial={pre.sus} />
       <AdvisorReviews initial={pre.reviews} />
-      <PeerQueue say={setMsg} initial={pre.peers} />
+      <PeerQueue initial={pre.peers} />
 
       <div className="xpp-cols">
         <MyParticipants onOpen={openFile} initial={pre.participants} />
@@ -438,7 +440,7 @@ function Dashboard({ onOut }) {
             <div key={it.kind + it.id} className="xpp-torate">
               <div className="row between"><span><b>{it.who}</b> <small className="muted">{it.what} · {fmt(it.at)}</small></span>
                 {rating?.id !== it.id && <button className="btn ghost sm" onClick={() => setRating(it)}>قيّم</button>}</div>
-              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); setBad(false); setMsg('حُفظ تقييمك.'); load(true); }} />}
+              {rating?.id === it.id && <RateParticipant item={it} criteria={d.criteria} onDone={() => { setRating(null); say('حُفظ تقييمك.'); load(true); }} />}
             </div>
           ))}
         </section>

@@ -6,9 +6,10 @@ import { readable } from './readable.js';
 const PORTAL = 'http://localhost:4304/x';
 const XP_TOKEN = 'x'.repeat(40);
 
-function server() {
+// fail: أفعال يرفضها الخادم برسالته (التحقق من التعليل، تعذّر الحفظ) لاختبار عرض الرفض
+function server({ finalStatus = 'pending', fail = {} } = {}) {
   const calls = [];
-  const state = { final: 'pending', answers: { a1: 'pending', a2: 'pending' }, rated: false };
+  const state = { final: finalStatus, answers: { a1: 'pending', a2: 'pending' }, rated: false };
   const answer = (id, author, text) => ({ id, text, status: state.answers[id], status_ar: { pending: 'بانتظار تأكيد الخبير', confirmed: 'أكّده الخبير', corrected: 'صحّحه الخبير', hidden: 'أخفاه الخبير' }[state.answers[id]], expert_note: null, at: '2026-11-03T10:00:00Z', author, by_expert: false, mine: false });
   const request = () => ({
     id: 'q1', text: 'كيف أربط سجل المعالم بسجل المنافع في مشروعي؟', source: 'free', source_ar: 'سؤال حر', target_team: 'guide', target_team_ar: 'فريق التوجيه',
@@ -46,6 +47,7 @@ function server() {
     cohort: { id: 'c1', name: 'دفعة نوفمبر', supervision: 'peers_expert' },
   });
   const reply = (b) => {
+    if (fail[b.action]) return { success: false, message: fail[b.action] };
     switch (b.action) {
       case 'xp.dashboard': return { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة محافظ', roles: ['advisor'] }, stats: { hours: 7.5, participants: 1, attended: 2, upcoming: 0, no_show: 0 }, rating: { count: 1, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر', supervision: 'peers_expert' }] };
       case 'xp.participants': return { success: true, items: [{ id: 'p1', name: 'سارة الأحمد', first: 'سارة', title: 'مديرة مشاريع', org: 'جهة الاختبار', status: 'enrolled', cohort: 'دفعة نوفمبر', advisor: true, role_ar: null, level: 'intermediate', level_ar: 'متوسط', approved: true, stage: 'التوجيه على رأس العمل', progress: 55, late: 1, continuous: 72, needs: 4 }], cohorts: [] };
@@ -133,4 +135,64 @@ test('طابور الأقران في لوحة الخبير: إجابة الخب�
   await q.getByLabel('إجابتك').fill('اربط كل منفعة بمعلم القرار الذي يثبتها، وراجعهما معًا في كل بوابة.');
   await q.getByRole('button', { name: 'أجب' }).click();
   await expect.poll(() => s.calls.find((c) => c.action === 'xp.peer-answer')).toMatchObject({ request_id: 'q1' });
+});
+
+// رفض الخادم كان يظهر بعلامة النجاح (✓) في منطقة role=status برأس الصفحة، خارج الشاشة حين يقع الفعل أسفلها
+async function noSuccessWith(page, text) {
+  await expect(page.getByRole('status').filter({ hasText: text })).toHaveCount(0);
+}
+
+test('رفض الخادم في ملف المشارك يُعرض خطأً في قسمه وفي مجال الرؤية: الختامي وتأكيد إجابة زميل', async ({ page }) => {
+  const s = server({ finalStatus: 'draft', fail: { 'xp.final-eval-save': 'اكتب تعليلًا واضحًا لتعديل «القياس النهائي»', 'xp.peer-review': 'تعذّر الحفظ، حاول مرة أخرى' } });
+  await page.route(/functions\/v1\/leaders-api/, s.route);
+  await page.addInitScript((t) => localStorage.setItem('mi_leaders_expert_session', t), XP_TOKEN);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(PORTAL);
+  await page.getByRole('region', { name: /مشاركوك/ }).getByRole('button', { name: 'افتح الملف' }).click();
+  await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
+
+  const fin = page.getByRole('region', { name: 'التقييم الختامي' });
+  await fin.getByLabel('قيمة معدلة لـالقياس النهائي').fill('80');
+  await fin.getByRole('button', { name: 'حفظ مسودة' }).click();
+  await expect.poll(() => s.calls.filter((c) => c.action === 'xp.final-eval-save').length).toBe(1);
+  const finErr = fin.getByRole('alert');
+  await expect(finErr).toContainText('اكتب تعليلًا واضحًا لتعديل «القياس النهائي»');
+  await expect(finErr).toBeInViewport();
+  await expect(finErr.locator('.ico')).toHaveText('!');
+  await noSuccessWith(page, 'اكتب تعليلًا');
+
+  const peer = page.getByRole('region', { name: 'طلبات التوجيه' });
+  await peer.locator('.xf-answer').first().getByRole('button', { name: 'أكّد' }).click();
+  const peerErr = peer.getByRole('alert');
+  await expect(peerErr).toContainText('تعذّر الحفظ، حاول مرة أخرى');
+  await expect(peerErr).toBeInViewport();
+  await noSuccessWith(page, 'تعذّر الحفظ');
+
+  // والنجاح بعدها يبقى نجاحًا في قسمه: تقييم المعلم يُعلن «حُفظ» في «أين هو» لا تحذيرًا موروثًا من رفض سابق
+  const where = page.getByRole('region', { name: 'أين هو' });
+  await where.getByRole('button', { name: 'قيّم بالمعيار' }).click();
+  await where.locator('.xf-rubric').getByLabel('الفهم').selectOption('3');
+  await where.getByRole('button', { name: 'احفظ التقييم' }).click();
+  await expect(where.getByRole('status')).toContainText('حُفظ');
+  await expect(where.getByRole('alert')).toHaveCount(0);
+});
+
+test('رفض الخادم في لوحة الخبير: طابور الأقران والقاعة يعرضان الخطأ في قسميهما لا نجاحًا', async ({ page }) => {
+  const s = server({ fail: { 'xp.peer-review': 'تعذّر الحفظ، حاول مرة أخرى', 'xp.hall-open': 'لا تملك فتح قاعة لهذه الدفعة' } });
+  await page.route(/functions\/v1\/leaders-api/, s.route);
+  await page.addInitScript((t) => localStorage.setItem('mi_leaders_expert_session', t), XP_TOKEN);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(PORTAL);
+
+  const q = page.getByRole('region', { name: /طلبات الأقران/ });
+  await q.locator('.xf-answer').first().getByRole('button', { name: 'أكّد' }).click();
+  const qErr = q.getByRole('alert');
+  await expect(qErr).toContainText('تعذّر الحفظ، حاول مرة أخرى');
+  await expect(qErr).toBeInViewport();
+  await noSuccessWith(page, 'تعذّر الحفظ');
+
+  const hall = page.getByRole('region', { name: 'القاعة الحية' });
+  await hall.getByRole('button', { name: 'افتح القاعة' }).click();
+  await expect(hall.getByRole('alert')).toContainText('لا تملك فتح قاعة لهذه الدفعة');
+  await noSuccessWith(page, 'لا تملك فتح قاعة');
 });

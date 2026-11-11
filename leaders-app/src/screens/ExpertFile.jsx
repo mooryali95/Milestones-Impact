@@ -7,7 +7,7 @@
 // المعالم ويؤكّد إجابات الأقران؛ المسند إليه بطلب خدمة يقرأ فقط.
 import React, { useCallback, useEffect, useState } from 'react';
 import { xpCall } from '../api.js';
-import { ErrorBox } from '../ui.jsx';
+import { ErrorBox, Notice, useNotice } from '../ui.jsx';
 import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
@@ -43,10 +43,12 @@ function RubricForm({ m, onSave, onClose }) {
 }
 
 // التقييم الختامي من البوابة: تعديل بتعليل، رفع للاعتماد، واعتماد أو إعادة (الخادم يطبّق قواعد اللجنة والتوقيعين)
-function FinalEval({ pid, f, advisor, reload, say }) {
+function FinalEval({ pid, f, advisor, reload }) {
   const [adj, setAdj] = useState(f?.record?.adjust || { components: {} });
   const [busy, setBusy] = useState(false);
   const [ret, setRet] = useState('');
+  // رفض الخادم (تعليل ناقص، ملاحظات إلزامية) يُعرض خطأً تحت أزرار القسم، لا نجاحًا في رأس الصفحة
+  const [note, say] = useNotice();
   useEffect(() => { setAdj(f?.record?.adjust || { components: {} }); }, [f?.record?.updated_at, f?.record?.status]);
   if (!f?.live) return null;
   const live = f.live, rec = f.record, status = rec?.status || 'draft';
@@ -58,7 +60,7 @@ function FinalEval({ pid, f, advisor, reload, say }) {
     setBusy(true);
     const r = await xpCall(action, { participant_id: pid, ...body });
     setBusy(false);
-    if (!r.success) return say(r.message);
+    if (!r.success) return say(r.message, true);
     say(ok); reload();
   };
   const effective = adj.decision?.value || live.suggested;
@@ -110,26 +112,29 @@ function FinalEval({ pid, f, advisor, reload, say }) {
           <small className="muted">{FINAL_APPROVAL_AR[live.config?.approval]}: {f.approval?.yes} من {f.approval?.need}{f.vote_block ? ` · ${f.vote_block}` : ''}</small>
         </>}
       </div>
+      <Notice note={note} onClose={() => say(null)} reveal />
       {(rec?.votes || []).length > 0 && <ul className="small muted">{rec.votes.map((v) => <li key={v.by}>{v.vote === 'approve' ? '✓ اعتمد' : '↩ أعاد'} · {v.by} · {when(v.at)}{v.note ? ` · «${v.note}»` : ''}</li>)}</ul>}
     </section>
   );
 }
 
 // إجابات الزملاء عن طلبات هذا المشارك بانتظار التأكيد، وطلباته
-function PeerPending({ peer, advisor, reload, say }) {
+function PeerPending({ peer, advisor, reload }) {
   const [note, setNote] = useState({});
   const [busy, setBusy] = useState(false);
+  const [result, say] = useNotice();
   const review = async (a, status) => {
     setBusy(true);
     const r = await xpCall('xp.peer-review', { answer_id: a.id, status, note: note[a.id] || '' });
     setBusy(false);
-    if (!r.success) return say(r.message);
+    if (!r.success) return say(r.message, true);
     say(status === 'confirmed' ? 'أُكّدت الإجابة.' : status === 'corrected' ? 'صُحّحت الإجابة بملاحظتك.' : 'أُخفيت الإجابة.'); reload();
   };
   if (!peer?.requests?.length) return null;
   return (
     <section className="card stack" aria-label="طلبات التوجيه">
       <h3>طلبات توجيهه <small className="muted">· {peer.requests.length}</small>{peer.pending_answers.length > 0 && <span className="chip warn"> {peer.pending_answers.length} إجابة بانتظار تأكيدك</span>}</h3>
+      <Notice note={result} onClose={() => say(null)} reveal />
       <ul className="xf-peer">{peer.requests.map((r) => (
         <li key={r.id}><div><b>{r.source_ar}</b> ← {r.target_team_ar} · «{r.text}» <span className={`chip ${r.status === 'confirmed' ? 'ok' : r.status === 'answered' ? 'warn' : ''}`}>{r.status_ar}</span></div>
           {r.answers.map((a) => (
@@ -152,8 +157,7 @@ function PeerPending({ peer, advisor, reload, say }) {
 
 export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
-  const [msg, setMsg] = useState('');
-  const [bad, setBad] = useState(false);
+  const [msNote, sayMs] = useNotice();
   const [rub, setRub] = useState(null);
   const load = useCallback(() => xpCall('xp.participant', { id }).then(setD), [id]);
   useEffect(() => { load(); }, [load]);
@@ -164,8 +168,7 @@ export default function ExpertFile({ id, onBack }) {
   const c = d.continuous;
   const rateMilestone = async (m, body) => {
     const r = await xpCall('xp.milestone', { participant_id: p.id, milestone_id: m.id, ...body });
-    setBad(!r.success);
-    setMsg(r.success ? 'حُفظ' : r.message);
+    sayMs(r.success ? 'حُفظ' : r.message, !r.success);
     if (r.success) { setRub(null); load(); }
   };
   return (
@@ -178,7 +181,6 @@ export default function ExpertFile({ id, onBack }) {
             <p className="small ltr">{p.email}{p.phone ? ` · ${p.phone}` : ''}</p></div>
           <span className="chip gold">{advisor ? 'أنت مستشار دفعته' : 'مسند إليك بطلب خدمة'}</span>
         </div>
-        {msg && <div className={`banner${bad ? ' warn' : ''}`} role={bad ? 'alert' : 'status'}><span className="ico" aria-hidden="true">{bad ? '!' : '✓'}</span><div className="grow">{msg}</div><button className="link small" onClick={() => setMsg('')}>إغلاق</button></div>}
         <div className="xf-needs" aria-label="المطلوب منك الآن">
           <b>المطلوب منك الآن</b>
           {d.needs.length ? <ul>{d.needs.map((n) => <li key={n.key}>{n.text}</li>)}</ul> : <p className="muted small">لا شيء ينتظرك الآن.</p>}
@@ -207,6 +209,7 @@ export default function ExpertFile({ id, onBack }) {
           {d.milestones?.length > 0 && (
             <>
               <p className="small muted">المعالم: {d.milestone_summary.done}/{d.milestone_summary.total} منجز{d.milestone_summary.late ? ` · ${d.milestone_summary.late} متأخر (أقصاه ${d.milestone_summary.max_late} يومًا)` : ''}</p>
+              <Notice note={msNote} onClose={() => sayMs(null)} reveal />
               <ol className="ms-list">{d.milestones.map((m) => (
                 <li key={m.id} className={m.status}>
                   <div className="grow"><b>{m.title_ar}</b>{Object.keys(m.scores || {}).length > 0 && <small className="muted"> · {Object.entries(m.scores).map(([k, v]) => `${MILESTONE_RUBRIC[k]?.title} ${v}/4`).join('، ')}</small>}
@@ -239,8 +242,8 @@ export default function ExpertFile({ id, onBack }) {
         </section>
       )}
 
-      <PeerPending peer={d.peer} advisor={advisor} reload={load} say={setMsg} />
-      <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} say={setMsg} />
+      <PeerPending peer={d.peer} advisor={advisor} reload={load} />
+      <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
     </div>
   );
 }

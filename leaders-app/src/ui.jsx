@@ -1,8 +1,30 @@
 // ════════════════════════════════════════════════════════════════
-// حالات الشاشة المشتركة: هيكل التحميل، والفراغ، والخطأ مع إعادة المحاولة
+// حالات الشاشة المشتركة: هيكل التحميل، والفراغ، والخطأ مع إعادة المحاولة، ونتيجة الإجراء في قسمه
 // ════════════════════════════════════════════════════════════════
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
+
+// نتيجة الإجراء: say(النص، خطأ؟). النجاح في منطقة إعلان ثابتة بعلامة ✓، والخطأ تنبيه بعلامة ! فلا يُقرأ رفض الخادم نجاحًا.
+// تُعرض في القسم الذي وقع فيه الإجراء لا في رأس صفحة طويلة، وreveal يمرّرها إلى مجال الرؤية إن وقعت خارجه
+// (قسم لا نداءات خلفية فيه، فلا تنقل الصفحة دون فعل من المستخدم). say ثابتة الهوية فتصلح اعتمادًا في useCallback.
+let noticeSeq = 0;
+export function useNotice() {
+  const [note, setNote] = useState(null);
+  const say = useCallback((text, bad = false) => setNote(text ? { text, bad: !!bad, n: ++noticeSeq } : null), []);
+  return [note, say];
+}
+export function Notice({ note, onClose, reveal = false }) {
+  const box = useRef(null);
+  useEffect(() => { if (reveal && note) box.current?.scrollIntoView?.({ block: 'nearest' }); }, [note, reveal]);
+  // المفتاح يعيد رسم الرسالة المكررة فتُعلن ثانية (خطأ التحقق نفسه بعد محاولة أخرى)
+  const body = note && <><span className="ico" aria-hidden="true">{note.bad ? '!' : '✓'}</span><div className="grow">{note.text}</div>{onClose && <button className="link small" onClick={onClose}>إغلاق</button>}</>;
+  return (
+    <>
+      <div className="notice-live" role="status" aria-live="polite">{note && !note.bad && <div key={note.n} ref={box} className="banner">{body}</div>}</div>
+      {note?.bad && <div key={note.n} ref={box} className="banner warn" role="alert">{body}</div>}
+    </>
+  );
+}
 
 // رسالة واحدة لكل نافذة حجبها المتصفح: ما حدث، وكيف تسمح، وماذا تفعل بعدها
 export const POPUP_BLOCKED = 'منع المتصفح فتح النافذة. اسمح بالنوافذ المنبثقة لهذا الموقع من شريط العنوان، ثم اضغط مرة أخرى.';

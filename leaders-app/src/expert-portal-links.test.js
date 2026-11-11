@@ -1,6 +1,7 @@
 // بوابة الخبير بعد فحص الجاهزية (2026-11-11):
 // 1) رابط الدعوة: الخادم يبنيه ببريد مرمّز (%40) والبوابة كانت تشترط «@» صريحة ولا تقبل نقطة قبلها، فلم يُقرأ رابط قط.
 //    الصيغة الآن في مصدر واحد (logic.js) يبنيها الخادم ويقرؤها البوابة.
+// 2) رفض الخادم في التقييم الختامي وطابور الأقران والقاعة كان يظهر بعلامة النجاح في رأس الصفحة بعيدًا عن القسم.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -37,5 +38,22 @@ describe('رابط دعوة الخبير: صيغة واحدة يبنيها ال�
     const portal = read('leaders-app/src/screens/ExpertPortal.jsx');
     expect(portal).toContain('readExpertInvite(location.hash)');
     expect(portal).not.toMatch(/location\.hash\.match\(\/\^#invite=/);
+  });
+});
+
+describe('رفض الخادم في أقسام الخبير يُعرض خطأً في قسمه', () => {
+  const file = read('leaders-app/src/screens/ExpertFile.jsx');
+  const portal = read('leaders-app/src/screens/ExpertPortal.jsx');
+  it('لا يمرّر أحد ضابط الرسالة الخام إلى قسم (say={setMsg}) فيضيع معنى الخطأ', () => {
+    for (const src of [file, portal]) expect(src).not.toMatch(/say=\{setMsg\}|toast=\{setMsg\}/);
+  });
+  it('كل رفض يُقال بعلم الخطأ، والقاعة المشتركة تمرّره', () => {
+    for (const src of [file, portal]) {
+      expect(src).not.toMatch(/return say\(r\.message\);/);
+      expect(src).toMatch(/return say\(r\.message, true\);/);
+    }
+    const hall = read('shared/hall/HallControl.jsx');
+    expect(hall).toContain('if (!r.success) return toast(r.message, true);');
+    expect(hall).not.toMatch(/toast\(r\.message\)/);
   });
 });

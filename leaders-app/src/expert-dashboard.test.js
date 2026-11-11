@@ -27,7 +27,7 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
   });
   it('الواجهة تقرأ المجمّع مرة واحدة وتطلب كل قسم وحده إن غاب', () => {
     const ui = read('leaders-app/src/screens/ExpertPortal.jsx');
-    for (const c of ['AdvisorReviews initial={pre.reviews}', 'PeerQueue say={setMsg} initial={pre.peers}', 'MyParticipants onOpen={openFile} initial={pre.participants}', 'initial={pre.sus}']) expect(ui, c).toContain(c);
+    for (const c of ['AdvisorReviews initial={pre.reviews}', 'PeerQueue initial={pre.peers}', 'MyParticipants onOpen={openFile} initial={pre.participants}', 'initial={pre.sus}']) expect(ui, c).toContain(c);
     expect(ui.match(/useEffect\(\(\) => \{ if \(!initial\) load\(\); \}, \[\]\);/g)).toHaveLength(3);
     expect(ui).toContain('preload: undefined');
     expect(read('leaders-app/src/SusCard.jsx')).toContain('if (initial) return undefined;');

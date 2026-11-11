@@ -60,7 +60,7 @@ describe('منظور القاعة يتسع للدفعة كلها', () => {
     const hall = readFileSync('leaders-app/src/screens/Hall.jsx', 'utf8');
     expect(hall).toContain('if (force || fails.current >= POLL_FAIL_LIMIT)');
     expect(hall).toContain("fails.current = 0; setPollErr('');");
-    expect(readFileSync('shared/hall/HallControl.jsx', 'utf8')).toContain('if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message)');
+    expect(readFileSync('shared/hall/HallControl.jsx', 'utf8')).toContain('if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message, true)');
     expect(readFileSync('scripts/integration/hall-load.mjs', 'utf8')).toContain('ok(worst < POLL_FAIL_LIMIT');
   });
 });
