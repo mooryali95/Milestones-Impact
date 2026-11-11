@@ -6,7 +6,7 @@
 import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
+import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
@@ -21,7 +21,12 @@ const shell = (title: string, body: string, preheader = '') => mailShell(title, 
 import { firstName } from './hall.js';
 
 // ── طلب الانضمام (مفتوح) ──
+// صفحة بلا حساب، فما يخرج منها من بريد محدود مهما كثرت الطلبات (server-sec-2، تدقيق 2026-11-11). كان كل طلب ببريد
+// جديد يرسل رسالتين، فعشرون طلبًا آليًا تستنفد نصيب الإشعارات يومًا كاملًا (D15) وتتوقف دعوات المقيّمين والاعتماد.
+// الآن: تحقق بشري قبل أي أثر، ولا رسالة إلى البريد المكتوب لأن أحدًا لم يثبت ملكيته (تصله النتيجة بعد مراجعة الإدارة)،
+// وتنبيه المالك مرة على الأكثر في كل نافذة من ست ساعات، جماعيًا يدخل الطابور ولا يزاحم الرموز.
 // بريد واحد لملف واحد، وحد لكل شبكة في الساعة، ولا يكشف الرد إن كان البريد مسجلًا
+export const APPLY_ALERT_HOURS = 6;
 export async function apply(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
@@ -37,17 +42,28 @@ export async function apply(b: Body, ctx: Ctx) {
       .eq('applied_ip', ctx.ip).gte('created_at', new Date(Date.now() - 36e5).toISOString());
     if ((count ?? 0) >= 5) throw new Fail('طلبات كثيرة من هذه الشبكة، حاول بعد ساعة', 429, 'rate');
   }
+  // بعد الحد (لا يُستهلك رمز التحقق على طلب سيُرفض) وقبل قراءة البريد: المسجل والجديد يُطلب منهما التحقق نفسه
+  await requireHuman(b, ctx, 'استقبال طلبات الانضمام متوقف مؤقتًا، حاول بعد قليل');
   const { data: exists } = await db.from('experts').select('id').eq('email', email).maybeSingle();
   if (exists) return { success: true, received: true };
   const row = must(await db.from('experts').insert({ ...fields, email, phone, status: 'applied', source: 'application', applied_ip: ctx.ip }).select('id').single()) as any;
   await audit('system', email, 'expert.apply', 'experts', row.id);
-  sendMail(email, 'وصل طلب انضمامك إلى شبكة الخبراء', shell(`شكرًا ${firstName(fields.full_name)}`,
-    mailText('وصلنا طلب انضمامك إلى شبكة خبراء برنامج القادة. نراجع الطلبات خلال خمسة أيام عمل، ونراسلك بالنتيجة على هذا البريد.'))).catch(() => {});
-  if (CONFIG.alertEmail) {
-    sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير جديد',
-      mailText(`${esc(fields.full_name)}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلب'))).catch(() => {});
-  }
+  if (CONFIG.alertEmail) await alertApplication(row.id, fields).catch(() => {});
   return { success: true, received: true };
+}
+
+// أول طلب في النافذة (ست ساعات بتوقيت ثابت) وحده ينبّه المالك، وزر الرسالة يفتح الطلبات كلها. الأقدم في النافذة
+// هو من ينبّه، فطلبان متزامنان لا يرسلان رسالتين ولا يضيعانها
+async function alertApplication(id: string, fields: { full_name: string | null; title?: string | null }) {
+  const span = APPLY_ALERT_HOURS * 36e5;
+  const since = new Date(Math.floor(Date.now() / span) * span).toISOString();
+  const { data: first } = await db.from('experts').select('id').eq('source', 'application').gte('created_at', since)
+    .order('created_at').order('id').limit(1).maybeSingle();
+  if (first?.id !== id) return;
+  await sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير جديد',
+    mailText(`${esc(fields.full_name)}${fields.title ? ` · ${esc(fields.title)}` : ''}`)
+    + mailText(`تصلك رسالة واحدة على الأكثر كل ${APPLY_ALERT_HOURS} ساعات، وما يصل بعدها من طلبات تجده في القائمة نفسها.`)
+    + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلبات')), [], { kind: 'bulk' });
 }
 
 // ── لوحة الإدارة ──

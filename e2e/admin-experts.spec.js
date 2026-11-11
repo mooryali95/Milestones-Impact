@@ -70,12 +70,18 @@ test('إضافة خبير بدعوة، والسعر حقل إداري', async ({
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-save')).toMatchObject({ full_name: 'منى القحطاني', email: 'm@x.com', roles: ['coach'], hourly_rate: '0' });
 });
 
+// الخادم يطلب التحقق البشري قبل قبول الطلب (server-sec-2): تظهر الأداة، ويُعاد الإرسال برمزها وحده
+const TURNSTILE = `window.turnstile = { render(el, o) { el.textContent = 'تحقق'; setTimeout(() => o.callback('tok-human-0123456789'), 50); return 'w1'; }, remove() {} };`;
 test('انضم كخبير: التحقق ثم الإرسال', async ({ page }) => {
   let sent = null;
+  const applies = [];
+  await page.route(/challenges\.cloudflare\.com/, (r) => r.fulfill({ contentType: 'application/javascript', body: TURNSTILE }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
-    if (b.action === 'expert.apply') sent = b;
-    await route.fulfill({ json: b.action === 'expert.apply' ? { success: true, received: true } : { success: false } });
+    if (b.action !== 'expert.apply') return route.fulfill({ json: { success: false } });
+    applies.push(b);
+    sent = b;
+    await route.fulfill({ json: b.captcha ? { success: true, received: true } : { success: false, code: 'captcha', site_key: '0x4AAA', message: 'أكّد أنك لست برنامجًا آليًا' } });
   });
   await page.setViewportSize({ width: 900, height: 1400 });
   await page.goto('http://localhost:4304/expert');
@@ -88,6 +94,7 @@ test('انضم كخبير: التحقق ثم الإرسال', async ({ page }) =
   await page.getByLabel('عرّف بخبرتك *').fill('خبرة خمسة عشر عامًا في قيادة محافظ المشاريع الحكومية وتحويلها إلى أثر قابل للقياس، وتدريب القادة.');
   await page.getByRole('button', { name: 'أرسل طلب الانضمام' }).click();
   await expect(page.getByRole('heading', { name: 'وصل طلبك' })).toBeVisible();
+  expect(applies.map((b) => b.captcha || null)).toEqual([null, 'tok-human-0123456789']);
   expect(sent).toMatchObject({ full_name: 'سارة الحربي', roles: ['advisor'], dimensions: ['leadership'] });
 });
 

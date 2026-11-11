@@ -2,9 +2,12 @@
 // انضم كخبير: leaders.sunkvalue.com/expert
 // ════════════════════════════════════════════════════════════════
 // صفحة مفتوحة بلا حساب. الطلب يدخل قائمة «طلبات بانتظار المراجعة» في لوحة
-// الإدارة، ولا يُسند إلى صاحبه شيء قبل اعتماده.
+// الإدارة، ولا يُسند إلى صاحبه شيء قبل اعتماده. الخادم يطلب التحقق البشري قبل
+// قبول الطلب: تظهر الأداة، ويُعاد الإرسال وحده حين تكتمل (كما في بوابات الدخول).
 import React, { useState } from 'react';
 import { call } from '../api.js';
+import Captcha from '../Captcha.jsx';
+import { captchaGate } from '../captcha.js';
 import { DIM_AR, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const LANG = { ar: 'العربية', en: 'English' };
@@ -35,14 +38,17 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [captchaKey, setCaptchaKey] = useState(null);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = async (e, captcha) => {
+    e?.preventDefault();
     setError('');
     setBusy(true);
-    const r = save ? await save(v) : await call('expert.apply', v);
+    const r = save ? await save(v) : await call('expert.apply', { ...v, captcha });
     setBusy(false);
+    if (!save && r.code === 'captcha') { const g = captchaGate(r, captcha); setCaptchaKey(g.box); return setError(g.error); }
+    setCaptchaKey(null);
     if (r.success) { if (onSaved) onSaved(r); else setDone(true); window.scrollTo({ top: 0 }); } else setError(r.message);
   };
 
@@ -87,6 +93,7 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
           <small className="muted">{v.bio.length < 80 ? `${80 - v.bio.length} حرفًا على الأقل بعد` : 'ممتاز'}</small></label>
 
         {error && <div className="alert err" role="alert">{error}</div>}
+        {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => submit(null, t)} />}
         <button className="btn" disabled={busy}>{busy ? 'جارٍ الإرسال…' : expert ? 'احفظ الملف وأرسله للمراجعة' : 'أرسل طلب الانضمام'}</button>
         <p className="small muted">نستخدم بياناتك لمراجعة طلبك وإسناد الخدمات إليك فقط، ولا تُشارك مع أي جهة.</p>
       </form>
