@@ -222,7 +222,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
             <div className="table-wrap"><table className="data-table la-cards ex-table">
               <thead><tr><th>الخبير</th><th>الأدوار</th><th>الأبعاد</th><th>الطاقة</th><th>ما قدّمه</th><th>الحالة</th></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
-                <tr key={e.id} className="la-click" onClick={() => onOpen(e.id)}>
+                <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
                   <td data-label="الأدوار"><Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} /></td>
                   <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>

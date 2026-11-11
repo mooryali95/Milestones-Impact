@@ -5,22 +5,33 @@ import React, { useEffect, useRef, useState } from 'react';
 import Ico from '../../../shared/ui/Ico.jsx';
 import { call, validEmail } from '../api.js';
 import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
-import { useUI } from '../ui.jsx';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 const Err = ({ msg }) => (msg ? <div className="login-error show" role="alert">{msg}</div> : null);
 
-export default function Login({ onSignedIn }) {
-  const { toast } = useUI();
+// مهلة إعادة إرسال الرمز، وهي مهلة الخادم نفسها (OTP_COOLDOWN_MS في admin-api): قبلها يرد 429
+const RESEND_WAIT = 60;
+
+// notice: سبب الوصول إلى الشاشة (انتهاء الجلسة)، وinitialEmail: بريد من انتهت جلسته
+export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
   const [step, setStep] = useState('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  // رد الخادم على الإرسال كما هو: لا يرسل رمز البريد لمن فعّل تطبيق المصادقة أو مفتاح المرور وحده،
+  // فلا تقول الواجهة «تم الإرسال» (تدقيق الجاهزية admin-core-7)
+  const [info, setInfo] = useState('');
+  const [wait, setWait] = useState(0);
   const codeRef = useRef(null);
 
   useEffect(() => { if (step === 'code') codeRef.current?.focus(); }, [step]);
+  useEffect(() => {
+    if (!wait) return undefined;
+    const t = setTimeout(() => setWait((w) => Math.max(0, w - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
 
   const sendEmail = async (e) => {
     e?.preventDefault();
@@ -32,14 +43,17 @@ export default function Login({ onSignedIn }) {
     const d = await call('login-send', { email: v });
     setBusy('');
     if (!d.success) return setError(d.message || 'البريد غير مسجّل');
+    setInfo(d.message || '');
+    setWait(RESEND_WAIT);
     setStep('code');
   };
 
   const resendCode = async () => {
-    setBusy('resend');
+    if (busy || wait) return;
+    setBusy('resend'); setError(''); setInfo('');
     const d = await call('login-send', { email: email.trim() });
     setBusy('');
-    if (d.success) toast('✅ تم إرسال الرمز إلى بريدك'); else setError(d.message);
+    if (d.success) { setInfo(d.message || ''); setWait(RESEND_WAIT); } else setError(d.message);
   };
 
   const verify = async (e) => {
@@ -101,6 +115,7 @@ export default function Login({ onSignedIn }) {
               <div className="login-form-eyebrow">دخول المدراء</div>
               <div className="login-form-title">مرحباً بك</div>
               <div className="login-form-sub">أدخل بريدك الإلكتروني للمتابعة</div>
+              {notice && <div className="login-notice" role="alert">{notice}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="loginEmail">البريد الإلكتروني</label>
                 <input className="form-input" type="email" id="loginEmail" placeholder="your@email.com" autoComplete="email"
@@ -119,7 +134,8 @@ export default function Login({ onSignedIn }) {
             <form onSubmit={verify} noValidate>
               <div className="login-form-eyebrow">Verification</div>
               <div className="login-form-title">أدخل الرمز</div>
-              <div className="login-form-sub">أدخل رمز المصادقة أو رمز البريد</div>
+              <div className="login-form-sub">أدخل الرمز من تطبيق المصادقة إن فعّلته، وإلا فالرمز الذي وصل بريدك</div>
+              {info && <div className="login-notice" role="status">{info}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="loginCode">الرمز المكوّن من 6 أرقام</label>
                 <input ref={codeRef} className="form-input code-input" type="text" id="loginCode" placeholder="• • • • • •"
@@ -131,15 +147,15 @@ export default function Login({ onSignedIn }) {
                 <span className="code-hint-badge totp"><Ico name="lock" /> TOTP — تطبيق المصادقة</span>
                 <span className="code-hint-badge otp">✉️ OTP — البريد الإلكتروني</span>
               </div>
-              <button className="send-code-btn" type="button" onClick={resendCode} disabled={!!busy}>
-                {busy === 'resend' ? 'جارٍ الإرسال...' : 'إرسال رمز لبريدي الإلكتروني ←'}
+              <button className="send-code-btn" type="button" onClick={resendCode} disabled={!!busy || wait > 0}>
+                {busy === 'resend' ? 'جارٍ الإرسال...' : wait > 0 ? `إعادة إرسال رمز البريد بعد ${wait} ثانية` : 'أعد إرسال رمز البريد ←'}
               </button>
               <button className="login-btn" type="submit" disabled={!!busy} style={{ marginTop: 14 }}>{busy === 'verify' ? 'جارٍ التحقق...' : 'تأكيد الدخول'}</button>
               <Err msg={error} />
               <div style={{ textAlign: 'center', marginTop: 14, display: 'grid', gap: 8, justifyItems: 'center' }}>
-                <button type="button" className="btn-ghost-small" onClick={() => { setStep('email'); setCode(''); setError(''); }}>← تغيير البريد الإلكتروني</button>
+                <button type="button" className="btn-ghost-small" onClick={() => { setStep('email'); setCode(''); setError(''); setInfo(''); }}>← تغيير البريد الإلكتروني</button>
                 <button type="button" className="btn-ghost-small" disabled={!!busy} onClick={async () => {
-                  setBusy('recover'); setError('');
+                  setBusy('recover'); setError(''); setInfo('');
                   const r = await call('recovery-request', { email });
                   setBusy(''); setError(r.message || '');
                 }}>فقدت مفتاح المرور أو تطبيق المصادقة؟</button>

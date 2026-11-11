@@ -4,7 +4,7 @@
 import { alertOps, audit, db, Fail, finalDecisionMail, FINAL_MAIL_SUBJECT, must, sendMail } from './core.ts';
 import { certificateNotice, onFinalApproved, suspendForReopen } from './certificates.ts';
 import { runningCohort } from './programs.ts';
-import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, voteBlock } from './final.js';
+import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, finalEditors, voteBlock } from './final.js';
 import { DEFAULT_MODEL } from './logic.js';
 import { mePayload } from './participant.ts';
 import { compareFor } from './impact.ts';
@@ -63,6 +63,9 @@ export async function get(b: Body, a?: { email: string }) {
     current_version: finalConfig(program.final_eval).version,
     approval: approvalState(record?.votes || [], program.final_eval, { largeAdjust: !!live.large_adjust }),
     vote_block: a && record?.status === 'pending' ? voteBlock(a.email, record, program.final_eval) : null,
+    // من رفع التقييم أو عدّله يسحبه مسودة (save يقبل المعلّق ويُسقط الأصوات)، فلا يبقى بلا إجراء حين يمنعه
+    // ضابط الأعين الأربع من التصويت (التدقيق 2026-11-11)
+    can_withdraw: !!a && record?.status === 'pending' && finalEditors(record).includes(String(a.email || '').toLowerCase()),
   };
 }
 
@@ -89,7 +92,7 @@ export async function save(a: Actor, b: Body) {
     ...(submit ? { snapshot: live, submitted_by: a.email, submitted_at: now } : { snapshot: null, submitted_by: null, submitted_at: null }),
   };
   must(await db.from('final_evaluations').upsert(row));
-  await audit(a.actor || 'admin', a.email, submit ? 'final.submit' : 'final.save', 'participants', p.id, null, { score: live.score, decision: live.decision, adjust, config_version: live.config_version, large_adjust: live.large_adjust });
+  await audit(a.actor || 'admin', a.email, submit ? 'final.submit' : record?.status === 'pending' ? 'final.withdraw' : 'final.save', 'participants', p.id, null, { score: live.score, decision: live.decision, adjust, config_version: live.config_version, large_adjust: live.large_adjust });
   return { success: true, live, status: row.status };
 }
 

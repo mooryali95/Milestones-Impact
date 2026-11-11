@@ -227,3 +227,114 @@ test('لكل صفحة برنامج صورة مشاركة خاصة بها ومو�
     expect(res.status()).toBe(200);
   }
 });
+
+// ── visitor-4: نموذج التواصل بلوحة المفاتيح: التركيز داخل النافذة، والخطوات المخفية لا تُبلغ،
+//    وEnter على الأزرار يعمل عملها، والمدخلات تبقى بعد الإغلاق، والخطأ معلن ──
+const inModal = (page) => page.evaluate(() => !!document.activeElement?.closest('#tfModal'));
+
+test('نموذج التواصل: يأخذ التركيز ويحصر Tab في الخطوة الظاهرة ويعيده إلى زر الفتح', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto(BASE + '/');
+  const trigger = page.locator('.header__cta');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#tfModal')).toBeVisible();
+  await expect(page.locator('.tf-welcome__cta')).toBeFocused();
+  await page.keyboard.press('Enter'); // زر البدء ينقل إلى الخطوة الأولى
+  await expect(page.locator('.tf-step[data-step="1"]')).toHaveClass(/active/);
+  await expect(page.locator('#qName')).toBeFocused();
+  const hidden = ['qEmail', 'qPhone', 'qContext'];
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press(i % 4 === 3 ? 'Shift+Tab' : 'Tab');
+    expect(await inModal(page)).toBe(true);
+    const id = await page.evaluate(() => document.activeElement?.id || document.activeElement?.className);
+    expect(hidden.includes(id) || /tf-option|tf-thanks/.test(id)).toBe(false);
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#tfModal')).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test('نموذج التواصل: Enter على الإغلاق يغلق وعلى السابق يرجع وعلى الخيار يختاره', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto(BASE + '/');
+  await page.evaluate(() => window.openTypeform());
+  await page.locator('.tf-welcome__cta').click();
+  await page.locator('#qName').fill('اختبار آلي');
+  await page.locator('#qOrg').fill('جهة الاختبار');
+  await page.keyboard.press('Enter'); // Enter في الحقل يتقدم
+  await expect(page.locator('.tf-step[data-step="2"]')).toHaveClass(/active/);
+  await page.locator('#qEmail').fill('test@example.com');
+  await page.locator('#qPhone').fill('+966500000000');
+  await page.locator('#tfNext').click();
+  await expect(page.locator('.tf-step[data-step="3"]')).toHaveClass(/active/);
+  await page.locator('.tf-option').nth(1).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.tf-option').nth(1)).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.tf-step[data-step="3"]')).toHaveClass(/active/);
+  await page.locator('#tfPrev').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.tf-step[data-step="2"]')).toHaveClass(/active/);
+  await expect(page.locator('.tf-step[data-step="2"] .tf-step__error')).not.toHaveClass(/show/);
+  await page.locator('.tf-modal__close').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#tfModal')).toBeHidden();
+});
+
+test('نموذج التواصل: الإغلاق لا يمحو المدخلات، والإرسال الناجح يمحوها', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto(BASE + '/projects/');
+  await page.evaluate(() => window.openTypeform());
+  await page.locator('.tf-welcome__cta').click();
+  await page.locator('#qName').fill('اختبار آلي');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.openTypeform());
+  await expect(page.locator('#qName')).toHaveValue('اختبار آلي');
+  await page.keyboard.press('Escape');
+  await fillContactForm(page);
+  await expect(page.locator('.tf-step[data-step="thanks"]')).toHaveClass(/active/);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.openTypeform());
+  await expect(page.locator('#qName')).toHaveValue('');
+});
+
+test('نموذج التواصل: خطأ الخطوة معلن، والحقل المخالف موسوم ومركّز', async ({ page }) => {
+  await mockBackend(page);
+  await page.goto(BASE + '/');
+  await page.evaluate(() => window.openTypeform());
+  await page.locator('.tf-welcome__cta').click();
+  await page.locator('#qName').fill('اختبار آلي');
+  await page.locator('#tfNext').click();
+  const err = page.locator('.tf-step[data-step="1"] .tf-step__error');
+  await expect(err).toHaveAttribute('role', 'alert');
+  await expect(err).toHaveText('يُرجى إدخال الاسم والجهة.');
+  await expect(page.locator('#qOrg')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#qName')).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#qOrg')).toBeFocused();
+  const color = await err.evaluate((el) => getComputedStyle(el).color);
+  expect(color).toBe('rgb(154, 79, 18)');
+});
+
+// ── visitor-5: درج الجوال المغلق لا يبلغه Tab، والمفتوح يأخذ التركيز ويعيده إلى زر القائمة ──
+test('درج الجوال: مغلقًا خارج ترتيب Tab، ومفتوحًا يأخذ التركيز ويعيده عند الإغلاق', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE + '/');
+  const drawer = page.locator('#mobileDrawer');
+  const burger = page.locator('#burgerBtn');
+  await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+  await burger.focus();
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.activeElement?.closest('#mobileDrawer'))).toBe(false);
+
+  await burger.click();
+  await expect(burger).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#drawerCloseBtn')).toBeFocused();
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('#mobileDrawer'))).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(burger).toHaveAttribute('aria-expanded', 'false');
+  await expect(burger).toBeFocused();
+  await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+});

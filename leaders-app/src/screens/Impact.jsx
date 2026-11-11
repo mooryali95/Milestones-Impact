@@ -42,7 +42,20 @@ function Invite({ data, onChange }) {
     setBusy(false);
     if (res.success) { onChange(res); setF({ email: '', full_name: '', relation: 'peer' }); } else setError(res.message);
   };
-  const revoke = async (id) => { const res = await call('rater.revoke', { id }); if (res.success) onChange(res); };
+  // إلغاء الدعوة يوقف الرابط الذي وصل المقيّم، فلا يقع بنقرة عابرة (p-capstone-6)
+  const revoke = async (r) => {
+    if (!window.confirm(`تُلغى دعوة ${r.full_name || r.email}، ويتوقف الرابط الذي وصله فلا يستطيع التقدير به. متابعة؟`)) return;
+    setError('');
+    const res = await call('rater.revoke', { id: r.id });
+    if (res.success) onChange(res); else setError(res.message);
+  };
+  // الدعوة المنتهية تُرسل من جديد بالبريد نفسه: الخادم يجدد رابطها ومهلتها في السجل نفسه
+  const resend = async (r) => {
+    setBusy(true); setError('');
+    const res = await call('rater.invite', { email: r.email, full_name: r.full_name || '', relation: r.relation, phase: 'post' });
+    setBusy(false);
+    if (res.success) onChange(res); else setError(res.message);
+  };
   const full = raters.length >= data.limit;
   return (
     <div className="card stack">
@@ -58,13 +71,17 @@ function Invite({ data, onChange }) {
             <li key={r.id} className="row between">
               <span><b>{r.full_name || r.email}</b> <span className="small muted">{RELATIONS.find((x) => x.key === r.relation)?.title}{r.verification_ar ? ` · ${r.verification_ar}` : ''}</span></span>
               <span className="row small">
-                <span className={`chip ${r.status === 'submitted' ? 'ok' : 'warn'}`}>{STATUS[r.status]}</span>
-                {['invited', 'awaiting'].includes(r.status) && <button className="link small" onClick={() => revoke(r.id)}>إلغاء</button>}
+                <span className={`chip ${r.status === 'submitted' ? 'ok' : r.expired ? 'bad' : 'warn'}`}>{r.expired ? 'انتهت الدعوة' : STATUS[r.status]}</span>
+                {r.expired && <button className="link small" disabled={busy} onClick={() => resend(r)}>أعد الإرسال</button>}
+                {['invited', 'awaiting'].includes(r.status) && <button className="link small" onClick={() => revoke(r)}>إلغاء</button>}
               </span>
             </li>
           ))}
         </ul>
       )}
+      {raters.some((r) => r.expired) && <p className="small muted">انقضت مهلة الدعوة (30 يومًا) قبل أن يرسل المقيّم تقديره. «أعد الإرسال» يرسل له رابطًا جديدًا.</p>}
+      {full && <p className="small muted">دعوت {data.limit} مقيّمين، وهو الحد. لتدعو غيرهم ألغِ دعوة لم يُرسل صاحبها تقديره.</p>}
+      {full && error && <div className="alert err">{error}</div>}
       {!full && (
         <form className="stack" onSubmit={send}>
           <div className="grid2">

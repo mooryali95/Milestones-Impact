@@ -8,6 +8,7 @@ import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domai
 import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
 import { requirementIdByCode } from './programs.ts';
+import { scopeOrg } from './admin.ts';
 import {
   compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
@@ -254,7 +255,11 @@ async function preRating(p: any) {
   return { ok: true, instrument_id: base.instrument_id };
 }
 
-const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, status: r.status, invited_at: r.invited_at, submitted_at: r.submitted_at, phase: r.phase,
+// expired: دعوة مرسلة انقضت مهلتها فالرابط يقول للمقيّم «انتهت صلاحية الرابط»؛ كانت تظهر للمشارك «بانتظار تقديره»
+// بلا ما يدل على أن عليه إعادة الإرسال (p-capstone-6، تدقيق 2026-11-11). ومثلها مهلة الرابط في raterFrom
+const raterExpired = (r: any) => r.status === 'invited' && !!r.expires_at && new Date(r.expires_at) < new Date();
+export const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, status: r.status, invited_at: r.invited_at, submitted_at: r.submitted_at, phase: r.phase,
+  expired: raterExpired(r),
   verification: r.verification ?? null, verification_ar: r.verification ? (RATER_VERIFICATION_AR as Record<string, string>)[r.verification] : null,
   flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) });
 
@@ -436,7 +441,7 @@ export async function adminReport(b: Body) {
     // حساب العرض خارج إحصاءات الأثر كما في النظرة العامة (التدقيق 2026-11-10، البند 9.8: 6 هنا مقابل 5 هناك)
     // وحساب الاختبار خارجه كذلك (is_test، قرار المالك 2026-11-11)
     let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false).eq('is_test', false);
-    if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
+    q = scopeOrg(q, b.organization_id);   // 'none' = بلا جهة، كما في فلتر النظرة العامة وشاشة الأثر
     if (b.participant_id) q = q.eq('id', String(b.participant_id));
     return q.order('id').range(f, t);
   });

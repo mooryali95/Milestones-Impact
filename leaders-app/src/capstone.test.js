@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, cleanRubric, costSummary, importRows, initiativeOf,
-  docLevelsFor, parseDate, parseNumber, readiness, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
+  docLevelsFor, parseDate, parseNumber, readiness, returnedBy, RUBRIC, rubricFor, rubricScore, sectionState, trackProject,
 } from '../../supabase/functions/leaders-api/capstone.js';
 import { priorityFor, rubricPriority, activityFor, cleanConfig, fieldsFor, modelsFor, modelStatus, quizFor, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
@@ -325,5 +325,21 @@ describe('مواءمة المستوى والمسار', () => {
     const md = 'س: أ؟\n- x\n* y\n\n:::min=advanced\nس: ب؟\n- x\n* y\n:::';
     expect(quizFor(md, 'beginner')).toHaveLength(1);
     expect(quizFor(md, 'advanced')).toHaveLength(2);
+  });
+});
+
+// p-capstone-2: حالة الراعي تبقى «طلب تعديلًا» بعد إعادة التسليم، فالحكم بالأحدث لا بوجود رفض في السجل
+describe('من أعاد الوثيقة', () => {
+  const accepted = '2026-11-01T09:00:00Z', declined = '2026-11-03T09:00:00Z', returned = '2026-11-06T09:00:00Z';
+  it('رفض الراعي بعد قبول المستشار: الراعي', () => {
+    expect(returnedBy({ status: 'returned', review: { reviewed_at: accepted }, sponsor: { status: 'declined', at: declined } })).toBe('sponsor');
+  });
+  it('إعادة المستشار بعد رفض راعٍ قديم: المستشار، فتظهر ملاحظاته الجديدة', () => {
+    expect(returnedBy({ status: 'returned', review: { reviewed_at: returned }, sponsor: { status: 'declined', at: declined } })).toBe('advisor');
+  });
+  it('بلا رفض من الراعي: المستشار، وغير المعادة لا أحد', () => {
+    expect(returnedBy({ status: 'returned', review: { reviewed_at: returned }, sponsor: null })).toBe('advisor');
+    expect(returnedBy({ status: 'returned', review: { reviewed_at: returned }, sponsor: { status: 'pending', at: null } })).toBe('advisor');
+    expect(returnedBy({ status: 'submitted', review: null, sponsor: { status: 'declined', at: declined } })).toBe(null);
   });
 });

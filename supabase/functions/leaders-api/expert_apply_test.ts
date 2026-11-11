@@ -40,6 +40,7 @@ function install(tables: Record<string, Row[]>) {
       insert: (x: any) => { mode = 'insert'; payload = x; return q; },
       update: (x: any) => { mode = 'update'; payload = x; return q; },
       eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return q; },
+      in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       gte: (c: string, v: string) => { filters.push((r) => String(r[c]) >= v); return q; },
       not: (c: string, op: string, v: string) => { if (op === 'in') { const ks = v.replace(/[()]/g, '').split(','); filters.push((r) => !ks.includes(r[c])); } return q; },
       order: (c: string) => { orders.push(c); return q; },
@@ -180,4 +181,71 @@ Deno.test('دورة طلب الرعاية وإلغائه: ثلاثة طلبات 
       assertEquals(tables.sponsor_requests.filter((r) => r.kind === 'claim').length, R.SPONSOR_REQUESTS_PER_DAY);
     });
   } finally { restore(); unconfig(); }
+});
+
+// server-sec-3: المسمى يكتبه صاحب الملف، فلا يدخل بريد المالك وسمًا (رابط تصيّد أو صورة تتبع من مرسل المنصة)
+Deno.test('ملف الخبير المدعو: المسمى يصل المالك نصًا مرمّزًا لا رابطًا', async () => {
+  const unconfig = configure();
+  const tables: Record<string, Row[]> = { experts: [{ id: 'ex1', email: 'invited@example.com', status: 'invited', source: 'admin' }], audit_log: [], mail_events: [] };
+  const restore = install(tables);
+  const real = globalThis.fetch;
+  const sent: { to: string; html: string }[] = [];
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    if (String(url).includes('resend.com')) {
+      const b = JSON.parse(String(init?.body));
+      sent.push({ to: b.to[0], html: b.html });
+      return new Response(JSON.stringify({ id: 're_1' }));
+    }
+    return new Response('ok');
+  }) as typeof fetch;
+  try {
+    const title = '<a href="https://evil.example/login">راجع الطلب من هنا</a><img src="https://evil.example/t.gif">';
+    await E.portalProfileSave(tables.experts[0], form('invited@example.com', { title }));
+    await new Promise((r) => setTimeout(r, 20));   // تنبيه المالك يُرسل بلا انتظار
+    assertEquals(sent.map((m) => m.to), ['owner@example.com']);
+    const html = sent[0].html;
+    assert(!html.includes('<a href="https://evil') && !html.includes('<img src="https://evil'), 'لا وسم من المسمى في البريد');
+    assert(html.includes('&lt;a href=&quot;https://evil.example/login&quot;&gt;'), 'المسمى يظهر نصًا مرمّزًا');
+  } finally { globalThis.fetch = real; restore(); unconfig(); }
+});
+
+// p-capstone-4: طلب الاستشارة الذي انتهى «لا خبير مطابق» كان يختفي من «طلباتك» بلا كلمة. يبقى ظاهرًا أسبوعين
+// بسببه وما يحدث بعده، ولا يحجز الدور، وما سبقه طلب قائم للدور نفسه لا يظهر
+Deno.test('طلبات المشارك: المنتهي بلا خدمة يبقى ظاهرًا بسببه ولا يحجز الدور', async () => {
+  const ago = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
+  const req = (id: string, role: string, status: string, days: number) => ({ id, participant_id: 'p1', role, status, dimension: null, note: null, expires_at: null, created_at: ago(days + 1), updated_at: ago(days) });
+  const tables: Record<string, Row[]> = { expert_requests: [
+    req('r-unmatched', 'coach', 'unmatched', 3),
+    req('r-cancelled', 'advisor', 'cancelled', 5),
+    req('r-old', 'specialist', 'unmatched', E.ENDED_VISIBLE_DAYS + 2),
+    req('r-live', 'mentor', 'offered', 1),
+    req('r-superseded', 'mentor', 'unmatched', 2),
+    { ...req('r-other', 'coach', 'unmatched', 1), participant_id: 'p2' },
+  ] };
+  const restore = install(tables);
+  try {
+    // الدور المطلوب له طلب قائم، فلا ترشيح ولا قراءة للخبراء
+    const r: any = await E.mySuggestions({ id: 'p1' }, { role: 'mentor' });
+    assertEquals(r.requests.map((x: any) => x.id), ['r-live']);
+    assertEquals(r.recent.map((x: any) => x.id).sort(), ['r-cancelled', 'r-unmatched']);
+    const u = r.recent.find((x: any) => x.id === 'r-unmatched');
+    assertEquals([u.status_ar, u.role_ar], ['لا خبير مطابق', 'موجّه']);
+    assert(u.hint.includes('لم يقبله أحد من الخبراء المطابقين'));
+    assert(r.requests[0].hint.includes('عرضناه على التالي الأنسب'));
+  } finally { restore(); }
+});
+
+// p-capstone-8: عنوان بطاقة التقييم «كيف كانت {what} مع {الخبير}؟»؛ الدور اسم شخص («موجّه») فلا يستقيم بعد «كانت»
+Deno.test('تقييم الخبير: الخدمة المكتملة تُسمّى «خدمة «الدور»» لا الدور وحده', async () => {
+  const now = new Date().toISOString();
+  const tables: Record<string, Row[]> = {
+    coaching_sessions: [{ id: 's1', participant_id: 'p1', status: 'attended', expert_id: 'e1', starts_at: now }],
+    expert_requests: [{ id: 'q1', participant_id: 'p1', role: 'coach', status: 'completed', expert_id: 'e1', updated_at: now }],
+    expert_ratings: [],
+  };
+  const restore = install(tables);
+  try {
+    const r: any = await E.pendingRatings({ id: 'p1' });
+    assertEquals(r.items.map((x: any) => x.what).sort(), ['جلسة توجيه', 'خدمة «موجّه»'].sort());
+  } finally { restore(); }
 });

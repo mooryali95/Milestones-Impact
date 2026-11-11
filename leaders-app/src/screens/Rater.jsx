@@ -21,13 +21,13 @@ export default function Rater() {
   useEffect(() => { call('rater.get', { t }).then(setData); }, [t]);
 
   if (!data) return <div className="center-load"><div className="spinner" /></div>;
-  if (!data.success) return <div className="page narrow"><div className="alert err">{data.message}</div></div>;
+  if (!data.success) return <div className="page narrow"><div className="card stack"><h1 className="as-h2">الرابط غير متاح</h1><div className="alert err" role="alert">{data.message}</div></div></div>;
   if (done || data.done) {
     return (
       <div className="page narrow">
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
-          <h2>شكرًا لك</h2>
+          <h1 className="as-h2">شكرًا لك</h1>
           <p className="muted">وصل تقديرك، ويدخل مجمّعًا في تقرير أثر البرنامج.</p>
         </div>
       </div>
@@ -43,8 +43,10 @@ export default function Rater() {
     setBusy(false);
     if (res.success) setDone(true); else setError(res.message);
   };
+  // كل مجموعة تُسمّى بنص العبارة ووقتها («الآن» أو «قبل البرنامج»)، فقارئ الشاشة لا يسمع «مجموعة اختيار» مكررة بلا اسم (links-expert-8)
+  const qid = (q) => `rq-${String(q.id).replace(/[^\w-]/g, '')}`;
   const scale = (q, k) => (
-    <div className="options likert" role="radiogroup">
+    <div className="options likert" role="radiogroup" aria-labelledby={`${qid(q)}-text ${qid(q)}-${k}`}>
       {q.options.map((o) => (
         <button key={o.k} type="button" className={`opt${answers[q.id]?.[k] === o.k ? ' on' : ''}`} role="radio"
           aria-checked={answers[q.id]?.[k] === o.k} onClick={() => set(q.id, k, o.k)}>
@@ -66,18 +68,18 @@ export default function Rater() {
       {data.questions.map((q, i) => (
         <div key={q.id} className="card stack">
           <div className="row small"><span className="chip dark">{dimOf(q.dimension).title}</span><span className="muted">{i + 1} من {data.questions.length}</span></div>
-          <p className="q-text">{q.text}</p>
-          <p className="retro-label">{pre ? 'في الأشهر الثلاثة الأخيرة' : 'الآن'}</p>
+          <p className="q-text" id={`${qid(q)}-text`}>{q.text}</p>
+          <p className="retro-label" id={`${qid(q)}-now`}>{pre ? 'في الأشهر الثلاثة الأخيرة' : 'الآن'}</p>
           {i === 0 && <p className="small muted">اختر «لا أستطيع الحكم» إن لم تشهد الموقف.</p>}
           {scale(q, 'now')}
-          {!pre && <p className="retro-label">قبل البرنامج</p>}
+          {!pre && <p className="retro-label" id={`${qid(q)}-before`}>قبل البرنامج</p>}
           {!pre && scale(q, 'before')}
         </div>
       ))}
       <div className="card stack">
         <label className="field"><span>ملاحظة <em>(اختياري)</em>: مثال محدد على تغيير لاحظته</span>
           <textarea className="input" rows={4} maxLength={2000} value={comment} onChange={(e) => setComment(e.target.value)} /></label>
-        {error && <div className="alert err">{error}</div>}
+        {error && <div className="alert err" role="alert">{error}</div>}
         {/* D18 وD19: إشعار خصوصية المقيّم وسطر موافقته، ويُسجَّل قبوله بإرسال التقدير */}
         <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك لقياس أثر البرنامج وحده، ولا يظهر تقديرك للمشارك منفردًا. يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> (النسخة {POLICY_VERSION}).</p>
         <div className="row">

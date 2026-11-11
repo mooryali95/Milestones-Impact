@@ -70,7 +70,9 @@ function funnel(rows: any[]) {
 }
 // حساب العرض لا يدخل القوائم ولا الإحصاءات. وحساب الاختبار (is_test، قرار المالك 2026-11-11) لا يدخل الإحصاءات
 // ولوحة الجهة وحدها: يظهر في القوائم التشغيلية بشارة «اختبار»، ويبقى حسابًا عاديًا في كل ما سوى ذلك.
-const scopeOrg = (q: any, org: unknown) => (org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q);
+// 'none' = بلا جهة. المصدر الواحد لهذه القاعدة، ويستعمله تقرير الأثر كذلك (impact.ts).
+// col يسمح بالتصفية على جدول مضمَّن (participants.organization_id مع participants!inner)
+export const scopeOrg = (q: any, org: unknown, col = 'organization_id') => (org === 'none' ? q.is(col, null) : org ? q.eq(col, String(org)) : q);
 export const forStats = (q: any) => q.eq('is_demo', false).eq('is_test', false);
 const orgFilter = (q: any, org: unknown) => scopeOrg(forStats(q), org);   // الإحصاءات وصفحة الجهة ولوحة منسقها
 const listFilter = (q: any, org: unknown) => scopeOrg(q.eq('is_demo', false), org);   // قائمة المشاركين
@@ -163,8 +165,10 @@ export async function overview(b: Body = {}) {
   const data = await all((f, t) => orgFilter(db.from('participants').select('id, status, organization_id, organization_name, org_via, created_at, last_login_at'), b.org).order('id').range(f, t));
   const byStatus: Record<string, number> = {};
   for (const r of data || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
-  const { count: pendingReviews } = await db.from('participant_requirements')
-    .select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted');
+  // بفلتر الجهة نفسه الذي تُحسب به بقية الأرقام، وبلا حساب العرض كقائمة المراجعة
+  const { count: pendingReviews } = await scopeOrg(db.from('participant_requirements')
+    .select('participant_id, participants!inner(organization_id, is_demo)', { count: 'exact', head: true }).eq('status', 'submitted')
+    .eq('participants.is_demo', false), b.org, 'participants.organization_id');
   const ids = new Set((data || []).map((r: any) => r.id));
   // مع تصفية الجهة تُقرأ صفوف مشاركيها فقط، وبدونها الكل
   const scope = b.org ? [...ids] as string[] : null;
@@ -389,13 +393,14 @@ export async function participantDelete(a: Admin, b: Body) {
 }
 
 // قائمة المراجعة: كل ما أرسله المشاركون وينتظر قرار المستشار
-export async function reviews() {
+// b.org (اختياري): جهة واحدة أو 'none' كفلتر النظرة العامة، فلا تختلط قائمتها بجهات أخرى
+export async function reviews(b: Body = {}) {
   // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
-  const rows = must(await db.from('participant_requirements')
-    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo), stage_requirements(code, title_ar, stage_key, kind)')
-    .eq('status', 'submitted').eq('participants.is_demo', false).limit(200)) ?? [];
-  const { data: waiting } = await db.from('participants').select('id, full_name, email, organization_name, updated_at')
-    .eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(200);
+  const rows = must(await scopeOrg(db.from('participant_requirements')
+    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind)')
+    .eq('status', 'submitted').eq('participants.is_demo', false), b.org, 'participants.organization_id').limit(200)) ?? [];
+  const { data: waiting } = await scopeOrg(db.from('participants').select('id, full_name, email, organization_name, updated_at')
+    .eq('status', 'pending_approval').eq('is_demo', false), b.org).order('updated_at', { ascending: true }).limit(200);
   return { success: true, submitted: rows, pending_approval: waiting || [] };
 }
 

@@ -100,7 +100,7 @@ export const MatrixTab = (p) => {
                       className={`cell ${isDone?"done":""} ${hasD&&!isDone?"dated":""} ${isHL?"highlighted":""}`}
                       aria-label={`${op.nameAr}: ${status}`}
                       {...pressable(() => {
-                        if (submitted){showToast("تم قفل الخطة بعد التقديم النهائي");return;}
+                        if (submitted){showToast("الخطة مقفلة بعد الموافقة النهائية، ولتعديلها اطلب إعادة الفتح من أسفل المصفوفة");return;}
                         setSelectedCell(proc); setTempDate(dates[key]||""); setDateError("");
                         setHighlightedKeys([...(proc.feeds||[]),...(proc.fedBy||[])]);
                       })}

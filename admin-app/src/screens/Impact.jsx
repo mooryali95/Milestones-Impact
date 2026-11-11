@@ -149,7 +149,7 @@ function People({ list, onPerson }) {
       <table className="la-table" tabIndex={0} aria-label="أثر كل مشارك">
         <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المقيّمون</th></tr></thead>
         <tbody>{rows.map((p) => (
-          <tr key={p.id} className="la-click" onClick={() => onPerson(p.id)}>
+          <tr key={p.id} className="la-click" tabIndex={0} onClick={() => onPerson(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onPerson(p.id); }}>
             <td><b>{p.full_name}</b><br /><small className="la-muted">{p.organization || ''}{p.forms?.[0] && ` · نموذج ${p.forms[0]}${p.forms[1] ? ` ← ${p.forms[1]}` : ''}`}</small></td>
             <td>{p.overall ? (() => {
               const [vl, vc] = VERDICT[p.overall.verdict.key];

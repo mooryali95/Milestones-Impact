@@ -141,9 +141,10 @@ const ROLES = [
   { key: 'org', label: 'منسق جهة', store: coordSession, send: (a) => coordCall(a), action: 'coord.logout' },
 ];
 export const otherRoleSessions = (here) => ROLES.filter((r) => r.key !== here && r.store.get()).map((r) => r.label);
-export async function signOut(here) {
-  const others = otherRoleSessions(here);
-  const all = others.length > 0 && window.confirm(`أنت داخل على هذا الجهاز أيضًا بصفة ${others.join(' و')}.\n\nموافق: اخرج من الكل (الأنسب لجهاز مشترك).\nإلغاء: اخرج من هذه البوابة وحدها.`);
+export const roleLabel = (key) => ROLES.find((r) => r.key === key)?.label || '';
+// all: الخروج من كل الأدوار. السؤال حين توجد جلسة دور آخر نافذة من التطبيق بثلاثة أزرار صريحة (SignOutDialog.jsx):
+// كان سؤال المتصفح الأصلي يجعل «إلغاء» خروجًا من البوابة وحدها، ولا طريق للتراجع (فحص الجاهزية p-entry-9)
+export async function signOut(here, all = false) {
   for (const r of ROLES.filter((x) => x.key === here || (all && x.store.get()))) {
     if (r.store.get()) await r.send(r.action).catch(() => {});
     r.store.clear();

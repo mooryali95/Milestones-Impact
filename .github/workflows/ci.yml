@@ -188,10 +188,12 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browser
         if: needs.changes.outputs.e2e_groups != '[]' && steps.browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        # مكتبات النظام الأساسية موجودة على مشغّل ubuntu-24.04، وما يُنزَّل هنا خطوط إضافية؛ إن تعطلت مرآة Ubuntu
+        # (حدث 2026-11-11: Temporary failure resolving azure.archive.ubuntu.com) يُثبَّت المتصفح وحده فلا يسقط الفحص قبل أي اختبار
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Install Playwright system libraries
         if: needs.changes.outputs.e2e_groups != '[]' && steps.browsers.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: npx playwright install-deps chromium || echo "::warning::تعذّر تثبيت مكتبات النظام من مرآة Ubuntu، والمثبّت على المشغّل يكفي"
 
       # رحلات المستخدم الأساسية من طرف المتصفح (الخلفية مُحاكاة داخل الاختبارات)، كل مجموعة بخوادمها وحدها
       - name: End-to-end tests (selected groups)

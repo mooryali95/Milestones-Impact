@@ -5,16 +5,16 @@
 //   بعد الرفع تُعرض لقطة الحساب بإصدار معادلتها لا حسابًا حيًا؛ والقرارات التي تلزمها ملاحظات تطلبها.
 // • FinalConfig: إعداد البرنامج (الأوزان، طريقة القياس النهائي، قواعد التغطية، حدود القرار، الاعتماد واللجنة).
 import React, { useCallback, useEffect, useState } from 'react';
-import { L } from '../leaders.js';
+import { L, withRunningReason } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
-import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
+import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED, voteNoticeAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
 const when = (d) => (d ? new Date(d).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 export function FinalEvalCard({ participantId, canWrite }) {
-  const { toast, prompt } = useUI();
+  const { toast, prompt, confirm } = useUI();
   const [d, setD] = useState(null);
   const [adj, setAdj] = useState({ components: {} });
   const [busy, setBusy] = useState(false);
@@ -31,16 +31,24 @@ export function FinalEvalCard({ participantId, canWrite }) {
   const locked = !canWrite || status === 'approved' || status === 'pending';
   const setComp = (k, f, v) => setAdj({ ...adj, components: { ...adj.components, [k]: { ...(adj.components?.[k] || {}), [f]: v } } });
   const clearComp = (k) => { const c = { ...adj.components }; delete c[k]; setAdj({ ...adj, components: c }); };
+  // ok نص النجاح، أو دالة تبنيه من رد الخادم (حال التقييم الفعلية بعد الصوت)
   const run = async (action, body, ok) => {
     setBusy(true);
     const r = await L(action, { participant_id: participantId, ...body });
     setBusy(false);
     if (!r.success) return toast(r.message);
-    toast(r.notice || ok); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
+    toast(r.notice || (typeof ok === 'function' ? ok(r) : ok)); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
+  };
+  const voteApprove = async () => {
+    if (await confirm(finalApproveConfirm(live, d.approval), { ok: 'اعتمد' })) run('admin.final-eval-vote', { vote: 'approve' }, (r) => voteNoticeAr('approve', r.status, r.approval));
   };
   const voteReturn = async () => {
     const note = await prompt('سبب الإعادة (يصل لمن رفع التقييم):', '');
-    if (note) run('admin.final-eval-vote', { vote: 'return', note }, 'أُعيد للمراجعة');
+    if (note) run('admin.final-eval-vote', { vote: 'return', note }, (r) => voteNoticeAr('return', r.status, r.approval));
+  };
+  const withdraw = async () => {
+    if (!(await confirm('يعود التقييم مسودة وتسقط الأصوات المسجلة عليه، فتعدّله ثم ترفعه للاعتماد من جديد. متابعة؟'))) return;
+    run('admin.final-eval-save', { adjust: adj }, 'سُحب التقييم وعاد مسودة');
   };
   const reopen = async () => {
     const note = await prompt('سبب إعادة فتح التقييم المعتمد:', '');
@@ -114,8 +122,9 @@ export function FinalEvalCard({ participantId, canWrite }) {
             <button className="btn-sm primary" disabled={busy} onClick={() => run('admin.final-eval-save', { adjust: adj, submit: true }, 'رُفع للاعتماد')}>ارفع للاعتماد</button>
           </>}
           {status === 'pending' && <>
-            <button className="btn-sm primary" disabled={busy || !!d.vote_block} title={d.vote_block || ''} onClick={() => run('admin.final-eval-vote', { vote: 'approve' }, 'سُجل اعتمادك')}>اعتمد</button>
+            <button className="btn-sm primary" disabled={busy || !!d.vote_block} title={d.vote_block || ''} onClick={voteApprove}>اعتمد</button>
             <button className="btn-sm ghost" disabled={busy || !!d.vote_block} onClick={voteReturn}>أعِد للمراجعة</button>
+            {d.can_withdraw && <button className="btn-sm ghost" disabled={busy} onClick={withdraw}>اسحب للتعديل</button>}
             <small className="la-muted">{FINAL_APPROVAL_AR[live.config.approval]}{d.approval.large_adjust ? ' + توقيع ثانٍ للتعديل الكبير' : ''}: {d.approval.yes} من {d.approval.need}</small>
             {d.vote_block && <small className="la-muted">{d.vote_block}</small>}
           </>}
@@ -134,7 +143,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
 
 // إعداد التقييم الختامي للبرنامج
 export function FinalConfig({ program, onClose }) {
-  const { toast } = useUI();
+  const { toast, prompt } = useUI();
   const [c, setC] = useState(() => finalConfig(program.final_eval));
   const [busy, setBusy] = useState(false);
   const close = useGuardedClose(JSON.stringify(c) !== JSON.stringify(finalConfig(program.final_eval)), () => onClose());
@@ -142,10 +151,14 @@ export function FinalConfig({ program, onClose }) {
   const total = Object.values(c.weights).reduce((a, b) => a + Number(b || 0), 0);
   const save = async () => {
     setBusy(true);
-    const r = await L('admin.final-eval-config', { program_id: program.id, config: c });
+    // أثناء دفعة جارية يقبل الخادم الحفظ من المدير العام بتعليل مكتوب؛ المساعد يسأله عنه ويعيد الإرسال
+    const r = await withRunningReason((extra) => L('admin.final-eval-config', { program_id: program.id, config: c, ...extra }), prompt);
     setBusy(false);
+    if (r.cancelled) return;
     if (!r.success) return toast(r.message);
-    toast(`حُفظ إعداد التقييم الختامي (الإصدار ${r.config?.version ?? ''})`); onClose(true);
+    // أعضاء اللجنة كما قرأهم الخادم فعلًا، فلا يُظن الاعتماد مقصورًا على من لم يُحفظ
+    const members = r.config?.approval !== 'expert' && r.config?.committee?.length ? `، أعضاء اللجنة: ${r.config.committee.join('، ')}` : r.config?.approval !== 'expert' ? '، والاعتماد لأي حساب إدارة' : '';
+    toast(`حُفظ إعداد التقييم الختامي (الإصدار ${r.config?.version ?? ''})${members}`); onClose(true);
   };
   const w = (k, v) => setC({ ...c, weights: { ...c.weights, [k]: v } });
   const t = (k, v) => setC({ ...c, thresholds: { ...c.thresholds, [k]: v } });

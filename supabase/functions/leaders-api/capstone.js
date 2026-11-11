@@ -201,6 +201,12 @@ export function parseDate(v) {
   if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
   return null;
 }
+// التاريخ كما يقرؤه الراعي: «1 مارس 2027» بالتقويم الميلادي وأرقام لاتينية كبقية المنصة، لا 2027-03-01 خامًا
+// يتقلب ترتيبه في السطر العربي (links-expert-7). ما لا يُفهم تاريخًا يُعرض كما كُتب
+export function dateAr(v) {
+  const ts = parseDate(v ?? '');
+  return ts == null ? String(v ?? '') : new Date(ts).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 const codeOf = (v) => String(v || '').trim().replace(/\s+/g, '').toUpperCase();
 const listCodes = (v) => String(v || '').split(/[،,;\s]+/).map(codeOf).filter(Boolean);
@@ -394,6 +400,17 @@ export function canSubmit(state) {
   if (blocked.length) return { ok: false, reason: `فحوص لازمة قبل التسليم: ${blocked.map((x) => x.title).join('، ')}` };
   if (state.readiness < READY_MIN) return { ok: false, reason: `الجاهزية ${state.readiness}% وتلزم ${READY_MIN}%. عالج فحوص الاتساق المفتوحة.` };
   return { ok: true };
+}
+
+// من أعاد الوثيقة المعادة: الأحدث بين رفض الراعي ومراجعة المستشار. حالة الراعي لا تُصفَّر بإعادة التسليم
+// (تبقى في السجل)، فبعد «قبول ← رفض الراعي ← إعادة تسليم ← إعادة من المستشار» كانت الواجهة تعرض ملاحظة الراعي
+// القديمة وتخفي ملاحظات المستشار الجديدة على التحسين الوحيد المتاح (p-capstone-2، تدقيق 2026-11-11).
+/** @param {{ status?: string, review?: { reviewed_at?: string | null } | null, sponsor?: { status?: string | null, at?: string | null } | null }} c */
+export function returnedBy(c) {
+  if (c?.status !== 'returned') return null;
+  if (c.sponsor?.status !== 'declined') return 'advisor';
+  const reviewed = Date.parse(c.review?.reviewed_at || ''), declined = Date.parse(c.sponsor.at || '');
+  return reviewed > declined ? 'advisor' : 'sponsor';
 }
 
 // الإطار الذي ينتمي إليه كل فصل، لترتيب الفهرس وألوانه

@@ -62,7 +62,9 @@ export const FINAL_DEFAULTS = {
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 const intIn = (v, d, a, b) => (Number.isFinite(num(v)) ? clamp(Math.round(num(v)), a, b) : d);
-const emailList = (v) => [...new Set((Array.isArray(v) ? v : String(v || '').split(/[\s,،;]+/)).map((e) => String(e).trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 20);
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const listTokens = (v) => (Array.isArray(v) ? v : String(v || '').split(/[\s,،;]+/)).map((e) => String(e ?? '').trim()).filter(Boolean);
+const emailList = (v) => [...new Set(listTokens(v).map((e) => e.toLowerCase()).filter((e) => EMAIL_RE.test(e)))].slice(0, 20);
 
 // إعداد البرنامج كما يُقرأ: الافتراضي لكل ما لم يُضبط
 export function finalConfig(raw) {
@@ -99,6 +101,10 @@ export function cleanFinalConfig(raw, previous = null, now = new Date().toISOStr
   if (!Object.values(c.sources).some((w) => w > 0)) throw new Error('أعطِ وزنًا لمصدر واحد على الأقل في التقييم المستمر');
   const t = c.thresholds;
   if (!(t.pass > t.pass_notes && t.pass_notes > t.extend)) throw new Error('حدود القرار تنازلية: الاجتياز > الاجتياز بملاحظات > التمديد');
+  // أعضاء اللجنة بالبريد وحده: كان ما ليس بريدًا يسقط بصمت، فإن سقط الكل فرغت اللجنة وصار الاعتماد لأي حساب إدارة
+  // (التدقيق 2026-11-11). فيُرفض الحفظ ويُسمّى ما ليس بريدًا
+  const notEmail = listTokens(raw?.committee).filter((e) => !EMAIL_RE.test(e));
+  if (notEmail.length) throw new Error(`أعضاء اللجنة يُكتبون بالبريد. ليست بريدًا: ${notEmail.slice(0, 5).join('، ')}`);
   if (c.approval !== 'expert' && c.committee.length && c.committee.length < c.committee_size) throw new Error(`أعضاء اللجنة المسمّون (${c.committee.length}) أقل من حجمها (${c.committee_size})`);
   const g = c.measure.gain_scores;
   if (!(g.up >= g.flat && g.flat >= g.down)) throw new Error('درجات المكسب تنازلية: صاعد ≥ مستقر ≥ هابط');
@@ -278,8 +284,25 @@ export function approvalState(votes, config, { largeAdjust = false } = {}) {
   return { done: yes >= need, returned: no >= majority, need, yes, no, large_adjust: largeAdjust };
 }
 
+// إشعار الصوت من حال التقييم الفعلية بعده (رد vote)، لا نص ثابت: صوت إعادة واحد لا يعيد التقييم في لجنة
+// الأغلبية قبل بلوغها، ولا في طريقة الخبير بعد اعتماد سابق (التدقيق 2026-11-11)
+export function voteNoticeAr(vote, status, approval = {}) {
+  if (vote === 'return') return status === 'returned' ? 'أُعيد للمراجعة' : `سُجّلت إعادتك، والتقييم ما زال بانتظار الاعتماد (أصوات الإعادة ${approval.no ?? 1}، والاعتماد ${approval.yes ?? 0} من ${approval.need ?? 1})`;
+  return status === 'approved' ? 'اعتُمد التقييم' : `سُجل اعتمادك: ${approval.yes ?? 1} من ${approval.need ?? 1}`;
+}
+
 // من عدّل التقييم: من رفعه ومن حفظ تعديلًا عليه في مسودة (adjust.edited_by). كلهم لا يعتمدون ما عدّلوه
 export function finalEditors(record) {
   const list = [record?.submitted_by, ...(Array.isArray(record?.adjust?.edited_by) ? record.adjust.edited_by : [])];
   return [...new Set(list.filter(Boolean).map((e) => String(e).toLowerCase()))];
+}
+
+// نص التأكيد قبل «اعتمد» في البوابة واللوحة (links-expert-4): الاعتماد الذي يكمل العدد يُبلغ المشارك ويصدر الشهادة
+// فورًا (final.ts vote)، ولا يُتراجع عنه إلا بإعادة فتح من الإدارة؛ فلا يقع بنقرة خاطئة. «أعِد للمراجعة» بلا تأكيد
+export function finalApproveConfirm(live, approval) {
+  const what = `${live?.score != null ? `${live.score}٪` : 'بلا درجة'} · ${FINAL_DECISION_AR[live?.decision] || 'بلا قرار'}`;
+  const yes = (approval?.yes || 0) + 1, need = approval?.need || 1;
+  if (yes < need) return `تعتمد التقييم الختامي (${what}). يُسجَّل توقيعك (${yes} من ${need})، ويُحسم القرار حين يكتمل العدد. متابعة؟`;
+  const cert = ['pass', 'pass_notes'].includes(live?.decision) ? ' وتصدر شهادته' : '';
+  return `تعتمد التقييم الختامي (${what}). بتوقيعك يكتمل الاعتماد، فيُبلغ المشارك بالقرار الآن${cert}، ولا يُتراجع عنه إلا بإعادة فتح من الإدارة. متابعة؟`;
 }

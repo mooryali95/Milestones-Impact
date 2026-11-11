@@ -61,8 +61,11 @@
 .la-lvl.tentative { outline: 1px dashed var(--gold); }
 #ctx-leaders .data-table tbody tr { cursor: pointer; }
 
-.la-person { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; margin-top: 12px; }
-@media (max-width: 1000px) { .la-person { grid-template-columns: 1fr; } }
+/* minmax(0, …): الحد الأدنى لـ1fr عرض المحتوى، فكان جدول المستويات (نحو 760px) يدفع الشبكة خارج الشاشة
+   بين 1024 و1366 (تدقيق الجاهزية admin-core-5). الآن يتمرر الجدول داخل بطاقته، ودون 1200 عمود واحد */
+.la-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; margin-top: 12px; }
+.la-person .table-wrap { overflow-x: auto; }
+@media (max-width: 1200px) { .la-person { grid-template-columns: minmax(0, 1fr); } }
 .la-dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .86rem; margin-bottom: 12px; }
 .la-dl dt { color: var(--ink-light); }
 .la-bio { background: var(--sand-paper); padding: 10px 12px; border-radius: 6px; font-size: .86rem; margin-bottom: 12px; white-space: pre-wrap; }

@@ -83,3 +83,47 @@ it('التقييم: كل المعايير من 1 إلى 5، والمتوسط م�
   expect(ratingSummary(Array.from({ length: 5 }, () => ({ overall: 3 }))).visible).toBe(true);
   expect(ratingSummary([])).toEqual({ avg: null, count: 0, visible: false });
 });
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+const root = join(__dirname, '../..');
+import { expertFieldError } from '../../supabase/functions/leaders-api/logic.js';
+// links-expert-5 وadmin-eval-10: ما كُتب في ملف الخبير لا يُمحى بصمت
+describe('ملف الخبير: لا إسقاط صامت', () => {
+  it('رابط LinkedIn بلا https أو بـhttp يُكمَّل، وغير رابط LinkedIn يُرد بخطأ', () => {
+    expect(cleanExpert({ linkedin_url: 'www.linkedin.com/in/x' }).linkedin_url).toBe('https://www.linkedin.com/in/x');
+    expect(cleanExpert({ linkedin_url: ' linkedin.com/in/x ' }).linkedin_url).toBe('https://linkedin.com/in/x');
+    expect(cleanExpert({ linkedin_url: 'http://sa.linkedin.com/in/x' }).linkedin_url).toBe('https://sa.linkedin.com/in/x');
+    expect(cleanExpert({ linkedin_url: 'https://www.linkedin.com/in/x' }).linkedin_url).toBe('https://www.linkedin.com/in/x');
+    expect(cleanExpert({ linkedin_url: 'https://evil.com/linkedin.com/' }).linkedin_url).toBeNull();
+    expect(expertFieldError({ linkedin_url: 'javascript:alert(1)' })).toMatch(/LinkedIn/);
+    expect(expertFieldError({ linkedin_url: 'linkedin.com/in/x' })).toBeNull();
+  });
+  it('الأرقام المشرقية تُقبل، وما خرج عن المدى أو لم يكن رقمًا يُرد بخطأ لا يُحفظ فارغًا', () => {
+    expect(cleanExpert({ hourly_rate: '٣٠٠' }, { withAdmin: true }).hourly_rate).toBe(300);
+    expect(expertFieldError({ weekly_hours: '١٠', years_experience: '١٥' })).toBeNull();
+    expect(expertFieldError({ years_experience: '75' })).toMatch(/سنوات الخبرة/);
+    expect(expertFieldError({ weekly_hours: 'abc' })).toMatch(/الساعات/);
+    expect(expertFieldError({ weekly_hours: '-50' })).toMatch(/الساعات/);
+    expect(expertFieldError({ hourly_rate: 'abc' })).toBeNull();
+    expect(expertFieldError({ hourly_rate: 'abc' }, { withAdmin: true })).toMatch(/سعر الساعة/);
+    expect(expertFieldError({ weekly_hours: '', years_experience: null, linkedin_url: '  ' })).toBeNull();
+  });
+  it('حفظ الملف من الطلب والبوابة والإدارة يمر على التحقق قبل الكتابة', () => {
+    const src = readFileSync(join(root, 'supabase/functions/leaders-api/experts.ts'), 'utf8');
+    expect(src.match(/expertFieldError\(b[,)]/g)?.length).toBe(3);
+  });
+  it('ساعات الشهادة في اللوحة تقبل الأرقام المشرقية', () => {
+    const src = readFileSync(join(root, 'admin-app/src/screens/Certificates.jsx'), 'utf8');
+    expect(src).toMatch(/hours: latinDigits\(e\.target\.value\)/);
+  });
+});
+
+// links-expert-6: الرد من لوحة الخبير لا يستبدل رمز رابط البريد، فيبقى الرابط يعرض «قُبل» لا «انتهى»
+it('رد الخبير من لوحته يرد على الصف نفسه ولا يكتب رمزًا جديدًا للعرض', () => {
+  const src = readFileSync(join(root, 'supabase/functions/leaders-api/experts.ts'), 'utf8');
+  const portal = src.slice(src.indexOf('export async function portalRespond'), src.indexOf('export async function portalRate'));
+  expect(portal).toMatch(/respondToOffer\(r,/);
+  expect(portal).not.toMatch(/offer_token_hash/);
+  expect(portal).not.toMatch(/randomToken/);
+});

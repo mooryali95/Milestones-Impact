@@ -203,13 +203,17 @@
   box-shadow: -12px 0 40px rgba(6, 30, 44, 0.18);
   z-index: 200;
   transform: translateX(100%);
-  transition: transform 0.4s var(--ease);
+  /* المغلق مخفي عن Tab وقارئ الشاشة بعد انتهاء حركة الإغلاق */
+  visibility: hidden;
+  transition: transform 0.4s var(--ease), visibility 0s linear 0.4s;
   display: flex;
   flex-direction: column;
   padding: 20px 24px 32px;
 }
 .mobile-drawer.is-open {
   transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.4s var(--ease);
 }
 @media (min-width: 768px) {
   .mobile-drawer,

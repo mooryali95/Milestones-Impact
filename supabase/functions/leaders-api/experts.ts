@@ -9,9 +9,9 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
-import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -30,6 +30,8 @@ export const APPLY_ALERT_HOURS = 6;
 export async function apply(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
+  const fieldError = expertFieldError(b);
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b);
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
   if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
@@ -98,6 +100,8 @@ export async function adminGet(_a: Admin, b: Body) {
 // إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم
 export async function adminSave(a: Admin, b: Body) {
   requireWrite(a);
+  const fieldError = expertFieldError(b, { withAdmin: true });
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b, { withAdmin: true });
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسم الخبير');
   const phone = b.phone ? normalizePhone(b.phone) : null;
@@ -181,7 +185,7 @@ export async function adminSetStatus(a: Admin, b: Body) {
 // حالة الطلب في expert_requests وحدها. tried يحفظ كل من عُرض عليه فلا يعود إليه،
 // وقيد «طلب قائم واحد لكل مشارك ودور» في القاعدة يمنع التكرار.
 const LIVE = ['open', 'offered', 'accepted'];
-const roleAr = (r: string) => (EXPERT_ROLE_AR as Record<string, string[]>)[r]?.[0] || r;
+const roleAr = expertRoleAr;
 
 // ما يحتاجه المشارك: مستواه في البُعد المطلوب (من تسكينه) وقطاعه
 async function needFor(participantId: string, role: string, dimension: string | null) {
@@ -295,8 +299,12 @@ export async function adminAssign(a: Admin, b: Body) {
   return { success: true, request_id: req.id, ...r };
 }
 
-export async function adminRequests() {
-  const { data } = await db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)').order('created_at', { ascending: false }).limit(300);
+// b.participant_id (اختياري): طلبات مشارك واحد لملفه، لا طلبات الجميع تُصفّى في المتصفح
+// (وكانت آخر 300 طلب وحدها، فقد يغيب منها طلب قديم له)
+export async function adminRequests(b: Body = {}) {
+  let q = db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)');
+  if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
+  const { data } = await q.order('created_at', { ascending: false }).limit(300);
   return { success: true, requests: data || [] };
 }
 
@@ -353,7 +361,10 @@ export async function offerGet(b: Body) {
   };
 }
 export async function offerRespond(b: Body) {
-  const r = await offerByToken(b.t);
+  return respondToOffer(await offerByToken(b.t), b);
+}
+// الرد نفسه من الرابط أو من لوحة الخبير، على الصف كما هو: لا يُستبدل رمز الرابط، فيبقى رابط البريد يعرض ما حدث (links-expert-6)
+async function respondToOffer(r: any, b: Body) {
   if (r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا', 409, 'gone');
   const now = new Date().toISOString();
   if (b.accept === true) {
@@ -428,7 +439,8 @@ export async function pendingRatings(p: any) {
   const rated = new Set((done || []).flatMap((x: any) => [x.session_id, x.request_id]).filter(Boolean));
   const items = [
     ...(sessions || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'session', id: x.id, when: x.starts_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: 'جلسة توجيه' })),
-    ...(reqs || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'request', id: x.id, when: x.updated_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: roleAr(x.role) })),
+    // «كيف كانت خدمة «موجّه» مع…» لا «كيف كانت موجّه مع…»: الدور اسم شخص لا يستقيم بعد «كانت» (p-capstone-8)
+    ...(reqs || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'request', id: x.id, when: x.updated_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: `خدمة «${roleAr(x.role)}»` })),
   ];
   return { success: true, items, criteria: RATE_TO_EXPERT };
 }
@@ -587,6 +599,8 @@ export async function portalDashboard(e: any) {
 // الخبير قبل اعتماده يستكمل ملفه بأسئلة الخبير نفسها في طلب الانضمام، فينتقل «مدعو» إلى «بانتظار المراجعة»
 export async function portalProfileSave(e: any, b: Body) {
   if (portalWorking(e)) throw new Fail('ملفك معتمد؛ تعديله من الإدارة', 409);
+  const fieldError = expertFieldError(b);
+  if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b);
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
   if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
@@ -599,18 +613,16 @@ export async function portalProfileSave(e: any, b: Body) {
   await audit('system', e.email, 'expert.profile', 'experts', e.id, { status: e.status }, { status: 'applied' });
   if (first && CONFIG.alertEmail) {
     sendMail(CONFIG.alertEmail, `خبير مدعو استكمل ملفه: ${fields.full_name}`, shell('ملف خبير جاهز للاعتماد',
-      mailText(`${esc(fields.full_name)}${fields.title ? ` · ${fields.title}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
+      mailText(`${esc(fields.full_name)}${fields.title ? ` · ${esc(fields.title)}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
   }
   return { success: true, expert: expertPublic({ ...saved, hourly_rate: undefined, admin_note: undefined }) };
 }
 
 // رد الخبير من لوحته على عرض قائم له (الرابط في البريد يعمل أيضًا)
 export async function portalRespond(e: any, b: Body) {
-  const r = must(await db.from('expert_requests').select('id, expert_id, status').eq('id', String(b.id || '')).maybeSingle()) as any;
+  const r = must(await db.from('expert_requests').select('*, experts(full_name)').eq('id', String(b.id || '')).maybeSingle()) as any;
   if (!r || r.expert_id !== e.id || r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا لك', 409, 'gone');
-  const token = randomToken();
-  await db.from('expert_requests').update({ offer_token_hash: await hash(token) }).eq('id', r.id).eq('status', 'offered');
-  return offerRespond({ t: token, accept: b.accept === true, reason: b.reason });
+  return respondToOffer(r, { accept: b.accept === true, reason: b.reason });
 }
 
 // الخبير يقيّم المشارك بعد جلسة منعقدة أو خدمة مكتملة له
@@ -650,18 +662,29 @@ const publicCard = (e: any) => ({
 const consultRole = (r: any) => (CONSULT_ROLES.includes(r) ? r : 'coach');
 const consultContext = (c: any) => ((CONSULT_CONTEXT as Record<string, string>)[c] ? c : 'program');
 const liveView = (x: any) => ({ id: x.id, role: x.role, role_ar: roleAr(x.role), status: x.status,
-  status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[x.status] || x.status, dimension: x.dimension,
-  note: x.note || null, expert: x.experts?.full_name || null, title: x.experts?.title || null, expires_at: x.expires_at });
+  status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[x.status] || x.status, hint: (EXPERT_REQUEST_HINT as Record<string, string>)[x.status] || null,
+  dimension: x.dimension, note: x.note || null, expert: x.experts?.full_name || null, title: x.experts?.title || null, expires_at: x.expires_at });
 
-// الاستشارة متى احتاجها المشارك: طلباته القائمة، وأنسب ثلاثة للدور والمحور المختارين
+// طلب انتهى بلا خدمة («لا خبير مطابق» أو ألغاه الفريق) يبقى أمام المشارك هذه المدة بسببه، ولا يحجز الدور.
+// كان يختفي من «طلباتك» بلا كلمة بعد أن وُعد ببريد حين يقبله خبير (p-capstone-4، تدقيق 2026-11-11)
+export const ENDED_VISIBLE_DAYS = 14;
+const ENDED = ['unmatched', 'cancelled'];
+
+// الاستشارة متى احتاجها المشارك: طلباته القائمة وما انتهى منها بلا خدمة مؤخرًا، وأنسب ثلاثة للدور والمحور المختارين
 export async function mySuggestions(p: any, b: Body) {
   const role = consultRole(b.role);
-  const { data: live } = await db.from('expert_requests').select('id, role, status, dimension, note, expires_at, experts(full_name, title)')
-    .eq('participant_id', p.id).in('status', LIVE).order('created_at', { ascending: false });
+  const cols = 'id, role, status, dimension, note, expires_at, updated_at, experts(full_name, title)';
+  const [{ data: live }, { data: ended }] = await Promise.all([
+    db.from('expert_requests').select(cols).eq('participant_id', p.id).in('status', LIVE).order('created_at', { ascending: false }),
+    db.from('expert_requests').select(cols).eq('participant_id', p.id).in('status', ENDED)
+      .gte('updated_at', new Date(Date.now() - ENDED_VISIBLE_DAYS * 864e5).toISOString()).order('updated_at', { ascending: false }).limit(5),
+  ]);
   const requests = (live || []).map(liveView);
+  // ما طُلب بعده طلب قائم للدور نفسه لم يعد يعني شيئًا
+  const recent = (ended || []).filter((x: any) => !requests.some((r) => r.role === x.role)).map(liveView);
   const busy = requests.some((x) => x.role === role);
   const roles = CONSULT_ROLES.map((r) => ({ key: r, title: roleAr(r), hint: (EXPERT_ROLE_AR as Record<string, string[]>)[r][1] }));
-  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests };
+  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests, recent };
   if (busy) return { ...base, candidates: [] };
   const { need } = await needFor(p.id, role, b.dimension || null);
   return { ...base, candidates: (await candidates(need, p.id)).slice(0, 3).map(publicCard) };

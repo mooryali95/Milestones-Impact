@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
@@ -212,11 +212,20 @@ export const stageCount = (stage) => {
 
 function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
   const [busy, setBusy] = useState(false);
+  // بعد «أنجزته» أو «تراجع» يُستبدل الزر بنقيضه، فيعود التركيز إليه (أو إلى البند إن لم يبق زر) لا إلى أول الصفحة
+  const li = useRef(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    (li.current?.querySelector('.actions button:not([disabled])') || li.current)?.focus();
+  }, [item.status]);
   const act = async (extra) => {
     setBusy(true);
     const res = await call('requirement.update', { requirement_id: item.id, ...extra });
     setBusy(false);
     if (res.success) {
+      refocus.current = true;
       onUpdate(res);
       if (!extra.undo) setToast(item.needs_review ? 'أُرسل للمستشار للمراجعة' : 'أحسنت، خطوة منجزة');
     } else setToast(res.message);
@@ -238,7 +247,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
   const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
 
   return (
-    <li className={`item ${item.status}`}>
+    <li ref={li} tabIndex={-1} className={`item ${item.status}`}>
       <span className="box" aria-hidden="true">{mark}</span>
       <div className="grow">
         <div className="row between">
@@ -494,7 +503,11 @@ export function PreManager({ inSettings = false }) {
   const [f, setF] = useState({ email: '', full_name: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { call('impact.mine').then((r) => setData(r.success ? r : null)); }, []);
+  // البطاقة المخفية لا تطلب حالتها: impact.mine يحسب ثبات الدفعة على الخادم في كل طلب (فحص الجاهزية p-capstone-7)
+  useEffect(() => {
+    if (hidden) return;
+    call('impact.mine').then((r) => setData(r.success ? r : null));
+  }, [hidden]);
   if (hidden || !data?.pre_available) return null;
   const pre = data.raters.find((r) => r.phase === 'pre');
   if (pre?.status === 'submitted') return null;
@@ -688,15 +701,18 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </div>
       )}
-      {participant.status !== 'completed' && <PreManager />}
-      {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
       {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
-
-      {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
           وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتيب والمختبر */}
       <div className="j-layout">
+        {/* بطاقات الطلب (دعوة المدير والترحيب ومفتاح المرور) تحت «خطوتك التالية» لا فوقها: على الهاتف كانت تدفعها
+            تحت الشاشة الأولى (فحص الجاهزية p-entry-6). وعلى الحاسب أول العمود الأوسط فوق المراحل */}
+        <div className="j-asks">
+          {participant.status !== 'completed' && <PreManager />}
+          {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
+          {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
+        </div>
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading || upcoming) && (
             <div className="next-grid j-next" data-tour="next-step">

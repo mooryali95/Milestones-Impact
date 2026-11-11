@@ -66,7 +66,8 @@ describe('عزل حساب العرض', () => {
   });
   it('لا يدخل طوابير المراجعة ولا القاعة ولا التذكير', () => {
     const admin = api('admin.ts');
-    expect(admin).toMatch(/participants!inner\(full_name, email, is_demo\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
+    // organization_id في الاختيار نفسه لفلتر الجهة في النظرة العامة (admin-core-6)
+    expect(admin).toMatch(/participants!inner\(full_name, email, is_demo[^)]*\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
     expect(admin).toMatch(/\.eq\('status', 'pending_approval'\)\.eq\('is_demo', false\)/);
     expect(admin).toMatch(/model_submissions[\s\S]*participants!inner\([^)]*is_demo\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
     expect(admin).toMatch(/\.neq\('status', 'suspended'\)\.eq\('is_demo', false\)/);

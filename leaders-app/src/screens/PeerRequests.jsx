@@ -74,7 +74,7 @@ export default function PeerRequests({ preset = null, onDone, compact = false })
           <div className="row between"><span><b>{r.source_ar}</b> ← {r.target_team_ar} <small className="muted">· {when(r.at)}</small></span><span className={`chip ${CHIP[r.status]}`}>{r.status_ar}</span></div>
           <p className="small">«{r.text}»</p>
           {r.answers.map((a) => <div key={a.id} className="pr-answer"><b>{a.author}</b>: {a.text} <span className={`chip ${A_CHIP[a.status]}`}>{a.status_ar}</span>{a.expert_note && <p className="small muted">ملاحظة الخبير: {a.expert_note}</p>}</div>)}
-          {r.status !== 'closed' && <button className="link small" disabled={busy} onClick={() => run('peer.close', { request_id: r.id }, 'أُغلق الطلب.')}>أغلق الطلب</button>}
+          {r.status !== 'closed' && <button className="link small" disabled={busy} onClick={() => window.confirm('يُغلق الطلب فلا يراه زملاؤك ولا تصله إجابات جديدة، ولا يُعاد فتحه. متابعة؟') && run('peer.close', { request_id: r.id }, 'أُغلق الطلب.')}>أغلق الطلب</button>}
         </li>
       ))}</ul>}
 

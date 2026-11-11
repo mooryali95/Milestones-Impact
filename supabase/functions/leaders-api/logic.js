@@ -2066,11 +2066,27 @@ export const EXPERT_ROLES = ['coach', 'advisor', 'specialist', 'assessor', 'ment
 const pickSet = (v, allowed) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => allowed.includes(x)))];
 const txt = (v, max) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
 const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(latinDigits(v).trim())); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+// رابط LinkedIn كما يُنسخ: بلا بروتوكول أو بـhttp يُكمَّل إلى https، وما ليس رابط LinkedIn لا يُقبل (فحص الجاهزية links-expert-5)
+const linkedinUrl = (v) => {
+  const s = String(v ?? '').trim().replace(/^http:\/\//i, '').replace(/^(?!https:\/\/)/i, 'https://');
+  return /^https:\/\/([a-z]+\.)?linkedin\.com\/\S*$/i.test(s) && s.length <= 300 ? s : null;
+};
+// ما كُتب ولم يُقبل يُرد بخطأ صريح بدل أن يُحفظ فارغًا بصمت (links-expert-5 وadmin-eval-10): كان «حُفظ الملف» يظهر
+// والساعات أو السنوات أو الرابط قد مُحيت، وتعديل الملف يمحو المحفوظ. null إن صلح كل ما كُتب
+export function expertFieldError(b, { withAdmin = false } = {}) {
+  const given = (k) => b[k] != null && String(b[k]).trim() !== '';
+  const out = cleanExpert(b, { withAdmin });
+  if (given('years_experience') && out.years_experience == null) return 'سنوات الخبرة رقم صحيح بين 0 و60';
+  if (given('weekly_hours') && out.weekly_hours == null) return 'الساعات المتاحة أسبوعيًا رقم صحيح بين 0 و60';
+  if (given('linkedin_url') && !out.linkedin_url) return 'رابط LinkedIn غير صحيح، انسخه من صفحتك مثل linkedin.com/in/…';
+  if (withAdmin && given('hourly_rate') && out.hourly_rate == null) return 'سعر الساعة رقم لا يقل عن 0';
+  return null;
+}
 // الحقول التي يكتبها الخبير بنفسه (طلب الانضمام) أو الإدارة. withAdmin يضيف السعر والملاحظة
 export function cleanExpert(b, { withAdmin = false } = {}) {
   const out = {
     full_name: txt(b.full_name, 120), title: txt(b.title, 160), bio: txt(b.bio, 3000),
-    linkedin_url: /^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(String(b.linkedin_url || '')) ? txt(b.linkedin_url, 300) : null,
+    linkedin_url: linkedinUrl(b.linkedin_url),
     roles: pickSet(b.roles, EXPERT_ROLES),
     dimensions: pickSet(b.dimensions, ['milestone', 'impact', 'leadership']),
     levels: pickSet(b.levels, ['beginner', 'intermediate', 'advanced']),
@@ -2080,7 +2096,7 @@ export function cleanExpert(b, { withAdmin = false } = {}) {
   };
   if (!out.languages.length) out.languages = ['ar'];
   if (withAdmin) {
-    const r = b.hourly_rate === '' || b.hourly_rate == null ? null : Number(b.hourly_rate);
+    const r = b.hourly_rate === '' || b.hourly_rate == null ? null : Number(latinDigits(b.hourly_rate).trim());
     out.hourly_rate = Number.isFinite(r) && r >= 0 ? Math.round(r * 100) / 100 : null;
     out.admin_note = txt(b.admin_note, 2000);
   }

@@ -995,8 +995,11 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .j-layout { display: flex; flex-direction: column; }
 .j-side { display: contents; }
 .j-next { order: 0; }
-.j-main { order: 1; min-width: 0; margin-top: 16px; }
-.j-tools { order: 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 28px; }
+/* بطاقات الطلب بعد «خطوتك التالية» على عمود واحد، وأول العمود الأوسط على الحاسب (p-entry-6) */
+.j-asks { order: 1; min-width: 0; }
+.j-asks:empty { display: none; }
+.j-main { order: 2; min-width: 0; margin-top: 16px; }
+.j-tools { order: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 28px; }
 .tool-card {
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px;
   display: grid; gap: 6px; align-content: start; border-top: 3px solid var(--gold);
@@ -1005,12 +1008,13 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .tool-card .row { margin-top: 6px; }
 .stage { scroll-margin-top: 84px; }
 @media (min-width: 1120px) {
-  .j-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
+  .j-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0 28px; align-items: start; }
   .j-side {
-    display: flex; flex-direction: column; gap: 12px; grid-column: 2; grid-row: 1;
+    display: flex; flex-direction: column; gap: 12px; grid-column: 2; grid-row: 1 / span 2;
     position: sticky; top: 84px; padding-top: 32px; max-height: calc(100vh - 96px); overflow-y: auto;
   }
-  .j-main { grid-column: 1; grid-row: 1; margin-top: 0; }
+  .j-asks { grid-column: 1; grid-row: 1; }
+  .j-main { grid-column: 1; grid-row: 2; margin-top: 0; }
   .j-side .next-grid { grid-template-columns: 1fr; margin-top: 0; }
   .j-tools { grid-template-columns: 1fr; margin-top: 0; }
   .next-card { box-shadow: var(--shadow); border-color: transparent; }
@@ -1190,6 +1194,15 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .tr-log li p { margin: 0; color: var(--muted); }
 .tr-log .chip { justify-self: start; }
 .tr-scroll { overflow-x: auto; }
+/* تأكيد الأثر على الجوال: بطاقة لكل منفعة، ووسم كل قيمة من data-label، فالأرقام المطلوب تأكيدها كلها في الإطار */
+@media screen and (max-width: 640px) {
+  .oc-benefits thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .oc-benefits, .oc-benefits tbody { display: block; min-width: 0; }
+  .oc-benefits tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .mtable.oc-benefits td { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; }
+  .mtable.oc-benefits td.oc-title { grid-column: 1 / -1; font-weight: 600; }
+  .oc-benefits td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 14px; }
+}
 .tr-ms { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 14px; }
 .tr-ms small { color: var(--muted); }
 .cx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
@@ -1197,6 +1210,7 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .cx-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .cx-live { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cx-live li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
+.cx-live .cx-hint { display: block; margin-top: 4px; line-height: 1.7; }
 
 /* المعالم */
 .ms-bar { height: 6px; border-radius: 999px; background: var(--st-warn-bg); overflow: hidden; }
@@ -1372,6 +1386,8 @@ body:has(.tour) main{padding-bottom:260px}
 .acct-sheet-options button { min-height: 52px; text-align: start; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--brand-paper); font: inherit; font-weight: 600; color: inherit; cursor: pointer; }
 .acct-sheet-options button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .acct-sheet-options button:disabled { opacity: .6; }
+/* سؤال الخروج (SignOutDialog.jsx): اللوح نفسه، بعرض محدود في وسط الشاشات الواسعة */
+.signout-sheet { max-width: 480px; margin-inline: auto; }
 .acct-sheet-cancel { min-height: 48px; border: 0; background: none; font: inherit; color: var(--muted); cursor: pointer; border-radius: 12px; }
 .acct-sheet-cancel:focus-visible { outline: 2px solid var(--gold); }
 @keyframes acct-up { from { transform: translateY(100%); } to { transform: none; } }

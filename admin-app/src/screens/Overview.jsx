@@ -28,6 +28,8 @@ function Bars({ rows }) {
 // القياس البعدي: يعرض ما يحسبه admin.impact كما هو، ولا يحسب الأثر هنا
 function Impact({ im, instruments }) {
   const post = (instruments || []).find((x) => x.kind === 'post');
+  // فشل الحساب خطأ يُعرض، لا حالة فارغة توحي بأن الأداة لم تُفعَّل
+  if (im && !im.success) return <p className="la-err" role="alert">تعذّر حساب قياس الأثر{im.message ? `: ${im.message}` : ''}</p>;
   if (!im?.success) {
     return (
       <>
@@ -147,8 +149,9 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
     let live = true;
     setD(null);
     Promise.all([
-      L('admin.overview', { org }), L('admin.reviews'),
-      L('admin.impact', org ? { organization_id: org } : {}).catch(() => null),
+      // الجهة نفسها لكل البطاقات: الأرقام وقائمة «ينتظر قرارك» والمتطلبات وقياس الأثر
+      L('admin.overview', { org }), L('admin.reviews', { org }),
+      L('admin.impact', org ? { organization_id: org } : {}).catch((e) => ({ success: false, message: e?.message })),
       L('admin.health').catch(() => null),
     ]).then(([o, r, im, h]) => live && setD({ o, r, im, h }));
     return () => { live = false; };

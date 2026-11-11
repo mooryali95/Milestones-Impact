@@ -10,6 +10,7 @@ import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
 import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
+import { latinDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
 const ST = { valid: ['سارية', 'ok'], suspended: ['معلّقة', 'warn'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
 
@@ -66,7 +67,7 @@ function SettingsCard({ canWrite, onPerson }) {
       <fieldset disabled={!canWrite} className="ce-grid">
         <label className="of-field"><span className="of-label">اسم البرنامج</span><input value={s.program_ar} onChange={set('program_ar')} maxLength={200} /></label>
         <label className="of-field"><span className="of-label">اسم البرنامج بالإنجليزية</span><input dir="ltr" value={s.program_en} onChange={set('program_en')} maxLength={200} /></label>
-        <label className="of-field"><span className="of-label">الساعات التدريبية</span><input inputMode="numeric" value={s.hours ?? ''} onChange={(e) => setS({ ...s, hours: e.target.value.replace(/\D/g, '') })} placeholder={auto?.hours && !auto.missing?.length ? `تلقائيًا: ${auto.hours}` : 'اختياري'} />
+        <label className="of-field"><span className="of-label">الساعات التدريبية</span><input inputMode="numeric" value={s.hours ?? ''} onChange={(e) => setS({ ...s, hours: latinDigits(e.target.value).replace(/\D/g, '') })} placeholder={auto?.hours && !auto.missing?.length ? `تلقائيًا: ${auto.hours}` : 'اختياري'} />
           <small className="la-muted">{auto?.missing?.length ? `لا تُحسب الساعات تلقائيًا حتى تُكتب مدة هذه الأنشطة: ${auto.missing.join('، ')}. حتى ذلك تبقى فارغة على الشهادة ما لم تكتبها هنا.` : auto?.hours ? `فارغ = ${auto.hours} ساعة محسوبة من جلسات البرنامج وأيامه، وتتبعها إن تغيرت.` : 'فارغ = تُحسب من مدد الجلسات والأيام في أنشطة البرنامج.'}</small></label>
       </fieldset>
       <h4 className="ce-sub">الموقّع <small>بجانب ختم Milestone الثابت</small></h4>

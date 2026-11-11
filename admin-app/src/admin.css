@@ -405,6 +405,19 @@ a { text-decoration: none; color: inherit; }
   border-right: 3px solid var(--st-bad);
 }
 .login-error.show { display: block; }
+/* إشعار محايد في شاشة الدخول: رد الخادم على الإرسال، وسبب إعادة الدخول بعد انتهاء الجلسة */
+.login-notice {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: rgba(200,164,92,0.10);
+  border: 1px solid rgba(200,164,92,0.35);
+  border-right: 3px solid var(--gold);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+/* إعادة الدخول فوق اللوحة دون فكّها، وفوق نوافذها (mid-ov عند 1000) */
+.reauth-overlay { position: fixed; inset: 0; z-index: 1500; overflow: auto; background: var(--off-white); }
 
 /* ══════════════════════════════════════════════════
    DASHBOARD SCREEN

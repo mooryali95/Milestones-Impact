@@ -289,7 +289,7 @@
 /* Error */
 .tf-step__error {
   font-size: 12.5px;
-  color: #B8651C;
+  color: #9A4F12; /* تباين 5.8:1 على الخلفية الفاتحة (#B8651C كان 4.2:1، دون 4.5) */
   margin-top: 12px;
   display: none;
   align-items: center;

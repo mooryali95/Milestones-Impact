@@ -73,7 +73,7 @@ function AccessLine({ o, canWrite, onEdit, toast }) {
 }
 
 function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const copy = useCopy();
   const list = data.orgs || [];
   const un = data.unassigned || {};
@@ -89,8 +89,12 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
   const filled = list.reduce((a, o) => a + (o.seats ? o.stats.total : 0), 0);
 
-  const linkTyped = async (name) => {
-    const r = await L('admin.assign-org', { typed_name: name, organization_id: typedTo[name] || list[0]?.id });
+  // الجهة يختارها المدير صراحةً (لا أول جهة في القائمة)، ويؤكد الربط باسمها وعدد من يُنقلون
+  const linkTyped = async (t) => {
+    const org = list.find((o) => o.id === typedTo[t.name]);
+    if (!org) return toast('اختر الجهة');
+    if (!(await confirm(`ربط ${t.n} مشارك كتبوا «${t.name}» بجهة «${org.name}»؟ يُنسبون إليها، ويُثبَّت لهم إعفاء رعايتها إن كانت ترعى مشاركيها.`))) return;
+    const r = await L('admin.assign-org', { typed_name: t.name, organization_id: org.id });
     toast(r.success ? `رُبط ${r.moved} مشارك` : r.message);
     if (r.success) reload();
   };
@@ -143,10 +147,11 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
                 <div key={t.name} className="la-row between"><span>{t.name} <small className="la-muted">{t.n}</small></span>
                   {canWrite && list.length > 0 && (
                     <span className="la-row">
-                      <select aria-label={`جهة ${t.name}`} value={typedTo[t.name] || list[0].id} onChange={(e) => setTypedTo({ ...typedTo, [t.name]: e.target.value })}>
+                      <select aria-label={`جهة ${t.name}`} value={typedTo[t.name] || ''} onChange={(e) => setTypedTo({ ...typedTo, [t.name]: e.target.value })}>
+                        <option value="">اختر جهة…</option>
                         {list.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                       </select>
-                      <button className="la-link" onClick={() => linkTyped(t.name)}>ربط</button>
+                      <button className="la-link" disabled={!typedTo[t.name]} onClick={() => linkTyped(t)}>ربط</button>
                     </span>
                   )}
                 </div>

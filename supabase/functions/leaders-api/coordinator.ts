@@ -8,7 +8,7 @@ import { journeyDefinition } from './programs.ts';
 import { journeyMap } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
-  allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
+  allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
 import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
@@ -144,7 +144,8 @@ export async function dashboardFor(c: any) {
   const queue = [...(rows as any[])];
   await Promise.all(Array.from({ length: 8 }, async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
-      const j: any = await journeyFor(r);
+      // بلا المجموعة والتقييم المستمر (org-15): لا يُستعملان هنا، والرحلة والتقدم والمعالم منها بلا فرق
+      const j: any = await journeyFor(r, { lite: true });
       journeys[r.id] = j;
       progressBy[r.id] = j.progress;
       // المرحلة الجارية من الرحلة نفسها التي يراها المشارك (التدقيق 2026-11-10، البند 8.2): كانت الجهة ترى «معتمد المستوى»
@@ -188,7 +189,10 @@ export async function dashboardFor(c: any) {
   });
   return {
     success: true,
-    org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector },
+    // رابط تسجيل الموظفين (org-6): هو نفسه الذي تحمله رسالة دعوة المنسق (sendInvite) وبشرطها، لجهة نشطة وحدها،
+    // فلا يبقى بريد الدعوة مصدره الوحيد. والحالة الفارغة في اللوحة تحيل إليه
+    org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector,
+      join_url: d.org.status === 'active' ? orgJoinUrl(d.org.invite_code) : null },
     permissions: perms,
     funnel: d.funnel, by_track: byTrack, track_titles: trackTitles, by_via: d.by_via,
     kpis: {

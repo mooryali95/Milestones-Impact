@@ -18,11 +18,10 @@ import { forParticipant as peerFor } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { overallLevel } from './logic.js';
-import { EXPERT_ROLE_AR, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
+import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
-const roleAr = (r: string) => (EXPERT_ROLE_AR as Record<string, any>)[r]?.title || (EXPERT_ROLE_AR as Record<string, any>)[r] || r;
 
 // ما يسبق الملف لكل جمهور: الفريق، وجلسات التوجيه وطلبات الخبراء، وطلبات الأقران، والتقييم الختامي
 async function around(p: any, cohortId: string | null, viewer: { email: string } | null) {
@@ -36,7 +35,7 @@ async function around(p: any, cohortId: string | null, viewer: { email: string }
   return {
     team: team.data?.team || null, team_ar: team.data?.team ? (HALL_TEAM_AR as Record<string, string>)[team.data.team] : null,
     sessions: (sessions.data || []).map((s: any) => ({ id: s.id, status: s.status, starts_at: s.starts_at, ends_at: s.ends_at, expert: s.experts?.full_name || null })),
-    expert_requests: (reqs.data || []).map((r: any) => ({ id: r.id, role: r.role, role_ar: roleAr(r.role), dimension: r.dimension, status: r.status, expert: r.experts?.full_name || null, at: r.accepted_at || r.created_at })),
+    expert_requests: (reqs.data || []).map((r: any) => ({ id: r.id, role: r.role, role_ar: roleAr(r.role), dimension: r.dimension, status: r.status, status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[r.status] || r.status, expert: r.experts?.full_name || null, at: r.accepted_at || r.created_at })),
     peer,
     final: fe && (fe as any).success ? { live: (fe as any).live, record: (fe as any).record, frozen: (fe as any).frozen, approval: (fe as any).approval, vote_block: (fe as any).vote_block, program: (fe as any).program, current_version: (fe as any).current_version } : null,
   };

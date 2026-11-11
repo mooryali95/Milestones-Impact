@@ -14,6 +14,9 @@ export const levelOf = (k) => LEVELS.find((l) => l.key === k) || { key: k, title
 
 export const TIERS = TIER_AR;
 
+// مهلة «أعد إرسال الرمز» في خطوة الرمز، واحدة لدخول المشارك ومنسق الجهة
+export const RESEND_SECONDS = 45;
+
 export const PHASES = [
   { key: 'admission', title: PHASE_AR.admission, hint: 'نتعرّف عليك ونحدد نقطة انطلاقك' },
   { key: 'qualification', title: PHASE_AR.qualification, hint: 'تدريب وتطبيق على عملك الحقيقي' },

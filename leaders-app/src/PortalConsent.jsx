@@ -39,7 +39,8 @@ export function RatersAwaiting({ items, onDecide }) {
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!items?.length) return null;
+  // بعد القرار في آخر مقيّم منتظر تبقى رسالة نتيجته ظاهرة وحدها (org-5)، فلا يُطوى القسم قبل أن يقرأها
+  if (!items?.length) return msg ? <div className="alert" role="status">{msg}</div> : null;
   const decide = async (x, decision) => {
     setBusy(true); setMsg('');
     const r = await onDecide({ id: x.id, decision, reason });
@@ -49,7 +50,7 @@ export function RatersAwaiting({ items, onDecide }) {
   };
   return (
     <section className="card stack raters-awaiting" aria-labelledby="ra-h">
-      <h2 className="as-h3" id="ra-h">مقيّمون بانتظار تأكيدك <small className="muted">· {items.length}</small></h2>
+      <h2 className="as-h3" id="ra-h" tabIndex={-1}>مقيّمون بانتظار تأكيدك <small className="muted">· {items.length}</small></h2>
       <p className="small muted">بريد المقيّم عام أو من غير نطاق الجهة، أو المشارك فردي. تأكد أنه يعمل معه فعلًا: تقديره يدخل حكم «تغير مؤكد» وتقرير الأثر للجهة.</p>
       {msg && <div className="alert" role="status">{msg}</div>}
       {items.map((x) => (

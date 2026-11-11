@@ -488,7 +488,9 @@ async function continuousFor(participantId: string, milestones: any[], programId
   });
 }
 
-export async function journeyFor(p: any) {
+// lite: لوحة الجهة تحسب رحلة كل مشارك عند كل فتح (org-15)، ولا تأخذ منها المجموعة ولا التقييم المستمر،
+// فيُتركان (نحو عشرة استعلامات لكل مشارك) والرحلة والتقدم والمعالم كما هي بلا فرق
+export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = {}) {
   const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
@@ -532,7 +534,7 @@ export async function journeyFor(p: any) {
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  const [group, continuous] = await Promise.all([
+  const [group, continuous] = lite ? [null, null] : await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
   ]);
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
@@ -595,7 +597,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     group, project_mode: def.cohort?.project_mode || 'individual', final,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
-      : { ...continuous, events: continuous.events.map(({ comment: _c, ...e }: any) => e) },
+      : continuous && { ...continuous, events: (continuous.events || []).map(({ comment: _c, ...e }: any) => e) },
     // هوية الجهة: يرى المشارك شعارها ولونها بجانب Milestone Impact
     // الشعار نفسه كبير، فيُجلب مرة بـ org.logo ويُخزَّن على الجهاز بنسخته (logo_v)
     org: org && org.status === 'active'

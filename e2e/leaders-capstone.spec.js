@@ -150,9 +150,30 @@ test('المستشار: وثيقة بلا بريد راعٍ تُقبل وتُع�
   await expect(accept).toBeDisabled();
   await page.getByLabel(/اعتماد دون تأييد الراعي \(إلزامي/).fill('مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها');
   await accept.click();
+  await expect(page.getByRole('alertdialog')).toContainText('تُعتمد الوثيقة نهائيًا دون تأييد الراعي');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByText('اعتُمدت الوثيقة')).toBeVisible();
   expect(srv.calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ decision: 'accept', waive_sponsor: 'مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها' });
   await expect(page.getByRole('button', { name: /قبول/ })).toHaveCount(0);
+});
+
+// التدقيق 2026-11-11 (admin-eval-9): سبب من حرف واحد كان يلغي التأكيد فيُعتمد نهائيًا بنقرة، والخادم يرفضه دون عشرة أحرف
+test('المستشار: الاعتماد دون تأييد راعٍ له بريد يلزمه سبب بحد الخادم وتأكيد قبل الإرسال', async ({ page }) => {
+  const srv = reviewServer({ sponsorEmail: 'khalid@jiha.sa', review: (s) => { s.status = 'approved'; return { success: true }; } });
+  await openReview(page, srv);
+  const waive = page.getByLabel(/اعتماد دون تأييد الراعي \(اختياري/);
+  await waive.fill('x');
+  const accept = page.getByRole('button', { name: 'قبول واعتماد' });
+  await expect(accept).toBeDisabled();
+  await waive.fill('الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب');
+  await accept.click();
+  const dlg = page.getByRole('alertdialog');
+  await expect(dlg).toContainText('تُعتمد الوثيقة نهائيًا دون تأييد الراعي');
+  await dlg.getByRole('button', { name: 'إلغاء' }).click();
+  expect(srv.calls.some((c) => c.action === 'admin.capstone-review')).toBe(false);
+  await accept.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => srv.calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ decision: 'accept', waive_sponsor: 'الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب' });
 });
 
 test('المستشار: خطأ القبول يعيد تحميل الوثيقة، فلا يبقى نموذج مراجعة لحالة تغيرت على الخادم', async ({ page }) => {

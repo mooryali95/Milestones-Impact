@@ -57,7 +57,7 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
       <div className="page narrow">
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
-          <h2>وصل طلبك</h2>
+          <h1 className="as-h2">وصل طلبك</h1>
           <p className="muted">نراجع طلبات الانضمام خلال 5 أيام عمل، ونراسلك بالنتيجة على بريدك.</p>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
     <div className="page narrow">
       <form className="card stack xp" onSubmit={submit}>
         <p className="eyebrow">شبكة الخبراء</p>
-        <h2>{expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h2>
+        <h1 className="as-h2">{expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h1>
         {expert ? <p className="muted">أدوارك والأبعاد التي تتقنها ونبذة عن خبرتك، ليُسند إليك ما يناسبك. نراجع الملف ثم نفعّل لوحتك.</p> : <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>}
 
         <div className="xp-grid">

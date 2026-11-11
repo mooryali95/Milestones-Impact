@@ -304,6 +304,15 @@ export async function adminOverview() {
   };
 }
 
+// ملف مشارك واحد: حقوقه السارية وحدها، لا لوحة المدفوعات كلها بأسماء الجميع وبريدهم
+// (تدقيق الجاهزية admin-core-12؛ كان الملف يجلب 2000 دفعة و5000 حق ليعرض سطرين)
+export async function participantEntitlements(participantId: string) {
+  if (!participantId) throw new Fail('لم يُحدَّد المشارك');
+  const ents = must(await db.from('entitlements').select('id, participant_id, item, source, organization_id, created_at, revoked_at')
+    .eq('participant_id', participantId).is('revoked_at', null)) ?? [];
+  return { success: true, entitlements: ents };
+}
+
 async function funnel() {
   const count = async (statuses: string[]) => (await db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).eq('is_test', false).in('status', statuses)).count ?? 0;
   const [assessed, approved] = await Promise.all([count(['pending_approval', ...APPROVED]), count(APPROVED)]);

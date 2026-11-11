@@ -83,6 +83,11 @@ describe('استثناء الدفعة الجارية للمدير العام ب�
       expect(src, f).toMatch(/withRunningReason\(\(extra\) => L\('admin\.save', \{ entity: 'placement_model', row, \.\.\.extra \}\), prompt\)/);
       expect(src, f).toMatch(/running=\{catalog\.running_cohort\}/);
     }
+    // إعداد التقييم الختامي مقفل بالقاعدة نفسها (final.ts)، فيُحفظ عبر المساعد نفسه ويُرسل التعليل (admin-eval-6)
+    const fe = read('admin-app/src/screens/FinalEval.jsx');
+    expect(fe).toMatch(/withRunningReason\(\(extra\) => L\('admin\.final-eval-config', \{ program_id: program\.id, config: c, \.\.\.extra \}\), prompt\)/);
+    expect(fe).toMatch(/if \(r\.cancelled\) return;/);
+    expect(read('supabase/functions/leaders-api/final.ts')).toMatch(/String\(b\.reason \|\| ''\)\.trim\(\)\.length < 10\)\) \{\s*throw new Fail\([^\n]*'cohort_running'\)/);
     const admin = read('supabase/functions/leaders-api/admin.ts');
     const cat = admin.slice(admin.indexOf('export async function catalog('), admin.indexOf('\n}\n', admin.indexOf('export async function catalog(')));
     expect(cat).toMatch(/out\.running_cohort = await runningCohort\(null\);/);

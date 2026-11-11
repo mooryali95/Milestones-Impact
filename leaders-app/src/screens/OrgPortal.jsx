@@ -7,29 +7,38 @@ import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
 import JourneyMap from '../JourneyMap.jsx';
-import { coordCall, coordSession, setCoordExpired, signOut } from '../api.js';
-import { filterRows, sortRows } from '../coord.js';
-import { LEVELS } from '../labels.js';
-import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
+import { coordCall, coordSession, setCoordExpired } from '../api.js';
+import { askSignOut } from '../SignOutDialog.jsx';
+import { filterRows, sortRows, stageOf, stageOptions, isStale, NOT_STARTED, PRE_BASELINE, STALE, STALE_DAYS } from '../coord.js';
+import { LEVELS, RESEND_SECONDS } from '../labels.js';
+import { ErrorBox, JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '·');
 
-function SignIn({ onIn, initialError }) {
-  const [email, setEmail] = useState('');
+function SignIn({ onIn, initialError, initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [step, setStep] = useState('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
   const ref = useRef(null);
-  useEffect(() => { if (step === 'code') ref.current?.focus(); }, [step]);
+  // والتركيز يعود إلى الحقل بعد رمز خاطئ (org-10): كان يُعطَّل أثناء الطلب فيذهب التركيز إلى الصفحة وتنغلق لوحة المفاتيح
+  useEffect(() => { if (step === 'code' && !busy) ref.current?.focus(); }, [step, busy]);
+  // إعادة إرسال الرمز من خطوته بمهلة دخول المشارك نفسها (RESEND_SECONDS)، والخادم يحد الطلبات في الساعة
+  const [wait, setWait] = useState(0);
+  useEffect(() => {
+    if (!wait) return undefined;
+    const t = setTimeout(() => setWait(wait - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
 
   const [captchaKey, setCaptchaKey] = useState(null);
   const start = async (e, captcha) => {
@@ -40,7 +49,7 @@ function SignIn({ onIn, initialError }) {
     if (r.code === 'captcha') { const g = captchaGate(r, captcha); setCaptchaKey(g.box); return setError(g.error); }
     setCaptchaKey(null);
     if (!r.success) return setError(r.message);
-    setStep('code');
+    setStep('code'); setCode(''); setWait(RESEND_SECONDS);
   };
   const verify = async (v) => {
     setBusy(true); setError('');
@@ -77,7 +86,13 @@ function SignIn({ onIn, initialError }) {
             <input ref={ref} className="input code-input" inputMode="numeric" autoComplete="one-time-code" aria-label="رمز التحقق" placeholder="••••••"
               value={code} disabled={busy} onChange={(e) => { const d = codeDigits(e.target.value); setCode(d); if (d.length === 6) verify(d); }} />
             {error && <div className="alert err">{error}</div>}
-            <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+            {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => start(null, t)} />}
+            <div className="row between small">
+              <button type="button" className="link" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+              {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>
+                : <button type="button" className="link" onClick={() => start()} disabled={busy}>أعد إرسال الرمز</button>}
+            </div>
+            <p className="muted small">لم يصل؟ تفقّد مجلد الرسائل غير المرغوبة.</p>
           </div>
         )}
       </div>
@@ -125,18 +140,19 @@ function Initiatives({ list, outcomes }) {
         </div>
       )}
       {msg && <div className="alert err">{msg}</div>}
-      <div className="op-scroll"><table>
+      {/* على الجوال بطاقة لكل مبادرة بنمط قائمة المشاركين نفسه (org-8): كان الجدول يُمرَّر أفقيًا وزر الوثيقة خارج الشاشة */}
+      <div className="op-scroll"><table className="op-people">
         <caption className="sr-only">محفظة مبادرات الجهة</caption>
         <thead><tr><th scope="col">المبادرة</th><th scope="col">القائد</th><th scope="col">النوع</th><th scope="col">الحالة</th><th scope="col">التنفيذ</th><th scope="col">تحقق المنافع</th><th scope="col">التكلفة</th><td /></tr></thead>
         <tbody>{list.map((x) => (
           <tr key={x.participant_id || x.initiative}>
-            <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
-            <td>{x.full_name || <span className="muted">·</span>}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
-            <td>{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
-            <td>{x.tracking ? <span className={`chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span> : '·'}</td>
-            <td>{x.tracking ? pctOf(x.tracking.benefits.realization) : '·'}</td>
-            <td>{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
-            <td>{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
+            <td className="op-name"><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
+            <td data-label="القائد">{x.full_name || <span className="muted">·</span>}</td><td data-label="النوع">{SCOPE_AR[x.scope] || '·'}</td>
+            <td data-label="الحالة">{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
+            <td data-label="التنفيذ">{x.tracking ? <span className={`chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span> : '·'}</td>
+            <td data-label="تحقق المنافع">{x.tracking ? pctOf(x.tracking.benefits.realization) : '·'}</td>
+            <td data-label="التكلفة">{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
+            <td className="op-wide">{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
           </tr>
         ))}</tbody>
       </table></div>
@@ -169,13 +185,34 @@ function ImpactCard({ im, onReport }) {
   );
 }
 
+// رابط تسجيل موظفي الجهة كما في رسالة دعوة المنسق (org-6)، بنسخ بنقرة. لا يظهر لجهة موقوفة (الخادم لا يرسله)
+function JoinLink({ url }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); }
+  };
+  return (
+    <p className="small" style={{ overflowWrap: 'anywhere' }}><span>رابط تسجيل موظفيكم: </span><a className="ltr" style={{ color: 'inherit' }} href={url} target="_blank" rel="noopener noreferrer">{url}</a>{' '}
+      <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={copy}>{copied ? 'نُسخ' : 'انسخ الرابط'}</button>
+      <span className="sr-only" role="status">{copied ? 'نُسخ الرابط' : ''}</span></p>
+  );
+}
+
 function Dashboard({ me, onLogout }) {
   // ما جاء مع الهوية (preload) يُعرض فورًا، وإعادة التحميل بعد إجراء تطلب اللوحة وحدها (البند 8.1)
   const [d, setD] = useState(me.preload?.dashboard ?? null);
-  const [f, setF] = useState({ q: '', status: '', track: '' });
+  const [f, setF] = useState({ q: '', stage: '', track: '' });
   const [sort, setSort] = useState('name');
   const [msg, setMsg] = useState('');
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
+  // قرار المقيّم لا يغيّر في اللوحة إلا قائمة المنتظرين (تأكيده يرسل دعوته، ورحلة المشارك تتغير حين يُسلّم تقييمه)،
+  // فيُزال من القائمة محليًا (org-5 وorg-15): كانت اللوحة كلها تُستبدل بالهيكل وتُعاد رحلة كل مشارك على الخادم،
+  // فتقفز الصفحة إلى أعلاها وتضيع رسالة «أُرسلت الدعوة»
+  const decideRater = async (b) => {
+    const r = await coordCall('coord.rater-confirm', b);
+    if (r.success) setD((x) => ({ ...x, raters_pending: (x.raters_pending || []).filter((y) => y.id !== b.id) }));
+    return r;
+  };
   useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
@@ -196,7 +233,7 @@ function Dashboard({ me, onLogout }) {
     exportWorkbook(
       { kind: 'ORG', title: `مشاركو ${org.name}`, subtitle: 'برنامج القادة', for: org.name, sheet: 'المشاركون', file: 'Organization' },
       head.map(([label, width]) => ({ label, width })),
-      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), p.stage || STATUS[p.status] || p.status, p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
+      rows.map((p) => [p.full_name, p.job_title, ...(perms.scores ? [p.track_title || ''] : []), stageOf(p), p.progress, ...(perms.activity ? [fmt(p.last_login_at)] : []), fmt(p.created_at),
         ...(perms.contact ? [p.email, p.phone] : []), ...(perms.scores ? DIMS.map(([k]) => lvl(p.levels?.[k])) : [])]),
     );
   };
@@ -205,6 +242,17 @@ function Dashboard({ me, onLogout }) {
     const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
     const { meta, body } = orgReport({ ...d, participants: rows }, 'coordinator');
     if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
+  };
+  // الانتقال إلى قسم بعينه: على الجوال تبدأ القائمة بعد شاشات من البطاقات (org-7)، فيُمرَّر إليها ويُنقل التركيز
+  const goTo = (id) => requestAnimationFrame(() => {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el?.focus({ preventScroll: true });
+  });
+  const show = (s) => {
+    if (s.to) return goTo(s.to);
+    setF({ q: '', track: '', stage: s.stage });
+    goTo('op-people-h');
   };
   const printImpact = async () => {
     const win = window.open('', '_blank');
@@ -219,10 +267,12 @@ function Dashboard({ me, onLogout }) {
           <p className="eyebrow">لوحة الجهة · للاطلاع</p>
           <h1>{org.name}</h1>
           <p className="muted">أهلًا {me.coordinator.full_name || ''}. لوحة مشاركي جهتك في برنامج القادة، تُحدَّث مع كل نشاط.</p>
+          {org.join_url && <JoinLink url={org.join_url} />}
           {msg && <div className="alert err small" role="alert">{msg}</div>}
           <div className="row">
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
+            {perms.list !== false && <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={() => goTo('op-people-h')}>إلى قائمة المشاركين</button>}
             <AccountSwitch here="org" doors={me.switch_to} doSwitch={(to) => coordCall('coord.switch', { to })} />
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>
@@ -230,9 +280,9 @@ function Dashboard({ me, onLogout }) {
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
         <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
       </section>
-      <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
+      <RatersAwaiting items={d.raters_pending} onDecide={decideRater} />
 
-      <NeedsYou d={d} />
+      <NeedsYou d={d} onShow={show} />
       <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" initial={me.preload?.sus} />
 
       <div className="op-kpis">
@@ -256,12 +306,15 @@ function Dashboard({ me, onLogout }) {
 
       {perms.list === false ? <section className="card"><h3>المشاركون</h3><p className="muted">صلاحيتك أرقام مجمّعة عن مشاركي جهتك، بلا أسماء ولا صفوف فردية.</p></section> : <section className="card op-table">
         <div className="row between op-tools">
-          <h3>المشاركون</h3>
+          <h3 id="op-people-h" tabIndex={-1}>المشاركون</h3>
           <div className="row">
             {/* عنوان ظاهر للبحث (8.6)، لا aria-label وحده */}
             <label className="op-search"><span className="small">ابحث</span><input className="input" type="search" placeholder="بالاسم أو المسمى…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
-            <select className="input" aria-label="المرحلة" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
-              <option value="">كل المراحل</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {/* المرشّح على ما يعرضه عمود «المرحلة» نفسه (org-2)، ومعه خيار يجمع من لم يكمل القياس المبدئي */}
+            <select className="input" aria-label="المرحلة" value={f.stage} onChange={(e) => setF({ ...f, stage: e.target.value })}>
+              <option value="">كل المراحل</option><option value={NOT_STARTED}>لم يكملوا القياس المبدئي</option>
+              {perms.activity && <option value={STALE}>لم يدخلوا منذ {STALE_DAYS} يومًا</option>}
+              {stageOptions(d.participants, (d.journey_map?.stages || []).map((s) => s.title)).map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             {tracks.length > 0 && <select className="input" aria-label="المسار" value={f.track} onChange={(e) => setF({ ...f, track: e.target.value })}>
               <option value="">كل المسارات</option>{tracks.map(([k]) => <option key={k} value={k}>{titleOf(k)}</option>)}
@@ -282,39 +335,39 @@ function Dashboard({ me, onLogout }) {
             <tr key={p.id}>
               <td className="op-name"><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
               {perms.scores && <td data-label="المسار">{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
-              <td data-label="المرحلة"><span className="chip">{p.stage || STATUS[p.status] || p.status}</span></td>
+              <td data-label="المرحلة"><span className="chip">{stageOf(p)}</span></td>
               <td data-label="الإنجاز"><span><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</span></td>
               {perms.activity && <td data-label="آخر دخول">{fmt(p.last_login_at)}</td>}
               {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}
               {perms.scores && DIMS.map(([k, en]) => <td key={k} className="op-dim" data-label={en}>{lvl(p.levels?.[k])}</td>)}
             </tr>
-          )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
+          )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : org.join_url ? 'لم ينضم أحد من جهتك بعد. شارك رابط تسجيل موظفيكم المعروض أعلى اللوحة.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
         </table></div>
       </section>}
-      <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط.</p>
+      <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط. للتواصل مع إدارة البرنامج: <a className="link ltr" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></p>
     </div>
   );
 }
 
 // ما يحتاج تدخل المنسق، أول اللوحة: كانت متفرقة في الرأس والجدول فتُعرض ولا توجّه. يُعدّ مما وصل اللوحة فعلًا
 // (بحسب صلاحياته)، ولا يظهر القسم إن لم يكن فيه شيء. «متوقف» من آخر دخول، فلا يُحسب إلا لمن له صلاحية النشاط.
-const STALE_DAYS = 14;
-const PRE_BASELINE = ['registered', 'profiled', 'assessing'];
+// show: ما يعرضهم بنقرة (org-7): بطاقة المقيّمين، أو مرشّح القائمة الذي يحصرهم
 export function needsYou(d, now = Date.now()) {
   const ps = d.permissions?.list === false ? [] : (d.participants || []);
   const out = [];
   const raters = (d.raters_pending || []).length;
-  if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أسفل هذا القسم' });
-  if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد' });
+  // بطاقة التأكيد تُعرض قبل هذا القسم، فالتلميح «أعلاه» (org-7)
+  if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أعلى هذا القسم', show: { to: 'ra-h' } });
+  if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد', contact: true });
   const notStarted = ps.filter((p) => PRE_BASELINE.includes(p.status)).length;
-  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', hint: 'صفِّ القائمة بالمرحلة لتراهم' });
+  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', show: { stage: NOT_STARTED } });
   if (d.permissions?.activity) {
-    const stale = ps.filter((p) => !['completed', 'withdrawn'].includes(p.status) && p.last_login_at && now - new Date(p.last_login_at).getTime() > STALE_DAYS * 864e5).length;
-    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, hint: 'رتّب القائمة بآخر نشاط لتراهم' });
+    const stale = ps.filter((p) => isStale(p, now)).length;
+    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, show: { stage: STALE } });
   }
   return out;
 }
-function NeedsYou({ d }) {
+function NeedsYou({ d, onShow }) {
   const items = needsYou(d);
   if (!items.length) return null;
   return (
@@ -323,6 +376,8 @@ function NeedsYou({ d }) {
       <ul>{items.map((x) => (
         <li key={x.key}>
           <span><b>{x.n}</b> {x.text}{x.hint && <small className="muted"> · {x.hint}</small>}</span>
+          {x.contact && <a className="btn ghost sm" href={`mailto:${CONTACT_EMAIL}`}>راسل إدارة البرنامج</a>}
+          {x.show && <button type="button" className="btn ghost sm" onClick={() => onShow(x.show)}>{x.show.to ? 'انتقل إليها' : 'اعرضهم في القائمة'}</button>}
         </li>
       ))}</ul>
     </section>
@@ -333,28 +388,44 @@ export default function OrgPortal() {
   const [me, setMe] = useState(null);
   const [boot, setBoot] = useState(true);
   const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  // تعذّر جلب الهوية والجلسة باقية (org-3): يُعرض الخطأ بمرجعه مع إعادة المحاولة، لا شاشة الدخول كأن المنسق خرج.
+  // انتهاء الجلسة أو إيقافها يمرّان بـsetCoordExpired إلى شاشة الدخول برسالتهما كما كانا
+  const [bootError, setBootError] = useState('');
 
+  const resume = async () => {
+    const r = await coordCall('coord.me', { with_dashboard: true });
+    if (r.success) setMe(r);
+    else if (coordSession.get()) setBootError(r.message);
+    return r.success;
+  };
+  const start = async () => {
+    // رابط البريد: /org/verify?e=...&t=...
+    if (location.pathname === '/org/verify') {
+      const q = new URLSearchParams(location.search);
+      history.replaceState(null, '', '/org');
+      const r = await coordCall('coord.auth-verify', { email: q.get('e'), link: q.get('t') });
+      if (r.success) { coordSession.set(r.token); setMe(r); }
+      // رابط مستعمل أو منتهٍ والجلسة في المتصفح نافذة (org-4): تُفتح اللوحة بها، وإلا يُعرض الخطأ وبريد الرابط معبأ لطلب رمز جديد
+      else if (!(coordSession.get() && (await resume()))) { setBootError(''); setError(r.message); setEmail(q.get('e') || ''); }
+    } else if (coordSession.get()) await resume();
+    setBoot(false);
+  };
   useEffect(() => {
-    setCoordExpired((m) => { setMe(null); setError(m || ''); });
-    (async () => {
-      // رابط البريد: /org/verify?e=...&t=...
-      if (location.pathname === '/org/verify') {
-        const q = new URLSearchParams(location.search);
-        history.replaceState(null, '', '/org');
-        const r = await coordCall('coord.auth-verify', { email: q.get('e'), link: q.get('t') });
-        if (r.success) { coordSession.set(r.token); setMe(r); } else setError(r.message);
-      } else if (coordSession.get()) {
-        const r = await coordCall('coord.me', { with_dashboard: true });
-        if (r.success) setMe(r);
-      }
-      setBoot(false);
-    })();
+    setCoordExpired((m) => { setMe(null); setBootError(''); setError(m || ''); });
+    start();
   }, []);
 
   const signedIn = (r) => { coordSession.set(r.token); setMe(r); };
-  const logout = async () => { await signOut('org'); setMe(null); };
+  const logout = async () => { if (await askSignOut('org')) { setMe(null); setBootError(''); } };
 
   if (boot) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (!me && bootError) return (
+    <div className="page narrow stack">
+      <ErrorBox message={bootError} onRetry={() => { setBootError(''); setBoot(true); resume().finally(() => setBoot(false)); }} />
+      <button type="button" className="link small" onClick={logout}>خروج</button>
+    </div>
+  );
   if (me?.consent_needed) return <PortalConsent role="coordinator" onAccept={async () => { const r = await coordCall('coord.consent'); if (r.success) setMe((m) => ({ ...m, ...r })); return r; }} />;
-  return me ? <Dashboard me={me} onLogout={logout} /> : <SignIn onIn={signedIn} initialError={error} />;
+  return me ? <Dashboard me={me} onLogout={logout} /> : <SignIn onIn={signedIn} initialError={error} initialEmail={email} />;
 }

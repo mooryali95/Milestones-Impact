@@ -64,7 +64,8 @@ describe('حراس المصدر', () => {
   it('النماذج والملخص والمتابعة تحرس مسوداتها', () => {
     expect(read('screens/Models.jsx')).toMatch(/useUnsavedGuard\(dirty && !!auto/);
     expect(read('screens/Capstone.jsx')).toMatch(/useUnsavedGuard\(summaryDirty/);
-    expect(read('screens/Tracking.jsx')).toMatch(/useUnsavedGuard\(open\)/);
+    // p-capstone-3: الحارس حين تغيّر النموذج فعلًا، ومغادرة الشاشة تبقي ما كُتب مسودة في الجلسة
+    expect(read('screens/Tracking.jsx')).toMatch(/useUnsavedGuard\(dirty, \(\) => drafts\.save\(key/);
   });
   it('حالات العمل في الخادم ليست 503', () => {
     const api = join(__dirname, '../../supabase/functions/leaders-api');

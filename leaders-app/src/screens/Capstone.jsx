@@ -13,7 +13,7 @@ import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
-import { MAX_REVISIONS, PRIORITY_WEIGHT, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 
@@ -41,8 +41,9 @@ function Meter({ value, min }) {
   );
 }
 
-export async function openCapstoneDoc(doc) {
-  const win = window.open('', '_blank');
+// win: نافذة فُتحت متزامنة مع النقرة قبل أي انتظار، وإلا حجبها Safari (p-capstone-5). من يملك الوثيقة عند النقر
+// (رابط الراعي) يتركها فتُفتح هنا متزامنة أيضًا
+export async function openCapstoneDoc(doc, win = window.open('', '_blank')) {
   const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
   const { meta, body } = capstoneReport(doc);
   return writeDocument(win, meta, body);
@@ -70,6 +71,17 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const done = d.sections.filter((s) => s.complete).length;
   const failing = d.checks.filter((x) => !x.ok);
 
+  // الفصل يُفتح والصفحة قائمة خلفه (فلا يدفع حارس المغادرة الحفظ)، ثم تُحمَّل من جديد عند الرجوع فتستبدل الملخص
+  // بنسخة الخادم: يُحفظ الملخص المعدَّل قبل فتح الفصل، وإن تعذّر بقي في مكانه برسالة (p-capstone-3)
+  const openSection = async (id) => {
+    if (summaryDirty) {
+      setBusy('summary'); setMsg(null);
+      const r = await call('capstone.summary', { summary });
+      setBusy('');
+      if (!r.success) return setMsg({ err: `لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: ${r.message}` });
+    }
+    setOpen(id);
+  };
   const saveSummary = async () => {
     setBusy('summary'); setMsg(null);
     const r = await call('capstone.summary', { summary });
@@ -87,11 +99,12 @@ export default function Capstone({ me, onEditProfile, onBack }) {
     setMsg({ ok: 'سُلّمت الوثيقة للمستشار. يصلك بريد بقراره.' });
   };
   const view = async () => {
-    setBusy('doc');
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح، ثم تُملأ بعد رد الخادم
+    setBusy('doc'); setMsg(null);
     const r = await call('capstone.doc');
     setBusy('');
-    if (!r.success) return setMsg({ err: r.message });
-    if (!(await openCapstoneDoc(r.doc))) setMsg({ err: POPUP_BLOCKED });
+    if (!r.success) { win?.close(); return setMsg({ err: r.message }); }
+    if (!(await openCapstoneDoc(r.doc, win))) setMsg({ err: POPUP_BLOCKED });
   };
 
   return (
@@ -129,7 +142,8 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       )}
       {d.track?.brief && <div className="card cp-brief"><span className="mg-cap">توجيه مسارك</span><p>{d.track.brief}</p></div>}
 
-      {c.status === 'returned' && (c.sponsor?.status === 'declined' ? (
+      {/* الأحدث بين رفض الراعي ومراجعة المستشار، لا رفض راعٍ قديم بقي في السجل */}
+      {c.status === 'returned' && (returnedBy(c) === 'sponsor' ? (
         <div className="card cp-review bad"><h2>ملاحظات راعي المبادرة</h2><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التسليم.</small></div>
       ) : c.review && (
         <div className="card cp-review bad">
@@ -149,7 +163,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
           {c.review?.note && <p className="muted">{c.review.note}</p>}
         </div>
       )}
-      {c.status === 'approved' && <Tracking />}
+      {c.status === 'approved' && <Tracking owner={me.participant.id} />}
       {c.status !== 'approved' && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
@@ -176,7 +190,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               const st = SECTION_STATE(s);
               return (
                 <li key={s.id}>
-                  <button className={`cp-sec${s.complete ? ' done' : ''}`} onClick={() => setOpen(s.id)}>
+                  <button className={`cp-sec${s.complete ? ' done' : ''}`} disabled={busy === 'summary'} onClick={() => openSection(s.id)}>
                     <span className="cp-n">{String(i + 1).padStart(2, '0')}</span>
                     <span className="model-icon sm">{s.icon}</span>
                     <span className="cp-t"><b>{s.title}</b><small>{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}</small></span>

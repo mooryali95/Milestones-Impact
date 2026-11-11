@@ -145,6 +145,10 @@ describe('التقييم الختامي', () => {
     expect(c.version).toBe(4);
     expect(c.effective_from).toMatch(/^\d{4}-/);
     expect(c.committee).toEqual(['a@x.sa', 'b@x.sa', 'c@x.sa']);
+    // أسماء بدل البريد لا تُفرغ اللجنة بصمت فتفتح الاعتماد لأي حساب إدارة: يُرفض الحفظ ويُسمّى ما ليس بريدًا
+    expect(() => cleanFinalConfig({ approval: 'committee_majority', committee_size: 3, committee: 'أحمد، سارة، خالد' })).toThrow(/ليست بريدًا: أحمد، سارة، خالد/);
+    expect(() => cleanFinalConfig({ approval: 'committee_majority', committee_size: 3, committee: ['a@x.sa', 'b@x.sa', 'سارة'] })).toThrow(/ليست بريدًا: سارة/);
+    expect(cleanFinalConfig({ approval: 'committee_majority', committee_size: 3, committee: ' , ' }).committee).toEqual([]);
     expect(c.sources.experts).toBeUndefined();   // الانخراط خارج المؤشر
     expect(finalConfig({}).measure).toEqual({ mode: 'mastery', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 });
     // D17: كاتون بوزن صفر صريح في الدفعة الأولى
