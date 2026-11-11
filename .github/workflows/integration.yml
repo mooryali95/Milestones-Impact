@@ -3,45 +3,79 @@ name: Integration (real Supabase)
 # المسارات الذهبية على خلفية حقيقية (المرحلة ي): Supabase محلي بـDocker، الترحيلات بالترتيب كما في
 # الإنتاج، الدوال تُقدَّم بـfunctions serve، ثم طلبات حقيقية تمر بالقاعدة وRLS والتوقيعات.
 # اختبارات المتصفح في ci.yml تحاكي الخادم كاملًا؛ هذا السير هو الطبقة الرقيقة التي لا تحاكي شيئًا.
+#
+# الترشيد (2026-11-11): يعمل حين يتغير الخادم أو الترحيلات أو سكربتاتها وحدها، ولا يعمل على المسودات،
+# والدفع إلى main بشجرة اجتازته في طلب الدمج يُختم بالنجاح بلا إعادة (integration-pass-<tree>).
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['supabase/**', 'scripts/integration/**', 'scripts/db/**', 'package-lock.json', '.github/workflows/integration.yml', '.github/actions/**']
   push:
     branches: [main]
+    paths: ['supabase/**', 'scripts/integration/**', 'scripts/db/**', 'package-lock.json', '.github/workflows/integration.yml', '.github/actions/**']
   workflow_dispatch:
     inputs:
       devices:
         description: عدد أجهزة اختبار حمل القاعة (50 افتراضيًا، و100 لبوابة م4)
         default: '50'
 
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
+  actions: read
 
 jobs:
   golden-paths:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
       API_URL: http://127.0.0.1:54321
+      SUPABASE_CLI: 3.1.0
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - id: tree
+        run: echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+      # على main: شجرة اجتازت هذا السير في طلب الدمج لا تُعاد
+      - id: dedupe
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=integration-pass-${{ steps.tree.outputs.tree }}&per_page=1" --jq '[.artifacts[] | select(.expired == false)] | length' || echo 0)
+          if [ "$n" -gt 0 ]; then echo "tested=true" >> "$GITHUB_OUTPUT"; echo "::notice::هذه الشجرة اجتازت التكامل في طلب الدمج؛ لا إعادة."; fi
+
+      - uses: ./.github/actions/node-deps
+        if: steps.dedupe.outputs.tested != 'true'
+      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub بلا توكن فيُرفض بحد المعدل أحيانًا.
+      # بإصدار مثبّت ومخزّن.
+      - uses: actions/cache@v5
+        if: steps.dedupe.outputs.tested != 'true'
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub بلا توكن فيُرفض بحد المعدل أحيانًا
+          path: ~/.supabase-cli
+          key: supabase-cli-${{ runner.os }}-${{ env.SUPABASE_CLI }}
       - name: Install Supabase CLI
-        run: npm i -g supabase@latest --no-audit --no-fund && supabase --version
+        if: steps.dedupe.outputs.tested != 'true'
+        run: |
+          [ -x ~/.supabase-cli/bin/supabase ] || npm i -g supabase@$SUPABASE_CLI --prefix ~/.supabase-cli --no-audit --no-fund
+          echo "$HOME/.supabase-cli/bin" >> "$GITHUB_PATH"
+          ~/.supabase-cli/bin/supabase --version
 
       - name: Start local Supabase (Postgres, PostgREST, Storage, Auth)
+        if: steps.dedupe.outputs.tested != 'true'
         run: supabase start -x studio,imgproxy,logflare,vector,realtime,mailpit,supavisor
 
       - name: Apply migrations in order (as production)
+        if: steps.dedupe.outputs.tested != 'true'
         run: bash scripts/integration/apply-migrations.sh
 
       - name: Serve edge functions
+        if: steps.dedupe.outputs.tested != 'true'
         run: |
           supabase functions serve --env-file supabase/functions/ci.env --no-verify-jwt > /tmp/functions.log 2>&1 &
           # جاهزية حقيقية: system.ping يمر بالقاعدة ويرد success. أي رد HTTP لا يكفي، لأن Kong يرد 502
@@ -59,6 +93,7 @@ jobs:
           if [ -z "$ready" ]; then echo "::error::leaders-api did not answer system.ping within two minutes"; tail -60 /tmp/functions.log; exit 1; fi
 
       - name: Golden paths
+        if: steps.dedupe.outputs.tested != 'true'
         run: |
           eval "$(supabase status -o env 2>/dev/null | grep -E '^(ANON_KEY|SERVICE_ROLE_KEY)=' || true)"
           export ANON_KEY SERVICE_ROLE_KEY
@@ -68,6 +103,7 @@ jobs:
       # أو بقي جهاز على حالة قديمة أو فشل طلب (scripts/integration/hall-load.mjs)
       # ومعه على القاعدة الحقيقية: الطاولات المحفوظة وثباتها، ومؤقت الخادم وقفل الإجابة بعده، وكتابة الحضور عند الإغلاق
       - name: Hall under load (50 devices, or the dispatch input)
+        if: steps.dedupe.outputs.tested != 'true'
         env:
           HALL_DEVICES: ${{ inputs.devices || '50' }}
         run: |
@@ -77,9 +113,19 @@ jobs:
           node scripts/integration/hall-load.mjs --devices="$HALL_DEVICES" --rounds=2 --round-seconds=10
 
       - name: Function logs
-        if: always()
+        if: always() && steps.dedupe.outputs.tested != 'true'
         run: tail -120 /tmp/functions.log || true
 
       - name: Stop
-        if: always()
+        if: always() && steps.dedupe.outputs.tested != 'true'
         run: supabase stop --no-backup || true
+
+      - name: Record the tested tree
+        if: success() && github.event_name == 'pull_request'
+        run: echo "${{ steps.tree.outputs.tree }}" > tree.txt
+      - uses: actions/upload-artifact@v7
+        if: success() && github.event_name == 'pull_request'
+        with:
+          name: integration-pass-${{ steps.tree.outputs.tree }}
+          path: tree.txt
+          retention-days: 14

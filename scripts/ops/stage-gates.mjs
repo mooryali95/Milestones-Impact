@@ -28,7 +28,7 @@ export const STAGES = [
       { id: 'm1.migrations', title: 'لا ترحيل معلّق على الإنتاج', kind: 'auto' },
       { id: 'm1.secrets', title: 'أسرار الدوال بلا افتراضي مضبوطة: مفتاح توقيع الشهادات وقناة التنبيه', kind: 'auto' },
       { id: 'm1.ci-main', title: 'آخر CI على main أخضر', kind: 'auto' },
-      { id: 'm1.probe', title: 'المسبار الساعي أخضر في آخر 3 ساعات', kind: 'auto' },
+      { id: 'm1.probe', title: 'المسبار الدوري (كل 3 ساعات) أخضر في آخر 6 ساعات', kind: 'auto' },
       { id: 'm1.backup-nightly', title: 'نسخة حديثة كاملة مشفّرة في R2 (خارج GitHub) يثبتها الفحص اليومي في آخر 36 ساعة', kind: 'auto' },
       { id: 'm1.supabase-backups', title: 'نسخ Supabase اليومية مفعّلة (خطة مدفوعة)', kind: 'auto' },
       { id: 'm1.resend-plan', title: 'خطة Resend تكفي ضعف الدفعة يوميًا، وSPF وDKIM وDMARC سليمة', kind: 'attest' },
@@ -203,7 +203,7 @@ export async function collect() {
     return { ok: !missing.length, reason: missing.length ? `ناقص: ${missing.join('، ')}` : 'كلها مضبوطة (أسماء فقط)' };
   });
   f['m1.ci-main'] = await safe(() => lastRun('ci.yml', null, ['push']));
-  f['m1.probe'] = await safe(() => lastRun('probe.yml', 3));
+  f['m1.probe'] = await safe(() => lastRun('probe.yml', 6));
   // النجاح وحده لا يكفي: خطوة النسخ تنجح وتحفظ النسخة في GitHub وحده إن غابت أسرار R2 (تحذير لا فشل).
   // الدليل على وصولها خارج GitHub هو الفحص اليومي في restore-drill.yml (وظيفة r2): يقرأ latest.json من الدلو
   // ويتحقق من العمر والبيان والتشفير، ويُتخطى إن لم يُضبط R2.

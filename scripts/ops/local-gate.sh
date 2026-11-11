@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# بوابة محلية: تعيد خطوات وظيفة build-and-test في .github/workflows/ci.yml بالترتيب نفسه.
+# بوابة محلية: تعيد خطوات وظيفتي checks وweb في .github/workflows/ci.yml كاملة (بلا انتقاء) بالترتيب نفسه.
 # تُستعمل حين يتعذر GitHub Actions، وقبل طلب الدمج دائمًا. أي خطوة تُضاف إلى ci.yml تُضاف هنا.
 # الاستعمال: npm run gate            كل الخطوات
 #            npm run gate -- --fast  بلا اختبارات المتصفح
