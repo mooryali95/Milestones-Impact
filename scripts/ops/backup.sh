@@ -14,7 +14,10 @@ set -euo pipefail
 : "${SUPABASE_DB_URL:?SUPABASE_DB_URL مطلوب (Session pooler)}"
 SCHEMAS="${BACKUP_SCHEMAS:-leaders,public,auth}"
 PREFIX="${BACKUP_PREFIX:-daily}"
-DAY="$(date -u +%F)"
+# اسم كل كائن فريد بلحظة تشغيله: daily/ تحت قفل احتفاظ يمنع الكتابة فوق كائن قائم (409 ObjectLockedByBucketPolicy)،
+# فكان الاسم باليوم وحده يُفشل كل تشغيل ثانٍ في اليوم (ops-2: نسخة ما قبل الترحيل، أو إعادة تشغيل فاشل). latest.json يدل على الأحدث
+STAMP="$(date -u +%Y-%m-%dT%H%M%SZ)"
+DAY="${STAMP%%T*}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${BACKUP_OUT:-}"
 WORK="$(mktemp -d)"
@@ -49,7 +52,7 @@ sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1;
 bytes() { wc -c < "$1" | tr -d ' '; }
 
 # ── القاعدة ──
-dump="$OUT/db-$TAG-$DAY.dump"
+dump="$OUT/db-$TAG-$STAMP.dump"
 args=(--no-owner --no-privileges -Fc)
 for s in ${SCHEMAS//,/ }; do args+=("--schema=$s"); done
 pgtool pg_dump "$SUPABASE_DB_URL" "${args[@]}" > "$dump"
@@ -74,15 +77,15 @@ if [ "$PREFIX" = daily ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   ( cd "$WORK" && SUPABASE_URL="${SUPABASE_URL:-https://eormhcupwgwpllhrfxxg.supabase.co}" node "$ROOT/scripts/db/backup-storage.mjs" storage leaders-private )
   ( cd "$WORK/storage" && find . -type f -print0 | sort -z | xargs -0 -I{} sh -c 'printf "%s\t%s\n" "$(wc -c < "{}" | tr -d " ")" "{}"' ) > "$WORK/storage-files.tsv"
   cp "$WORK/storage-files.tsv" "$WORK/storage/.files.tsv"
-  tar czf "$OUT/storage-$DAY.tar.gz" -C "$WORK" storage
-  encrypt "$OUT/storage-$DAY.tar.gz"
-  files+=("$OUT/storage-$DAY.tar.gz.gpg")
+  tar czf "$OUT/storage-$STAMP.tar.gz" -C "$WORK" storage
+  encrypt "$OUT/storage-$STAMP.tar.gz"
+  files+=("$OUT/storage-$STAMP.tar.gz.gpg")
 elif [ "$PREFIX" = daily ]; then
   echo "::warning::SUPABASE_SERVICE_ROLE_KEY غير مضبوط: دلو leaders-private (السير الذاتية والأدلة) لم يُنسخ." >&2
 fi
 
 # ── البيان ──
-manifest="$OUT/manifest-$TAG-$DAY.json"
+manifest="$OUT/manifest-$TAG-$STAMP.json"
 {
   printf '{"at":"%s","day":"%s","prefix":"%s","schemas":"%s","encryption":"%s","rows":%s,"files":[' "$(date -u +%FT%TZ)" "$DAY" "$PREFIX" "$SCHEMAS" "$MODE" "$ROWS"
   sep=""

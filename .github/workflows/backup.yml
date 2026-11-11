@@ -51,10 +51,14 @@ jobs:
       - name: Dump, encrypt at the source, and upload to R2
         if: steps.gate.outputs.skip != 'true'
         run: bash scripts/ops/backup.sh
+      # الطبقة الثانية تُحفظ ولو فشل الرفع إلى R2 (ops-2: فشل 409 فضاعت معه)، والمشفّر والبيان وحدهما: تفريغ قطعه
+      # خطأ قبل تشفيره يبقى صريحًا في المجلد ولا يُرفع
       - uses: actions/upload-artifact@v7
-        if: steps.gate.outputs.skip != 'true'
+        if: ${{ !cancelled() && steps.gate.outputs.skip != 'true' }}
         with:
           name: backup-${{ github.run_id }}
-          path: backup-out/
+          path: |
+            backup-out/*.gpg
+            backup-out/manifest-*.json
           retention-days: 30
           if-no-files-found: error
