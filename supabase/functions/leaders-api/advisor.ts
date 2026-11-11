@@ -6,11 +6,11 @@
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
 import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
-import { db, Fail, sendMail } from './core.ts';
+import { all, db, Fail, sendMail } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewSubmissionBy } from './admin.ts';
 import { firstName } from './hall.js';
-import { advisedParticipantIds, effectiveAdvisorId } from './logic.js';
+import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId } from './logic.js';
 
 type Body = Record<string, any>;
 
@@ -57,21 +57,20 @@ export async function myParticipantIds(expertId: string) {
   const { data: cohorts } = await db.from('cohorts').select('id, organization_id, is_default').eq('advisor_expert_id', expertId);
   // ليس مستشار دفعة: قد يكون خبير مجموعة في دفعة غيره
   if (!cohorts?.length) return groupScoped(expertId, [], []);
-  const ids = new Set<string>();
-  for (const c of cohorts) {
-    const { data: enr } = await db.from('enrollments').select('participant_id').eq('cohort_id', c.id);
-    (enr || []).forEach((x: any) => ids.add(x.participant_id));
-    // من لم يُسجَّل في دفعة صراحةً ينتمي لدفعة جهته أو للمفتوحة (cohortOf)؛ نتحقق لكل مرشح بالمصدر نفسه
-    const base = c.organization_id
-      ? await db.from('participants').select('id, organization_id').eq('organization_id', c.organization_id).eq('is_demo', false)
-      : c.is_default ? await db.from('participants').select('id, organization_id').eq('is_demo', false) : { data: [] as any[] };
-    for (const p of (base.data || [])) {
-      if (ids.has(p.id)) continue;
-      const { cohort } = await cohortOf(p);
-      if ((cohort as any)?.id === c.id) ids.add(p.id);
-    }
-  }
-  return groupScoped(expertId, [...ids], cohorts.map((c: any) => c.id));
+  // من لم يُسجَّل في دفعة صراحةً ينتمي لدفعة جهته أو للمفتوحة (cohortOf). كان يُتحقق لكل مرشح بقراءتين متتابعتين
+  // (2N رحلة في كل تحميل للوحة الخبير وكل إجراء فيها)؛ الآن ثلاث قراءات بصفحات، والقاعدة نفسها في الذاكرة
+  const orgs = [...new Set(cohorts.map((c: any) => c.organization_id).filter(Boolean))] as string[];
+  const open = cohorts.some((c: any) => !c.organization_id && c.is_default);
+  const msg = 'تعذّر قراءة مشاركي دفعاتك الآن، حاول بعد قليل';
+  const [allCohorts, enrollments, candidates] = await Promise.all([
+    all((f, t) => db.from('cohorts').select('*').order('id').range(f, t), msg),
+    all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id').range(f, t), msg),
+    open || orgs.length
+      ? all((f, t) => { const q = db.from('participants').select('id, organization_id').eq('is_demo', false); return (open ? q : q.in('organization_id', orgs)).order('id').range(f, t); }, msg)
+      : Promise.resolve([] as any[]),
+  ]);
+  const ids = advisorCohortParticipantIds(cohorts, allCohorts, enrollments, candidates);
+  return groupScoped(expertId, ids, cohorts.map((c: any) => c.id));
 }
 
 // يطبّق خبير المجموعة على قائمة مشاركي دفعاته: يخرج من له خبير مجموعة معتمد غيره، ويضيف أعضاء مجموعاته هو.
