@@ -119,6 +119,20 @@ test('الكتيب: فشل تحميل باب لا يُبقي نص الباب ا�
   expect(calls.filter((c) => c.action === 'handbook.chapter' && c.id === 'c4')).toHaveLength(2);
 });
 
+// نص الباب لا يوضع في DOM قبل قرار المالك 9 (أدوات عرض القارئ و«حفظ الصفحة» تعد المخفي بـsr-only ظاهرًا)؛
+// وقارئ الشاشة يُدل على النسخة الشخصية القائمة، وهي مسجلة بعلامة مائية
+test('الكتيب: قارئ الشاشة يُدل على النسخة النصية القائمة، ولا نص للباب في الصفحة', async ({ page }) => {
+  await openHandbook(page, (b, srv) => srv.reply(b));
+  await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
+  const sheet = page.getByRole('img', { name: 'لماذا هذه المنهجية؟' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveAccessibleDescription('صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتيب، ففيها أبوابك كلها نصًا في نافذة جديدة.');
+  await expect(page.getByRole('button', { name: /نسخة PDF شخصية/ })).toBeVisible();
+  for (const t of ['أبعاد المعلم الخمسة', 'المعلم الذي لا يرتبط بالمسار الحرج', 'توقيت: متى تُطرح الأسئلة']) {
+    expect(await page.locator('body').evaluate((el, s) => el.textContent.includes(s), t)).toBe(false);
+  }
+});
+
 // ── الحضور ──
 test('الحضور: الجلسة الجارية «جارية الآن» لا «قادمة»، وطريقة التسجيل الآلية مذكورة', async ({ page }) => {
   const at = (h) => new Date(Date.now() + h * 36e5).toISOString();

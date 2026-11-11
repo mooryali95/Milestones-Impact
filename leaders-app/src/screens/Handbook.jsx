@@ -646,7 +646,10 @@ export default function Handbook({ me, lab, onLab, onBack }) {
               </div>
             )}
             <div hidden={current === COVER || (!data && !loading)} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
-              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} />
+              {/* اللوحة صورة لا يقرؤها قارئ الشاشة؛ وصفها يدله على النسخة الشخصية القائمة (نص مسجل بعلامة مائية)، ولا نص للباب في DOM
+                  حتى يحسم المالك القرار 9 (وضع قراءة نصي بطلب مسجل، ux-05) */}
+              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} aria-describedby="hb-text-note" />
+              <p id="hb-text-note" className="sr-only">صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتيب، ففيها أبوابك كلها نصًا في نافذة جديدة.</p>
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
             {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}
