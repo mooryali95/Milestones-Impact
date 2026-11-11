@@ -1201,6 +1201,7 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .cx-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .cx-live { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cx-live li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
+.cx-live .cx-hint { display: block; margin-top: 4px; line-height: 1.7; }
 
 /* المعالم */
 .ms-bar { height: 6px; border-radius: 999px; background: var(--st-warn-bg); overflow: hidden; }

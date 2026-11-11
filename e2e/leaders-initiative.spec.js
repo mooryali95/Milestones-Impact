@@ -161,3 +161,29 @@ test('الوثيقة الاحترافية: إن رفض الخادم تُغلق �
   await expect(page.getByText('تعذّر تجهيز الوثيقة الآن')).toBeVisible();
   await expect.poll(() => win.isClosed()).toBe(true);
 });
+
+// p-capstone-4: «لا خبير مطابق» كان يختفي من «طلباتك» بلا كلمة بعد وعد «يصلك بريد حين يقبله»
+test('طلب الاستشارة المنتهي بلا خبير يبقى ظاهرًا بسببه، ولا يمنع طلب الدور من جديد', async ({ page }) => {
+  const UNMATCHED = 'لم يقبله أحد من الخبراء المطابقين، أو لا خبير متاح الآن. يراه فريق البرنامج ليسنده إلى خبير حين يتوفر، ولك أن تطلبه من جديد أو تختار نوع دعم آخر.';
+  const OFFERED = 'عُرض على الخبير ليقبل أو يعتذر، وإن اعتذر أو انقضت مهلته عرضناه على التالي الأنسب. يصلك بريد حين يقبله خبير.';
+  let chosen = null;
+  await open(page, {
+    'experts.suggest': (b) => ({
+      success: true, role: b.role, role_ar: 'موجّه', roles: [{ key: 'coach', title: 'موجّه', hint: 'جلسات التوجيه الفردية' }],
+      contexts: { program: 'خلال البرنامج' }, dimensions: { milestone: 'إدارة المشروعات' },
+      requests: chosen ? [{ id: 'r2', role: 'coach', role_ar: 'موجّه', status: 'offered', status_ar: 'معروض على خبير', hint: OFFERED, expert: chosen }] : [],
+      recent: chosen ? [] : [{ id: 'r1', role: 'coach', role_ar: 'موجّه', status: 'unmatched', status_ar: 'لا خبير مطابق', hint: UNMATCHED }],
+      candidates: chosen ? [] : [{ id: 'e1', full_name: 'خالد المطيري', title: 'مدرب تنفيذي', sectors: [], languages: [], rating: null }],
+    }),
+    'experts.choose': () => { chosen = 'خالد المطيري'; return { success: true, status: 'offered', expert: chosen }; },
+  });
+  const card = page.locator('section', { has: page.locator('#cx-h') });
+  await expect(card.locator('[data-request="unmatched"]')).toContainText('لا خبير مطابق');
+  await expect(card.locator('[data-request="unmatched"]')).toContainText(UNMATCHED);
+  await card.getByRole('button', { name: 'اطلب الآن' }).click();
+  await card.getByLabel(/ما الذي تحتاجه/).fill('مراجعة خطة المخاطر');
+  await card.getByRole('button', { name: 'اختره' }).click();
+  await expect(card.getByText('أرسلنا طلبك إلى خالد المطيري مع ما كتبته. يصلك بريد حين يقبله خبير، وإن اعتذر عرضناه على التالي الأنسب.')).toBeVisible();
+  await expect(card.locator('[data-request="offered"]')).toContainText(OFFERED);
+  await expect(card.locator('[data-request="unmatched"]')).toHaveCount(0);
+});

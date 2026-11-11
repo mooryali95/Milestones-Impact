@@ -24,9 +24,12 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
     setBusy(e.id); setMsg(null);
     const r = await call('experts.choose', { ...form, dimension: form.dimension || null, expert_id: e.id });
     setBusy('');
-    if (r.success) { setMsg({ ok: `أرسلنا طلبك إلى ${r.expert} مع ما كتبته، ويصلك بريد حين يقبله.` }); setOpen(false); load(); } else setMsg({ err: r.message });
+    // ما يحدث فعلًا بعد الاختيار: إن اعتذر الخبير أو انقضت مهلته عُرض الطلب على التالي، وحالته تبقى هنا
+    if (r.success) { setMsg({ ok: `أرسلنا طلبك إلى ${r.expert} مع ما كتبته. يصلك بريد حين يقبله خبير، وإن اعتذر عرضناه على التالي الأنسب. تابع حالته هنا.` }); setOpen(false); load(); } else setMsg({ err: r.message });
   };
   const busyRole = d.requests.find((x) => x.role === form.role);
+  // طلبات انتهت بلا خدمة مؤخرًا («لا خبير مطابق» أو ألغاها الفريق): تبقى ظاهرة بسببها، ولا تحجز الدور
+  const ended = Array.isArray(d.recent) ? d.recent : [];
 
   return (
     <section className="card stack rx" aria-labelledby="cx-h">
@@ -34,11 +37,12 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
         <h2 id="cx-h" className="as-h3">{title}</h2>
         {!open && <button className="btn ghost sm" onClick={() => setOpen(true)}>اطلب الآن</button>}
       </div>
-      {d.requests.length > 0 && (
+      {d.requests.length + ended.length > 0 && (
         <ul className="cx-live">
-          {d.requests.map((x) => (
-            <li key={x.id}><b>{x.role_ar}</b>{x.dimension ? ` · ${d.dimensions[x.dimension]}` : ''}{x.expert ? <> · {x.expert}{x.title ? ` (${x.title})` : ''}</> : ''} · <span className="chip">{x.status_ar}</span>
-              {x.note && <small className="muted"> {x.note}</small>}</li>
+          {[...d.requests, ...ended].map((x) => (
+            <li key={x.id} data-request={x.status}><b>{x.role_ar}</b>{x.dimension ? ` · ${d.dimensions[x.dimension]}` : ''}{x.expert ? <> · {x.expert}{x.title ? ` (${x.title})` : ''}</> : ''} · <span className={`chip${ended.includes(x) ? ' warn' : ''}`}>{x.status_ar}</span>
+              {x.note && <small className="muted"> {x.note}</small>}
+              {x.hint && <small className="muted cx-hint">{x.hint}</small>}</li>
           ))}
         </ul>
       )}
@@ -65,7 +69,7 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
             <textarea className="input" rows={3} maxLength={1000} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="مثال: أحتاج مراجعة سجل المخاطر قبل عرضه على الراعي" /></label>
 
           {busyRole ? (
-            <p className="small muted">لديك طلب {busyRole.role_ar} قائم ({busyRole.status_ar}). اختر نوع دعم آخر، أو انتظر حتى يكتمل.</p>
+            <p className="small muted">لديك طلب {busyRole.role_ar} قائم ({busyRole.status_ar}). {busyRole.hint || ''} اختر نوع دعم آخر في الأثناء إن احتجت.</p>
           ) : d.candidates.length ? (
             <>
               <p className="small muted">أنسب 3 خبراء لطلبك ومستواك.</p>

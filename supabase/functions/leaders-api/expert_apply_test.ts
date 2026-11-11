@@ -40,6 +40,7 @@ function install(tables: Record<string, Row[]>) {
       insert: (x: any) => { mode = 'insert'; payload = x; return q; },
       update: (x: any) => { mode = 'update'; payload = x; return q; },
       eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return q; },
+      in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       gte: (c: string, v: string) => { filters.push((r) => String(r[c]) >= v); return q; },
       not: (c: string, op: string, v: string) => { if (op === 'in') { const ks = v.replace(/[()]/g, '').split(','); filters.push((r) => !ks.includes(r[c])); } return q; },
       order: (c: string) => { orders.push(c); return q; },
@@ -206,4 +207,30 @@ Deno.test('ملف الخبير المدعو: المسمى يصل المالك ن
     assert(!html.includes('<a href="https://evil') && !html.includes('<img src="https://evil'), 'لا وسم من المسمى في البريد');
     assert(html.includes('&lt;a href=&quot;https://evil.example/login&quot;&gt;'), 'المسمى يظهر نصًا مرمّزًا');
   } finally { globalThis.fetch = real; restore(); unconfig(); }
+});
+
+// p-capstone-4: طلب الاستشارة الذي انتهى «لا خبير مطابق» كان يختفي من «طلباتك» بلا كلمة. يبقى ظاهرًا أسبوعين
+// بسببه وما يحدث بعده، ولا يحجز الدور، وما سبقه طلب قائم للدور نفسه لا يظهر
+Deno.test('طلبات المشارك: المنتهي بلا خدمة يبقى ظاهرًا بسببه ولا يحجز الدور', async () => {
+  const ago = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
+  const req = (id: string, role: string, status: string, days: number) => ({ id, participant_id: 'p1', role, status, dimension: null, note: null, expires_at: null, created_at: ago(days + 1), updated_at: ago(days) });
+  const tables: Record<string, Row[]> = { expert_requests: [
+    req('r-unmatched', 'coach', 'unmatched', 3),
+    req('r-cancelled', 'advisor', 'cancelled', 5),
+    req('r-old', 'specialist', 'unmatched', E.ENDED_VISIBLE_DAYS + 2),
+    req('r-live', 'mentor', 'offered', 1),
+    req('r-superseded', 'mentor', 'unmatched', 2),
+    { ...req('r-other', 'coach', 'unmatched', 1), participant_id: 'p2' },
+  ] };
+  const restore = install(tables);
+  try {
+    // الدور المطلوب له طلب قائم، فلا ترشيح ولا قراءة للخبراء
+    const r: any = await E.mySuggestions({ id: 'p1' }, { role: 'mentor' });
+    assertEquals(r.requests.map((x: any) => x.id), ['r-live']);
+    assertEquals(r.recent.map((x: any) => x.id).sort(), ['r-cancelled', 'r-unmatched']);
+    const u = r.recent.find((x: any) => x.id === 'r-unmatched');
+    assertEquals([u.status_ar, u.role_ar], ['لا خبير مطابق', 'موجّه']);
+    assert(u.hint.includes('لم يقبله أحد من الخبراء المطابقين'));
+    assert(r.requests[0].hint.includes('عرضناه على التالي الأنسب'));
+  } finally { restore(); }
 });

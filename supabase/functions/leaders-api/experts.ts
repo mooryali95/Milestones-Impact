@@ -11,7 +11,7 @@ import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
-import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -650,18 +650,29 @@ const publicCard = (e: any) => ({
 const consultRole = (r: any) => (CONSULT_ROLES.includes(r) ? r : 'coach');
 const consultContext = (c: any) => ((CONSULT_CONTEXT as Record<string, string>)[c] ? c : 'program');
 const liveView = (x: any) => ({ id: x.id, role: x.role, role_ar: roleAr(x.role), status: x.status,
-  status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[x.status] || x.status, dimension: x.dimension,
-  note: x.note || null, expert: x.experts?.full_name || null, title: x.experts?.title || null, expires_at: x.expires_at });
+  status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[x.status] || x.status, hint: (EXPERT_REQUEST_HINT as Record<string, string>)[x.status] || null,
+  dimension: x.dimension, note: x.note || null, expert: x.experts?.full_name || null, title: x.experts?.title || null, expires_at: x.expires_at });
 
-// الاستشارة متى احتاجها المشارك: طلباته القائمة، وأنسب ثلاثة للدور والمحور المختارين
+// طلب انتهى بلا خدمة («لا خبير مطابق» أو ألغاه الفريق) يبقى أمام المشارك هذه المدة بسببه، ولا يحجز الدور.
+// كان يختفي من «طلباتك» بلا كلمة بعد أن وُعد ببريد حين يقبله خبير (p-capstone-4، تدقيق 2026-11-11)
+export const ENDED_VISIBLE_DAYS = 14;
+const ENDED = ['unmatched', 'cancelled'];
+
+// الاستشارة متى احتاجها المشارك: طلباته القائمة وما انتهى منها بلا خدمة مؤخرًا، وأنسب ثلاثة للدور والمحور المختارين
 export async function mySuggestions(p: any, b: Body) {
   const role = consultRole(b.role);
-  const { data: live } = await db.from('expert_requests').select('id, role, status, dimension, note, expires_at, experts(full_name, title)')
-    .eq('participant_id', p.id).in('status', LIVE).order('created_at', { ascending: false });
+  const cols = 'id, role, status, dimension, note, expires_at, updated_at, experts(full_name, title)';
+  const [{ data: live }, { data: ended }] = await Promise.all([
+    db.from('expert_requests').select(cols).eq('participant_id', p.id).in('status', LIVE).order('created_at', { ascending: false }),
+    db.from('expert_requests').select(cols).eq('participant_id', p.id).in('status', ENDED)
+      .gte('updated_at', new Date(Date.now() - ENDED_VISIBLE_DAYS * 864e5).toISOString()).order('updated_at', { ascending: false }).limit(5),
+  ]);
   const requests = (live || []).map(liveView);
+  // ما طُلب بعده طلب قائم للدور نفسه لم يعد يعني شيئًا
+  const recent = (ended || []).filter((x: any) => !requests.some((r) => r.role === x.role)).map(liveView);
   const busy = requests.some((x) => x.role === role);
   const roles = CONSULT_ROLES.map((r) => ({ key: r, title: roleAr(r), hint: (EXPERT_ROLE_AR as Record<string, string[]>)[r][1] }));
-  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests };
+  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests, recent };
   if (busy) return { ...base, candidates: [] };
   const { need } = await needFor(p.id, role, b.dimension || null);
   return { ...base, candidates: (await candidates(need, p.id)).slice(0, 3).map(publicCard) };
