@@ -32,22 +32,45 @@ test('لوحة الجهة: المرحلة الجارية لا الحالة ال�
   await expect(page.getByRole('searchbox', { name: 'ابحث' })).toBeVisible();
 });
 
-test('الخروج من لوحة الجهة وفي الجهاز جلسة مشارك: «موافق» يخرج من الكل ويلغي الجلستين على الخادم', async ({ page }) => {
+// فحص الجاهزية p-entry-9: السؤال نافذة من التطبيق بثلاثة أزرار صريحة، لا سؤال المتصفح الذي كان «إلغاء» فيه خروجًا
+test('الخروج من لوحة الجهة وفي الجهاز جلسة مشارك: «اخرج من كل الأدوار» يلغي الجلستين على الخادم', async ({ page }) => {
   const calls = await org(page);
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_coord_session', 'c'.repeat(40)); localStorage.setItem('mi_leaders_session', 'p'.repeat(40)); });
   await page.goto('http://localhost:4304/org');
-  page.once('dialog', (d) => { expect(d.message()).toContain('مشارك'); d.accept(); });
   await page.getByRole('button', { name: 'خروج' }).click();
+  const dlg = page.getByRole('dialog', { name: 'الخروج من المنصة' });
+  await expect(dlg).toContainText('بصفة مشارك');
+  await dlg.getByRole('button', { name: 'اخرج من كل الأدوار' }).click();
   await expect.poll(() => calls.map((c) => c.action).filter((a) => a.endsWith('logout')).sort()).toEqual(['coord.logout', 'logout']);
   expect(await page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, null]);
+  await expect(dlg).toHaveCount(0);
 });
 
-test('«إلغاء» يخرج من لوحة الجهة وحدها ويبقي جلسة المشارك', async ({ page }) => {
+test('«اخرج من حساب منسق جهة وحده» يبقي جلسة المشارك', async ({ page }) => {
   const calls = await org(page);
   await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('mi_leaders_coord_session', 'c'.repeat(40)); localStorage.setItem('mi_leaders_session', 'p'.repeat(40)); } });
   await page.goto('http://localhost:4304/org');
-  page.once('dialog', (d) => d.dismiss());
   await page.getByRole('button', { name: 'خروج' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'اخرج من حساب منسق جهة وحده' }).click();
   await expect.poll(() => calls.filter((c) => c.action.endsWith('logout')).map((c) => c.action)).toEqual(['coord.logout']);
   expect(await page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, 'p'.repeat(40)]);
+});
+
+test('«تراجع» وEscape لا يُخرجان: الجلستان باقيتان واللوحة كما هي، والتركيز يعود إلى «خروج»', async ({ page }) => {
+  const calls = await org(page);
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_coord_session', 'c'.repeat(40)); localStorage.setItem('mi_leaders_session', 'p'.repeat(40)); });
+  await page.goto('http://localhost:4304/org');
+  const out = page.getByRole('button', { name: 'خروج' });
+  await out.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'تراجع' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(out).toBeFocused();
+  await out.click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'اخرج من كل الأدوار' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(calls.filter((c) => c.action.endsWith('logout'))).toEqual([]);
+  expect(await page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual(['c'.repeat(40), 'p'.repeat(40)]);
+  await expect(page.getByText('من 50 مقعدًا')).toBeVisible();
 });

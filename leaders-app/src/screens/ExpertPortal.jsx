@@ -7,7 +7,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
-import { signOut, xpCall, xpSession } from '../api.js';
+import { xpCall, xpSession } from '../api.js';
+import { askSignOut } from '../SignOutDialog.jsx';
 import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
@@ -40,7 +41,7 @@ function Onboarding({ expert, onOut, reload }) {
     <div className="page narrow">
       <div className="row between"><p className="eyebrow">بوابة الخبراء</p>
         <span className="row"><AccountSwitch here="expert" light doors={expert.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
-        <button className="link small" onClick={async () => { await signOut('expert'); onOut(); }}>خروج</button></span></div>
+        <button className="link small" onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button></span></div>
       {edit
         ? <ExpertApply expert={expert} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
         : <div className="card milestone-card stack">
@@ -387,7 +388,7 @@ function Dashboard({ onOut }) {
             title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
           {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
-          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { await signOut('expert'); onOut(); }}>خروج</button>
+          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button>
         </div>
       </section>
       {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}

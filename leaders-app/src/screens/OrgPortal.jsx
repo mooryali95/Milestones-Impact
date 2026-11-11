@@ -7,7 +7,8 @@ import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
 import JourneyMap from '../JourneyMap.jsx';
-import { coordCall, coordSession, setCoordExpired, signOut } from '../api.js';
+import { coordCall, coordSession, setCoordExpired } from '../api.js';
+import { askSignOut } from '../SignOutDialog.jsx';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
 import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
@@ -352,7 +353,7 @@ export default function OrgPortal() {
   }, []);
 
   const signedIn = (r) => { coordSession.set(r.token); setMe(r); };
-  const logout = async () => { await signOut('org'); setMe(null); };
+  const logout = async () => { if (await askSignOut('org')) setMe(null); };
 
   if (boot) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (me?.consent_needed) return <PortalConsent role="coordinator" onAccept={async () => { const r = await coordCall('coord.consent'); if (r.success) setMe((m) => ({ ...m, ...r })); return r; }} />;

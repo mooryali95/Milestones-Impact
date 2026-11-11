@@ -45,12 +45,14 @@ describe('لوحة الجهة', () => {
 describe('8.3 الخروج من الأدوار', () => {
   it('خروج واحد للبوابات الثلاث يسأل حين توجد جلسة دور آخر، ويلغي الجلسات على الخادم', () => {
     const api = read('leaders-app/src/api.js');
-    expect(api).toContain("export async function signOut(here) {");
+    expect(api).toContain("export async function signOut(here, all = false) {");
     expect(api).toContain("if (r.store.get()) await r.send(r.action).catch(() => {});");
     for (const a of ["'logout'", "'xp.logout'", "'coord.logout'"]) expect(api, a).toContain(`action: ${a}`);
-    expect(read('leaders-app/src/App.jsx')).toContain("await signOut('participant');");
-    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain("await signOut('org');");
-    expect(read('leaders-app/src/screens/ExpertPortal.jsx').match(/await signOut\('expert'\)/g)).toHaveLength(2);
+    // السؤال نافذة من التطبيق بثلاثة أزرار (فحص الجاهزية p-entry-9)، والتراجع لا يُخرج
+    expect(api).not.toContain('window.confirm');
+    expect(read('leaders-app/src/App.jsx')).toContain("if (!(await askSignOut('participant'))) return;");
+    expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain("if (await askSignOut('org')) setMe(null);");
+    expect(read('leaders-app/src/screens/ExpertPortal.jsx').match(/if \(await askSignOut\('expert'\)\) onOut\(\);/g)).toHaveLength(2);
   });
 });
 

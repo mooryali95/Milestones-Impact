@@ -11,7 +11,8 @@
 import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
 import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
-import { bootPreload, call, session, setExpiredHandler, signOut } from './api.js';
+import { bootPreload, call, session, setExpiredHandler } from './api.js';
+import { askSignOut } from './SignOutDialog.jsx';
 import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
@@ -311,7 +312,7 @@ function Participant() {
   const openLab = (id = null) => { setLabOpen(id); go('lab'); };
 
   const logout = async () => {
-    await signOut('participant');
+    if (!(await askSignOut('participant'))) return;
     try { localStorage.removeItem(LOGO_KEY); } catch { /* لا شيء محفوظ */ }
     setMe(null);
     setView('home');
