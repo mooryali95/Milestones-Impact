@@ -214,3 +214,15 @@ test('البحث الشامل والإعدادات: Tab لا يخرج منهما
   await expect(set).toBeHidden();
   await expect(gear).toBeFocused();
 });
+
+test('النموذج التعليمي الجديد: نقرتان على «حفظ النموذج» ترسلان طلب إنشاء واحدًا', async ({ page }) => {
+  const calls = await setup(page, { delay: { 'admin.save': 1200 } });
+  await leaders(page, 'كتيب القائد');
+  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: 'النماذج التعليمية' }).click();
+  await page.getByRole('button', { name: '+ نموذج جديد' }).first().click();
+  const ed = page.getByRole('dialog', { name: 'نموذج جديد' });
+  await ed.getByLabel('اسم النموذج').fill('خريطة أصحاب المصلحة');
+  await ed.getByRole('button', { name: 'حفظ النموذج' }).dblclick();
+  await expect(ed).toBeHidden();
+  expect(calls.filter((c) => c.action === 'admin.save')).toHaveLength(1);
+});

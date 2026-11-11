@@ -32,7 +32,7 @@ function Move({ rows, entity, id, reload, canWrite }) {
   return <><button className="la-mv" onClick={() => go(-1)} aria-label="نقل لأعلى">▲</button><button className="la-mv" onClick={() => go(1)} aria-label="نقل لأسفل">▼</button></>;
 }
 
-// إطار المحررين: نافذة كبيرة فوق الصفحة، Esc يغلقها
+// إطار المحررين: نافذة كبيرة فوق الصفحة، Esc يغلقها. الحفظ ينتظر رده (busy) فلا تُرسله نقرتان مرتين
 function Studio({ label, onClose, children, onSubmit, two }) {
   useEscape(onClose);
   return (
@@ -117,6 +117,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const [view, setView] = useState(m?.min_level || 'beginner');
   const [scope, setScope] = useState('project');
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const ta = useRef(null);
   const qa = useRef(null);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
@@ -149,13 +150,16 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   };
   const submit = async (btn) => {
     if (btn === 'cancel') return guard.guardClose(() => onClose());
+    if (busy) return;
     if (!v.title_ar.trim()) return setErr('عنوان الباب مطلوب');
     const blockErr = bodyLint.find((x) => x.level === 'error');
     if (blockErr) { pick(blockErr); return setErr(`لا يُحفظ الباب وفيه خطأ في الكتل: السطر ${blockErr.line}، ${blockErr.msg}`); }
     // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فلا يُرسلان؛ يحفظ المحرر النص غير المُقاس وحده.
     // الأبواب الجديدة وحذفها من المستودع كذلك، فالمحرر لا يفتح إلا بابًا قائمًا.
     const row = { id: m.id, title_ar: v.title_ar.trim(), body_md: v.body_md, reflection_ar: v.reflection_ar.trim() || null };
+    setBusy(true);
     const r = await L('admin.save', { entity: 'handbook_modules', row });
+    setBusy(false);
     if (!r.success) return setErr(r.message);
     guard.done();
     toast('حُفظ الباب');
@@ -169,7 +173,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه (من المستودع)</small><LevelSeg value={v.min_level} onChange={() => {}} disabled /></div>
         <div className="hb-ed-btns">
-          {canWrite && <button className="btn-sm primary" value="save">حفظ الباب</button>}
+          {canWrite && <button className="btn-sm primary" value="save" disabled={busy}>حفظ الباب</button>}
           <button className="btn-sm ghost" value="cancel" formNoValidate>إغلاق</button>
         </div>
       </header>
@@ -281,6 +285,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
   };
   const guard = useGuard(draftKey('model', m, d), v, setV);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const setField = (i, patch) => setV({ ...v, fields: v.fields.map((f, k) => (k === i ? { ...f, ...patch } : f)) });
   const moveField = (i, dir) => {
@@ -292,16 +297,21 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
   };
   const submit = async (btn) => {
     if (btn === 'cancel') return guard.guardClose(() => onClose());
+    // كل نقرة على «حفظ النموذج» لنموذج جديد كانت تُنشئ صفًا (مفتاحه من الوقت)، فتتكرر النماذج على اتصال بطيء
+    if (busy) return;
     let r;
     if (btn === 'delete') {
       if (!(await confirm(`حذف النموذج "${m.title_ar}"؟`, { danger: true }))) return;
+      setBusy(true);
       r = await L('admin.delete', { entity: 'learning_models', id: m.id });
     } else {
       if (!v.title_ar.trim()) return setErr('اسم النموذج مطلوب');
       const row = { ...v, title_ar: v.title_ar.trim(), icon: v.icon.trim(), points: Number(v.points) || 0 };
       Object.assign(row, m ? { id: m.id } : { dimension: d, sort: nextSort(catalog.learning_models || [], d) });
+      setBusy(true);
       r = await L('admin.save', { entity: 'learning_models', row });
     }
+    setBusy(false);
     if (!r.success) return setErr(r.message);
     guard.done();
     toast(btn === 'delete' ? 'حُذف النموذج' : 'حُفظ النموذج');
@@ -316,9 +326,9 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
           <input aria-label="اسم النموذج" placeholder="اسم النموذج" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه</small><LevelSeg value={v.min_level} onChange={(l) => setV({ ...v, min_level: l })} disabled={!canWrite} /></div>
         <div className="hb-ed-btns">
-          {canWrite && <button className="btn-sm primary" value="save">حفظ النموذج</button>}
+          {canWrite && <button className="btn-sm primary" value="save" disabled={busy}>حفظ النموذج</button>}
           <button className="btn-sm ghost" value="cancel" formNoValidate>إغلاق</button>
-          {canWrite && m && <button className="hb-del" value="delete" formNoValidate>حذف</button>}
+          {canWrite && m && <button className="hb-del" value="delete" formNoValidate disabled={busy}>حذف</button>}
         </div>
       </header>
       <fieldset className="hb-ed-panes" disabled={!canWrite}>
@@ -392,6 +402,7 @@ export function Submission({ id, canWrite, onClose }) {
   const [feedback, setFeedback] = useState('');
   const [bonus, setBonus] = useState(0);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
   // ما كتبه المقيّم ولم يعتمده: Esc والنقر خارجها و«إغلاق» تسأل قبل أن يضيع
   const close = useGuardedClose(!!x && (rating !== (x.rating || 0) || feedback !== (x.feedback_ar || '') || String(bonus) !== String(x.bonus || 0)), () => onClose());
   useEffect(() => {
@@ -404,9 +415,12 @@ export function Submission({ id, canWrite, onClose }) {
   const m = x.learning_models;
   const submit = async (btn) => {
     if (btn === 'cancel') return close();
+    if (busy) return;
     if (btn === 'reviewed' && !rating) return setErr('اختر تقييمًا من 1 إلى 5');
     if (btn === 'returned' && !feedback.trim()) return setErr('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
+    setBusy(true);
     const r = await L('admin.review-submission', { id: x.id, status: btn, rating: rating || undefined, feedback, bonus });
+    setBusy(false);
     if (!r.success) return setErr(r.message);
     toast(btn === 'reviewed' ? 'اعتُمد التقييم' : 'أُعيد للمشارك');
     onClose(true);
@@ -438,7 +452,7 @@ export function Submission({ id, canWrite, onClose }) {
           <label>ملاحظاتك للمشارك<textarea rows={7} readOnly={!canWrite} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="ما الذي أجاده، وما الذي يطوّره في هذا النموذج؟" /></label>
           <label>نقاط تميّز إضافية (اختياري)<input type="number" min="0" max="100" readOnly={!canWrite} value={bonus} onChange={(e) => setBonus(e.target.value)} /></label>
           <p className="la-muted">نقاط النموذج ({m.points}) مُنحت عند التسليم. نقاط التميّز تُضاف عند الاعتماد فقط.</p>
-          {canWrite && <><button className="btn-sm primary" value="reviewed">اعتماد التقييم</button><button className="btn-sm ghost" value="returned">إعادة للتطوير مع الملاحظات</button></>}
+          {canWrite && <><button className="btn-sm primary" value="reviewed" disabled={busy}>اعتماد التقييم</button><button className="btn-sm ghost" value="returned" disabled={busy}>إعادة للتطوير مع الملاحظات</button></>}
           {err && <div className="la-err" role="alert">{err}</div>}
         </aside>
       </div>
