@@ -1,0 +1,6 @@
+# بلاغات الثغرات الأمنية في منصات Milestone Impact (RFC 9116)
+# Security vulnerability reports for Milestone Impact platforms
+Contact: mailto:mi@sunkvalue.com
+Expires: 2027-11-11T00:00:00.000Z
+Preferred-Languages: ar, en
+Canonical: https://leaders.sunkvalue.com/.well-known/security.txt

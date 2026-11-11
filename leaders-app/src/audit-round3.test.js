@@ -49,10 +49,10 @@ describe('المشارك', () => {
     expect(a).toContain('const mixed = new Set(a.chapters.map((c) => c.dimension)).size > 1;');
     expect(read('leaders-app/src/styles.css')).toMatch(/@media \(pointer: coarse\) \{\n\s+button\.link, \.btn\.sm, a\.btn \{ min-height: 44px; \}/);
   });
-  it('7.7 ترحيل نص بند 360: رواية واحدة، مشروط بالنص الأصلي', () => {
+  it('7.7 ترحيل نص بند 360 (مطبّق): رواية واحدة، مشروط بالنص الأصلي', () => {
     const name = '20261110220000_leaders_t360_help';
     const sql = read(`supabase/migrations/${name}.sql`);
-    expect(gateOf(sql, name).gate).toBe('tolerant');
+    expect(gateOf(sql, name).gate).toBe('blocking');   // في بيان البصمات منذ تطبيقه 2026-11-11
     expect(sql).toContain("and help_ar = $q$يرسل لك الموجّه رابطًا قبل التدريب");
     expect(sql).toContain('ادعُ مديرك أو اثنين من زملائك من «ملفي»');
   });

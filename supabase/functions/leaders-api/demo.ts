@@ -15,8 +15,10 @@ const DEMO_EMAIL = `demo@${DEMO_MAIL_DOMAIN}`;   // sendMail لا يرسل إل�
 // رقم وهمي بصيغة صحيحة لإكمال الملف فقط (لا يُتصل به ولا يُنشر)
 const DEMO_PHONE = '05' + '0'.repeat(8);
 
+// حساب العرض الأصلي يُعرَّف ببريده الخاص لا بالعلامة وحدها: is_demo تعني «خارج القوائم والإحصاءات والبريد»، ويحملها
+// أيضًا حساب اختبار وسمه المالك (2026-11-11). فلا يتعطل فتح العرض بوجود أكثر من حساب موسوم، ولا تحذف إعادة الضبط إلا هذا
 async function demoRow() {
-  const { data } = await db.from('participants').select('*').eq('is_demo', true).maybeSingle();
+  const { data } = await db.from('participants').select('*').eq('is_demo', true).eq('email', DEMO_EMAIL).maybeSingle();
   if (data) return data;
   return must(await db.from('participants').insert({
     email: DEMO_EMAIL, full_name: 'مشارك العرض', is_demo: true, source: 'admin',
@@ -33,7 +35,7 @@ export async function open(a: Admin, _b: Body, ctx: Ctx) {
 
 // إعادة الضبط: يُحذف الحساب بكل ما عليه، ويُنشأ من جديد عند الفتح التالي
 export async function reset(a: Admin) {
-  const { data: p } = await db.from('participants').select('id').eq('is_demo', true).maybeSingle();
+  const { data: p } = await db.from('participants').select('id').eq('is_demo', true).eq('email', DEMO_EMAIL).maybeSingle();
   if (p) {
     await db.from('certificates').delete().eq('participant_id', p.id);
     must(await db.from('participants').delete().eq('id', p.id), 'تعذّر حذف حساب العرض');

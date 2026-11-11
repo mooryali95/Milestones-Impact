@@ -566,8 +566,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     switch_to: audience === 'participant' && !p.is_demo ? (await rolesOf(p.email)).filter((d) => d !== 'participant') : [],
     participant: {
       id: p.id, email: p.email, full_name: p.full_name, name_en: p.name_en || null, name_locked: !!p.name_locked_at,
-      // تأكيد الاسم قبل الشهادة (7.3): null = لم يؤكَّد، وغياب الحقل = العمود لم يُرحَّل بعد
-      name_confirmed: 'name_confirmed_at' in p ? !!p.name_confirmed_at : undefined, phone: p.phone, job_title: p.job_title,
+      // تأكيد الاسم قبل الشهادة (7.3)؛ الترحيل 20261110210000 مطبّق على الإنتاج منذ 2026-11-11
+      name_confirmed: !!p.name_confirmed_at, phone: p.phone, job_title: p.job_title,
       organization_name: p.organization_name, organization_linked: !!p.organization_id, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null,
       bio: p.bio, linkedin_url: p.linkedin_url, has_cv: !!p.cv_path, status: p.status, is_demo: !!p.is_demo,
       // null = لم يوافق بعد (يُعرض الإشعار)؛ غياب الحقل = العمود لم يُرحَّل بعد
@@ -647,7 +647,6 @@ const PROFILE_FIELDS: Record<string, number> = {
 
 // تأكيد الاسم كما سيُطبع على الشهادة (7.3). يُرفض اسم لا يصلح للشهادة، فيصحّحه صاحبه أولًا من ملفه
 export async function confirmName(p: any) {
-  if (!('name_confirmed_at' in p)) throw new Fail('تأكيد الاسم يُفعَّل قريبًا', 503, 'not_ready');
   if (p.name_locked_at) return { success: true, name_confirmed: true, ...(await mePayload(p)) };
   if (!certNameOk(p.full_name)) throw new Fail('اسمك العربي لا يصلح للشهادة بعد: اسمان على الأقل بالحروف. صحّحه في ملفك ثم أكّده.', 400, 'name');
   if (p.name_en && !certNameEnOk(p.name_en)) throw new Fail('اسمك بالإنجليزية لا يصلح للشهادة بعد: اسمان بالحروف اللاتينية. صحّحه أو احذفه ثم أكّد.', 400, 'name_en');
@@ -697,7 +696,7 @@ export async function profileSave(p: any, b: Body) {
   }
   // تغيير الاسم يلغي تأكيده: يُعرض على صاحبه من جديد قبل أن تصدر به شهادة
   if (('full_name' in patch && patch.full_name !== p.full_name) || ('name_en' in patch && patch.name_en !== (p.name_en || null))) {
-    if ('name_confirmed_at' in p) patch.name_confirmed_at = null;
+    patch.name_confirmed_at = null;
   }
   if (patch.linkedin_url && !/^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(patch.linkedin_url)) {
     throw new Fail('رابط LinkedIn غير صحيح');
