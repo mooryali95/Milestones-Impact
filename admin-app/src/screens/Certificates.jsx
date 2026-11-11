@@ -14,17 +14,18 @@ import { SITES } from '../../../supabase/functions/_shared/sites.js';
 const ST = { valid: ['سارية', 'ok'], suspended: ['معلّقة', 'warn'], revoked: ['ملغاة', 'bad'], replaced: ['مستبدلة', ''] };
 
 // الإعداد العام: يسري على كل الشهادات الجديدة، وما تخصّصه جهة يعلوه لمشاركيها
-function SettingsCard({ canWrite }) {
+function SettingsCard({ canWrite, onPerson }) {
   const { toast } = useUI();
   const [s, setS] = useState(null);
   const [mode, setMode] = useState('none');
   const [extra, setExtra] = useState(0);
   const [auto, setAuto] = useState(null);
+  const [held, setHeld] = useState([]);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     L('admin.cert-settings').then((r) => {
       if (!r.success) return setS({ error: r.message });
-      setS(r.settings); setMode(r.settings.signatory ? 'custom' : 'none'); setExtra(r.customized_orgs || 0); setAuto(r.computed_hours || null);
+      setS(r.settings); setMode(r.settings.signatory ? 'custom' : 'none'); setExtra(r.customized_orgs || 0); setAuto(r.computed_hours || null); setHeld(r.held || []);
     });
   }, []);
   if (!s) return <section className="la-card"><h3>إعدادات الشهادة</h3><Spinner /></section>;
@@ -50,7 +51,18 @@ function SettingsCard({ canWrite }) {
         <li>تُصدر تلقائيًا حين يُعتمد التقييم الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»، ويؤكد المشارك اسمه كما سيُطبع، ثم يُقفل الاسم. تغيير الحالة يدويًا لا يصدر شهادة.</li>
         <li>التعديل هنا يسري على الشهادات الجديدة، ولا يغيّر ما صدر.</li>
         <li>لكل جهة أن تخصّص ما يختلف من نموذجها{extra ? ` (${extra} جهة مخصّصة الآن)` : ''}.</li>
+        {/* النص يطابق الخادم (onFinalApproved): التوقف يحجب ولا يؤجل، وإعادة التفعيل لا تصدر ما فات */}
+        <li>إيقاف الإصدار التلقائي يحجب شهادة كل من يُعتمد تقييمه أثناء التوقف، وإعادة تفعيله لا تصدر ما حُجب. ومن لم تصدر شهادته يظهر هنا بطريق إصدارها.</li>
       </ol>
+      {held.length > 0 && (
+        <div className="la-note" role="note" aria-label="لم تصدر شهاداتهم">
+          <b>اعتُمد تقييمهم الختامي بنجاح ولم تصدر شهاداتهم ({held.length})</b>
+          <ul>{held.map((h) => (
+            <li key={h.participant_id}><button className="link" onClick={() => onPerson?.(h.participant_id)}>{h.full_name}</button> · {h.awaiting_name ? 'ينتظر تأكيد اسمه' : 'لم تصدر شهادته'}</li>
+          ))}</ul>
+          <small>تصدر لمن ينتظر تأكيد اسمه حين يؤكده والإصدار مفعّل، ولغيره بإعادة فتح تقييمه الختامي من ملفه واعتماده والإصدار مفعّل.</small>
+        </div>
+      )}
       <fieldset disabled={!canWrite} className="ce-grid">
         <label className="of-field"><span className="of-label">اسم البرنامج</span><input value={s.program_ar} onChange={set('program_ar')} maxLength={200} /></label>
         <label className="of-field"><span className="of-label">اسم البرنامج بالإنجليزية</span><input dir="ltr" value={s.program_en} onChange={set('program_en')} maxLength={200} /></label>
@@ -144,7 +156,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
         <div className="stat-card"><div className="stat-label">ملغاة أو مستبدلة</div><div className="stat-value">{st ? st.revoked + st.replaced : '·'}</div><div className="stat-sub">بسبب مسجّل</div></div>
         <div className="stat-card"><div className="stat-label">عمليات التحقق</div><div className="stat-value">{d?.success ? d.checks : '·'}</div><div className="stat-sub">من صفحة التحقق العامة</div></div>
       </div>
-      <SettingsCard canWrite={canWrite} />
+      <SettingsCard canWrite={canWrite} onPerson={onPerson} />
       <section className="la-card">
         <h3>سجل الشهادات</h3>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>

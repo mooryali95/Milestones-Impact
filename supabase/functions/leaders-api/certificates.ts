@@ -6,7 +6,7 @@
 // الوحيد التعليق أو الإلغاء بتعليل وصلاحية super. تحفظ لقطة ثابتة لكل ما يظهر على الشهادة وتقفل الاسم.
 // التوقيع HMAC للحقول الحاكمة بمفتاح مستقل عن ملح الجلسات بمعرّف مفتاح (kid)، فتدوير الملح لا يبطل شهادة،
 // وتدوير المفتاح لا يبطل ما صدر. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
-import { alertOps, all, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
+import { alertOps, all, allFor, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
 import { forStats } from './admin.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
 import { displayTitles } from './profiles.ts';
@@ -212,7 +212,12 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
     return { id: suspended.id, serial: suspended.snapshot?.serial };
   }
   if (suspended) await setStatus(suspended.id, 'replaced', by || 'system', 'اعتماد ختامي جديد');
-  if (!cfg.enabled) return null;
+  // الإصدار التلقائي متوقف: لا تصدر، ولا يمر ذلك بصمت. يُسجَّل، ويرجع حاله فيراه المعتمِد ولا يَعِد البريد بالشهادة،
+  // ويبقى صاحبها في «لم تصدر شهاداتهم» بلوحة الشهادات (held) حتى تصدر
+  if (!cfg.enabled) {
+    await audit('system', by, 'certificate.skipped-disabled', 'participants', participantId, null, { decision: final.decision });
+    return { skipped: 'disabled' };
+  }
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
   // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm)
   if (!p.name_confirmed_at) {
@@ -222,6 +227,15 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
     return { awaiting_name: true };
   }
   return insertCertificate(p, by, final);
+}
+
+// ما يُبلَّغ به المعتمِد حين يكتمل الاعتماد: حال الشهادة كما انتهت، لا «سُجل اعتمادك» وحده
+export function certificateNotice(c: any) {
+  if (c?.serial) return `اعتُمد التقييم، والشهادة ${c.serial} سارية`;
+  if (c?.awaiting_name) return 'اعتُمد التقييم، وتصدر الشهادة حين يؤكد المشارك اسمه';
+  if (c?.skipped) return 'اعتُمد التقييم، ولم تصدر الشهادة لأن الإصدار التلقائي متوقف. تجد المشارك في «الشهادات» ضمن من لم تصدر شهاداتهم';
+  if (c?.failed) return 'اعتُمد التقييم، وتعذّر إصدار الشهادة، وأُبلغ فريق التشغيل';
+  return 'اعتُمد التقييم';
 }
 
 // بعد تأكيد الاسم: إن كان التقييم الختامي معتمدًا بقرار ناجح ولا شهادة سارية، تصدر الآن بقرار التقييم نفسه
@@ -404,14 +418,28 @@ export async function preview(b: Body) {
   };
 }
 
+// من اعتُمد تقييمه الختامي بنجاح ولا شهادة سارية أو معلّقة له: ينتظر تأكيد اسمه، أو حُجبت شهادته لتوقف الإصدار
+// أو تعذّرها. يُعرض في لوحة الشهادات فلا يُحجب أحد بصمت. حساب العرض خارجه كبقية القوائم
+async function heldCertificates() {
+  const fe = await all((f, t) => db.from('final_evaluations').select('participant_id, participants!inner(full_name, name_confirmed_at, is_demo)')
+    .eq('status', 'approved').in('decision', PASSING).eq('participants.is_demo', false).order('participant_id').range(f, t));
+  if (!fe.length) return [];
+  const ids = [...new Set(fe.map((r: any) => r.participant_id as string))];
+  const have = new Set((await allFor(ids, () => db.from('certificates').select('participant_id').in('status', ['valid', 'suspended']))).map((c: any) => c.participant_id));
+  const out = new Map<string, any>();
+  for (const r of fe) if (!have.has(r.participant_id)) out.set(r.participant_id, { participant_id: r.participant_id, full_name: r.participants?.full_name, awaiting_name: !r.participants?.name_confirmed_at });
+  return [...out.values()];
+}
+
 export async function settingsGet() {
-  const [orgs, progs] = await Promise.all([
+  const [orgs, progs, held] = await Promise.all([
     db.from('organizations').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
     db.from('programs').select('id', { count: 'exact', head: true }).neq('cert', '{}'),
+    heldCertificates(),
   ]);
   // ما ستكتبه الشهادة إن تُرك حقل الساعات فارغًا: من أنشطة البرنامج الافتراضي
   const def = await journeyDefinition({});
-  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0, computed_hours: programHours(def.requirements) };
+  return { success: true, settings: await settings(), customized_orgs: orgs.count ?? 0, customized_programs: progs.count ?? 0, computed_hours: programHours(def.requirements), held };
 }
 
 export async function settingsSave(a: Actor, b: Body) {

@@ -36,7 +36,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
     const r = await L(action, { participant_id: participantId, ...body });
     setBusy(false);
     if (!r.success) return toast(r.message);
-    toast(ok); load();
+    toast(r.notice || ok); load();   // notice: حال الشهادة حين يكتمل الاعتماد (صدرت، أو تنتظر الاسم، أو حُجبت، أو تعذّرت)
   };
   const voteReturn = async () => {
     const note = await prompt('سبب الإعادة (يصل لمن رفع التقييم):', '');

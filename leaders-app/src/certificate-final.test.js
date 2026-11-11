@@ -84,6 +84,26 @@ describe('حساب العرض وحسابات الاختبار في الشهاد�
   });
 });
 
+describe('إيقاف الإصدار التلقائي لا يحجب بصمت', () => {
+  it('الحجب يُسجَّل ويرجع حاله، والبريد لا يَعِد، والمعتمِد يرى الحال', () => {
+    const on = cert.slice(cert.indexOf('export async function onFinalApproved('), cert.indexOf('export async function suspendForReopen('));
+    expect(on).toMatch(/if \(!cfg\.enabled\) \{\n\s+await audit\('system', by, 'certificate\.skipped-disabled'[\s\S]*return \{ skipped: 'disabled' \};/);
+    const vote = final.slice(final.indexOf('export async function vote('), final.indexOf('export async function reopen('));
+    expect(vote).toContain('return { failed: true }; });');
+    expect(vote).toContain('const held = !!(certificate?.skipped || certificate?.failed);');
+    expect(vote).toContain('finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held })');
+    expect(vote).toContain('notice: certificateNotice(certificate)');
+    expect(read('admin-app/src/screens/FinalEval.jsx')).toContain('toast(r.notice || ok); load();');
+    // تأكيد الاسم يعيد الشهادة الصادرة وحدها، لا الانتظار ولا الحجب
+    expect(read('supabase/functions/leaders-api/index.ts')).toContain('return { ...r, certificate: (certificate as any)?.serial ? certificate : null };');
+  });
+  it('من لم تصدر شهادته يظهر في لوحة الشهادات', () => {
+    expect(cert).toMatch(/async function heldCertificates\(\) \{[\s\S]*\.eq\('status', 'approved'\)\.in\('decision', PASSING\)[\s\S]*\.in\('status', \['valid', 'suspended'\]\)/);
+    expect(cert).toMatch(/computed_hours: programHours\(def\.requirements\), held \};/);
+    expect(read('admin-app/src/screens/Certificates.jsx')).toContain('setHeld(r.held || [])');
+  });
+});
+
 describe('ترحيل 20261107140000_leaders_certificate_suspended', () => {
   const SQL = read('supabase/migrations/20261107140000_leaders_certificate_suspended.sql');
   it('حاجب بعد تطبيقه، ويقبل المعلّقة، وإعادته آمنة', async () => {

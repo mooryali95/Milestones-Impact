@@ -2,7 +2,7 @@
 // التقييم الختامي على الخادم: يجمع المصادر، ويحفظ التعديل والقرار، ويدير الاعتماد
 // ════════════════════════════════════════════════════════════════
 import { alertOps, audit, db, Fail, finalDecisionMail, FINAL_MAIL_SUBJECT, must, sendMail } from './core.ts';
-import { onFinalApproved, suspendForReopen } from './certificates.ts';
+import { certificateNotice, onFinalApproved, suspendForReopen } from './certificates.ts';
 import { runningCohort } from './programs.ts';
 import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, voteBlock } from './final.js';
 import { DEFAULT_MODEL } from './logic.js';
@@ -117,12 +117,14 @@ export async function vote(a: Actor, b: Body) {
   // D05: الاعتماد وحده يصدر الشهادة (اجتاز أو اجتاز بملاحظات)، أو يلغي المعلّقة، ثم بريد القرار بخطوته التالية
   if (patch.status === 'approved') {
     const decision = String(record.decision || record.snapshot?.decision || '');
-    const certificate = await onFinalApproved(pid, { decision, formula_version: record.snapshot?.config_version ?? null, program_id: program.id }, a.email)
-      .catch(async (e) => { await alertOps('certificate_issue', { participant: pid, message: String((e as Error)?.message || e).slice(0, 200) }); return null; });
+    const certificate: any = await onFinalApproved(pid, { decision, formula_version: record.snapshot?.config_version ?? null, program_id: program.id }, a.email)
+      .catch(async (e) => { await alertOps('certificate_issue', { participant: pid, message: String((e as Error)?.message || e).slice(0, 200) }); return { failed: true }; });
+    // البريد لا يَعِد بشهادة لم تصدر: حُجبت لتوقف الإصدار التلقائي، أو تعذّر إصدارها
+    const held = !!(certificate?.skipped || certificate?.failed);
     // حساب العرض لا يصله بريد القرار (demo.ts)، وحساب الاختبار يصله كأي حساب
-    if (p.email && !p.is_demo) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null), [], { ref: `participant:${pid}` })
+    if (p.email && !p.is_demo) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held }), [], { ref: `participant:${pid}` })
       .catch((e) => console.error('final decision mail', e));
-    return { success: true, status: patch.status, approval: st, certificate };
+    return { success: true, status: patch.status, approval: st, certificate, notice: certificateNotice(certificate) };
   }
   return { success: true, status: patch.status || 'pending', approval: st };
 }

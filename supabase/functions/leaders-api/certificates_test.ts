@@ -1,8 +1,8 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { checkCertificate, signCertificate, PASSING, preview } = await import('./certificates.ts');
-const { Fail } = await import('./core.ts');
+const { certificateNotice, checkCertificate, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
+const { db, Fail, finalDecisionMail } = await import('./core.ts');
 
 const K1 = 'k1-'.padEnd(40, 'a');
 const K2 = 'k2-'.padEnd(40, 'b');
@@ -46,4 +46,43 @@ Deno.test('معاينة النموذج «شهادة إتمام بنجاح» بق
   const r = await preview({ program_id: 'program-under-test' });
   assertEquals([r.certificate.kind, r.certificate.decision], ['completion_success', 'pass']);
   assert(r.certificate.serial.endsWith('-SAMPLE'));
+});
+
+// قاعدة مُحاكاة لجدول بعينه: كل استعلام يعيد ما في tables[table]، والإدراج يُسجَّل في log. تُعاد الأصلية بعد الاختبار
+function fakeDb(tables: Record<string, unknown>, log: [string, any][]) {
+  const orig = db.from;
+  (db as any).from = (table: string) => {
+    const q: any = new Proxy({}, {
+      get: (_t, k) => k === 'then'
+        ? (res: any, rej: any) => Promise.resolve({ data: tables[table] ?? null, error: null }).then(res, rej)
+        : (...args: any[]) => { if (k === 'insert' || k === 'update') log.push([table, args[0]]); return q; },
+    });
+    return q;
+  };
+  return () => { (db as any).from = orig; };
+}
+
+// إيقاف الإصدار التلقائي لا يحجب بصمت: يُسجَّل في السجل، ويرجع حاله فيراه المعتمِد ولا يَعِد البريد بالشهادة
+Deno.test('الإصدار التلقائي متوقف: لا تصدر، ويُسجَّل الحجب، ويرجع حاله', async () => {
+  const log: [string, any][] = [];
+  const restore = fakeDb({ certificate_settings: { id: 1, enabled: false }, certificates: [] }, log);
+  try {
+    const r = await onFinalApproved('participant-1', { decision: 'pass', program_id: 'program-1' }, 'admin@example.sa');
+    assertEquals(r, { skipped: 'disabled' });
+    assertEquals(log.map(([t, row]) => [t, row.action ?? null]), [['audit_log', 'certificate.skipped-disabled']]);
+  } finally { restore(); }
+});
+
+Deno.test('بريد القرار لا يَعِد بشهادة لم تصدر، والمعتمِد يرى حال الشهادة', () => {
+  assert(finalDecisionMail('سارة', 'pass', null).includes('تصلك شهادة الإتمام بنجاح في رسالة مستقلة'));
+  for (const d of PASSING) {
+    const held = finalDecisionMail('سارة', d, null, { held: true });
+    assert(!held.includes('تصلك شهادة'), d);
+    assert(held.includes('لم تصدر شهادة الإتمام بنجاح بعد'), d);
+  }
+  assertEquals(certificateNotice({ id: 'c1', serial: 'MI-LDR-2026-ABCDEF' }), 'اعتُمد التقييم، والشهادة MI-LDR-2026-ABCDEF سارية');
+  assert(certificateNotice({ skipped: 'disabled' }).includes('الإصدار التلقائي متوقف'));
+  assert(certificateNotice({ awaiting_name: true }).includes('حين يؤكد المشارك اسمه'));
+  assert(certificateNotice({ failed: true }).includes('تعذّر إصدار الشهادة'));
+  assertEquals(certificateNotice(null), 'اعتُمد التقييم');
 });
