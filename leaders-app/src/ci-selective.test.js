@@ -98,6 +98,16 @@ describe('ثوابت ملفات السير', () => {
       expect(t, f).not.toMatch(/actions\/(checkout|setup-node|upload-artifact)@v4/);
     }
   });
+  it('تنظيف الفروع يدوي، وافتراضه الخطة وحدها، ولا يمس main ولا release ولا فرعًا له طلب مفتوح', () => {
+    const t = read('.github/workflows/branch-cleanup.yml');
+    expect(t).toMatch(/on:\n {2}workflow_dispatch:/);
+    expect(t).not.toMatch(/\n {2}(push|pull_request|schedule):/);
+    expect(t).toMatch(/default: dry-run/);
+    expect(t).toContain('if [ "$b" = "$default" ] || [ "$b" = "release" ]; then row "$b" "يبقى" "فرع أساسي"');
+    expect(t).toContain('if [ -n "$open" ]; then row "$b" "يبقى" "طلب مفتوح $open"');
+    // الحذف والوسم في وضع apply وحده
+    expect(t.match(/if \[ "\$MODE" = "apply" \]; then gh api/g)).toHaveLength(2);
+  });
   it('المسبار كل ثلاث ساعات وبوابته ست ساعات، وفحص R2 لا يشغّل جهازًا قبل ضبطه، وDependabot شهري بلا الكبرى', () => {
     expect(read('.github/workflows/probe.yml')).toContain("- cron: '23 */3 * * *'");
     expect(read('scripts/ops/stage-gates.mjs')).toContain("lastRun('probe.yml', 6)");
