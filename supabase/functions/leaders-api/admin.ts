@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
@@ -65,7 +65,7 @@ function funnel(rows: any[]) {
   return {
     registered: at(0), profiled: at(1), assessed: at(2), approved: at(3), completed: at(4),
     pending_approval: rows.filter((r) => r.status === 'pending_approval').length,
-    withdrawn: rows.filter((r) => r.status === 'withdrawn' || r.status === 'suspended').length,
+    withdrawn: rows.filter((r) => !inProgram(r.status)).length,
   };
 }
 // حساب العرض لا يدخل القوائم ولا الإحصاءات. وحساب الاختبار (is_test، قرار المالك 2026-11-11) لا يدخل الإحصاءات
@@ -501,16 +501,20 @@ export async function reviewRequirement(a: Admin, b: Body) {
   return { success: true };
 }
 
-// تدخل في مرحلة لمشارك بعينه: يفتحها، أو يعتمد اكتمالها، أو يعفيه منها؛ وaction فارغ يلغي التدخل.
+// تدخل في مرحلة لمشارك بعينه: يفتحها، أو يعتمد اكتمالها، أو يعفيه منها؛ وstage_action فارغ يلغي التدخل.
 // يخص برنامج المشارك الحالي، فلا يسري إن انتقل إلى برنامج آخر.
+// الفعل في stage_action لا action: حقل action في الطلب اسم الإجراء نفسه (admin.stage-override) الذي يوزَّع عليه،
+// فكان الفعل والاسم يتنازعان الحقل ولا يصل التدخل أبدًا (تدقيق الجاهزية، admin-core-1)
 export async function stageOverride(a: Admin, b: Body) {
   requireWrite(a);
+  // غياب الحقل لا يُفهم إلغاءً: الإلغاء يحذف التدخل، فلا يكون إلا بقيمة فارغة صريحة
+  if (!('stage_action' in b)) throw new Fail('حدّد الإجراء على المرحلة');
   const p = must(await db.from('participants').select('id, organization_id').eq('id', String(b.participant_id || '')).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
   const def = await journeyDefinition(p);
   const stage = def.stages.find((s: any) => s.key === String(b.stage_key || ''));
   if (!stage) throw new Fail('المرحلة ليست في رحلة هذا المشارك', 404);
-  const action = b.action == null || b.action === '' ? null : String(b.action);
+  const action = b.stage_action == null || b.stage_action === '' ? null : String(b.stage_action);
   if (action && !['open', 'complete', 'skip'].includes(action)) throw new Fail('إجراء غير معروف');
   const key = { participant_id: p.id, program_id: def.program_id, stage_key: stage.key };
   if (action) {

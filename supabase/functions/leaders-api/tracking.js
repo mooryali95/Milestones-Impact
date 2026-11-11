@@ -22,7 +22,7 @@ export const UPDATE_POINTS = 10;
 export const VERIFIED_POINTS = 50;
 export const M_STATUS = { on_track: 'في موعده', at_risk: 'معرّض للتأخر', late: 'متأخر', done: 'تحقق', dropped: 'أُلغي بقرار' };
 export const HEALTH = { pending: 'لم تبدأ المتابعة', green: 'على المسار', amber: 'يحتاج انتباهًا', red: 'متعثر', stale: 'بلا تحديث', closed: 'اكتملت المتابعة' };
-export const VERIFY = { pending: 'بانتظار تأكيد الراعي', confirmed: 'أكّده الراعي', disputed: 'اعترض الراعي', none: 'بلا راعٍ للتأكيد' };
+export const VERIFY = { pending: 'بانتظار تأكيد الراعي', confirmed: 'أكّده الراعي', disputed: 'اعترض الراعي', expired: 'تحتاج إعادة إرسال إلى الراعي', none: 'بلا راعٍ للتأكيد' };
 
 const DAY = 864e5;
 export const periodOf = (t) => new Date(t).toISOString().slice(0, 7);
@@ -92,7 +92,10 @@ export function latestState(plan, updates) {
   };
 }
 
-const verifyOf = (u) => (u.verify_status || (u.checkpoint ? 'none' : null));
+// حالة تأكيد الراعي. «expired» مشتقة لا تُخزَّن: طلب معلّق انقضت مهلة رابطه، أو لم يصل بريده
+// فأُغلق رابطه فورًا. كلاهما يعيد المراجعة إلى القائد ليرسلها من جديد، بدل «بانتظار الراعي» إلى الأبد.
+export const verifyOf = (u, now = Date.now()) => (u.verify_status === 'pending' && u.verify_expires_at && Date.parse(u.verify_expires_at) <= now
+  ? 'expired' : u.verify_status || (u.checkpoint ? 'none' : null));
 
 // ── ملخص المتابعة: مصدر واحد لكل شاشة وتقرير ──
 export function trackingSummary(plan, updates, approvedAt, now = Date.now()) {
@@ -115,12 +118,16 @@ export function trackingSummary(plan, updates, approvedAt, now = Date.now()) {
   const checkpoints = CHECKPOINTS.map((c, i) => {
     const u = list.find((x) => x.checkpoint === c.key);
     const next = CHECKPOINTS[i + 1];
-    const status = u ? (verifyOf(u) === 'confirmed' ? 'verified' : verifyOf(u) === 'disputed' ? 'disputed' : 'submitted')
-      : next && day >= next.day ? 'missed' : day >= c.day ? 'due' : 'upcoming';
-    return { ...c, status, verify: u ? verifyOf(u) : null, verify_title: u ? VERIFY[verifyOf(u)] : null, period: u?.period || null };
+    const v = u ? verifyOf(u, now) : null;
+    const open = !(next && day >= next.day);
+    const status = u ? (v === 'confirmed' ? 'verified' : v === 'disputed' ? 'disputed' : 'submitted')
+      : !open ? 'missed' : day >= c.day ? 'due' : 'upcoming';
+    // اعتراض الراعي أو انقضاء رابطه يعيدها إلى القائد في أي شهر، إلى أن تحل المراجعة التالية
+    const resubmit = open && (v === 'disputed' || v === 'expired');
+    return { ...c, status, resubmit, verify: v, verify_title: v ? VERIFY[v] : null, period: u?.period || null };
   });
-  // مراجعة الختام تبقى متاحة شهرًا بعد انتهاء المتابعة
-  const checkpointDue = day < TRACK_DAYS + 30 ? checkpoints.find((c) => c.status === 'due') || null : null;
+  // مراجعة الختام تبقى متاحة شهرًا بعد انتهاء المتابعة، ومعها إعادة إرسالها
+  const checkpointDue = day < TRACK_DAYS + 30 ? checkpoints.find((c) => c.status === 'due' || c.resubmit) || null : null;
   const lastAt = list.reduce((a, u) => (!a || String(u.updated_at || u.created_at) > a ? String(u.updated_at || u.created_at) : a), null);
   const reviewed = checkpoints.some((c) => ['submitted', 'verified', 'disputed'].includes(c.status));
 
@@ -143,10 +150,23 @@ export function trackingSummary(plan, updates, approvedAt, now = Date.now()) {
     due: {
       update: active && day >= FIRST_UPDATE_DAY && !thisPeriod,
       checkpoint: checkpointDue ? checkpointDue.key : null,
+      resubmit: !!checkpointDue?.resubmit,
     },
     can_update: (active || !!checkpointDue) && !(thisPeriod && thisPeriod.verify_status === 'confirmed'),
     checkpoints,
   };
+}
+
+// ── أين يُكتب تحديث القائد ──
+// صف الشهر الجاري، إلا مراجعةً تُعاد إلى الراعي: تُصحَّح في صفها نفسه ولو كان من شهر سابق،
+// فلكل مراجعة صف واحد (فهرس participant_id, checkpoint) ورابط واحد صالح.
+export function saveTarget(summary, updates, wantsCheckpoint) {
+  const list = updates || [];
+  const redo = wantsCheckpoint && summary.due.resubmit ? list.find((u) => u.checkpoint === summary.due.checkpoint) || null : null;
+  const period = redo?.period || summary.current;
+  const existing = redo || list.find((u) => u.period === period) || null;
+  const locked = !redo && ['pending', 'confirmed'].includes(existing?.verify_status) ? existing.verify_status : null;
+  return { period, existing, redo: !!redo, locked, checkpoint: existing?.checkpoint || (wantsCheckpoint && summary.due.checkpoint) || null };
 }
 
 // ── تحديث المشارك: قيم معروفة فقط، ومراجعة الأثر تقيس كل المنافع ──

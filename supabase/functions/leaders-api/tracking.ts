@@ -9,13 +9,13 @@ import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { award } from './participant.ts';
 import { isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail } from './logic.js';
 import {
-  CHECKPOINTS, cleanUpdate, HEALTH, latestState, M_STATUS, periodOf, portfolioOutcomes, trackingPlan, trackingSummary,
-  UPDATE_POINTS, VERIFIED_POINTS, VERIFY,
+  CHECKPOINTS, cleanUpdate, HEALTH, latestState, M_STATUS, periodOf, portfolioOutcomes, saveTarget, trackingPlan, trackingSummary,
+  UPDATE_POINTS, VERIFIED_POINTS, VERIFY, verifyOf,
 } from './tracking.js';
 
 type Body = Record<string, any>;
 const VERIFY_DAYS = 21;
-const UPDATE_COLS = 'id, participant_id, period, checkpoint, milestones, benefits, narrative, blockers, support, verify_name, verify_status, verify_note, verify_at, created_at, updated_at';
+const UPDATE_COLS = 'id, participant_id, period, checkpoint, milestones, benefits, narrative, blockers, support, verify_name, verify_status, verify_note, verify_at, verify_expires_at, created_at, updated_at';
 
 const initiativeOf = (snapshot: any) => snapshot?.meta?.initiative || 'المبادرة';
 
@@ -43,7 +43,7 @@ async function load(participantId: string) {
 const updateView = (u: any) => ({
   id: u.id, period: u.period, checkpoint: u.checkpoint, checkpoint_title: CHECKPOINTS.find((c) => c.key === u.checkpoint)?.title || null,
   milestones: u.milestones || {}, benefits: u.benefits || {}, narrative: u.narrative, blockers: u.blockers, support: u.support,
-  verify: u.checkpoint ? { status: u.verify_status || 'none', title: (VERIFY as Record<string, string>)[u.verify_status || 'none'], name: u.verify_name, note: u.verify_note, at: u.verify_at } : null,
+  verify: u.checkpoint ? { status: verifyOf(u), title: (VERIFY as Record<string, string>)[verifyOf(u)!], name: u.verify_name, note: u.verify_note, at: u.verify_at } : null,
   updated_at: u.updated_at,
 });
 
@@ -72,13 +72,9 @@ export async function save(p: any, b: Body) {
   const t = await load(p.id);
   if (!t) throw new Fail('تبدأ المتابعة بعد اعتماد وثيقة مبادرتك', 403, 'not_approved');
   if (!t.summary.can_update) throw new Fail('انتهت مدة المتابعة لهذه المبادرة', 409, 'closed');
-  const period = t.summary.current;
-  const existing = t.updates.find((u) => u.period === period) || null;
-  if (existing?.verify_status === 'pending' || existing?.verify_status === 'confirmed') {
-    throw new Fail(existing.verify_status === 'pending' ? 'مراجعة الأثر عند الراعي ليؤكدها، فلا تُعدَّل الآن' : 'أكّد الراعي هذه المراجعة، فلا تُعدَّل', 409, 'verifying');
-  }
-  // مراجعة الأثر حين يحين موعدها ويطلبها القائد، أو يبقى التحديث مراجعةً إن كان كذلك
-  const checkpoint = existing?.checkpoint || (b.checkpoint && t.summary.due.checkpoint) || null;
+  // صف الشهر الجاري، أو صف المراجعة التي اعترض عليها الراعي أو انقضى رابطه ولو من شهر سابق
+  const { period, existing, redo, locked, checkpoint } = saveTarget(t.summary, t.updates, !!b.checkpoint);
+  if (locked) throw new Fail(locked === 'pending' ? 'مراجعة الأثر عند الراعي ليؤكدها، فلا تُعدَّل الآن' : 'أكّد الراعي هذه المراجعة، فلا تُعدَّل', 409, 'verifying');
   let clean;
   try { clean = cleanUpdate(t.plan, b, checkpoint); } catch (e) { throw new Fail((e as Error).message); }
   const now = new Date().toISOString();
@@ -87,11 +83,10 @@ export async function save(p: any, b: Body) {
     ...(existing?.verify_status === 'disputed' ? { verify_status: null, verify_note: null, verify_at: null } : {}),
   }, { onConflict: 'participant_id,period' }).select('id').single()) as any;
   if (!existing) await award(p.id, 'tracking', row.id, UPDATE_POINTS, `تحديث متابعة ${period}: ${initiativeOf(t.cap.snapshot)}`);
-  await audit('participant', p.email, checkpoint ? 'tracking.checkpoint' : 'tracking.update', 'capstone_updates', row.id, null, { period, checkpoint });
-  let invited = false;
-  if (checkpoint) invited = await inviteVerifier(p, t.cap, row.id, checkpoint);
+  await audit('participant', p.email, checkpoint ? 'tracking.checkpoint' : 'tracking.update', 'capstone_updates', row.id, null, { period, checkpoint, resend: redo });
+  const invite = checkpoint ? await inviteVerifier(p, t.cap, row.id, checkpoint) : 'none';
   const r = await mine(p);
-  return { ...r, invited };
+  return { ...r, invited: invite === 'sent', mail_failed: invite === 'failed' };
 }
 
 // ── تأكيد الراعي ──
@@ -104,19 +99,26 @@ function verifyMail(sponsor: string | null, who: string, initiative: string, tit
     { family: 'capstone', preheader: `${who} يطلب تأكيد أثر مبادرة «${initiative}»`, footnote: '' });
 }
 
-async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: string) {
+async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: string): Promise<'sent' | 'failed' | 'none'> {
   const email = normalizeEmail(cap.sponsor_email || cap.snapshot?.meta?.sponsor_email || '');
-  if (!isEmail(email)) return false;
+  if (!isEmail(email)) return 'none';
   const token = randomToken();
   must(await db.from('capstone_updates').update({
     verify_name: cap.sponsor_name || cap.snapshot?.meta?.sponsor || null, verify_email: email, verify_token_hash: await hash(token),
     verify_status: 'pending', verify_note: null, verify_at: null, verify_expires_at: new Date(Date.now() + VERIFY_DAYS * 864e5).toISOString(),
   }).eq('id', updateId));
   const title = CHECKPOINTS.find((c) => c.key === checkpoint)?.title || 'مراجعة الأثر';
-  await sendMail(email, `تأكيد أثر مبادرة «${initiativeOf(cap.snapshot)}»`,
-    verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`))
-    .catch((e) => console.error('verify mail:', e));
-  return true;
+  try {
+    await sendMail(email, `تأكيد أثر مبادرة «${initiativeOf(cap.snapshot)}»`,
+      verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`));
+    return 'sent';
+  } catch (e) {
+    // لم يصل الرابط: يُغلق الآن فتعود المراجعة إلى القائد ليعيد إرسالها، بدل «بانتظار الراعي» حتى تنقضي مهلته
+    console.error('verify mail:', e);
+    const { error } = await db.from('capstone_updates').update({ verify_token_hash: null, verify_expires_at: new Date().toISOString() }).eq('id', updateId);
+    if (error) console.error('verify close:', error);
+    return 'failed';
+  }
 }
 
 async function verifyFrom(tk: unknown) {
@@ -205,8 +207,11 @@ export async function reminders() {
     const title = s.due.checkpoint ? CHECKPOINTS.find((x) => x.key === s.due.checkpoint)!.title : 'تحديث هذا الشهر';
     await db.from('capstones').update({ tracking_reminded_at: new Date().toISOString() }).eq('participant_id', c.participant_id);
     await sendMail(p.email, `${title}: ${initiativeOf(c.snapshot)}`, mailShell(title,
-      mailText(`أهلًا ${esc(p.full_name || '')}، حان «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}».`)
-      + mailText(s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
+      mailText(s.due.resubmit
+        ? `أهلًا ${esc(p.full_name || '')}، لم يؤكد الراعي أرقام «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}»: اعترض عليها أو لم يعد رابطه صالحًا.`
+        : `أهلًا ${esc(p.full_name || '')}، حان «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}».`)
+      + mailText(s.due.resubmit ? 'صحّح ما يلزم من صفحة «مبادرتي» ثم أرسلها من جديد، فيصل الراعي رابط آخر.'
+        : s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
       + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' }), [], { kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((e) => console.error(e));
     sent += 1;
   }

@@ -16,6 +16,7 @@ import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
 import { countAr, PARTICIPANT_STATUS as STATUS, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
@@ -74,7 +75,7 @@ function SignIn({ onIn, initialError }) {
               <p className="muted">إن كان <b className="ltr">{email}</b> مسجّلًا منسقًا لجهة، وصله رمز من 6 أرقام ورابط دخول.</p>
             </div>
             <input ref={ref} className="input code-input" inputMode="numeric" autoComplete="one-time-code" aria-label="رمز التحقق" placeholder="••••••"
-              value={code} disabled={busy} onChange={(e) => { const d = e.target.value.replace(/\D/g, '').slice(0, 6); setCode(d); if (d.length === 6) verify(d); }} />
+              value={code} disabled={busy} onChange={(e) => { const d = codeDigits(e.target.value); setCode(d); if (d.length === 6) verify(d); }} />
             {error && <div className="alert err">{error}</div>}
             <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
           </div>

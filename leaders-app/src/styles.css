@@ -315,7 +315,8 @@ textarea.input { min-height: 96px; resize: vertical; }
 .chev { transition: transform .2s; color: var(--muted); }
 .open .chev { transform: rotate(180deg); }
 
-.checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+/* عمود بعرض المرحلة لا بعرض أعرض بند: بلا minmax(0) يتسع العمود لمحتوى بند واحد فتُقص بنود المرحلة كلها على الجوال */
+.checklist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .item {
   display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 10px;
   border: 1px solid var(--line); background: #fff;
@@ -732,8 +733,10 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .act-bar { height: 6px; border-radius: 99px; background: rgba(11, 39, 47, .08); overflow: hidden; }
 .act-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--copper)); border-radius: inherit; transition: width .5s; }
 .act-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.act-list li { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 6px 0; border-top: 1px dashed var(--line); }
+.act-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; padding: 6px 0; border-top: 1px dashed var(--line); }
 .act-list li:first-child { border-top: 0; }
+/* صف الجلسة على الشاشة الضيقة: العنوان والموعد في سطر، والطريقة والأزرار والحالة في سطر تحته */
+@media (max-width: 620px) { .act-session > .grow { flex-basis: 100%; } }
 .act-video { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; }
 .act-video > div, .act-video iframe, .act-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .act-frame { position: relative; }
@@ -1529,6 +1532,8 @@ body:has(.tour) main{padding-bottom:260px}
 .nav-hint{position:fixed;inset-inline:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;margin:0 auto;max-width:420px;padding:10px 14px;border-radius:12px;background:var(--brand-graphite);color:var(--brand-cream);font-size:14px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 @media (min-width:900px){.nav-hint{bottom:auto;top:72px}}
 .banner.warn .ico{color:var(--bad)}
+/* منطقة إعلان الإشعار فارغة حتى يقع إجراء: لا تضيف فراغًا بين عناصر البطاقة */
+.stack > .notice-live:empty { margin-top: 0; }
 /* «هكذا يظهر اسمك» قبل الشهادة (تدقيق الإنتاج 2026-11-10، البند 7.3) */
 .name-confirm { margin-top: 8px; padding: 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface); }
 .name-confirm-preview { display: grid; gap: 4px; padding: 12px; border-radius: 8px; background: var(--paper, transparent); text-align: center; }

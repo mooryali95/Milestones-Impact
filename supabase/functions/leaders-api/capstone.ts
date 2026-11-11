@@ -254,6 +254,8 @@ export async function adminGet(b: Body) {
     sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
     priority: state.weighted, max_revisions: MAX_REVISIONS,
     rubric: rubricFor(state.levels), leader: await leaderScore(p),
+    // بلا بريد صحيح للراعي لا يُطلب تأييد: تعرض الشاشة القبول بالاعتماد دون تأييد بدل خطأ بعد الحفظ
+    sponsor_email: sponsorEmailOf(state.charter),
   };
 }
 
@@ -266,10 +268,17 @@ function sponsorMail(sponsor: string | null, who: string, initiative: string, li
     { family: 'capstone', preheader: `${who} يطلب تأييدك لمبادرة «${initiative}»`, footnote: '' });
 }
 
-async function inviteSponsor(p: any, c: any) {
-  const charter = (await build(p)).charter;
-  const email = normalizeEmail(charter.sponsor_email);
-  if (!isEmail(email)) throw new Fail('لا بريد صحيح للراعي في بطاقة المبادرة. اعتمد دون تأييد بسبب مكتوب، أو أعدها للمشارك ليصحح البريد', 400, 'sponsor_email');
+// بريد الراعي من بطاقة المبادرة، أو null إن غاب أو لم يصح (الراعي اختياري، قرار المالك 2026-11-03)
+function sponsorEmailOf(charter: any): string | null {
+  const email = normalizeEmail(charter?.sponsor_email);
+  return isEmail(email) ? email : null;
+}
+const NO_SPONSOR_EMAIL_AR = 'لا بريد صحيح للراعي في بطاقة المبادرة. اعتمد دون تأييد بسبب مكتوب، أو أعدها للمشارك ليصحح البريد';
+
+async function inviteSponsor(p: any, c: any, charter: any = null) {
+  charter = charter || (await build(p)).charter;
+  const email = sponsorEmailOf(charter);
+  if (!email) throw new Fail(NO_SPONSOR_EMAIL_AR, 400, 'sponsor_email');
   if (c?.sponsor_invited_at && Date.now() - Date.parse(c.sponsor_invited_at) < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
   const token = randomToken();
   must(await db.from('capstones').update({
@@ -311,6 +320,12 @@ export async function adminReview(a: Admin, b: Body) {
   if (b.decision !== 'accept') throw new Fail('قرار غير صالح');
   let rubric;
   try { rubric = cleanRubric(b.scores, b.notes); } catch (e) { throw new Fail((e as Error).message); }
+  // ما يمنع إتمام القبول يُفحص قبل أي كتابة. كان بريد الراعي يُفحص بعد حفظ القبول والدرجة، فتبقى الشاشة
+  // على «بانتظار مراجعتك» والوثيقة مقبولة، ولا تصح «الإعادة للتحسين» التي تنصح بها الرسالة (التدقيق 2026-11-11)
+  const waive = String(b.waive_sponsor || '').trim().slice(0, 500);
+  if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي');
+  const charter = waive ? null : (await build(p)).charter;
+  if (!waive && !sponsorEmailOf(charter)) throw new Fail(NO_SPONSOR_EMAIL_AR, 400, 'sponsor_email');
   const { levels } = await levelsOf(p.id);
   const key = trackKey(levels);
   const { data: t } = key ? await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle() : { data: null };
@@ -320,9 +335,17 @@ export async function adminReview(a: Admin, b: Body) {
     status: 'accepted', scores: rubric.scores, notes: rubric.notes, review_note: note, score, reviewed_by: a.email, reviewed_at: now, updated_at: now,
   }).eq('participant_id', p.id));
   await audit('admin', a.email, 'capstone.accept', 'capstones', p.id, null, { score });
-  const waive = String(b.waive_sponsor || '').trim().slice(0, 500);
   if (waive) await approve(p, a.email, waive);
-  else await inviteSponsor(p, c);
+  else {
+    try { await inviteSponsor(p, c, charter); }
+    catch (e) {
+      // القبول محفوظ، وتعذر الدعوة وحده (حد إعادة الإرسال أو البريد) لا يُعرض خطأً يُبقي الوثيقة كأنها لم تُقبل:
+      // تعود الوثيقة بحالتها، فتظهر لوحة «تأييد الراعي» لإعادة الدعوة أو الاعتماد دون تأييد
+      if (!(e instanceof Fail)) console.error('capstone sponsor invite:', e);
+      const why = e instanceof Fail ? e.message : 'تعذّر إرسال طلب التأييد';
+      return { ...(await adminGet({ participant_id: p.id })), warning: `قُبلت الوثيقة ولم يُرسل طلب التأييد: ${why}` };
+    }
+  }
   return adminGet({ participant_id: p.id });
 }
 

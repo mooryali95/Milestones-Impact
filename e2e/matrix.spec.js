@@ -97,6 +97,22 @@ test('استعادة الجلسة تأخذ حالة الخطة من الخادم
   await expect(page.locator('.tab', { hasText: 'النهائي' })).toBeVisible();
 });
 
+// عملية «مؤكَّدة» بلا تاريخ (save يخزن confirmed وحده): كان اسم الخلية لقارئ الشاشة ينسّق تاريخًا غير موجود فيرمي
+// fmtGregorian(undefined) ويُفرغ المصفوفة كلها (مراجعة الجولة أ على visitor-2). الآن تُرسم الخلايا الست عشرة واسمها صادق.
+test('عملية مؤكَّدة بلا تاريخ لا تُسقط المصفوفة، واسم خليتها «مؤكَّد، بلا موعد»', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await seedSession(page);
+  await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+    { success: true, registration: { id: 'r1', name: 'مستخدم', phone: '0500000000', email: 'user@example.com', dates: {}, confirmed: { 'creation-1': true } } }) }));
+  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  // الاسم يتطلب حالة الخادم (confirmed)، فانتظاره يضمن أن العد بعده على الحالة التي كانت تُسقط الشجرة
+  await expect(page.locator('.cell[data-proc="creation-1"]')).toHaveAttribute('aria-label', /: مؤكَّد، بلا موعد$/);
+  await expect(page.locator('.cell')).toHaveCount(16);
+  expect(errors).toEqual([]);
+});
+
 test('انتهاء الجلسة على الخادم يُخرج المستخدم برسالة', async ({ page }) => {
   await seedSession(page);
   await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
@@ -105,6 +121,61 @@ test('انتهاء الجلسة على الخادم يُخرج المستخدم 
   await page.goto(BASE + '/');
   await expect(page.getByText(/انتهت الجلسة/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'بدء الرحلة' }).first()).toBeVisible();
+});
+
+// خلايا المصفوفة وشرائح الاقتراح أزرار بلوحة المفاتيح. كانت div وspan بنقرة فأرة
+// وحدها، فمن لا يستعمل الفأرة لا يفتح عملية ولا يحدد موعدًا، وهي مهمة التطبيق
+// الوحيدة (WCAG 2.1.1). والنافذة تأخذ التركيز عند فتحها وتعيده إلى الخلية عند إغلاقها.
+test('تحديد موعد عملية بلوحة المفاتيح وحدها: من الخلية إلى الحفظ ثم العودة إليها', async ({ page }) => {
+  await seedSession(page);
+  const calls = await mockUserApi(page);
+  await page.goto(BASE + '/');
+  await expect(page.locator('.tabs')).toBeVisible();
+
+  const focused = () => page.evaluate(() => {
+    const el = document.activeElement;
+    return { cls: el.className, role: el.getAttribute('role'), label: el.getAttribute('aria-label'), type: el.type || '', text: el.textContent.trim().slice(0, 40) };
+  });
+  const tabUntil = async (match, max = 60, key = 'Tab') => {
+    for (let i = 0; i < max; i++) {
+      await page.keyboard.press(key);
+      if (match(await focused())) return focused();
+    }
+    throw new Error(`لم يصل التركيز بـ ${key}: ${JSON.stringify(await focused())}`);
+  };
+
+  // الخلية الأولى: زر اسمه العملية وحال موعدها
+  const cell = await tabUntil((f) => /\bcell\b/.test(f.cls));
+  expect(cell.role).toBe('button');
+  expect(cell.label).toMatch(/^.+: بلا موعد$/);
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement.getAttribute('role'))).toBe('dialog');
+
+  await tabUntil((f) => f.type === 'date');
+  await page.locator(':focus').fill('2099-03-15');
+  await tabUntil((f) => f.text === 'حفظ', 5, 'Shift+Tab');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => calls.filter((c) => c.action === 'save').length).toBe(1);
+  expect(Object.values(calls.find((c) => c.action === 'save').fields.dates)).toEqual(['2099-03-15']);
+
+  // Esc يغلق، والتركيز يعود إلى الخلية نفسها وقد صار اسمها يحمل الموعد
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  const back = await focused();
+  expect(back.cls).toMatch(/\bcell\b/);
+  expect(back.label).toMatch(/: محدد، /);
+
+  // شرائح الاقتراح والعمليات الباقية تحت المصفوفة: أزرار تُفتح بلوحة المفاتيح أيضًا
+  await expect(page.locator('.missing-chip').first()).toBeVisible();
+  for (const el of await page.locator('.smart-chip, .missing-chip').all()) {
+    await expect(el).toHaveAttribute('role', 'button');
+    await expect(el).toHaveAttribute('tabindex', '0');
+  }
+  await tabUntil((f) => f.cls.includes('missing-chip'));
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
 });
 
 // رابطٌ مشترَك إلى تبويب: يُفتح عليه، ورجوعٌ واحد يغادر التطبيق.

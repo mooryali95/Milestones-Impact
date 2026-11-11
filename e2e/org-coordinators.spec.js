@@ -7,7 +7,7 @@ const PORTAL = 'http://localhost:4304/org';
 const org = { id: 'o1', name: 'وزارة التجربة', short_name: 'وت', color: '#12414E', invite_code: 'wt01', seats: 10, status: 'active', domains: [], stats: { total: 0, registered: 0, pending_approval: 0, active_week: 0 } };
 const coord = { id: 'c1', organization_id: 'o1', email: 'coord@wt.gov.sa', full_name: 'منسقة الجهة', status: 'active', permissions: { scores: false, contact: false, export: true }, weekly_report: true, last_login_at: '2026-10-20', invited_at: '2026-10-01' };
 
-async function admin(page, replies) {
+async function admin(page, replies, role = 'admin') {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
@@ -26,7 +26,7 @@ async function admin(page, replies) {
     await route.fulfill({ json: base[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
   await page.goto(ADMIN);
-  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.evaluate((r) => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: r }, ts: Date.now() })), role);
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.locator('.la-tabs').getByRole('button', { name: 'الجهات' }).click();
@@ -84,6 +84,44 @@ test('الحذف يتطلب كتابة اسم الجهة حين لا ارتبا�
   await f.getByLabel('اكتب اسم الجهة للتأكيد').fill('وزارة التجربة');
   await del.click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.delete')).toMatchObject({ entity: 'organizations', id: 'o1' });
+});
+
+// admin-core-3: إطفاء المفتاح كان يُعلن «أُلغي حساب المنسق» ولو رفض الخادم الإلغاء، فيبقى المنسق مطّلعًا على بيانات المشاركين
+test('مدير النظام لا يُطفئ حساب منسق قائم: الإلغاء للمدير العام، ويُدَل على الإيقاف', async ({ page }) => {
+  const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: coord, sessions: [], activity: [] }, 'admin.coordinator-save': { success: true } });
+  await page.locator('.la-org').getByRole('button', { name: 'تحرير' }).click();
+  const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
+  await expect(f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox')).toBeDisabled();
+  await expect(f.getByText(/إلغاء الحساب للمدير العام وحده، ولقطع وصول المنسق الآن أوقف حسابه من «لوحة الجهة»/)).toBeVisible();
+  await f.getByRole('button', { name: 'زيادة' }).click();
+  await f.getByRole('button', { name: 'حفظ التعديلات' }).click();
+  await expect(page.getByRole('status')).toHaveText('تم الحفظ');
+  expect(calls.find((c) => c.action === 'admin.coordinator-remove')).toBeUndefined();
+});
+
+test('إلغاء حساب المنسق لا يُعلن إلا بعد أن يؤكده الخادم، ورفضه يبقي النموذج مفتوحًا برسالته', async ({ page }) => {
+  let removed = { success: false, code: 'audit_failed', message: 'تعذّر تسجيل العملية، فلم تُنفّذ' };
+  const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: coord, sessions: [], activity: [] } }, 'super_admin');
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.coordinator-remove') return route.fallback();
+    calls.push(b);
+    await route.fulfill({ json: removed });
+  });
+  await page.locator('.la-org').getByRole('button', { name: 'تحرير' }).click();
+  const f = page.getByRole('dialog', { name: /وزارة التجربة/ });
+  const account = f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox');
+  await expect(account).toBeEnabled();
+  await account.uncheck();
+  await f.getByRole('button', { name: 'حفظ التعديلات' }).click();
+  await expect(f.getByRole('alert')).toHaveText('حُفظت الجهة، لكن حساب المنسق لم يُلغَ: تعذّر تسجيل العملية، فلم تُنفّذ');
+  await expect(f).toBeVisible();
+  await expect(page.getByText('أُلغي حساب المنسق')).toHaveCount(0);
+  removed = { success: true };
+  await f.getByRole('button', { name: 'حفظ التعديلات' }).click();
+  await expect(page.getByRole('status')).toHaveText('تم الحفظ، وأُلغي حساب المنسق');
+  await expect(f).toBeHidden();
+  expect(calls.filter((c) => c.action === 'admin.coordinator-remove')).toHaveLength(2);
 });
 
 test('لوحة المنسق في الجهة: الصلاحيات والإيقاف والمعاينة', async ({ page }) => {

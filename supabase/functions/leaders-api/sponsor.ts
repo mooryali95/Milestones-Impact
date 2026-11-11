@@ -21,12 +21,18 @@ export async function mine(p: any) {
   return data || null;
 }
 
+// كل طلب ينبّه المالك، والإلغاء يفتح طلبًا جديدًا، فدورة طلب وإلغاء بلا حد كانت تستنزف نصيب الإشعارات (server-sec-2).
+// ثلاثة طلبات في اليوم تكفي من يصحح اسم جهته. طلبات المقاعد والعقد (kind) يفتحها الخادم فلا تُحتسب
+export const SPONSOR_REQUESTS_PER_DAY = 3;
 export async function request(p: any, b: Body) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية', 409);
   const typed = String(b.typed_name || '').trim().slice(0, 200);
   if (typed.length < 2) throw new Fail('اكتب اسم الجهة التي رشّحتك');
   const contact = b.contact_email ? normalizeEmail(b.contact_email) : null;
   if (contact && !isEmail(contact)) throw new Fail('بريد منسق الجهة غير صحيح');
+  const { count } = await db.from('sponsor_requests').select('id', { count: 'exact', head: true })
+    .eq('participant_id', p.id).eq('kind', 'claim').gte('created_at', new Date(Date.now() - 864e5).toISOString());
+  if ((count ?? 0) >= SPONSOR_REQUESTS_PER_DAY) throw new Fail('أرسلت طلبات رعاية كثيرة اليوم، حاول غدًا', 429, 'rate');
   const { data, error } = await db.from('sponsor_requests').insert({ participant_id: p.id, typed_name: typed, contact_email: contact }).select('id').single();
   if (error) throw new Fail(error.code === '23505' ? 'لديك طلب رعاية قيد المراجعة' : 'تعذّر إرسال الطلب', error.code === '23505' ? 409 : 500);
   await audit('participant', p.id, 'sponsor.request', 'sponsor_requests', data.id, null, { typed });

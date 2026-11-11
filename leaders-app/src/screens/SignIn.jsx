@@ -16,6 +16,7 @@ import GoogleButton, { firstNameOf } from '../GoogleButton.jsx';
 import logo from '../milestone-impact-inverted.svg';
 import IntroVideo from '../IntroVideo.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
+import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
 const RESEND_SECONDS = 45;
 // إشعار الخصوصية والشروط قبل زر التسجيل: إكمال التسجيل بعده موافقة تُسجَّل مع نسخة السياسة
@@ -90,7 +91,8 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
   };
 
   const onCode = (v) => {
-    const digits = v.replace(/\D/g, '').slice(0, 6);
+    // الأرقام المشرقية (٠-٩) تُحوَّل ولا تُمحى: كانت \D تمحوها فيبقى الحقل فارغًا بلا رسالة
+    const digits = codeDigits(v);
     setCode(digits);
     if (digits.length === 6) verify({ code: digits });
   };

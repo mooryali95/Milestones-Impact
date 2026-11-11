@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // نفس منهجية تطبيق المصفوفة: المفتاح العام في الترويسة لبوابة Supabase،
 // وتوكن الجلسة داخل الجسم يُتحقق منه على الخادم.
-import { BUSY_STATUS, fetchRetry, SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
+import { BUSY_STATUS, fetchRetry, fnUrl, SUPABASE_KEY } from '../../src/lib/api.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
@@ -43,7 +43,7 @@ export async function parse(r) {
 export async function call(action, body = {}) {
   let res;
   try {
-    const r = await fetchRetry(`${SUPABASE_URL}/functions/v1/leaders-api`, {
+    const r = await fetchRetry(fnUrl('leaders-api'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: session.get(), ...body }),
@@ -88,7 +88,7 @@ export const setCoordExpired = (fn) => { onCoordExpired = fn; };
 export async function coordCall(action, body = {}) {
   let res;
   try {
-    const r = await fetchRetry(`${SUPABASE_URL}/functions/v1/leaders-api`, {
+    const r = await fetchRetry(fnUrl('leaders-api'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: coordSession.get(), ...body }),
@@ -111,7 +111,7 @@ export const xpSession = {
 export async function xpCall(action, body = {}) {
   let res;
   try {
-    const r = await fetchRetry(`${SUPABASE_URL}/functions/v1/leaders-api`, {
+    const r = await fetchRetry(fnUrl('leaders-api'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       body: JSON.stringify({ action, token: xpSession.get(), ...body }),

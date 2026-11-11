@@ -189,8 +189,8 @@ describe('حراس المصدر: لا ترجع ثغرات ل1', () => {
     expect(golden).toContain("const HUMAN = 'XXXX.DUMMY.TOKEN.XXXX';");
     expect(golden).toMatch(/judged === 5 && refused === 15 && tries === 5/);
   });
-  it('الواجهات الثلاث تعرض أداة التحقق برسائلها من مصدر واحد، والتسجيل يطلب الاسم بعد الرمز', () => {
-    for (const f of ['SignIn', 'OrgPortal', 'ExpertPortal']) {
+  it('الواجهات تعرض أداة التحقق برسائلها من مصدر واحد (والطلب المفتوح للانضمام كخبير)، والتسجيل يطلب الاسم بعد الرمز', () => {
+    for (const f of ['SignIn', 'OrgPortal', 'ExpertPortal', 'ExpertApply']) {
       const src = read(`leaders-app/src/screens/${f}.jsx`);
       expect(src, f).toMatch(/<Captcha key=\{captchaKey\.n\} siteKey=\{captchaKey\.site\}/);
       expect(src, f).toContain('captchaGate(');

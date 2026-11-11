@@ -1,7 +1,9 @@
 // متابعة تنفيذ المبادرة وأثرها: الخطة من لقطة الوثيقة، والفعلي من التحديثات
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CHECKPOINTS, cleanUpdate, latestState, periodOf, portfolioOutcomes, realization, trackingPlan, trackingSummary,
+  CHECKPOINTS, cleanUpdate, latestState, periodOf, portfolioOutcomes, realization, saveTarget, trackingPlan, trackingSummary, VERIFY,
 } from '../../supabase/functions/leaders-api/tracking.js';
 
 const DAY = 864e5;
@@ -79,11 +81,68 @@ describe('الحالة والملخص', () => {
     expect(v.checkpoints[0]).toMatchObject({ status: 'verified', verify: 'confirmed' });
     expect(v.due.checkpoint).toBeNull();
   });
+  // اعتراض الراعي أو انقضاء رابطه بعد نهاية الشهر كان يعلّق المراجعة إلى الأبد بلا إعادة إرسال
+  const sent = (d, extra) => ({ period: periodOf(at(d)), checkpoint: 'd90', milestones: {}, benefits: { b0: { value: '75' } }, narrative: 'x'.repeat(50),
+    verify_status: 'pending', verify_expires_at: new Date(at(d + 21)).toISOString(), created_at: new Date(at(d)).toISOString(), updated_at: new Date(at(d)).toISOString(), ...extra });
+  it('مراجعة اعترض عليها الراعي تعود إلى القائد في الشهر التالي، حتى تحل المراجعة التالية', () => {
+    const cp = sent(92, { verify_status: 'disputed', verify_note: 'الرقم لا يطابق' });
+    expect(periodOf(at(92))).not.toBe(periodOf(at(125)));
+    const s = trackingSummary(plan, [u1, cp], APPROVED, at(125));
+    expect(s.checkpoints[0]).toMatchObject({ status: 'disputed', resubmit: true, period: periodOf(at(92)) });
+    expect(s.due).toMatchObject({ checkpoint: 'd90', resubmit: true });
+    // حلّت مراجعة الختام: لا تُطلب مراجعتان معًا
+    const later = trackingSummary(plan, [u1, cp], APPROVED, at(181));
+    expect(later.checkpoints[0]).toMatchObject({ status: 'disputed', resubmit: false });
+    expect(later.due).toMatchObject({ checkpoint: 'd180', resubmit: false });
+  });
+  it('رابط الراعي المعلّق بعد مهلته يعيد المراجعة إلى القائد، وقبلها تبقى عند الراعي', () => {
+    const cp = sent(92);
+    const before = trackingSummary(plan, [u1, cp], APPROVED, at(100));
+    expect(before.checkpoints[0]).toMatchObject({ status: 'submitted', verify: 'pending', resubmit: false });
+    expect(before.due.checkpoint).toBeNull();
+    const after = trackingSummary(plan, [u1, cp], APPROVED, at(125));
+    expect(after.checkpoints[0]).toMatchObject({ status: 'submitted', verify: 'expired', verify_title: VERIFY.expired, resubmit: true });
+    expect(after.due).toMatchObject({ checkpoint: 'd90', resubmit: true });
+  });
+  it('مراجعة الختام المعترض عليها تُعاد خلال شهر المهلة بعد المتابعة، ثم تُغلق', () => {
+    const d180 = { ...sent(182), checkpoint: 'd180', verify_status: 'disputed' };
+    const s = trackingSummary(plan, [u1, d180], APPROVED, at(200));
+    expect(s).toMatchObject({ active: false, can_update: true, due: { checkpoint: 'd180', resubmit: true } });
+    expect(s.health).not.toBe('closed');
+    expect(trackingSummary(plan, [u1, d180], APPROVED, at(216))).toMatchObject({ health: 'closed', can_update: false, due: { checkpoint: null } });
+  });
+  it('إعادة الإرسال تُكتب في صف المراجعة نفسه ولو من شهر سابق، والمعلّقة لا تُعدَّل', () => {
+    const disputed = sent(92, { verify_status: 'disputed' });
+    const s = trackingSummary(plan, [u1, disputed], APPROVED, at(125));
+    expect(saveTarget(s, [u1, disputed], true)).toMatchObject({ period: disputed.period, existing: disputed, redo: true, locked: null, checkpoint: 'd90' });
+    // تحديث الشهر الجاري يبقى ممكنًا في صفه دون أن يمس المراجعة
+    expect(saveTarget(s, [u1, disputed], false)).toMatchObject({ period: periodOf(at(125)), existing: null, redo: false, checkpoint: null });
+    const pending = sent(92);
+    const p = trackingSummary(plan, [u1, pending], APPROVED, at(95));
+    expect(saveTarget(p, [u1, pending], true)).toMatchObject({ locked: 'pending', redo: false });
+    expect(saveTarget(trackingSummary(plan, [u1, pending], APPROVED, at(114)), [u1, pending], true)).toMatchObject({ locked: null, redo: true, checkpoint: 'd90' });
+  });
   it('تنتهي المتابعة بعد ستة أشهر ومراجعة الختام', () => {
     const done = { period: '2026-07', checkpoint: 'd180', verify_status: 'pending', milestones: {}, benefits: {}, created_at: new Date(at(182)).toISOString() };
     const s = trackingSummary(plan, [u1, done], APPROVED, at(200));
     expect(s).toMatchObject({ active: false, health: 'closed', can_update: false });
     expect(CHECKPOINTS.map((c) => c.day)).toEqual([90, 180]);
+  });
+});
+
+describe('الخادم: إعادة إرسال المراجعة وتعذّر بريد الراعي', () => {
+  const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/tracking.ts'), 'utf8');
+  const invite = src.slice(src.indexOf('async function inviteVerifier'), src.indexOf('async function verifyFrom'));
+  it('الحفظ يكتب في الصف الذي يحدده saveTarget، والأعمدة تشمل مهلة الرابط', () => {
+    expect(src).toContain('saveTarget(t.summary, t.updates, !!b.checkpoint)');
+    expect(src).not.toContain("existing?.checkpoint || (b.checkpoint && t.summary.due.checkpoint)");
+    expect(src).toMatch(/UPDATE_COLS = '[^']*verify_expires_at/);
+  });
+  it('تعذّر البريد لا يُعلن وصول الرابط، ويغلقه فتعود المراجعة إلى القائد', () => {
+    expect(invite).not.toContain('.catch(');
+    expect(invite).toContain("return 'failed'");
+    expect(invite).toMatch(/verify_token_hash: null, verify_expires_at: new Date\(\)\.toISOString\(\)/);
+    expect(src).toContain("invited: invite === 'sent', mail_failed: invite === 'failed'");
   });
 });
 

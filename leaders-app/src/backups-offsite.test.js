@@ -1,7 +1,8 @@
 // حراس الحزمة 3 (D09 وD13): النسخ خارج GitHub بالتشفير عند المصدر، وفحصها ومراقب حداثتها وتمرينها،
 // وتجميد SSPDF بسحب صلاحياته. التمرين الكامل جُرّب على قاعدة Postgres محلية (الإيداع وتقرير الحزمة).
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
@@ -76,6 +77,51 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
     expect(b).toMatch(/BACKUP_SCHEMAS:-leaders,public,auth/);
     expect(b).toMatch(/'auth\.users', \(select count\(\*\) from auth\.users\)/);
     expect(b).toMatch(/put latest\.json "\$manifest" application\/json/);
+  });
+  // ops-2 (2026-11-10): التشغيل اليدوي 03:37 كتب daily/db-…-2026-11-10.dump.gpg تحت قفل الاحتفاظ، ففشل المجدول 07:33
+  // بـ409 ObjectLockedByBucketPolicy. السكربت الحقيقي بأدوات مزيفة (pg_dump وpsql وgpg والوقت) بلا قاعدة ولا R2
+  it.skipIf(process.platform !== 'linux')('تشغيلان في اليوم نفسه يكتبان كائنات مختلفة، فلا يصطدم الثاني بقفل الاحتفاظ', () => {
+    const bin = mkdtempSync(join(tmpdir(), 'mi-backup-bin-'));
+    const out = mkdtempSync(join(tmpdir(), 'mi-backup-out-'));
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    const realDate = spawnSync('bash', ['-c', 'command -v date'], { encoding: 'utf8' }).stdout.trim();
+    try {
+      tool('pg_dump', '[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; echo dump');
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      tool('gpg', 'while [ $# -gt 1 ]; do [ "$1" = -o ] && { o="$2"; shift; }; shift; done; cp "$1" "$o"');
+      tool('date', `exec ${realDate} -d "$FAKE_NOW" "$@"`);
+      const run = (at) => {
+        const r = spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+          encoding: 'utf8',
+          env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME || tmpdir(), FAKE_NOW: at, SUPABASE_DB_URL: 'postgres://fake', BACKUP_PASSPHRASE: 'x', BACKUP_OUT: out },
+        });
+        expect(r.status, r.stderr).toBe(0);
+        return JSON.parse(r.stdout.trim().split('\n').pop());
+      };
+      const first = run('2026-11-10T03:37:12Z');
+      const second = run('2026-11-10T07:33:36Z');
+      const keys = (m) => m.files.map((f) => f.key);
+      expect(first.day).toBe('2026-11-10');
+      expect(second.day).toBe('2026-11-10');
+      expect(keys(first)).toEqual(['daily/db-leaders-public-auth-2026-11-10T033712Z.dump.gpg']);
+      expect(keys(second)).toEqual(['daily/db-leaders-public-auth-2026-11-10T073336Z.dump.gpg']);
+      // في المجلد المحلي (تشغيل المالك من جهازه) لا يكتب الثاني فوق الأول
+      expect(readdirSync(out).sort()).toEqual([
+        'db-leaders-public-auth-2026-11-10T033712Z.dump.gpg', 'db-leaders-public-auth-2026-11-10T073336Z.dump.gpg',
+        'manifest-leaders-public-auth-2026-11-10T033712Z.json', 'manifest-leaders-public-auth-2026-11-10T073336Z.json',
+      ]);
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
+  it('النسخة المشفرة تُحفظ في أدوات السير ولو فشل الرفع إلى R2، ولا يُرفع منها غير المشفر والبيان', () => {
+    const b = read('.github/workflows/backup.yml');
+    const step = b.slice(b.indexOf('- uses: actions/upload-artifact'));
+    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && steps\.gate\.outputs\.skip != 'true' \}\}/);
+    expect(step).toContain('backup-out/*.gpg');
+    expect(step).toContain('backup-out/manifest-*.json');
+    expect(step).not.toMatch(/path: backup-out\/\s*$/m);
   });
   it('التمرين يفشل عند العمر والبصمة وفك التشفير والخطأ غير المتوقع وعدد الصفوف وعينة الدلو', () => {
     const d = read('scripts/ops/restore-drill.sh');

@@ -222,17 +222,31 @@ export function acquiescenceFor(questions, answers) {
   return Object.fromEntries(DIMENSIONS.map((d) => [d, !!by[d] && by[d].n > 0 && by[d].top === by[d].n]));
 }
 
-// «لا ينطبق» في الممارسة: كم عبارة في كل بُعد أُجيبت بدرجة سالبة
+// «لا ينطبق» في عبارة ممارسة: خيار بدرجة سالبة في الخادم، أو موسوم na فيما يصل الواجهة (لا ترى الدرجات).
+// فالقاعدة نفسها تُحسب في الخادم عند الإرسال وفي شاشة القياس قبله (فحص الجاهزية p-entry-2).
+export function isBehaviorNa(q, k) {
+  if (!q || q.active === false || q.tier !== 'behavior' || k == null) return false;
+  const opts = q.options || [];
+  const o = opts.find((x) => x?.k === k) ?? opts[k];
+  return !!o && (o.na === true || Number(o.score) < 0);
+}
+// «لا ينطبق» في الممارسة: كم عبارة في كل بُعد أُجيبت به
 export function behaviorNaCounts(questions, answers) {
   const out = Object.fromEntries(DIMENSIONS.map((d) => [d, 0]));
   for (const q of questions || []) {
-    if (q.active === false || q.tier !== 'behavior' || answers?.[q.id] == null) continue;
-    if ((scoreFor(q, answers[q.id]) ?? 0) < 0) out[q.dimension] = (out[q.dimension] || 0) + 1;
+    if (isBehaviorNa(q, answers?.[q.id])) out[q.dimension] = (out[q.dimension] || 0) + 1;
   }
   return out;
 }
 export const MAX_BEHAVIOR_NA = 1;
-export const BEHAVIOR_NA_MESSAGE = 'اختر «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم';
+// القاعدة بنص واحد: مقدمة القياس وأول عبارات كل قسم وتنبيه الاختيار الزائد، ورسالة رفض الإرسال
+export const BEHAVIOR_NA_RULE = '«لا ينطبق» لعبارة واحدة على الأكثر في كل قسم';
+export const BEHAVIOR_NA_MESSAGE = `اختر ${BEHAVIOR_NA_RULE}`;
+// عبارات «لا ينطبق» في كل قسم تجاوز الحد، بترتيب الأسئلة: الخادم يردها مع الرفض، والشاشة تدل على أولها
+export function behaviorNaExcess(questions, answers) {
+  const n = behaviorNaCounts(questions, answers);
+  return (questions || []).filter((q) => n[q.dimension] > MAX_BEHAVIOR_NA && isBehaviorNa(q, answers?.[q.id])).map((q) => q.id);
+}
 
 // opts.acquiescence: من acquiescenceFor لبُعد التقييم (يحتاج الإجابات نفسها)
 export function evaluatePlacement(pcts, model = DEFAULT_MODEL, opts = {}) {
@@ -445,9 +459,31 @@ export function seededShuffle(list, seed) {
 export const normalizeEmail = (e) => String(e || '').trim().toLowerCase();
 export const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 254;
 
+// الأرقام العربية المشرقية (٠-٩) والفارسية (۰-۹) إلى 0-9. لوحة المفاتيح العربية تكتبها، و\d في JavaScript لا يطابقها،
+// فكان رمز الدخول يُمحى والجوال يُرفض (فحص الجاهزية p-entry-1). المصدر الواحد لكل رقم يكتبه الإنسان في الواجهة أو يصل الخادم.
+// U+0660 وU+06F0 ينتهيان بصفر، فآخر أربع بتات في كل منهما هي قيمة الرقم.
+export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 15));
+// رمز الدخول كما يُكتب أو يُلصق في حقله: ستة أرقام لاتينية (randomCode في core.ts)، في دخول المشارك والجهة والخبير
+export const codeDigits = (v) => latinDigits(v).replace(/\D/g, '').slice(0, 6);
+// رابط دعوة الخبير: /x#invite=<البريد مرمّزًا>.<الرمز>. يبنيه الخادم ويقرؤه البوابة من هنا وحده، فلا تختلف صيغتاهما
+// (اختلفتا من #167: الخادم يرمّز «@» إلى %40 والبوابة تشترط «@» صريحة، فلم يُقرأ رابط قط).
+// الرمز base64url بلا نقاط، فالفصل عند آخر نقطة يحفظ نقاط البريد؛ والبريد يُقبل مرمّزًا أو مفكوكًا إن فكّه برنامج البريد
+export const expertInviteHash = (email, code) => `#invite=${encodeURIComponent(email)}.${code}`;
+export function readExpertInvite(hash) {
+  const raw = String(hash || '');
+  if (!raw.startsWith('#invite=')) return null;
+  const body = raw.slice('#invite='.length);
+  const cut = body.lastIndexOf('.');
+  if (cut < 1) return null;
+  let email;
+  try { email = normalizeEmail(decodeURIComponent(body.slice(0, cut))); } catch { return null; }
+  const code = body.slice(cut + 1);
+  return isEmail(email) && /^[A-Za-z0-9_-]{20,}$/.test(code) ? { email, code } : null;
+}
+
 // جوال سعودي أو دولي، يُحفظ بصيغة موحدة تبدأ بـ +
 export function normalizePhone(p) {
-  const d = String(p || '').replace(/[^\d+]/g, '');
+  const d = latinDigits(p || '').replace(/[^\d+]/g, '');
   if (!d) return null;
   if (/^05\d{8}$/.test(d)) return '+966' + d.slice(1);
   if (/^5\d{8}$/.test(d)) return '+966' + d;
@@ -793,6 +829,11 @@ export function orgVisibility(viewers, now = Date.now()) {
 // أقل عدد تُعرض له أرقام مجمّعة عن مشاركين: دونه يكشف المتوسط درجة الفرد
 export const MIN_COHORT = 5;
 
+// المنسحب والموقوف خارج البرنامج: لا مرحلة جارية له في لوحة الجهة ولا موضع في خريطة رحلتها،
+// فتظهر حالته لا آخر مرحلة كان فيها (تدقيق الجاهزية 2026-11-11، org-1: كان المنسحب يظهر «في التدريب»)
+export const OUT_OF_PROGRAM = ['withdrawn', 'suspended'];
+export const inProgram = (status) => !OUT_OF_PROGRAM.includes(status);
+
 // ما يراه المنسق من المشارك: الاسم والمسمى والمرحلة ونسبة الإنجاز دائمًا،
 // والنشاط (آخر دخول) والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
 export function coordParticipant(p, perms) {
@@ -800,8 +841,9 @@ export function coordParticipant(p, perms) {
   const out = {
     id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status, approved: !!p.approved,
     progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at,
-    // المرحلة الجارية في رحلته كما يراها هو (8.2)، والحالة الإدارية تبقى للتصفية
-    stage: p.stage || null,
+    // المرحلة الجارية في رحلته كما يراها هو (8.2)، والحالة الإدارية تبقى للتصفية.
+    // ولمن خرج من البرنامج لا مرحلة، فتعرض اللوحة وملف Excel حالته كما يعرضها التقرير المطبوع
+    stage: inProgram(p.status) ? p.stage || null : null,
   };
   if (perms.activity) out.last_login_at = p.last_login_at || null;
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }
@@ -832,8 +874,12 @@ export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curr
 
 // أسئلة الاستبانة من إعدادها: سطر لكل سؤال؛ «(نص)» في أوله سؤال مفتوح، و«(نص اختياري)» مفتوح لا يُلزم،
 // وما عداه تقدير من 1 إلى 5. المصدر الواحد للأسئلة للواجهة والخادم معًا.
+// سطور الأسئلة كما تُقرأ وكما تُحفظ (cleanConfig): بلا فراغات ولا سطور فارغة، وعشرون سؤالًا أقصى
+export const SURVEY_MAX = 20;
+const allSurveyLines = (config) => String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean);
+const surveyLines = (config) => allSurveyLines(config).slice(0, SURVEY_MAX);
 export function surveyQuestions(config) {
-  return String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20).map((line, i) => {
+  return surveyLines(config).map((line, i) => {
     const m = line.match(/^\((نص(?: اختياري)?)\)\s*(.+)$/);
     return m ? { key: `q${i + 1}`, label: m[2], type: 'text', required: m[1] === 'نص' } : { key: `q${i + 1}`, label: line, type: 'rating', required: true };
   });
@@ -1256,6 +1302,15 @@ export function cleanConfig(kind, cfg, prev = {}) {
   }
   // لقاء بمدة معلنة (عرض أمام لجنة): المدة هنا مصدر ما يقوله وصف المرحلة
   if (kind === 'meeting') return c.minutes ? { minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes) } : {};
+  // الاستبانة: أسئلتها هي إعدادها كله. بلا هذا الفرع كان كل حفظ (ولو لتصحيح العنوان) يمحوها،
+  // واستبانة بلا سؤال تبقى بندًا معلقًا عند المشارك بلا فعل (التدقيق 2026-11-11)
+  if (kind === 'survey') {
+    // الحد يُرفض صراحة لا يُقص: القص كان يحذف السؤال الحادي والعشرين وما بعده ويقول «تم الحفظ» (مراجعة الجولة أ)
+    const lines = allSurveyLines(c);
+    if (!lines.length) throw new Error('اكتب سؤالًا واحدًا على الأقل للاستبانة');
+    if (lines.length > SURVEY_MAX) throw new Error(`الحد الأقصى للاستبانة عشرون سؤالًا، وكتبت ${lines.length}`);
+    return { questions: lines.join('\n') };
+  }
   return {};
 }
 
@@ -2013,7 +2068,7 @@ import { resolveStages } from './journey.js';
 export const EXPERT_ROLES = ['coach', 'advisor', 'specialist', 'assessor', 'mentor'];
 const pickSet = (v, allowed) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => allowed.includes(x)))];
 const txt = (v, max) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
-const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
+const int = (v, lo, hi) => { if (v === '' || v == null) return null; const n = Math.round(Number(latinDigits(v).trim())); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
 // الحقول التي يكتبها الخبير بنفسه (طلب الانضمام) أو الإدارة. withAdmin يضيف السعر والملاحظة
 export function cleanExpert(b, { withAdmin = false } = {}) {
   const out = {

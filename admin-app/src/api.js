@@ -3,9 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // المفتاح العام يرضي بوابة Supabase فقط؛ ما يصرّح فعلًا بكل إجراء هو
 // توكن جلسة المدير داخل الجسم، ويُتحقق منه على الخادم.
-import { SUPABASE_URL, SUPABASE_KEY } from '../../src/lib/api.js';
+import { fnUrl, SUPABASE_KEY } from '../../src/lib/api.js';
 
-const ADMIN_API = `${SUPABASE_URL}/functions/v1/admin-api`;
+const ADMIN_API = fnUrl('admin-api');
 export const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
 
 // مفتاح الجلسة ومدتها (مفتاح v3 ثابت فلا تنتهي جلسات المدراء الحالية)

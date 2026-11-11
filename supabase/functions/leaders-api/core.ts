@@ -569,10 +569,12 @@ async function turnstileOk(token: unknown, ip: string | null) {
 // التحقق البشري إلزامي ويفشل مغلقًا: بلا مفتاحَي Turnstile يتوقف الدخول برمز البريد ويُبلَّغ المالك فورًا
 // (captcha_unconfigured)، بدل أن تسقط الحماية بصمت إن حُذف سر (الملحق 1، H2). بوابة النشر في ci.yml
 // تمنع أصلًا نشر الدوال بلا المفتاحين. الدخول بحساب Google وبمفتاح المرور لا يمر من هنا فيبقى متاحًا.
-export async function requireHuman(b: Record<string, any>, ctx: { ip: string | null }) {
+// closed: رسالة التوقف لغير الدخول (طلب انضمام الخبير)، فلا يُدل صاحب الطلب على دخول لا يعنيه
+const SIGNIN_CLOSED = 'الدخول برمز البريد متوقف مؤقتًا. ادخل بحساب Google أو بمفتاح المرور، أو حاول بعد قليل.';
+export async function requireHuman(b: Record<string, any>, ctx: { ip: string | null }, closed = SIGNIN_CLOSED) {
   if (!CONFIG.turnstileSecret || !CONFIG.turnstileSite) {
-    console.error('leaders-api: Turnstile keys missing; email-code sign-in is closed');
-    throw new Fail('الدخول برمز البريد متوقف مؤقتًا. ادخل بحساب Google أو بمفتاح المرور، أو حاول بعد قليل.', 503, 'captcha_unconfigured');
+    console.error('leaders-api: Turnstile keys missing; email-code sign-in and expert applications are closed');
+    throw new Fail(closed, 503, 'captcha_unconfigured');
   }
   if (!(await turnstileOk(b.captcha, ctx.ip))) {
     throw new Fail(b.captcha ? 'تعذّر التحقق، أعد المحاولة' : 'أكّد أنك لست برنامجًا آليًا', 400, 'captcha', { site_key: CONFIG.turnstileSite });

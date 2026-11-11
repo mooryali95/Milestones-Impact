@@ -317,7 +317,7 @@ jobs:
         run: |
           ping() {
             body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
-              -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1")
+              -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1?forceFunctionRegion=ap-south-1")
             echo "$1: $body"
             echo "$body" | grep -q '"success":true'
           }

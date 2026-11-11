@@ -92,14 +92,18 @@ export const MatrixTab = (p) => {
                 {PHASES.map(ph => {
                   const op = OPERATIONS[tr.id][ph.id-1], key=`${tr.id}-${ph.id}`, proc=procs.find(p=>p.key===key);
                   const hasD=!!dates[key], isDone=!!confirmed[key], isHL=highlightedKeys.includes(key);
+                  // الخلية زر بلوحة المفاتيح وقارئ الشاشة، واسمها العملية وحال موعدها
+                  // التاريخ يُنسَّق حين يوجد وحده: «مؤكَّد» بلا تاريخ حال ممكنة (save يخزن confirmed وحده)، وfmtGregorian(undefined) يرمي
+                  const status = !hasD ? (isDone ? "مؤكَّد، بلا موعد" : "بلا موعد") : `${isDone ? "مؤكَّد" : "محدد"}، ${fmtGregorian(dates[key])}`;
                   return (
-                    <div key={key}
+                    <div key={key} data-proc={key}
                       className={`cell ${isDone?"done":""} ${hasD&&!isDone?"dated":""} ${isHL?"highlighted":""}`}
-                      onClick={() => {
+                      aria-label={`${op.nameAr}: ${status}`}
+                      {...pressable(() => {
                         if (submitted){showToast("تم قفل الخطة بعد التقديم النهائي");return;}
                         setSelectedCell(proc); setTempDate(dates[key]||""); setDateError("");
                         setHighlightedKeys([...(proc.feeds||[]),...(proc.fedBy||[])]);
-                      }}
+                      })}
                       onMouseLeave={()=>{ if(!selectedCell) setHighlightedKeys([]); }}>
                       <div className="cell-accent" style={{background:tr.color}}/>
                       <div className="cell-top">
@@ -128,7 +132,7 @@ export const MatrixTab = (p) => {
               {(appContent.starter_processes||'creation-1,establishment-1').split(',').map(k=>k.trim()).map(k=>{
                 const p=procs.find(x=>x.key===k);
                 return p ? <span key={k} className="smart-chip" style={{borderColor:p.trackColor+'50',color:p.trackColor,background:p.trackColor+'0A'}}
-                  onClick={()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>
+                  {...pressable(()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);})}>
                   {p.trackIcon} {p.nameAr}</span> : null;
               })}
             </div>
@@ -145,7 +149,7 @@ export const MatrixTab = (p) => {
               <div className="smart-below-label"><Icon name="alignment" size={16} style={{marginLeft:".35rem"}} /> {appContent.suggest_label||'بناءً على اختياراتك، قد يهمك:'}</div>
               <div className="smart-suggest">
                 {sugList.map(p=><span key={p.key} className="smart-chip" style={{borderColor:p.trackColor+'50',color:p.trackColor,background:p.trackColor+'0A'}}
-                  onClick={()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>
+                  {...pressable(()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);})}>
                   {p.trackIcon} {p.nameAr}</span>)}
               </div>
             </div>
@@ -165,7 +169,7 @@ export const MatrixTab = (p) => {
               </div>
               <div className="smart-suggest">
                 {sugList.map(p=><span key={p.key} className="smart-chip" style={{borderColor:p.trackColor+'50',color:p.trackColor,background:p.trackColor+'0A'}}
-                  onClick={()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);}}>
+                  {...pressable(()=>{setSelectedCell(p);setTempDate("");setDateError("");setHighlightedKeys([...(p.feeds||[]),...(p.fedBy||[])]);})}>
                   {p.trackIcon} {p.nameAr}</span>)}
               </div>
             </div>
@@ -178,7 +182,7 @@ export const MatrixTab = (p) => {
             <h4>⚠ متبقي {16-datedCount} عملية بدون موعد</h4>
             <div className="missing-chips">
               {missingProcs.map(p=><span key={p.key} className="missing-chip"
-                onClick={()=>{setSelectedCell(p);setTempDate("");setDateError("");}}>
+                {...pressable(()=>{setSelectedCell(p);setTempDate("");setDateError("");})}>
                 {p.trackIcon} {p.nameAr}</span>)}
             </div>
           </div>

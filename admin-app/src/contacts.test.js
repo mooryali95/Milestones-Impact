@@ -28,3 +28,28 @@ it('countBy و mailto', () => {
   expect(countBy(rows)).toEqual({ new: 1, replied: 1 });
   expect(mailto(rows[0])).toMatch(/^mailto:sara@x\.com\?subject=/);
 });
+
+// طلبات مقياس جاهزية الأثر تمر بإجراء contact منذ 2026-11-11 (visitor-1): مصدرها باسمه لا «القادة»، في اللوحة وفي بريد المالك
+describe('مصدر مقياس الجاهزية', () => {
+  it('اسم المصدر وشارته من مصدر واحد، والمصفي يعرفه', async () => {
+    const { SOURCE_AR, sourceTone, INTEREST_AR } = await import('./contacts.js');
+    expect(SOURCE_AR['MI-ASSESSMENT']).toBe('مقياس الجاهزية');
+    expect(INTEREST_AR.assessment).toBeTruthy();
+    expect([sourceTone('MI-HOME'), sourceTone('MI-ASSESSMENT'), sourceTone('MI-LEADERS')]).toEqual(['home', 'home', 'leaders']);
+    const rows3 = [...rows, { id: 3, name: 'ليلى', email: 'l@z.sa', status: 'new', product: 'MI-ASSESSMENT' }];
+    expect(filterContacts(rows3, { source: 'MI-ASSESSMENT' }).map((r) => r.id)).toEqual([3]);
+  });
+  it('الشاشة لا تسمي مصدرًا مجهولًا «القادة»، وبريد المالك يسمي المقياس', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
+    const ui = read('admin-app/src/screens/Contacts.jsx');
+    expect(ui).not.toContain("SOURCE_AR[r.product] || 'القادة'");
+    expect(ui).not.toContain("'صفحة القادة'");
+    expect(read('supabase/functions/send-otp/index.ts')).toContain('"MI-ASSESSMENT": "مقياس جاهزية الأثر"');
+    // رمز دخول اللوحة يقبل الأرقام العربية المشرقية بالمطبّع نفسه الذي في بوابات القادة
+    const login = read('admin-app/src/screens/Login.jsx');
+    expect(login).toContain('setCode(codeDigits(e.target.value))');
+    expect(login).not.toContain("replace(/\\D/g, '')");
+  });
+});

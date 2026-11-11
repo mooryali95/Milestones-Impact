@@ -8,6 +8,12 @@
 // it grants no access to registrations, OTP codes, or admin data.
 
 export const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
+// منطقة تنفيذ الدوال هي منطقة القاعدة نفسها (مومباي)، مصدر واحد لعملاء الدوال كلهم. بلا تثبيت تعمل الدالة في أقرب
+// منطقة إلى الطالب، فتدفع كل رحلة إلى القاعدة مئات المللي ثانية (ops-3، تدقيق 2026-11-11: us-east-2 وdb_ms بين 297
+// و968، ومثبتة بين 25 و85). المعامل لا ترويسة x-region لأن الترويسة تحتاج إذنًا في CORS، وهو ما يوصي به توثيق Supabase
+// (Regional Invocations) للدوال كثيرة الرحلات إلى القاعدة.
+export const FUNCTION_REGION = 'ap-south-1';
+export const fnUrl = (fn) => `${SUPABASE_URL}/functions/v1/${fn}?forceFunctionRegion=${FUNCTION_REGION}`;
 export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0';
 
 // Invoke an Edge Function. The anon key stays in the Authorization header
@@ -15,7 +21,7 @@ export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 // is carried inside the JSON body and verified server-side.
 export async function callFn(fn, body) {
   try {
-    const res = await fetchRetry(`${SUPABASE_URL}/functions/v1/${fn}`, {
+    const res = await fetchRetry(fnUrl(fn), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

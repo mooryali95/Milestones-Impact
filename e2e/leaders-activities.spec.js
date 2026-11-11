@@ -82,6 +82,27 @@ test('الرحلة: الأنشطة الموثقة بلا زر «أنجزته»',
   expect(calls.some((c) => c.action === 'requirement.update')).toBe(false);
 });
 
+// أيام التدريب ذروة الجوال: صف جلسة قابلة للانضمام (الطريقة و«انضم الآن» والحالة) كان يوسّع عمود
+// قائمة التحقق فتُقص بنود المرحلة كلها من اليسار ويخرج «افتح الكتيب» عن الشاشة
+test('الجوال: بند الورشة لا يوسّع قائمة المرحلة فتبقى البنود وأزرارها داخلها', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await participant(page);
+  await page.goto(APP);
+  await expect(page.getByRole('button', { name: 'انضم الآن' })).toBeVisible();
+  const out = await page.evaluate(() => {
+    const st = document.querySelector('.stage.active').getBoundingClientRect();
+    const els = [...document.querySelectorAll('.checklist > li, .checklist button, .checklist a.btn')];
+    return {
+      scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      outside: els.map((el) => [el.textContent.trim().slice(0, 30), el.getBoundingClientRect()])
+        .filter(([, r]) => r.left < st.left - 0.5 || r.right > st.right + 0.5).map(([t]) => t),
+    };
+  });
+  expect(out.scroll).toBe(0);
+  expect(out.outside).toEqual([]);
+  if (SHOTS) await page.locator('.stage.active').screenshot({ path: `${SHOTS}/journey-activities-mobile.png` });
+});
+
 test('مسح رمز الحضور يسجل الحضور', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 });
   const calls = await participant(page, { 'workshop.checkin': { success: true, already: false, session: { title: 'اليوم الثاني: Impact', location: 'الرياض، قاعة الأثر' }, at: new Date().toISOString() } });

@@ -103,6 +103,91 @@ for (const path of ['/', '/projects/']) {
   });
 }
 
+// بوابة تقرير مقياس الجاهزية: كانت تُدرج في contact_requests مباشرة بالمفتاح العام، والإدراج
+// مغلق منذ ترحيل 20261105100000، فيضيع كل طلب. ثم تُخفي البوابة برسالة فشلها فلا يراها الزائر.
+async function answerAssessment(page) {
+  await page.goto(BASE + '/assessment/');
+  await page.locator('#asStart').click();
+  for (let i = 1; i <= 12; i++) {
+    await expect(page.locator('#asCounter')).toHaveText(`${i} / 12`);
+    await page.locator('.as-option').nth(i % 4).click();
+  }
+  await expect(page.locator('#asGate')).toBeVisible();
+  await page.locator('#asGate [name="name"]').fill('اختبار آلي');
+  await page.locator('#asGate [name="organization"]').fill('جهة الاختبار');
+  await page.locator('#asGate [name="email"]').fill('test@example.com');
+  await page.locator('#asGateBtn').click();
+}
+const sendOtp = (calls) => calls.filter((c) => c.url.includes('/functions/v1/send-otp') && c.body?.action === 'contact');
+
+test('بوابة المقياس: الطلب يمر بإجراء contact في الدالة، ويُعرض التقرير', async ({ page }) => {
+  const calls = await mockBackend(page);
+  await answerAssessment(page);
+  await expect(page.locator('#asReport')).toBeVisible();
+  await expect(page.locator('#asGate')).toBeHidden();
+  expect(calls.some((c) => c.url.includes('/rest/v1/contact_requests'))).toBe(false);
+  const sent = sendOtp(calls);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].body).toMatchObject({
+    product: 'MI-ASSESSMENT',
+    interest: 'assessment',
+    interest_label: 'مقياس جاهزية الأثر',
+    name: 'اختبار آلي',
+    organization: 'جهة الاختبار',
+    email: 'test@example.com',
+  });
+  expect(sent[0].body.context).toMatch(/^الدرجة الكلية: \d+% .*؛ الإجابات: (\d,){11}\d$/);
+});
+
+test('بوابة المقياس: يُعرض التحقق البشري حين يطلبه الخادم، ثم يُعاد الإرسال برمزه', async ({ page }) => {
+  // أداة Turnstile مُحاكاة: تحفظ دالة النجاح ليستدعيها الاختبار
+  await page.addInitScript(() => {
+    window.turnstile = { render: (el, opts) => { el.textContent = 'widget'; window.__solve = opts.callback; } };
+  });
+  const calls = [];
+  await page.route(SUPABASE, async (route) => {
+    const body = route.request().postDataJSON?.() ?? null;
+    calls.push({ url: route.request().url(), body });
+    const ok = body?.captcha === 'turnstile-token-123';
+    await route.fulfill({ status: ok ? 200 : 400, contentType: 'application/json',
+      body: JSON.stringify(ok ? { success: true } : { success: false, code: 'captcha', site_key: 'site-key-test' }) });
+  });
+  await answerAssessment(page);
+  await expect(page.locator('#asGate .as-captcha')).toBeVisible();
+  await expect(page.locator('#asReport')).toBeHidden();
+
+  await page.evaluate(() => window.__solve('turnstile-token-123'));
+  await expect(page.locator('#asReport')).toBeVisible();
+  await expect(page.locator('#asGate')).toBeHidden();
+  const sent = sendOtp(calls);
+  expect(sent).toHaveLength(2);
+  expect(sent[0].body.captcha).toBeUndefined();
+  expect(sent[1].body.captcha).toBe('turnstile-token-123');
+});
+
+test('بوابة المقياس: تعذّر الإرسال يُبقي الرسالة وبديل البريد ظاهرين فوق التقرير، وإعادة المحاولة ترسل', async ({ page }) => {
+  let fail = true;
+  const calls = [];
+  await page.route(SUPABASE, (route) => {
+    calls.push({ url: route.request().url(), body: route.request().postDataJSON?.() ?? null });
+    return fail
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"code":"db"}' })
+      : route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' });
+  });
+  await answerAssessment(page);
+  await expect(page.locator('#asGateError')).toBeVisible();
+  await expect(page.locator('#asGateError')).toContainText('تعذّر إرسال بياناتكم');
+  await expect(page.locator('#asGateError a[href^="mailto:mi@sunkvalue.com"]')).toBeVisible();
+  await expect(page.locator('#asReport')).toBeVisible();
+  await expect(page.locator('#asGateBtn')).toHaveText('إعادة المحاولة');
+
+  fail = false;
+  await page.locator('#asGateBtn').click();
+  await expect(page.locator('#asGate')).toBeHidden();
+  await expect(page.locator('#asReport')).toBeVisible();
+  expect(sendOtp(calls)).toHaveLength(2);
+});
+
 test('النموذج يرفض المتابعة دون اسم الجهة', async ({ page }) => {
   await mockBackend(page);
   await page.goto(BASE + '/');

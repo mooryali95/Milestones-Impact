@@ -15,6 +15,17 @@ describe('لوحة الجهة', () => {
     expect(coordParticipant({ id: 'p', full_name: 'س', status: 'approved', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
     expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain('{p.stage || STATUS[p.status] || p.status}');
   });
+  it('org-1 المنسحب والموقوف بلا مرحلة جارية، فتظهر حالتهما في اللوحة وExcel كما في التقرير المطبوع', () => {
+    // رحلتهما تبقى محسوبة بمرحلتها النشطة (الإدارة تغيّر الحالة وحدها)، فكانت اللوحة تعرض «التدريب» لمن انسحب
+    for (const status of ['withdrawn', 'suspended']) {
+      const row = coordParticipant({ id: 'p', full_name: 'س', status, stage: 'التدريب', progress: 45 }, coordPermissions({}));
+      expect(row.stage, status).toBeNull();
+      expect(row.status).toBe(status);
+    }
+    expect(coordParticipant({ id: 'p', full_name: 'س', status: 'enrolled', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
+    // الخريطة تأخذ الحالة لتُخرجهما من الرحلة (journey-map.test.js)
+    expect(read('supabase/functions/leaders-api/coordinator.ts')).toContain('id: r.id, name: r.full_name, status: r.status, created_at: r.created_at,');
+  });
   it('8.5 العدد والمعدود، و8.6 الجداول والبحث لقارئ الشاشة', () => {
     const o = read('leaders-app/src/screens/OrgPortal.jsx');
     expect(o).toContain("countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')");
@@ -64,5 +75,20 @@ describe('لوحة الإدارة', () => {
     const h = read('admin-app/public/_headers');
     expect(h).toMatch(/^\/\*\n(?: {2}.*\n)*? {2}! Access-Control-Allow-Origin$/m);
     expect(h).not.toMatch(/^ {2}#/m);
+  });
+});
+
+// «خارج البرنامج» مصدر واحد (OUT_OF_PROGRAM/inProgram في logic.js، مراجعة الجولة أ): كانت القائمة مكررة في activities.ts
+// وadmin.ts، وكانت دعوات الجلسات تستبعد المنسحب وحده فيُدعى الموقوف.
+describe('خارج البرنامج: مصدر واحد', () => {
+  const src = (f) => readFileSync(join(__dirname, '../../supabase/functions/leaders-api', f), 'utf8');
+  it('لا قائمة منسوخة للمنسحب والموقوف، والدعوات والحضور والقمع على inProgram', () => {
+    for (const f of ['activities.ts', 'admin.ts', 'coordinator.ts', 'journey-map.js']) {
+      expect(src(f), f).not.toMatch(/\[\s*'withdrawn',\s*'suspended'\s*\]/);
+      expect(src(f), f).not.toMatch(/status === 'withdrawn' \|\| r\.status === 'suspended'/);
+    }
+    expect(src('activities.ts')).toContain("(m) => m.email && inProgram(m.status)");
+    expect(src('activities.ts')).toContain('e.approved === 3 && inProgram(e.status)');
+    expect(src('admin.ts')).toContain('withdrawn: rows.filter((r) => !inProgram(r.status)).length');
   });
 });

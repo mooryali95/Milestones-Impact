@@ -35,7 +35,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
     const r = await call('state', { cohort_id: cohortId, since: force ? 0 : ver.current });
     if (at !== seq.current) return;
     // إخفاق عابر في السؤال الدوري يصلحه السؤال التالي؛ يُبلَّغ عند أول تحميل، أو حين يتوالى (مرة لا كل ثانيتين)
-    if (!r.success) { fails.current += 1; if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message); return; }
+    if (!r.success) { fails.current += 1; if (force || fails.current === POLL_FAIL_LIMIT) toast(r.message, true); return; }
     fails.current = 0;
     if (r.unchanged) return;
     ver.current = r.session?.version || 0;
@@ -49,7 +49,8 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
     const r = await call(key, body);
     seq.current += 1;
     setBusy(false);
-    if (!r.success) return toast(r.message);
+    // toast(نص، خطأ؟): البوابة تعرض الخطأ تنبيهًا لا نجاحًا (اللوحة تتجاهل المعامل الثاني)
+    if (!r.success) return toast(r.message, true);
     if (ok) toast(ok);
     // نتيجة كتابة الحضور عند الإغلاق تُقال للخبير صريحة: كم كُتب، أو لماذا لم يُكتب
     if (key === 'close' && r.attendance) {
@@ -58,7 +59,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
         : t.reason === 'no_workshop' ? 'أُغلقت القاعة. لم تُربط بجلسة ورشة، فلم يُكتب حضور؛ سجّله من «الحضور والجلسات»'
           : t.reason === 'no_rounds' ? 'أُغلقت القاعة. لم تُكشف جولة، فلم يُكتب حضور؛ سجّله من «الحضور والجلسات»'
             : t.reason === 'not_written' ? 'أُغلقت القاعة، وتعذّر حفظ الحضور؛ سجّله من «الحضور والجلسات»'
-              : 'أُغلقت القاعة، ولم يبلغ أحد حد المشاركة');
+              : 'أُغلقت القاعة، ولم يبلغ أحد حد المشاركة', t.reason === 'not_written');
     }
     ver.current = r.session?.version || 0; setV(r);
   };
