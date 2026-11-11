@@ -5,7 +5,7 @@
 //   بعد الرفع تُعرض لقطة الحساب بإصدار معادلتها لا حسابًا حيًا؛ والقرارات التي تلزمها ملاحظات تطلبها.
 // • FinalConfig: إعداد البرنامج (الأوزان، طريقة القياس النهائي، قواعد التغطية، حدود القرار، الاعتماد واللجنة).
 import React, { useCallback, useEffect, useState } from 'react';
-import { L } from '../leaders.js';
+import { L, withRunningReason } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED } from '../../../supabase/functions/leaders-api/logic.js';
@@ -137,7 +137,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
 
 // إعداد التقييم الختامي للبرنامج
 export function FinalConfig({ program, onClose }) {
-  const { toast } = useUI();
+  const { toast, prompt } = useUI();
   const [c, setC] = useState(() => finalConfig(program.final_eval));
   const [busy, setBusy] = useState(false);
   const close = useGuardedClose(JSON.stringify(c) !== JSON.stringify(finalConfig(program.final_eval)), () => onClose());
@@ -145,8 +145,10 @@ export function FinalConfig({ program, onClose }) {
   const total = Object.values(c.weights).reduce((a, b) => a + Number(b || 0), 0);
   const save = async () => {
     setBusy(true);
-    const r = await L('admin.final-eval-config', { program_id: program.id, config: c });
+    // أثناء دفعة جارية يقبل الخادم الحفظ من المدير العام بتعليل مكتوب؛ المساعد يسأله عنه ويعيد الإرسال
+    const r = await withRunningReason((extra) => L('admin.final-eval-config', { program_id: program.id, config: c, ...extra }), prompt);
     setBusy(false);
+    if (r.cancelled) return;
     if (!r.success) return toast(r.message);
     // أعضاء اللجنة كما قرأهم الخادم فعلًا، فلا يُظن الاعتماد مقصورًا على من لم يُحفظ
     const members = r.config?.approval !== 'expert' && r.config?.committee?.length ? `، أعضاء اللجنة: ${r.config.committee.join('، ')}` : r.config?.approval !== 'expert' ? '، والاعتماد لأي حساب إدارة' : '';
