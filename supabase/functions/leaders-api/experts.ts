@@ -428,7 +428,8 @@ export async function pendingRatings(p: any) {
   const rated = new Set((done || []).flatMap((x: any) => [x.session_id, x.request_id]).filter(Boolean));
   const items = [
     ...(sessions || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'session', id: x.id, when: x.starts_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: 'جلسة توجيه' })),
-    ...(reqs || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'request', id: x.id, when: x.updated_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: roleAr(x.role) })),
+    // «كيف كانت خدمة «موجّه» مع…» لا «كيف كانت موجّه مع…»: الدور اسم شخص لا يستقيم بعد «كانت» (p-capstone-8)
+    ...(reqs || []).filter((x: any) => !rated.has(x.id)).map((x: any) => ({ kind: 'request', id: x.id, when: x.updated_at, expert: x.experts?.full_name, title: x.experts?.title || null, what: `خدمة «${roleAr(x.role)}»` })),
   ];
   return { success: true, items, criteria: RATE_TO_EXPERT };
 }

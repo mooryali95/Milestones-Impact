@@ -234,3 +234,18 @@ Deno.test('طلبات المشارك: المنتهي بلا خدمة يبقى ظ
     assert(r.requests[0].hint.includes('عرضناه على التالي الأنسب'));
   } finally { restore(); }
 });
+
+// p-capstone-8: عنوان بطاقة التقييم «كيف كانت {what} مع {الخبير}؟»؛ الدور اسم شخص («موجّه») فلا يستقيم بعد «كانت»
+Deno.test('تقييم الخبير: الخدمة المكتملة تُسمّى «خدمة «الدور»» لا الدور وحده', async () => {
+  const now = new Date().toISOString();
+  const tables: Record<string, Row[]> = {
+    coaching_sessions: [{ id: 's1', participant_id: 'p1', status: 'attended', expert_id: 'e1', starts_at: now }],
+    expert_requests: [{ id: 'q1', participant_id: 'p1', role: 'coach', status: 'completed', expert_id: 'e1', updated_at: now }],
+    expert_ratings: [],
+  };
+  const restore = install(tables);
+  try {
+    const r: any = await E.pendingRatings({ id: 'p1' });
+    assertEquals(r.items.map((x: any) => x.what).sort(), ['جلسة توجيه', 'خدمة «موجّه»'].sort());
+  } finally { restore(); }
+});

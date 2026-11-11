@@ -246,3 +246,33 @@ test('طلب التوجيه لا يُغلق بلا تأكيد', async ({ page })
   await close.click();
   await expect.poll(() => calls.filter((c) => c.action === 'peer.close').length).toBe(1);
 });
+
+// p-capstone-8: مع تقييمين منتظرين، ظهر الشكر بعد إرسال الأول في صندوق خطأ أحمر فوق التقييم التالي
+test('تقييم الخبير: الشكر لافتة نجاح لا صندوق خطأ، والخطأ يبقى خطأ', async ({ page }) => {
+  const item = (id, expert, what) => ({ kind: 'request', id, when: '2026-11-05T10:00:00Z', expert, title: null, what });
+  let items = [item('q1', 'خالد المطيري', 'خدمة «موجّه»'), item('q2', 'منى السالم', 'جلسة توجيه')];
+  let fail = false;
+  const criteria = { useful: 'أفادتني الجلسة فعلًا', clear: 'كان واضحًا ومحددًا', committed: 'التزم بالموعد والمتابعة' };
+  await open(page, {
+    'ratings.pending': () => ({ success: true, items, criteria }),
+    'ratings.submit': () => {
+      if (fail) return { success: false, message: 'تعذّر حفظ التقييم الآن' };
+      items = items.slice(1);
+      return { success: true };
+    },
+  });
+  const card = page.locator('section.rx');
+  await expect(card.getByRole('heading', { name: 'كيف كانت خدمة «موجّه» مع خالد المطيري؟' })).toBeVisible();
+  const rate = async () => { for (const k of Object.values(criteria)) await card.getByRole('radiogroup', { name: k }).getByRole('radio', { name: '5 من 5' }).click(); };
+  await rate();
+  await card.getByRole('button', { name: 'أرسل التقييم' }).click();
+  await expect(card.getByRole('heading', { name: /منى السالم/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'شكرًا، وصل تقييمك' })).toBeVisible();
+  await expect(card.locator('.alert.err')).toHaveCount(0);
+
+  fail = true;
+  await rate();
+  await card.getByRole('button', { name: 'أرسل التقييم' }).click();
+  await expect(card.locator('.alert.err')).toHaveText('تعذّر حفظ التقييم الآن');
+  await expect(page.getByText('شكرًا، وصل تقييمك')).toHaveCount(0);
+});
