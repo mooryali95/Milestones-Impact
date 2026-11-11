@@ -108,6 +108,29 @@ test('ملف المشارك: اعتماد المستويات، وإعادة بن
   await expect(page.locator('.data-table tbody tr')).toHaveCount(2);
 });
 
+// admin-core-1: كان فعل المرحلة يُرسل في حقل action فيحل محل اسم الإجراء، فيرد الخادم «إجراء غير معروف» ولا يصل التدخل
+test('ملف المشارك: التدخل في مرحلة يصل إلى الخادم بفعله وسببه، وإلغاؤه بفعل فارغ', async ({ page }) => {
+  const journey = [
+    { key: 's1', title_ar: 'التهيئة', status: 'active', items: [] },
+    { key: 's2', title_ar: 'التدريب', status: 'locked', override: 'skip', items: [] },
+  ];
+  const calls = await setup(page, { 'admin.participant': { ...person, journey }, 'admin.stage-override': { success: true } });
+  await page.getByText('سارة الأحمد').click();
+  await page.getByRole('button', { name: 'اعتمد اكتمالها' }).click();
+  await page.getByRole('dialog').locator('input').fill('أنجزها في ورشة حضورية موثقة');
+  await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect(page.getByRole('status')).toHaveText('تم');
+  const sent = calls.filter((c) => c.action === 'admin.stage-override');
+  expect(sent[0]).toEqual({ action: 'admin.stage-override', token: 't', participant_id: 'p1', stage_key: 's1', stage_action: 'complete', note: 'أنجزها في ورشة حضورية موثقة' });
+
+  await page.getByRole('button', { name: 'إلغاء التدخل' }).click();
+  await page.getByRole('dialog').locator('input').fill('أُعفي خطأً');
+  await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.stage-override').length).toBe(2);
+  expect(calls.filter((c) => c.action === 'admin.stage-override')[1]).toMatchObject({ stage_key: 's2', stage_action: '' });
+  expect(calls.some((c) => ['complete', 'open', 'skip', ''].includes(c.action))).toBe(false);
+});
+
 test('الجهات: البطاقات ولوحة الجهة ورابط الحملة والتحرير', async ({ page }) => {
   const calls = await setup(page);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);

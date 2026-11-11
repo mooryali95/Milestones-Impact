@@ -304,7 +304,7 @@ function Person({ id, canWrite, onBack }) {
     const msg = { open: `فتح «${s.title_ar}» له الآن؟`, complete: `اعتماد اكتمال «${s.title_ar}»؟`, skip: `إعفاؤه من «${s.title_ar}»؟`, '': `إلغاء التدخل في «${s.title_ar}» وإعادتها لقواعد البرنامج؟` }[action];
     const note = await prompt(`${msg}\nالسبب (يُحفظ في السجل):`, '');
     if (note === null) return;
-    act('admin.stage-override', { participant_id: p.id, stage_key: s.key, action, note }, 'تم');
+    act('admin.stage-override', { participant_id: p.id, stage_key: s.key, stage_action: action, note }, 'تم');
   };
   // الملفات الخاصة تُفتح بطلب صريح يُسجَّل في السجل، للمدير وحده (الخادم يرفض غيره)
   const evidence = async (path) => {

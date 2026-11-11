@@ -14,8 +14,10 @@ export const setLeadersExpired = (fn) => { onExpired = fn; };
 // الأوامر التي تغيّر ما ينتظر قرار الإدارة: بعد نجاحها تُحدَّث الأعداد على التبويبات
 const CHANGES_PENDING = new Set(['admin.approve', 'admin.review', 'admin.review-submission', 'admin.status', 'admin.reset-assessment']);
 
+// اسم الإجراء والتوكن آخر الجسم، فلا يكتب فوقهما حقل بالاسم نفسه في body (تدقيق الجاهزية، admin-core-1:
+// كان فعل المرحلة action يحل محل admin.stage-override فيرد الخادم «إجراء غير معروف»)
 export async function L(action, body = {}) {
-  const d = await post(API, { action, token: session.load()?.token, ...body }, 'تعذّر الاتصال بالخادم');
+  const d = await post(API, { ...body, action, token: session.load()?.token }, 'تعذّر الاتصال بالخادم');
   if (!d.success && d.code === 'session') { session.clear(); onExpired(); }
   if (d.success && CHANGES_PENDING.has(action) && typeof window !== 'undefined') window.dispatchEvent(new Event('mi:pending'));
   return d;

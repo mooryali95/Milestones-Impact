@@ -501,16 +501,20 @@ export async function reviewRequirement(a: Admin, b: Body) {
   return { success: true };
 }
 
-// تدخل في مرحلة لمشارك بعينه: يفتحها، أو يعتمد اكتمالها، أو يعفيه منها؛ وaction فارغ يلغي التدخل.
+// تدخل في مرحلة لمشارك بعينه: يفتحها، أو يعتمد اكتمالها، أو يعفيه منها؛ وstage_action فارغ يلغي التدخل.
 // يخص برنامج المشارك الحالي، فلا يسري إن انتقل إلى برنامج آخر.
+// الفعل في stage_action لا action: حقل action في الطلب اسم الإجراء نفسه (admin.stage-override) الذي يوزَّع عليه،
+// فكان الفعل والاسم يتنازعان الحقل ولا يصل التدخل أبدًا (تدقيق الجاهزية، admin-core-1)
 export async function stageOverride(a: Admin, b: Body) {
   requireWrite(a);
+  // غياب الحقل لا يُفهم إلغاءً: الإلغاء يحذف التدخل، فلا يكون إلا بقيمة فارغة صريحة
+  if (!('stage_action' in b)) throw new Fail('حدّد الإجراء على المرحلة');
   const p = must(await db.from('participants').select('id, organization_id').eq('id', String(b.participant_id || '')).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
   const def = await journeyDefinition(p);
   const stage = def.stages.find((s: any) => s.key === String(b.stage_key || ''));
   if (!stage) throw new Fail('المرحلة ليست في رحلة هذا المشارك', 404);
-  const action = b.action == null || b.action === '' ? null : String(b.action);
+  const action = b.stage_action == null || b.stage_action === '' ? null : String(b.stage_action);
   if (action && !['open', 'complete', 'skip'].includes(action)) throw new Fail('إجراء غير معروف');
   const key = { participant_id: p.id, program_id: def.program_id, stage_key: stage.key };
   if (action) {
