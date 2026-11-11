@@ -129,7 +129,7 @@ test('الاحترافي: بلا رقم ولا عدّاد، والإرسال ي�
   }
   await expect(tray(page).getByRole('button')).toHaveCount(0);
   await send.click();
-  expect(Object.keys(sent.answer)).toHaveLength(49);
+  await expect.poll(() => Object.keys(sent?.answer || {}).length).toBe(49);
   await expect(page.locator('.lb-score-line')).toHaveText('في خانتها 46 من 49، ومحور واحد صحيح في 3.');
   await expect(page.locator('.lb-mixups li').first()).toHaveText('خلطت بين التنفيذ والمتابعة والتحكم في بطاقتين: إدارة الجودة، إدارة التواصل.');
   await expect(page.getByRole('table')).toBeVisible();
