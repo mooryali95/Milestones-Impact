@@ -498,7 +498,8 @@
 .sub-stars span { font-size: 1.9rem; color: rgba(10,42,61,.18); }
 .sub-stars label.on span { color: var(--gold); }
 .sub-stars label:hover span { color: var(--gold-light); }
-.stars-c { color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
+/* اسم درجة السلّم نصًا (ratingLabel): لون النص لا الذهبي الباهت، وبلا تباعد يقطع الحروف العربية */
+.stars-c { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .rank-chip { padding: 4px 12px; border-radius: 14px; font-size: .76rem; font-weight: 700; color: var(--brand-graphite); background: linear-gradient(135deg, var(--gold), var(--gold-light)); }
 .la-book-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .la-book-kpis span { display: grid; padding: 10px 12px; border-radius: 10px; background: var(--sand-light); font-size: .74rem; color: var(--ink-light); }

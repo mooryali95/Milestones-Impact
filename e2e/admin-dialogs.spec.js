@@ -226,3 +226,16 @@ test('النموذج التعليمي الجديد: نقرتان على «حفظ
   await expect(ed).toBeHidden();
   expect(calls.filter((c) => c.action === 'admin.save')).toHaveLength(1);
 });
+
+test('التقييم بالسلّم الرباعي: الجدول يعرض اسم الدرجة لا نجومًا خمسًا، والتنبيه لا يذكر خامسة', async ({ page }) => {
+  await setup(page);
+  await leaders(page, 'كتيب القائد');
+  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
+  const cell = page.locator('td.stars-c');
+  await expect(cell).toContainText('متميز (4 من 4)');
+  await expect(cell).not.toContainText('★');
+  await page.getByRole('button', { name: 'عرض' }).click();
+  const rev = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
+  await rev.getByRole('button', { name: 'اعتماد التقييم' }).click();
+  await expect(rev.getByRole('alert')).toHaveText('اختر مستوى من السلّم');
+});

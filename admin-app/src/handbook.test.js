@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import * as hb from './handbook.js';
 import { applyTool, badQuiz, filterHandbookMd, HB_TOOLS, masterBook, maxPoints, nextSort, splitList, tierLabel, tiered, words } from './handbook.js';
 
 const tool = (label) => HB_TOOLS.find((t) => t[1] === label);
@@ -49,5 +52,22 @@ describe('استوديو الكتاب', () => {
     expect(tierLabel('min=advanced scope=program')).toBe('للاحترافي · لقادة البرامج والمحافظ');
     expect(tierLabel(' only=beginner ')).toBe('للتأسيسي فقط');
     expect(tierLabel('min=intermediate')).toBe('للمتوسط فأعلى');
+  });
+});
+
+// D08 في لوحة الإدارة: تقدير النموذج من 1 إلى 4، فيُعرض باسم درجته من السلّم الواحد لا بنجوم خمس
+// كانت أعلى درجة (متميز 4) تظهر «★★★★☆» فتبدو دون الامتياز، والتنبيه يطلب «من 1 إلى 5»
+describe('تقدير النموذج بالسلّم الرباعي', () => {
+  it('اسم الدرجة وموضعها من أربع، وما خارج السلّم فارغ', () => {
+    expect([1, 2, 3, 4].map(hb.ratingLabel)).toEqual(['دون المطلوب (1 من 4)', 'مقبول (2 من 4)', 'متقن (3 من 4)', 'متميز (4 من 4)']);
+    expect([0, null, undefined, 5].map(hb.ratingLabel)).toEqual(['', '', '', '']);
+    // الاسم القديم الذي تستورده شاشة المشاركين هو الدالة نفسها، فلا نجوم في أي من الشاشتين
+    expect(hb.stars).toBe(hb.ratingLabel);
+  });
+  it('لا نجوم خمس ولا «من 1 إلى 5» في أداة التقييم', () => {
+    const read = (f) => readFileSync(join(__dirname, f), 'utf8');
+    expect(read('handbook.js')).not.toMatch(/★|☆/);
+    expect(read('screens/Handbook.jsx')).not.toMatch(/من 1 إلى 5/);
+    expect(read('screens/Handbook.jsx')).toMatch(/ratingLabel\(x\.rating\)/);
   });
 });

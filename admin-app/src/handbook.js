@@ -4,7 +4,7 @@
 // صيغة الاختبار وحذف كتل المستوى ونقاط الباب تأتي من logic.js على الخادم
 // نفسه، فما تراه الإدارة في المعاينة هو ما يصل المشارك حرفيًا.
 import { filterHandbookMd, handbookModulesFor, lintHandbookMd, lintQuiz, modelsFor, parseQuiz, POINTS } from '../../supabase/functions/leaders-api/logic.js';
-import { SUBMISSION_STATUS_ADMIN, TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
+import { RUBRIC_SCALE, rubricLevelAr, SUBMISSION_STATUS_ADMIN, TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
 export { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
@@ -15,7 +15,10 @@ export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار 
 
 export const words = (md) => (String(md || '').replace(/^:::.*$/gm, '').match(/\S+/g) || []).length;
 export const tiered = (md) => /^:::(min|only)=/m.test(md || '');
-export const stars = (n) => '★★★★★'.slice(0, n || 0) + '☆☆☆☆☆'.slice(0, 5 - (n || 0));
+// تقدير النموذج باسم درجته من السلّم الرباعي الواحد (D08): «متميز (4 من 4)». كانت نجومًا خمسًا تُظهر أعلى درجة «4 من 5»
+export const ratingLabel = (n) => (rubricLevelAr(n) ? `${rubricLevelAr(n)} (${Math.round(Number(n))} من ${RUBRIC_SCALE.levels.length})` : '');
+// الاسم القديم الذي تستورده شاشة المشاركين؛ الدالة نفسها
+export const stars = ratingLabel;
 export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection : 0);
 // أسئلة كُتبت لكن لن تظهر: بلا خيار صحيح أو بأقل من خيارين
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;

@@ -9,7 +9,7 @@ import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
   FTYPE, HB_TOOLS, HB_VIEWS, MASTER, RANK, SCOPE_VIEW, SUB_FILTER,
-  applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, splitList, stars, tierLabel, tiered, words,
+  applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, ratingLabel, splitList, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
@@ -416,7 +416,7 @@ export function Submission({ id, canWrite, onClose }) {
   const submit = async (btn) => {
     if (btn === 'cancel') return close();
     if (busy) return;
-    if (btn === 'reviewed' && !rating) return setErr('اختر تقييمًا من 1 إلى 5');
+    if (btn === 'reviewed' && !rating) return setErr('اختر مستوى من السلّم');
     if (btn === 'returned' && !feedback.trim()) return setErr('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
     setBusy(true);
     const r = await L('admin.review-submission', { id: x.id, status: btn, rating: rating || undefined, feedback, bonus });
@@ -632,7 +632,7 @@ function Reviews({ catalog, canWrite, model, setModel, onSaved }) {
               <td>{x.learning_models?.title_ar || ''}<br /><small className="la-muted">{DIM_EN[x.learning_models?.dimension] || ''}</small></td>
               <td>{date(x.submitted_at)}</td>
               <td><span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0] || x.status}</span></td>
-              <td className="stars-c">{x.rating ? stars(x.rating) : ''}{x.bonus ? <small> +{x.bonus}</small> : null}</td>
+              <td className="stars-c">{ratingLabel(x.rating)}{x.bonus ? <small> +{x.bonus}</small> : null}</td>
               <td><button className={`btn-sm ${x.status === 'submitted' ? 'primary' : 'ghost'}`} onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button></td>
             </tr>
           )) : <tr><td colSpan={6} className="la-empty">لا أعمال هنا</td></tr>}</tbody>
