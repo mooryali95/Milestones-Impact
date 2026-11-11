@@ -132,9 +132,9 @@ describe('4.5 روابط الاستعمال الواحد بعد القرار', (
 });
 
 describe('9.8 و9.9', () => {
-  it('تقرير الأثر بلا حساب العرض', () => {
+  it('تقرير الأثر بلا حساب العرض ولا حساب الاختبار', () => {
     const impact = read('supabase/functions/leaders-api/impact.ts');
-    expect(impact.slice(impact.indexOf('export async function adminReport'))).toContain(".select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false);");
+    expect(impact.slice(impact.indexOf('export async function adminReport'))).toContain(".select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false).eq('is_test', false);");
   });
   it('عناوين المتطلبات في لوحة الحضور برموزها مملوءة', () => {
     const r = { code: 'T-ATTEND', title_ar: 'حضور الأيام التدريبية ({days:T-ATTEND})', config: { sessions_required: 4 } };
