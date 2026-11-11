@@ -106,5 +106,5 @@ export const MIGRATIONS = [
   '20261110200000_leaders_group_advisor',
   '20261110210000_leaders_name_confirmation',
   '20261110220000_leaders_t360_help',
-  '20261111100000_leaders_test_account_demo',
+  '20261111110000_leaders_test_accounts',
 ];

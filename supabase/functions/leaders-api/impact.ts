@@ -434,7 +434,8 @@ export async function raterSubmit(b: Body) {
 export async function adminReport(b: Body) {
   const people = await all((f, t) => {
     // حساب العرض خارج إحصاءات الأثر كما في النظرة العامة (التدقيق 2026-11-10، البند 9.8: 6 هنا مقابل 5 هناك)
-    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false);
+    // وحساب الاختبار خارجه كذلك (is_test، قرار المالك 2026-11-11)
+    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false).eq('is_test', false);
     if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
     if (b.participant_id) q = q.eq('id', String(b.participant_id));
     return q.order('id').range(f, t);

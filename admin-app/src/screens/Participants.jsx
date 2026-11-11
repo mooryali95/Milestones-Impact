@@ -153,7 +153,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   return (
                     <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
-                      <td data-label="الاسم"><b>{p.full_name}</b><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
+                      <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                       <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
@@ -328,7 +328,7 @@ function Person({ id, canWrite, onBack }) {
       <button className="la-link" onClick={onBack}>→ كل المشاركين</button>
       <div className="la-person">
         <section className="la-card">
-          <div className="la-row between"><h3>{p.full_name}</h3><span className="la-chip">{STATUS[p.status] || p.status}</span></div>
+          <div className="la-row between"><h3>{p.full_name}</h3><span className="la-row">{p.is_test && <span className="la-chip warn" title="خارج النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر، وحساب عادي في كل ما سواها">حساب اختبار</span>}<span className="la-chip">{STATUS[p.status] || p.status}</span></span></div>
           <dl className="la-dl">
             <dt>البريد</dt><dd dir="ltr">{p.email}</dd>
             <dt>الجوال</dt><dd dir="ltr">{p.phone}</dd>
@@ -368,6 +368,10 @@ function Person({ id, canWrite, onBack }) {
               <button className="btn-sm ghost" disabled={status === p.status} onClick={() => act('admin.status', { participant_id: p.id, status }, 'تم التحديث')}>تغيير الحالة</button>
               <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
               <button className="btn-sm ghost" onClick={() => setEditing(true)}>تعديل البيانات</button>
+              {/* حساب اختبار داخلي: خارج الإحصاءات وحدها، ويبقى حسابًا عاديًا (قرار المالك 2026-11-11) */}
+              <button className="btn-sm ghost" title="يُستبعد من النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر"
+                onClick={() => act('admin.participant-save', { participant_id: p.id, fields: { is_test: !p.is_test } }, p.is_test ? 'عاد محسوبًا في الإحصاءات' : 'صار حساب اختبار، خارج الإحصاءات')}>
+                {p.is_test ? 'إلغاء علامة الاختبار' : 'حساب اختبار'}</button>
             </div>
           )}
           {editing && (

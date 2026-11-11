@@ -68,13 +68,17 @@ function funnel(rows: any[]) {
     withdrawn: rows.filter((r) => r.status === 'withdrawn' || r.status === 'suspended').length,
   };
 }
-// حساب العرض لا يدخل القوائم ولا الإحصاءات
-const orgFilter = (q: any, org: unknown) => { q = q.eq('is_demo', false); return org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q; };
+// حساب العرض لا يدخل القوائم ولا الإحصاءات. وحساب الاختبار (is_test، قرار المالك 2026-11-11) لا يدخل الإحصاءات
+// ولوحة الجهة وحدها: يظهر في القوائم التشغيلية بشارة «اختبار»، ويبقى حسابًا عاديًا في كل ما سوى ذلك.
+const scopeOrg = (q: any, org: unknown) => (org === 'none' ? q.is('organization_id', null) : org ? q.eq('organization_id', String(org)) : q);
+export const forStats = (q: any) => q.eq('is_demo', false).eq('is_test', false);
+const orgFilter = (q: any, org: unknown) => scopeOrg(forStats(q), org);   // الإحصاءات وصفحة الجهة ولوحة منسقها
+const listFilter = (q: any, org: unknown) => scopeOrg(q.eq('is_demo', false), org);   // قائمة المشاركين
 
 export async function orgs() {
   const [{ data: list }, { data: ps }, { data: coords }] = await Promise.all([
     db.from('organizations').select('*').order('created_at'),
-    all((f, t) => db.from('participants').select('id, status, organization_id, organization_name, last_login_at').eq('is_demo', false).order('id').range(f, t)).then((data) => ({ data })),
+    all((f, t) => forStats(db.from('participants').select('id, status, organization_id, organization_name, last_login_at')).order('id').range(f, t)).then((data) => ({ data })),
     db.from('org_coordinators').select('id, organization_id, email, status, expires_at, invited_at, last_login_at'),
   ]);
   const weekAgo = Date.now() - 7 * 864e5;
@@ -244,9 +248,9 @@ async function overviewMore(ids: string[] | null) {
 // ── المشاركون ──
 export async function participants(b: Body) {
   let q = db.from('participants')
-    .select('id, full_name, email, phone, job_title, organization_id, organization_name, status, created_at, last_login_at, placements(dimension, level, approved_at)')
-    .eq('is_demo', false).order('created_at', { ascending: false }).limit(500);
-  q = orgFilter(q, b.org);
+    .select('id, full_name, email, phone, job_title, organization_id, organization_name, status, created_at, last_login_at, is_test, placements(dimension, level, approved_at)')
+    .order('created_at', { ascending: false }).limit(500);
+  q = listFilter(q, b.org);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.search) {
     const s = String(b.search).replace(/[%,()]/g, ' ').trim();
@@ -313,7 +317,7 @@ export async function participant(b: Body) {
 export async function participantSave(a: Admin, b: Body) {
   requireWrite(a);
   const id = String(b.participant_id || '');
-  const p = must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, is_demo').eq('id', id).maybeSingle()) as any;
+  const p = must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, is_demo, is_test').eq('id', id).maybeSingle()) as any;
   if (!p) throw new Fail('المشارك غير موجود', 404);
   if (p.is_demo) throw new Fail('حساب العرض لا يُعدَّل من هنا', 409);
   const f = b.fields && typeof b.fields === 'object' ? b.fields : {};
@@ -323,6 +327,8 @@ export async function participantSave(a: Admin, b: Body) {
   if ('phone' in f) { const raw = String(f.phone || '').trim(); const v = raw ? normalizePhone(raw) : null; if (raw && !v) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.'); row.phone = v; }
   if ('job_title' in f) row.job_title = String(f.job_title || '').trim().slice(0, 120) || null;
   if ('organization_name' in f) row.organization_name = String(f.organization_name || '').trim().slice(0, 200) || null;
+  // حساب اختبار داخلي: يُستبعد من الإحصاءات وحدها (forStats)، ويُسجَّل تغييره في السجل كبقية الحقول
+  if ('is_test' in f) row.is_test = f.is_test === true;
   const changed = Object.keys(row).filter((k) => k !== 'email_verified_at' && row[k] !== p[k]);
   if (!changed.length) return { success: true, changed: [] };
   const saved = must(await db.from('participants').update(row).eq('id', id).select('*').single(), 'تعذّر الحفظ؛ قد يكون البريد مسجلًا لمشارك آخر');

@@ -261,7 +261,7 @@ export async function adminOverview() {
       .order('created_at', { ascending: false }).limit(2000),
     db.from('entitlements').select('id, participant_id, item, source, organization_id, value_cents, created_at, revoked_at, granted_by, note, participants(full_name, email)').order('created_at', { ascending: false }).limit(5000),
     db.from('payment_events').select('type, received_at, processed_at, error').order('received_at', { ascending: false }).limit(20),
-    db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false),
+    db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).eq('is_test', false),
   ]);
   const live = (pays || []).filter((x: any) => x.mode === 'live');
   const paid = live.filter((x: any) => x.status === 'paid');
@@ -305,7 +305,7 @@ export async function adminOverview() {
 }
 
 async function funnel() {
-  const count = async (statuses: string[]) => (await db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).in('status', statuses)).count ?? 0;
+  const count = async (statuses: string[]) => (await db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).eq('is_test', false).in('status', statuses)).count ?? 0;
   const [assessed, approved] = await Promise.all([count(['pending_approval', ...APPROVED]), count(APPROVED)]);
   const { data: prog } = await db.from('entitlements').select('participant_id').eq('item', 'program').is('revoked_at', null);
   return { assessed, approved, enrolled: new Set((prog || []).map((x: any) => x.participant_id)).size };
