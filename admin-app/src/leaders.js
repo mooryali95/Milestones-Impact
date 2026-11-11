@@ -2,11 +2,11 @@
 // تطبيق القادة: الاتصال بـ leaders-api والمسميات والحسابات المشتركة
 // ════════════════════════════════════════════════════════════════
 // توكن جلسة الإدارة نفسه يُرسل إلى leaders-api، فتتحقق منه في api_sessions.
-import { SUPABASE_URL } from '../../src/lib/api.js';
+import { fnUrl } from '../../src/lib/api.js';
 import { BRAND } from '../../shared/js/brand.js';
 import { post, session } from './api.js';
 
-const API = `${SUPABASE_URL}/functions/v1/leaders-api`;
+const API = fnUrl('leaders-api');
 
 let onExpired = () => {};
 export const setLeadersExpired = (fn) => { onExpired = fn; };
