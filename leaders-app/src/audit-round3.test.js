@@ -15,6 +15,17 @@ describe('لوحة الجهة', () => {
     expect(coordParticipant({ id: 'p', full_name: 'س', status: 'approved', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
     expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain('{p.stage || STATUS[p.status] || p.status}');
   });
+  it('org-1 المنسحب والموقوف بلا مرحلة جارية، فتظهر حالتهما في اللوحة وExcel كما في التقرير المطبوع', () => {
+    // رحلتهما تبقى محسوبة بمرحلتها النشطة (الإدارة تغيّر الحالة وحدها)، فكانت اللوحة تعرض «التدريب» لمن انسحب
+    for (const status of ['withdrawn', 'suspended']) {
+      const row = coordParticipant({ id: 'p', full_name: 'س', status, stage: 'التدريب', progress: 45 }, coordPermissions({}));
+      expect(row.stage, status).toBeNull();
+      expect(row.status).toBe(status);
+    }
+    expect(coordParticipant({ id: 'p', full_name: 'س', status: 'enrolled', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
+    // الخريطة تأخذ الحالة لتُخرجهما من الرحلة (journey-map.test.js)
+    expect(read('supabase/functions/leaders-api/coordinator.ts')).toContain('id: r.id, name: r.full_name, status: r.status, created_at: r.created_at,');
+  });
   it('8.5 العدد والمعدود، و8.6 الجداول والبحث لقارئ الشاشة', () => {
     const o = read('leaders-app/src/screens/OrgPortal.jsx');
     expect(o).toContain("countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')");

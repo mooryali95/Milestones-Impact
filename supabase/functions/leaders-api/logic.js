@@ -829,6 +829,11 @@ export function orgVisibility(viewers, now = Date.now()) {
 // أقل عدد تُعرض له أرقام مجمّعة عن مشاركين: دونه يكشف المتوسط درجة الفرد
 export const MIN_COHORT = 5;
 
+// المنسحب والموقوف خارج البرنامج: لا مرحلة جارية له في لوحة الجهة ولا موضع في خريطة رحلتها،
+// فتظهر حالته لا آخر مرحلة كان فيها (تدقيق الجاهزية 2026-11-11، org-1: كان المنسحب يظهر «في التدريب»)
+export const OUT_OF_PROGRAM = ['withdrawn', 'suspended'];
+export const inProgram = (status) => !OUT_OF_PROGRAM.includes(status);
+
 // ما يراه المنسق من المشارك: الاسم والمسمى والمرحلة ونسبة الإنجاز دائمًا،
 // والنشاط (آخر دخول) والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.
 export function coordParticipant(p, perms) {
@@ -836,8 +841,9 @@ export function coordParticipant(p, perms) {
   const out = {
     id: p.id, full_name: p.full_name, job_title: p.job_title || null, status: p.status, approved: !!p.approved,
     progress: Number.isFinite(p.progress) ? p.progress : 0, created_at: p.created_at,
-    // المرحلة الجارية في رحلته كما يراها هو (8.2)، والحالة الإدارية تبقى للتصفية
-    stage: p.stage || null,
+    // المرحلة الجارية في رحلته كما يراها هو (8.2)، والحالة الإدارية تبقى للتصفية.
+    // ولمن خرج من البرنامج لا مرحلة، فتعرض اللوحة وملف Excel حالته كما يعرضها التقرير المطبوع
+    stage: inProgram(p.status) ? p.stage || null : null,
   };
   if (perms.activity) out.last_login_at = p.last_login_at || null;
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }

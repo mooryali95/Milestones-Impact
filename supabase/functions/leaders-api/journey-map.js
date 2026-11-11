@@ -7,6 +7,7 @@
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
+import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
 export const STAGE_GRACE_DAYS = MILESTONE_GRACE_DAYS;
@@ -69,9 +70,11 @@ export function needsOf(stage) {
   return it ? renderJourneyText(it.title_ar, { reqs: stage.items }) : null;
 }
 
-// people: [{ id, name, created_at, journey, milestones, dates }]
+// people: [{ id, name, status, created_at, journey, milestones, dates }]
+// المنسحب والموقوف خارج الرحلة (inProgram): لا يُعدّ فيها ولا يقف عند مرحلة ولا يتأخر عنها
 /** @param {{ stages: any[], people: any[], cohort?: any, program?: any, today?: any, list?: boolean, activity?: boolean }} o */
-export function journeyMap({ stages, people, cohort = null, program = null, today = new Date(), list = false, activity = false }) {
+export function journeyMap({ stages, people: all, cohort = null, program = null, today = new Date(), list = false, activity = false }) {
+  const people = all.filter((p) => inProgram(p.status));
   const keys = stages.map((s) => s.key);
   const windows = stageWindows(stages, cohort || {});
   const t = isoDay(today);

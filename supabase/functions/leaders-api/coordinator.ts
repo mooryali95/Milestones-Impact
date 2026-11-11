@@ -181,7 +181,7 @@ export async function dashboardFor(c: any) {
   const journey_map = journeyMap({
     stages: (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort),
     people: (rows as any[]).map((r: any) => ({
-      id: r.id, name: r.full_name, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
+      id: r.id, name: r.full_name, status: r.status, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
       dates: [r.profile_completed_at, journeys[r.id]?.baselineAt, ...((journeys[r.id]?.pl || []) as any[]).map((x: any) => x.approved_at)],
     })),
     cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,

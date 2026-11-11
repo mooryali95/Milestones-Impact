@@ -91,6 +91,20 @@ describe('التجميع والصلاحيات', () => {
     const withActivity = journeyMap({ ...base, list: true, activity: true }).stages.find((s) => s.key === 'training');
     expect(withActivity.people[0].needs).toBe('بند التدريب');
   });
+  it('org-1 المنسحب والموقوف خارج الرحلة: لا يقفان عند مرحلة ولا يُعدّان متأخرين ولا تظهر أسماؤهما', () => {
+    // رحلتهما المحسوبة ما زالت نشطة عند «التدريب» منذ زمن (الإدارة تغيّر الحالة وحدها)
+    const out = [
+      { id: 'w', name: 'منسحب', status: 'withdrawn', created_at: '2026-09-01T00:00:00Z', journey: journeyAt(2, '2026-10-01'), milestones: [{ id: 'm1', title_ar: 'معلم', due: '2026-11-05', done: false, status: 'late' }] },
+      { id: 's', name: 'موقوف', status: 'suspended', created_at: '2026-09-01T00:00:00Z', journey: journeyAt(2, '2026-10-01'), milestones: [] },
+    ];
+    const m = journeyMap({ ...base, people: [...people, ...out], list: true, activity: true });
+    const training = m.stages.find((s) => s.key === 'training');
+    expect([training.here, training.late]).toEqual([2, 1]);
+    expect(training.people.map((p) => p.name)).toEqual(['سارة', 'خالد']);
+    expect(m.totals).toEqual({ total: 4, finished: 1, late: 1, not_started: 0 });
+    expect(m.milestones).toEqual([{ id: 'm1', title: 'معلم', due: '2026-11-05', done: 1, late: 1 }]);
+    expect(JSON.stringify(m)).not.toMatch(/منسحب|موقوف/);
+  });
   it('لا درجات ولا مستويات في الخريطة أبدًا', () => {
     const json = JSON.stringify(journeyMap({ ...base, list: true, activity: true }));
     expect(json).not.toMatch(/level|score|dimension/);
