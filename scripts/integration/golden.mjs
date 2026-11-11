@@ -155,5 +155,20 @@ ok(susF.success && sql(`select score from leaders.sus_responses where subject_id
 const susG = await call('sus.submit', { answers: [4, 1, 5, 2, 4, 1, 5, 1, 4, 2] }, susOld.token);
 ok(susG.status === 409, 'SUS: إجابة ثانية تُرفض 409', JSON.stringify(susG));
 
+// خريطة الرحلة في لوحة الجهة (2026-11-11): التجميع على قاعدة حقيقية من رحلة المشارك نفسها، والأسماء بصلاحية القائمة وحدها
+const orgId = sql(`insert into leaders.organizations (name) values ('جهة خريطة الرحلة') returning id`);
+const mapP = await seed(`map-${Date.now()}@example.sa`, 'مشارك الخريطة');
+sql(`update leaders.participants set organization_id = ${q(orgId)} where id = ${q(mapP.pid)}`);
+const coordId = sql(`insert into leaders.org_coordinators (organization_id, email, status, permissions) values (${q(orgId)}, ${q(`coord-map-${Date.now()}@example.sa`)}, 'active', '{"list": false}'::jsonb) returning id`);
+sql(`insert into leaders.consent_events (subject, subject_id, kind, version) values ('coordinator', ${q(coordId)}, 'accept', '9999-12-31')`);
+const coordToken = randomBytes(24).toString('base64url');
+sql(`insert into leaders.coordinator_sessions (coordinator_id, token_hash, method, expires_at) values (${q(coordId)}, ${q(hash(coordToken))}, 'email_code', now() + interval '1 day')`);
+const cm = await call('coord.me', { with_dashboard: true }, coordToken);
+const jm = cm.preload?.dashboard?.journey_map;
+ok(cm.success === true && Array.isArray(jm?.stages) && jm.stages.length >= 3, 'لوحة الجهة تحمل خريطة الرحلة بمراحل البرنامج', JSON.stringify(cm).slice(0, 400));
+const here = (jm?.stages || []).reduce((n, s) => n + s.here, 0);
+ok(jm?.totals?.total === 1 && here + (jm?.totals?.finished || 0) === 1 && jm.stages[0].here === 1, 'المشارك الجديد يقف عند أول مرحلة، ومجموع الواقفين والمنهين عدد المشاركين', JSON.stringify(jm?.stages?.map((s) => [s.key, s.here])));
+ok(!JSON.stringify(jm || {}).includes('مشارك الخريطة') && jm?.stages?.[0]?.people === undefined, 'بلا صلاحية القائمة: لا اسم في الخريطة، وأسباب مجمّعة وحدها', JSON.stringify(jm?.stages?.[0]));
+
 console.log(fails ? `\n✗ ${fails} فحوص فشلت` : '\n✓ المسارات الذهبية كلها سليمة');
 process.exit(fails ? 1 : 0);

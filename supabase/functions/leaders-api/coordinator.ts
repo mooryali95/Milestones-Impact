@@ -4,6 +4,8 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
+import { journeyDefinition } from './programs.ts';
+import { journeyMap } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
@@ -138,10 +140,12 @@ export async function dashboardFor(c: any) {
   ]);
   const progressBy: Record<string, number> = {};
   const stageBy: Record<string, string | null> = {};
+  const journeys: Record<string, any> = {};
   const queue = [...(rows as any[])];
   await Promise.all(Array.from({ length: 8 }, async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
       const j: any = await journeyFor(r);
+      journeys[r.id] = j;
       progressBy[r.id] = j.progress;
       // المرحلة الجارية من الرحلة نفسها التي يراها المشارك (التدقيق 2026-11-10، البند 8.2): كانت الجهة ترى «معتمد المستوى»
       // والمشارك نفسه في «التدريب»
@@ -170,6 +174,18 @@ export async function dashboardFor(c: any) {
     db.from('sponsor_requests').select('id', { count: 'exact', head: true }).eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { count: 0 } : r)),
   ]);
   const seatsUsed = new Set((seated || []).map((e: any) => e.participant_id)).size;
+  // خريطة الرحلة (قرار المالك 2026-11-11): مراحل برنامج دفعة الجهة، ومن يقف عند كل منها من الرحلات المحسوبة أعلاه نفسها.
+  // الأسماء لصلاحية «القائمة»، وما ينقص كل شخص لصلاحية «النشاط»، وإلا أسباب مجمّعة بلا أسماء
+  const def: any = await journeyDefinition({ organization_id: c.organization_id });
+  const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
+  const journey_map = journeyMap({
+    stages: (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort),
+    people: (rows as any[]).map((r: any) => ({
+      id: r.id, name: r.full_name, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
+      dates: [r.profile_completed_at, journeys[r.id]?.baselineAt, ...((journeys[r.id]?.pl || []) as any[]).map((x: any) => x.approved_at)],
+    })),
+    cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,
+  });
   return {
     success: true,
     org: { name: d.org.name, short_name: d.org.short_name, color: d.org.color, seats: d.org.seats, sector: d.org.sector },
@@ -184,6 +200,7 @@ export async function dashboardFor(c: any) {
       seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting ?? 0,
     },
     participants,
+    journey_map,
   };
 }
 // أثر الجهة: القياس المبدئي مقابل البعدي لمشاركيها. الأرقام المجمعة للجميع،
