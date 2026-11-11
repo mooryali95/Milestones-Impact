@@ -13,6 +13,7 @@ import Ico from '../Ico.jsx';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, TIERS } from '../labels.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { BEHAVIOR_NA_MESSAGE, BEHAVIOR_NA_RULE, behaviorNaCounts, behaviorNaExcess, isBehaviorNa, MAX_BEHAVIOR_NA } from '../../../supabase/functions/leaders-api/logic.js';
 
 const ADVANCE_MS = 280;
 const BREAK_LINES = {
@@ -41,6 +42,11 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const [failed, setFailed] = useState(null);
   const [busy, setBusy] = useState(false);
   const timer = useRef(null);
+  // حد «لا ينطبق» في الممارسة يفرضه الخادم على المبدئي وحده (assessmentSubmit)، فتعرضه الشاشة قبل الإرسال لا بعده:
+  // naBlock سؤال رُدّ فيه اختيار زائد، وreturnTo وجهة التقدم بعد تصحيح: المراجعة إن جاء منها، أو السؤال الذي أرسله إلى العبارة الأخرى
+  const naLimit = !post;
+  const [naBlock, setNaBlock] = useState(null);
+  const [returnTo, setReturnTo] = useState(null);
   // مؤقت منقضٍ (بالدقائق) منذ بدء الإجابة في هذه الجلسة: يُعرض لا يُفرض
   const [startedAt, setStartedAt] = useState(null);
   const [elapsed, setElapsed] = useState(0);
@@ -97,9 +103,22 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     clearTimeout(timer.current);
     if (!isComplete(q, { [q.id]: k }, { [q.id]: b })) return;
     const at = idx;
-    timer.current = setTimeout(() => goNext(at), ADVANCE_MS);
-  }, [q, idx, save, goNext]);
-  const choose = useCallback((k) => record(k, q?.retro ? before[q.id] ?? null : null), [record, q, before]);
+    timer.current = setTimeout(() => {
+      if (returnTo === 'review') setMode('review');
+      else if (returnTo != null) { setReturnTo(null); setIdx(returnTo); }
+      else goNext(at);
+    }, ADVANCE_MS);
+  }, [q, idx, save, goNext, returnTo]);
+  const choose = useCallback((k) => {
+    // «لا ينطبق» زائد في القسم لا يُحفظ: يبقى السؤال وتحته القاعدة وطريق إلى العبارة الأخرى
+    if (naLimit && isBehaviorNa(q, k) && behaviorNaCounts(qs, { ...answers, [q.id]: k })[q.dimension] > MAX_BEHAVIOR_NA) {
+      clearTimeout(timer.current);
+      return setNaBlock(q.id);
+    }
+    setNaBlock(null);
+    record(k, q?.retro ? before[q.id] ?? null : null);
+  }, [record, q, before, naLimit, qs, answers]);
+  useEffect(() => { setNaBlock(null); if (mode === 'review') setReturnTo(null); }, [idx, mode]);
   const chooseBefore = useCallback((b) => record(answers[q.id] ?? null, b), [record, q, answers]);
 
   useEffect(() => {
@@ -119,9 +138,16 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   const submit = async () => {
     setBusy(true); setError('');
     const res = await call('assessment.submit', { assessment_id: data.assessment.id });
+    if (res.success) { setBusy(false); return onSubmitted(res); }
+    // تجاوز لم تره هذه الشاشة (من جلسة أخرى مثلًا): الإجابات من الخادم، ثم إلى أول عبارة سمّاها
+    const at = res.code === 'too_many_na' ? qs.findIndex((x) => x.id === res.question_ids?.[0]) : -1;
+    if (at >= 0) {
+      const fresh = await call('assessment.get', { kind });
+      if (fresh.success) { setAnswers(fresh.answers || {}); setBefore(fresh.before || {}); }
+      setBusy(false); setIdx(at); setReturnTo('review'); return setMode('q');
+    }
     setBusy(false);
-    if (res.success) onSubmitted(res);
-    else setError(res.message);
+    setError(res.message);
   };
 
   if (error && !data) {
@@ -167,6 +193,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <p className="eyebrow">{post ? 'القياس البعدي' : 'تحديد المستوى'}</p>
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>
           <p>{data.assessment.intro || 'أسئلة قصيرة في الأطر الثلاثة. نتيجتها تحدد مسارك في كل إطار على حدة، فتبدأ من حيث أنت فعلًا.'}</p>
+          {naLimit && qs.some((x) => x.tier === 'behavior' && x.options.some((o) => o.na)) && <p className="small">في عبارات الممارسة، {BEHAVIOR_NA_MESSAGE}، وأجب عن البقية بأقرب تكرار لما تفعله.</p>}
           {/* الزمن تقدير متوسط لا وعد: لا حد زمني، ويظهر الوقت المنقضي في الرأس أثناء الإجابة */}
           <div className="alert info small"><Ico name="clock" /> {data.assessment.est_minutes ? `نحو ${data.assessment.est_minutes} دقيقة في المتوسط بلا حد زمني، ` : ''}{countAr(qs.length, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')}. تُحفظ إجاباتك أولًا بأول.</div>
           {resumed && <div className="bar"><i style={{ width: `${pct}%` }} /></div>}
@@ -197,14 +224,18 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
 
   if (mode === 'review') {
     const missing = qs.filter((x) => !isComplete(x, answers, before));
+    // تجاوز حد «لا ينطبق» يُعرض هنا بموضعه، لا رفضًا بعد «أرسل»
+    const naOver = naLimit && !missing.length ? behaviorNaExcess(qs, answers) : [];
+    const naSecs = [...new Set(naOver.map((id) => secTitle(secOf(qs.find((x) => x.id === id)))))];
     return (
       <div className="page quiz">
         {header}
         <div className="card milestone-card stack">
           <div className="badge"><span>★</span></div>
-          <h2>{missing.length ? `بقي ${missing.length} من الأسئلة` : 'أنهيت الأسئلة كلها'}</h2>
+          <h2>{missing.length ? `بقي ${missing.length} من الأسئلة` : naOver.length ? 'راجع «لا ينطبق» قبل الإرسال' : 'أنهيت الأسئلة كلها'}</h2>
           <p className="muted">{missing.length
             ? 'أجب عنها لتظهر نتيجتك.'
+            : naOver.length ? `${BEHAVIOR_NA_MESSAGE}، واخترته في أكثر من عبارة في قسم ${naSecs.join(' وقسم ')}. غيّر ما زاد إلى أقرب تكرار لما تفعله.`
             : post ? 'أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها، ثم ادعُ مديرك ليقدّر التغير من موقعه.'
               : 'أرسل إجاباتك لتظهر نتيجتك المبدئية في الأطر الثلاثة فورًا، ثم يراجعها المستشار ويعتمد مسارك.'}</p>
           {error && <div className="alert err">{error}</div>}
@@ -212,6 +243,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
           <div className="row" style={{ justifyContent: 'center' }}>
             {missing.length
               ? <button className="btn gold" onClick={() => { setIdx(qs.indexOf(missing[0])); setMode('q'); }}>أكمل الناقص</button>
+              : naOver.length ? <button className="btn gold" onClick={() => { setIdx(qs.findIndex((x) => x.id === naOver[0])); setReturnTo('review'); setMode('q'); }}>اذهب إلى العبارة</button>
               : <button className="btn gold" disabled={busy || saving > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : post ? 'أرسل واعرض ما تغيّر' : 'أرسل واعرض نتيجتي'}</button>}
             <button className="btn ghost" onClick={() => { setIdx(qs.length - 1); setMode('q'); }}>راجع إجاباتي</button>
           </div>
@@ -222,6 +254,9 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
 
   const likert = q.kind === 'likert';
   const retroOpen = q.retro && answers[q.id] != null && !isNa(q, answers[q.id]);
+  // تنبيه الحد: اختيار زائد لم يُقبل، أو «لا ينطبق» محفوظ هنا وفي عبارة أخرى من القسم (قبل هذا الإصلاح أو من جلسة أخرى)
+  const naNote = naLimit && q.tier === 'behavior' && (naBlock === q.id || (isBehaviorNa(q, answers[q.id]) && behaviorNaCounts(qs, answers)[q.dimension] > MAX_BEHAVIOR_NA));
+  const naOther = naNote ? qs.findIndex((x) => x.id !== q.id && x.dimension === q.dimension && isBehaviorNa(x, answers[x.id])) : -1;
   return (
     <div className="page quiz">
       {header}
@@ -233,7 +268,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
         <p className="q-text">{q.text}</p>
         {q.help && <p className="q-help">{q.help}</p>}
         {!q.help && <div style={{ height: 12 }} />}
-        {q.tier === 'behavior' && qs[idx - 1]?.tier !== 'behavior' && <p className="q-help">لا إجابة صحيحة هنا: اختر ما تفعله فعلًا.</p>}
+        {q.tier === 'behavior' && qs[idx - 1]?.tier !== 'behavior' && <p className="q-help">لا إجابة صحيحة هنا: اختر ما تفعله فعلًا{naLimit ? `، و${BEHAVIOR_NA_RULE}` : ''}.</p>}
         {q.retro && <p className="retro-label">الآن، في الأشهر الثلاثة الأخيرة</p>}
         <div className={`options${likert ? ' likert' : ''}`} role="radiogroup" aria-label={q.retro ? `${q.text}: الآن` : q.text}>
           {q.options.map((o, i) => (
@@ -257,6 +292,12 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
               ))}
             </div>
           </>
+        )}
+        {naNote && (
+          <div className="alert info" role="alert" style={{ marginTop: 14 }}>
+            {BEHAVIOR_NA_RULE}، وفي هذا القسم عبارة أخرى اخترته فيها. اختر هنا أقرب تكرار لما تفعله، أو غيّر إجابتك هناك.
+            {naOther >= 0 && <> <button className="link" onClick={() => { setReturnTo((r) => (r === 'review' ? r : idx)); setIdx(naOther); }}>اذهب إليها</button></>}
+          </div>
         )}
         {failed && (
           <div className="alert err" style={{ marginTop: 14 }}>

@@ -222,17 +222,31 @@ export function acquiescenceFor(questions, answers) {
   return Object.fromEntries(DIMENSIONS.map((d) => [d, !!by[d] && by[d].n > 0 && by[d].top === by[d].n]));
 }
 
-// «لا ينطبق» في الممارسة: كم عبارة في كل بُعد أُجيبت بدرجة سالبة
+// «لا ينطبق» في عبارة ممارسة: خيار بدرجة سالبة في الخادم، أو موسوم na فيما يصل الواجهة (لا ترى الدرجات).
+// فالقاعدة نفسها تُحسب في الخادم عند الإرسال وفي شاشة القياس قبله (فحص الجاهزية p-entry-2).
+export function isBehaviorNa(q, k) {
+  if (!q || q.active === false || q.tier !== 'behavior' || k == null) return false;
+  const opts = q.options || [];
+  const o = opts.find((x) => x?.k === k) ?? opts[k];
+  return !!o && (o.na === true || Number(o.score) < 0);
+}
+// «لا ينطبق» في الممارسة: كم عبارة في كل بُعد أُجيبت به
 export function behaviorNaCounts(questions, answers) {
   const out = Object.fromEntries(DIMENSIONS.map((d) => [d, 0]));
   for (const q of questions || []) {
-    if (q.active === false || q.tier !== 'behavior' || answers?.[q.id] == null) continue;
-    if ((scoreFor(q, answers[q.id]) ?? 0) < 0) out[q.dimension] = (out[q.dimension] || 0) + 1;
+    if (isBehaviorNa(q, answers?.[q.id])) out[q.dimension] = (out[q.dimension] || 0) + 1;
   }
   return out;
 }
 export const MAX_BEHAVIOR_NA = 1;
-export const BEHAVIOR_NA_MESSAGE = 'اختر «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم';
+// القاعدة بنص واحد: مقدمة القياس وأول عبارات كل قسم وتنبيه الاختيار الزائد، ورسالة رفض الإرسال
+export const BEHAVIOR_NA_RULE = '«لا ينطبق» لعبارة واحدة على الأكثر في كل قسم';
+export const BEHAVIOR_NA_MESSAGE = `اختر ${BEHAVIOR_NA_RULE}`;
+// عبارات «لا ينطبق» في كل قسم تجاوز الحد، بترتيب الأسئلة: الخادم يردها مع الرفض، والشاشة تدل على أولها
+export function behaviorNaExcess(questions, answers) {
+  const n = behaviorNaCounts(questions, answers);
+  return (questions || []).filter((q) => n[q.dimension] > MAX_BEHAVIOR_NA && isBehaviorNa(q, answers?.[q.id])).map((q) => q.id);
+}
 
 // opts.acquiescence: من acquiescenceFor لبُعد التقييم (يحتاج الإجابات نفسها)
 export function evaluatePlacement(pcts, model = DEFAULT_MODEL, opts = {}) {

@@ -5,7 +5,7 @@ import {
   all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import {
-  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaCounts, BEHAVIOR_NA_MESSAGE, MAX_BEHAVIOR_NA, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
@@ -849,9 +849,10 @@ export async function assessmentSubmit(p: any, b: Body) {
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
 
   // «لا ينطبق» لعبارة واحدة على الأكثر في كل قسم من الممارسة: أكثر من ذلك
-  // يُسقط الممارسة من المؤشر ويعيد توزيع وزنها صامتًا (ملحق التدقيق 1، #1)
-  const na = behaviorNaCounts(questions, answers);
-  if (Object.values(na).some((n: any) => n > MAX_BEHAVIOR_NA)) throw new Fail(BEHAVIOR_NA_MESSAGE, 400, 'too_many_na');
+  // يُسقط الممارسة من المؤشر ويعيد توزيع وزنها صامتًا (ملحق التدقيق 1، #1). الرد يسمّي العبارات الزائدة
+  // فتنتقل الشاشة إلى أولها بدل أن يبحث عنها المشارك سؤالًا سؤالًا (فحص الجاهزية p-entry-2)
+  const naOver = behaviorNaExcess(questions, answers);
+  if (naOver.length) throw new Fail(BEHAVIOR_NA_MESSAGE, 400, 'too_many_na', { question_ids: naOver });
   // المعيار المركّب وحده، من جدوله أو من قيمه الافتراضية في logic.js
   const result = placementFromAnswers(questions, answers, [], model.data || DEFAULT_MODEL);
   const split = skillSplit(questions, answers);
