@@ -64,7 +64,10 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     labKeys.length ? db.from('lab_items').select('id, key, title_ar, active').in('key', labKeys) : none,
     labKeys.length ? db.from('lab_attempts').select('item_id, pct, finished_at').eq('participant_id', p.id).not('finished_at', 'is', null) : none,
   ]);
-  const labs = Object.fromEntries((labItems.data || []).map((it: any) => {
+  // تعذر قراءة الأداة أو المحاولات لا يُعدّ «أداة غائبة» فيكتمل المتطلب بخطأ عابر: labs = null فيبقى غير مكتمل (labStatus)
+  const labsFailed = !!((labItems as any).error || (labTries as any).error);
+  if (labsFailed) console.error('lab evidence', (labItems as any).error || (labTries as any).error);
+  const labs = labsFailed ? null : Object.fromEntries((labItems.data || []).map((it: any) => {
     const tries = (labTries.data || []).filter((a: any) => a.item_id === it.id).sort((a: any, b: any) => String(a.finished_at).localeCompare(String(b.finished_at)));
     return [it.key, {
       item_id: it.id, title: it.title_ar, active: it.active !== false, attempts: tries.length,

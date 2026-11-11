@@ -876,9 +876,11 @@ export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curr
 //   spaced    محاولة استرجاع: محاولة منتهية بعد الأولى بأسبوعين على الأقل (التكرار المتباعد)
 export const LAB_ACCEPT_AR = { mastery: `بلوغ الإتقان (${LAB_MASTERY}%) في أفضل محاولة`, finished: 'إنهاء محاولة واحدة', spaced: 'محاولة ثانية بعد أسبوعين على الأقل من الأولى' };
 export const LAB_SPACED_DAYS = 14;
-// labs: أدوات المختبر بمفاتيحها { item_id, title, active, attempts, best, first_at, last_at }. الغائبة أو الموقوفة لا تحبس مرحلتها
+// labs: أدوات المختبر بمفاتيحها { item_id, title, active, attempts, best, first_at, last_at }. الغائبة أو الموقوفة لا تحبس مرحلتها.
+// labs = null: تعذرت قراءة الأداة أو المحاولات، فالحالة مجهولة: لا يكتمل المتطلب بها (يفشل مغلقًا) ويُعرض أنها تعذرت
 export function labStatus(c, labs) {
   const key = c?.lab_key || null;
+  if (labs === null) return { type: 'lab', done: false, unavailable: true, lab_key: key };
   const s = key ? labs?.[key] : null;
   if (!s || s.active === false) return { type: 'lab', done: true, na: true, lab_key: key };
   const accept = c.accept in LAB_ACCEPT_AR ? c.accept : 'mastery';
@@ -1223,7 +1225,7 @@ export function activityFor(req, ev, now = Date.now()) {
     return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
   }
   if (req.kind === 'model') return ev.modelsLocked ? { type: 'model', done: false, locked: true, model_key: c.model_key || null } : modelStatus(c, ev.models || {});
-  if (req.kind === 'lab') return labStatus(c, ev.labs || {});
+  if (req.kind === 'lab') return labStatus(c, ev.labs === null ? null : ev.labs || {});
   if (req.kind === 'capstone') {
     // فصول بعينها من وثيقة المبادرة (خطة التطبيق مثلًا): يكتمل حين تُحفظ كلها، لا باعتماد الوثيقة
     if (c.sections?.length) return ev.modelsLocked ? { type: 'capstone', done: false, locked: true, sections: [] } : capstoneSectionsStatus(c.sections, ev.models || {});

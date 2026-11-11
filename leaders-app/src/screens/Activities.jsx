@@ -354,6 +354,7 @@ const LAB_ACCEPT_HINT = {
   spaced: () => 'يكتمل بمحاولة ثانية بعد أسبوعين على الأقل من محاولتك الأولى.',
 };
 function LabLink({ a, onLab }) {
+  if (a.unavailable) return <p className="h">تعذر التحقق من محاولاتك في هذه الأداة الآن، فلم يُحتسب المتطلب بعد. أعد فتح الصفحة بعد قليل.</p>;
   if (a.na) return <p className="h">هذه الأداة غير متاحة الآن، فيُحتسب لك.</p>;
   const state = a.best == null ? 'لم تبدأ بعد' : `أفضل نتيجة ${a.best}%${a.accept === 'mastery' ? `، والإتقان ${a.mastery}%` : ''}`;
   return (

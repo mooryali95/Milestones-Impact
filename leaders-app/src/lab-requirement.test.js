@@ -45,6 +45,20 @@ describe('حالة متطلب «أداة من المختبر»', () => {
     expect(labStatus(c, {})).toMatchObject({ done: true, na: true });
     expect(labStatus(c, labs({ active: false }))).toMatchObject({ done: true, na: true });
   });
+  it('تعذر قراءة الأداة أو المحاولات يفشل مغلقًا: لا يكتمل المتطلب ولا تتقدم المرحلة', () => {
+    expect(labStatus(c, null)).toEqual({ type: 'lab', done: false, unavailable: true, lab_key: 'pm-process-map' });
+    const req = { id: 'r1', stage_key: 'training', kind: 'lab', required: true, sort: 1, config: c, dimension: 'milestone', level: null };
+    const act = activityFor(req, { labs: null });
+    expect(act).toMatchObject({ done: false, unavailable: true });
+    expect(act.na).toBeUndefined();
+    const j = buildJourney({ stages: [{ key: 'training', sort: 1 }, { key: 'ojt_coaching', sort: 2 }], requirements: [req], progress: {}, levels: { milestone: 'beginner' }, state: {}, activity: { r1: act } });
+    expect(j[0]).toMatchObject({ status: 'active', done: 0, total: 1 });
+    // الخادم يمرر null عند خطأ أي من القراءتين، لا قائمة فارغة
+    const src = read('supabase/functions/leaders-api/activities.ts');
+    expect(src).toMatch(/const labsFailed = !!\(\(labItems as any\)\.error \|\| \(labTries as any\)\.error\);/);
+    expect(src).toMatch(/const labs = labsFailed \? null :/);
+    expect(read('leaders-app/src/screens/Activities.jsx')).toMatch(/if \(a\.unavailable\) return <p className="h">تعذر التحقق من محاولاتك/);
+  });
   it('activityFor يوجّه النوع، والرحلة لا تكتمل مرحلتها قبل الإتقان', () => {
     const req = { id: 'r1', stage_key: 'training', kind: 'lab', required: true, sort: 1, config: c, dimension: 'milestone', level: null };
     expect(activityFor(req, { labs: labs({ attempts: 1, best: 80 }) }).done).toBe(true);
