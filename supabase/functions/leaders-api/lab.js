@@ -43,15 +43,18 @@ const DIM_ORDER = ['milestone', 'impact', 'leadership'];
 
 export const grantLive = (g, now = Date.now()) => !g.expires_at || Date.parse(g.expires_at) > now;
 
-/** @param {any[]} items @param {{ levels?: Record<string, string> | null, participantId?: string, organizationId?: string | null, grants?: any[], now?: number }} who */
-export function labVisible(items, { levels = null, participantId, organizationId = null, grants = [], now = Date.now() }) {
+// ومصدر ثالث: متطلب «أداة من المختبر» في رحلة المشارك يفتح أداته له (required: مفاتيح الأدوات المطلوبة منه)،
+// فلا يُطلب من أحد ما لا يراه، ولا يلزم منح يدوي.
+/** @param {any[]} items @param {{ levels?: Record<string, string> | null, participantId?: string, organizationId?: string | null, grants?: any[], required?: string[], now?: number }} who */
+export function labVisible(items, { levels = null, participantId, organizationId = null, grants = [], required = [], now = Date.now() }) {
   const mine = grants.filter((g) => grantLive(g, now)
     && ((g.participant_id && g.participant_id === participantId) || (g.organization_id && g.organization_id === organizationId)));
   const whole = mine.some((g) => !g.item_id);
   const ids = new Set(mine.map((g) => g.item_id).filter(Boolean));
+  const need = new Set(required || []);
   const byLevel = (it) => it.audience === 'all' && !!levels?.[it.dimension] && LEVEL_RANK[levels[it.dimension]] >= LEVEL_RANK[it.min_level || 'beginner'];
   return items
-    .filter((it) => it.active !== false && (whole || ids.has(it.id) || byLevel(it)))
+    .filter((it) => it.active !== false && (whole || ids.has(it.id) || need.has(it.key) || byLevel(it)))
     .sort((a, b) => DIM_ORDER.indexOf(a.dimension) - DIM_ORDER.indexOf(b.dimension) || (a.sort || 0) - (b.sort || 0));
 }
 
@@ -415,6 +418,60 @@ export function practicePct(spec, results, path) {
 export function labAward(points, pct) {
   const p = Number(points) || 0;
   return { mastery: pct >= MASTERY ? p : 0, excellence: pct >= EXCELLENCE ? Math.round(p * EXCELLENCE_SHARE) : 0 };
+}
+
+// ── ملخص أداء المشارك في أداة: للمستشار في ملف المشارك (أفضل نتيجة، والمحاولات، والتلميحات، وأكثر خلط) ──
+// attempts: محاولاته المنتهية في الأداة { pct, results, hints, finished_at }
+// spec (اختياري): مواصفة الأداة لتسمية أعمدة الخلط بأسمائها
+export function labSummary(attempts, spec = null) {
+  const done = (attempts || []).filter((a) => a.finished_at).sort((a, b) => String(a.finished_at).localeCompare(String(b.finished_at)));
+  if (!done.length) return { attempts: 0, first: null, best: null, hints: 0, mix: null };
+  const mix = {};
+  for (const a of done) {
+    for (const r of Object.values(a.results || {})) {
+      const cm = r?.confusion?.cols;
+      if (!cm) continue;
+      for (const [e, row] of Object.entries(cm)) for (const [g, n] of Object.entries(row || {})) if (e !== g && n) mix[`${e}>${g}`] = (mix[`${e}>${g}`] || 0) + n;
+    }
+  }
+  const top = Object.entries(mix).sort((x, y) => y[1] - x[1])[0];
+  return {
+    attempts: done.length, first: done[0].pct, best: Math.max(...done.map((a) => Number(a.pct) || 0)),
+    hints: done.reduce((n, a) => n + hintCount(a.hints), 0),
+    mix: top ? { expected: top[0].split('>')[0], chosen: top[0].split('>')[1], n: top[1], ...mixLabels(spec, top[0].split('>')) } : null,
+  };
+}
+
+function mixLabels(spec, [e, g]) {
+  const cols = (spec?.steps || []).filter((st) => st.type === 'board').flatMap((st) => st.cols || []);
+  const name = (id) => cols.find((c) => c.id === id)?.label || id;
+  return { expected_ar: name(e), chosen_ar: name(g) };
+}
+
+// ── تحليل البطاقات للإدارة: لكل بطاقة في لوحة نسبة الصواب، وأكثر خانة خاطئة، ومتوسط درجة التلميح ──
+// attempts: المحاولات التي أُجيبت فيها خطوة اللوحة { answers, hints } (أولى المحاولات وأحدثها سواء)
+export function boardCardStats(step, stepIndex, attempts) {
+  const rows = (attempts || []).filter((a) => a.answers && stepIndex in a.answers);
+  return (step.cards || []).map((c) => {
+    let right = 0; let n = 0; let hint = 0;
+    const wrong = {};
+    for (const a of rows) {
+      const p = a.answers[stepIndex]?.[c.id];
+      const d = Number(a.hints?.[stepIndex]?.[c.id]) || 0;
+      hint += d;
+      if (!Array.isArray(p)) continue;
+      n++;
+      if (p[0] === c.row && p[1] === c.col && d < HINT_MAX) right++;
+      else if (!(p[0] === c.row && p[1] === c.col)) { const k = `${p[0]}:${p[1]}`; wrong[k] = (wrong[k] || 0) + 1; }
+    }
+    const top = Object.entries(wrong).sort((x, y) => y[1] - x[1])[0];
+    return {
+      id: c.id, label: c.label, code: c.code || null, row: c.row, col: c.col, n,
+      right_pct: n ? Math.round((100 * right) / n) : null,
+      top_wrong: top ? { row: top[0].split(':')[0], col: top[0].split(':')[1], n: top[1] } : null,
+      avg_hint: rows.length ? Math.round((10 * hint) / rows.length) / 10 : 0,
+    };
+  });
 }
 
 // ── تحقق المحتوى قبل الحفظ: يعيد المواصفة منظفة أو يرمي رسالة عربية ──

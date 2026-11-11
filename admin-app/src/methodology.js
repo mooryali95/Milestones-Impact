@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -15,7 +15,7 @@ export const PHASE = PHASE_AR;
 export const KIND = {
   check: 'تأكيد إنجاز', upload: 'رفع ملف', form: 'نموذج', meeting: 'جلسة يسجلها المستشار', auto: 'تلقائي',
   reading: 'قراءة أبواب الكتاب', video: 'مشاهدة فيديو', workshop: 'جلسات جماعية بمواعيد', coaching: 'جلسات فردية بحجز', curriculum: 'منهج المسار',
-  model: 'نموذج تعليمي', capstone: 'مشروع التخرج', survey: 'استبانة',
+  model: 'نموذج تعليمي', capstone: 'مشروع التخرج', survey: 'استبانة', lab: 'أداة من المختبر',
 };
 // ما يعنيه كل نوع، يظهر تحت اختيار النوع
 export const KIND_HELP = {
@@ -32,6 +32,7 @@ export const KIND_HELP = {
   model: 'نموذج من «كتيب القائد» يبنيه المشارك في المنصة، فيكتمل المتطلب بتسليمه أو بتقييمك له. لا رفع ملفات: النموذج نفسه هو المخرج وفصل في وثيقة مبادرته.',
   capstone: 'وثيقة المبادرة: يكتمل حين تعتمدها بالمعيار (ويؤيدها راعيها إن سُمّي)، أو حين يحفظ المشارك فصولًا تختارها منها، كخطة التطبيق. تراجعها من «مشاريع التخرج».',
   survey: 'أسئلة تكتبها أنت، يكتمل المتطلب بإرسال المشارك إجاباته لا بنقرة. إن أخفيته من دفعة اختفى من رحلات أعضائها وبقيت الإجابات.',
+  lab: 'أداة من «مختبر القائد» تُصحَّح آليًا. يكتمل من محاولات المشارك فيها، ويفتحها المتطلب لمن يخصه بلا منح. إن أوقفت الأداة حُسب المتطلب منجزًا، فلا يُطالب أحد بما لا يراه.',
 };
 export const VERIFY = VERIFY_AR;
 export const COACH_MODE = SESSION_MODE_AR;
@@ -87,7 +88,7 @@ export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'active', label: 'ظاهرة للمشاركين', type: 'check' },
 ];
 
-export const reqFields = (stages, models = []) => [
+export const reqFields = (stages, models = [], labs = []) => [
   { name: 'code', label: 'الرمز (فريد، مثل T-ATTEND)', dir: 'ltr' },
   { name: 'title_ar', label: 'نص المتطلب' },
   { name: 'help_ar', label: 'توضيح للمشارك', type: 'textarea', rows: 2, help: TOKEN_HELP },
@@ -114,6 +115,9 @@ export const reqFields = (stages, models = []) => [
   { name: 'cfg_model_key', label: 'النموذج التعليمي', type: 'select', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'model',
     help: () => 'يراه المشارك بمستواه ونطاق عمله. إن لم يكن النموذج متاحًا له حُسب المتطلب منجزًا، فلا يُطالب بما لا يخصه.' },
   { name: 'cfg_accept', label: 'يكتمل', type: 'select', options: ACCEPT, show: (v) => v.kind === 'model' },
+  { name: 'cfg_lab_key', label: 'أداة المختبر', type: 'select', options: Object.fromEntries(labs.map((l) => [l.key, `${l.title_ar}${l.active === false ? ' (موقوفة)' : ''}`])), show: (v) => v.kind === 'lab',
+    help: () => 'يراها المشارك في المختبر وفي بطاقة المتطلب بزر «افتح في المختبر». والسقالة فيها بحسب مستواه في إطارها.' },
+  { name: 'cfg_lab_accept', label: 'يكتمل', type: 'select', options: LAB_ACCEPT_AR, show: (v) => v.kind === 'lab' },
   { name: 'cfg_sections', label: 'فصول من وثيقة المبادرة (اتركها فارغة ليكتمل باعتماد الوثيقة كلها)', type: 'multi', options: Object.fromEntries(models.map((m) => [m.key, m.title_ar])), show: (v) => v.kind === 'capstone',
     help: () => 'يكتمل حين يحفظ المشارك الفصول المختارة، فتصير خطة التطبيق جزءًا من وثيقته لا ملفًا مرفوعًا.' },
   { name: 'cfg_questions', label: 'أسئلة الاستبانة (سطر لكل سؤال)', type: 'textarea', rows: 6, show: (v) => v.kind === 'survey',
@@ -127,7 +131,9 @@ export const reqFields = (stages, models = []) => [
 const CFG_DEFAULTS = { accept: 'reviewed', scope: 'all', quiz: true, min_pct: 90, sessions_required: 1, minutes: 60, verify: 'qr', mode: 'online' };
 export function reqToForm(r) {
   const c = { ...CFG_DEFAULTS, ...(r.config || {}) };
-  return { ...r, ...Object.fromEntries(Object.entries(c).map(([k, x]) => [`cfg_${k}`, x])) };
+  // قبول أداة المختبر حقل مستقل عن «يكتمل» في النموذج التعليمي، لأن خياراته غيرها
+  const lab = { cfg_lab_accept: r.kind === 'lab' && r.config?.accept in LAB_ACCEPT_AR ? r.config.accept : 'mastery' };
+  return { ...r, ...Object.fromEntries(Object.entries(c).map(([k, x]) => [`cfg_${k}`, x])), ...lab };
 }
 // قيم النموذج ← المتطلب: config من حقول cfg_* الظاهرة لنوعه
 export function formToReq(v) {

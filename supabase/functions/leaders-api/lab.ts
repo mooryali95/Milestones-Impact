@@ -8,13 +8,13 @@
 // المختبر قسم مستقل: يراه من فتحته له الإدارة أو لجهته (lab_grants)، ومن
 // اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
 import { all, audit, db, Fail, must } from './core.ts';
-import { releaseOf } from './programs.ts';
+import { journeyDefinition, releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
-import { seededShuffle } from './logic.js';
+import { requirementApplies, seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
 import {
   AUDIENCES, BOARD_FEEDBACK, boardCheck, boardScaffold, gradeStep, grantLive, HINT_MAX, hintCount, hintFor, hintsView, labAward, labLevelOf, labVisible, MASTERY,
-  meterState, nextIndex, practicePct, publicSpec, revealedOf,
+  meterState, nextIndex, practicePct, publicSpec, revealedOf, boardCardStats, LEVELS,
 } from './lab.js';
 
 type Body = Record<string, any>;
@@ -25,14 +25,22 @@ const ANSWER_MAX = 20000;
 const ITEM_COLS = 'id, key, kind, dimension, chapter_key, min_level, sort, title_ar, summary_ar, minutes, points, active, audience, spec';
 
 // أدوات المختبر التي يراها المشارك الآن
+// أدوات المختبر المطلوبة في رحلة المشارك (متطلب «أداة من المختبر» يخصه): تُفتح له بلا منح
+async function requiredLabKeys(p: any, levels: Record<string, string> | null) {
+  const def = await journeyDefinition(p).catch(() => null);
+  return (def?.requirements || []).filter((r: any) => r.kind === 'lab' && requirementApplies(r, levels || {}))
+    .map((r: any) => String(r.config?.lab_key || '')).filter(Boolean);
+}
+
 async function visible(p: any) {
   const levels = await approvedLevels(p).catch(() => null);
   const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
-  const [items, grants] = await Promise.all([
+  const [items, grants, required] = await Promise.all([
     db.from('lab_items').select(ITEM_COLS),
     db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
+    requiredLabKeys(p, levels),
   ]);
-  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [] }) };
+  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [], required }) };
 }
 const visibleItems = async (p: any) => (await visible(p)).items;
 
@@ -317,4 +325,36 @@ export async function adminRevoke(a: Admin, b: Body) {
   const gone = must(await db.from('lab_grants').delete().eq('id', id).select('organization_id, participant_id, item_id, expires_at'));
   if (gone?.length) await audit('admin', a.email, 'lab.revoke', 'lab_grants', id, gone[0], null);
   return { success: true };
+}
+
+// معاينة الأداة كما يراها مشارك بمستوى تختاره الإدارة: السقالة والخطوات بلا حلول، ولا محاولة تُنشأ
+export async function adminPreview(b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('الأداة غير محددة');
+  const level = LEVELS.includes(String(b.level)) ? String(b.level) : 'beginner';
+  const it = must(await db.from('lab_items').select(ITEM_COLS).eq('id', id).maybeSingle());
+  if (!it) throw new Fail('الأداة غير موجودة', 404);
+  return { success: true, item: { ...meta(it), level }, spec: publicSpec(it.spec, (list: any[]) => list, level) };
+}
+
+// تحليل البطاقات: لكل لوحة في الأداة، نسبة صواب كل بطاقة وأكثر خانة خاطئة ومتوسط درجة التلميح، من المحاولات
+// التي أُجيبت فيها اللوحة، بلا حساب العرض وحسابات الاختبار (forStats)
+export async function adminCards(b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('الأداة غير محددة');
+  const it = must(await db.from('lab_items').select(ITEM_COLS).eq('id', id).maybeSingle());
+  if (!it) throw new Fail('الأداة غير موجودة', 404);
+  const boards = (it.spec?.steps || []).map((st: any, i: number) => ({ st, i })).filter((x: any) => x.st.type === 'board');
+  if (!boards.length) return { success: true, boards: [] };
+  // بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
+  const rows = await all((f, t) => db.from('lab_attempts').select('*, participants!inner(is_demo, is_test)').eq('item_id', id)
+    .eq('participants.is_demo', false).eq('participants.is_test', false).order('id').range(f, t));
+  return {
+    success: true,
+    boards: boards.map(({ st, i }: any) => ({
+      step: i, title: st.title_ar || '', rows: st.rows, cols: st.cols,
+      attempts: rows.filter((a: any) => a.answers && i in a.answers).length,
+      cards: boardCardStats(st, i, rows),
+    })),
+  };
 }

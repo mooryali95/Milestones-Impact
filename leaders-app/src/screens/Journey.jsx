@@ -210,7 +210,7 @@ export const stageCount = (stage) => {
   return `${req.filter((i) => i.status === 'done').length} من ${req.length}${opt ? ` · ${opt === 1 ? 'واحد اختياري' : `${opt} اختيارية`}` : ''}`;
 };
 
-function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, setToast }) {
+function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onLabItem, setToast }) {
   const [busy, setBusy] = useState(false);
   // بعد «أنجزته» أو «تراجع» يُستبدل الزر بنقيضه، فيعود التركيز إليه (أو إلى البند إن لم يبق زر) لا إلى أول الصفحة
   const li = useRef(null);
@@ -258,7 +258,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         </div>
         {item.help_ar && !(item.code === 'T-360' && sys && !verified && item.status !== 'done') && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
-        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} setToast={setToast} />}
+        {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} onLabItem={onLabItem} setToast={setToast} />}
         {sys && !verified && item.kind !== 'survey' && item.status !== 'done' && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يُسجَّل بعد انعقاد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' || item.code === 'T-360' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
@@ -619,7 +619,7 @@ function Continuous({ c }) {
   );
 }
 
-export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab }) {
+export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab, onLabItem }) {
   const { journey, profile, participant } = me;
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
   const [susFirst] = useState(() => bootPreload.take('sus'));
@@ -806,7 +806,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                     order += 1;
                     return (
                       <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
-                        onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} setToast={setToast} />
+                        onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
                     );
                   };
                   // المراحل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير

@@ -6,6 +6,7 @@
 
 import { DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
+import { MASTERY as LAB_MASTERY } from './lab.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -867,7 +868,26 @@ export function isoWeek(d = new Date()) {
 // ════════════════════════════════════════════════════════════════
 // المتطلب من هذه الأنواع لا يكتمل بنقرة؛ يحسمه دليل يجمعه النظام.
 // تجاوز يدوي من المستشار (participant_requirements.status = done) يبقى ممكنًا.
-export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum', 'model', 'capstone'];
+export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curriculum', 'model', 'capstone', 'lab'];
+
+// متطلب «أداة من المختبر»: يكتمل من محاولات المشارك في الأداة نفسها، لا بنقرة.
+//   mastery   أفضل محاولة منتهية تبلغ عتبة الإتقان (70%)، كنقاط الأداة
+//   finished  إنهاء محاولة واحدة أيًا كانت نتيجتها
+//   spaced    محاولة استرجاع: محاولة منتهية بعد الأولى بأسبوعين على الأقل (التكرار المتباعد)
+export const LAB_ACCEPT_AR = { mastery: `بلوغ الإتقان (${LAB_MASTERY}%) في أفضل محاولة`, finished: 'إنهاء محاولة واحدة', spaced: 'محاولة ثانية بعد أسبوعين على الأقل من الأولى' };
+export const LAB_SPACED_DAYS = 14;
+// labs: أدوات المختبر بمفاتيحها { item_id, title, active, attempts, best, first_at, last_at }. الغائبة أو الموقوفة لا تحبس مرحلتها
+export function labStatus(c, labs) {
+  const key = c?.lab_key || null;
+  const s = key ? labs?.[key] : null;
+  if (!s || s.active === false) return { type: 'lab', done: true, na: true, lab_key: key };
+  const accept = c.accept in LAB_ACCEPT_AR ? c.accept : 'mastery';
+  const attempts = Number(s.attempts) || 0;
+  const done = accept === 'finished' ? attempts > 0
+    : accept === 'spaced' ? attempts > 1 && !!s.first_at && !!s.last_at && Date.parse(s.last_at) - Date.parse(s.first_at) >= LAB_SPACED_DAYS * 864e5
+      : (s.best ?? -1) >= LAB_MASTERY;
+  return { type: 'lab', done, lab_key: key, item_id: s.item_id, title: s.title || null, attempts, best: s.best ?? null, accept, mastery: LAB_MASTERY, first_at: s.first_at || null };
+}
 
 // أسئلة الاستبانة من إعدادها: سطر لكل سؤال؛ «(نص)» في أوله سؤال مفتوح، و«(نص اختياري)» مفتوح لا يُلزم،
 // وما عداه تقدير من 1 إلى 5. المصدر الواحد للأسئلة للواجهة والخادم معًا.
@@ -1203,6 +1223,7 @@ export function activityFor(req, ev, now = Date.now()) {
     return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
   }
   if (req.kind === 'model') return ev.modelsLocked ? { type: 'model', done: false, locked: true, model_key: c.model_key || null } : modelStatus(c, ev.models || {});
+  if (req.kind === 'lab') return labStatus(c, ev.labs || {});
   if (req.kind === 'capstone') {
     // فصول بعينها من وثيقة المبادرة (خطة التطبيق مثلًا): يكتمل حين تُحفظ كلها، لا باعتماد الوثيقة
     if (c.sections?.length) return ev.modelsLocked ? { type: 'capstone', done: false, locked: true, sections: [] } : capstoneSectionsStatus(c.sections, ev.models || {});
@@ -1270,6 +1291,13 @@ export function cleanConfig(kind, cfg, prev = {}) {
     const key = String(c.model_key || '').trim();
     if (!/^[a-z0-9-]{2,60}$/.test(key)) throw new Error('اختر النموذج التعليمي الذي يكتمل به المتطلب');
     return { model_key: key, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
+  }
+  if (kind === 'lab') {
+    const key = String(c.lab_key || '').trim();
+    if (!/^[a-z0-9-]{2,60}$/.test(key)) throw new Error('اختر أداة المختبر التي يكتمل بها المتطلب');
+    // lab_accept من محرر الرحلة (حقل مستقل عن «يكتمل» في النموذج التعليمي)، وaccept من الإعداد المحفوظ
+    const acc = c.lab_accept ?? c.accept;
+    return { lab_key: key, accept: acc in LAB_ACCEPT_AR ? acc : 'mastery' };
   }
   if (kind === 'capstone') {
     const sections = [...new Set((Array.isArray(c.sections) ? c.sections : []).map(String).filter((k) => /^[a-z0-9-]{2,60}$/.test(k)))].slice(0, 12);
