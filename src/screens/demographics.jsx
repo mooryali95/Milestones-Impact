@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef } from "react";
+import { useDialog } from "../lib/a11y";
 import Skeleton from "../components/Skeleton";
 import Icon from "../components/Icon";
 
@@ -20,10 +21,12 @@ const DemographicsScreen = (p) => {
     updateDemoRow,
   } = p;
 
+  const box = useRef(null);
+  useDialog(box, () => setDemoScreen(false));
   return (
       (
         <div className="demo-overlay" onClick={() => setDemoScreen(false)}>
-        <div className="demo-screen" role="dialog" aria-modal="true" aria-label="التحليل الديموغرافي" onClick={e => e.stopPropagation()}>
+        <div ref={box} className="demo-screen" role="dialog" aria-modal="true" aria-label="التحليل الديموغرافي" tabIndex={-1} onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="demo-header">

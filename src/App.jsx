@@ -580,7 +580,7 @@ export default function App() {
         <div className="nav-center">
           <div className="tabs">
             {userTabs.map(([k,v]) => (
-              <button key={k} className={`tab ${tab===k?"on":""}`} onClick={() => setTab(k)}>{v}</button>
+              <button key={k} className={`tab ${tab===k?"on":""}`} aria-current={tab===k ? "page" : undefined} onClick={() => setTab(k)}>{v}</button>
             ))}
           </div>
         </div>
@@ -602,7 +602,7 @@ export default function App() {
       <div className="bottom-bar">
         <div className="bottom-bar-inner">
           {userTabs.map(([k,v,icon]) => (
-            <button key={k} className={`bb-btn ${tab===k?"on":""}`} onClick={()=>setTab(k)}>
+            <button key={k} className={`bb-btn ${tab===k?"on":""}`} aria-current={tab===k ? "page" : undefined} onClick={()=>setTab(k)}>
               {/* label={null} — الاسم المرئي تحتها يكفي قارئ الشاشة */}
               <span className="bb-icon"><Icon name={icon} size={20} label={null}/></span>
               <span className="bb-label">{v}</span>
@@ -610,6 +610,10 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* المعلم الرئيسي وعنوان الصفحة لقارئ الشاشة؛ الشريطان أعلاه وأسفله تنقّل */}
+      <main id="main">
+      <h1 className="sr-only">مصفوفة التأثير: خطتي</h1>
 
       {/* ════ MATRIX TAB ════ */}
       {tab === "matrix" && (
@@ -687,6 +691,7 @@ export default function App() {
           user={user}
         />
       )}
+      </main>
 
       {/* ══ Modal ══ */}
       {selectedCell && (

@@ -9,6 +9,9 @@ import { CSS } from "../styles/appCss";
 // AUTH SCREENS — التسجيل، استئناف الجلسة، دخول المستشار
 // ════════════════════════════════════════════════════════════════
 
+// خطأ الحقل يُربط به ليقرأه قارئ الشاشة معه: الحقل يُعلَن غير صالح ويُوصف برسالته ذات المعرّف {id}-err
+const errAttrs = (id, err) => (err ? { "aria-invalid": true, "aria-describedby": `${id}-err` } : {});
+
 // القشرة المشتركة: تحقن الأنماط وتضبط تخطيط الشاشة المزدوج.
 const AuthShell = ({ children }) => (
   <>
@@ -43,10 +46,10 @@ export const RegisterScreen = ({
           {otpStep === "form" ? <>
             <h1 className="auth-title">بدء الرحلة</h1>
             <p className="auth-sub">سجّل بياناتك للدخول إلى منظومة العمليات الست عشرة</p>
-            <form onSubmit={handleRegister}>
-              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label htmlFor="reg-name">الاسم الكامل</label><input id="reg-name" placeholder="أدخل اسمك" value={user.name} maxLength={80} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg">{regErrors.name}</div>}</div>
-              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label htmlFor="reg-phone">رقم الجوال</label><input id="reg-phone" type="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg">{regErrors.phone}</div>}</div>
-              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label htmlFor="reg-email">البريد الإلكتروني</label><input id="reg-email" type="email" placeholder="email@example.com" value={user.email} maxLength={254} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg">{regErrors.email}</div>}</div>
+            <form onSubmit={handleRegister} noValidate>
+              <div className={`fg ${regErrors.name ? "fg-err" : ""}`}><label htmlFor="reg-name">الاسم الكامل</label><input id="reg-name" autoComplete="name" placeholder="أدخل اسمك" value={user.name} maxLength={80} {...errAttrs("reg-name", regErrors.name)} onChange={e => { setUser({ ...user, name: e.target.value }); setRegErrors({ ...regErrors, name: "" }); }} />{regErrors.name && <div className="fg-msg" id="reg-name-err">{regErrors.name}</div>}</div>
+              <div className={`fg ${regErrors.phone ? "fg-err" : ""}`}><label htmlFor="reg-phone">رقم الجوال</label><input id="reg-phone" type="tel" autoComplete="tel" placeholder="05XXXXXXXX" value={user.phone} maxLength={10} {...errAttrs("reg-phone", regErrors.phone)} onChange={e => { setUser({ ...user, phone: e.target.value }); setRegErrors({ ...regErrors, phone: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.phone && <div className="fg-msg" id="reg-phone-err">{regErrors.phone}</div>}</div>
+              <div className={`fg ${regErrors.email ? "fg-err" : ""}`}><label htmlFor="reg-email">البريد الإلكتروني</label><input id="reg-email" type="email" autoComplete="email" placeholder="email@example.com" value={user.email} maxLength={254} {...errAttrs("reg-email", regErrors.email)} onChange={e => { setUser({ ...user, email: e.target.value }); setRegErrors({ ...regErrors, email: "" }); }} style={{ direction: "ltr", textAlign: "right" }} />{regErrors.email && <div className="fg-msg" id="reg-email-err">{regErrors.email}</div>}</div>
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ الإرسال..." : "إرسال رمز التحقق ✉"}</button>
             </form>
             <div style={{textAlign:"center",marginTop:"1.2rem",fontSize:"0.8rem",color:"var(--wg)"}}>
@@ -55,13 +58,13 @@ export const RegisterScreen = ({
           </> : <>
             <h1 className="auth-title">رمز التحقق</h1>
             <p className="auth-sub">تم إرسال رمز مكوّن من 6 أرقام إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email}</strong></p>
-            <form onSubmit={handleVerifyOtp}>
+            <form onSubmit={handleVerifyOtp} noValidate>
               <div className={`fg ${otpError ? "fg-err" : ""}`}>
                 <label htmlFor="reg-otp">رمز التحقق</label>
-                <input id="reg-otp" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                <input id="reg-otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={otpCode} {...errAttrs("reg-otp", otpError)}
                   onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
-                {otpError && <div className="fg-msg">{otpError}</div>}
+                {otpError && <div className="fg-msg" id="reg-otp-err">{otpError}</div>}
               </div>
               <button type="submit" className="btn" disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>
@@ -107,13 +110,13 @@ export const ResumeScreen = ({
           {otpStep === "form" ? <>
             <h1 className="auth-title">استئناف الجلسة</h1>
             <p className="auth-sub">أدخل رقم جوالك لاستعادة بياناتك وخطتك السابقة</p>
-            <form onSubmit={handleResume}>
+            <form onSubmit={handleResume} noValidate>
               <div className={`fg ${resumeError ? "fg-err" : ""}`}>
                 <label htmlFor="resume-phone">رقم الجوال المسجل</label>
-                <input id="resume-phone" type="tel" placeholder="05XXXXXXXX" value={resumePhone} maxLength={10}
+                <input id="resume-phone" type="tel" autoComplete="tel" placeholder="05XXXXXXXX" value={resumePhone} maxLength={10} {...errAttrs("resume-phone", resumeError)}
                   onChange={e => { setResumePhone(e.target.value); setResumeError(""); }}
                   style={{ direction: "ltr", textAlign: "right" }} />
-                {resumeError && <div className="fg-msg">{resumeError}</div>}
+                {resumeError && <div className="fg-msg" id="resume-phone-err">{resumeError}</div>}
               </div>
               <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={resumeLoading}>
                 {resumeLoading ? "جارٍ البحث..." : "إرسال رمز التحقق ✉"}
@@ -129,13 +132,13 @@ export const ResumeScreen = ({
           </> : <>
             <h1 className="auth-title">رمز التحقق</h1>
             <p className="auth-sub">تم إرسال رمز إلى<br/><strong style={{color:BRAND.dark,direction:"ltr",display:"inline-block"}}>{user.email?.replace(/(.{2}).*(@.*)/, "$1***$2")}</strong></p>
-            <form onSubmit={handleResumeVerify}>
+            <form onSubmit={handleResumeVerify} noValidate>
               <div className={`fg ${otpError ? "fg-err" : ""}`}>
                 <label htmlFor="resume-otp">رمز التحقق</label>
-                <input id="resume-otp" type="text" inputMode="numeric" maxLength={6} placeholder="000000" value={otpCode}
+                <input id="resume-otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={otpCode} {...errAttrs("resume-otp", otpError)}
                   onChange={e => { setOtpCode(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
                   style={{ direction: "ltr", textAlign: "center", fontSize: "1.6rem", letterSpacing: "10px", fontWeight: 700 }} />
-                {otpError && <div className="fg-msg">{otpError}</div>}
+                {otpError && <div className="fg-msg" id="resume-otp-err">{otpError}</div>}
               </div>
               <button type="submit" className="btn" style={{ background: "#4A5628" }} disabled={otpSending}>{otpSending ? "جارٍ التحقق..." : "تحقق ✓"}</button>
             </form>

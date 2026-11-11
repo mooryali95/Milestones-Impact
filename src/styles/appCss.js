@@ -108,6 +108,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
 .btn-logout { padding: 0.3rem 0.65rem; border: 1px solid rgba(255,255,255,0.22); border-radius: 2px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); font-family: var(--font-ar); font-size: 0.72rem; cursor: pointer; transition: background 0.2s; }
 .btn-logout:active { background: rgba(255,255,255,0.15); }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+/* النافذة الحوارية نفسها تأخذ التركيز احتياطًا حين لا عنصر فيها يقبله (useDialog)؛ لا إطار حولها كلها */
+[role="dialog"]:focus, [role="alertdialog"]:focus { outline: none; }
 [role="button"] { cursor: pointer; }
 .skip-link { position: absolute; right: 12px; top: -48px; z-index: 1000; background: #0B272F; color: #fff; padding: 8px 14px; border-radius: 6px; }
 .skip-link:focus { top: 12px; }

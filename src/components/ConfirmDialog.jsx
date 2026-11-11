@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { useEscape } from "../lib/a11y";
+import React, { useRef } from "react";
+import { useDialog } from "../lib/a11y";
 
 // ════════════════════════════════════════════════════════════════
 // CONFIRM DIALOG — حوار التأكيد
@@ -11,15 +11,18 @@ const ConfirmDialog = (p) => {
     setConfirmAction,
   } = p;
 
-  useEscape(useCallback(() => setConfirmAction(null), [setConfirmAction]));
+  const box = useRef(null);
+  useDialog(box, () => setConfirmAction(null));
+  // التركيز الأول على الخيار الأسلم: «إلغاء» أمام فعل لا رجعة فيه، والتأكيد أمام عرض نافع
+  const primary = confirmAction.tone === "primary";
   return (
       <div className="confirm-overlay" onClick={()=>setConfirmAction(null)}>
-        <div className="confirm-box" role="alertdialog" aria-modal="true" aria-label={confirmAction.title} onClick={e=>e.stopPropagation()}>
-          <h3>{confirmAction.title}</h3>
-          <p>{confirmAction.message}</p>
+        <div ref={box} className="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg" tabIndex={-1} onClick={e=>e.stopPropagation()}>
+          <h3 id="confirm-title">{confirmAction.title}</h3>
+          <p id="confirm-msg">{confirmAction.message}</p>
           <div className="confirm-btns">
-            <button className={`btn ${confirmAction.tone === "primary" ? "" : "btn-danger"}`} onClick={confirmAction.onConfirm}>{confirmAction.confirmLabel || "نعم، متأكد"}</button>
-            <button className="btn btn-outline" onClick={()=>setConfirmAction(null)}>{confirmAction.cancelLabel || "إلغاء"}</button>
+            <button className={`btn ${primary ? "" : "btn-danger"}`} data-autofocus={primary || undefined} onClick={confirmAction.onConfirm}>{confirmAction.confirmLabel || "نعم، متأكد"}</button>
+            <button className="btn btn-outline" data-autofocus={!primary || undefined} onClick={()=>setConfirmAction(null)}>{confirmAction.cancelLabel || "إلغاء"}</button>
           </div>
         </div>
       </div>
