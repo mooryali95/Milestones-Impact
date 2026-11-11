@@ -3,7 +3,8 @@
    ════════════════════════════════════════════════════════════════════
    - ١٢ سؤالاً موزعة على حلقات سلسلة الأثر الخمس
    - نتيجة فورية: درجة كلية، ومستوى نضج، ومخطط للحلقات
-   - التقرير التفصيلي مقابل الاسم والجهة والبريد، يُحفظ في Supabase
+   - التقرير التفصيلي مقابل الاسم والجهة والبريد، يُرسل طلبًا عبر قناة الموقع
+     الموحدة (window.MIContact في typeform.js: إجراء contact في send-otp)
    - طباعة التقرير أو حفظه PDF من المتصفح
    ════════════════════════════════════════════════════════════════════ */
 
@@ -11,9 +12,6 @@
 
   const CONFIG = {
     product:        'MI-ASSESSMENT',
-    supabaseUrl:    'https://eormhcupwgwpllhrfxxg.supabase.co',
-    supabaseKey:    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0',
-    table:          'contact_requests',
     recipientEmail: 'mi@sunkvalue.com',
     timeoutMs:      15000,
   };
@@ -109,10 +107,15 @@
   const gateBtn   = $('#asGateBtn');
   const report    = $('#asReport');
 
+  const GATE_LABEL  = 'اعرض التقرير الكامل';
+  const RETRY_LABEL = 'إعادة المحاولة';
+
   let answers = new Array(TOTAL).fill(null);
   let current = 0;
   let result = null;
   let sending = false;
+  let saveFailed = false;   // تعذّر الإرسال: التقرير معروض والبوابة باقية برسالتها وإعادة المحاولة
+  let captchaToken = '';
 
   // ──────────────────────────────────────────────
   // التنقل بين الشاشات
@@ -127,6 +130,10 @@
   $('#asRestart').addEventListener('click', () => {
     answers = new Array(TOTAL).fill(null);
     result = null;
+    saveFailed = false;
+    removeCaptcha();
+    gateError.hidden = true;
+    gateBtn.textContent = GATE_LABEL;
     report.hidden = true;
     gateForm.hidden = false;
     show('intro');
@@ -219,17 +226,23 @@
   // ──────────────────────────────────────────────
   // بوابة التقرير التفصيلي
   // ──────────────────────────────────────────────
-  gateForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (sending || !result) return;
+  // التقرير لا يُحجب بعطل عندنا: إن تعذّر الإرسال عُرض التقرير، وبقيت البوابة فوقه
+  // برسالة ظاهرة وإعادة محاولة وبديل البريد، فلا يضيع الطلب بصمت.
+  gateForm.addEventListener('submit', (e) => { e.preventDefault(); submitGate(); });
 
-    const data = {
+  function readGate() {
+    return {
       name:         gateForm.elements.name.value.trim().slice(0, 120),
       organization: gateForm.elements.organization.value.trim().slice(0, 160),
       email:        gateForm.elements.email.value.trim().slice(0, 160),
       phone:        gateForm.elements.phone.value.trim().slice(0, 30),
       website:      gateForm.elements.website.value,   // حقل مخفي لاصطياد الروبوتات
     };
+  }
+
+  async function submitGate() {
+    if (sending || !result) return;
+    const data = readGate();
 
     const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(data.email);
     if (data.name.length < 2 || data.organization.length < 2 || !validEmail) {
@@ -245,21 +258,58 @@
     sending = true;
     gateBtn.disabled = true;
     gateBtn.textContent = 'جارٍ إعداد التقرير…';
+    removeCaptcha();
+    const captcha = captchaToken;
+    captchaToken = '';   // رمز التحقق صالح لمرة واحدة
 
     try {
-      await saveLead(data);
+      await saveLead(data, captcha);
+      saveFailed = false;
       revealReport(data);
     } catch (err) {
-      console.warn('[Assessment] Save failed:', err);
-      gateError.innerHTML = 'تعذّر حفظ بياناتكم حاليًا. يمكنكم الاطلاع على التقرير وإرسال النتيجة إلينا عبر <a href="' + mailtoLink(data) + '">البريد</a>.';
-      gateError.hidden = false;
-      revealReport(data);
+      if (err && err.code === 'captcha' && err.siteKey) {
+        showCaptcha(err.siteKey, data);
+      } else {
+        console.warn('[Assessment] Save failed:', err);
+        showSaveError(data);
+      }
     } finally {
       sending = false;
       gateBtn.disabled = false;
-      gateBtn.textContent = 'اعرض التقرير الكامل';
+      gateBtn.textContent = saveFailed ? RETRY_LABEL : GATE_LABEL;
     }
-  });
+  }
+
+  function showSaveError(data) {
+    saveFailed = true;
+    gateError.innerHTML = 'تعذّر إرسال بياناتكم إلينا الآن، والتقرير معروض أدناه. أعيدوا المحاولة، أو أرسلوا النتيجة إلينا عبر <a href="' + mailtoLink(data) + '">البريد</a>.';
+    gateError.hidden = false;
+    gateBtn.textContent = RETRY_LABEL;
+    revealReport(data, { keepGate: true });
+  }
+
+  // التحقق البشري داخل البوابة، ويُعاد الإرسال تلقائيًا بعده
+  function showCaptcha(siteKey, data) {
+    removeCaptcha();
+    const box = document.createElement('div');
+    box.className = 'as-captcha';
+    box.setAttribute('role', 'status');
+    box.innerHTML = '<p class="as-card__text">أكّدوا أنكم لستم برنامجًا آليًا، ويُعرض التقرير تلقائيًا بعدها.</p><div class="as-captcha__box"></div>';
+    gateBtn.before(box);
+    const fail = () => { removeCaptcha(); showSaveError(data); };
+    if (!window.MIContact) { fail(); return; }
+    window.MIContact.loadTurnstile()
+      .then((t) => t.render(box.querySelector('.as-captcha__box'), {
+        sitekey: siteKey, language: 'ar',
+        callback: (token) => { captchaToken = token; submitGate(); },
+        'error-callback': fail,
+      }))
+      .catch(fail);
+  }
+
+  function removeCaptcha() {
+    root.querySelectorAll('.as-captcha').forEach((el) => el.remove());
+  }
 
   function summaryText() {
     return `الدرجة الكلية: ${result.total}% (${result.level.name})\n` +
@@ -267,8 +317,10 @@
       `\nالحلقة الأضعف: ${result.weakest.name}`;
   }
 
-  async function saveLead(data) {
-    const payload = {
+  // الخادم يطوي الأسطر في سطر واحد، فالملخص في الطلب مفصول بفواصل منقوطة ليُقرأ في اللوحة
+  async function saveLead(data, captcha) {
+    if (!window.MIContact) throw new Error('MIContact unavailable');
+    await window.MIContact.send({
       product:        CONFIG.product,
       source_url:     window.location.href,
       name:           data.name,
@@ -277,25 +329,10 @@
       phone:          data.phone,
       interest:       'assessment',
       interest_label: 'مقياس جاهزية الأثر',
-      context:        summaryText() + '\n\nالإجابات: ' + answers.join(','),
+      context:        summaryText().split('\n').join('؛ ') + '؛ الإجابات: ' + answers.join(','),
       user_agent:     navigator.userAgent,
       language:       navigator.language,
-      status:         'new',
-    };
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), CONFIG.timeoutMs);
-    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/${CONFIG.table}`, {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: {
-        'Content-Type':  'application/json',
-        'apikey':        CONFIG.supabaseKey,
-        'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        'Prefer':        'return=minimal',
-      },
-      body: JSON.stringify(payload),
-    }).finally(() => clearTimeout(timer));
-    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+    }, { captcha, timeoutMs: CONFIG.timeoutMs });
   }
 
   function mailtoLink(data) {
@@ -311,7 +348,7 @@
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function revealReport(data) {
+  function revealReport(data, opts = {}) {
     const date = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
     const priorities = [...result.perLink].sort((a, b) => a.pct - b.pct);
 
@@ -328,8 +365,10 @@
         <p class="as-rlink__advice">${l.advice}</p>
       </li>`).join('');
 
-    gateForm.hidden = true;
     report.hidden = false;
+    // عند تعذّر الإرسال تبقى البوابة ظاهرة برسالتها فوق التقرير، ولا يُمرَّر بعيدًا عنها
+    if (opts.keepGate) return;
+    gateForm.hidden = true;
     report.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 

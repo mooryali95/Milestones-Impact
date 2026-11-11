@@ -25,6 +25,68 @@
   };
 
   // ──────────────────────────────────────────────
+  // 📮 قناة طلبات الموقع: نموذج التواصل ومقياس الجاهزية
+  // ──────────────────────────────────────────────
+  // كل طلب يمر بإجراء contact في send-otp وحده: الإدراج المباشر في contact_requests
+  // مغلق أمام المفتاح العام منذ ترحيل 20261105100000. تنجح الدالة أو ترمي خطأ؛
+  // وإن طلب الخادم التحقق البشري حمل الخطأ code = 'captcha' ومعه siteKey.
+  async function postContact(payload, opts = {}) {
+    const ctrl = opts.timeoutMs ? new AbortController() : null;
+    const timer = ctrl && setTimeout(() => ctrl.abort(), opts.timeoutMs);
+    let res;
+    try {
+      res = await fetch(
+        `${CONFIG.supabaseUrl}/functions/v1/send-otp`,
+        {
+          method: 'POST',
+          signal: ctrl ? ctrl.signal : undefined,
+          headers: {
+            'Content-Type':  'application/json',
+            'apikey':        CONFIG.supabaseKey,
+            'Authorization': `Bearer ${CONFIG.supabaseKey}`,
+          },
+          body: JSON.stringify({ action: 'contact', ...payload, captcha: opts.captcha || undefined }),
+        }
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (res.ok && data && data.success) return true;
+    // الخادم يطلب التحقق البشري: يُعرض ثم يُعاد الإرسال بالرمز
+    if (data && data.code === 'captcha' && data.site_key) {
+      const err = new Error('captcha');
+      err.code = 'captcha';
+      err.siteKey = data.site_key;
+      throw err;
+    }
+    throw new Error(`send-otp ${res.status}: ${(data && data.message) || ''}`);
+  }
+
+  // التحقق البشري (Cloudflare Turnstile): لا يُحمَّل شيء من خارج الموقع إلا حين
+  // يطلبه الخادم (code: captcha مع site_key).
+  let turnstileLoading = null;
+  function loadTurnstile() {
+    if (window.turnstile) return Promise.resolve(window.turnstile);
+    if (!turnstileLoading) {
+      turnstileLoading = new Promise((ok, no) => {
+        const s = document.createElement('script');
+        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        s.async = true;
+        s.onload = () => ok(window.turnstile);
+        s.onerror = () => { turnstileLoading = null; no(new Error('turnstile')); };
+        document.head.appendChild(s);
+      });
+    }
+    return turnstileLoading;
+  }
+
+  // متاحة قبل فحص النافذة: صفحة المقياس ترسل طلبها من هنا أيضًا (assessment.js)
+  window.MIContact = { send: postContact, loadTurnstile };
+
+  // ──────────────────────────────────────────────
   // 🎯 DOM References
   // ──────────────────────────────────────────────
   const tfModal    = document.getElementById('tfModal');
@@ -250,30 +312,9 @@
       status:         'new',
     };
 
-    const res = await fetch(
-      `${CONFIG.supabaseUrl}/functions/v1/send-otp`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'apikey':        CONFIG.supabaseKey,
-          'Authorization': `Bearer ${CONFIG.supabaseKey}`,
-        },
-        body: JSON.stringify({ action: 'contact', ...payload, captcha: formData.captcha || undefined }),
-      }
-    );
-
-    let data = null;
-    try { data = await res.json(); } catch (e) { data = null; }
-    if (res.ok && data && data.success) { formData.captcha = ''; return true; }
-    // الخادم يطلب التحقق البشري: يُعرض ثم يُعاد الإرسال بالرمز
-    if (data && data.code === 'captcha' && data.site_key) {
-      const err = new Error('captcha');
-      err.code = 'captcha';
-      err.siteKey = data.site_key;
-      throw err;
-    }
-    throw new Error(`send-otp ${res.status}: ${(data && data.message) || ''}`);
+    await postContact(payload, { captcha: formData.captcha });
+    formData.captcha = '';
+    return true;
   }
 
   // ──────────────────────────────────────────────
@@ -363,23 +404,6 @@
   // ──────────────────────────────────────────────
   // 🤖 التحقق البشري (Cloudflare Turnstile)
   // ──────────────────────────────────────────────
-  // لا يُحمَّل شيء من خارج الموقع إلا حين يطلبه الخادم (code: captcha مع site_key).
-  let turnstileLoading = null;
-  function loadTurnstile() {
-    if (window.turnstile) return Promise.resolve(window.turnstile);
-    if (!turnstileLoading) {
-      turnstileLoading = new Promise((ok, no) => {
-        const s = document.createElement('script');
-        s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-        s.async = true;
-        s.onload = () => ok(window.turnstile);
-        s.onerror = () => { turnstileLoading = null; no(new Error('turnstile')); };
-        document.head.appendChild(s);
-      });
-    }
-    return turnstileLoading;
-  }
-
   function showCaptcha(siteKey) {
     hideSubmitError();
     const stepEl = document.querySelector('.tf-step.active');
