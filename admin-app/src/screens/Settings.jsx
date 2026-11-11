@@ -72,7 +72,8 @@ function Totp({ user, onUser }) {
       <div className="totp-status-row"><div className="totp-status-info">
         <div className={`totp-status-dot ${on ? 'on' : 'off'}`} />
         <div><div className="totp-status-label">{on ? 'TOTP مفعّل' : 'TOTP غير مفعّل'}</div>
-          <div className="totp-status-sub">{on ? 'يقبل: رمز التطبيق + رمز البريد' : 'يستخدم رمز البريد فقط حالياً'}</div></div>
+          {/* من فعّل التطبيق لا يُقبل منه رمز البريد ولا يُرسل له (admin-api: login-send وlogin-verify) */}
+          <div className="totp-status-sub">{on ? 'يقبل رمز التطبيق وحده عند الدخول، ولا يُرسل لك رمز بريد' : 'يستخدم رمز البريد فقط حالياً'}</div></div>
       </div></div>
       <div className="btn-row" style={{ marginBottom: 12 }}>
         {on ? <>
