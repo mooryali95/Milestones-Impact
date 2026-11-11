@@ -36,7 +36,8 @@
     let res;
     try {
       res = await fetch(
-        `${CONFIG.supabaseUrl}/functions/v1/send-otp`,
+        // منطقة التنفيذ مثبتة على منطقة القاعدة (ap-south-1) كسائر عملاء الدوال (src/lib/api.js fnUrl، ops-3)
+        `${CONFIG.supabaseUrl}/functions/v1/send-otp?forceFunctionRegion=ap-south-1`,
         {
           method: 'POST',
           signal: ctrl ? ctrl.signal : undefined,

@@ -50,4 +50,14 @@ describe('منطقة تنفيذ الدوال', () => {
       expect(read(f), f).toContain(`"https://$PROJECT_REF.supabase.co/functions/v1/$1?forceFunctionRegion=${FUNCTION_REGION}"`);
     }
   });
+
+  it('نموذج التواصل في الموقع الرئيسي (ومنه بوابة مقياس الجاهزية) يطلب المنطقة نفسها، وكل الصفحات على نسخته الأخيرة', () => {
+    const tf = read('home/assets/program/js/typeform.js');
+    expect(tf).toContain(`/functions/v1/send-otp?forceFunctionRegion=${FUNCTION_REGION}`);
+    expect(tf).not.toMatch(/functions\/v1\/send-otp`/);
+    const pages = ['index.html', 'projects/index.html', 'governance/index.html', 'assessment/index.html', 'pricing.html', 'refund.html', 'privacy.html', 'terms.html', 'leaders/index.html'];
+    const versions = new Set(pages.map((p) => read(`home/${p}`).match(/typeform\.js\?v=(\d+)/)?.[1]));
+    expect([...versions]).toEqual(['5']);
+  });
 });
+
