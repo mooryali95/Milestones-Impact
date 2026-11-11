@@ -291,7 +291,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => FL.participantFile(String(b.id || ''), 'admin', { viewer: { email: _a.email } }),
   'admin.peer': (_a, b) => PR.adminList(b),
-  'admin.reviews': () => A.reviews(),
+  'admin.reviews': (_a, b) => A.reviews(b),
   'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
   'admin.approve': A.approve,
   'admin.status': A.setStatus,

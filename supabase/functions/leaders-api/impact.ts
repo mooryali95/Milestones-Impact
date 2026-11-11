@@ -8,6 +8,7 @@ import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domai
 import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
 import { requirementIdByCode } from './programs.ts';
+import { scopeOrg } from './admin.ts';
 import {
   compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
@@ -440,7 +441,7 @@ export async function adminReport(b: Body) {
     // حساب العرض خارج إحصاءات الأثر كما في النظرة العامة (التدقيق 2026-11-10، البند 9.8: 6 هنا مقابل 5 هناك)
     // وحساب الاختبار خارجه كذلك (is_test، قرار المالك 2026-11-11)
     let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false).eq('is_test', false);
-    if (b.organization_id) q = q.eq('organization_id', String(b.organization_id));
+    q = scopeOrg(q, b.organization_id);   // 'none' = بلا جهة، كما في فلتر النظرة العامة وشاشة الأثر
     if (b.participant_id) q = q.eq('id', String(b.participant_id));
     return q.order('id').range(f, t);
   });
