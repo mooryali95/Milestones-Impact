@@ -227,7 +227,7 @@ export default function ExpertFile({ id, onBack }) {
         <h3>ما حدث</h3>
         <div className="xpp-cols">
           <div><b className="small">الجلسات</b>{d.sessions.length ? <ul className="small muted">{d.sessions.slice(0, 8).map((s) => <li key={s.id}>{when(s.starts_at)} · {SESSION_AR[s.status] || s.status}{s.expert ? ` · ${s.expert}` : ''}</li>)}</ul> : <p className="muted small">لا جلسات.</p>}</div>
-          <div><b className="small">طلبات الخبراء</b>{d.expert_requests.length ? <ul className="small muted">{d.expert_requests.slice(0, 8).map((r) => <li key={r.id}>{r.role_ar}{r.expert ? ` · ${r.expert}` : ''} · {r.status}</li>)}</ul> : <p className="muted small">لا طلبات.</p>}</div>
+          <div><b className="small">طلبات الخبراء</b>{d.expert_requests.length ? <ul className="small muted">{d.expert_requests.slice(0, 8).map((r) => <li key={r.id}>{r.role_ar}{r.expert ? ` · ${r.expert}` : ''} · {r.status_ar}</li>)}</ul> : <p className="muted small">لا طلبات.</p>}</div>
           <div><b className="small">النماذج المسلّمة</b>{d.models.length ? <ul className="small muted">{d.models.slice(0, 8).map((m) => <li key={m.id}>{m.title} · {m.status_ar}{m.rating ? ` (${rubricLevelAr(m.rating)})` : ''}</li>)}</ul> : <p className="muted small">لا تسليمات.</p>}</div>
         </div>
       </section>

@@ -11,7 +11,7 @@ import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
-import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -185,7 +185,7 @@ export async function adminSetStatus(a: Admin, b: Body) {
 // حالة الطلب في expert_requests وحدها. tried يحفظ كل من عُرض عليه فلا يعود إليه،
 // وقيد «طلب قائم واحد لكل مشارك ودور» في القاعدة يمنع التكرار.
 const LIVE = ['open', 'offered', 'accepted'];
-const roleAr = (r: string) => (EXPERT_ROLE_AR as Record<string, string[]>)[r]?.[0] || r;
+const roleAr = expertRoleAr;
 
 // ما يحتاجه المشارك: مستواه في البُعد المطلوب (من تسكينه) وقطاعه
 async function needFor(participantId: string, role: string, dimension: string | null) {

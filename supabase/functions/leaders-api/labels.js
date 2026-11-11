@@ -134,6 +134,8 @@ export const EXPERT_ROLE_AR = {
   assessor: ['مقيّم', 'تقييم المبادرة والعرض في ختام البرنامج'],
   mentor: ['مرشد', 'متابعة مشارك طوال رحلته'],
 };
+// اسم الدور وحده (الأول من الزوج) لكل من يعرضه: الخادم والبوابة. كان ملف المشارك يعرض الزوج ملتصقًا (links-expert-3)
+export const expertRoleAr = (r) => EXPERT_ROLE_AR[r]?.[0] || r;
 // الاستشارة يطلبها المشارك متى احتاجها: أدوارها ومواضعها في الرحلة
 export const CONSULT_ROLES = ['coach', 'mentor', 'specialist', 'advisor'];
 export const CONSULT_CONTEXT = { program: 'خلال البرنامج', capstone: 'أثناء بناء المبادرة', tracking: 'أثناء تنفيذ المبادرة' };
