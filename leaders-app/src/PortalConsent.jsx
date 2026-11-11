@@ -39,7 +39,8 @@ export function RatersAwaiting({ items, onDecide }) {
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!items?.length) return null;
+  // بعد القرار في آخر مقيّم منتظر تبقى رسالة نتيجته ظاهرة وحدها (org-5)، فلا يُطوى القسم قبل أن يقرأها
+  if (!items?.length) return msg ? <div className="alert" role="status">{msg}</div> : null;
   const decide = async (x, decision) => {
     setBusy(true); setMsg('');
     const r = await onDecide({ id: x.id, decision, reason });

@@ -144,7 +144,8 @@ export async function dashboardFor(c: any) {
   const queue = [...(rows as any[])];
   await Promise.all(Array.from({ length: 8 }, async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
-      const j: any = await journeyFor(r);
+      // بلا المجموعة والتقييم المستمر (org-15): لا يُستعملان هنا، والرحلة والتقدم والمعالم منها بلا فرق
+      const j: any = await journeyFor(r, { lite: true });
       journeys[r.id] = j;
       progressBy[r.id] = j.progress;
       // المرحلة الجارية من الرحلة نفسها التي يراها المشارك (التدقيق 2026-11-10، البند 8.2): كانت الجهة ترى «معتمد المستوى»

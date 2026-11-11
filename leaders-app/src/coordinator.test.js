@@ -66,6 +66,24 @@ it('لوحة الجهة: المبادرات المعتمدة وحدها، ولا
   expect(src).toMatch(/paired \?\? 0\) < MIN_COHORT\) return \{[^}]*cohort: null/);
   expect(MIN_COHORT).toBeGreaterThanOrEqual(5);
 });
+// org-15: رحلة كل مشارك تُحسب عند كل فتح للوحة. الحساب الخفيف يترك المجموعة والتقييم المستمر (نحو عشرة استعلامات لكل مشارك)
+// ولا يمس ما قبلهما، فالرحلة والتقدم والمعالم التي تأخذها اللوحة هي نفسها. وقرار المقيّم لا يعيد اللوحة كلها (org-5)
+it('لوحة الجهة: رحلة خفيفة بلا المجموعة والتقييم المستمر، والرحلة نفسها', () => {
+  const coord = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/coordinator.ts'), 'utf8');
+  const part = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/participant.ts'), 'utf8');
+  expect(coord).toContain('journeyFor(r, { lite: true })');
+  // ما تأخذه اللوحة من الرحلة: لا group ولا continuous
+  const dash = coord.slice(coord.indexOf('export async function dashboardFor'), coord.indexOf('export async function impactFor'));
+  expect(dash).not.toMatch(/\.(group|continuous)\b/);
+  // lite لا يغيّر إلا الخطوة الأخيرة: كل ما يُرجعه غير المجموعة والتقييم المستمر محسوب قبلها
+  const fn = part.slice(part.indexOf('export async function journeyFor'), part.indexOf('export async function mePayload'));
+  expect(fn.match(/\blite\b/g)).toHaveLength(3);   // المعامل ونوعه، وموضع استعماله الوحيد
+  expect(fn).toMatch(/const \[group, continuous\] = lite \? \[null, null\] : await Promise\.all\(\[\s*groupOf\(/);
+  const tail = fn.slice(fn.indexOf('const [group, continuous]'));
+  expect(tail).not.toMatch(/\b(journey|milestones|pl|levels|approved)\s*=/);
+  const portal = readFileSync(join(__dirname, 'screens/OrgPortal.jsx'), 'utf8');
+  expect(portal).not.toMatch(/rater-confirm', b\); if \(r\.success\) load\(\)/);
+});
 
 describe('المطّلعون المتعددون', () => {
   it('بلا «القائمة» لا يخرج صف واحد عن أي مشارك', () => {

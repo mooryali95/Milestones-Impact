@@ -488,7 +488,9 @@ async function continuousFor(participantId: string, milestones: any[], programId
   });
 }
 
-export async function journeyFor(p: any) {
+// lite: لوحة الجهة تحسب رحلة كل مشارك عند كل فتح (org-15)، ولا تأخذ منها المجموعة ولا التقييم المستمر،
+// فيُتركان (نحو عشرة استعلامات لكل مشارك) والرحلة والتقدم والمعالم كما هي بلا فرق
+export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = {}) {
   const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p),
@@ -532,7 +534,7 @@ export async function journeyFor(p: any) {
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
   });
-  const [group, continuous] = await Promise.all([
+  const [group, continuous] = lite ? [null, null] : await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),
   ]);
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)

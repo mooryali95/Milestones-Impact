@@ -177,6 +177,14 @@ function Dashboard({ me, onLogout }) {
   const [sort, setSort] = useState('name');
   const [msg, setMsg] = useState('');
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
+  // قرار المقيّم لا يغيّر في اللوحة إلا قائمة المنتظرين (تأكيده يرسل دعوته، ورحلة المشارك تتغير حين يُسلّم تقييمه)،
+  // فيُزال من القائمة محليًا (org-5 وorg-15): كانت اللوحة كلها تُستبدل بالهيكل وتُعاد رحلة كل مشارك على الخادم،
+  // فتقفز الصفحة إلى أعلاها وتضيع رسالة «أُرسلت الدعوة»
+  const decideRater = async (b) => {
+    const r = await coordCall('coord.rater-confirm', b);
+    if (r.success) setD((x) => ({ ...x, raters_pending: (x.raters_pending || []).filter((y) => y.id !== b.id) }));
+    return r;
+  };
   useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
@@ -243,7 +251,7 @@ function Dashboard({ me, onLogout }) {
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
         <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
       </section>
-      <RatersAwaiting items={d.raters_pending} onDecide={async (b) => { const r = await coordCall('coord.rater-confirm', b); if (r.success) load(); return r; }} />
+      <RatersAwaiting items={d.raters_pending} onDecide={decideRater} />
 
       <NeedsYou d={d} onShow={show} />
       <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" initial={me.preload?.sus} />
