@@ -3,7 +3,9 @@
 import { readFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import { gradeStep, labLevelOf, MASTERY, nextIndex, practicePct, publicSpec, validateLab } from '../../supabase/functions/leaders-api/lab.js';
+import {
+  boardCheck, gradeStep, HINT_MAX, hintCount, hintFor, hintsView, labLevelOf, MASTERY, nextIndex, practicePct, publicSpec, revealedOf, validateLab,
+} from '../../supabase/functions/leaders-api/lab.js';
 import { AREAS, GROUPS, PROCESSES, byId } from '../../scripts/lab/pm-data.mjs';
 import { ITEMS as INTRO } from '../../scripts/lab/phase3.mjs';
 import { ITEMS as MAP_ITEMS } from '../../scripts/lab/pm-map.mjs';
@@ -213,6 +215,76 @@ describe('اللوحة: ما يصل المشارك بحسب مستواه', () =>
     expect(sql).toBe(gen('pm-map'));
     expect(sql.split('\n').slice(0, 15).join('\n')).toMatch(/^-- deploy-gate: tolerant /m);
     expect(sql).toContain("insert into leaders.schema_migrations (name) values ('20261111120100_leaders_lab_pm_map') on conflict do nothing;");
+  });
+});
+
+// ── المرحلة الثانية: التلميحات والفحص والحفظ التلقائي ──
+describe('سلّم التلميح: من العام إلى الخاص، والكشف وحده يُسقط درجة البطاقة', () => {
+  const st = boardOf('map');
+  it('الدرجات الأربع: سؤال، ثم الصف، ثم العمود، ثم الكشف', () => {
+    const h = (d) => hintFor(st, 'p8-3', d);
+    expect(h(1)).toEqual({ card: 'p8-3', degree: 1, question_ar: st.hint_ar });
+    expect(h(2)).toMatchObject({ degree: 2, row: 'quality' });
+    expect(h(2).col).toBeUndefined();
+    expect(h(3)).toMatchObject({ degree: 3, row: 'quality', col: 'mc' });
+    expect(h(3).revealed).toBeUndefined();
+    expect(h(4)).toMatchObject({ degree: HINT_MAX, row: 'quality', col: 'mc', revealed: true });
+    expect(h(9).degree).toBe(HINT_MAX);
+    expect(hintFor(st, 'nope', 1)).toBeNull();
+  });
+  it('التلميحات تُحتسب وتُستأنف، ولا تُنقص النسبة إلا الكشف الكامل', () => {
+    const degrees = { 'p8-3': 4, 'p5-5': 2 };
+    expect(revealedOf(degrees)).toEqual(['p8-3']);
+    expect(hintCount({ 2: degrees, 5: { 'x': 1 } })).toBe(7);
+    expect(Object.keys(hintsView(st, degrees))).toEqual(['p8-3', 'p5-5']);
+    const full = gradeStep(st, fullAnswer(st), { level: 'advanced', revealed: revealedOf(degrees) });
+    expect(full.score).toBeCloseTo(48 / 49);
+    expect(full.revealed).toBe(1);
+  });
+});
+
+describe('الفحص قبل الإرسال بحسب المستوى', () => {
+  const st = boardOf('map');
+  it('التأسيسي: بطاقة واحدة عند وضعها، صواب أو خطأ دون خانتها', () => {
+    expect(boardCheck(st, { 'p8-3': ['quality', 'mc'] }, 'beginner', 'p8-3')).toEqual({ card: 'p8-3', ok: true });
+    const bad = boardCheck(st, { 'p8-3': ['quality', 'exec'] }, 'beginner', 'p8-3');
+    expect(bad).toEqual({ card: 'p8-3', ok: false });
+    expect(boardCheck(st, {}, 'beginner', 'p8-3').error).toBeTruthy();
+    // بطاقة من الصف المحلول لا تُفحص
+    expect(boardCheck(st, { 'p4-1': ['integ', 'init'] }, 'beginner', 'p4-1').error).toBeTruthy();
+  });
+  it('المتوسط: عدد الخطأ في اللوحة كلها لا أماكنه', () => {
+    const a = { 'p8-3': ['quality', 'exec'], 'p8-2': ['quality', 'exec'], 'p5-5': ['scope', 'plan'] };
+    expect(boardCheck(st, a, 'intermediate')).toEqual({ placed: 3, wrong: 2 });
+  });
+  it('الاحترافي: لا فحص قبل الإرسال', () => {
+    expect(boardCheck(st, fullAnswer(st), 'advanced').error).toMatch(/عند الإرسال/);
+  });
+});
+
+describe('الخادم: الحفظ التلقائي والتلميح والفحص، متسامحة قبل ترحيل حالة المحاولة', () => {
+  const ts = readFileSync('supabase/functions/leaders-api/lab.ts', 'utf8');
+  const idx = readFileSync('supabase/functions/leaders-api/index.ts', 'utf8');
+  const sql = readFileSync('supabase/migrations/20261111120200_leaders_lab_attempt_state.sql', 'utf8');
+  it('ثلاثة أفعال للمشارك مسجلة', () => {
+    for (const a of ['draft', 'hint', 'check']) expect(idx).toContain(`'lab.${a}': (p, b) => L.${a}(p, b),`);
+  });
+  it('الأفعال على الخطوة الجارية وحدها، والكتابة مشروطة بها، وغياب العمود لا يُفشل الإرسال', () => {
+    expect(ts).toMatch(/async function openStep[\s\S]*?i !== a\.current/);
+    expect(ts).toMatch(/async function patchOpen[\s\S]*?\.eq\('current', i\)\.is\('finished_at', null\)/);
+    expect(ts).toMatch(/return \{ success: true, saved: !!ok/);
+    // المستوى يُثبَّت مع المحاولة، وقبل الترحيل تُنشأ بلا عمود المستوى
+    expect(ts).toMatch(/insert\(\{ \.\.\.row, level: it\.level \}\)[\s\S]*?first\.error \? must\(await db\.from\('lab_attempts'\)\.insert\(row\)/);
+    // الكشف يُسقط درجة البطاقة في التصحيح، والمسودة تُمحى بالإرسال إن وُجد عمودها
+    expect(ts).toMatch(/gradeStep\(steps\[i\], b\.answer, \{ level, revealed: revealedOf\(a\.hints\?\.\[i\]\) \}\)/);
+    expect(ts).toMatch(/if \('draft' in a\) row\.draft = \{\};/);
+    // فحصا المتوسط يُعدّان على الخادم
+    expect(ts).toMatch(/used >= BOARD_FEEDBACK\.check2/);
+  });
+  it('الترحيل: أربعة أعمدة بقيم افتراضية، متسامح، ويسجّل اسمه', () => {
+    for (const c of ['draft', 'hints', 'checks', 'level']) expect(sql).toMatch(new RegExp(`add column if not exists ${c} `));
+    expect(sql.split('\n').slice(0, 15).join('\n')).toMatch(/^-- deploy-gate: tolerant /m);
+    expect(sql).toContain("insert into leaders.schema_migrations (name) values ('20261111120200_leaders_lab_attempt_state') on conflict do nothing;");
   });
 });
 

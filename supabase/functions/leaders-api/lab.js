@@ -162,6 +162,43 @@ function gradeBoard(step, answer, { level = 'beginner', revealed = [] } = {}) {
   };
 }
 
+// ── سلّم التلميح لبطاقة في اللوحة (يُطلب من الخادم فلا يصل الحل مسبقًا، ويُسجَّل) ──
+//   1 سؤال موجه، 2 الصف الصحيح (المحور الأسهل)، 3 العمود الصحيح، 4 كشف الخانة: تُوضع البطاقة وتُقفل ودرجتها صفر
+// التلميحات لا تُنقص النسبة إلا الكشف الكامل، ويُعلن عددها في النتيجة.
+export const HINT_MAX = 4;
+export function hintFor(step, cardId, degree) {
+  const c = (step?.cards || []).find((x) => x.id === cardId);
+  if (!c) return null;
+  const d = Math.max(1, Math.min(HINT_MAX, Number(degree) || 1));
+  return {
+    card: c.id, degree: d, question_ar: c.hint1_ar || step.hint_ar || '',
+    ...(d >= 2 ? { row: c.row } : {}), ...(d >= 3 ? { col: c.col } : {}), ...(d >= HINT_MAX ? { revealed: true } : {}),
+  };
+}
+// تلميحات خطوة بدرجاتها { card: degree } ← ما يراه المشارك عند الاستئناف
+export const hintsView = (step, degrees) => Object.fromEntries(Object.entries(degrees || {}).map(([k, d]) => [k, hintFor(step, k, d)]).filter(([, v]) => v));
+export const revealedOf = (degrees) => Object.entries(degrees || {}).filter(([, d]) => Number(d) >= HINT_MAX).map(([k]) => k);
+// عدد التلميحات المطلوبة في المحاولة كلها (مجموع الدرجات)
+export const hintCount = (hints) => Object.values(hints || {}).reduce((n, s) => n + Object.values(s || {}).reduce((m, d) => m + (Number(d) || 0), 0), 0);
+
+// ── فحص اللوحة قبل الإرسال بحسب سقالة المستوى ──
+// instant: بطاقة واحدة عند وضعها، صواب أو خطأ فقط (لا يكشف خانتها)
+// check2: اللوحة كلها، عدد البطاقات في غير خانتها لا أماكنها، مرتين في الخطوة
+export function boardCheck(step, answer, level, card = null) {
+  const sc = boardScaffold(step, level);
+  if (sc.feedback === 'submit') return { error: 'الفحص قبل الإرسال غير متاح في مستواك: تُصحَّح اللوحة عند الإرسال' };
+  const a = answer && typeof answer === 'object' ? answer : {};
+  const solved = new Set(sc.solved_rows);
+  const at = (c) => Array.isArray(a[c.id]) && a[c.id][0] === c.row && a[c.id][1] === c.col;
+  if (sc.feedback === 'instant') {
+    const c = (step.cards || []).find((x) => x.id === card);
+    if (!c || solved.has(c.row) || !Array.isArray(a[c.id])) return { error: 'ضع البطاقة أولًا ثم افحصها' };
+    return { card: c.id, ok: at(c) };
+  }
+  const placed = (step.cards || []).filter((c) => !solved.has(c.row) && Array.isArray(a[c.id]));
+  return { placed: placed.length, wrong: placed.filter((c) => !at(c)).length };
+}
+
 // ── تصحيح خطوة واحدة: { score من 0 إلى 1، ok، why، solution، ... } ──
 // ctx للوحة وحدها: مستوى المشارك (للصفوف المحلولة) والبطاقات المكشوفة بالتلميح
 export function gradeStep(step, answer, ctx = {}) {

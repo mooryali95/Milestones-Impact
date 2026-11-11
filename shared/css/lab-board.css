@@ -15,6 +15,15 @@
 .lb-card.is-half { border-color: var(--lb-warn); background: #fdf5e7; }
 .lb-card.is-bad { border-color: var(--lb-bad); background: #fbefec; }
 .lb-card.dragging { opacity: .4; }
+.lb-card.is-revealed { border-style: dashed; border-color: var(--lb-muted); background: #f3f3f3; }
+.lb-hintq { margin: 0; font-size: 14px; line-height: 1.8; padding: 6px 10px; border-radius: 8px; background: #fbf6ea; }
+.lb-hintbtn { border-color: var(--lb-gold); }
+.lb-rowhead.hint, .lb-cell.hint { box-shadow: inset 0 0 0 2px var(--lb-gold); }
+.lb-rowhead.hint .lb-rowtoggle { border-color: var(--lb-gold); }
+.lb-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; min-height: 22px; }
+.lb-checkmsg { font-size: 14px; font-weight: 600; }
+.lb-save { font-size: 13px; color: var(--lb-muted); }
+.lb-save.err { color: var(--lb-bad); }
 .lb-code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--lb-gold); }
 .lb-status { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: var(--lb-gold); }
 .lb-back { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--lb-line); background: #fff; cursor: pointer; color: inherit; }
@@ -37,6 +46,7 @@
 .lb-solbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13px; }
 .lb-legend { display: inline-flex; gap: 6px; align-items: center; color: var(--lb-muted); }
 .lb-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.lb-legend i.revealed { border-color: var(--lb-muted); border-style: dashed; }
 .lb-legend i.ok { border-color: var(--lb-ok); } .lb-legend i.half { border-color: var(--lb-warn); } .lb-legend i.bad { border-color: var(--lb-bad); }
 .lb-ghost { position: fixed; pointer-events: none; z-index: 1000; transform: translate(50%, -50%); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
 

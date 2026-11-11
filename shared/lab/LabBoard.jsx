@@ -13,13 +13,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 export const BOARD_LEVEL_AR = { beginner: 'تأسيسي', intermediate: 'متوسط', advanced: 'احترافي' };
 
 // وصف السقالة للمشارك من السقالة نفسها (لا من اسم المستوى)، فلا يَعِد بما لا يُعرض
-export function scaffoldText(sc) {
+export function scaffoldText(sc, withHints = false) {
   const parts = [];
   if (sc.solved_rows?.length) parts.push(sc.solved_rows.length === 1 ? 'صف محلول مثالًا' : 'صفوف محلولة مثالًا');
   if (sc.show_code) parts.push('رقم كل بطاقة ظاهر، والرقم بعد النقطة رقم المجال');
   if (sc.counts === 'cell') parts.push('عدد البطاقات المطلوب في كل خانة');
   if (sc.counts === 'col') parts.push('عدد البطاقات في كل عمود');
-  return parts.length ? `${parts.join('، و')}.` : 'بلا عدّادات ولا أرقام: اللوحة لك وحدك حتى ترسل.';
+  if (sc.feedback === 'instant') parts.push('تُفحص كل بطاقة عند وضعها');
+  if (sc.feedback === 'check2') parts.push(`«افحص لوحتي» ${sc.checks === 2 ? 'مرتين' : `${sc.checks} مرات`} لعدد الأخطاء لا أماكنها`);
+  const base = parts.length ? `${parts.join('، و')}.` : 'بلا عدّادات ولا أرقام ولا فحص قبل الإرسال.';
+  return withHints ? `${base} والتلميح متاح لأي بطاقة إن احتجته، ويُذكر عدده في النتيجة.` : base;
 }
 
 function useNarrow(q = '(max-width: 720px)') {
@@ -53,32 +56,44 @@ export function cardScore(step, pos, sol) {
   return two && (pos[0] === sol[0] || pos[1] === sol[1]) ? 0.5 : 0;
 }
 
-function CardButton({ card, sel, tone, locked, onPick, onKey, small }) {
+function CardButton({ card, sel, tone, locked, onPick, onKey, small, onPointerDown, dragging }) {
   return (
-    <button type="button" className={`lb-card${small ? ' sm' : ''}${sel ? ' on' : ''}${tone ? ` is-${tone}` : ''}${locked ? ' locked' : ''}`}
+    <button type="button" className={`lb-card${small ? ' sm' : ''}${sel ? ' on' : ''}${tone ? ` is-${tone}` : ''}${locked ? ' locked' : ''}${dragging ? ' dragging' : ''}`}
       aria-pressed={locked ? undefined : sel} aria-disabled={locked || undefined}
-      onClick={(e) => { e.stopPropagation(); if (!locked) onPick(card.id); }} onKeyDown={onKey}
+      onClick={(e) => { e.stopPropagation(); if (!locked) onPick(card.id); }} onKeyDown={onKey} onPointerDown={locked ? undefined : onPointerDown}
       data-card={card.id}>
       {card.code && <b className="lb-code" dir="ltr">{card.code}</b>}
       <span>{card.label}</span>
       {tone === 'ok' && <span className="lb-sr"> (صحيحة)</span>}
       {tone === 'half' && <span className="lb-sr"> (نصف صحيحة)</span>}
       {tone === 'bad' && <span className="lb-sr"> (خطأ)</span>}
+      {tone === 'revealed' && <span className="lb-sr"> (كُشفت بالتلميح)</span>}
     </button>
   );
 }
 
+// زر التلميح بحسب الدرجة التالية في السلّم
+export const HINT_NEXT_AR = ['تلميح: سؤال موجه', 'تلميح: أضئ الصف', 'تلميح: أضئ العمود', 'اكشف خانتها (درجتها صفر)'];
+const DRAG_PX = 6;
+const EDGE_PX = 64;
+
 /**
- * @param {{ step: any, value?: Record<string, string[]>, onChange?: (v: any) => void, result?: any, marks?: Record<string, string>, readOnly?: boolean, children?: any }} props
+ * @param {{ step: any, value?: Record<string, string[]>, onChange?: (v: any, meta?: any) => void, result?: any, marks?: Record<string, string>, hints?: Record<string, any>, onHint?: ((id: string) => void) | null, readOnly?: boolean, children?: any }} props
  * marks: علامات فورية لبطاقات بعينها (ok/bad) من فحص الخادم، للمستوى التأسيسي
+ * hints: تلميحات الخادم لكل بطاقة { degree, question_ar, row, col, revealed }، والمكشوفة مقفلة في خانتها
  */
-export default function LabBoard({ step, value, onChange = () => {}, result = null, marks = {}, readOnly = false, children = null }) {
+export default function LabBoard({ step, value, onChange = () => {}, result = null, marks = {}, hints = {}, onHint = null, readOnly = false, children = null }) {
   const narrow = useNarrow();
   const { rows, cols, cards } = step;
   const sc = step.scaffold || {};
   const solved = sc.solved || {};
   const done = !!result || readOnly;
+  const isLocked = (id) => !!solved[id] || !!hints[id]?.revealed;
   const [sel, setSel] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [over, setOver] = useState(null);
+  const drag = useRef(null);
+  const suppress = useRef(false);
   const [cur, setCur] = useState([0, 0]);
   const [openRow, setOpenRow] = useState(() => rows.find((r) => !(sc.solved_rows || []).includes(r.id))?.id || rows[0]?.id);
   const [live, setLive] = useState('');
@@ -100,7 +115,8 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
   }, [cur, openRow]);
 
   const pick = (id) => {
-    if (done || solved[id]) return;
+    if (suppress.current) return;
+    if (done || isLocked(id)) return;
     const next = sel === id ? null : id;
     setSel(next);
     if (next) {
@@ -108,16 +124,78 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
       setLive(`حُددت «${label[id]}»${p ? `، وهي الآن في ${cellName(rows.find((r) => r.id === p[0]), cols.find((c) => c.id === p[1]))}` : ''}. اختر خانتها بالأسهم ثم مسافة، أو انقرها.`);
     } else setLive('أُلغي التحديد.');
   };
-  const place = (ri, ci) => {
-    if (done || !sel) return;
+  const placeCard = (id, ri, ci) => {
+    if (done || !id || isLocked(id)) return;
     const r = rows[ri]; const c = cols[ci];
-    const v = { ...(value || {}), [sel]: [r.id, c.id] };
-    onChange(v, { card: sel, to: [r.id, c.id] });
+    const v = { ...(value || {}), [id]: [r.id, c.id] };
+    onChange(v, { card: id, to: [r.id, c.id] });
     const after = boardPositions(step, v);
     const n = cards.filter((k) => same(after[k.id], [r.id, c.id])).length;
-    setLive(`«${label[sel]}»: في ${cellName(r, c)}. عدد البطاقات في الخانة ${n}.`);
+    setLive(`«${label[id]}»: في ${cellName(r, c)}. عدد البطاقات في الخانة ${n}.`);
     setSel(null);
   };
+  const place = (ri, ci) => { if (!suppress.current) placeCard(sel, ri, ci); };
+
+  // السحب بالمؤشر (الفأرة والقلم): تحسين فوق النقر. اللمس يبقى بالنقر لأن السحب يعطّل تمرير الصينية.
+  // عتبة 6px تميز السحب من النقر، وظل البطاقة يتبع المؤشر، والخانة المستهدفة تُبرز، والصفحة تُمرَّر قرب الحافتين.
+  const endDrag = useRef(() => {});
+  useEffect(() => () => endDrag.current(), []);
+  const startDrag = (id) => (e) => {
+    if (done || e.pointerType === 'touch' || e.button !== 0 || isLocked(id)) return;
+    drag.current = { id, x0: e.clientX, y0: e.clientY, active: false, ghost: null };
+    const cellAt = (ev) => document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('[data-cell]');
+    const move = (ev) => {
+      const d = drag.current;
+      if (!d) return;
+      if (!d.active) {
+        if (Math.hypot(ev.clientX - d.x0, ev.clientY - d.y0) < DRAG_PX) return;
+        d.active = true;
+        d.ghost = document.createElement('div');
+        d.ghost.className = 'lb-card lb-ghost';
+        d.ghost.setAttribute('aria-hidden', 'true');
+        d.ghost.textContent = label[d.id];
+        document.body.appendChild(d.ghost);
+        setDragId(d.id); setSel(null);
+      }
+      ev.preventDefault();
+      d.ghost.style.left = `${ev.clientX}px`; d.ghost.style.top = `${ev.clientY}px`;
+      setOver(cellAt(ev)?.getAttribute('data-cell') || null);
+      if (ev.clientY < EDGE_PX) window.scrollBy(0, -14);
+      else if (ev.clientY > window.innerHeight - EDGE_PX) window.scrollBy(0, 14);
+    };
+    const up = (ev) => {
+      const d = drag.current;
+      endDrag.current();
+      if (!d?.active) return;
+      suppress.current = true;
+      setTimeout(() => { suppress.current = false; }, 0);
+      const at = cellAt(ev)?.getAttribute('data-cell');
+      if (at) { const [ri, ci] = at.split(':').map(Number); placeCard(d.id, ri, ci); }
+    };
+    endDrag.current = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      drag.current?.ghost?.remove();
+      drag.current = null;
+      setDragId(null); setOver(null);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  };
+  const askHint = (id) => {
+    if (!onHint) return;
+    onHint(id);
+  };
+  // إعلان التلميح حين يصل من الخادم
+  const hintKey = sel && hints[sel] ? `${sel}:${hints[sel].degree}` : '';
+  useEffect(() => {
+    if (!hintKey) return;
+    const h = hints[sel];
+    const rl = h.row && rows.find((r) => r.id === h.row)?.label;
+    const cl = h.col && cols.find((c) => c.id === h.col)?.label;
+    setLive(h.revealed ? `كُشفت خانة «${label[sel]}»: ${cl} × ${rl}.` : cl ? `تلميح: ${cl} × ${rl}.` : rl ? `تلميح: صفها ${rl}.` : `تلميح: ${h.question_ar}`);
+    if (h.revealed) setSel(null);
+  }, [hintKey]);
   const unplace = (id) => {
     const v = { ...(value || {}) };
     delete v[id];
@@ -153,7 +231,7 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
       focusCell.current = true;
       if (narrow) setOpenRow(rows[r].id);
       setCur([r, c]);
-      setLive(`${cellName(rows[r], cols[c])}، فيها ${inCell(rows[r], cols[c]).length} بطاقات.`);
+      setLive(`${cellName(rows[r], cols[c])}، عدد البطاقات فيها ${inCell(rows[r], cols[c]).length}.`);
       return;
     }
     if (e.target !== e.currentTarget) return;
@@ -167,12 +245,14 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
   };
 
   const toneOf = (id) => {
+    if (hints[id]?.revealed && !showSol) return 'revealed';
     if (result && !showSol) {
       const s = cardScore(step, src[id], result.solution?.[id]);
       return solved[id] ? null : s === 1 ? 'ok' : s === 0.5 ? 'half' : 'bad';
     }
     return marks[id] || null;
   };
+  const selHint = sel ? hints[sel] : null;
   const placedInCol = (c) => cards.filter((k) => src[k.id]?.[1] === c.id).length;
   const selCard = sel && cards.find((k) => k.id === sel);
 
@@ -182,16 +262,18 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
         <div className="lb-trayzone">
           <div className="lb-tray-head"><b>البطاقات المتبقية</b><span className="lb-left">{tray.length}</span></div>
           <div className="lb-tray" ref={trayRef} role="group" aria-label={`البطاقات المتبقية: ${tray.length}`}>
-            {tray.length ? tray.map((k) => <CardButton key={k.id} card={k} sel={sel === k.id} tone={marks[k.id]} onPick={pick} onKey={cardKey(k.id)} />)
+            {tray.length ? tray.map((k) => <CardButton key={k.id} card={k} sel={sel === k.id} tone={marks[k.id]} onPick={pick} onKey={cardKey(k.id)} onPointerDown={startDrag(k.id)} dragging={dragId === k.id} />)
               : <span className="lb-empty">وُضعت كل البطاقات. انقر بطاقة على اللوحة لتحريكها.</span>}
           </div>
           {selCard && (
             <p className="lb-status">
               <span>المحددة: «{selCard.label}». اختر خانتها، أو بالأسهم ثم مسافة.</span>
               {src[sel] && !solved[sel] && <button type="button" className="lb-back" onClick={() => unplace(sel)}>↩ أعدها إلى الصينية</button>}
+              {onHint && <button type="button" className="lb-back lb-hintbtn" onClick={() => askHint(sel)}>{HINT_NEXT_AR[Math.min(3, selHint?.degree || 0)]}</button>}
               <button type="button" className="lb-back" onClick={() => { setSel(null); setLive('أُلغي التحديد.'); }}>إلغاء</button>
             </p>
           )}
+          {selHint?.question_ar && !selHint.revealed && <p className="lb-hintq" role="note"><b>سؤال موجه:</b> {selHint.question_ar}</p>}
           {children}
         </div>
       )}
@@ -213,7 +295,7 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
             const rowPlaced = cards.filter((k) => src[k.id]?.[0] === r.id).length;
             return (
               <div key={r.id} role="row" className={`lb-row${isSolved ? ' solved' : ''}${open ? ' open' : ''}`}>
-                <div role="rowheader" className="lb-rowhead">
+                <div role="rowheader" className={`lb-rowhead${selHint?.row === r.id ? ' hint' : ''}`}>
                   {narrow ? (
                     <button type="button" className="lb-rowtoggle" aria-expanded={open} onClick={() => setOpenRow(open ? null : r.id)}>
                       {r.n ? <b dir="ltr">{r.n}.</b> : null}<span>{r.label}</span>{isSolved ? <em>مثال محلول</em> : <small>{rowPlaced}</small>}
@@ -225,16 +307,17 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
                   const want = sc.cell_counts?.[r.id]?.[c.id] || 0;
                   const target = !!sel && !done;
                   return (
-                    <div key={c.id} role="gridcell" ref={(el) => { cellRefs.current[`${ri}:${ci}`] = el; }}
+                    <div key={c.id} role="gridcell" ref={(el) => { cellRefs.current[`${ri}:${ci}`] = el; }} data-cell={`${ri}:${ci}`}
                       tabIndex={done ? -1 : cur[0] === ri && cur[1] === ci ? 0 : -1}
                       aria-label={`${cellName(r, c)}${sc.counts === 'cell' ? `، ${here.length} من ${want}` : ''}`}
-                      className={`lb-cell${target ? ' target' : ''}${isSolved ? ' solved' : ''}`}
+                      className={`lb-cell${target || dragId ? ' target' : ''}${isSolved ? ' solved' : ''}${over === `${ri}:${ci}` ? ' over' : ''}${selHint?.row === r.id && (!selHint.col || selHint.col === c.id) ? ' hint' : ''}`}
                       onClick={() => place(ri, ci)} onKeyDown={cellKey(ri, ci)} onFocus={() => setCur([ri, ci])}>
                       {narrow && <small className="lb-cellcol">{c.label}</small>}
                       {sc.counts === 'cell' && <small className={`lb-count${want && here.length === want ? ' full' : ''}`}>{here.length}/{want}</small>}
                       {here.map((k) => (
-                        <CardButton key={k.id} card={k} small sel={sel === k.id} tone={toneOf(k.id)} locked={!!solved[k.id] || done}
-                          onPick={(id) => { if (sel && sel !== id) place(ri, ci); else pick(id); }} onKey={cardKey(k.id)} />
+                        <CardButton key={k.id} card={k} small sel={sel === k.id} tone={toneOf(k.id)} locked={isLocked(k.id) || done}
+                          onPick={(id) => { if (sel && sel !== id) place(ri, ci); else pick(id); }} onKey={cardKey(k.id)}
+                          onPointerDown={startDrag(k.id)} dragging={dragId === k.id} />
                       ))}
                     </div>
                   );
@@ -247,10 +330,10 @@ export default function LabBoard({ step, value, onChange = () => {}, result = nu
       {result && (
         <div className="lb-solbar">
           <button type="button" className="lb-back" aria-pressed={showSol} onClick={() => setShowSol(!showSol)}>{showSol ? 'اعرض لوحتي' : 'اعرض اللوحة الصحيحة'}</button>
-          <span className="lb-legend"><i className="ok" />في خانتها <i className="half" />محور واحد صحيح <i className="bad" />خطأ</span>
+          <span className="lb-legend"><i className="ok" />في خانتها <i className="half" />محور واحد صحيح <i className="bad" />خطأ{Object.values(hints).some((h) => h?.revealed) && <><i className="revealed" />كُشفت بالتلميح</>}</span>
         </div>
       )}
-      <div className="lb-sr" aria-live="polite">{live}</div>
+      <div className="lb-sr lb-live" aria-live="polite">{live}</div>
     </div>
   );
 }

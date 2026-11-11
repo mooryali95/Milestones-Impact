@@ -12,7 +12,10 @@ import { releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
 import { seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
-import { AUDIENCES, gradeStep, grantLive, labAward, labLevelOf, labVisible, MASTERY, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
+import {
+  AUDIENCES, BOARD_FEEDBACK, boardCheck, boardScaffold, gradeStep, grantLive, HINT_MAX, hintCount, hintFor, hintsView, labAward, labLevelOf, labVisible, MASTERY,
+  meterState, nextIndex, practicePct, publicSpec, revealedOf,
+} from './lab.js';
 
 type Body = Record<string, any>;
 
@@ -73,15 +76,24 @@ export async function list(p: any) {
   return { success: true, items: items.map((it: any) => ({ ...meta(it), progress: sum[it.id] || empty })), points: { total: pts.total, rank: pts.rank } };
 }
 
-// حالة المحاولة كما يراها المشارك: ما أجاب عنه بنتائجه، والخطوة الحالية، والمؤشرات
+// حالة المحاولة كما يراها المشارك: ما أجاب عنه بنتائجه، والخطوة الحالية، والمؤشرات،
+// ومسودة الخطوة الجارية وتلميحاتها وفحوصها (للوحة) ليستأنف من حيث توقف
 function attemptView(it: any, a: any) {
   const results = a.results || {};
+  const cur = it.spec?.steps?.[a.current];
   return {
     id: a.id, current: a.current, path: a.path || [], answers: a.answers || {}, done: !!a.finished_at, pct: a.pct,
     results: Object.fromEntries((a.path || []).filter((i: number) => results[i]).map((i: number) => [i, results[i]])),
     meters: meterState(it.spec, (a.path || []).map((i: number) => results[i]?.effects)),
+    draft: a.draft?.[a.current] ?? null,
+    hints: cur?.type === 'board' ? hintsView(cur, a.hints?.[a.current]) : {},
+    checks_used: Number(a.checks?.[a.current]) || 0,
+    hint_count: hintCount(a.hints),
   };
 }
+
+// مستوى المحاولة: المثبّت عند بدئها، وإلا مستوى المشارك الآن (محاولة قبل ترحيل 20261111120200)
+const levelOfAttempt = (it: any, a: any) => (a?.level && ['beginner', 'intermediate', 'advanced'].includes(a.level) ? a.level : it.level);
 
 export async function start(p: any, b: Body) {
   const it = await myItem(p, b.id);
@@ -97,14 +109,81 @@ export async function start(p: any, b: Body) {
     if ((count ?? 0) >= STARTS_PER_DAY) throw new Fail('بدأت محاولات كثيرة اليوم، تابع غدًا', 429, 'rate');
     // D02: إصدار محتوى الدفعة مع كل محاولة، إلزامي: null لدفعة بلا إصدار وحدها، وخطأ القراءة أو الحفظ يرمي
     const release = (await releaseOf(p))?.id ?? null;
-    a = must(await db.from('lab_attempts').insert({ participant_id: p.id, item_id: it.id, content_release: release }).select('*').single());
+    const row = { participant_id: p.id, item_id: it.id, content_release: release };
+    // المستوى يُثبَّت مع المحاولة؛ وقبل ترحيل 20261111120200 تُنشأ بلا عمود المستوى (deploy-gate: tolerant)
+    const first = await db.from('lab_attempts').insert({ ...row, level: it.level }).select('*').single();
+    a = first.error ? must(await db.from('lab_attempts').insert(row).select('*').single()) : first.data;
   }
+  const level = levelOfAttempt(it, a);
   return {
     success: true,
-    item: { ...meta(it), level: it.level },
-    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`), it.level),
+    item: { ...meta(it), level },
+    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`), level),
     attempt: attemptView(it, a),
   };
+}
+
+// المحاولة الجارية للمشارك عند خطوتها الحالية، لأفعال ما قبل الإرسال (المسودة والتلميح والفحص)
+async function openStep(p: any, b: Body) {
+  const a = must(await db.from('lab_attempts').select('*').eq('id', String(b.attempt || '')).eq('participant_id', p.id).maybeSingle());
+  if (!a) throw new Fail('المحاولة غير موجودة', 404);
+  if (a.finished_at) throw new Fail('انتهت هذه المحاولة، ابدأ محاولة جديدة', 409, 'finished');
+  const it = await myItem(p, a.item_id);
+  const i = Number(b.step);
+  const step = it.spec?.steps?.[i];
+  if (i !== a.current || !step) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  return { a, it, i, step, level: levelOfAttempt(it, a) };
+}
+// تحديث حقل من حالة المحاولة الجارية مشروطًا بالخطوة، فلا يكتب على خطوة أُرسلت. null: العمود غير موجود بعد
+async function patchOpen(a: any, i: number, patch: Body) {
+  const res = await db.from('lab_attempts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', a.id).eq('current', i).is('finished_at', null).select('id');
+  if (res.error) return null;
+  if (!res.data?.length) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  return true;
+}
+
+// الحفظ التلقائي: مسودة الخطوة الجارية، لا تُصحَّح. saved: false قبل ترحيل الحالة فيعرف المشارك أنها لم تُحفظ
+export async function draft(p: any, b: Body) {
+  const { a, i } = await openStep(p, b);
+  if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
+  const ok = await patchOpen(a, i, { draft: { [i]: b.answer ?? null } });
+  return { success: true, saved: !!ok, at: new Date().toISOString() };
+}
+
+// تلميح لبطاقة في اللوحة: الدرجة التالية في السلّم، ويُسجَّل قبل أن يُعاد
+export async function hint(p: any, b: Body) {
+  const { a, i, step, level } = await openStep(p, b);
+  if (step.type !== 'board') throw new Fail('التلميحات للوحة فقط');
+  const card = (step.cards || []).find((c: any) => c.id === String(b.card || ''));
+  if (!card || boardScaffold(step, level).solved_rows.includes(card.row)) throw new Fail('البطاقة غير موجودة');
+  if (!('hints' in a)) throw new Fail('التلميحات غير متاحة بعد، أكمل بلا تلميح', 503, 'unavailable');
+  const mine = { ...(a.hints?.[i] || {}) };
+  const degree = Math.min(HINT_MAX, (Number(mine[card.id]) || 0) + 1);
+  mine[card.id] = degree;
+  const ok = await patchOpen(a, i, { hints: { ...(a.hints || {}), [i]: mine } });
+  if (!ok) throw new Fail('التلميحات غير متاحة بعد، أكمل بلا تلميح', 503, 'unavailable');
+  return { success: true, hint: hintFor(step, card.id, degree), hint_count: hintCount({ ...(a.hints || {}), [i]: mine }) };
+}
+
+// فحص اللوحة قبل الإرسال بسقالة المستوى: بطاقة عند وضعها للتأسيسي، وعدد الخطأ مرتين للمتوسط
+export async function check(p: any, b: Body) {
+  const { a, i, step, level } = await openStep(p, b);
+  if (step.type !== 'board') throw new Fail('الفحص للوحة فقط');
+  if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
+  const sc = boardScaffold(step, level);
+  if (sc.feedback === 'check2') {
+    if (!('checks' in a)) throw new Fail('الفحص غير متاح بعد، أكمل وأرسل', 503, 'unavailable');
+    const used = Number(a.checks?.[i]) || 0;
+    if (used >= BOARD_FEEDBACK.check2) throw new Fail('استعملت مرتي الفحص في هذه الخطوة', 409, 'checks');
+    const r: any = boardCheck(step, b.answer, level);
+    if (r.error) throw new Fail(r.error);
+    const ok = await patchOpen(a, i, { checks: { ...(a.checks || {}), [i]: used + 1 }, draft: { [i]: b.answer ?? null } });
+    if (!ok) throw new Fail('الفحص غير متاح بعد، أكمل وأرسل', 503, 'unavailable');
+    return { success: true, ...r, checks_left: BOARD_FEEDBACK.check2 - used - 1 };
+  }
+  const r: any = boardCheck(step, b.answer, level, String(b.card || ''));
+  if (r.error) throw new Fail(r.error);
+  return { success: true, ...r };
 }
 
 export async function answer(p: any, b: Body) {
@@ -112,16 +191,21 @@ export async function answer(p: any, b: Body) {
   if (!a) throw new Fail('المحاولة غير موجودة', 404);
   if (a.finished_at) throw new Fail('انتهت هذه المحاولة، ابدأ محاولة جديدة', 409, 'finished');
   const it = await myItem(p, a.item_id);
+  const level = levelOfAttempt(it, a);
   const steps = it.spec?.steps || [];
   const i = Number(b.step);
   if (i !== a.current || !steps[i]) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
   if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
-  const result = gradeStep(steps[i], b.answer, { level: it.level });
-  const next = nextIndex(it.spec, i, b.answer, it.level);
+  // البطاقة المكشوفة بالتلميح الأخير تُوضع في خانتها ودرجتها صفر
+  const result = gradeStep(steps[i], b.answer, { level, revealed: revealedOf(a.hints?.[i]) });
+  if (steps[i].type === 'board') result.hints = Object.values(a.hints?.[i] || {}).reduce((n: number, d: any) => n + (Number(d) || 0), 0);
+  const next = nextIndex(it.spec, i, b.answer, level);
   const path = [...(a.path || []), i];
   const results = { ...(a.results || {}), [i]: result };
   const answers = { ...(a.answers || {}), [i]: b.answer ?? null };
   const row: Body = { path, results, answers, current: next, updated_at: new Date().toISOString() };
+  // المسودة تُمحى بالإرسال (إن وُجد عمودها)
+  if ('draft' in a) row.draft = {};
   const pct = next < 0 ? practicePct(it.spec, results, path) : null;
   if (next < 0) Object.assign(row, { pct, finished_at: new Date().toISOString() });
   // التحديث مشروط بالخطوة الحالية، فإرسال الإجابة مرتين لا يُحتسب مرتين
@@ -134,7 +218,7 @@ export async function answer(p: any, b: Body) {
     const prize = labAward(it.points, pct);
     // award يمنح مرة واحدة لكل مصدر ومرجع، فالإعادة بعد الإتقان لا تضاعف النقاط
     const gained = (await award(p.id, 'lab', it.id, prize.mastery, it.title_ar)) + (await award(p.id, 'lab_bonus', it.id, prize.excellence, `تميّز: ${it.title_ar}`));
-    finish = { pct, first: count === 1, gained, closing_ar: it.spec?.closing_ar || '' };
+    finish = { pct, first: count === 1, gained, closing_ar: it.spec?.closing_ar || '', hints: hintCount(a.hints) };
   }
   const meters = meterState(it.spec, path.map((k: number) => results[k]?.effects));
   if (finish) {
