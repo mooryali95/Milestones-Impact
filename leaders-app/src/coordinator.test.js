@@ -84,6 +84,12 @@ it('لوحة الجهة: رحلة خفيفة بلا المجموعة والتق�
   const portal = readFileSync(join(__dirname, 'screens/OrgPortal.jsx'), 'utf8');
   expect(portal).not.toMatch(/rater-confirm', b\); if \(r\.success\) load\(\)/);
 });
+// org-6: رابط التسجيل في اللوحة هو نفسه الذي تحمله رسالة دعوة المنسق وبشرطها (جهة نشطة)، من orgJoinUrl وحده
+it('لوحة الجهة: رابط تسجيل الموظفين من مصدر رسالة الدعوة، ولجهة نشطة وحدها', () => {
+  const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/coordinator.ts'), 'utf8');
+  expect(src).toContain("join_url: d.org.status === 'active' ? orgJoinUrl(d.org.invite_code) : null");
+  expect(src).toContain("invite_code: o.status === 'active' ? o.invite_code : null");
+});
 
 describe('المطّلعون المتعددون', () => {
   it('بلا «القائمة» لا يخرج صف واحد عن أي مشارك', () => {

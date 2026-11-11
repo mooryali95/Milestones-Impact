@@ -16,7 +16,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
@@ -170,6 +170,19 @@ function ImpactCard({ im, onReport }) {
   );
 }
 
+// رابط تسجيل موظفي الجهة كما في رسالة دعوة المنسق (org-6)، بنسخ بنقرة. لا يظهر لجهة موقوفة (الخادم لا يرسله)
+function JoinLink({ url }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { setCopied(false); }
+  };
+  return (
+    <p className="small" style={{ overflowWrap: 'anywhere' }}><span>رابط تسجيل موظفيكم: </span><a className="ltr" style={{ color: 'inherit' }} href={url} target="_blank" rel="noopener noreferrer">{url}</a>{' '}
+      <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={copy}>{copied ? 'نُسخ' : 'انسخ الرابط'}</button>
+      <span className="sr-only" role="status">{copied ? 'نُسخ الرابط' : ''}</span></p>
+  );
+}
+
 function Dashboard({ me, onLogout }) {
   // ما جاء مع الهوية (preload) يُعرض فورًا، وإعادة التحميل بعد إجراء تطلب اللوحة وحدها (البند 8.1)
   const [d, setD] = useState(me.preload?.dashboard ?? null);
@@ -239,6 +252,7 @@ function Dashboard({ me, onLogout }) {
           <p className="eyebrow">لوحة الجهة · للاطلاع</p>
           <h1>{org.name}</h1>
           <p className="muted">أهلًا {me.coordinator.full_name || ''}. لوحة مشاركي جهتك في برنامج القادة، تُحدَّث مع كل نشاط.</p>
+          {org.join_url && <JoinLink url={org.join_url} />}
           {msg && <div className="alert err small" role="alert">{msg}</div>}
           <div className="row">
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
@@ -312,10 +326,10 @@ function Dashboard({ me, onLogout }) {
               {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}
               {perms.scores && DIMS.map(([k, en]) => <td key={k} className="op-dim" data-label={en}>{lvl(p.levels?.[k])}</td>)}
             </tr>
-          )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
+          )) : <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>{kpis.total ? 'لا نتائج لهذا البحث.' : org.join_url ? 'لم ينضم أحد من جهتك بعد. شارك رابط تسجيل موظفيكم المعروض أعلى اللوحة.' : 'لم ينضم أحد من جهتك بعد. شارك رابط الدعوة الذي أرسلته لك الإدارة.'}</td></tr>}</tbody>
         </table></div>
       </section>}
-      <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط.</p>
+      <p className="small muted">بيانات المشاركين سرية، ومخصصة لمتابعة برنامج جهتك فقط. للتواصل مع إدارة البرنامج: <a className="link ltr" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></p>
     </div>
   );
 }
@@ -329,7 +343,7 @@ export function needsYou(d, now = Date.now()) {
   const raters = (d.raters_pending || []).length;
   // بطاقة التأكيد تُعرض قبل هذا القسم، فالتلميح «أعلاه» (org-7)
   if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أعلى هذا القسم', show: { to: 'ra-h' } });
-  if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد' });
+  if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد', contact: true });
   const notStarted = ps.filter((p) => PRE_BASELINE.includes(p.status)).length;
   if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', show: { stage: NOT_STARTED } });
   if (d.permissions?.activity) {
@@ -347,6 +361,7 @@ function NeedsYou({ d, onShow }) {
       <ul>{items.map((x) => (
         <li key={x.key}>
           <span><b>{x.n}</b> {x.text}{x.hint && <small className="muted"> · {x.hint}</small>}</span>
+          {x.contact && <a className="btn ghost sm" href={`mailto:${CONTACT_EMAIL}`}>راسل إدارة البرنامج</a>}
           {x.show && <button type="button" className="btn ghost sm" onClick={() => onShow(x.show)}>{x.show.to ? 'انتقل إليها' : 'اعرضهم في القائمة'}</button>}
         </li>
       ))}</ul>
