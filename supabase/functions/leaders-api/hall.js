@@ -135,7 +135,10 @@ export function hallView({ session, sentence, members, roles, tables = {}, prese
   const revealed = !!(sentence && (session.revealed || []).includes(sentence.id));
   const isAdmin = viewer?.kind === 'admin';
   const present = new Map((presence || []).map((p) => [p.participant_id, p]));
-  const ansBy = new Map((answers || []).filter((a) => sentence && a.sentence_id === sentence.id).map((a) => [a.participant_id, a]));
+  // إجابات أعضاء القاعة وحدهم: كاتون مشترك بين الدفعات، فمن أجاب الجملة نفسها خارجها (دفعة أخرى، أو حساب العرض)
+  // لا يدخل توزيع جولتها المعروض على الشاشة (server-sec-5)
+  const memberIds = new Set((members || []).map((m) => m.id));
+  const ansBy = new Map((answers || []).filter((a) => sentence && a.sentence_id === sentence.id && memberIds.has(a.participant_id)).map((a) => [a.participant_id, a]));
   const people = (members || []).map((m) => {
     const pr = present.get(m.id);
     const a = ansBy.get(m.id);

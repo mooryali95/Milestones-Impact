@@ -136,6 +136,14 @@ async function buildState(session: any, viewer: { kind: 'participant' | 'admin';
   return out;
 }
 
+// قاعة المشارك هي قاعة دفعته، إلا حساب العرض: دفعته الافتراضية هي المفتوحة الحقيقية، فلا يدخل قاعتها ولا يرى حالتها
+// (أسماء الحاضرين وفرقهم)، ولا تمر إجابته في كاتون ببوابتها. cohortMembers يستبعده من الأعضاء أصلًا (server-sec-5)
+async function hallCohortOf(p: any) {
+  if (p.is_demo) return null;
+  const { cohort } = await cohortOf(p);
+  return cohort || null;
+}
+
 // دفعة المشارك لسؤال الحالة الدوري: تُحفظ في العامل ثواني، فالسؤال كل ثلاث ثوانٍ لا يعيد قراءة تسجيلاته وكل الدفعات.
 // الأفعال (دخول، يد، اختيار فريق، إجابة) تقرأ الدفعة من القاعدة دائمًا، فمن نُقل من دفعته يرى أثره مع أول فعل أو بعد المدة.
 const COHORT_TTL_MS = 15000;
@@ -143,10 +151,10 @@ const cohortMemo = new Map<string, { at: number; cohort: any }>();
 async function pollCohort(p: any) {
   const hit = cohortMemo.get(p.id);
   if (hit && Date.now() - hit.at < COHORT_TTL_MS) return hit.cohort;
-  const { cohort } = await cohortOf(p);
+  const cohort = await hallCohortOf(p);
   if (cohortMemo.size > 2000) cohortMemo.clear();
-  cohortMemo.set(p.id, { at: Date.now(), cohort: cohort || null });
-  return cohort || null;
+  cohortMemo.set(p.id, { at: Date.now(), cohort });
+  return cohort;
 }
 
 // ── للمشارك ──
@@ -165,7 +173,7 @@ export async function state(p: any, b: Body) {
 }
 
 export async function join(p: any) {
-  const { cohort } = await cohortOf(p);
+  const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) throw new Fail('لا قاعة مفتوحة لدفعتك الآن', 404);
   must(await db.from('hall_presence').upsert({ session_id: s.id, participant_id: p.id, last_seen: new Date().toISOString() }));
@@ -185,7 +193,7 @@ export async function join(p: any) {
 }
 
 export async function hand(p: any, b: Body) {
-  const { cohort } = await cohortOf(p);
+  const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) throw new Fail('لا قاعة مفتوحة', 404);
   must(await db.from('hall_presence').update({ hand: b.raised === true }).eq('session_id', s.id).eq('participant_id', p.id));
@@ -195,7 +203,7 @@ export async function hand(p: any, b: Body) {
 
 // اختيار المشارك فريقه حين يختار الخبير طريقة «ارفع يدك»
 export async function pick(p: any, b: Body) {
-  const { cohort } = await cohortOf(p);
+  const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s || s.stage !== 'split' || s.split_method !== 'choose') throw new Fail('اختيار الفريق غير متاح الآن', 409);
   if (!HALL_TEAMS.includes(b.team)) throw new Fail('اختر أحد الفرق الأربعة');
@@ -206,7 +214,7 @@ export async function pick(p: any, b: Body) {
 
 // هل الجملة مفتوحة للإجابة في قاعة المشارك؟ (يستعملها katon.answer)
 export async function hallGate(p: any, sentenceId: string) {
-  const { cohort } = await cohortOf(p);
+  const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) return { inHall: false, sessionId: null };
   const inTopic = !!s.topic_id && !!(await db.from('katon_sentences').select('id').eq('id', sentenceId).eq('topic_id', s.topic_id).maybeSingle()).data;

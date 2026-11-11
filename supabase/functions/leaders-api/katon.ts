@@ -107,7 +107,8 @@ export async function adminList(b: Body) {
   const [tp, ss, ans, prog] = await Promise.all([
     db.from('katon_topics').select('*').order('sort'),
     db.from('katon_sentences').select('*').order('sort'),
-    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances'),
+    // إجابات حساب العرض (الجولة الحية في الورش) لا تدخل إحصاء البنود (server-sec-5)
+    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances, participants!inner(is_demo)').eq('participants.is_demo', false),
     programId ? db.from('programs').select('id, name, katon_points').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const bySent = new Map<string, any[]>();

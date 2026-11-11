@@ -23,8 +23,11 @@ async function groupAdvisorId(cohortId: string | null | undefined, participantId
   return (data as any)?.cohort_groups?.advisor_expert_id || null;
 }
 
-// المستشار الفعلي للمشارك (effectiveAdvisorId): خبير مجموعته إن عُيّن وكان معتمدًا، وإلا مستشار دفعته الأساسي
-export async function advisorOf(p: { id: string; organization_id?: string | null }) {
+// المستشار الفعلي للمشارك (effectiveAdvisorId): خبير مجموعته إن عُيّن وكان معتمدًا، وإلا مستشار دفعته الأساسي.
+// حساب العرض بلا مستشار: دفعته الافتراضية هي المفتوحة الحقيقية، ومستشارها خبير حقيقي لا يصله بريد عن مشارك غير موجود
+// (تسليم نموذج، طلب توجيه) ولا يقيّم تسليمه، ولا يظهر اسمه في عرض الورشة (server-sec-5)
+export async function advisorOf(p: { id: string; organization_id?: string | null; is_demo?: boolean | null }) {
+  if (p.is_demo) return null;
   const { cohort } = await cohortOf(p);
   const c: any = cohort;
   const ids = { group: await groupAdvisorId(c?.id, p.id), cohort: c?.advisor_expert_id || null };
@@ -105,7 +108,7 @@ export async function reviews(e: any) {
 }
 
 export async function review(e: any, b: Body) {
-  const { data: s } = await db.from('model_submissions').select('id, participant_id, participants(id, organization_id)').eq('id', String(b.id || '')).maybeSingle();
+  const { data: s } = await db.from('model_submissions').select('id, participant_id, participants(id, organization_id, is_demo)').eq('id', String(b.id || '')).maybeSingle();
   if (!s) throw new Fail('التسليم غير موجود', 404);
   const adv = await advisorOf((s as any).participants);
   if (adv?.id !== e.id) throw new Fail('هذا التسليم ليس من دفعتك', 403);
