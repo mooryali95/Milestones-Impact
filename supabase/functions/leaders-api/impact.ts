@@ -254,7 +254,11 @@ async function preRating(p: any) {
   return { ok: true, instrument_id: base.instrument_id };
 }
 
-const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, status: r.status, invited_at: r.invited_at, submitted_at: r.submitted_at, phase: r.phase,
+// expired: دعوة مرسلة انقضت مهلتها فالرابط يقول للمقيّم «انتهت صلاحية الرابط»؛ كانت تظهر للمشارك «بانتظار تقديره»
+// بلا ما يدل على أن عليه إعادة الإرسال (p-capstone-6، تدقيق 2026-11-11). ومثلها مهلة الرابط في raterFrom
+const raterExpired = (r: any) => r.status === 'invited' && !!r.expires_at && new Date(r.expires_at) < new Date();
+export const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, status: r.status, invited_at: r.invited_at, submitted_at: r.submitted_at, phase: r.phase,
+  expired: raterExpired(r),
   verification: r.verification ?? null, verification_ar: r.verification ? (RATER_VERIFICATION_AR as Record<string, string>)[r.verification] : null,
   flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) });
 

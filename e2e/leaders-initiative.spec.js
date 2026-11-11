@@ -187,3 +187,62 @@ test('طلب الاستشارة المنتهي بلا خبير يبقى ظاهر
   await expect(card.locator('[data-request="offered"]')).toContainText(OFFERED);
   await expect(card.locator('[data-request="unmatched"]')).toHaveCount(0);
 });
+
+// p-capstone-6: «إلغاء» المقيّم بنقرة واحدة أوقف رابطه بلا تأكيد، والدعوة المنتهية ظهرت «بانتظار تقديره»
+// بلا إعادة إرسال، وعند الحد اختفى النموذج بلا تفسير
+test('القياس البعدي: إلغاء المقيّم بتأكيد، والدعوة المنتهية تُعاد، والحد مشروح', async ({ page }) => {
+  const rater = (id, name, email, status, expired = false) => ({ id, email, full_name: name, relation: 'peer', status, phase: 'post', expired });
+  const raters = [rater('x1', 'نورة', 'noura@x.sa', 'invited', true), rater('x2', 'خالد', 'khaled@x.sa', 'invited'), rater('x3', 'عمر', 'omar@x.sa', 'submitted')];
+  const mine = (list) => ({ success: true, summary: null, raters: list, limit: 3, pre_available: false });
+  const post = { ...me, journey: [...me.journey, { key: 'evaluation', title_ar: 'قياس التطور', phase: 'impact', status: 'active', done: 1, total: 1,
+    items: [{ id: 'r1', code: 'E-POST', title_ar: 'إكمال القياس البعدي', kind: 'auto', auto: true, required: true, status: 'done' }] }] };
+  const calls = await open(page, {
+    me: post, 'impact.mine': mine(raters),
+    'rater.invite': () => mine([{ ...raters[0], expired: false }, raters[1], raters[2]]),
+    'rater.revoke': () => mine([raters[0], raters[2]]),
+  });
+  await page.getByRole('button', { name: 'أثري' }).first().click();
+  const list = page.locator('.rater-list');
+  const noura = list.locator('li', { hasText: 'نورة' });
+  await expect(noura).toContainText('انتهت الدعوة');
+  await expect(noura).not.toContainText('بانتظار تقديره');
+  await expect(page.getByText(/دعوت 3 مقيّمين، وهو الحد/)).toBeVisible();
+
+  // رفض التأكيد لا يلغي شيئًا، وقبوله يلغي بعد ذكر صاحب الدعوة وأن رابطه يتوقف
+  const dialogs = [];
+  page.once('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+  await list.locator('li', { hasText: 'خالد' }).getByRole('button', { name: 'إلغاء' }).click();
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('خالد');
+  expect(dialogs[0]).toContain('يتوقف الرابط');
+  expect(calls.filter((c) => c.action === 'rater.revoke')).toHaveLength(0);
+  page.once('dialog', (d) => d.accept());
+  await list.locator('li', { hasText: 'خالد' }).getByRole('button', { name: 'إلغاء' }).click();
+  await expect(list.locator('li', { hasText: 'خالد' })).toHaveCount(0);
+  expect(calls.find((c) => c.action === 'rater.revoke')).toMatchObject({ id: 'x2' });
+
+  // إعادة إرسال المنتهية بالبريد نفسه
+  await noura.getByRole('button', { name: 'أعد الإرسال' }).click();
+  await expect(noura).toContainText('بانتظار تقديره');
+  expect(calls.find((c) => c.action === 'rater.invite')).toMatchObject({ email: 'noura@x.sa', full_name: 'نورة', relation: 'peer', phase: 'post' });
+});
+
+// p-capstone-6: «أغلق الطلب» في طلبات التوجيه أغلقه بنقرة عابرة، ولا إعادة فتح
+test('طلب التوجيه لا يُغلق بلا تأكيد', async ({ page }) => {
+  const item = (status) => ({ id: 'm1', text: 'كيف أقيس منفعة غير مالية؟', source: 'free', source_ar: 'سؤال حر', target_team: null, target_team_ar: 'الجميع',
+    status, status_ar: status === 'closed' ? 'مغلق' : 'بانتظار إجابة', at: '2026-11-04T10:00:00Z', participant_id: 'p1', author: 'سارة الأحمد', mine: true, can_answer: false, answers: [] });
+  const peer = (status) => ({ success: true, supervision: 'peers_expert', supervision_ar: 'الأقران يجيبون ويؤكّد الخبير', team: 'guide', team_ar: 'فريق التوجيه',
+    teams: { guide: 'فريق التوجيه' }, advisor: null, mine_open: status === 'closed' ? 0 : 1, items: [item(status)] });
+  const calls = await open(page, { 'peer.list': peer('open'), 'peer.close': () => peer('closed') });
+  const card = page.getByRole('region', { name: 'طلبات التوجيه' });
+  const close = card.getByRole('button', { name: 'أغلق الطلب' });
+  const dialogs = [];
+  page.once('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+  await close.click();
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('لا يُعاد فتحه');
+  expect(calls.filter((c) => c.action === 'peer.close')).toHaveLength(0);
+  page.once('dialog', (d) => d.accept());
+  await close.click();
+  await expect.poll(() => calls.filter((c) => c.action === 'peer.close').length).toBe(1);
+});
