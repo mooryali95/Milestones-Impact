@@ -134,3 +134,30 @@ test('متابعة الشهر: ما كُتب ولم يُحفظ يعود بعد �
   await expect(page.getByRole('button', { name: /حدّث متابعة/ })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'ما جرى هذا الشهر' })).toHaveCount(0);
 });
+
+// p-capstone-5: كانت النافذة تُفتح بعد انتظار capstone.doc، أي بعد انقضاء أثر النقرة، فيحجبها Safari
+// (Chromium لا يحجبها، فالاختبار يثبت الترتيب: النافذة قبل رد الخادم)
+const DOC = { meta: { initiative: 'رقمنة خدمات المستفيدين', participant: { name: 'سارة الأحمد' }, org: { name: 'جهة التجربة' }, scope_title: 'مشروع', track: { title: 'مسار التنفيذ المؤثر' } }, sections: [], checks: [], summary: '' };
+test('الوثيقة الاحترافية: النافذة تُفتح مع النقرة قبل رد الخادم، ثم تُملأ', async ({ page }) => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  let answered = false;
+  await open(page, { 'capstone.doc': async () => { await held; answered = true; return { success: true, doc: DOC }; } });
+  await toCapstone(page);
+  const popup = page.waitForEvent('popup', { timeout: 3000 });
+  await page.getByRole('button', { name: 'اعرض الوثيقة الاحترافية' }).click();
+  const win = await popup;
+  expect(answered).toBe(false);
+  release();
+  await expect(win.locator('body')).toContainText('رقمنة خدمات المستفيدين');
+});
+
+test('الوثيقة الاحترافية: إن رفض الخادم تُغلق النافذة الفارغة وتظهر رسالته', async ({ page }) => {
+  await open(page, { 'capstone.doc': { success: false, message: 'تعذّر تجهيز الوثيقة الآن' } });
+  await toCapstone(page);
+  const popup = page.waitForEvent('popup', { timeout: 3000 });
+  await page.getByRole('button', { name: 'اعرض الوثيقة الاحترافية' }).click();
+  const win = await popup;
+  await expect(page.getByText('تعذّر تجهيز الوثيقة الآن')).toBeVisible();
+  await expect.poll(() => win.isClosed()).toBe(true);
+});

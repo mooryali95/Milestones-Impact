@@ -41,8 +41,9 @@ function Meter({ value, min }) {
   );
 }
 
-export async function openCapstoneDoc(doc) {
-  const win = window.open('', '_blank');
+// win: نافذة فُتحت متزامنة مع النقرة قبل أي انتظار، وإلا حجبها Safari (p-capstone-5). من يملك الوثيقة عند النقر
+// (رابط الراعي) يتركها فتُفتح هنا متزامنة أيضًا
+export async function openCapstoneDoc(doc, win = window.open('', '_blank')) {
   const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
   const { meta, body } = capstoneReport(doc);
   return writeDocument(win, meta, body);
@@ -98,11 +99,12 @@ export default function Capstone({ me, onEditProfile, onBack }) {
     setMsg({ ok: 'سُلّمت الوثيقة للمستشار. يصلك بريد بقراره.' });
   };
   const view = async () => {
-    setBusy('doc');
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح، ثم تُملأ بعد رد الخادم
+    setBusy('doc'); setMsg(null);
     const r = await call('capstone.doc');
     setBusy('');
-    if (!r.success) return setMsg({ err: r.message });
-    if (!(await openCapstoneDoc(r.doc))) setMsg({ err: POPUP_BLOCKED });
+    if (!r.success) { win?.close(); return setMsg({ err: r.message }); }
+    if (!(await openCapstoneDoc(r.doc, win))) setMsg({ err: POPUP_BLOCKED });
   };
 
   return (
