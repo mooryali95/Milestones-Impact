@@ -119,6 +119,20 @@ test('الكتيب: فشل تحميل باب لا يُبقي نص الباب ا�
   expect(calls.filter((c) => c.action === 'handbook.chapter' && c.id === 'c4')).toHaveLength(2);
 });
 
+test('الكتيب: نص الباب متاح لقارئ الشاشة بعناوينه وقوائمه، واللوحة المرسومة كما هي', async ({ page }) => {
+  await openHandbook(page, (b, srv) => srv.reply(b));
+  await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
+  await expect(page.getByRole('img', { name: 'لماذا هذه المنهجية؟' })).toBeVisible();
+  const text = page.locator('.hb-sheet .sr-only');
+  await expect(text.getByRole('heading', { name: 'لماذا هذه المنهجية؟' })).toHaveCount(1);
+  await expect(text.getByRole('heading', { name: 'أبعاد المعلم الخمسة' })).toHaveCount(1);
+  await expect(text.getByRole('listitem')).toHaveCount(5);
+  await expect(text.locator('strong')).toHaveText(['قرار']);
+  await expect(text).toContainText('المعلم الذي لا يرتبط بالمسار الحرج');
+  await expect(text).toContainText('نسخة شخصية مرخصة لـ');
+  expect(await text.evaluate((el) => getComputedStyle(el).userSelect)).toBe('none');
+});
+
 // ── الحضور ──
 test('الحضور: الجلسة الجارية «جارية الآن» لا «قادمة»، وطريقة التسجيل الآلية مذكورة', async ({ page }) => {
   const at = (h) => new Date(Date.now() + h * 36e5).toISOString();
