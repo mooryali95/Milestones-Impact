@@ -224,6 +224,8 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
   position: relative; overflow: hidden;
 }
 .cell:active { background: var(--bg-deep); }
+/* حلقة التركيز داخل الخلية: الخلايا المتجاورة بفاصل 1px تغطي الحلقة الخارجية */
+.cell:focus-visible { outline-offset: -3px; }
 .cell.done { background: rgba(74,122,58,0.04); }
 .cell.dated { background: rgba(139,105,20,0.03); }
 .cell.highlighted { background: rgba(20, 73, 94,0.07); }
@@ -265,6 +267,7 @@ input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin
    MODAL
 ════════════════════════════════════════ */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4);   display: flex; align-items: flex-end; justify-content: center; z-index: 1000; padding: 0; animation: fadeIn 0.2s; overscroll-behavior: contain; }
+.modal:focus { outline: none; }
 .modal { background: var(--bg-card); border-radius: 2px 22px 0 0; padding: 1.3rem; width: 100%; max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; animation: slideUp 0.3s cubic-bezier(0.22,1,0.36,1); position: relative; touch-action: pan-y; }
 .modal-pull { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 1rem; }
 .modal-x { position: absolute; top: 1rem; left: 1.1rem; width: 30px; height: 30px; border-radius: 50%; background: var(--bg-deep); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; color: var(--text-secondary); transition: background 0.18s; }

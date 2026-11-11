@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { pressable, useEscape } from "../lib/a11y";
+import React, { useCallback, useRef } from "react";
+import { pressable, useDialogFocus, useEscape } from "../lib/a11y";
 import Skeleton from "./Skeleton";
 import Icon from "./Icon";
 import { gregorianToHijri } from "../lib/dateUtils";
@@ -30,10 +30,12 @@ const ProcessModal = (p) => {
   } = p;
 
   useEscape(useCallback(() => { setSelectedCell(null); setHighlightedKeys([]); }, [setSelectedCell, setHighlightedKeys]));
+  const dialogRef = useRef(null);
+  useDialogFocus(dialogRef, selectedCell.key);
   return (
       (
         <div className="overlay" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>
-          <div className="modal" role="dialog" aria-modal="true" aria-label={selectedCell.nameAr} onClick={e=>e.stopPropagation()}>
+          <div className="modal" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={selectedCell.nameAr} onClick={e=>e.stopPropagation()}>
             <div className="modal-pull"/>
             <button className="modal-x" aria-label="إغلاق تفاصيل العملية" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>✕</button>
             <span className="modal-badge" style={{background:selectedCell.trackColor}}>{selectedCell.trackIcon} {selectedCell.trackNameAr} • {selectedCell.phaseNameAr}</span>
