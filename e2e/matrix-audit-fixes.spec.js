@@ -241,3 +241,25 @@ test('بلا تعديلات أو بعد الحفظ يُغلق التحليل م�
   await page.getByRole('alertdialog', { name: /حذف سالم/ }).getByRole('button', { name: 'حذف' }).click();
   await expect(demo.locator('.demo-card')).toHaveCount(1);
 });
+
+// ── visitor-8: النقر على خلية بعد قفل الخطة يُعلم بالقفل وكيف يُطلب فتحها، بلا خطأ في الصفحة ──
+
+test('النقر على خلية بعد التقديم النهائي يعرض رسالة القفل ولا يرمي خطأ', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const dates = Object.fromEntries(KEYS.map((k, i) => [k, `2099-0${1 + (i % 9)}-${10 + i}`]));
+  await seed(page, { dates, submitted: true });
+  await page.goto(BASE + '/');
+  // الخطة المقدَّمة تُفتح على النموذج النهائي، فيعود إلى المصفوفة
+  await page.getByRole('button', { name: 'المصفوفة' }).click();
+  const cell = page.locator('.cell', { hasText: 'تحليل ديموغرافي' });
+  await cell.click();
+  await expect(page.locator('.toast')).toContainText('الخطة مقفلة');
+  await expect(page.locator('.toast')).toContainText('إعادة الفتح');
+  await expect(page.locator('.modal')).toHaveCount(0);
+  // وبلوحة المفاتيح كذلك
+  await cell.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.toast')).toContainText('الخطة مقفلة');
+  expect(errors).toEqual([]);
+});
