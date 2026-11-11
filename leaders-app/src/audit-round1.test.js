@@ -42,12 +42,12 @@ describe('7.3 الاسم على الشهادة', () => {
     const p = read('supabase/functions/leaders-api/participant.ts');
     expect(p).toContain("if ('full_name' in patch && patch.full_name !== p.full_name && !certNameOk(patch.full_name)) {");
     expect(p).toContain("patch.name_en !== (p.name_en || null) && !certNameEnOk(patch.name_en)");
-    expect(p).toContain("if ('name_confirmed_at' in p) patch.name_confirmed_at = null;");
+    expect(p).toContain('patch.name_confirmed_at = null;');
   });
   it('الشهادة الجديدة تنتظر تأكيد الاسم، والتأكيد يصدرها بقرار التقييم نفسه', () => {
     const cert = read('supabase/functions/leaders-api/certificates.ts');
     const on = cert.slice(cert.indexOf('export async function onFinalApproved('), cert.indexOf('export async function issueAfterNameConfirm('));
-    expect(on).toMatch(/if \('name_confirmed_at' in p && !p\.name_confirmed_at\) \{[\s\S]*'certificate\.awaiting-name'[\s\S]*return \{ awaiting_name: true \};\n\s+\}\n\s+return insertCertificate\(p, by, final\);/);
+    expect(on).toMatch(/if \(!p\.name_confirmed_at\) \{[\s\S]*'certificate\.awaiting-name'[\s\S]*return \{ awaiting_name: true \};\n\s+\}\n\s+return insertCertificate\(p, by, final\);/);
     expect(cert).toMatch(/export async function issueAfterNameConfirm[\s\S]*\.eq\('status', 'approved'\)[\s\S]*PASSING\.includes\(decision\)[\s\S]*onFinalApproved\(/);
     expect(read('supabase/functions/leaders-api/index.ts')).toMatch(/'profile\.confirm-name': async \(p\) => \{[\s\S]*P\.confirmName\(p\)[\s\S]*Z\.issueAfterNameConfirm\(p\.id\)/);
     expect(read('leaders-app/src/screens/Journey.jsx')).toContain('هكذا يظهر اسمك على الشهادة');
@@ -57,8 +57,8 @@ describe('7.3 الاسم على الشهادة', () => {
 describe('ترحيل 20261110210000_leaders_name_confirmation', () => {
   const NAME = '20261110210000_leaders_name_confirmation';
   const SQL = read(`supabase/migrations/${NAME}.sql`);
-  it('متسامح قبل تطبيقه، ومن صدرت شهادته يُعد مؤكِّدًا، وإعادته آمنة', async () => {
-    expect(gateOf(SQL, NAME).gate).toBe('tolerant');
+  it('حاجب بعد تطبيقه على الإنتاج، ومن صدرت شهادته يُعد مؤكِّدًا، وإعادته آمنة', async () => {
+    expect(gateOf(SQL, NAME).gate).toBe('blocking');   // في بيان البصمات منذ تطبيقه 2026-11-11
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table leaders.participants (id int primary key, name_locked_at timestamptz);

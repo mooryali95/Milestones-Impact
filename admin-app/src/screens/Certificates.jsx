@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // شهادات المشاركة: الإعداد العام، والسجل بالإلغاء وإعادة الإصدار
 // ════════════════════════════════════════════════════════════════
-// الإصدار تلقائي عند «أنهى البرنامج». من هنا: ضبط ما يظهر على الشهادات
+// الإصدار تلقائي باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه (D05 و7.3). من هنا: ضبط ما يظهر على الشهادات
 // الجديدة، ومعاينتها، وإلغاء شهادة، أو إعادة إصدارها لتصحيح الاسم.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
@@ -46,7 +46,8 @@ function SettingsCard({ canWrite }) {
       <div className="ce-split">
       <div className="ce-form">
       <ol className="ce-how">
-        <li>تُصدر تلقائيًا حين تصير حالة المشارك «أنهى البرنامج»، ويُقفل اسمه.</li>
+        {/* النص يطابق الخادم (certificates.ts: onFinalApproved): كان يقول إنها تصدر بتغيير الحالة، وهي لا تصدر به (البند 9.2) */}
+        <li>تُصدر تلقائيًا حين يُعتمد التقييم الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»، ويؤكد المشارك اسمه كما سيُطبع، ثم يُقفل الاسم. تغيير الحالة يدويًا لا يصدر شهادة.</li>
         <li>التعديل هنا يسري على الشهادات الجديدة، ولا يغيّر ما صدر.</li>
         <li>لكل جهة أن تخصّص ما يختلف من نموذجها{extra ? ` (${extra} جهة مخصّصة الآن)` : ''}.</li>
       </ol>
@@ -140,7 +141,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
       <SettingsCard canWrite={canWrite} />
       <section className="la-card">
         <h3>سجل الشهادات</h3>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا حين تغيّر حالة مشارك إلى «أنهى البرنامج»، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>
+        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>
         <FilterBar scope="certs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={presets} counts={counts}
           shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة" />
         {!rows.length ? <p className="la-muted">لا نتائج لهذه الفلاتر.</p> : (

@@ -212,9 +212,8 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
   if (suspended) await setStatus(suspended.id, 'replaced', by || 'system', 'اعتماد ختامي جديد');
   if (!cfg.enabled) return null;
   const { data: p } = await db.from('participants').select('*').eq('id', participantId).single();
-  // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm).
-  // قبل ترحيل 20261110210000 لا عمود، فتصدر كما كانت
-  if ('name_confirmed_at' in p && !p.name_confirmed_at) {
+  // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm)
+  if (!p.name_confirmed_at) {
     await audit('system', by, 'certificate.awaiting-name', 'participants', p.id, null, { decision: final.decision });
     if (p.email && !p.is_demo) sendMail(p.email, 'أكّد اسمك لتصدر شهادتك', nameConfirmMail(p.full_name, CONFIG.appUrl), [], { ref: `participant:${p.id}` })
       .catch((e) => console.error('name confirm mail:', e));
