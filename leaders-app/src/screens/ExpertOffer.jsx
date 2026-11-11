@@ -19,30 +19,41 @@ export default function ExpertOffer() {
   const [error, setError] = useState('');
   useEffect(() => { call('offer.get', { t }).then(setD); }, [t]);
 
+  // gone: رد الخادم بأن العرض لم يعد قائمًا (انتهت مهلته أو أُغلق)، فلا تبقى الأزرار تَعِد بما لا يقع
+  const [gone, setGone] = useState(false);
   const respond = async (accept) => {
     setBusy(true); setError('');
     const r = await call('offer.respond', { t, accept });
     setBusy(false);
-    if (r.success) setDone(accept ? 'accepted' : 'declined'); else setError(r.message);
+    if (r.success) setDone(accept ? 'accepted' : 'declined'); else { setError(r.message); if (r.code === 'gone') setGone(true); }
   };
 
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
-  if (!d.success) return <div className="page narrow"><div className="card stack"><h2>العرض غير متاح</h2><p className="muted">{d.message}</p></div></div>;
+  if (!d.success) return <div className="page narrow"><div className="card stack"><h1 className="as-h2">العرض غير متاح</h1><p className="muted">{d.message}</p></div></div>;
   const o = d.offer;
-  if (done || o.status === 'accepted') {
+  // كل حالة غير «معروض» منتهية بنصها (links-expert-6): المقبول من الرابط أو من اللوحة، والمكتمل، وما أُغلق؛ وبعد القبول طريق إلى اللوحة
+  const end = done === 'declined' ? ['شكرًا لك', 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.', false]
+    : done === 'accepted' || o.status === 'accepted' ? ['قُبل الطلب', 'أُبلغ المشارك باسمك، وتجده مع تفاصيله ومواعيد الجلسات في لوحة الخبير.', true]
+      : o.status === 'completed' ? ['اكتملت هذه الخدمة', 'أُغلقت الخدمة بعد أدائها، وتجدها وتقييمها في لوحة الخبير.', true]
+        : o.status !== 'offered' ? ['لم يعد هذا العرض قائمًا', 'أُغلق هذا الطلب أو عُرض على خبير آخر، ولا يلزمك شيء.', false]
+          : null;
+  if (end) {
     return (
       <div className="page narrow"><div className="card milestone-card stack">
-        <div className="badge"><span>✓</span></div>
-        <h2>{done === 'declined' ? 'شكرًا لك' : 'قُبل الطلب'}</h2>
-        <p className="muted">{done === 'declined' ? 'سُجّل اعتذارك، وعُرض الطلب على خبير آخر.' : 'أُبلغ المشارك باسمك، وتصلك تفاصيله ومواعيد الجلسات.'}</p>
+        {end[2] && <div className="badge"><span aria-hidden="true">✓</span></div>}
+        <h1 className="as-h2">{end[0]}</h1>
+        <p className="muted">{end[1]}</p>
+        {end[2] && <a className="btn" href="/x">افتح لوحة الخبير</a>}
       </div></div>
     );
   }
+  const expired = !!o.expires_at && Date.parse(o.expires_at) <= Date.now();
+  const closed = expired || gone;
   return (
     <div className="page narrow">
       <div className="card stack xo">
         <p className="eyebrow">طلب خدمة</p>
-        <h2>أهلًا {o.expert}</h2>
+        <h1 className="as-h2">أهلًا {o.expert}</h1>
         <p className="muted">رشّحك النظام لخدمة مشارك في برنامج القادة، بناءً على تخصصك وسعتك المتاحة.</p>
         <dl className="xo-facts">
           <div><dt>الخدمة</dt><dd>{o.role_ar}</dd></div>
@@ -51,14 +62,16 @@ export default function ExpertOffer() {
           {o.context && <div><dt>التوقيت</dt><dd>{o.context}</dd></div>}
           {o.note && <div><dt>ما يحتاجه</dt><dd>{o.note}</dd></div>}
           <div><dt>المشارك</dt><dd>{o.participant}</dd></div>
-          {o.expires_at && <div><dt>المهلة</dt><dd>{left(o.expires_at)}</dd></div>}
+          {o.expires_at && <div><dt>المهلة</dt><dd>{expired ? 'انتهت' : left(o.expires_at)}</dd></div>}
         </dl>
         {error && <div className="alert err" role="alert">{error}</div>}
-        <div className="row xo-acts">
-          <button className="btn" disabled={busy} onClick={() => respond(true)}>أقبل الطلب</button>
-          <button className="btn ghost" disabled={busy} onClick={() => respond(false)}>أعتذر هذه المرة</button>
-        </div>
-        <p className="small muted">إن لم ترد خلال المهلة يُعرض الطلب على الخبير التالي، ولا يؤثر الاعتذار على ملفك.</p>
+        {closed ? <p className="alert info" role="status">{expired ? 'انتهت مهلة هذا العرض، ويُعرض الطلب على الخبير التالي. لا يلزمك شيء.' : 'لم يعد هذا العرض قائمًا، ولا يلزمك شيء.'}</p> : <>
+          <div className="row xo-acts">
+            <button className="btn" disabled={busy} onClick={() => respond(true)}>أقبل الطلب</button>
+            <button className="btn ghost" disabled={busy} onClick={() => respond(false)}>أعتذر هذه المرة</button>
+          </div>
+          <p className="small muted">إن لم ترد خلال المهلة يُعرض الطلب على الخبير التالي، ولا يؤثر الاعتذار على ملفك.</p>
+        </>}
       </div>
     </div>
   );

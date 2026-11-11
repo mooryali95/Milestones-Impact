@@ -357,7 +357,10 @@ export async function offerGet(b: Body) {
   };
 }
 export async function offerRespond(b: Body) {
-  const r = await offerByToken(b.t);
+  return respondToOffer(await offerByToken(b.t), b);
+}
+// الرد نفسه من الرابط أو من لوحة الخبير، على الصف كما هو: لا يُستبدل رمز الرابط، فيبقى رابط البريد يعرض ما حدث (links-expert-6)
+async function respondToOffer(r: any, b: Body) {
   if (r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا', 409, 'gone');
   const now = new Date().toISOString();
   if (b.accept === true) {
@@ -613,11 +616,9 @@ export async function portalProfileSave(e: any, b: Body) {
 
 // رد الخبير من لوحته على عرض قائم له (الرابط في البريد يعمل أيضًا)
 export async function portalRespond(e: any, b: Body) {
-  const r = must(await db.from('expert_requests').select('id, expert_id, status').eq('id', String(b.id || '')).maybeSingle()) as any;
+  const r = must(await db.from('expert_requests').select('*, experts(full_name)').eq('id', String(b.id || '')).maybeSingle()) as any;
   if (!r || r.expert_id !== e.id || r.status !== 'offered') throw new Fail('لم يعد هذا العرض قائمًا لك', 409, 'gone');
-  const token = randomToken();
-  await db.from('expert_requests').update({ offer_token_hash: await hash(token) }).eq('id', r.id).eq('status', 'offered');
-  return offerRespond({ t: token, accept: b.accept === true, reason: b.reason });
+  return respondToOffer(r, { accept: b.accept === true, reason: b.reason });
 }
 
 // الخبير يقيّم المشارك بعد جلسة منعقدة أو خدمة مكتملة له

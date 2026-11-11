@@ -118,3 +118,12 @@ describe('ملف الخبير: لا إسقاط صامت', () => {
     expect(src).toMatch(/hours: latinDigits\(e\.target\.value\)/);
   });
 });
+
+// links-expert-6: الرد من لوحة الخبير لا يستبدل رمز رابط البريد، فيبقى الرابط يعرض «قُبل» لا «انتهى»
+it('رد الخبير من لوحته يرد على الصف نفسه ولا يكتب رمزًا جديدًا للعرض', () => {
+  const src = readFileSync(join(root, 'supabase/functions/leaders-api/experts.ts'), 'utf8');
+  const portal = src.slice(src.indexOf('export async function portalRespond'), src.indexOf('export async function portalRate'));
+  expect(portal).toMatch(/respondToOffer\(r,/);
+  expect(portal).not.toMatch(/offer_token_hash/);
+  expect(portal).not.toMatch(/randomToken/);
+});
