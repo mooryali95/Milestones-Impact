@@ -42,3 +42,29 @@ test.describe('القاعة الحية على الجوال (admin-program-11)', 
     expect(over).toBeLessThanOrEqual(0);
   });
 });
+
+test.describe('تمديد معلم لمشارك (admin-program-6)', () => {
+  const person = (extended) => ({
+    success: true, participant: { id: 'p1', full_name: 'سارة الأحمد', email: 's@x.com', status: 'enrolled', placements: [] }, progress: 20, history: [],
+    profile: null, assessments: [], journey: [], points: { total: 0, rank: { title: 'مستكشف' } }, book: [], models: [],
+    milestones: [{ id: 'm1', title_ar: 'نهاية التدريب', status: 'late', due: extended ? '2026-12-01' : '2026-11-01', late_days: 10, extended, done: false, scores: {} }],
+    milestone_summary: { total: 1, done: 0, late: 1, max_late: 10 },
+  });
+  test('التمديد بحقل تاريخ يرسل اليوم بصيغته، لا نصًا حرًا يُلغي التمديد بصمت', async ({ page }) => {
+    const calls = await open(page, '#/leaders/participants/p1', { 'admin.participant': person(false), 'admin.participant-milestone': { success: true } });
+    await page.getByRole('button', { name: 'مدّد له' }).click();
+    const form = page.getByRole('dialog', { name: 'تمديد «نهاية التدريب» لهذا المشارك وحده' });
+    await expect(form.getByLabel('الموعد الجديد')).toHaveAttribute('type', 'date');
+    await form.getByLabel('الموعد الجديد').fill('2026-12-15');
+    await form.getByRole('button', { name: 'حفظ' }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.participant-milestone')).toMatchObject({ participant_id: 'p1', milestone_id: 'm1', due_override: '2026-12-15' });
+    await expect(page.getByRole('status').filter({ hasText: 'مُدّد الموعد لهذا المشارك' })).toBeVisible();
+  });
+  test('إلغاء التمديد زر صريح بتأكيد', async ({ page }) => {
+    const calls = await open(page, '#/leaders/participants/p1', { 'admin.participant': person(true), 'admin.participant-milestone': { success: true } });
+    await expect(page.getByRole('button', { name: 'عدّل التمديد' })).toBeVisible();
+    await page.getByRole('button', { name: 'ألغِ التمديد' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.participant-milestone')).toMatchObject({ milestone_id: 'm1', due_override: null });
+  });
+});

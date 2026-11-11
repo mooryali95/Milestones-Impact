@@ -86,6 +86,20 @@ export function cleanMilestone(raw, stageKeys) {
   };
 }
 
+// الأرقام العربية الهندية (٠-٩) والفارسية (۰-۹) إلى لاتينية: لوحات المفاتيح العربية في الحاسب والجوال تكتبها افتراضيًا.
+// عامة، لا تخص المعالم؛ تُصدَّر من logic.js لمن يحتاجها.
+export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+
+// تمديد موعد معلم لمشارك: فارغ = إلغاء التمديد (null)، وإلا يوم صحيح بصيغة 2026-12-01 بأي أرقام.
+// غير ذلك يُرفض برسالة، ولا يُحفظ null بصمت فيُلغى التمديد ويقال «تم» (التدقيق 2026-11-11، admin-program-6)
+export function cleanDueOverride(raw) {
+  const s = latinDigits(raw).trim();
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  if (!ISO.test(s) || toIso(Date.UTC(y, m - 1, d)) !== s) throw new Error('اكتب الموعد الجديد يومًا صحيحًا بصيغة سنة-شهر-يوم، مثل 2026-12-01');
+  return s;
+}
+
 // تاريخ استحقاق المعلم لدفعة: من نقطة ارتكازه في جدولها، أو null إن لم يتحدد بعد
 export function milestoneDue(m, { startsOn = null, endsOn = null, schedule = {} } = {}) {
   let base = null;
