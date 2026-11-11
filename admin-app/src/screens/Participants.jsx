@@ -93,7 +93,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
 
   const move = async () => {
     if (!moveTo) return toast('اختر الجهة');
-    if (!(await confirm(`نقل ${picked.size} مشارك إلى الجهة المختارة؟`))) return;
+    // الهدف باسمه في التأكيد، فلا يُنقل أحد إلى جهة غير المقصودة
+    const target = moveTo === 'none' ? 'فكّ ارتباطهم بأي جهة' : `«${orgs.find((o) => o.id === moveTo)?.name || 'الجهة المختارة'}»`;
+    if (!(await confirm(moveTo === 'none' ? `${target} لـ${picked.size} مشارك؟` : `نقل ${picked.size} مشارك إلى ${target}؟`))) return;
     const r = await L('admin.assign-org', { participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo });
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
@@ -311,6 +313,17 @@ function Person({ id, canWrite, onBack }) {
     const d = await L('admin.evidence-url', { participant_id: p.id, path });
     if (d.success) window.open(d.url, '_blank', 'noopener'); else toast(d.message);
   };
+  // تغيير الحالة بتأكيد يسمي أثره (تدقيق الجاهزية admin-core-9): الانسحاب قبل فتح أول باب يرد مقعد الراعي
+  // ولا تعيده إعادة الحالة (admin.ts setStatus)، والإيقاف يمنعه من الدخول (participant.ts)
+  const changeStatus = async () => {
+    const to = `تغيير حالة ${p.full_name} من «${STATUS[p.status] || p.status}» إلى «${STATUS[status] || status}»؟`;
+    const effect = {
+      withdrawn: ' يخرج من البرنامج، وإن لم يفتح أي باب من الكتيب بعدُ أُلغي إعفاء رعاية جهته ورُدّ مقعده إليها، ولا تعيده إعادة الحالة لاحقًا.',
+      suspended: ' يخرج من البرنامج ولا يستطيع الدخول إلى حسابه حتى تعيد حالته.',
+    }[status] || '';
+    if (!(await confirm(to + effect, { danger: !!effect, ok: 'تغيير الحالة' }))) return;
+    act('admin.status', { participant_id: p.id, status }, 'تم التحديث');
+  };
   // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
   const enroll = async () => {
     const c = (cohorts || []).find((x) => x.id === cohortTo);
@@ -365,7 +378,7 @@ function Person({ id, canWrite, onBack }) {
               <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
                 {Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
-              <button className="btn-sm ghost" disabled={status === p.status} onClick={() => act('admin.status', { participant_id: p.id, status }, 'تم التحديث')}>تغيير الحالة</button>
+              <button className="btn-sm ghost" disabled={status === p.status} onClick={changeStatus}>تغيير الحالة</button>
               <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
               <button className="btn-sm ghost" onClick={() => setEditing(true)}>تعديل البيانات</button>
               {/* حساب اختبار داخلي: خارج الإحصاءات وحدها، ويبقى حسابًا عاديًا (قرار المالك 2026-11-11) */}
