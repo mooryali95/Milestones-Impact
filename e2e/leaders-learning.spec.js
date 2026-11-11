@@ -54,3 +54,15 @@ test('القاعة: وسم رفضه الخادم يعود إلى ما استُل
   await expect(page.locator('.hall-receipt')).toContainText('تستطيع تعديلها حتى يُكشف المفتاح');
 });
 
+test('القاعة: ملاحظة المشارك تبقى في حقلها وتُرسل مع تعديل الثقة، فلا تُمحى على الخادم', async ({ page }) => {
+  const note = 'كيف نقيس الأثر في جهة لا تجمع بيانات خط الأساس؟';
+  const calls = await openHall(page, { choice: 'false', confidence: 2, stances: ['question'], note }, () => ({ success: true }));
+  const field = page.getByRole('textbox', { name: /اكتب سؤالك أو فكرتك/ });
+  await expect(field).toHaveValue(note);
+  await page.getByRole('radio', { name: /متيقن/ }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'katon.answer').length).toBe(1);
+  expect(calls.find((c) => c.action === 'katon.answer')).toMatchObject({ sentence_id: 'k3', verdict: 'false', confidence: 3, stances: ['question'], note });
+  await expect(field).toHaveValue(note);
+  await expect(page.getByRole('button', { name: 'ارفعها طلب توجيه لفريقك' })).toBeVisible();
+});
+

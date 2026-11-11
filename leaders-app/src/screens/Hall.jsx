@@ -155,7 +155,7 @@ export default function Hall({ onBack }) {
               </div>
               <p className="kt-text">{s.text_ar}</p>
               {/* حكم بثقة مدرَّجة ووسوم موقف (CBM الثلاثي)؛ me.choice هو الحكم وme.confidence درجته */}
-              <KatonAnswer key={`${s.id}:${rejected}`} compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
+              <KatonAnswer key={`${s.id}:${rejected}`} compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [], note: me.note || '' } : null} disabled={!canAnswer || busy}
                 onAnswer={(a) => act('katon.answer', { sentence_id: s.id, ...a })} onAsk={(text) => setAsk({ source: 'sentence', ref_id: s.id, text, label: `جملة «${Q_AR[s.question]}»` })} />
               {v.revealed && (
                 <div className="banner"><span className="ico">{me?.points > 0 ? '✓' : '•'}</span>

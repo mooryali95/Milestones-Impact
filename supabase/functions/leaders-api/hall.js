@@ -150,7 +150,8 @@ export function hallView({ session, sentence, members, roles, tables = {}, prese
       // الحكم (صحيحة/خاطئة) بدرجة ثقته ووسوم الموقف؛ لا تظهر للزملاء قبل الكشف
       answered: !!a, choice: na && showChoice ? na.verdict : null, confidence: na && showChoice ? na.confidence : null, stances: na && showChoice ? na.stances : [],
       points: a && revealed ? katonScore(na, sentence.key, points) : null,
-      ...(isAdmin && a?.note ? { note: a.note } : {}),
+      // الملاحظة للخبير ولصاحبها وحده: بدونها كان حقلها يفرغ عند صاحبها فيرسل تعديله التالي note فارغة تمحوها على الخادم
+      ...((isAdmin || m.id === viewer?.id) && a?.note ? { note: a.note } : {}),
     };
   });
   const answered = people.filter((p) => p.answered).length;
