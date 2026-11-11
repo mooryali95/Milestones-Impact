@@ -995,8 +995,11 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .j-layout { display: flex; flex-direction: column; }
 .j-side { display: contents; }
 .j-next { order: 0; }
-.j-main { order: 1; min-width: 0; margin-top: 16px; }
-.j-tools { order: 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 28px; }
+/* بطاقات الطلب بعد «خطوتك التالية» على عمود واحد، وأول العمود الأوسط على الحاسب (p-entry-6) */
+.j-asks { order: 1; min-width: 0; }
+.j-asks:empty { display: none; }
+.j-main { order: 2; min-width: 0; margin-top: 16px; }
+.j-tools { order: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 28px; }
 .tool-card {
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px;
   display: grid; gap: 6px; align-content: start; border-top: 3px solid var(--gold);
@@ -1005,12 +1008,13 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .tool-card .row { margin-top: 6px; }
 .stage { scroll-margin-top: 84px; }
 @media (min-width: 1120px) {
-  .j-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
+  .j-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0 28px; align-items: start; }
   .j-side {
-    display: flex; flex-direction: column; gap: 12px; grid-column: 2; grid-row: 1;
+    display: flex; flex-direction: column; gap: 12px; grid-column: 2; grid-row: 1 / span 2;
     position: sticky; top: 84px; padding-top: 32px; max-height: calc(100vh - 96px); overflow-y: auto;
   }
-  .j-main { grid-column: 1; grid-row: 1; margin-top: 0; }
+  .j-asks { grid-column: 1; grid-row: 1; }
+  .j-main { grid-column: 1; grid-row: 2; margin-top: 0; }
   .j-side .next-grid { grid-template-columns: 1fr; margin-top: 0; }
   .j-tools { grid-template-columns: 1fr; margin-top: 0; }
   .next-card { box-shadow: var(--shadow); border-color: transparent; }

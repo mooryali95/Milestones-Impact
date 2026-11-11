@@ -494,7 +494,11 @@ export function PreManager({ inSettings = false }) {
   const [f, setF] = useState({ email: '', full_name: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { call('impact.mine').then((r) => setData(r.success ? r : null)); }, []);
+  // البطاقة المخفية لا تطلب حالتها: impact.mine يحسب ثبات الدفعة على الخادم في كل طلب (فحص الجاهزية p-capstone-7)
+  useEffect(() => {
+    if (hidden) return;
+    call('impact.mine').then((r) => setData(r.success ? r : null));
+  }, [hidden]);
   if (hidden || !data?.pre_available) return null;
   const pre = data.raters.find((r) => r.phase === 'pre');
   if (pre?.status === 'submitted') return null;
@@ -688,15 +692,18 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div>
         </div>
       )}
-      {participant.status !== 'completed' && <PreManager />}
-      {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
       {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
-
-      {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
           وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتيب والمختبر */}
       <div className="j-layout">
+        {/* بطاقات الطلب (دعوة المدير والترحيب ومفتاح المرور) تحت «خطوتك التالية» لا فوقها: على الهاتف كانت تدفعها
+            تحت الشاشة الأولى (فحص الجاهزية p-entry-6). وعلى الحاسب أول العمود الأوسط فوق المراحل */}
+        <div className="j-asks">
+          {participant.status !== 'completed' && <PreManager />}
+          {welcome && approved && <Welcome firstName={firstName} onClose={closeWelcome} />}
+          {passkey && <PasskeyBanner onDone={(r) => { setPasskey(false); if (r === 'set') setToast('فُعّل مفتاح المرور'); }} />}
+        </div>
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading || upcoming) && (
             <div className="next-grid j-next" data-tour="next-step">
