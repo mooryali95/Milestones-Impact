@@ -264,31 +264,6 @@ function render(canvas, chapter, watermark, cssWidth, meta, logo) {
   ctx.restore();
 }
 
-// بديل نصي للوحة يقرؤه قارئ الشاشة: الكتل نفسها التي تُرسم (readingBlocks) بعناوينها وقوائمها، مخفية عن العين
-// (sr-only)، فلا تتغير الصفحة المرسومة. التحديد والنسخ والطباعة محجوبة عنها كاللوحة (body.protected)، وفي آخرها سطر الملكية
-const rich = (t) => t.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((x, i) => (x.startsWith('**') && x.endsWith('**') ? <strong key={i}>{x.slice(2, -2)}</strong> : x));
-function ChapterText({ chapter, name }) {
-  const out = [];
-  for (const b of parse(chapter.md)) {
-    const ordered = b.type === 'li' && b.marker !== '•' && b.marker !== '◆';
-    const last = out[out.length - 1];
-    if (b.type === 'li' && last?.type === 'list' && last.ordered === ordered) last.items.push(b.text);
-    else out.push(b.type === 'li' ? { type: 'list', ordered, items: [b.text] } : b);
-  }
-  const H = { h2: 'h3', h3: 'h4', quote: 'blockquote' };
-  return (
-    <div className="sr-only">
-      <h2>{chapter.title}</h2>
-      {out.map((b, i) => {
-        if (b.type === 'list') { const L = b.ordered ? 'ol' : 'ul'; return <L key={i}>{b.items.map((t, j) => <li key={j}>{rich(t)}</li>)}</L>; }
-        const T = H[b.type] || 'p';
-        return <T key={i}>{rich(b.text)}</T>;
-      })}
-      <p>نسخة شخصية مرخصة لـ {name}</p>
-    </div>
-  );
-}
-
 const COVER = 'cover';   // الغلاف أول صفحة في القارئ، ويُفتح أولًا لمن لم يقرأ بعد
 const PART = { milestone: 'الجزء الأول', impact: 'الجزء الثاني', leadership: 'الجزء الثالث' };
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -672,7 +647,6 @@ export default function Handbook({ me, lab, onLab, onBack }) {
             )}
             <div hidden={current === COVER || (!data && !loading)} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
               <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} />
-              {data && !loading && <ChapterText chapter={data.chapter} name={toc.name || me.participant.full_name} />}
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
             {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}
