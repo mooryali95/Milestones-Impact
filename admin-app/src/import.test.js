@@ -14,6 +14,19 @@ describe('استيراد المشاركين: القراءة', () => {
     expect(parseImport('0551234567;عمر علي;omar@example.sa;مهندس')[0]).toMatchObject({ full_name: 'عمر علي', email: 'omar@example.sa', phone: '0551234567', job_title: 'مهندس' });
   });
   it('السطر الأول بلا بريد ولا جوال سطر عناوين يُهمل', () => { expect(parseImport('اسم فقط\n\n  ')).toEqual([]); });
+  it('سطر الفواصل وحدها فارغ: لا يُعرض صفًا ولا يأخذ مكان سطر العناوين', () => {
+    expect(parseImport(',,\n;;\n"",""\n\t\t\n,,,')).toEqual([]);
+    // سطر فارغ بالفواصل في أول الجدول لا يستهلك موضع العناوين، والصفوف الفارغة بين الأقسام لا تظهر «ناقصة»
+    const rows = parseImport(',,,\nالاسم,البريد\nسارة الأحمد,sara@example.sa\n,,\nعمر علي,omar@example.sa\n;;;');
+    expect(rows.map((r) => [r.line, r.full_name, r.email])).toEqual([[3, 'سارة الأحمد', 'sara@example.sa'], [5, 'عمر علي', 'omar@example.sa']]);
+    expect(importCounts(checkImport(rows))).toEqual({ ok: 2 });
+  });
+  it('الصفوف الفارغة التي يكتبها Excel في آخر الملف لا تُحسب في الحد', () => {
+    const csv = ['الاسم,البريد', ...Array.from({ length: IMPORT_MAX }, (_, i) => `مشارك ${i},p${i}@example.sa`), ...Array(10).fill(',,,')].join('\n');
+    const rows = parseImport(csv);
+    expect(rows).toHaveLength(IMPORT_MAX);
+    expect(importLimitIssue(rows.length)).toBe('');
+  });
   it('البريد المعيب أو الغائب لا يُسقط الصف: يبقى برقم سطره ويظهر ناقصًا', () => {
     const rows = parseImport('الاسم\tالبريد\nسارة الأحمد\tsara@example.sa\nخالد العتيبي\tkhaled@example\n\nمنى السالم\tmona@@example.sa\nعمر علي\t0551234567\nريم الحربي\treem.example.sa');
     expect(rows.map((r) => [r.line, r.full_name, r.email])).toEqual([

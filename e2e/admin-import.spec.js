@@ -78,3 +78,18 @@ test('فوق الحد: رسالة واضحة قبل الإرسال، وزر ال
   await expect(dlg.getByRole('button', { name: 'تحقق من المسجلين' })).toBeDisabled();
   expect(calls).toHaveLength(0);
 });
+
+test('أسطر الفواصل الفارغة لا تظهر صفوفًا ولا تُحسب في الحد: 300 مشارك وفي آخر الملف ",,," يُرسلون كلهم', async ({ page }) => {
+  const { calls, dlg } = await open(page, (b) => {
+    const rows = checkImport(b.rows);
+    return { success: true, dry_run: true, rows, counts: importCounts(rows), organization: null };
+  });
+  const csv = ['الاسم,البريد', ...Array.from({ length: 300 }, (_, i) => `مشارك رقم ${i},p${i}@example.sa`), ',,,', ';;', ',,,'].join('\n');
+  await dlg.locator('textarea').fill(csv);
+  await expect(dlg.getByLabel('ملخص الصفوف')).toContainText('جاهز 300');
+  await expect(dlg.getByLabel('ملخص الصفوف')).not.toContainText('ناقص');
+  await expect(dlg.getByRole('alert')).toHaveCount(0);
+  await dlg.getByRole('button', { name: 'تحقق من المسجلين' }).click();
+  await expect(dlg.getByRole('button', { name: 'أضف 300 مشاركًا' })).toBeVisible();
+  expect(calls[0].rows).toHaveLength(300);
+});

@@ -12,8 +12,9 @@ const PHONE_LIKE = /^[+\d٠-٩][\d٠-٩\s\-()]{6,}$/;
 
 // نص ملصوق من Excel (أعمدة بعلامة جدولة) أو ملف CSV (فاصلة أو فاصلة منقوطة): الأعمدة تُعرف بمحتواها لا بترتيبها.
 // الخلية التي فيها بريد هي البريد، والتي تشبه رقمًا هي الجوال، وأول ما سواهما الاسم، وثانيه المسمى الوظيفي.
-// كل سطر غير فارغ صف برقم سطره، ولو كان بريده معيبًا أو غائبًا: يظهر في المعاينة «ناقصًا» ولا يسقط بصمت.
-// المستثنى سطر العناوين وحده: أول سطر لا بريد فيه ولا «@» ولا رقم جوال.
+// كل سطر فيه خلية غير فارغة على الأقل صف برقم سطره، ولو كان بريده معيبًا أو غائبًا: يظهر في المعاينة «ناقصًا» ولا يسقط بصمت.
+// المستثنى: السطر الفارغ ولو كان فواصل وحدها (,,, أو ;; يكتبها Excel للصفوف الممسوحة) فلا يُعرض ولا يُحسب في الحد،
+// وسطر العناوين: أول سطر فيه خلايا لا بريد فيها ولا «@» ولا رقم جوال.
 export function parseImport(text) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
   const rows = [];
@@ -23,6 +24,8 @@ export function parseImport(text) {
     if (!line) return;
     const sep = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
     const cells = line.split(sep).map((c) => c.trim().replace(/^"(.*)"$/, '$1').trim()).filter(Boolean);
+    // قبل فحص العناوين، فلا يأخذ سطر فواصل فارغ في أول الجدول مكان سطر العناوين
+    if (!cells.length) return;
     const email = cells.find((c) => isEmail(normalizeEmail(c))) || cells.find((c) => c.includes('@')) || '';
     const rest = cells.filter((c) => c !== email);
     const phone = rest.find((c) => PHONE_LIKE.test(c)) || '';
