@@ -874,8 +874,10 @@ export const VERIFIED_KINDS = ['reading', 'video', 'workshop', 'coaching', 'curr
 
 // أسئلة الاستبانة من إعدادها: سطر لكل سؤال؛ «(نص)» في أوله سؤال مفتوح، و«(نص اختياري)» مفتوح لا يُلزم،
 // وما عداه تقدير من 1 إلى 5. المصدر الواحد للأسئلة للواجهة والخادم معًا.
+// سطور الأسئلة كما تُقرأ وكما تُحفظ (cleanConfig): بلا فراغات ولا سطور فارغة، وعشرون سؤالًا أقصى
+const surveyLines = (config) => String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20);
 export function surveyQuestions(config) {
-  return String(config?.questions || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 20).map((line, i) => {
+  return surveyLines(config).map((line, i) => {
     const m = line.match(/^\((نص(?: اختياري)?)\)\s*(.+)$/);
     return m ? { key: `q${i + 1}`, label: m[2], type: 'text', required: m[1] === 'نص' } : { key: `q${i + 1}`, label: line, type: 'rating', required: true };
   });
@@ -1298,6 +1300,13 @@ export function cleanConfig(kind, cfg, prev = {}) {
   }
   // لقاء بمدة معلنة (عرض أمام لجنة): المدة هنا مصدر ما يقوله وصف المرحلة
   if (kind === 'meeting') return c.minutes ? { minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes) } : {};
+  // الاستبانة: أسئلتها هي إعدادها كله. بلا هذا الفرع كان كل حفظ (ولو لتصحيح العنوان) يمحوها،
+  // واستبانة بلا سؤال تبقى بندًا معلقًا عند المشارك بلا فعل (التدقيق 2026-11-11)
+  if (kind === 'survey') {
+    const lines = surveyLines(c);
+    if (!lines.length) throw new Error('اكتب سؤالًا واحدًا على الأقل للاستبانة');
+    return { questions: lines.join('\n') };
+  }
   return {};
 }
 
