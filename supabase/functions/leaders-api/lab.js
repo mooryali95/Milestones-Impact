@@ -187,6 +187,7 @@ export const hintCount = (hints) => Object.values(hints || {}).reduce((n, s) => 
 // ── فحص اللوحة قبل الإرسال بحسب سقالة المستوى ──
 // instant: بطاقة واحدة عند وضعها، صواب أو خطأ فقط (لا يكشف خانتها)
 // check2: اللوحة كلها، عدد البطاقات في غير خانتها لا أماكنها، مرتين في الخطوة
+/** @param {string | null} [card] */
 export function boardCheck(step, answer, level, card = null) {
   const sc = boardScaffold(step, level);
   if (sc.feedback === 'submit') return { error: 'الفحص قبل الإرسال غير متاح في مستواك: تُصحَّح اللوحة عند الإرسال' };

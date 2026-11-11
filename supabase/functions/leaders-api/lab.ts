@@ -225,7 +225,7 @@ async function answerOnce(p: any, b: Body) {
   if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
   // البطاقة المكشوفة بالتلميح الأخير تُوضع في خانتها ودرجتها صفر
   const result = gradeStep(steps[i], b.answer, { level, revealed: revealedOf(a.hints?.[i]) });
-  if (steps[i].type === 'board') result.hints = Object.values(a.hints?.[i] || {}).reduce((n: number, d: any) => n + (Number(d) || 0), 0);
+  if (steps[i].type === 'board') (result as any).hints = Object.values(a.hints?.[i] || {}).reduce((n: number, d: any) => n + (Number(d) || 0), 0);
   const next = nextIndex(it.spec, i, b.answer, level);
   const path = [...(a.path || []), i];
   const results = { ...(a.results || {}), [i]: result };
