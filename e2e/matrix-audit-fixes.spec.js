@@ -173,3 +173,71 @@ test('الإشعار الطويل يلتف داخل الشاشة ولا يفيض
   });
   expect(r).toEqual({ left: true, right: true, fits: true, wide: true });
 });
+
+// ── visitor-10: التحليل الديموغرافي لا يُغلق فتضيع المدخلات ──
+
+async function openDemo(page) {
+  await page.locator('.cell', { hasText: 'تحليل ديموغرافي' }).click();
+  await page.getByRole('button', { name: /ابدأ تحليلك الديموغرافي/ }).click();
+  const demo = page.getByRole('dialog', { name: 'التحليل الديموغرافي' });
+  await expect(demo.locator('[id$="-name"]').first()).toBeVisible();
+  return demo;
+}
+
+test('النقر خارج التحليل أو الرجوع أو Esc مع تعديلات غير محفوظة يسأل قبل الخروج', async ({ page }) => {
+  await seed(page);
+  await page.goto(BASE + '/');
+  const demo = await openDemo(page);
+  const name = demo.locator('[id$="-name"]').first();
+  await name.fill('شخص تجريبي');
+
+  await page.mouse.click(5, 5);
+  const ask = page.getByRole('alertdialog', { name: 'الخروج دون حفظ؟' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'العودة للتحرير' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(name).toHaveValue('شخص تجريبي');
+
+  await demo.getByRole('button', { name: '← رجوع' }).click();
+  await expect(ask).toBeVisible();
+  await page.keyboard.press('Escape'); // Esc يغلق السؤال وحده، والتحليل باقٍ
+  await expect(ask).toHaveCount(0);
+  await expect(name).toHaveValue('شخص تجريبي');
+
+  await page.keyboard.press('Escape');
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'الخروج دون حفظ' }).click();
+  await expect(demo).toHaveCount(0);
+});
+
+test('بلا تعديلات أو بعد الحفظ يُغلق التحليل مباشرة، وحذف شخص له بيانات يُطلب تأكيده', async ({ page }) => {
+  const saves = await seed(page);
+  await page.goto(BASE + '/');
+  let demo = await openDemo(page);
+  await demo.getByRole('button', { name: '← رجوع' }).click();
+  await expect(demo).toHaveCount(0);
+
+  demo = await openDemo(page);
+  await demo.locator('[id$="-name"]').first().fill('سالم');
+  await demo.locator('.demo-stepper-btn', { hasText: '+' }).first().click();
+  await demo.getByRole('button', { name: /حفظ التحليل/ }).click();
+  await expect(page.locator('.toast', { hasText: 'تم حفظ التحليل' })).toBeVisible();
+  expect(saves).toHaveLength(1);
+  await page.mouse.click(5, 5);
+  await expect(demo).toHaveCount(0);
+
+  demo = await openDemo(page);
+  await expect(demo.locator('.demo-card')).toHaveCount(3);
+  await demo.locator('[id$="-name"]').first().fill('سالم');
+  await demo.locator('.demo-card').first().getByRole('button', { name: /حذف/ }).click();
+  const ask = page.getByRole('alertdialog', { name: /حذف سالم/ });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'إلغاء' }).click();
+  await expect(demo.locator('.demo-card')).toHaveCount(3);
+  // الصف الفارغ يُحذف بلا سؤال
+  await demo.locator('.demo-card').nth(2).getByRole('button', { name: /حذف/ }).click();
+  await expect(demo.locator('.demo-card')).toHaveCount(2);
+  await demo.locator('.demo-card').first().getByRole('button', { name: /حذف/ }).click();
+  await page.getByRole('alertdialog', { name: /حذف سالم/ }).getByRole('button', { name: 'حذف' }).click();
+  await expect(demo.locator('.demo-card')).toHaveCount(1);
+});

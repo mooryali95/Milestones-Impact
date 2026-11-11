@@ -15,23 +15,24 @@ const DemographicsScreen = (p) => {
     appContent,
     demoRows,
     demoSaving,
-    removeDemoRow,
+    askRemoveDemoRow,
     saveDemoData,
     screen,
-    setDemoScreen,
+    closeDemoScreen,
     updateDemoRow,
   } = p;
 
   const box = useRef(null);
-  useDialog(box, () => setDemoScreen(false));
+  // كل طرق الخروج تمر بـ closeDemoScreen: تسأل قبل أن تضيع تعديلات لم تُحفظ
+  useDialog(box, closeDemoScreen);
   return (
       (
-        <div className="demo-overlay" onClick={() => setDemoScreen(false)}>
+        <div className="demo-overlay" onClick={closeDemoScreen}>
         <div ref={box} className="demo-screen" role="dialog" aria-modal="true" aria-label="التحليل الديموغرافي" tabIndex={-1} onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="demo-header">
-            <button className="demo-header-back" onClick={() => setDemoScreen(false)}>← رجوع</button>
+            <button className="demo-header-back" onClick={closeDemoScreen}>← رجوع</button>
             <div className="demo-header-info">
               <div className="demo-header-title">◈ {appContent.demo_screen_title || 'التحليل الديموغرافي'}</div>
               <div className="demo-header-sub">{appContent.demo_screen_sub || 'تفكيك البنية البشرية'}</div>
@@ -67,7 +68,7 @@ const DemographicsScreen = (p) => {
                 <div className="demo-card-header">
                   <div className="demo-card-num">{idx + 1}</div>
                   <div className="demo-card-name">{row.name || `الشخص ${idx + 1}`}</div>
-                  <button className="demo-card-remove" onClick={() => removeDemoRow(row.id)}>✕ حذف</button>
+                  <button className="demo-card-remove" onClick={() => askRemoveDemoRow(row, idx)}>✕ حذف</button>
                 </div>
 
                 <div className="demo-card-body">
