@@ -281,6 +281,17 @@ describe('الخادم: الحفظ التلقائي والتلميح والفح�
     // فحصا المتوسط يُعدّان على الخادم
     expect(ts).toMatch(/used >= BOARD_FEEDBACK\.check2/);
   });
+  it('التلميح والفحص والإرسال: كتابة مشروطة بالقيمة المقروءة، فالطلبات المتوازية لا تفقد تلميحًا ولا تتجاوز مرتي الفحص', () => {
+    // patchOpen يشترط قيمة الأعمدة المحروسة كما قُرئت، وإن تغيرت لم يكتب ورمى 'race'
+    expect(ts).toMatch(/async function patchOpen\(a: any, i: number, patch: Body, guard: string\[\] = \[\]\)[\s\S]*?for \(const col of guard\) q = q\.eq\(col, JSON\.stringify\(a\[col\] \?\? \{\}\)\);[\s\S]*?if \(guard\.length\) throw new Fail\([^)]*409, 'race'\)/);
+    expect(ts).toMatch(/patchOpen\(a, i, \{ hints: \{ \.\.\.\(a\.hints \|\| \{\}\), \[i\]: mine \} \}, \['hints'\]\)/);
+    expect(ts).toMatch(/\[i\]: used \+ 1 \}, draft: \{ \[i\]: b\.answer \?\? null \} \}, \['checks'\]\)/);
+    // الإعادة من قراءة جديدة، ثلاث مرات أقصى، وللسباق وحده
+    expect(ts).toMatch(/async function retryRace[\s\S]*?e\.code !== 'race' \|\| n >= 3\) throw e;/);
+    for (const f of ['hint', 'check', 'answer']) expect(ts).toContain(`export const ${f} = (p: any, b: Body) => retryRace(() => ${f}Once(p, b));`);
+    // الإرسال مشروط بالتلميحات المقروءة في اللوحة، فكشف يصل أثناءه يُصحَّح بإعادة القراءة
+    expect(ts).toMatch(/if \(hintGuard\) save = save\.eq\('hints', JSON\.stringify\(a\.hints \?\? \{\}\)\);/);
+  });
   it('الترحيل: أربعة أعمدة بقيم افتراضية، متسامح، ويسجّل اسمه', () => {
     for (const c of ['draft', 'hints', 'checks', 'level']) expect(sql).toMatch(new RegExp(`add column if not exists ${c} `));
     expect(sql.split('\n').slice(0, 15).join('\n')).toMatch(/^-- deploy-gate: tolerant /m);

@@ -142,12 +142,27 @@ async function openStep(p: any, b: Body) {
   if (i !== a.current || !step) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
   return { a, it, i, step, level: levelOfAttempt(it, a) };
 }
-// تحديث حقل من حالة المحاولة الجارية مشروطًا بالخطوة، فلا يكتب على خطوة أُرسلت. null: العمود غير موجود بعد
-async function patchOpen(a: any, i: number, patch: Body) {
-  const res = await db.from('lab_attempts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', a.id).eq('current', i).is('finished_at', null).select('id');
+// تحديث حقل من حالة المحاولة الجارية مشروطًا بالخطوة، فلا يكتب على خطوة أُرسلت. null: العمود غير موجود بعد.
+// guard: أعمدة تُشترط قيمتها المقروءة (مقارنة ثم كتابة)، فطلبان متوازيان لا يكتب أحدهما فوق الآخر:
+// إن تغيرت منذ القراءة لم يُكتب شيء ورُمي 'race' فيعيد المستدعي القراءة (retryRace)
+async function patchOpen(a: any, i: number, patch: Body, guard: string[] = []) {
+  let q = db.from('lab_attempts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', a.id).eq('current', i).is('finished_at', null);
+  for (const col of guard) q = q.eq(col, JSON.stringify(a[col] ?? {}));
+  const res = await q.select('id');
   if (res.error) return null;
-  if (!res.data?.length) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  if (!res.data?.length) {
+    if (guard.length) throw new Fail('وصل طلب آخر للخطوة نفسها في الوقت ذاته، أعد المحاولة', 409, 'race');
+    throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  }
   return true;
+}
+// يعيد الفعل من قراءته حين يسبقه طلب متوازٍ، ثلاث مرات أقصى؛ وتغير الخطوة نفسها يكشفه openStep عند الإعادة
+async function retryRace<T>(fn: () => Promise<T>): Promise<T> {
+  for (let n = 1; ; n++) {
+    try { return await fn(); } catch (e) {
+      if (!(e instanceof Fail) || e.code !== 'race' || n >= 3) throw e;
+    }
+  }
 }
 
 // الحفظ التلقائي: مسودة الخطوة الجارية، لا تُصحَّح. saved: false قبل ترحيل الحالة فيعرف المشارك أنها لم تُحفظ
@@ -159,7 +174,8 @@ export async function draft(p: any, b: Body) {
 }
 
 // تلميح لبطاقة في اللوحة: الدرجة التالية في السلّم، ويُسجَّل قبل أن يُعاد
-export async function hint(p: any, b: Body) {
+export const hint = (p: any, b: Body) => retryRace(() => hintOnce(p, b));
+async function hintOnce(p: any, b: Body) {
   const { a, i, step, level } = await openStep(p, b);
   if (step.type !== 'board') throw new Fail('التلميحات للوحة فقط');
   const card = (step.cards || []).find((c: any) => c.id === String(b.card || ''));
@@ -168,13 +184,14 @@ export async function hint(p: any, b: Body) {
   const mine = { ...(a.hints?.[i] || {}) };
   const degree = Math.min(HINT_MAX, (Number(mine[card.id]) || 0) + 1);
   mine[card.id] = degree;
-  const ok = await patchOpen(a, i, { hints: { ...(a.hints || {}), [i]: mine } });
+  const ok = await patchOpen(a, i, { hints: { ...(a.hints || {}), [i]: mine } }, ['hints']);
   if (!ok) throw new Fail('التلميحات غير متاحة بعد، أكمل بلا تلميح', 503, 'unavailable');
   return { success: true, hint: hintFor(step, card.id, degree), hint_count: hintCount({ ...(a.hints || {}), [i]: mine }) };
 }
 
 // فحص اللوحة قبل الإرسال بسقالة المستوى: بطاقة عند وضعها للتأسيسي، وعدد الخطأ مرتين للمتوسط
-export async function check(p: any, b: Body) {
+export const check = (p: any, b: Body) => retryRace(() => checkOnce(p, b));
+async function checkOnce(p: any, b: Body) {
   const { a, i, step, level } = await openStep(p, b);
   if (step.type !== 'board') throw new Fail('الفحص للوحة فقط');
   if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
@@ -185,7 +202,7 @@ export async function check(p: any, b: Body) {
     if (used >= BOARD_FEEDBACK.check2) throw new Fail('استعملت مرتي الفحص في هذه الخطوة', 409, 'checks');
     const r: any = boardCheck(step, b.answer, level);
     if (r.error) throw new Fail(r.error);
-    const ok = await patchOpen(a, i, { checks: { ...(a.checks || {}), [i]: used + 1 }, draft: { [i]: b.answer ?? null } });
+    const ok = await patchOpen(a, i, { checks: { ...(a.checks || {}), [i]: used + 1 }, draft: { [i]: b.answer ?? null } }, ['checks']);
     if (!ok) throw new Fail('الفحص غير متاح بعد، أكمل وأرسل', 503, 'unavailable');
     return { success: true, ...r, checks_left: BOARD_FEEDBACK.check2 - used - 1 };
   }
@@ -194,7 +211,9 @@ export async function check(p: any, b: Body) {
   return { success: true, ...r };
 }
 
-export async function answer(p: any, b: Body) {
+// ما قبل حفظ الإجابة قراءة فقط، فإعادته عند السباق آمنة؛ والنقاط بعد الحفظ المشروط
+export const answer = (p: any, b: Body) => retryRace(() => answerOnce(p, b));
+async function answerOnce(p: any, b: Body) {
   const a = must(await db.from('lab_attempts').select('*').eq('id', String(b.attempt || '')).eq('participant_id', p.id).maybeSingle());
   if (!a) throw new Fail('المحاولة غير موجودة', 404);
   if (a.finished_at) throw new Fail('انتهت هذه المحاولة، ابدأ محاولة جديدة', 409, 'finished');
@@ -217,8 +236,16 @@ export async function answer(p: any, b: Body) {
   const pct = next < 0 ? practicePct(it.spec, results, path) : null;
   if (next < 0) Object.assign(row, { pct, finished_at: new Date().toISOString() });
   // التحديث مشروط بالخطوة الحالية، فإرسال الإجابة مرتين لا يُحتسب مرتين
-  const saved = must(await db.from('lab_attempts').update(row).eq('id', a.id).eq('current', i).is('finished_at', null).select('id'));
-  if (!saved?.length) throw new Fail('سُجلت إجابة هذه الخطوة من قبل، أعد فتح الأداة', 409, 'step');
+  // واللوحة مشروطة كذلك بالتلميحات المقروءة، فتلميح كاشف يصل أثناء الإرسال لا يفلت من التصحيح
+  let save = db.from('lab_attempts').update(row).eq('id', a.id).eq('current', i).is('finished_at', null);
+  const hintGuard = steps[i].type === 'board' && 'hints' in a;
+  if (hintGuard) save = save.eq('hints', JSON.stringify(a.hints ?? {}));
+  const saved = must(await save.select('id'));
+  // بلا صف: إما أُرسلت الخطوة من قبل، وإما تغيرت التلميحات فيُعاد التصحيح من قراءة جديدة (retryRace يكشف الأولى عند الإعادة)
+  if (!saved?.length) {
+    if (hintGuard) throw new Fail('وصل طلب آخر للخطوة نفسها في الوقت ذاته، أرسل مرة أخرى', 409, 'race');
+    throw new Fail('سُجلت إجابة هذه الخطوة من قبل، أعد فتح الأداة', 409, 'step');
+  }
   let finish: any = null;
   if (next < 0) {
     const { count } = await db.from('lab_attempts').select('id', { count: 'exact', head: true })
