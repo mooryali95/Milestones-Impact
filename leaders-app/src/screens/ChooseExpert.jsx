@@ -80,7 +80,8 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
                     {e.team && <span className="chip ok cx-team">من فريق دفعتك</span>}
                     {e.title && <small className="muted">{e.title}{e.years ? ` · ${e.years} سنة خبرة` : ''}</small>}
                     {e.bio && <p className="small">{e.bio}</p>}
-                    <small>{e.rating ? `★ ${e.rating.avg} (${e.rating.count} تقييم)` : 'خبير جديد في البرنامج'}</small>
+                    {/* غياب التقييم المعلن لا يدل على حداثة الخبير، فلا يُقال عنه ما لا نعرفه (تصور 360، المرحلة 0) */}
+                    {e.rating && <small>★ {e.rating.avg} ({e.rating.count} تقييم)</small>}
                     <button className="btn sm" disabled={!!busy || !form.note.trim()} onClick={() => choose(e)}>{busy === e.id ? 'لحظة…' : 'اختره'}</button>
                   </article>
                 ))}

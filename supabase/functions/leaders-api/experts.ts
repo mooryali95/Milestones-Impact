@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -590,7 +590,7 @@ export async function portalDashboard(e: any) {
     advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
     stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
-    rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: 5 },
+    rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: MIN_RATINGS },
     requests: (reqs || []).map(req),
     sessions: (sessions || []).map((x: any) => ({ id: x.id, status: x.status, starts_at: x.starts_at, ends_at: x.ends_at, join_url: x.status === 'booked' && Date.parse(x.ends_at) > now ? x.join_url : null,
       participant: x.participants?.full_name, to_rate: x.status === 'attended' && !done.has(x.id) })),
