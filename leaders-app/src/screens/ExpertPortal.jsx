@@ -14,7 +14,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
 import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
-import { assignmentScopeAr, codeDigits, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
+import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -425,7 +425,7 @@ function Dashboard({ onOut }) {
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
         <div><b>{d.stats.participants}</b><span>قائد خدمته</span></div>
         <div><b>{d.stats.upcoming}</b><span>جلسة قادمة</span></div>
-        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : 'لم يكتمل'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count}` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
+        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : 'لم يكتمل'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count} · يتحدث كل شهر إذا اجتمعت ${MIN_RATINGS} تقييمات جديدة` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
       </div>
 
       {offered.length > 0 && (

@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -408,7 +408,7 @@ export async function sweepOffers(b: Body) {
 // التقييم في الاتجاهين
 // ════════════════════════════════════════════════════════════════
 // مصدر التقييم expert_ratings وحده: تقييم واحد لكل اتجاه لكل جلسة أو طلب (فهرس فريد).
-// المجمّع يدخل الترشيح (MATCH_WEIGHTS.quality) ولا يُعرض رقمه لغير الإدارة قبل MIN_RATINGS.
+// المجمّع يدخل الترشيح (MATCH_WEIGHTS.quality) ولا يراه المشارك، ويراه الخبير بنافذة دورية بعد MIN_RATINGS.
 async function ratingsBy(ids: string[]) {
   if (!ids.length) return {};
   const { data } = await db.from('expert_ratings').select('expert_id, overall').eq('direction', 'to_expert').in('expert_id', ids);
@@ -418,14 +418,17 @@ async function ratingsBy(ids: string[]) {
 }
 async function expertRatings(expertId: string) {
   const { data } = await db.from('expert_ratings').select('direction, scores, overall, comment, created_at, participants(full_name)')
-    .eq('expert_id', expertId).order('created_at', { ascending: false }).limit(200);
+    .eq('expert_id', expertId).order('created_at', { ascending: false }).limit(2000);
   const to = (data || []).filter((x: any) => x.direction === 'to_expert');
+  // ما يراه الخبير من ملخصه: نافذة دورية (expertOwnRating)، والإدارة ترى الحي كاملًا ومعه تنبيه الهبوط
   const avgOf = (k: string) => (to.length ? Math.round((to.reduce((a: number, x: any) => a + Number(x.scores?.[k] || 0), 0) / to.length) * 10) / 10 : null);
   return {
     summary: ratingSummary(to),
     criteria: Object.fromEntries(Object.keys(RATE_TO_EXPERT).map((k) => [k, avgOf(k)])),
     comments: to.filter((x: any) => x.comment).slice(0, 20).map((x: any) => ({ comment: x.comment, overall: x.overall, created_at: x.created_at })),
     given: (data || []).filter((x: any) => x.direction === 'to_participant').length,
+    own: expertOwnRating(to, Object.keys(RATE_TO_EXPERT)),
+    drop: ratingDrop(to),
   };
 }
 
@@ -473,7 +476,8 @@ export async function rateExpert(p: any, b: Body) {
 // لوحة الخبير: leaders.sunkvalue.com/x
 // ════════════════════════════════════════════════════════════════
 // يدخل الخبير النشط برمز البريد. يرى نفسه وطلباته وجلساته ومشاركيه المقبولين فقط،
-// ولا يرى سعر ساعته ولا تكلفته ولا ملاحظة الإدارة (expertPublic)، ولا متوسط تقييمه قبل MIN_RATINGS.
+// ولا يرى سعر ساعته ولا تكلفته ولا ملاحظة الإدارة (expertPublic)، ولا متوسط تقييمه قبل MIN_RATINGS،
+// وبعده يراه بنافذة دورية (expertOwnRating) لا مع كل تقييم.
 const SESSION_DAYS = 14;
 // الدخول للمعتمد وللمدعو ومن قدّم طلبه؛ العمل (الطلبات والجلسات والتقييم) للمعتمد وحده
 const portalOk = (e: any) => e && ['active', 'paused', 'invited', 'applied'].includes(e.status);
@@ -590,7 +594,7 @@ export async function portalDashboard(e: any) {
     advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
     stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
-    rating: ratings.summary.visible ? { avg: ratings.summary.avg, count: ratings.summary.count, criteria: ratings.criteria } : { count: ratings.summary.count, min: MIN_RATINGS },
+    rating: ratings.own,
     requests: (reqs || []).map(req),
     sessions: (sessions || []).map((x: any) => ({ id: x.id, status: x.status, starts_at: x.starts_at, ends_at: x.ends_at, join_url: x.status === 'booked' && Date.parse(x.ends_at) > now ? x.join_url : null,
       participant: x.participants?.full_name, to_rate: x.status === 'attended' && !done.has(x.id) })),
@@ -652,11 +656,11 @@ export async function portalRate(e: any, b: Body) {
 // المشارك يختار خبيره: ثلاثة مرشحين بالاسم والتقييم، والعرض على من اختاره
 // ════════════════════════════════════════════════════════════════
 // الترشيح نفسه (candidates وMATCH_WEIGHTS)، والطلب نفسه (expert_requests وofferNext):
-// المشارك يختار من الثلاثة الأوائل فقط، والتقييم يظهر بعد MIN_RATINGS وحده، ولا سعر ولا حِمل.
+// المشارك يختار من الثلاثة الأوائل فقط، ولا يرى نجوم الخبير أبدًا: التقييم يعمل داخل الترتيب وحده
+// (قرار المالك 2026-11-11 في تصور 360، المرحلة 0ب)، ولا سعر ولا حِمل.
 const publicCard = (e: any) => ({
   id: e.id, full_name: e.full_name, title: e.title || null, bio: e.bio ? String(e.bio).slice(0, 280) : null,
   years: e.years_experience ?? null, sectors: (e.sectors || []).slice(0, 3), languages: e.languages || [],
-  rating: e.rating?.visible ? { avg: e.rating.avg, count: e.rating.count } : null,
   // من فريق دفعة المشارك: تقولها الواجهة بجوار اسمه
   team: !!e.team,
 });
