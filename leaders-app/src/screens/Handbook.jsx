@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import FirstOpen from '../FirstOpen.jsx';
 import { BRAND } from '../../../shared/js/brand.js';
 import { call, lastRead } from '../api.js';
-import { BookSkeleton, POPUP_BLOCKED } from '../ui.jsx';
+import { BookSkeleton, ErrorBox, POPUP_BLOCKED } from '../ui.jsx';
 import { DIMENSIONS, dimOf } from '../labels.js';
 import { POINTS } from '../../../supabase/functions/leaders-api/logic.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
@@ -422,6 +422,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
   const [shield, setShield] = useState(false);
   const [toast, setToast] = useState('');
   const [reading, setReading] = useState(null);
+  const [attempt, setAttempt] = useState(0);   // «حاول مرة أخرى» بعد فشل تحميل باب: يعيد الطلب ولو لم يتغير الباب
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   // التمرير إلى رأس الباب بعد رسمه لا قبله: اللوحة تكبر عند الرسم (بعد تحميل الخطوط)، والتمرير قبله كان ينتهي
@@ -448,14 +449,15 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       setLoading(true);
       const r = await call('handbook.chapter', { id: current });
       setLoading(false);
-      if (!r.success) return setError(r.message);
+      // الفشل لا يُبقي الباب السابق ونصه واختباره تحت عنوان الباب الجديد
+      if (!r.success) { setData(null); setReading(null); return setError(r.message); }
       setError('');
       scrollFor.current = r.chapter.id;
       setData(r);
       setReading(r.reading || null);
       lastRead.set({ id: current, title: r.chapter.title });
     })();
-  }, [current, tab]);
+  }, [current, tab, attempt]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -643,11 +645,11 @@ export default function Handbook({ me, lab, onLab, onBack }) {
                 {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
               </div>
             )}
-            <div hidden={current === COVER} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
+            <div hidden={current === COVER || (!data && !loading)} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
               <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} />
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
-            {error && <div className="alert err" style={{ marginTop: 10 }}>{error}</div>}
+            {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
             {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={onLab} />}
             <div className="row between book-nav">

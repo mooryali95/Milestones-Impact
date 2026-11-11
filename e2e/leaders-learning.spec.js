@@ -100,6 +100,25 @@ test('الكتيب على الجوال: «ابدأ القراءة» من الغ�
   expect(await top()).toBeLessThan(200);
 });
 
+test('الكتيب: فشل تحميل باب لا يُبقي نص الباب السابق واختباره، و«حاول مرة أخرى» يعيد الطلب', async ({ page }) => {
+  let failC4 = true;
+  const calls = await openHandbook(page, (b, srv) => {
+    if (b.id === 'c4' && failC4) return { success: false, code: 'rate', message: 'فتحت صفحات كثيرة خلال ساعة' };
+    return srv.reply(b);
+  });
+  await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
+  await expect(page.getByRole('img', { name: 'لماذا هذه المنهجية؟' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'فهرس الكتيب' }).getByRole('button', { name: /سلسلة القيمة الخماسية/ }).click();
+  const alert = page.getByRole('alert').filter({ hasText: 'فتحت صفحات كثيرة خلال ساعة' });
+  await expect(alert).toBeVisible();
+  await expect(page.getByRole('img', { name: 'لماذا هذه المنهجية؟' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'أتممت الباب' })).toHaveCount(0);
+  failC4 = false;
+  await alert.getByRole('button', { name: 'حاول مرة أخرى' }).click();
+  await expect(page.getByRole('img', { name: 'سلسلة القيمة الخماسية' })).toBeVisible();
+  expect(calls.filter((c) => c.action === 'handbook.chapter' && c.id === 'c4')).toHaveLength(2);
+});
+
 // ── الحضور ──
 test('الحضور: الجلسة الجارية «جارية الآن» لا «قادمة»، وطريقة التسجيل الآلية مذكورة', async ({ page }) => {
   const at = (h) => new Date(Date.now() + h * 36e5).toISOString();
