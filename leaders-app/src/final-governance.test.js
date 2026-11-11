@@ -47,4 +47,10 @@ describe('الشاشات', () => {
     expect(ms).toContain('c.engagement');
     expect(read('leaders-app/src/screens/Journey.jsx')).toContain('me.final.notes');
   });
+  it('الدرجة الآلية تُعرض قبل أي تعديل، وما بعد تعديل الخبير سطر مستقل (التدقيق admin-eval-1)', () => {
+    const fe = read('admin-app/src/screens/FinalEval.jsx');
+    const xf = read('leaders-app/src/screens/ExpertFile.jsx');
+    for (const s of [fe, xf]) expect(s).toContain('وبعد تعديل الخبير ${live.score}٪');
+    expect(fe).toContain('placeholder={live.formula_score');
+  });
 });

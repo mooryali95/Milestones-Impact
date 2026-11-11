@@ -74,7 +74,7 @@ function FinalEval({ pid, f, advisor, reload }) {
           {live.decision && <span className={`chip ${DEC_CHIP[live.decision]}`}>{FINAL_DECISION_AR[live.decision]}</span>}
           {live.large_adjust && <span className="chip warn">تعديل كبير: توقيعان</span>}</span>
       </div>
-      <p className="small muted">الدرجة الآلية {live.auto_score != null ? `${live.auto_score}٪` : '—'} من مكوّنات تغطي {live.coverage}٪ من الأوزان{live.missing?.length ? ` (لم يكتمل: ${live.missing.join('، ')})` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>.{f.frozen ? ` لقطة الرفع بإصدار المعادلة ${live.config_version}.` : ''}</p>
+      <p className="small muted">الدرجة الآلية {live.auto_score != null ? `${live.auto_score}٪` : '—'} من مكوّنات تغطي {live.coverage}٪ من الأوزان{live.missing?.length ? ` (لم يكتمل: ${live.missing.join('، ')})` : ''}{live.score_adjusted && live.score != null ? `، وبعد تعديل الخبير ${live.score}٪` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>.{f.frozen ? ` لقطة الرفع بإصدار المعادلة ${live.config_version}.` : ''}</p>
       <ul className="ca-list">{live.components.map((c) => {
         const a = adj.components?.[c.key];
         return (

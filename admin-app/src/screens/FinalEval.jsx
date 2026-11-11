@@ -63,7 +63,8 @@ export function FinalEvalCard({ participantId, canWrite }) {
       <p className="la-muted">
         الدرجة الآلية {live.auto_score != null ? `${live.auto_score}٪` : '—'} من مكوّنات تغطي {live.coverage}٪ من الأوزان
         {live.missing?.length ? ` (لم يكتمل: ${live.missing.join('، ')})` : ''}
-        {live.zeroed?.length ? ` (انتهت الدفعة فحُسب صفرًا: ${live.zeroed.join('، ')})` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>
+        {live.zeroed?.length ? ` (انتهت الدفعة فحُسب صفرًا: ${live.zeroed.join('، ')})` : ''}
+        {live.score_adjusted && live.score != null ? `، وبعد تعديل الخبير ${live.score}٪` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>
         {live.fail_blocked ? <>؛ «لم يجتز» يحتاج تغطية {live.config.fail_min_coverage}٪ ودليلًا حاضرًا من المشروع أو القياس النهائي، فاقتُرح التمديد</> : null}.
         {d.frozen && <> <span className="la-chip">لقطة الرفع · إصدار المعادلة {live.config_version}{d.current_version !== live.config_version ? ` (الإعداد الحالي ${d.current_version})` : ''}</span></>}
       </p>
@@ -91,8 +92,8 @@ export function FinalEvalCard({ participantId, canWrite }) {
 
       {!locked && (
         <div className="la-adj-row">
-          <label className="field"><span>الدرجة النهائية (اختياري، تتجاوز المعادلة؛ فرق فوق {live.config.large_adjust} يحتاج توقيعين)</span>
-            <input type="number" min="0" max="100" value={adj.score?.value ?? ''} placeholder={live.auto_score ?? ''} onChange={(e) => setAdj({ ...adj, score: e.target.value === '' ? undefined : { ...(adj.score || {}), value: e.target.value } })} /></label>
+          <label className="field"><span>الدرجة النهائية (اختياري، تتجاوز المعادلة؛ فرقها عن الآلية فوق {live.config.large_adjust} يحتاج توقيعين، بتعديلها أو بتعديل المكوّنات)</span>
+            <input type="number" min="0" max="100" value={adj.score?.value ?? ''} placeholder={live.formula_score ?? ''} onChange={(e) => setAdj({ ...adj, score: e.target.value === '' ? undefined : { ...(adj.score || {}), value: e.target.value } })} /></label>
           {adj.score && <label className="field"><span>تعليل الدرجة</span><input value={adj.score.reason || ''} onChange={(e) => setAdj({ ...adj, score: { ...adj.score, reason: e.target.value } })} /></label>}
           <label className="field"><span>القرار</span>
             <select value={adj.decision?.value || ''} onChange={(e) => setAdj({ ...adj, decision: e.target.value ? { ...(adj.decision || {}), value: e.target.value } : undefined })}>

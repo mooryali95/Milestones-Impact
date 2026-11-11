@@ -98,6 +98,33 @@ describe('التقييم الختامي', () => {
     expect(approvalState([{ by: 'a', vote: 'approve' }, { by: 'b', vote: 'approve' }], {}, { largeAdjust: true }).done).toBe(true);
   });
 
+  // التدقيق 2026-11-11 (admin-eval-1): الدرجة «الآلية» كانت تُحسب بعد تعديل المكوّنات، فرفعها كلها
+  // من 41 إلى 100 لا يُعد تعديلًا كبيرًا، ويُعتمد «اجتاز» بتوقيع واحد
+  it('تعديل المكوّنات الكبير يحتاج توقيعين كتعديل الدرجة، والدرجة الآلية تبقى قبل أي تعديل', () => {
+    const comp = (pairs) => pairs.map(([key, value]) => ({ key, value, reason: 'من مصدره', label: key }));
+    const why = 'أداؤه في العرض الحي أعلى بكثير مما سُجّل';
+    const comps = comp([['continuous', 40], ['milestones', 50], ['project', 35], ['post', 43]]);
+    expect(computeFinal(comps, {})).toMatchObject({ auto_score: 41, suggested: 'fail', large_adjust: false });
+    const lift = computeFinal(comps, {}, cleanAdjust({ components: Object.fromEntries(comps.map((c) => [c.key, { value: 100, reason: why }])) }, comps));
+    expect(lift).toMatchObject({ auto_score: 41, formula_score: 100, score: 100, score_adjusted: true, suggested: 'pass', large_adjust: true });
+    expect(approvalState([{ by: 'b@x.sa', vote: 'approve' }], {}, { largeAdjust: lift.large_adjust })).toMatchObject({ done: false, need: 2 });
+    // تعديل صغير يبقى بتوقيع واحد: (40×30 + 50×20 + 60×30 + 43×20) / 100 = 48.6
+    const small = computeFinal(comps, {}, cleanAdjust({ components: { project: { value: 60, reason: why } }, notes_to_participant: 'استكمل المشروع بمعياره ثم تُعاد المراجعة' }, comps));
+    expect(small).toMatchObject({ auto_score: 41, score: 49, large_adjust: false });
+    // الصفر المعلن بعد انتهاء الدفعة آلي: تعديله لا يُسقطه من الآلية فيخفي الفرق (56 ← 86)
+    const gap = comp([['continuous', 80], ['milestones', 80], ['project', null], ['post', 80]]);
+    const ended = { ended: true };
+    expect(computeFinal(gap, {}, {}, ended)).toMatchObject({ auto_score: 56, zeroed: ['project'] });
+    const filled = computeFinal(gap, {}, cleanAdjust({ components: { project: { value: 100, reason: why } } }, gap, ended), ended);
+    expect(filled).toMatchObject({ auto_score: 56, score: 86, large_adjust: true, zeroed: [] });
+    expect(filled.components.find((x) => x.key === 'project')).toMatchObject({ auto: 0, value: 100, adjusted: true });
+    // لا درجة آلية أصلًا: الدرجة كلها من الخبير فتحتاج توقيعين
+    const none = comp([['continuous', null], ['milestones', null], ['project', null], ['post', null]]);
+    const manual = computeFinal(none, {}, cleanAdjust({ components: Object.fromEntries(none.map((c) => [c.key, { value: 75, reason: why }])) }, none));
+    expect(manual).toMatchObject({ auto_score: null, score: 75, large_adjust: true });
+    expect(computeFinal(none, {})).toMatchObject({ score: null, large_adjust: false });
+  });
+
   it('«اجتاز بملاحظات» و«يُمدَّد» و«لم يجتز» تلزمها ملاحظات تصل المشارك', () => {
     const comps = finalComponents(src);
     expect(() => cleanAdjust({ decision: { value: 'extend', reason: 'ينقصه تسليم المبادرة كاملة' } }, comps)).toThrow(/ملاحظات تصل المشارك/);

@@ -43,7 +43,7 @@ export const FINAL_DEFAULTS = {
   fail_min_coverage: 80,
   // بعد انتهاء الدفعة: المكوّنات الغائبة بسبب المشارك تُحسب صفرًا بإعلان
   zero_after_end: ['project', 'post'],
-  // تعديل الدرجة النهائية بفرق عن الآلية يتجاوز هذا يحتاج توقيعين ولو كان الاعتماد بخبير واحد
+  // فرق الدرجة النهائية عن الآلية (بتعديل المكوّنات أو الدرجة) يتجاوز هذا يحتاج توقيعين ولو كان الاعتماد بخبير واحد
   large_adjust: 15,
   // القياس النهائي: الطريقة ودرجات اتجاه المكسب ومحك الإتقان على الاختبار الموضوعي (K+S).
   // D06: في الدفعة الأولى الإتقان المحكّي بمحك مؤقت 70، والمكسب الفردي لا يدخل الدرجة بل يُعرض وصفًا
@@ -178,20 +178,29 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   const rows = components.map((x) => {
     const a = adjust?.components?.[x.key];
     const adjusted = a && Number.isFinite(num(a.value)) ? clamp(Math.round(num(a.value)), 0, 100) : null;
-    const zeroed = adjusted == null && x.value == null && ended && cfg.zero_after_end.includes(x.key) && (cfg.weights[x.key] || 0) > 0;
-    const value = adjusted ?? (zeroed ? 0 : x.value);
+    // الصفر المعلن جزء من الآلي ولو عدّله الخبير، فيبقى الفرق ظاهرًا في الدرجة الآلية
+    const autoZero = x.value == null && ended && cfg.zero_after_end.includes(x.key) && (cfg.weights[x.key] || 0) > 0;
+    const zeroed = adjusted == null && autoZero;
+    const auto = autoZero ? 0 : x.value;
     return {
-      ...x, weight: cfg.weights[x.key] || 0, auto: zeroed ? 0 : x.value, value, zeroed,
-      reason: zeroed ? `${x.reason}؛ انتهت الدفعة فيُحسب صفرًا` : x.reason,
+      ...x, weight: cfg.weights[x.key] || 0, auto, value: adjusted ?? auto, zeroed,
+      reason: autoZero ? `${x.reason}؛ انتهت الدفعة فيُحسب صفرًا` : x.reason,
       adjusted: adjusted != null, adjust_reason: adjusted != null ? a.reason : null,
     };
   });
   const present = rows.filter((x) => x.value != null && x.weight > 0);
   const wsum = present.reduce((a, x) => a + x.weight, 0);
-  const auto_score = present.length ? Math.round(present.reduce((a, x) => a + x.value * x.weight, 0) / wsum) : null;
+  const weighted = (k) => {
+    const p = rows.filter((x) => x[k] != null && x.weight > 0);
+    return p.length ? Math.round(p.reduce((a, x) => a + x[k] * x.weight, 0) / p.reduce((a, x) => a + x.weight, 0)) : null;
+  };
+  // الآلية من المصادر وحدها قبل أي تعديل، والمعادلة بعد تعديل المكوّنات، والنهائية بعد تعديل الدرجة إن وُجد.
+  // التدقيق 2026-11-11: كانت «الآلية» بعد تعديل المكوّنات، فلا يُرى رفعها كلها تعديلًا كبيرًا
+  const auto_score = weighted('auto');
+  const formula_score = weighted('value');
   const coverage = Math.round((wsum / total) * 100);
   const so = adjust?.score;
-  const score = so && Number.isFinite(num(so.value)) ? clamp(Math.round(num(so.value)), 0, 100) : auto_score;
+  const score = so && Number.isFinite(num(so.value)) ? clamp(Math.round(num(so.value)), 0, 100) : formula_score;
   const failed = rows.filter((x) => x.failed).map((x) => x.label);
   let suggested = coverage >= cfg.min_coverage && !failed.length ? decisionFor(score, cfg.thresholds) : null;
   // «لم يجتز» لا يُقترح إلا بتغطية عالية وبدليل حاضر فعلًا من المشروع أو القياس النهائي (لا صفر معلن)
@@ -201,12 +210,13 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   const dec = adjust?.decision?.value && Object.hasOwn(FINAL_DECISION_AR, adjust.decision.value) ? adjust.decision.value : suggested;
   const missing = rows.filter((x) => x.value == null && x.weight > 0).map((x) => x.label);
   const zeroed = rows.filter((x) => x.zeroed).map((x) => x.label);
-  // تعديل يخالف ما تقترحه الأدلة يُعلَن ليُطلب له تعليل؛ وتعديل كبير للدرجة يحتاج توقيعين
+  // تعديل يخالف ما تقترحه الأدلة يُعلَن ليُطلب له تعليل؛ وتعديل كبير يحتاج توقيعين: فرق النهائية عن الآلية
+  // بتعديل المكوّنات أو الدرجة أو كليهما. وبلا درجة آلية أصلًا فالدرجة كلها من الخبير
   const departs = dec && suggested && dec !== suggested;
-  const large_adjust = score != null && auto_score != null && Math.abs(score - auto_score) > cfg.large_adjust;
+  const large_adjust = score != null && (auto_score == null || Math.abs(score - auto_score) > cfg.large_adjust);
   return {
     components: rows.map((x) => ({ ...x, share: x.value != null && x.weight > 0 && wsum ? Math.round((x.weight / wsum) * 100) : 0 })),
-    auto_score, score, score_adjusted: score !== auto_score, coverage, missing, zeroed, ended,
+    auto_score, formula_score, score, score_adjusted: score !== auto_score, coverage, missing, zeroed, ended,
     suggested, fail_blocked, decision: dec, departs, large_adjust, failed,
     notes_to_participant: adjust?.notes_to_participant || null,
     config: cfg, config_version: cfg.version,
