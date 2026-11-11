@@ -17,12 +17,12 @@ import { ExpertAssign } from './ExpertMatch.jsx';
 import { ContinuousCard, ParticipantMilestones } from './Milestones.jsx';
 import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
+import { approveBlocker } from '../placement-card.js';
+import LevelCard from './LevelCard.jsx';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
-// عدد الأسئلة بصيغة عربية سليمة: سؤال واحد، سؤالان، 3–10 أسئلة، 11+ سؤالًا
-const questionsAr = (n) => (n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤالان' : n <= 10 ? `${n} أسئلة` : `${n} سؤالًا`);
 
 const DAY = 864e5;
 const ACTIVE = ['placed', 'enrolled'];
@@ -179,8 +179,6 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   );
 }
 
-const pct = (v) => (v == null ? '·' : `${Math.round(v)}%`);
-
 // أزرار التدخل بحسب حالة المرحلة: لا يُعرض إلا ما له أثر
 function StageOverride({ s, onPick }) {
   if (s.override) return <div className="la-stage-ov"><small className="la-chip">{{ open: 'فُتحت له يدويًا', complete: 'اعتُمدت يدويًا', skip: 'أُعفي منها' }[s.override]}</small><button className="la-link" onClick={() => onPick('')}>إلغاء التدخل</button></div>;
@@ -286,11 +284,10 @@ function Person({ id, canWrite, onBack }) {
     return d;
   };
 
+  // ما يمنع الاعتماد ظاهر تحت الزر: مستوى ناقص، أو مخالفة المستوى القائم بلا تعليل (الخادم يرفض بدونه)
+  const blocker = approveBlocker(DIMS, { levels, notes, currentLevel, dimName: (d) => DIM_EN[d] });
   const approve = async () => {
-    if (Object.values(levels).some((v) => !v) || DIMS.some((d) => !levels[d])) return toast('حدّد مستوى كل بُعد');
-    // مخالفة المستوى القائم (المحسوب أو المعتمد قبله) تلزمها علة مكتوبة؛ الخادم يرفض بدونها
-    const bare = DIMS.find((d) => { const cur = currentLevel(d); return cur && levels[d] !== cur && (notes[d] || '').trim().length < 10; });
-    if (bare) return toast(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_EN[bare]} (10 أحرف على الأقل)`);
+    if (blocker) return toast(blocker.text);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
     act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
   };
@@ -397,54 +394,8 @@ function Person({ id, canWrite, onBack }) {
           )}
         </section>
 
-        <section className="la-card">
-          <div className="la-row between">
-            <h3>المستوى في الأبعاد الثلاثة</h3>
-            {prof && (prof.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي، بانتظارك</span>)}
-          </div>
-          {!prof && !latest && <p className="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>}
-          {prof?.track && (
-            <div className="la-track-now"><code className="la-code">{prof.track.key}</code><b>{prof.track.title || 'مسار بلا عنوان'}</b>{prof.track.track_title && prof.track.track_title !== prof.track.title && <small className="la-muted"> · {prof.track.track_title}</small>}
-              <p className="la-muted">{prof.track.summary}</p>{prof.track.strengths && <p className="la-muted">{prof.track.strengths}</p>}<small className="la-muted">يتحدث المسار تلقائيًا إن غيّرت مستوى أي إطار ثم اعتمدت.</small></div>
-          )}
-          <div className="table-wrap"><table className="la-table">
-            <thead><tr><th>البُعد</th><th>معرفة</th><th>مواقف</th><th>ممارسة</th><th>المؤشر</th><th>المستوى</th><th>ملاحظة للمشارك</th></tr></thead>
-            <tbody>{DIMS.map((d) => {
-              const rr = res(d);
-              const ev = rr?.evaluation;
-              const x = prof?.dimensions.find((y) => y.dimension === d);
-              const override = canWrite && !!levels[d] && !!currentLevel(d) && levels[d] !== currentLevel(d);
-              return (
-                <tr key={d}>
-                  <td><b>{DIM_EN[d]}</b><br /><small>{DIM[d]}</small></td>
-                  <td>{pct(rr?.knowledge_pct)}</td><td>{pct(rr?.skill_pct)}</td><td>{pct(rr?.behavior_pct)}</td>
-                  <td>{ev?.composite != null ? <>
-                    <b>{ev.composite}</b>
-                    {ev.borderline && <><br /><span className="la-chip warn">حدّية</span></>}
-                    {/* أعلام معلوماتية للمستشار: لا تغيّر المستوى المقترح */}
-                    {(ev.flags || []).map((f) => <span key={f.key}><br /><span className="la-chip warn" title={f.reason_ar}>{f.reason_ar}</span></span>)}
-                    {ev.reason && <><br /><small className="la-why">{ev.reason}</small></>}
-                    {ev.items_to_flip != null && <><br /><small className="la-muted">يفصله {questionsAr(ev.items_to_flip)} عن المستوى التالي</small></>}
-                  </> : '·'}</td>
-                  <td>
-                    {canWrite ? (
-                      <select aria-label={`مستوى ${DIM_EN[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
-                        <option value="">...</option>{Object.entries(LVL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                      </select>
-                    ) : LVL[x?.level] || ''}
-                    {ev && <><br /><small className="la-muted">المعيار: {LVL[ev.level]}</small></>}
-                    {override && <><br /><span className="la-chip warn">يخالف {LVL[currentLevel(d)]}؛ يلزم تعليل</span></>}
-                  </td>
-                  <td>{canWrite ? <input aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} placeholder={override ? 'سبب المخالفة (إلزامي، 10 أحرف على الأقل)' : 'اختياري'} aria-required={override} onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} /> : x?.note}</td>
-                </tr>
-              );
-            })}</tbody>
-          </table></div>
-          {canWrite && <>
-            <button className="btn-sm primary" onClick={approve}>{prof?.approved ? 'تحديث الاعتماد' : 'اعتماد المسار وفتح البرنامج'}</button>
-            <p className="la-muted">الاعتماد يفتح مراحل التأهيل والكتيب للمشارك ويرسل له بريدًا.</p>
-          </>}
-        </section>
+        <LevelCard prof={prof} latest={latest} model={r.placement_model} canWrite={canWrite} levels={levels} setLevels={setLevels}
+          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} />
       </div>
 
       {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}

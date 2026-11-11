@@ -318,6 +318,7 @@ export async function participant(b: Body) {
     success: true, participant: p, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
+    placement_model: model || DEFAULT_MODEL,   // حدود مقياس المؤشر في بطاقة المستوى (للعرض وحده)
     history: audits.data || [],
     points: pts, book: book || [], models: subs || [], labs,
   };

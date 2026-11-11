@@ -757,3 +757,61 @@
 .la-lab-steps li.off { opacity: .6; }
 .la-lab-steps p { margin: 4px 0; }
 .la-labs small { display: block; }
+
+/* ── بطاقة «المستوى في الأبعاد الثلاثة»: صف ملخص لكل بُعد وتفاصيل تُفتح عند الحاجة (تصور 2026-11-11، المرحلة 1) ── */
+.lc-track p { margin: 4px 0 0; }
+.lc-head, .lc-sum { display: grid; grid-template-columns: 18px minmax(110px, 1fr) minmax(120px, 1fr) minmax(150px, 1.6fr) auto; gap: 10px; align-items: center; }
+.lc-head { font-size: .72rem; color: var(--ink-light); padding: 4px 8px; border-bottom: 1px solid var(--line-strong); }
+.lc-head span:first-child { grid-column: 2; }
+.lc-rows { list-style: none; margin: 0 0 10px; padding: 0; }
+.lc-row { border-bottom: 1px solid var(--line); }
+.lc-row.attn { border-inline-start: 3px solid var(--gold); }
+.lc-sum { width: 100%; padding: 10px 8px; background: none; border: 0; text-align: start; cursor: pointer; font: inherit; color: inherit; }
+.lc-sum:hover { background: var(--sand-paper); }
+.lc-caret { color: var(--ink-light); font-size: .8rem; }
+.lc-dim { display: grid; line-height: 1.3; }
+.lc-dim small { color: var(--ink-light); font-size: .74rem; }
+.lc-level { display: inline-flex; gap: 6px; align-items: center; }
+.lc-state { color: var(--ink-soft); font-size: .8rem; }
+.lc-warn { color: var(--st-warn-text); font-size: .78rem; font-weight: 700; }
+.lc-comp { display: inline-flex; gap: 8px; align-items: center; min-width: 0; }
+.lc-bar { position: relative; flex: 1; min-width: 80px; height: 10px; border-radius: 99px; background: var(--sand-light); overflow: hidden; }
+.lc-bar i { position: absolute; top: 0; bottom: 0; }
+.lc-fill { inset-inline-start: 0; background: var(--petrol-s); border-radius: 99px; }
+.lc-zone { background: repeating-linear-gradient(135deg, rgba(178,107,0,.28) 0 3px, transparent 3px 6px); }
+.lc-mark { width: 2px; margin-inline-start: -1px; background: var(--petrol); }
+.lc-num { font-variant-numeric: tabular-nums; min-width: 2.5em; }
+.lc-novalue { font-size: .78rem; }
+.lc-tiers { display: inline-flex; gap: 8px; align-items: flex-end; }
+.lc-tier { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.lc-tier-k { font-size: .66rem; color: var(--ink-light); }
+.lc-spark { position: relative; width: 14px; height: 22px; background: var(--sand-light); border-radius: 2px; overflow: hidden; display: block; }
+.lc-spark i { position: absolute; inset-inline: 0; bottom: 0; background: var(--gold); }
+.lc-det { padding: 4px 36px 14px 8px; display: grid; gap: 8px; font-size: .84rem; }
+.lc-reason { margin: 0; }
+.lc-flags { margin: 0; padding-inline-start: 18px; color: var(--st-warn-text); }
+.lc-tiers-text { margin: 0; font-size: .78rem; }
+.lc-decide { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lc-field { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .8rem; color: var(--ink-soft); }
+.lc-field select, .lc-field input { border: 1px solid var(--line-strong); border-radius: 4px; padding: 5px 8px; font: inherit; font-size: .84rem; max-width: 100%; }
+.lc-note { display: grid; gap: 4px; }
+.lc-note input { width: 100%; box-sizing: border-box; }
+.lc-note input[aria-invalid="true"] { border-color: var(--st-warn-text); }
+.lc-legend { font-size: .72rem; margin: 0 0 10px; }
+.lc-foot { margin-bottom: 10px; font-size: .84rem; }
+.lc-approve { display: grid; gap: 6px; justify-items: start; }
+.lc-approve p { margin: 0; }
+.lc-approve [aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
+.lc-block { color: var(--st-warn-text); font-size: .82rem; font-weight: 600; }
+@media (max-width: 640px) {
+  .lc-head { display: none; }
+  .lc-sum { grid-template-columns: 18px 1fr auto; grid-template-areas: "c d l" ". b b" ". t t"; row-gap: 6px; }
+  .lc-caret { grid-area: c; }
+  .lc-dim { grid-area: d; }
+  .lc-level { grid-area: l; }
+  .lc-comp { grid-area: b; }
+  .lc-tiers { grid-area: t; gap: 14px; }
+  .lc-tier { flex-direction: row; align-items: flex-end; gap: 4px; }
+  .lc-spark { height: 16px; }
+  .lc-det { padding: 4px 8px 14px; }
+}
