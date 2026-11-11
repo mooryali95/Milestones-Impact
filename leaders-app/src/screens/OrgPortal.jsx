@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
+import JourneyMap from '../JourneyMap.jsx';
 import { coordCall, coordSession, setCoordExpired, signOut } from '../api.js';
 import { filterRows, sortRows } from '../coord.js';
 import { LEVELS } from '../labels.js';
@@ -238,8 +239,11 @@ function Dashboard({ me, onLogout }) {
           .map(([l, n]) => <div key={l} className="card op-kpi"><b>{n}</b><span className="small muted">{l}</span></div>)}
       </div>
 
-      <div className="op-grid">
-        <section className="card"><h3>مراحل الرحلة</h3><Bars obj={Object.fromEntries(FUNNEL.map(([k, l]) => [l, funnel[k] || 0]))} total={funnel.registered} /></section>
+      {/* خريطة الرحلة: مراحل برنامج الجهة وكم يقف عند كل منها (قرار المالك 2026-11-11)، وتحل محل أعمدة القمع الأربعة */}
+      {d.journey_map && <JourneyMap map={d.journey_map} />}
+
+      <div className={`op-grid${d.journey_map ? ' two' : ''}`}>
+        {!d.journey_map && <section className="card"><h3>مراحل الرحلة</h3><Bars obj={Object.fromEntries(FUNNEL.map(([k, l]) => [l, funnel[k] || 0]))} total={funnel.registered} /></section>}
         <section className="card"><h3>المسارات</h3>
           {tracks.length ? <Bars obj={trackBars} total={kpis.total} />
             : <p className="small muted">{perms.scores ? 'لا مسار ظاهر بعد: يظهر هنا مسار من وافق من مشاركيك على اطلاع جهته على مستوياته متى تحددت.' : 'المسار مشتق من مستويات المشارك، فلا يظهر إلا مع صلاحية المستويات وبموافقة المشارك.'}</p>}</section>

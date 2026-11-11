@@ -408,7 +408,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         const status = auto ? (auto(state) ? 'done' : 'pending')
           : act ? (act.done || p.status === 'done' ? 'done' : 'pending')
           : p.status || 'pending';
-        return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
+        return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
       });
     const doneCount = items.filter((i) => i.status === 'done').length;
     return { ...stage, items: gateSurveys(items), done: doneCount, total: items.length };
