@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Ico from '../../../shared/ui/Ico.jsx';
 import { call, fmtDate } from '../api.js';
-import { countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, STATUS_AR } from '../contacts.js';
+import { countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { announceContacts } from '../pending.js';
 
@@ -38,7 +38,7 @@ function Drawer({ r, onClose, onStatus }) {
           <div className="detail-section">
             <div className="detail-section-title">تفاصيل الطلب</div>
             <div className="detail-row"><span className="detail-key">نوع الطلب</span><span className="detail-val">{INTEREST_AR[r.interest] || r.interest}</span></div>
-            <div className="detail-row"><span className="detail-key">المصدر</span><span className="detail-val">{r.product === 'MI-HOME' ? 'الصفحة الرئيسية' : 'صفحة القادة'}</span></div>
+            <div className="detail-row"><span className="detail-key">المصدر</span><span className="detail-val">{SOURCE_AR[r.product] || r.product || 'غير محدد'}</span></div>
             <div className="detail-row"><span className="detail-key">التاريخ</span><span className="detail-val">{fmtDate(r.created_at)}</span></div>
             {r.context && (
               <div style={{ marginTop: 4 }}>
@@ -157,7 +157,7 @@ export default function Contacts() {
                   <td style={{ color: 'var(--ink-mid)' }}>{r.organization}</td>
                   <td><span style={{ fontSize: '.83rem', direction: 'ltr', display: 'inline-block' }}>{r.email}</span> <Copy text={r.email} /></td>
                   <td><span className="interest-badge">{INTEREST_AR[r.interest] || r.interest || '—'}</span></td>
-                  <td><span className={`source-badge ${r.product === 'MI-HOME' ? 'home' : 'leaders'}`}>{SOURCE_AR[r.product] || 'القادة'}</span></td>
+                  <td><span className={`source-badge ${sourceTone(r.product)}`}>{SOURCE_AR[r.product] || r.product || 'غير محدد'}</span></td>
                   <td style={{ color: 'var(--ink-light)', fontSize: '.82rem', whiteSpace: 'nowrap' }}>{fmtDate(r.created_at)}</td>
                   <td><span className={`status-badge ${r.status}`}>{STATUS_AR[r.status] || r.status}</span></td>
                 </tr>

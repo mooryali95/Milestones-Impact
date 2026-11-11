@@ -6,6 +6,7 @@ import Ico from '../../../shared/ui/Ico.jsx';
 import { call, validEmail } from '../api.js';
 import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
 import { useUI } from '../ui.jsx';
+import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 const Err = ({ msg }) => (msg ? <div className="login-error show" role="alert">{msg}</div> : null);
@@ -123,7 +124,7 @@ export default function Login({ onSignedIn }) {
                 <label className="form-label" htmlFor="loginCode">الرمز المكوّن من 6 أرقام</label>
                 <input ref={codeRef} className="form-input code-input" type="text" id="loginCode" placeholder="• • • • • •"
                   maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+                  onChange={(e) => setCode(codeDigits(e.target.value))} />
               </div>
               <div className="code-hint">
                 <span>يقبل:</span>

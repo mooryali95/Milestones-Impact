@@ -91,7 +91,7 @@ async function countSince(sb: SB, since: string, filter?: (q: any) => any): Prom
   return count ?? 0;
 }
 
-const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة" };
+const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة", "MI-ASSESSMENT": "مقياس جاهزية الأثر" };
 
 async function notifyAdmin(sb: SB, r: Row) {
   if (!(await claim(sb, "notify", String(r.id)))) return;

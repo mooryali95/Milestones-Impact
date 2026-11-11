@@ -2,9 +2,12 @@
 export const STATUS_AR = { new: 'جديد', read: 'مقروء', replied: 'تم الرد', archived: 'مؤرشف' };
 export const INTEREST_AR = {
   leaders: 'برنامج القادة', matrix: 'مصفوفة التأثير', partnership: 'شراكة استراتيجية', general: 'استشارة عامة',
-  A: 'استشارة قيادية', B: 'تنفيذ مؤسسي', C: 'شراكة استراتيجية',
+  A: 'استشارة قيادية', B: 'تنفيذ مؤسسي', C: 'شراكة استراتيجية', assessment: 'تقرير مقياس الجاهزية',
 };
-export const SOURCE_AR = { 'MI-HOME': 'الرئيسية', 'MI-LEADERS': 'القادة' };
+// مصادر الطلبات: الموقع الرئيسي، وصفحة القادة، ومقياس جاهزية الأثر (بوابة تقريره تمر بإجراء contact نفسه منذ 2026-11-11)
+export const SOURCE_AR = { 'MI-HOME': 'الرئيسية', 'MI-LEADERS': 'القادة', 'MI-ASSESSMENT': 'مقياس الجاهزية' };
+// شارة المصدر: ما جاء من الموقع الرئيسي (ومنه المقياس) بلون الرئيسية، وصفحة القادة بلونها
+export const sourceTone = (product) => (product === 'MI-LEADERS' ? 'leaders' : 'home');
 export const PAGE_SIZE = 20;
 
 export function filterContacts(rows, { q = '', status = '', source = '' }) {
