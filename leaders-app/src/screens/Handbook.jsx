@@ -424,6 +424,9 @@ export default function Handbook({ me, lab, onLab, onBack }) {
   const [reading, setReading] = useState(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  // التمرير إلى رأس الباب بعد رسمه لا قبله: اللوحة تكبر عند الرسم (بعد تحميل الخطوط)، والتمرير قبله كان ينتهي
+  // على الجوال عند اختبار الباب، لأن المتصفح يثبّت ما في الشاشة حين يكبر ما فوقه (scroll anchoring)
+  const scrollFor = useRef(null);
   useReadingTracker(tab === 'read' && data && data.chapter.id === current ? current : null, canvasRef, shield || loading, setReading);
 
   const loadToc = useCallback(async (first) => {
@@ -447,10 +450,10 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       setLoading(false);
       if (!r.success) return setError(r.message);
       setError('');
+      scrollFor.current = r.chapter.id;
       setData(r);
       setReading(r.reading || null);
       lastRead.set({ id: current, title: r.chapter.title });
-      document.querySelector('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })();
   }, [current, tab]);
 
@@ -474,6 +477,10 @@ export default function Handbook({ me, lab, onLab, onBack }) {
       name: toc?.name || me.participant.full_name, part: `${PART[data.chapter.dimension]} · ${dimOf(data.chapter.dimension).title}`,
       partEn: PART_EN[data.chapter.dimension], no: pad(inPart || 1), word: WORDS[(inPart || 1) - 1] || String(inPart), folio: `${i + 1} / ${list.length}`,
     }, logo);
+    if (scrollFor.current === data.chapter.id) {
+      scrollFor.current = null;
+      canvasRef.current?.closest('.book-page')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, [data, toc, me]);
 
   useEffect(() => {

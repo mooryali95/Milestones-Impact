@@ -71,6 +71,35 @@ test('القاعة: ملاحظة المشارك تبقى في حقلها وتُ�
   await expect(page.getByRole('button', { name: 'ارفعها طلب توجيه لفريقك' })).toBeVisible();
 });
 
+// ── الكتيب ──
+const PARA = 'المعلم في هذه المنهجية **نقطة قرار** يقف عندها الفريق ليسأل: هل ما زالت القيمة التي بدأنا من أجلها قائمة، وهل نستمر أم نعدّل المسار أم نتوقف؟ ومن غير هذا السؤال يتحول المعلم إلى تاريخ يمر في الخطة دون أن يغيّر شيئًا في قرارات المشروع.';
+const LONG_MD = Array.from({ length: 10 }, (_, i) => `## القسم ${i + 1}\n${PARA}\n\n${PARA}\n\n- بند أول في القسم ${i + 1}\n- بند ثانٍ في القسم ${i + 1}`).join('\n\n');
+async function openHandbook(page, chapter) {
+  const calls = await signedIn(page, (b, srv) => {
+    if (b.action !== 'handbook.chapter') return null;
+    const r = chapter(b, srv);
+    if (r === undefined) { const x = srv.reply(b); return { ...x, chapter: { ...x.chapter, md: LONG_MD } }; }
+    return r;
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP);
+  await page.locator('[data-tour="nav-handbook"]').locator('visible=true').first().click();
+  return calls;
+}
+
+test('الكتيب على الجوال: «ابدأ القراءة» من الغلاف تنتهي عند رأس الباب لا عند اختباره', async ({ page }) => {
+  await openHandbook(page, () => undefined);
+  await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
+  const sheet = page.locator('.hb-sheet');
+  await expect.poll(() => sheet.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(2500);
+  // يستقر التمرير ورأس اللوحة في أعلى الشاشة
+  const top = () => sheet.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  await expect.poll(top, { timeout: 5000 }).toBeGreaterThan(-20);
+  await page.waitForTimeout(800);
+  expect(await top()).toBeGreaterThan(-20);
+  expect(await top()).toBeLessThan(200);
+});
+
 // ── الحضور ──
 test('الحضور: الجلسة الجارية «جارية الآن» لا «قادمة»، وطريقة التسجيل الآلية مذكورة', async ({ page }) => {
   const at = (h) => new Date(Date.now() + h * 36e5).toISOString();
