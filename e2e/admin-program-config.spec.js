@@ -121,3 +121,33 @@ test.describe('معيار التسكين أثناء دفعة جارية (admin-p
     expect(calls.filter((c) => c.action === 'admin.save')).toHaveLength(1);
   });
 });
+
+test.describe('ما يُحرَّر على أنه للمشارك يقول من يراه فعلًا (admin-program-7)', () => {
+  const catalog = {
+    success: true, journey_stages: [], stage_requirements: [], instruments: [], locked_instruments: [], questions: [], level_rules: [],
+    grid_cells: [{ dimension: 'milestone', level: 'beginner', path_title_ar: 'أساس المعالم', description_ar: 'بداية' }],
+    placement_model: [{ id: 1, w_knowledge: 30, w_skill: 45, w_behavior: 25, min_intermediate: 55, min_advanced: 80, floor_intermediate: 25, floor_advanced: 50, borderline: 5 }],
+    tracks: [{ key: 'M1I1L2', title_ar: 'مسار البداية', milestone_level: 'beginner' }], track_stats: {},
+  };
+  const track = {
+    success: true, track: { key: 'M1I1L2', title_ar: 'مسار البداية', summary_ar: 'لمن يبدأ', focus_ar: '1. المعالم', journey_ar: 'التدريب' },
+    levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' }, participants: [], handbook: [], project: null,
+    profile: { key: 'milestone-beginner', title_ar: 'من الخطة إلى نقاط القرار', title_en: 'From Plan to Decision Points', summary_ar: 'أولويتك الآن إدارة المشروعات', journey_ar: 'الكتيب: أبواب إدارة المشروعات\nالمختبر: مخطط الجدول' },
+  };
+  test('خلايا المصفوفة لا تَعِد بأنها للمشارك', async ({ page }) => {
+    await open(page, '#/leaders/levels', { 'admin.catalog': catalog });
+    await expect(page.getByRole('heading', { name: 'خلايا المصفوفة: مرجع الفريق لكل مستوى في كل إطار' })).toBeVisible();
+    await expect(page.getByText('لا تظهر للمشارك: يرى مستواه العام وملف تعريف مساره.')).toBeVisible();
+    await expect(page.getByText('ما يقرؤه المشارك عن مستواه ومساره')).toHaveCount(0);
+  });
+  test('صفحة المسار تسمي ما يحل ملف التعريف محله، ونموذج الهوية يوسم الحقول الداخلية', async ({ page }) => {
+    await open(page, '#/leaders/tracks/M1I1L2', { 'admin.catalog': catalog, 'admin.track': track });
+    const box = page.locator('.la-track-profile');
+    await expect(box).toContainText('مكان الاسم و«لمن صُمّم» و«توجيه الرحلة» أعلاه، فتلك داخلية للإدارة');
+    await expect(box).toContainText('أما أولويات التطوير فتصل المشارك كما تحررها هنا');
+    await expect(box.getByRole('listitem')).toHaveCount(2);
+    await page.getByRole('button', { name: 'تحرير هوية المسار' }).click();
+    const form = page.getByRole('dialog', { name: 'مسار M1I1L2' });
+    await expect(form.getByText('داخلي للإدارة: يرى المشارك نص ملف التعريف مكانه')).toHaveCount(3);
+  });
+});

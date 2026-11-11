@@ -262,7 +262,9 @@ export function Levels({ catalog, reload, canWrite }) {
   return (
     <>
       <section className="la-card">
-        <h3>خلايا المصفوفة: ما يقرؤه المشارك عن مستواه ومساره</h3>
+        <h3>خلايا المصفوفة: مرجع الفريق لكل مستوى في كل إطار</h3>
+        {/* لا تصل المشارك: mePayload يرسل الخلايا للإدارة والخبير وحدهما (التدقيق 2026-11-11، admin-program-7) */}
+        <p className="la-muted">لا تظهر للمشارك: يرى مستواه العام وملف تعريف مساره. عنوان المسار في الخلية يراه الخبير في ملف المشارك، والوصف مرجع للفريق هنا.</p>
         <div className="la-cells">
           <div />
           {DIMS.map((d) => <div key={d} className="la-ch">{DIM_EN[d]}<small>{DIM[d]}</small></div>)}
