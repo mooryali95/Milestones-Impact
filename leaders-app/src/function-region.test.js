@@ -57,7 +57,7 @@ describe('منطقة تنفيذ الدوال', () => {
     expect(tf).not.toMatch(/functions\/v1\/send-otp`/);
     const pages = ['index.html', 'projects/index.html', 'governance/index.html', 'assessment/index.html', 'pricing.html', 'refund.html', 'privacy.html', 'terms.html', 'leaders/index.html'];
     const versions = new Set(pages.map((p) => read(`home/${p}`).match(/typeform\.js\?v=(\d+)/)?.[1]));
-    expect([...versions]).toEqual(['5']);
+    expect([...versions]).toEqual(['6']);
   });
 });
 

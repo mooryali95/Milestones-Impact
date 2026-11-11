@@ -107,46 +107,70 @@
   const stepOrder = ['welcome', '1', '2', '3', 'thanks'];
   let formData = {};
   let lastMailtoLink = '';
+  let opener = null;   // العنصر الذي فتح النافذة، يعود إليه التركيز عند الإغلاق
+
+  const FIELD_IDS = ['qName', 'qOrg', 'qEmail', 'qPhone', 'qContext'];
+
+  // رسالة خطأ الخطوة تُعلن لقارئ الشاشة: role=alert، والنص يُدرج لحظة الظهور
+  // فيُقرأ كل مرة، والحقول مربوطة بها (aria-describedby)
+  tfSteps.forEach((stepEl) => {
+    const err = stepEl.querySelector('.tf-step__error');
+    if (!err) return;
+    err.id = err.id || `tfErr-${stepEl.dataset.step}`;
+    err.dataset.msg = err.textContent.trim();
+    err.textContent = '';
+    err.setAttribute('role', 'alert');
+    stepEl.querySelectorAll('input, textarea').forEach((f) => f.setAttribute('aria-describedby', err.id));
+  });
+
+  function setOptions(value) {
+    document.querySelectorAll('.tf-option').forEach(opt => {
+      const on = !!value && opt.dataset.value === value;
+      opt.classList.toggle('selected', on);
+      opt.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+
+  // تُمسح المدخلات بعد إرسال ناجح فقط، فمن أغلق النافذة خطأً يجد ما كتبه حين يعود
+  function resetFields() {
+    FIELD_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    setOptions(null);
+  }
 
   // ──────────────────────────────────────────────
   // 🔓 PUBLIC API — Open/Close
   // ──────────────────────────────────────────────
   window.openTypeform = function(presetInterest) {
+    opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
     tfModal.classList.add('open');
     document.body.style.overflow = 'hidden';
     currentStep = 0;
     formData = {};
-    if (presetInterest) formData.interest = presetInterest;
+    hideSubmitError();
+    tfSteps.forEach((s) => showError(s, false));
+    if (presetInterest) setOptions(presetInterest);
     goToStep(0);
-
-    if (presetInterest) {
-      setTimeout(() => {
-        document.querySelectorAll('.tf-option').forEach(opt => {
-          opt.classList.remove('selected');
-          opt.setAttribute('aria-checked', 'false');
-          if (opt.dataset.value === presetInterest) {
-            opt.classList.add('selected');
-            opt.setAttribute('aria-checked', 'true');
-          }
-        });
-      }, 50);
-    } else {
-      document.querySelectorAll('.tf-option').forEach(opt => {
-        opt.classList.remove('selected');
-        opt.setAttribute('aria-checked', 'false');
-      });
-    }
-
-    ['qName', 'qOrg', 'qEmail', 'qPhone', 'qContext'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
   };
 
   window.closeTypeform = function() {
     tfModal.classList.remove('open');
     document.body.style.overflow = '';
+    // يعود التركيز إلى ما فتح النافذة إن بقي ظاهرًا قابلًا للتركيز
+    if (opener && opener.isConnected && !opener.closest('[inert]') && opener.getClientRects().length) {
+      opener.focus({ preventScroll: true });
+    }
+    opener = null;
   };
+
+  // العناصر القابلة للتركيز الظاهرة في النافذة (الخطوات غير النشطة inert فلا تُعد)
+  function focusables() {
+    return Array.from(tfModal.querySelectorAll('button, a[href], input, textarea, select, [tabindex]:not([tabindex="-1"])'))
+      .filter((el) => !el.disabled && !el.closest('[inert]') && el.getClientRects().length
+        && getComputedStyle(el).visibility !== 'hidden');
+  }
 
   window.nextStep = nextStep;
   window.prevStep = prevStep;
@@ -156,11 +180,15 @@
   // 🎬 Navigation
   // ──────────────────────────────────────────────
   function goToStep(idx) {
-    tfSteps.forEach(s => s.classList.remove('active'));
-
     const stepKey = stepOrder[idx];
     const target = document.querySelector(`.tf-step[data-step="${stepKey}"]`);
-    if (target) target.classList.add('active');
+    // الخطوات غير النشطة شفافة فقط، فتُجعل inert كي لا يبلغها Tab ولا قارئ الشاشة
+    tfSteps.forEach(s => {
+      const on = s === target;
+      s.classList.toggle('active', on);
+      s.inert = !on;
+      if (on) s.removeAttribute('aria-hidden'); else s.setAttribute('aria-hidden', 'true');
+    });
 
     const progressSteps = stepOrder.length - 2;
     let prog = 0;
@@ -185,11 +213,15 @@
       tfNext.innerHTML = '<span>موافق</span><span class="tf-btn-next__enter">Enter ↵</span>';
     }
 
+    // الترحيب والشكر بلا حقول: التركيز على زرهما فورًا، فلا يبقى خلف النافذة
+    const input = target && target.querySelector('input, textarea');
+    if (target && !input) {
+      const btn = target.querySelector('button');
+      if (btn) btn.focus({ preventScroll: true });
+    }
     setTimeout(() => {
-      if (target) {
-        const input = target.querySelector('input, textarea');
-        if (input) input.focus();
-      }
+      if (input && tfModal.classList.contains('open') && target.classList.contains('active')
+        && !target.contains(document.activeElement)) input.focus();
     }, 400);
 
     const body = document.getElementById('tfBody');
@@ -217,9 +249,21 @@
   // ──────────────────────────────────────────────
   // ✅ Validation
   // ──────────────────────────────────────────────
-  function showError(stepEl, show) {
+  // invalid: معرّفات الحقول المخالفة، فتُوسم aria-invalid ويُنقل التركيز إلى أولها
+  function showError(stepEl, show, invalid = []) {
     const err = stepEl.querySelector('.tf-step__error');
-    if (err) err.classList.toggle('show', show);
+    if (err) {
+      err.classList.toggle('show', show);
+      err.textContent = show ? (err.dataset.msg || '') : '';
+    }
+    stepEl.querySelectorAll('input').forEach((f) => {
+      if (show && invalid.includes(f.id)) f.setAttribute('aria-invalid', 'true');
+      else f.removeAttribute('aria-invalid');
+    });
+    if (show && invalid.length) {
+      const first = document.getElementById(invalid[0]);
+      if (first) first.focus();
+    }
   }
 
   function validateStep(stepKey) {
@@ -229,7 +273,8 @@
     if (stepKey === '1') {
       const name = document.getElementById('qName').value.trim();
       const org = document.getElementById('qOrg').value.trim();
-      if (name.length < 2 || org.length < 2) { showError(stepEl, true); return false; }
+      const bad = [name.length < 2 && 'qName', org.length < 2 && 'qOrg'].filter(Boolean);
+      if (bad.length) { showError(stepEl, true, bad); return false; }
       formData.name = name;
       formData.organization = org;
     }
@@ -237,7 +282,8 @@
       const email = document.getElementById('qEmail').value.trim();
       const phone = document.getElementById('qPhone').value.trim();
       const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-      if (!validEmail || phone.length < 6) { showError(stepEl, true); return false; }
+      const bad = [!validEmail && 'qEmail', phone.length < 6 && 'qPhone'].filter(Boolean);
+      if (bad.length) { showError(stepEl, true, bad); return false; }
       formData.email = email;
       formData.phone = phone;
     }
@@ -276,9 +322,23 @@
   document.addEventListener('keydown', (e) => {
     if (!tfModal.classList.contains('open')) return;
     if (e.key === 'Escape') { closeTypeform(); return; }
+    // Tab يبقى داخل النافذة: من آخر عنصر إلى أولها وبالعكس، ومن خارجها إلى أولها
+    if (e.key === 'Tab') {
+      const list = focusables();
+      if (!list.length) return;
+      const i = list.indexOf(document.activeElement);
+      if (i === -1 || (e.shiftKey && i === 0) || (!e.shiftKey && i === list.length - 1)) {
+        e.preventDefault();
+        list[e.shiftKey ? list.length - 1 : 0].focus();
+      }
+      return;
+    }
+    // Enter في حقل نصي يتقدم خطوة؛ والأزرار (السابق، الإغلاق، الخيارات) تبقى على سلوكها الأصلي
     if (e.key === 'Enter' && !e.shiftKey) {
       const activeEl = document.activeElement;
-      if (activeEl && activeEl.tagName === 'TEXTAREA') return;
+      const inField = activeEl && activeEl.tagName === 'INPUT' && tfModal.contains(activeEl);
+      const nowhere = !activeEl || activeEl === document.body || activeEl === tfModal;
+      if (!inField && !nowhere) return;
       e.preventDefault();
       nextStep();
     }
@@ -363,6 +423,7 @@
 
     try {
       await sendToSupabase();
+      resetFields();
       currentStep = stepOrder.length - 1;
       goToStep(currentStep);
 
