@@ -19,6 +19,8 @@ import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
+import AssessmentAnswers from './AssessmentAnswers.jsx';
+import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
@@ -245,6 +247,10 @@ function Person({ id, canWrite, onBack }) {
   const [editing, setEditing] = useState(false);
   const [cohorts, setCohorts] = useState(null);   // الدفعات المفتوحة للتسجيل الصريح
   const [cohortTo, setCohortTo] = useState('');
+  // «إجابات القياس»: لوحة جانبية للمدير ذي الكتابة، وعنوانها قابل للنسخ (?answers=<البُعد> أو all)
+  const [answers, setAnswers] = useState(() => (canWrite ? new URLSearchParams(readQuery()).get('answers') : null));
+  const openAnswers = (d) => { const v = d || 'all'; setAnswers(v); writeQuery(`answers=${encodeURIComponent(v)}`); };
+  const closeAnswers = () => { setAnswers(null); writeQuery(''); };
   useEffect(() => {
     if (!canWrite) return;
     L('admin.programs', {}).then((x) => setCohorts(x.success ? (x.cohorts || []).filter((c) => !c.is_default && c.status !== 'closed') : []));
@@ -395,7 +401,8 @@ function Person({ id, canWrite, onBack }) {
         </section>
 
         <LevelCard prof={prof} latest={latest} model={r.placement_model} canWrite={canWrite} levels={levels} setLevels={setLevels}
-          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} />
+          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} onAnswers={canWrite ? openAnswers : null} />
+        {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       </div>
 
       {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}

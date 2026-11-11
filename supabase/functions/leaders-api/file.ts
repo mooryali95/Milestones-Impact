@@ -7,7 +7,7 @@
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
 import { db, Fail } from './core.ts';
 import { awaitingFor, confirmRater } from './impact.ts';
-import { participant as adminParticipant } from './admin.ts';
+import { participant as adminParticipant, answersReview } from './admin.ts';
 import type { Actor } from './admin.ts';
 import { advisorCohorts, myParticipantIds } from './advisor.ts';
 import * as F from './final.ts';
@@ -127,6 +127,14 @@ export async function participant(e: any, b: Body) {
   const scope = await expertScope(e);
   if (!scope.advisor.has(id) && !scope.assigned.has(id)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
   return participantFile(id, 'expert', { viewer: { email: e.email }, advisor: scope.advisor.has(id) });
+}
+
+// ── إجابات القياس من البوابة: لمستشار الدفعة فيمن يشرف عليهم (قرار المالك 2026-11-11) ──
+// الدالة نفسها التي تراها الإدارة، ويُسجَّل الاطلاع باسم الخبير. الخبير المسند بطلب خدمة وحده لا يراها.
+export async function assessmentAnswers(e: any, b: Body) {
+  const pid = String(b.participant_id || '');
+  await requireAdvisorOf(e, pid);
+  return answersReview(pid, b.assessment_id, { type: 'system', email: e.email, action: 'expert.answers-view' });
 }
 
 // ── الختامي والمعالم من البوابة: لمستشار الدفعة ──

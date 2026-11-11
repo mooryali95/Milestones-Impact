@@ -4,6 +4,7 @@
 import {
   all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
+import { servedOrder } from './answer-review.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -759,15 +760,9 @@ export async function assessmentGet(p: any, b: Body = {}) {
     qs = forForm(qs, a.form);
   }
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
-  const order = ['milestone', 'impact', 'leadership'];
-  // الممارسة أولًا ثم المواقف ثم المعرفة: يقدّر المشارك ممارسته قبل أن تلمّح
-  // أسئلة المعرفة والمواقف إلى ما يُنتظر منه، وتأتي المعرفة بعد المواقف
-  // فلا تدله على إجاباتها.
-  const tierOrder = ['behavior', 'skill', 'knowledge'];
-  // بنود انتقال التعلم في القياس البعدي تأتي آخرًا، بعد الأطر الثلاثة
-  const last = (q: any) => (q.tier === 'transfer' ? 1 : 0);
-  qs.sort((x: any, y: any) => last(x) - last(y) || order.indexOf(x.dimension) - order.indexOf(y.dimension)
-    || tierOrder.indexOf(x.tier) - tierOrder.indexOf(y.tier) || x.sort - y.sort);
+  // ترتيب العرض من مصدر واحد مع مراجعة الإجابات في اللوحة (servedOrder): الأبعاد بترتيبها، وفي كل
+  // بُعد الممارسة ثم المواقف ثم المعرفة، وبنود انتقال التعلم في البعدي آخرًا
+  qs = servedOrder(qs);
 
   return {
     success: true,

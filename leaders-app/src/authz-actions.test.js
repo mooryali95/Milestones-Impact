@@ -27,7 +27,9 @@ const ADMIN_READS = new Set(['health', 'mail-gallery', 'visits', 'trends', 'item
   'participant-impact', 'sus', 'erasures', 'catalog', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'impact',
   'curriculum', 'programs', 'payments', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones',
-  'hall', 'katon', 'final-eval', 'cohort-groups', 'capstones', 'capstone', 'outcomes']);
+  'hall', 'katon', 'final-eval', 'cohort-groups', 'capstones', 'capstone', 'outcomes',
+  // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
+  'assessment-answers']);
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {

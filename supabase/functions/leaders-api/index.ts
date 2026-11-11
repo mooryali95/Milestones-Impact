@@ -247,6 +247,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
   'xp.participants': (e) => FL.participants(e),
   'xp.participant': (e, b) => FL.participant(e, b),
+  'xp.assessment-answers': (e, b) => FL.assessmentAnswers(e, b),
   'xp.final-eval': (e, b) => FL.finalGet(e, b),
   'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
   'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
@@ -296,6 +297,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': (_a, b) => A.reviews(b),
   'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
+  'admin.assessment-answers': (a, b) => A.assessmentAnswers(a, b),
   'admin.approve': A.approve,
   'admin.status': A.setStatus,
   'admin.reset-assessment': A.resetAssessment,

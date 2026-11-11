@@ -160,7 +160,8 @@ export default function LevelCard({ prof, latest, model, canWrite, levels, setLe
       {latest && (
         <div className="la-row between lc-foot">
           <span className="la-muted">القياس: أُرسل {date(latest.submitted_at)}</span>
-          {onAnswers && <button type="button" className="btn-sm ghost" onClick={() => onAnswers(null)}>إجابات القياس</button>}
+          {onAnswers ? <button type="button" className="btn-sm ghost" onClick={() => onAnswers(null)}>إجابات القياس</button>
+            : !canWrite && <small className="la-muted">إجابات القياس للمدير وحده</small>}
         </div>
       )}
       {canWrite && (

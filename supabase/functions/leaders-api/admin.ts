@@ -18,6 +18,7 @@ import { defaultProgramId, journeyDefinition, runningCohort } from './programs.t
 import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
+import { reviewAnswers } from './answer-review.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -423,6 +424,42 @@ export async function evidenceUrl(a: Admin, b: Body) {
   if (!data) throw new Fail('الملف غير موجود', 404);
   await audit('admin', a.email, 'admin.file-open', 'participants', pid, null, { path: file.path, kind: file.kind });
   return { success: true, url: data.signedUrl };
+}
+
+// ── إجابات القياس للمراجعة (تصور بطاقة المستوى وإجابات القياس، المرحلة 2، قرار المالك 2026-11-11) ──
+// للقراءة وحدها: كل سؤال بخياراته ودرجاتها (المفتاح) وما اختاره المشارك، وزمن تقديري من وقت الحفظ.
+// المفتاح سر من أسرار البنك، فلا يصل إلا المدير ذا الكتابة (assessmentAnswers) ومستشار الدفعة لمن
+// يشرف عليهم (file.ts بـrequireAdvisorOf)، وكل اطلاع يُسجَّل في السجل كما يُسجَّل فتح السيرة.
+// الزمن مؤشر مراجعة لا يدخل أي قرار آلي (answer-review.js).
+export type AnswersViewer = { type: 'admin' | 'system'; email: string; action: string };
+const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
+export async function answersReview(participantId: string, assessmentId: unknown, viewer: AnswersViewer) {
+  if (!isUuid(participantId)) throw new Fail('بيانات ناقصة');
+  const list = must(await db.from('assessments')
+    .select('id, status, form, started_at, submitted_at, instrument_id, instruments(kind, title_ar), assessment_results(dimension, knowledge_pct, skill_pct, behavior_pct)')
+    .eq('participant_id', participantId).eq('status', 'submitted').order('submitted_at', { ascending: false })) ?? [];
+  if (!list.length) throw new Fail('لم يُرسل المشارك قياسًا بعد', 404, 'no_assessment');
+  // المبدئي أولًا (أساس التسكين)، ويُختار البعدي من القائمة
+  const a: any = assessmentId ? list.find((x: any) => x.id === String(assessmentId)) : (list.find((x: any) => x.instruments?.kind === 'baseline') || list[0]);
+  if (!a) throw new Fail('هذا القياس ليس للمشارك', 404, 'not_found');
+  const [qs, rows] = await Promise.all([
+    db.from('questions').select('id, code, dimension, tier, kind, text_ar, options, sort, retro, form').eq('instrument_id', a.instrument_id),
+    db.from('assessment_answers').select('question_id, value, score, answered_at').eq('assessment_id', a.id),
+  ]);
+  // نسب الأقسام من assessment_results نفسها، فتطابق ما في بطاقة المستوى
+  const stored = Object.fromEntries((a.assessment_results || []).map((r: any) => [r.dimension, { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct }]));
+  const review = reviewAnswers({ questions: must(qs) ?? [], rows: must(rows) ?? [], startedAt: a.started_at, submittedAt: a.submitted_at, results: Object.keys(stored).length ? stored : null });
+  await audit(viewer.type, viewer.email, viewer.action, 'participants', participantId, null, { assessment_id: a.id });
+  return {
+    success: true,
+    assessment: { id: a.id, kind: a.instruments?.kind || null, title: a.instruments?.title_ar || null, form: a.form || null, started_at: a.started_at, submitted_at: a.submitted_at },
+    assessments: list.map((x: any) => ({ id: x.id, kind: x.instruments?.kind || null, form: x.form || null, submitted_at: x.submitted_at })),
+    ...review,
+  };
+}
+export async function assessmentAnswers(a: Admin, b: Body) {
+  if (!canWrite(a)) throw new Fail('إجابات القياس للمدير وحده، لا لدور العرض', 403, 'forbidden');
+  return answersReview(String(b.participant_id || ''), b.assessment_id, { type: 'admin', email: a.email, action: 'admin.answers-view' });
 }
 
 // اعتماد المستوى: يعتمد الثلاثة دفعة واحدة، مع إمكان تعديل أي منها
