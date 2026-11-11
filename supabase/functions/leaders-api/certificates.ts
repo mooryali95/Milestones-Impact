@@ -372,7 +372,8 @@ export async function reissueOrg(a: Actor, b: Body) {
 }
 
 // معاينة بالمصدر نفسه الذي يُصدر منه: إعداد عام أو برنامج أو جهة، باسم تجريبي.
-// program_cert مسودة البرنامج، وcert مسودة الجهة؛ الغائب يُقرأ من المحفوظ
+// program_cert مسودة البرنامج، وcert مسودة الجهة؛ الغائب يُقرأ من المحفوظ.
+// ونوعها نوع كل إصدار جديد (D05): «شهادة إتمام بنجاح» بقرار اجتاز، لا «شهادة مشاركة» القديمة
 export async function preview(b: Body) {
   const [cfg, org, saved] = await Promise.all([settings(), orgRow(b.organization_id), programCert(b.program_id || await defaultProgramId())]);
   const draft = b.settings ? { ...cfg, ...cleanProfile(b.settings) } : cfg;
@@ -381,11 +382,14 @@ export async function preview(b: Body) {
   const now = new Date().toISOString();
   return {
     success: true,
-    certificate: snapshotOf({
-      serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
-      track: { title_ar: 'القيادة من خلال الآخرين', title_en: 'Leading Through Others' }, start: now, end: now,
-      org, profile: profileFor(draft, prCert, cert),
-    }),
+    certificate: {
+      ...snapshotOf({
+        serial: `MI-LDR-${now.slice(0, 4)}-SAMPLE`, issuedAt: now, name_ar: 'اسم المشارك كما في ملفه', name_en: 'Participant Name',
+        track: { title_ar: 'القيادة من خلال الآخرين', title_en: 'Leading Through Others' }, start: now, end: now,
+        org, profile: profileFor(draft, prCert, cert),
+      }),
+      kind: 'completion_success', decision: 'pass',
+    },
   };
 }
 

@@ -1,7 +1,7 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { checkCertificate, signCertificate, PASSING } = await import('./certificates.ts');
+const { checkCertificate, signCertificate, PASSING, preview } = await import('./certificates.ts');
 const { Fail } = await import('./core.ts');
 
 const K1 = 'k1-'.padEnd(40, 'a');
@@ -38,4 +38,12 @@ Deno.test('بلا مفتاح مستقل لا تصدر شهادة (503)، وال�
   Deno.env.set('LEADERS_CERT_SIGNING_KEY', 'short');
   assertEquals(((await assertRejects(() => signCertificate('x'), Fail)) as InstanceType<typeof Fail>).code, 'cert_key_missing');
   assertEquals(PASSING, ['pass', 'pass_notes']);
+});
+
+// المعاينة من نوع ما يصدر فعلًا: كل إصدار جديد «شهادة إتمام بنجاح» (D05)، فلا يعتمد المالك نصًا على شهادة من نوع آخر.
+// القاعدة غير متاحة في الاختبار: الإعداد يُقرأ افتراضيًا، والبرنامج مسمّى فلا يُسأل عن الافتراضي
+Deno.test('معاينة النموذج «شهادة إتمام بنجاح» بقرار اجتاز، كما يصدر', async () => {
+  const r = await preview({ program_id: 'program-under-test' });
+  assertEquals([r.certificate.kind, r.certificate.decision], ['completion_success', 'pass']);
+  assert(r.certificate.serial.endsWith('-SAMPLE'));
 });
