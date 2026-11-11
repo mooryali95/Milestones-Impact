@@ -465,6 +465,21 @@ export const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.lengt
 export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 15));
 // رمز الدخول كما يُكتب أو يُلصق في حقله: ستة أرقام لاتينية (randomCode في core.ts)، في دخول المشارك والجهة والخبير
 export const codeDigits = (v) => latinDigits(v).replace(/\D/g, '').slice(0, 6);
+// رابط دعوة الخبير: /x#invite=<البريد مرمّزًا>.<الرمز>. يبنيه الخادم ويقرؤه البوابة من هنا وحده، فلا تختلف صيغتاهما
+// (اختلفتا من #167: الخادم يرمّز «@» إلى %40 والبوابة تشترط «@» صريحة، فلم يُقرأ رابط قط).
+// الرمز base64url بلا نقاط، فالفصل عند آخر نقطة يحفظ نقاط البريد؛ والبريد يُقبل مرمّزًا أو مفكوكًا إن فكّه برنامج البريد
+export const expertInviteHash = (email, code) => `#invite=${encodeURIComponent(email)}.${code}`;
+export function readExpertInvite(hash) {
+  const raw = String(hash || '');
+  if (!raw.startsWith('#invite=')) return null;
+  const body = raw.slice('#invite='.length);
+  const cut = body.lastIndexOf('.');
+  if (cut < 1) return null;
+  let email;
+  try { email = normalizeEmail(decodeURIComponent(body.slice(0, cut))); } catch { return null; }
+  const code = body.slice(cut + 1);
+  return isEmail(email) && /^[A-Za-z0-9_-]{20,}$/.test(code) ? { email, code } : null;
+}
 
 // جوال سعودي أو دولي، يُحفظ بصيغة موحدة تبدأ بـ +
 export function normalizePhone(p) {

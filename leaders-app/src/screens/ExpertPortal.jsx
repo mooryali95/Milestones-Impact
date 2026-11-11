@@ -13,7 +13,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { POPUP_BLOCKED, Skel } from '../ui.jsx';
 import { CONTACT_EMAIL, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
-import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
+import { codeDigits, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -22,12 +22,15 @@ import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 
 const HALL_ACTION = { state: 'xp.hall', open: 'xp.hall-open', step: 'xp.hall-step', split: 'xp.hall-split', assign: 'xp.hall-assign', close: 'xp.hall-close' };
 
-// رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة ويُمسح من الشريط، ثم يُتحقق منه بمسار الرمز نفسه
+// رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة بصيغة الخادم نفسها (readExpertInvite)، ثم يُتحقق منه بمسار الرمز نفسه.
+// يُمسح من الشريط صالحًا كان أو تالفًا، فلا يبقى الرمز في العنوان ولا في سجل المتصفح
+const INVITE_STALE = 'رابط الدعوة استُخدم أو انتهى. ادخل ببريدك، ونرسل لك رمزًا.';
+const INVITE_BROKEN = 'رابط الدعوة غير مكتمل. ادخل ببريدك، ونرسل لك رمزًا.';
 function takeInvite() {
-  const m = location.hash.match(/^#invite=([^.]+@[^#]+?)\.([A-Za-z0-9_-]{20,})$/);
-  if (!m) return null;
-  history.replaceState(null, '', location.pathname);
-  return { email: decodeURIComponent(m[1]), code: m[2] };
+  if (!location.hash.startsWith('#invite=')) return null;
+  const invite = readExpertInvite(location.hash);
+  history.replaceState(null, '', location.pathname + location.search);
+  return invite || { broken: true };
 }
 
 // قبل الاعتماد: المدعو يستكمل ملفه، ومن أرسله يرى أنه بانتظار المراجعة ويعدّله إن شاء
@@ -54,8 +57,8 @@ const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-la
 const when = (d) => new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 const left = (iso) => { const h = Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 36e5)); return h >= 1 ? `${h} ساعة` : 'أقل من ساعة'; };
 
-function SignIn({ onIn }) {
-  const [email, setEmail] = useState('');
+function SignIn({ onIn, initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [step, setStep] = useState('email');
   const [busy, setBusy] = useState(false);
@@ -446,15 +449,18 @@ function Dashboard({ onOut }) {
 
 export default function ExpertPortal() {
   const [invite] = useState(takeInvite);
-  const [inside, setInside] = useState(() => !invite && !!xpSession.get());
-  const [err, setErr] = useState('');
+  const pending = invite && !invite.broken;
+  const [inside, setInside] = useState(() => !pending && !!xpSession.get());
+  const [err, setErr] = useState(invite?.broken ? INVITE_BROKEN : '');
   useEffect(() => {
-    if (!invite) return;
+    if (!pending) return;
     xpCall('xp.auth-verify', invite).then((r) => {
       if (r.success) { xpSession.set(r.token); setInside(true); }
-      else setErr(r.code === 'used' || r.code === 'expired' ? 'رابط الدعوة استُخدم أو انتهى. ادخل ببريدك، ونرسل لك رمزًا.' : r.message);
+      // رمز لا يطابق يعني أن دعوة أحدث أو رمز دخول طُلب بعده حلّ محله: الرابط لم يعد صالحًا، لا «رمز غير صحيح» كتبه الخبير
+      else setErr(['used', 'expired', 'code'].includes(r.code) ? INVITE_STALE : r.message);
     });
   }, []);
-  if (invite && !inside && !err) return <div className="center-load"><div className="spinner" /></div>;
-  return inside ? <Dashboard onOut={() => setInside(false)} /> : <>{err && <div className="page narrow"><div className="alert err" role="alert">{err}</div></div>}<SignIn onIn={() => setInside(true)} /></>;
+  if (pending && !inside && !err) return <div className="center-load"><div className="spinner" /></div>;
+  // إن تعذّرت الدعوة يبقى بريدها معبّأً في نموذج الدخول، فيطلب الخبير رمزًا بضغطة
+  return inside ? <Dashboard onOut={() => setInside(false)} /> : <>{err && <div className="page narrow"><div className="alert err" role="alert">{err}</div></div>}<SignIn onIn={() => setInside(true)} initialEmail={invite?.email} /></>;
 }

@@ -9,7 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
+import { cleanExpert, cleanRating, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 
@@ -111,7 +111,7 @@ export const portalUrl = () => `${SITES.leaders}/x`;
 async function invite(e: any) {
   const code = randomToken();
   must(await db.from('expert_challenges').insert({ expert_id: e.id, email: e.email, code_hash: await hash(code), ip: null, expires_at: new Date(Date.now() + INVITE_DAYS * 864e5).toISOString() }));
-  const link = `${portalUrl()}#invite=${encodeURIComponent(e.email)}.${code}`;
+  const link = `${portalUrl()}${expertInviteHash(e.email, code)}`;
   await sendMail(e.email, 'دعوة إلى شبكة خبراء برنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
     mailText('يسعدنا أن ندعوك للانضمام إلى شبكة خبراء برنامج القادة، لتقديم خبرتك لقادة المشاريع في مراحل البرنامج.')
     + (e.status === 'active'

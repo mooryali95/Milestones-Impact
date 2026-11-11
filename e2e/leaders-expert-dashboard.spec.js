@@ -2,6 +2,7 @@
 // وشهادة الساعات بعد أول جلسة، و«لم يكتمل» للتقييم الغائب، وخطوات البداية للخبير الجديد، ومنطقة إعلان لقارئ الشاشة.
 // الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
+import { expertInviteHash } from '../supabase/functions/leaders-api/logic.js';
 
 const PORTAL = 'http://localhost:4304/x';
 const XP_TOKEN = 'x'.repeat(40);
@@ -100,4 +101,43 @@ test('فتح ملف مشارك ثم الرجوع: الأقسام تطلب حال
   await expect(page.getByRole('heading', { name: 'أهلًا د. سارة الحربي' })).toBeVisible();
   await expect.poll(() => calls.filter((c) => c.action === 'xp.participants').length).toBe(1);
   expect(calls.filter((c) => c.action === 'xp.reviews')).toHaveLength(1);
+});
+
+// رابط الدعوة كما يبنيه الخادم نفسه (expertInviteHash): البريد مرمّز (%40) وقبل «@» نقطة. كانت البوابة لا تقرؤه فتعرض دخولًا عاديًا
+const INVITE_CODE = 'Zq3_x-9KpL0aB7cD2eF4gH6iJ8kM1nO5pQ_rS-tUvWx';
+async function invited(page, verify) {
+  const calls = [];
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    calls.push(b);
+    if (b.action === 'xp.auth-verify') return route.fulfill({ json: verify });
+    if (b.action === 'xp.dashboard') return route.fulfill({ json: { ...base, preload } });
+    return route.fulfill({ json: { success: true } });
+  });
+  await page.goto(PORTAL + expertInviteHash('sara.harbi@example.org', INVITE_CODE));
+  return calls;
+}
+
+test('رابط الدعوة ببريد مرمّز فيه نقطة يُدخل الخبير بلوحته، ويُمسح الرمز من الشريط', async ({ page }) => {
+  const calls = await invited(page, { success: true, token: XP_TOKEN, expert: { full_name: 'د. سارة الحربي' } });
+  await expect(page.getByRole('heading', { name: 'أهلًا د. سارة الحربي' })).toBeVisible();
+  expect(calls.find((c) => c.action === 'xp.auth-verify')).toMatchObject({ email: 'sara.harbi@example.org', code: INVITE_CODE });
+  expect(page.url()).toBe(PORTAL);
+  expect(await page.evaluate(() => localStorage.getItem('mi_leaders_expert_session'))).toBe(XP_TOKEN);
+});
+
+test('رابط دعوة مستعمل أو حلّ محله أحدث: رسالة الرابط لا «رمز غير صحيح»، والبريد معبّأ لطلب رمز', async ({ page }) => {
+  await invited(page, { success: false, code: 'code', message: 'الرمز غير صحيح' });
+  await expect(page.getByRole('alert')).toHaveText('رابط الدعوة استُخدم أو انتهى. ادخل ببريدك، ونرسل لك رمزًا.');
+  await expect(page.getByLabel('البريد الإلكتروني')).toHaveValue('sara.harbi@example.org');
+  expect(page.url()).toBe(PORTAL);
+});
+
+test('رابط دعوة تالف لا يُرسل للتحقق: رسالة واضحة ويُمسح من الشريط', async ({ page }) => {
+  const calls = [];
+  await page.route(/functions\/v1\/leaders-api/, async (route) => { calls.push(JSON.parse(route.request().postData() || '{}')); await route.fulfill({ json: { success: true } }); });
+  await page.goto(`${PORTAL}#invite=sara.harbi%40example.org.short`);
+  await expect(page.getByRole('alert')).toHaveText('رابط الدعوة غير مكتمل. ادخل ببريدك، ونرسل لك رمزًا.');
+  expect(calls.filter((c) => c.action === 'xp.auth-verify')).toHaveLength(0);
+  expect(page.url()).toBe(PORTAL);
 });
