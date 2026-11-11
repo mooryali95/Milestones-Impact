@@ -207,7 +207,7 @@ function Security({ onUser }) {
 }
 
 function Users({ me }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [users, setUsers] = useState(null);
   const [form, setForm] = useState(null);   // { name, email, role }
   const [error, setError] = useState('');
@@ -222,6 +222,21 @@ function Users({ me }) {
     const d = await call('update-user', { email: me.email, targetId: id, field, value });
     if (!d.success) { toast('❌ ' + d.message); return false; }
     return true;
+  };
+  // القائمة تعرض الدور المحفوظ وحده (value لا defaultValue): ما رفضه الخادم أو أُلغي تأكيده لا يبقى ظاهرًا
+  const changeRole = async (u, role) => {
+    if (role === 'super_admin' && !(await confirm(`منح ${u.name} دور «${ROLE_LABELS.super_admin}»؟ يملك به إدارة المستخدمين وأدوارهم وكل صلاحيات اللوحة.`))) return;
+    if (!(await update(u.id, 'role_id', role))) return;
+    setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, role_id: role } : x)));
+    toast('✅ تم التحديث');
+  };
+  const toggleActive = async (u) => {
+    if (u.is_active && !(await confirm(`تعطيل حساب ${u.name}؟ لا يدخل اللوحة حتى تعيد تفعيله.`, { danger: true, ok: 'تعطيل' }))) return;
+    if (await update(u.id, 'is_active', !u.is_active)) load();
+  };
+  const resetAccess = async (u) => {
+    if (!(await confirm(`إعادة وصول ${u.name}؟ يُلغى مفتاح المرور الوحيد وتطبيق المصادقة، ويدخل برمز البريد.`, { danger: true, ok: 'إعادة الوصول' }))) return;
+    if (await update(u.id, 'reset_access', true)) { toast('✅ أُعيد الوصول وأُبلغ بالبريد'); load(); }
   };
   const save = async (e) => {
     e.preventDefault();
@@ -264,19 +279,19 @@ function Users({ me }) {
                     <td style={{ fontWeight: 500 }}>{u.name}{u.is_owner && <span className="owner-badge">المالك</span>}</td>
                     <td style={{ fontSize: '.78rem', color: 'var(--ink-mid)', direction: 'ltr' }}>{u.email}</td>
                     <td>
-                      <select className="role-select" defaultValue={u.role_id} disabled={u.is_owner} title={u.is_owner ? 'حساب المالك محمي' : undefined} aria-label={`دور ${u.name}`}
-                        onChange={async (e) => { if (await update(u.id, 'role_id', e.target.value)) toast('✅ تم التحديث'); else load(); }}>
+                      <select className="role-select" value={u.role_id} disabled={u.is_owner} title={u.is_owner ? 'حساب المالك محمي' : undefined} aria-label={`دور ${u.name}`}
+                        onChange={(e) => changeRole(u, e.target.value)}>
                         {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                       </select>
                     </td>
                     <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? 'var(--st-ok)' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : u.passkey_only ? 'مفتاح فقط' : '—'}</span>
                       {me.is_owner && !u.is_owner && (u.totp_enabled || u.passkey_only) && (
                         <button className="btn-ghost-small" style={{ marginInlineStart: 6 }} title="يدخل برمز البريد ثم يضبط وسيلته من جديد"
-                          onClick={async () => { if (window.confirm(`إعادة وصول ${u.name}؟ يُلغى مفتاح المرور الوحيد وتطبيق المصادقة، ويدخل برمز البريد.`) && await update(u.id, 'reset_access', true)) { toast('✅ أُعيد الوصول وأُبلغ بالبريد'); load(); } }}>إعادة الوصول</button>
+                          onClick={() => resetAccess(u)}>إعادة الوصول</button>
                       )}</td>
                     <td>{u.is_owner ? <Ico name="lock" /> : (
                       <button className={`toggle-btn ${u.is_active ? 'on' : 'off'}`} role="switch" aria-checked={!!u.is_active} aria-label={`تفعيل ${u.name}`}
-                        onClick={async () => { if (await update(u.id, 'is_active', !u.is_active)) load(); }} />
+                        onClick={() => toggleActive(u)} />
                     )}</td>
                   </tr>
                 ))}
