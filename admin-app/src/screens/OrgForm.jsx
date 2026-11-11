@@ -5,6 +5,7 @@
 // الحذف لا يتم إلا بعد عرض أثره وكتابة اسم الجهة، والإيقاف هو البديل المقترح.
 import React, { useEffect, useMemo, useState } from 'react';
 import { domainsOf, inviteUrl, L, orgColor } from '../leaders.js';
+import { session } from '../api.js';
 import { hostOf, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
 import { useEscape, useUI } from '../ui.jsx';
 import { CertOverride, Field } from '../cert.jsx';
@@ -203,6 +204,10 @@ export default function OrgForm({ org, coordinator, onClose }) {
     setCoord(next); setTouched({ ...touched, [`coord_${k}`]: true });
   };
   const contactOnly = !coord.enabled && !coordinator && !!coord.email.trim();
+  // إلغاء حساب المنسق القائم للمدير العام وحده (الخادم يرفضه لغيره)، فلا يُطفأ المفتاح لغيره ليوحي بإلغاء لن يتم،
+  // ويُدَل على «إيقاف الحساب» المسموح له (تدقيق الجاهزية، admin-core-3)
+  const me = session.load()?.user;
+  const keepAccount = !!coordinator && (me?.role_id || me?.role) !== 'super_admin';
 
   const close = async (saved) => {
     if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;
@@ -239,7 +244,9 @@ export default function OrgForm({ org, coordinator, onClose }) {
       if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن حساب المنسق لم يُحفظ: ${c.message}`); }
       if (c.invited) note = `تم الحفظ، وأُرسلت الدعوة إلى ${coord.email}`;
     } else if (!coord.enabled && coordinator && orgId) {
-      await L('admin.coordinator-remove', { organization_id: orgId });
+      // لا يُعلن الإلغاء إلا بعد أن يؤكده الخادم: كان يُعلن ولو رفضه، فيبقى المنسق مطّلعًا على بيانات المشاركين
+      const c = await L('admin.coordinator-remove', { organization_id: orgId });
+      if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن حساب المنسق لم يُلغَ: ${c.message}`); }
       note = 'تم الحفظ، وأُلغي حساب المنسق';
     }
     setBusy(false);
@@ -361,10 +368,11 @@ export default function OrgForm({ org, coordinator, onClose }) {
               <Field label="الاسم"><input value={coord.full_name} onChange={setC('full_name')} /></Field>
               <Field label="البريد" error={err('coord_email')} hint={domainHint(coord.email, v.domains)}><input type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
               <Field label="الجوال"><input dir="ltr" inputMode="tel" value={coord.phone} onChange={setC('phone')} /></Field>
-              <Field group label="حساب الاطلاع" wide hint={coord.enabled
+              <Field group label="حساب الاطلاع" wide hint={`${coord.enabled
                 ? (coordinator && coordinator.email === coord.email.trim().toLowerCase() ? 'الحساب قائم. تغيير البريد ينقل الوصول وينهي جلسات البريد القديم.' : 'عند الحفظ يُنشأ الحساب، ويصل المنسق بريد ترحيب فيه رابط تسجيل الموظفين ولوحة الجهة.')
-                : contactOnly ? '⚠ لم يصل هذا البريد شيء: المنسق جهة اتصال فقط. فعّل الحساب لتُرسل له الدعوة ورابط التسجيل.' : 'بلا حساب: المنسق جهة اتصال فقط.'}>
-                <label className="of-switch"><input type="checkbox" checked={coord.enabled} onChange={(e) => { setAccountTouched(true); setCoord({ ...coord, enabled: e.target.checked }); }} />
+                : contactOnly ? '⚠ لم يصل هذا البريد شيء: المنسق جهة اتصال فقط. فعّل الحساب لتُرسل له الدعوة ورابط التسجيل.' : 'بلا حساب: المنسق جهة اتصال فقط.'}${keepAccount
+                ? ' إلغاء الحساب للمدير العام وحده، ولقطع وصول المنسق الآن أوقف حسابه من «لوحة الجهة».' : ''}`}>
+                <label className="of-switch"><input type="checkbox" checked={coord.enabled} disabled={keepAccount} onChange={(e) => { setAccountTouched(true); setCoord({ ...coord, enabled: e.target.checked }); }} />
                   <span>يرى لوحة الجهة وتقاريرها ويصله ملخص أسبوعي</span></label>
               </Field>
             </div>
