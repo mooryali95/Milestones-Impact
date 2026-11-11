@@ -308,6 +308,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ══ login-send: same reply whether or not the email is an admin ══
+    // مطابقة البريد تامة (eq) لا ilike في الدخول والتحقق والاستعادة: البريد يقبل «_» و«%»، وهما في ilike حرفان
+    // شاملان، فكان صاحب بريد مثل omar_x@outlook.com يطابق حساب مدير omar.x@outlook.com ويتسلم رمزه على بريده هو
+    // (التدقيق الشامل 2026-11-11، server-sec-1). البريد يُخزَّن بحروف صغيرة عند الإنشاء (newEmail) ويُطبَّع هنا كذلك.
     if (action === "login-send") {
       const email = String(body.email || "").trim().toLowerCase();
       if (!isEmail(email)) return json({ success: false, message: "البريد غير صحيح" }, 400);
@@ -317,7 +320,7 @@ Deno.serve(async (req: Request) => {
 
       // من فعّل TOTP لا يدخل برمز البريد، فلا نرسله له أصلًا.
       // ومن جعل دخوله بمفتاح المرور وحده لا يُرسل له رمز كذلك.
-      const { data: admins } = await sb.from("admin_users").select("id, is_active, totp_enabled, passkey_only").ilike("email", email).limit(1);
+      const { data: admins } = await sb.from("admin_users").select("id, is_active, totp_enabled, passkey_only").eq("email", email).limit(1);
       if (admins?.length && admins[0].is_active && !admins[0].totp_enabled && !admins[0].passkey_only) {
         const code = randomCode();
         const exp = new Date(Date.now() + OTP_TTL_MS).toISOString();
@@ -335,7 +338,7 @@ Deno.serve(async (req: Request) => {
       const email = String(body.email || "").trim().toLowerCase();
       if (!isEmail(email)) return json({ success: false, message: "البريد غير صحيح" }, 400);
       const reply = json({ success: true, message: "إن كان البريد لحساب إدارة يدخل بمفتاح مرور أو تطبيق مصادقة، أُبلغ المالك ليعيد وصولك، ويصلك بريد بذلك." });
-      const { data: u } = await sb.from("admin_users").select("id, name, email, is_active, totp_enabled, passkey_only, is_owner").ilike("email", email).limit(1);
+      const { data: u } = await sb.from("admin_users").select("id, name, email, is_active, totp_enabled, passkey_only, is_owner").eq("email", email).limit(1);
       const user = u?.[0];
       if (!user?.is_active || user.is_owner || !(user.totp_enabled || user.passkey_only)) return reply;
       const hourAgo = new Date(Date.now() - 36e5).toISOString();
@@ -363,7 +366,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (await tooManyFails(sb, email)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
 
       const { data: admins } = await sb.from("admin_users")
-        .select("id, name, role_id, is_active, totp_secret, totp_enabled, is_owner, passkey_only").ilike("email", email).limit(1);
+        .select("id, name, role_id, is_active, totp_secret, totp_enabled, is_owner, passkey_only").eq("email", email).limit(1);
       const user = admins?.[0];
 
       let verified = false;
