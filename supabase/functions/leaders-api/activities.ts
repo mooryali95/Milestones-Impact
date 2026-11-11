@@ -322,9 +322,10 @@ export async function workshopSave(a: any, b: Body) {
     location_ar: mode === 'in_person' ? String(row.location_ar || '').trim().slice(0, 300) || null : null,
     join_url: mode === 'online' ? String(row.join_url || '').trim().slice(0, 500) || null : null,
     starts_at: row.starts_at, ends_at: row.ends_at, active: row.active !== false,
-    // فارغ: الجلسة لكل الدفعات
-    cohort_id: /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null,
   };
+  // فارغ صراحة: الجلسة لكل الدفعات. وغياب الحقل في التحرير يُبقي ربطها القائم؛ كان يكتب null فيفك
+  // ربط الجلسة بدفعتها بصمت فتسقط دعوتها وتذكيرها (التدقيق 2026-11-11، admin-program-3)
+  if ('cohort_id' in row || !row.id) out.cohort_id = /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null;
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
   if (mode === 'online' && !/^https:\/\/\S+$/.test(out.join_url || '')) throw new Fail('الجلسة عن بعد تحتاج رابط اجتماع يبدأ بـ https');
   if (!(new Date(out.ends_at) > new Date(out.starts_at))) throw new Fail('وقت الانتهاء بعد وقت البدء');

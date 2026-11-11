@@ -68,3 +68,29 @@ test.describe('تمديد معلم لمشارك (admin-program-6)', () => {
     await expect.poll(() => calls.find((c) => c.action === 'admin.participant-milestone')).toMatchObject({ milestone_id: 'm1', due_override: null });
   });
 });
+
+test.describe('جلسات برنامج بدفعة واحدة (admin-program-3)', () => {
+  const later = new Date(Date.now() + 7 * 864e5).toISOString();
+  const activities = {
+    success: true, coaching: [], programs: [{ id: 'pa', name: 'برنامج القادة' }],
+    cohorts: [{ id: '11111111-1111-1111-1111-111111111111', name: 'دفعة نوفمبر', program_id: 'pa', status: 'running' }],
+    requirements: [{ id: 'r1', program_id: 'pa', kind: 'workshop', code: 'T-ATTEND', title_ar: 'حضور الأيام التدريبية', config: { verify: 'manual' } }],
+    workshops: [{ id: 'w1', requirement_id: 'r1', title_ar: 'اليوم الأول', mode: 'in_person', location_ar: 'القاعة', starts_at: later, ends_at: later, active: true, attended: 0, cohort_id: '11111111-1111-1111-1111-111111111111' }],
+  };
+  test('حقل الدفعة يظهر مع الدفعة الوحيدة وهي الافتراضي، وتحرير جلسة مربوطة لا يفك ربطها', async ({ page }) => {
+    const calls = await open(page, '#/leaders/activities', { 'admin.activities': activities, 'admin.workshop-save': { success: true, id: 'w2' } });
+    await expect(page.getByRole('button', { name: 'أرسل الدعوة' })).toBeVisible();
+    await page.getByRole('button', { name: '+ موعد' }).click();
+    const form = page.getByRole('dialog', { name: 'موعد جديد' });
+    await expect(form.getByLabel('الدفعة')).toHaveValue('11111111-1111-1111-1111-111111111111');
+    await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('اليوم الثاني');
+    await form.getByLabel('المكان (القاعة والمدينة)').fill('القاعة الكبرى');
+    await form.getByLabel('تبدأ').fill('2026-12-01T09:00');
+    await form.getByLabel('تنتهي').fill('2026-12-01T15:00');
+    await form.getByRole('button', { name: 'حفظ' }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.workshop-save')?.row).toMatchObject({ requirement_id: 'r1', cohort_id: '11111111-1111-1111-1111-111111111111' });
+    await page.getByRole('button', { name: 'تحرير' }).click();
+    await page.getByRole('dialog', { name: 'تحرير موعد' }).getByRole('button', { name: 'حفظ' }).click();
+    await expect.poll(() => calls.filter((c) => c.action === 'admin.workshop-save')[1]?.row).toMatchObject({ id: 'w1', cohort_id: '11111111-1111-1111-1111-111111111111' });
+  });
+});

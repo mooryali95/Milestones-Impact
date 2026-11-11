@@ -35,3 +35,18 @@ describe('تباين قواعد المرحلة وأعلام المحتوى في 
     expect(ratio(fg, '#FFFFFF'), `.la-flags: ${fg}`).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('جلسة البرنامج بدفعة واحدة (admin-program-3)', () => {
+  const fn = (src, name) => src.slice(src.indexOf(`export async function ${name}(`), src.indexOf('\nexport ', src.indexOf(`export async function ${name}(`) + 1));
+  it('الخادم: غياب cohort_id في التحرير يُبقي ربط الجلسة بدفعتها، والفارغ الصريح وحده يجعلها عامة', () => {
+    const save = fn(read('supabase/functions/leaders-api/activities.ts'), 'workshopSave');
+    expect(save).toMatch(/if \('cohort_id' in row \|\| !row\.id\) out\.cohort_id = /);
+    // لا يُكتب cohort_id ضمن الصف الثابت فيصير null كلما غاب الحقل
+    expect(save.slice(save.indexOf('const out'), save.indexOf('};'))).not.toMatch(/cohort_id/);
+  });
+  it('اللوحة: حقل الدفعة يظهر من الدفعة الأولى، والدفعة الوحيدة افتراضي الموعد الجديد', () => {
+    const ui = read('admin-app/src/screens/Activities.jsx');
+    expect(ui).not.toMatch(/cohorts\.length < 2 \? SESSION_FIELDS/);
+    expect(ui).toMatch(/cohort_id: cohorts\.length === 1 \? cohorts\[0\]\.id : ''/);
+  });
+});
