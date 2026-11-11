@@ -11,10 +11,16 @@
 //   schedule  جدول زمني تُبنى فيه الاعتماديات (FS SS FF SF) مع الإزاحة
 //   plot      وضع عناصر على مصفوفة بمحورين (النفوذ والاهتمام مثلًا)
 //   matrix    مصفوفة صفوف وأعمدة بقيم محددة (RACI مثلًا)
+//   board     لوحة صفوف × أعمدة تقبل الخلية فيها عدة بطاقات (خريطة العمليات مثلًا)، بسقالة بحسب المستوى
 // المشارك يرى الخطوة بلا حلها، والتصحيح هنا فقط. منطق خالص بلا قاعدة
 // بيانات، يستورده الخادم والواجهة والاختبارات.
 
-export const STEP_TYPES = ['order', 'classify', 'match', 'choice', 'allocate', 'schedule', 'plot', 'matrix'];
+export const STEP_TYPES = ['order', 'classify', 'match', 'choice', 'allocate', 'schedule', 'plot', 'matrix', 'board'];
+export const LEVELS = ['beginner', 'intermediate', 'advanced'];
+// مستوى المشارك في إطار الأداة: المعتمد، وإلا التأسيسي (من فُتحت له بمنح قبل اعتماد مستواه)
+export const labLevelOf = (levels, dimension) => (LEVELS.includes(levels?.[dimension]) ? levels[dimension] : 'beginner');
+// خطوة لمستويات بعينها (رؤوس اللوحة للاحترافي مثلًا) تُتخطى لغيرها
+export const stepFor = (st, level) => !st?.only_levels?.length || st.only_levels.includes(level || 'beginner');
 export const LINK_TYPES = ['FS', 'SS', 'FF', 'SF'];
 export const LINK_LABEL = { FS: 'انتهاء ← بدء', SS: 'بدء ← بدء', FF: 'انتهاء ← انتهاء', SF: 'بدء ← انتهاء' };
 export const KINDS = { tool: 'أداة عمل', scenario: 'موقف محاكاة' };
@@ -99,9 +105,68 @@ export function computeSchedule(tasks, links) {
 const sameLink = (a, b) => a.from === b.from && a.to === b.to && a.type === b.type && (Number(a.lag) || 0) === (Number(b.lag) || 0);
 const sameEnds = (a, b) => a.from === b.from && a.to === b.to;
 
+// ── اللوحة: السقالة الافتراضية لكل مستوى (المستوى يحدد الافتراضي لا السقف) ──
+//   show_code    رقم البطاقة ظاهر (الرقم «س.ص» يكشف الصف)
+//   counts       عدّادات: cell لكل خلية، col لكل عمود، none بلا عدّاد
+//   solved_rows  صفوف محلولة مثالًا (مكشوفة عمدًا، ولا تدخل المقام)
+//   feedback     instant فحص كل بطاقة عند وضعها، check2 فحصان للعدد لا المكان، submit عند الإرسال فقط
+export const BOARD_COUNTS = ['cell', 'col', 'none'];
+export const BOARD_FEEDBACK = { instant: 1000, check2: 2, submit: 0 };
+const SCAFFOLD_DEFAULT = { show_code: false, counts: 'none', solved_rows: [], feedback: 'submit' };
+export function boardScaffold(step, level) {
+  const s = step?.levels?.[level || 'beginner'] || {};
+  return {
+    show_code: !!s.show_code,
+    counts: BOARD_COUNTS.includes(s.counts) ? s.counts : SCAFFOLD_DEFAULT.counts,
+    solved_rows: (Array.isArray(s.solved_rows) ? s.solved_rows : []).filter((r) => (step.rows || []).some((x) => x.id === r)),
+    feedback: s.feedback in BOARD_FEEDBACK ? s.feedback : SCAFFOLD_DEFAULT.feedback,
+  };
+}
+
+// تصحيح اللوحة: البطاقة في خانتها درجة، وفي صفها الصحيح بعمود خطأ أو العكس نصف درجة (فهمَ محورًا)،
+// والمكشوفة بالتلميح الأخير صفر. بطاقات الصفوف المحلولة خارج المقام. ويعيد مصفوفة الخلط بين الأعمدة
+// (المتوقع × المختار) وأخطاء كل صف، فمنهما تُبنى الخريطة الحرارية في النتيجة.
+function gradeBoard(step, answer, { level = 'beginner', revealed = [] } = {}) {
+  const a = answer && typeof answer === 'object' ? answer : {};
+  const sc = boardScaffold(step, level);
+  const solved = new Set(sc.solved_rows);
+  const shown = new Set(revealed);
+  const cards = (step.cards || []).filter((c) => !solved.has(c.row));
+  const cols = (step.cols || []).map((c) => c.id);
+  const two = cols.length > 1 && (step.rows || []).length > 1;
+  const confusion = Object.fromEntries(cols.map((c) => [c, Object.fromEntries(cols.map((d) => [d, 0]))]));
+  const rowErrors = Object.fromEntries((step.rows || []).map((r) => [r.id, 0]));
+  let got = 0; let right = 0; let half = 0;
+  const notes = [];
+  for (const c of cards) {
+    const p = Array.isArray(a[c.id]) ? a[c.id].map(String) : null;
+    const okRow = !!p && p[0] === c.row;
+    const okCol = !!p && p[1] === c.col;
+    // نصف الدرجة لمحور واحد لا يُمنح في لوحة بصف واحد أو عمود واحد، لأن المحور الآخر صحيح دائمًا هناك
+    const s = shown.has(c.id) ? 0 : okRow && okCol ? 1 : two && (okRow || okCol) ? 0.5 : 0;
+    got += s;
+    if (s === 1) right++;
+    if (s === 0.5) half++;
+    if (p && cols.includes(p[1]) && !shown.has(c.id)) confusion[c.col][p[1]] += 1;
+    if (!(okRow && okCol) || shown.has(c.id)) {
+      rowErrors[c.row] += 1;
+      if (c.note_ar) notes.push({ id: c.id, note_ar: c.note_ar });
+    }
+  }
+  const score = cards.length ? got / cards.length : 0;
+  return {
+    score, ok: score === 1, why: step.why_ar || '',
+    solution: Object.fromEntries((step.cards || []).map((c) => [c.id, [c.row, c.col]])),
+    notes, right, half, total: cards.length, revealed: [...shown].filter((id) => cards.some((c) => c.id === id)).length,
+    confusion: { cols: confusion, rows: rowErrors },
+  };
+}
+
 // ── تصحيح خطوة واحدة: { score من 0 إلى 1، ok، why، solution، ... } ──
-export function gradeStep(step, answer) {
+// ctx للوحة وحدها: مستوى المشارك (للصفوف المحلولة) والبطاقات المكشوفة بالتلميح
+export function gradeStep(step, answer, ctx = {}) {
   const why = step.why_ar || '';
+  if (step.type === 'board') return gradeBoard(step, answer, ctx);
   if (step.type === 'order') {
     const key = step.answer || [];
     const got = Array.isArray(answer) ? answer.filter((x) => key.includes(x)) : [];
@@ -210,7 +275,8 @@ function notesFor(items, a, isRight) {
 // ── مسار الموقف: الخطوة التالية بعد الإجابة ──
 // الخيار في خطوة القرار قد يحدد خطوة تالية بمعرّفها، أو "end" لإنهاء الموقف.
 // وإلا فالتالية هي التي بعدها، أو next المكتوبة على الخطوة نفسها.
-export function nextIndex(spec, i, answer) {
+// والخطوة الخاصة بمستويات أخرى (only_levels) تُتخطى إلى ما بعدها.
+export function nextIndex(spec, i, answer, level = null) {
   const steps = spec?.steps || [];
   const st = steps[i];
   if (!st) return -1;
@@ -220,11 +286,13 @@ export function nextIndex(spec, i, answer) {
     if (o?.next) target = o.next;
   }
   if (target === 'end') return -1;
+  let j = i + 1;
   if (target) {
-    const j = steps.findIndex((s) => s.id === target);
-    if (j > i) return j;
+    const t = steps.findIndex((s) => s.id === target);
+    if (t > i) j = t;
   }
-  return i + 1 < steps.length ? i + 1 : -1;
+  while (j < steps.length && !stepFor(steps[j], level)) j++;
+  return j < steps.length ? j : -1;
 }
 
 // مؤشرات الموقف بعد سلسلة من القرارات: البداية زائد أثر كل قرار، بين 0 و100
@@ -238,8 +306,34 @@ export function meterState(spec, effectsList) {
 }
 
 // ── ما يراه المشارك قبل الإجابة: الخطوة بلا حلها ولا شرحها ──
-export function publicStep(step) {
+// اللوحة: البطاقات بنصها (ورقمها إن سمح المستوى)، والسقالة المحسومة لمستوى المشارك. مواضع البطاقات
+// لا تُرسل إلا لبطاقات الصفوف المحلولة، والعدّادات بقدر ما يسمح المستوى.
+function publicBoard(step, level) {
+  const sc = boardScaffold(step, level);
+  const cards = step.cards || [];
+  const solvedSet = new Set(sc.solved_rows);
+  const counts = {};
+  if (sc.counts === 'cell') for (const c of cards) (counts[c.row] ||= {})[c.col] = (counts[c.row][c.col] || 0) + 1;
+  const colCounts = {};
+  if (sc.counts === 'col') for (const c of cards) colCounts[c.col] = (colCounts[c.col] || 0) + 1;
+  return {
+    rows: (step.rows || []).map(({ id, label, n }) => ({ id, label, ...(n ? { n } : {}) })),
+    cols: (step.cols || []).map(({ id, label }) => ({ id, label })),
+    cards: cards.map((c) => ({ id: c.id, label: c.label, ...(sc.show_code && c.code ? { code: c.code } : {}) })),
+    row_label_ar: step.row_label_ar || '',
+    scaffold: {
+      level: level || 'beginner', show_code: sc.show_code, counts: sc.counts, feedback: sc.feedback, checks: BOARD_FEEDBACK[sc.feedback],
+      ...(sc.counts === 'cell' ? { cell_counts: counts } : {}),
+      ...(sc.counts === 'col' ? { col_counts: colCounts } : {}),
+      solved_rows: sc.solved_rows,
+      solved: Object.fromEntries(cards.filter((c) => solvedSet.has(c.row)).map((c) => [c.id, [c.row, c.col]])),
+    },
+  };
+}
+
+export function publicStep(step, level = null) {
   const base = { type: step.type, prompt_ar: step.prompt_ar || '', title_ar: step.title_ar || '', context_ar: step.context_ar || '' };
+  if (step.type === 'board') return { ...base, ...publicBoard(step, level) };
   if (step.type === 'order') return { ...base, items: step.items || [] };
   if (step.type === 'classify') return { ...base, bins: step.bins || [], items: (step.items || []).map(({ id, label }) => ({ id, label })) };
   if (step.type === 'match') return { ...base, left: (step.left || []).map(({ id, label }) => ({ id, label })), right: step.right || [] };
@@ -252,17 +346,20 @@ export function publicStep(step) {
 }
 
 // ترتيب العرض يُخلط بالبذرة (معرّف المحاولة) فلا يحفظ المشارك موضع الإجابة
-/** @param {any} spec @param {(list: any[], salt: string) => any[]} [shuffle] */
-export function publicSpec(spec, shuffle = (list) => list) {
+// level: مستوى المشارك في إطار الأداة، تُحسم به سقالة اللوحة والخطوات الخاصة بمستويات
+/** @param {any} spec @param {(list: any[], salt: string) => any[]} [shuffle] @param {string | null} [level] */
+export function publicSpec(spec, shuffle = (list) => list, level = null) {
   const s = spec || {};
   return {
     story_ar: s.story_ar || '', role_ar: s.role_ar || '', closing_ar: s.closing_ar || '',
     meters: (s.meters || []).map(({ id, label, start }) => ({ id, label, start: Number(start) || 50 })),
     steps: (s.steps || []).map((st, i) => {
-      const p = publicStep(st);
+      const p = publicStep(st, level);
+      if (!stepFor(st, level)) p.skip = true;
       const mix = (k) => { if (Array.isArray(p[k])) p[k] = shuffle(p[k], `${i}${k}`); };
       if (['order', 'classify', 'plot'].includes(st.type)) mix('items');
       if (st.type === 'match') { mix('left'); mix('right'); }
+      if (st.type === 'board') mix('cards');
       return p;
     }),
   };
@@ -323,6 +420,37 @@ export function validateLab(input) {
       ...(str(st.id, 40) ? { id: str(st.id, 40) } : {}), ...(jump(st.next, at) ? { next: jump(st.next, at) } : {}),
     };
     if (!base.prompt_ar) throw new Error(`${at}: بلا سؤال`);
+    if (Array.isArray(st.only_levels) && st.only_levels.length) {
+      const only = [...new Set(st.only_levels.map(String))];
+      if (!only.every((l) => LEVELS.includes(l))) throw new Error(`${at}: مستوى غير معروف في only_levels`);
+      if (n === 0) throw new Error(`${at}: الخطوة الأولى لكل المستويات`);
+      base.only_levels = only;
+    }
+    if (st.type === 'board') {
+      const rows = ids(st.rows, `${at} صف`).map(({ id, label, n: num }) => ({ id, label, ...(Number.isInteger(Number(num)) && Number(num) > 0 ? { n: Number(num) } : {}) }));
+      const cols = ids(st.cols, `${at} عمود`).map(({ id, label }) => ({ id, label }));
+      if (!rows.length || !cols.length) throw new Error(`${at}: صف وعمود على الأقل`);
+      if (rows.length > 15) throw new Error(`${at}: خمسة عشر صفًا حدًا أقصى`);
+      if (cols.length > 8) throw new Error(`${at}: ثمانية أعمدة حدًا أقصى`);
+      const cards = ids(st.cards, `${at} بطاقة`).map((c) => {
+        if (!rows.some((r) => r.id === c.row) || !cols.some((x) => x.id === c.col)) throw new Error(`${at}: البطاقة ${c.id} بلا صف أو عمود صحيح`);
+        return { id: c.id, label: c.label, row: c.row, col: c.col, ...(str(c.code, 12) ? { code: str(c.code, 12) } : {}), ...notes(c), ...(str(c.hint1_ar) ? { hint1_ar: str(c.hint1_ar) } : {}) };
+      });
+      if (!cards.length) throw new Error(`${at}: بلا بطاقات`);
+      if (cards.length > 80) throw new Error(`${at}: ثمانون بطاقة حدًا أقصى`);
+      const levels = {};
+      for (const l of LEVELS) {
+        const s = st.levels?.[l];
+        if (!s) continue;
+        if (s.counts && !BOARD_COUNTS.includes(s.counts)) throw new Error(`${at}: عدّادات غير معروفة للمستوى ${l}`);
+        if (s.feedback && !(s.feedback in BOARD_FEEDBACK)) throw new Error(`${at}: تغذية غير معروفة للمستوى ${l}`);
+        const solved = (Array.isArray(s.solved_rows) ? s.solved_rows : []).map(String);
+        if (!solved.every((r) => rows.some((x) => x.id === r))) throw new Error(`${at}: صف محلول غير موجود للمستوى ${l}`);
+        if (cards.every((c) => solved.includes(c.row))) throw new Error(`${at}: لا يبقى للمستوى ${l} ما يضعه`);
+        levels[l] = { show_code: !!s.show_code, counts: s.counts || 'none', solved_rows: solved, feedback: s.feedback || 'submit' };
+      }
+      return { ...base, rows, cols, cards, levels, row_label_ar: str(st.row_label_ar, 80), hint_ar: str(st.hint_ar) };
+    }
     if (st.type === 'order') {
       const items = ids(st.items, `${at} عنصر`);
       const answer = Array.isArray(st.answer) ? st.answer.map(String) : [];

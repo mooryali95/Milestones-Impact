@@ -12,7 +12,7 @@ import { releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
 import { seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
-import { AUDIENCES, gradeStep, grantLive, labAward, labVisible, MASTERY, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
+import { AUDIENCES, gradeStep, grantLive, labAward, labLevelOf, labVisible, MASTERY, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
 
 type Body = Record<string, any>;
 
@@ -22,20 +22,23 @@ const ANSWER_MAX = 20000;
 const ITEM_COLS = 'id, key, kind, dimension, chapter_key, min_level, sort, title_ar, summary_ar, minutes, points, active, audience, spec';
 
 // أدوات المختبر التي يراها المشارك الآن
-async function visibleItems(p: any) {
+async function visible(p: any) {
   const levels = await approvedLevels(p).catch(() => null);
   const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
   const [items, grants] = await Promise.all([
     db.from('lab_items').select(ITEM_COLS),
     db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
   ]);
-  return labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [] });
+  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [] }) };
 }
+const visibleItems = async (p: any) => (await visible(p)).items;
 
+// الأداة ومستوى المشارك في إطارها: به تُحسم سقالة اللوحة والخطوات الخاصة بمستويات (labLevelOf)
 async function myItem(p: any, id: unknown) {
-  const it = (await visibleItems(p)).find((x: any) => x.id === String(id || ''));
+  const { items, levels } = await visible(p);
+  const it = items.find((x: any) => x.id === String(id || ''));
   if (!it) throw new Fail('هذه الأداة غير متاحة لك', 404);
-  return it;
+  return { ...it, level: labLevelOf(levels, it.dimension) };
 }
 
 // ملخص محاولات المشارك لكل أداة: الأولى (القياس الابتدائي)، والأفضل، والعدد، والمفتوحة
@@ -98,8 +101,8 @@ export async function start(p: any, b: Body) {
   }
   return {
     success: true,
-    item: meta(it),
-    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`)),
+    item: { ...meta(it), level: it.level },
+    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`), it.level),
     attempt: attemptView(it, a),
   };
 }
@@ -113,8 +116,8 @@ export async function answer(p: any, b: Body) {
   const i = Number(b.step);
   if (i !== a.current || !steps[i]) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
   if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
-  const result = gradeStep(steps[i], b.answer);
-  const next = nextIndex(it.spec, i, b.answer);
+  const result = gradeStep(steps[i], b.answer, { level: it.level });
+  const next = nextIndex(it.spec, i, b.answer, it.level);
   const path = [...(a.path || []), i];
   const results = { ...(a.results || {}), [i]: result };
   const answers = { ...(a.answers || {}), [i]: b.answer ?? null };

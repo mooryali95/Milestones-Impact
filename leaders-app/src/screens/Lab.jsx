@@ -3,12 +3,14 @@
 // ════════════════════════════════════════════════════════════════
 // الخادم يرسل الخطوات بلا حلولها، ويصحح كل خطوة عند إرسالها ويحدد
 // التالية (قد يتفرع الموقف بحسب القرار). كل التفاعل بالنقر لا بالسحب،
-// فيعمل باللمس على الجوال. يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
+// فيعمل باللمس على الجوال (اللوحة board تضيف لوحة المفاتيح والسحب فوق النقر،
+// shared/lab/LabBoard.jsx). يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
 // باب في الكتيب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
 import React, { useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { computeSchedule, KINDS, labLevel, LINK_LABEL, LINK_TYPES, MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import LabBoard, { BOARD_LEVEL_AR, BoardInsight, boardReady, scaffoldText } from '../../../shared/lab/LabBoard.jsx';
 import { RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const pctOf = (s) => Math.round((Number(s) || 0) * 100);
@@ -317,6 +319,7 @@ function StepBody(props) {
   if (step.type === 'schedule') return <ScheduleStep {...props} />;
   if (step.type === 'plot') return <PlotStep {...props} />;
   if (step.type === 'matrix') return <MatrixStep {...props} />;
+  if (step.type === 'board') return <LabBoard step={step} value={props.value} onChange={props.onChange} result={props.result} />;
   return null;
 }
 
@@ -330,14 +333,22 @@ function ready(step, v) {
   if (step.type === 'schedule') return (v?.links || []).length > 0;
   if (step.type === 'plot') return step.items.every((it) => v?.[it.id]);
   if (step.type === 'matrix') return step.rows.every((r) => Object.values(v?.[r.id] || {}).some(Boolean));
+  if (step.type === 'board') return boardReady(step, v);
   return false;
 }
 
-function Feedback({ step, result }) {
+function Feedback({ step, result, answer }) {
   const p = pctOf(result.score);
   return (
     <div className={`lab-fb ${tone(p)}`}>
       <div className="lab-fb-head"><b>{result.ok ? 'إجابة متقنة' : p >= 50 ? 'قريب' : 'راجع هذه'}</b><span className={`chip ${tone(p)}`}>{p}%</span></div>
+      {step.type === 'board' && <BoardInsight step={step} value={answer} result={result} />}
+      {step.type === 'board' && result.notes?.length > 0 && (
+        <details className="lab-notes">
+          <summary>لماذا أخطأت في {result.notes.length === 1 ? 'بطاقة واحدة' : result.notes.length === 2 ? 'بطاقتين' : `${result.notes.length} بطاقات`}؟</summary>
+          {result.notes.map((x) => <small key={x.id} className="lab-note">{labelOf(step.cards, x.id)}: {x.note_ar}</small>)}
+        </details>
+      )}
       {result.feedback_ar && <p>{result.feedback_ar}</p>}
       {result.then_ar && <p className="lab-then">{result.then_ar}</p>}
       {result.broken?.length > 0 && <p className="small">صفوف بلا صاحب قرار واحد: {result.broken.map((b) => labelOf(step.rows, b.row)).join('، ')}</p>}
@@ -380,6 +391,8 @@ function Runner({ id, onExit, onPoints }) {
   const { item, spec } = d;
   const step = spec.steps[cur];
   const dim = dimOf(item.dimension);
+  // الخطوات الخاصة بمستوى آخر (رؤوس اللوحة للاحترافي مثلًا) لا تُعد في عدد الخطوات
+  const shown = spec.steps.filter((x) => !x.skip).length;
 
   const submit = async () => {
     setBusy(true);
@@ -417,7 +430,7 @@ function Runner({ id, onExit, onPoints }) {
       {phase === 'intro' && (
         <div className="lab-card">
           <p className="lab-story">{spec.story_ar}</p>
-          <p className="small muted">{spec.steps.length > 1 ? `${spec.steps.length} ${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} · ` : ''}نحو {item.minutes} دقيقة · {item.points} نقطة عند {MASTERY}%</p>
+          <p className="small muted">{shown > 1 ? `${shown} ${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} · ` : ''}نحو {item.minutes} دقيقة · {item.points} نقطة عند {MASTERY}%</p>
           <button className="btn gold" onClick={() => setPhase('step')}>ابدأ</button>
         </div>
       )}
@@ -432,8 +445,9 @@ function Runner({ id, onExit, onPoints }) {
           {step.title_ar && <h3>{step.title_ar}</h3>}
           {step.context_ar && <p className="lab-context">{step.context_ar}</p>}
           <p className="lab-prompt">{step.prompt_ar}</p>
+          {step.type === 'board' && step.scaffold && <p className="small muted lab-level">المساعدة على قدر مستواك ({BOARD_LEVEL_AR[step.scaffold.level]}): {scaffoldText(step.scaffold)}</p>}
           <StepBody key={cur} step={step} value={answer} onChange={setAnswer} result={result} />
-          {result && <Feedback step={step} result={result} />}
+          {result && <Feedback step={step} result={result} answer={answer} />}
           <div className="row lab-actions">
             {!result
               ? <button className="btn" disabled={busy || !ready(step, answer)} onClick={submit}>{busy ? 'يُصحَّح…' : 'أرسل الإجابة'}</button>

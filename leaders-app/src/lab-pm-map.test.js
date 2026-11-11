@@ -3,9 +3,12 @@
 import { readFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { describe, expect, it } from 'vitest';
-import { gradeStep, nextIndex, practicePct, publicSpec, validateLab } from '../../supabase/functions/leaders-api/lab.js';
+import { gradeStep, labLevelOf, MASTERY, nextIndex, practicePct, publicSpec, validateLab } from '../../supabase/functions/leaders-api/lab.js';
 import { AREAS, GROUPS, PROCESSES, byId } from '../../scripts/lab/pm-data.mjs';
 import { ITEMS as INTRO } from '../../scripts/lab/phase3.mjs';
+import { ITEMS as MAP_ITEMS } from '../../scripts/lab/pm-map.mjs';
+
+const BOARD_ITEM = MAP_ITEMS[0];
 
 const gen = (phase) => execFileSync('node', ['scripts/lab/build-items.mjs', phase], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 
@@ -94,3 +97,125 @@ describe('المرحلة صفر: تمهيد الخريطة بالأنواع ال
     expect(readFileSync('supabase/migrations/20261030160000_leaders_lab_phase2.sql', 'utf8')).toBe(gen('phase2'));
   });
 });
+
+// ── المرحلة الأولى: نوع الخطوة board ──
+const MAP = validateLab(BOARD_ITEM.spec);
+const boardOf = (id) => MAP.steps.find((s) => s.id === id);
+const fullAnswer = (st) => Object.fromEntries(st.cards.map((c) => [c.id, [c.row, c.col]]));
+
+describe('اللوحة: التحقق من المواصفة', () => {
+  const base = { type: 'board', prompt_ar: 'ضع', rows: [{ id: 'r1', label: 'صف' }, { id: 'r2', label: 'صف2' }], cols: [{ id: 'c1', label: 'عمود' }, { id: 'c2', label: 'عمود2' }], cards: [{ id: 'k', label: 'بطاقة', row: 'r1', col: 'c2' }] };
+  const v = (st) => () => validateLab({ steps: [{ type: 'order', prompt_ar: 'رتب', items: [{ id: 'a', label: 'أ' }, { id: 'b', label: 'ب' }], answer: ['a', 'b'] }, st] });
+  it('البطاقة بصف أو عمود غير موجود، والمعرّف المكرر، والحدود: 15 صفًا و8 أعمدة و80 بطاقة', () => {
+    expect(v(base)).not.toThrow();
+    expect(v({ ...base, cards: [{ id: 'k', label: 'ب', row: 'zz', col: 'c1' }] })).toThrow(/بلا صف أو عمود/);
+    expect(v({ ...base, cards: [{ id: 'k', label: 'ب', row: 'r1', col: 'c1' }, { id: 'k', label: 'ج', row: 'r1', col: 'c1' }] })).toThrow(/مكرر/);
+    expect(v({ ...base, rows: Array.from({ length: 16 }, (_, i) => ({ id: `r${i}`, label: 'ص' })), cards: [{ id: 'k', label: 'ب', row: 'r1', col: 'c1' }] })).toThrow(/خمسة عشر/);
+    expect(v({ ...base, cols: Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, label: 'ع' })) })).toThrow(/ثمانية/);
+    expect(v({ ...base, cards: Array.from({ length: 81 }, (_, i) => ({ id: `k${i}`, label: 'ب', row: 'r1', col: 'c1' })) })).toThrow(/ثمانون/);
+    expect(v({ ...base, levels: { beginner: { solved_rows: ['r1'] } } })).toThrow(/لا يبقى/);
+    expect(v({ ...base, levels: { beginner: { counts: 'all' } } })).toThrow(/عدّادات/);
+    expect(v({ ...base, only_levels: ['expert'] })).toThrow(/only_levels/);
+    expect(() => validateLab({ steps: [{ ...base, only_levels: ['advanced'] }] })).toThrow(/الأولى/);
+  });
+});
+
+describe('اللوحة: التصحيح بدرجة المحورين والخلط', () => {
+  const st = boardOf('map');
+  it('الإجابة الكاملة درجة كاملة بلا خلط، والصف المحلول خارج المقام للتأسيسي فقط', () => {
+    const b = gradeStep(st, fullAnswer(st), { level: 'beginner' });
+    expect(b).toMatchObject({ score: 1, ok: true, total: 42, right: 42, half: 0 });
+    expect(gradeStep(st, fullAnswer(st), { level: 'advanced' }).total).toBe(49);
+    // بطاقات الصف المحلول لا تُحتسب ولو غابت من الإجابة
+    const noInteg = Object.fromEntries(Object.entries(fullAnswer(st)).filter(([k]) => byId[k].row !== 'integ'));
+    expect(gradeStep(st, noInteg, { level: 'beginner' }).score).toBe(1);
+    expect(gradeStep(st, noInteg, { level: 'advanced' }).score).toBeCloseTo(42 / 49);
+  });
+  it('الصف الصحيح والعمود الخطأ نصف درجة، والعكس نصف، وكلاهما خطأ صفر، والمكشوفة بالتلميح صفر', () => {
+    const one = { ...st, cards: [st.cards.find((c) => c.id === 'p8-3')] };
+    expect(gradeStep(one, { 'p8-3': ['quality', 'mc'] }, { level: 'advanced' }).score).toBe(1);
+    expect(gradeStep(one, { 'p8-3': ['quality', 'exec'] }, { level: 'advanced' }).score).toBe(0.5);
+    expect(gradeStep(one, { 'p8-3': ['risk', 'mc'] }, { level: 'advanced' }).score).toBe(0.5);
+    expect(gradeStep(one, { 'p8-3': ['risk', 'exec'] }, { level: 'advanced' }).score).toBe(0);
+    expect(gradeStep(one, {}, { level: 'advanced' }).score).toBe(0);
+    expect(gradeStep(one, { 'p8-3': ['quality', 'mc'] }, { level: 'advanced', revealed: ['p8-3'] })).toMatchObject({ score: 0, revealed: 1 });
+  });
+  it('لوحة بعمود واحد (رؤوس الصفوف) لا تمنح نصف درجة على المحور الثابت', () => {
+    const h = boardOf('heads');
+    expect(gradeStep(h, { 'a-scope': ['s6', 'head'] }, { level: 'advanced' }).half).toBe(0);
+  });
+  it('مصفوفة الخلط بين الأعمدة وأخطاء الصفوف، وشرح كل بطاقة أخطأ فيها', () => {
+    const a = { ...fullAnswer(st), 'p8-2': ['quality', 'mc'], 'p10-2': ['comm', 'mc'], 'p5-5': ['scope', 'plan'] };
+    const r = gradeStep(st, a, { level: 'advanced' });
+    expect(r.confusion.cols.exec.mc).toBe(2);
+    expect(r.confusion.cols.mc.plan).toBe(1);
+    expect(r.confusion.cols.plan.plan).toBe(24);
+    expect(r.confusion.rows).toMatchObject({ quality: 1, comm: 1, scope: 1, integ: 0 });
+    expect(r.notes.map((n) => n.id).sort()).toEqual(['p10-2', 'p5-5', 'p8-2']);
+    expect(r.score).toBeCloseTo((46 + 1.5) / 49);
+  });
+});
+
+describe('اللوحة: ما يصل المشارك بحسب مستواه', () => {
+  const pub = (level) => publicSpec(MAP, (x) => x, level);
+  it('لا يصل row ولا col ولا الشرح لأي مستوى، إلا مواضع الصف المحلول للتأسيسي', () => {
+    for (const level of ['beginner', 'intermediate', 'advanced']) {
+      const p = pub(level);
+      const st = p.steps[2];
+      for (const c of st.cards) expect(Object.keys(c).sort()).toEqual(level === 'beginner' ? ['code', 'id', 'label'] : ['id', 'label']);
+      const keys = keysOf(p);
+      for (const k of ['answer', 'note_ar', 'why_ar', 'hint1_ar', 'row', 'col', 'levels']) expect(keys.has(k)).toBe(false);
+      const solved = Object.keys(st.scaffold.solved);
+      expect(solved.every((id) => byId[id].row === 'integ')).toBe(true);
+      expect(solved).toHaveLength(level === 'beginner' ? 7 : 0);
+    }
+  });
+  it('السقالة تتلاشى: عدّاد لكل خلية للتأسيسي، ولكل عمود للمتوسط، ولا شيء للاحترافي', () => {
+    const [b, m, a] = ['beginner', 'intermediate', 'advanced'].map((l) => pub(l).steps[2].scaffold);
+    expect(b).toMatchObject({ show_code: true, counts: 'cell', feedback: 'instant', solved_rows: ['integ'] });
+    expect(b.cell_counts.sched.plan).toBe(5);
+    expect(b.cell_counts.integ).toEqual({ init: 1, plan: 1, exec: 2, mc: 2, close: 1 });
+    expect(m).toMatchObject({ show_code: false, counts: 'col', feedback: 'check2', checks: 2 });
+    expect(m.col_counts).toEqual({ init: 2, plan: 24, exec: 10, mc: 12, close: 1 });
+    expect(m.cell_counts).toBeUndefined();
+    expect(a).toMatchObject({ show_code: false, counts: 'none', feedback: 'submit', checks: 0, solved: {} });
+    expect(a.col_counts).toBeUndefined();
+  });
+  it('رؤوس الصفوف للاحترافي وحده: تُتخطى لغيره في المسار وتُعلَّم skip، فلا تدخل النسبة', () => {
+    expect(pub('advanced').steps[1].skip).toBeUndefined();
+    expect(pub('beginner').steps[1].skip).toBe(true);
+    expect(nextIndex(MAP, 0, null, 'beginner')).toBe(2);
+    expect(nextIndex(MAP, 0, null, 'intermediate')).toBe(2);
+    expect(nextIndex(MAP, 0, null, 'advanced')).toBe(1);
+    // غير المعتمد يأخذ التأسيسي
+    expect(labLevelOf(null, 'milestone')).toBe('beginner');
+    expect(labLevelOf({ milestone: 'advanced' }, 'milestone')).toBe('advanced');
+  });
+  it('الأداة كاملة 100% لكل مستوى بمساره، والإتقان 70% يتطلب أغلب اللوحة', () => {
+    for (const level of ['beginner', 'intermediate', 'advanced']) {
+      const results = {}; const path = [];
+      for (let i = 0; i >= 0; i = nextIndex(MAP, i, perfectAny(MAP.steps[i]), level)) {
+        results[i] = gradeStep(MAP.steps[i], perfectAny(MAP.steps[i]), { level });
+        expect(results[i].score, `${level} ${i}`).toBe(1);
+        path.push(i);
+      }
+      expect(path.includes(1)).toBe(level === 'advanced');
+      expect(practicePct(MAP, results, path)).toBe(100);
+    }
+    // اللوحة نصف النسبة (وزن 4 من 8): بثلثها مع كمال الباقي دون الإتقان، وبنصفها مع خطأ موقفين دونه أيضًا
+    const r = (map, c) => ({ 0: { score: 1 }, 2: { score: map }, 3: { score: c[0] }, 4: { score: c[1] }, 5: { score: c[2] } });
+    expect(practicePct(MAP, r(0.3, [1, 1, 1]), [0, 2, 3, 4, 5])).toBeLessThan(MASTERY);
+    expect(practicePct(MAP, r(0.5, [1, 0, 0]), [0, 2, 3, 4, 5])).toBeLessThan(MASTERY);
+    expect(practicePct(MAP, r(0.9, [1, 1, 0]), [0, 2, 3, 4, 5])).toBeGreaterThanOrEqual(MASTERY);
+  });
+  it('الترحيل مطابق لما يولّده المحتوى، بوسم بوابة النشر وسطر السجل', () => {
+    const sql = readFileSync('supabase/migrations/20261111120100_leaders_lab_pm_map.sql', 'utf8');
+    expect(sql).toBe(gen('pm-map'));
+    expect(sql.split('\n').slice(0, 15).join('\n')).toMatch(/^-- deploy-gate: tolerant /m);
+    expect(sql).toContain("insert into leaders.schema_migrations (name) values ('20261111120100_leaders_lab_pm_map') on conflict do nothing;");
+  });
+});
+
+function perfectAny(st) {
+  return st.type === 'board' ? fullAnswer(st) : perfect(st);
+}

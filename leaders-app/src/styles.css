@@ -899,6 +899,10 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .lab-then { font-style: italic; color: var(--slate); }
 .lab-why { margin: 0; line-height: 1.9; font-size: 14px; }
 .lab-why b { display: block; font-size: 14px; color: var(--accent); }
+.lab-notes { display: grid; gap: 6px; font-size: 14px; }
+.lab-notes summary { cursor: pointer; font-weight: 600; }
+.lab-notes .lab-note { display: block; margin-top: 4px; }
+.lab-level { margin: 0; }
 
 .lab-done { justify-items: start; }
 .lab-done .lab-meters { width: 100%; }
@@ -972,6 +976,8 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
   .tabbar .nav-item[aria-current="page"] { color: #fff; background: rgba(199, 154, 75, .18); box-shadow: none; }
   .tabbar .nav-item[aria-current="page"] svg { color: var(--copper); }
   main.with-tabbar { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  /* صينية لوحة المختبر الثابتة فوق شريط التنقل السفلي */
+  .lb { --lb-sticky-bottom: calc(104px + env(safe-area-inset-bottom)); }
   .foot.with-tabbar { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   /* على الهاتف أعلى الشاشة تحت الترويسة: لا يحجب المحتوى ولا شريط التنقل السفلي */
   .toast { bottom: auto; top: calc(64px + env(safe-area-inset-top)); }
