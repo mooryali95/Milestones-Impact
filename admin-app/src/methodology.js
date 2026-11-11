@@ -166,7 +166,7 @@ export const INST_FIELDS = [
 
 export const CELL_FIELDS = [
   { name: 'path_title_ar', label: 'عنوان المسار' },
-  { name: 'description_ar', label: 'الوصف للمشارك', type: 'textarea', rows: 5 },
+  { name: 'description_ar', label: 'وصف المستوى (مرجع الفريق، لا يظهر للمشارك)', type: 'textarea', rows: 5 },
 ];
 
 export const TRACK_FIELDS = [
