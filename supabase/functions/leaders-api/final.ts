@@ -119,7 +119,8 @@ export async function vote(a: Actor, b: Body) {
     const decision = String(record.decision || record.snapshot?.decision || '');
     const certificate = await onFinalApproved(pid, { decision, formula_version: record.snapshot?.config_version ?? null, program_id: program.id }, a.email)
       .catch(async (e) => { await alertOps('certificate_issue', { participant: pid, message: String((e as Error)?.message || e).slice(0, 200) }); return null; });
-    if (p.email) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null), [], { ref: `participant:${pid}` })
+    // حساب العرض لا يصله بريد القرار (demo.ts)، وحساب الاختبار يصله كأي حساب
+    if (p.email && !p.is_demo) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null), [], { ref: `participant:${pid}` })
       .catch((e) => console.error('final decision mail', e));
     return { success: true, status: patch.status, approval: st, certificate };
   }

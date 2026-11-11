@@ -133,12 +133,15 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
   const presets = useMemo(() => Object.entries(ST).map(([k, [l]]) => ({ key: k, label: l, test: (c) => c.status === k })), []);
   const rows = useMemo(() => applyFilters(all, { fields, presets, text: (c) => [c.serial, c.name_ar, c.name_en, c.org_name].join(' ') }, f), [all, f, fields, presets]);
   const counts = useMemo(() => presetCounts(all, presets), [all, presets]);
+  // المؤشرات من الخادم بمرشح الإحصاءات (بلا حساب العرض وحسابات الاختبار)، لا من صفوف السجل التي تُظهر الاختبار بشارته.
+  // الخادم قبل نشر هذا التحديث لا يرسلها: تُعدّ من الصفوف كما كانت
+  const st = d?.stats || (d?.success ? { total: all.length, valid: counts.valid || 0, revoked: counts.revoked || 0, replaced: counts.replaced || 0 } : null);
   return (
     <div className="ce">
       <div className="stats-grid ce-kpis">
-        <div className="stat-card"><div className="stat-label">الشهادات الصادرة</div><div className="stat-value">{d?.success ? all.length : '·'}</div><div className="stat-sub">منذ بدء البرنامج</div></div>
-        <div className="stat-card"><div className="stat-label">سارية</div><div className="stat-value s-replied">{counts.valid ?? '·'}</div><div className="stat-sub">صالحة للتحقق</div></div>
-        <div className="stat-card"><div className="stat-label">ملغاة أو مستبدلة</div><div className="stat-value">{d?.success ? (counts.revoked || 0) + (counts.replaced || 0) : '·'}</div><div className="stat-sub">بسبب مسجّل</div></div>
+        <div className="stat-card"><div className="stat-label">الشهادات الصادرة</div><div className="stat-value">{st ? st.total : '·'}</div><div className="stat-sub">منذ بدء البرنامج، بما فيها الملغاة والمستبدلة</div></div>
+        <div className="stat-card"><div className="stat-label">سارية</div><div className="stat-value s-replied">{st ? st.valid : '·'}</div><div className="stat-sub">صالحة للتحقق</div></div>
+        <div className="stat-card"><div className="stat-label">ملغاة أو مستبدلة</div><div className="stat-value">{st ? st.revoked + st.replaced : '·'}</div><div className="stat-sub">بسبب مسجّل</div></div>
         <div className="stat-card"><div className="stat-label">عمليات التحقق</div><div className="stat-value">{d?.success ? d.checks : '·'}</div><div className="stat-sub">من صفحة التحقق العامة</div></div>
       </div>
       <SettingsCard canWrite={canWrite} />
@@ -155,7 +158,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
               return (
                 <tr key={c.id}>
                   <td dir="ltr" className="ce-serial">{c.serial}</td>
-                  <td><button className="link" onClick={() => onPerson(c.participant_id)}>{c.name_ar}</button>{c.name_en && <small className="la-muted" dir="ltr"> · {c.name_en}</small>}</td>
+                  <td><button className="link" onClick={() => onPerson(c.participant_id)}>{c.name_ar}</button>{c.name_en && <small className="la-muted" dir="ltr"> · {c.name_en}</small>}{c.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}</td>
                   <td>{c.org_name || '·'}</td>
                   <td>{date(c.issued_at)}</td>
                   <td><span className={`la-chip ${t}`} title={c.revoke_reason || ''}>{l}</span></td>

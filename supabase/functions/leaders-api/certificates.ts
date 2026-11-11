@@ -6,7 +6,8 @@
 // الوحيد التعليق أو الإلغاء بتعليل وصلاحية super. تحفظ لقطة ثابتة لكل ما يظهر على الشهادة وتقفل الاسم.
 // التوقيع HMAC للحقول الحاكمة بمفتاح مستقل عن ملح الجلسات بمعرّف مفتاح (kid)، فتدوير الملح لا يبطل شهادة،
 // وتدوير المفتاح لا يبطل ما صدر. صفحة التحقق عامة برقم الشهادة، بحد طلبات لكل عنوان.
-import { alertOps, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
+import { alertOps, all, audit, certificateMail, CONFIG, db, Fail, must, nameConfirmMail, sendMail } from './core.ts';
+import { forStats } from './admin.ts';
 import { certProfile, programHours, trackKey } from './logic.js';
 import { displayTitles } from './profiles.ts';
 import { cohortOf, defaultProgramId, journeyDefinition } from './programs.ts';
@@ -178,7 +179,8 @@ async function insertCertificate(p: any, by: string | null, final: FinalRef | nu
     if (!error) {
       if (!p.name_locked_at) await db.from('participants').update({ name_locked_at: issuedAt }).eq('id', p.id);
       await audit(by ? 'admin' : 'system', by, 'certificate.issue', 'certificates', data.id, null, { serial });
-      sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
+      // حساب العرض لا يصله بريد من أي مسار (demo.ts)، كبريد تأكيد الاسم
+      if (p.email && !p.is_demo) sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
         .catch((e) => console.error('certificate mail:', e));
       return data;
     }
@@ -290,16 +292,25 @@ export async function mine(p: any) {
 }
 
 // ── للإدارة ──
+// السجل قائمة تشغيلية: حساب العرض خارجه، وحساب الاختبار فيه بشارته (is_test). وشهادات شخص بعينه تُعاد كلها.
+// المؤشرات إحصاء: تُعدّ بمرشح الإحصاءات نفسه (forStats)، فلا يدخلها حساب العرض ولا حساب الاختبار
 export async function list(b: Body) {
+  const person = b.participant_id ? String(b.participant_id) : null;
   let q = db.from('certificates')
-    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_id:snapshot->org->>id, org_name:snapshot->org->>name')
+    .select('id, serial, status, issued_at, issued_by, revoked_at, revoked_by, revoke_reason, participant_id, name_ar:snapshot->>name_ar, name_en:snapshot->>name_en, org_id:snapshot->org->>id, org_name:snapshot->org->>name, participants!inner(is_demo, is_test)')
     .order('issued_at', { ascending: false }).limit(1000);
+  if (person) q = q.eq('participant_id', person); else q = q.eq('participants.is_demo', false);
   if (b.status) q = q.eq('status', String(b.status));
-  if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
   if (b.organization_id) q = q.eq('snapshot->org->>id', String(b.organization_id));
-  const { data } = await q;
-  const { count } = await db.from('certificate_checks').select('id', { count: 'exact', head: true });
-  return { success: true, certificates: data || [], checks: count ?? 0 };
+  const [{ data }, { count }, counted] = await Promise.all([
+    q,
+    db.from('certificate_checks').select('id', { count: 'exact', head: true }),
+    all((f, t) => forStats(db.from('participants').select('id, certificates!inner(status)')).order('id').range(f, t)),
+  ]);
+  const stats: Record<string, number> = { total: 0, valid: 0, suspended: 0, revoked: 0, replaced: 0 };
+  for (const p of counted) for (const c of p.certificates || []) { stats.total += 1; stats[c.status] = (stats[c.status] || 0) + 1; }
+  const certificates = (data || []).map(({ participants: p, ...c }: any) => ({ ...c, is_test: !!p?.is_test }));
+  return { success: true, certificates, checks: count ?? 0, stats };
 }
 
 export async function get(b: Body) {
