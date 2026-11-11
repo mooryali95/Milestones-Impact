@@ -12,6 +12,7 @@ import { Empty, Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
+import OrgTeam from './OrgTeam.jsx';
 
 
 export function Funnel({ f, big }) {
@@ -272,6 +273,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
+      {!isNone && <OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} />}
       {!isNone && <CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
 
       <Sources d={d} total={all.length} />

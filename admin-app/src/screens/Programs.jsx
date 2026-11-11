@@ -11,7 +11,7 @@ import Form from '../Form.jsx';
 import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
-import CohortGroups from './Groups.jsx';
+import CohortTeam from './CohortTeam.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -103,10 +103,9 @@ export default function Programs({ canWrite, onEditJourney }) {
   const editCohort = (c = {}) => {
     const pid = c.program_id || programs.find((p) => p.is_default)?.id;
     const p = programs.find((x) => x.id === pid);
-    Promise.all([L('admin.program', { id: pid }), L('admin.experts')]).then(([pr, ex]) => setForm({
+    L('admin.program', { id: pid }).then((pr) => setForm({
       title: c.id ? `دفعة: ${c.name}` : 'دفعة جديدة',
-      fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default, team: d.team_ready === true,
-        experts: (ex.experts || []).filter((e) => ['active', 'paused'].includes(e.status)) }),
+      fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default }),
       values: cohortToForm(c.id ? c : { program_id: pid, status: 'planned', program_version_id: p?.versions[0]?.id || '' }),
       onSave: (v) => L('admin.cohort-save', { ...(c.id ? { id: c.id } : {}), ...formToCohort(v) }),
     }));
@@ -178,7 +177,7 @@ export default function Programs({ canWrite, onEditJourney }) {
                   <td>{[date(c.starts_on), date(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
                   <td>{COHORT_STATUS[c.status]}</td>
                   <td>{c.enrolled || ''}</td>
-                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>المجموعات ونمط العمل</button></>}</td>
+                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button></>}</td>
                 </tr>
               );
             })}
@@ -217,7 +216,7 @@ export default function Programs({ canWrite, onEditJourney }) {
       )}
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
-      {groups && <CohortGroups cohort={groups} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
+      {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
     </>
   );

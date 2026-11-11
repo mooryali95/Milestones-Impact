@@ -815,3 +815,40 @@
   .lc-spark { height: 16px; }
   .lc-det { padding: 4px 8px 14px; }
 }
+/* الفريق والمجموعات في الدفعة (CohortTeam.jsx) وملخصه في صفحة الجهة (OrgTeam.jsx) */
+.ct-sec { border-top: 1px solid var(--line); padding-top: 12px; }
+.ct-notes { margin: 0; padding: 10px 12px; list-style: none; border: 1px solid var(--line-strong); border-inline-start: 3px solid var(--gold-deep); border-radius: 8px; font-size: .84rem; color: var(--st-warn-text); display: grid; gap: 4px; }
+.ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ct-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.ct-row > div { display: grid; gap: 2px; min-width: 0; }
+.ct-who { flex: 1 1 180px; }
+.ct-what { flex: 1 1 180px; font-size: .86rem; }
+.ct-row > .ct-state { display: flex; flex-wrap: wrap; gap: 4px; }
+.ct-load { flex: 2 1 220px; }
+.ct-warn { color: var(--st-warn-text); font-weight: 600; }
+.ct-fs { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.ct-fs legend { font-weight: 700; font-size: .86rem; padding: 0 4px; color: var(--ink); }
+.ct-pick { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.la-form label.ct-opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-weight: 400; }
+.la-form label.ct-opt.on { border-color: var(--petrol-s); background: var(--sand-light); }
+.la-form label.ct-opt input, .la-form .ct-radios input[type="radio"] { width: auto; margin-top: 3px; }
+.ct-opt > span { display: grid; gap: 2px; min-width: 0; }
+.ct-opt b { color: var(--ink); }
+.ct-opt .la-chip { margin-inline-start: 6px; }
+.ct-radios { display: grid; gap: 8px; }
+.la-form .ct-radios label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 600; color: var(--ink); }
+.ct-radios label small { flex-basis: 100%; font-weight: 400; }
+.ct-radio-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ct-radio-row small { flex-basis: 100%; font-weight: 400; }
+.la-form .ct-radios select { width: auto; max-width: 100%; }
+.ot-cohort { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; margin-top: 10px; }
+.ot-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: .88rem; }
+.ot-dl dt { color: var(--ink-soft); }
+.ot-dl dd { margin: 0; }
+.ot-closed summary { cursor: pointer; margin-top: 10px; color: var(--ink-soft); }
+@media (max-width: 600px) {
+  .ct-row { padding: 10px; }
+  .ct-row > .la-link { margin-inline-start: auto; }
+  .ot-dl { grid-template-columns: 1fr; }
+  .ot-dl dd { margin-bottom: 6px; }
+}

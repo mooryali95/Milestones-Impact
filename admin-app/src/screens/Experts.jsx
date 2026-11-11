@@ -11,6 +11,8 @@ import { applyFilters, presetCounts } from '../filters.js';
 import { RequestsBoard } from './ExpertMatch.jsx';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
+import { COHORT_STATUS } from '../methodology.js';
+import { periodAr, scopeText } from '../team.js';
 
 const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
 const ROLES = Object.entries(EXPERT_ROLE_AR);
@@ -142,6 +144,22 @@ function Ratings({ r }) {
   );
 }
 
+// تكليفاته من المصادر الثلاثة (مستشار دفعة، خبير مجموعة، عضو فريق): قراءة فقط، والتحرير من «الفريق والمجموعات» في الدفعة
+function Assignments({ list }) {
+  if (!list) return null;
+  return (
+    <section className="la-card ex-assign" aria-labelledby="ex-assign-h">
+      <h4 id="ex-assign-h">تكليفاته</h4>
+      {!list.length ? <p className="la-muted">لا تكليف له في أي دفعة. يُكلَّف من «الفريق والمجموعات» في الدفعة، أو من صفحة الجهة.</p> : (
+        <ul className="la-log">{list.map((a) => (
+          <li key={a.cohort_id}><b>{a.org ? `${a.org} · ` : ''}{a.cohort}</b> <span>{scopeText(a)}</span>
+            {' '}<small className="la-muted">{[COHORT_STATUS[a.status] || a.status, periodAr(a)].filter(Boolean).join(' · ')}</small></li>
+        ))}</ul>
+      )}
+    </section>
+  );
+}
+
 function Profile({ id, canWrite, onBack }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
@@ -172,6 +190,7 @@ function Profile({ id, canWrite, onBack }) {
             {['applied', 'invited', 'active', 'paused'].includes(e.status) && <button className="btn-sm ghost" onClick={async () => { const r = await L('admin.expert-invite', { id: e.id }); toast(r.success ? 'أُرسلت الدعوة' : r.message); if (r.success) load(); }}>إرسال دعوة</button>}</div>}
         </div>
       </section>
+      <Assignments list={d.assignments} />
       <Service s={d.service} rate={e.hourly_rate} />
       <Ratings r={d.ratings} />
       <ExpertForm key={e.updated_at} initial={e} canWrite={canWrite} onSaved={load} />

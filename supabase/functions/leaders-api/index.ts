@@ -44,6 +44,7 @@ import * as PR from './peer.ts';
 import * as FL from './file.ts';
 import * as SU from './sus.ts';
 import * as PV from './privacy.ts';
+import * as TM from './team.ts';
 
 type Body = Record<string, any>;
 
@@ -371,7 +372,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,
   'admin.experts': () => E.adminList(),
-  'admin.expert': E.adminGet,
+  // ملف الخبير ومعه تكليفاته من المصادر الثلاثة (قراءة؛ التحرير من فريق الدفعة)
+  'admin.expert': async (a, b) => ({ ...(await E.adminGet(a, b)), assignments: await TM.assignmentsOf(String(b.id || '')) }),
   'admin.expert-save': E.adminSave,
   'admin.expert-invite': E.adminInvite,
   'admin.expert-set-status': E.adminSetStatus,
@@ -408,6 +410,11 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.final-eval-reopen': (a, b) => A.writer(a, F.reopen, b),
   'admin.final-eval-config': (a, b) => A.writer(a, F.config, b),
   'admin.cohort-groups': (_a, b) => G.cohortGroups(b),
+  // فريق الدفعة في نقطة واحدة، وملخصه لكل دفعة في صفحة الجهة (team.ts)
+  'admin.cohort-team': (_a, b) => TM.cohortTeam(b),
+  'admin.org-team': (_a, b) => TM.orgTeam(b),
+  'admin.team-add': (a, b) => A.writer(a, TM.teamAdd, b),
+  'admin.team-remove': (a, b) => A.writer(a, TM.teamRemove, b),
   'admin.cohort-group-save': (a, b) => A.writer(a, G.cohortGroupSave, b),
   'admin.cohort-group-assign': (a, b) => A.writer(a, G.cohortGroupAssign, b),
   'admin.cohort-groups-auto': (a, b) => A.writer(a, G.cohortGroupsAuto, b),

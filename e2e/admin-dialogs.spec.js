@@ -35,6 +35,7 @@ async function setup(page, { delay = {} } = {}) {
       'admin.program-compare': { success: true, version: { number: 1, label: 'الإطلاق' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [] } },
       'admin.cert-settings': { success: true, settings: { enabled: true, program_ar: 'برنامج القادة', hours: 48, signatory: null } },
       'admin.cohort-groups': { success: true, cohort: cohorts[0], members: [], groups: [], stages: [{ key: 'training', title_ar: 'التدريب' }] },
+      'admin.cohort-team': { success: true, team_max: 30, cohort: cohorts[0], rows: [], groups: [], coverage: null, experts: [] },
       'admin.certificates': { success: true, checks: 0, certificates: [cert] },
       'admin.catalog': catalog,
       'admin.submissions': { success: true, submissions: [submission] }, 'admin.submission': { success: true, submission: { ...submission, status: 'submitted', rating: null, bonus: 0 } },
@@ -151,15 +152,17 @@ test('نوافذ البرامج: «قارن» والتقييم الختامي و
   await expect(fin).toBeHidden();
   await expect(page.getByRole('button', { name: 'التقييم الختامي' })).toBeFocused();
 
-  // المجموعات: Esc يغلقها، ونمط عمل لم يُحفظ يسأل قبل الإغلاق
-  await page.getByRole('button', { name: 'المجموعات ونمط العمل' }).click();
-  const grp = page.getByRole('dialog', { name: 'المجموعات ونمط العمل' });
+  // الفريق والمجموعات (تبويب المجموعات ونمط العمل): Esc يغلقها، ونمط عمل لم يُحفظ يسأل قبل الإغلاق
+  await page.getByRole('button', { name: 'الفريق والمجموعات' }).click();
+  const grp = page.getByRole('dialog', { name: /^الفريق والمجموعات:/ });
+  await grp.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   await grp.getByLabel('نمط العمل في التدريب').selectOption({ index: 1 });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('alertdialog')).toContainText('لديك تعديلات لم تُحفظ');
   await page.getByRole('alertdialog').getByRole('button', { name: 'إغلاق دون حفظ' }).click();
   await expect(grp).toBeHidden();
-  await page.getByRole('button', { name: 'المجموعات ونمط العمل' }).click();
+  await page.getByRole('button', { name: 'الفريق والمجموعات' }).click();
+  await grp.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   await expect(grp.getByLabel('نمط العمل في التدريب')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(grp).toBeHidden();

@@ -17,6 +17,7 @@ test('المجموعات: عدد بحقل ومعاينة الحجم، وتواز
       'admin.programs': { success: true, programs: [{ id: 'pa', name: 'برنامج القادة', is_default: true, requirements: 35, versions: [] }], cohorts, organizations: [] },
       'admin.cohort-groups': { success: true, cohort: cohorts[0], members, groups, stages: [{ key: 'training', title_ar: 'التدريب' }] },
       'admin.cohort-groups-auto': { success: true },
+      'admin.cohort-team': { success: true, team_max: 30, cohort: cohorts[0], rows: [], groups: [], coverage: null, experts: [] },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true, items: [], orgs: [], participants: [] } });
   });
@@ -25,8 +26,10 @@ test('المجموعات: عدد بحقل ومعاينة الحجم، وتواز
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.getByRole('button', { name: 'البرامج والدفعات' }).first().click();
-  await page.getByRole('button', { name: /المجموعات/ }).first().click();
-  const dlg = page.getByRole('dialog', { name: 'المجموعات ونمط العمل' });
+  // المجموعات تبويب في «الفريق والمجموعات» منذ تصور ربط الخبراء بالجهة (المرحلة 1)
+  await page.getByRole('button', { name: 'الفريق والمجموعات' }).first().click();
+  const dlg = page.getByRole('dialog', { name: 'الفريق والمجموعات: دفعة نوفمبر 2026' });
+  await dlg.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   // الافتراضي نحو ستة في المجموعة: 50 ÷ 6 ≈ 8 مجموعات، والمعاينة تتبع الحقل
   const count = dlg.getByLabel('عدد المجموعات');
   await expect(count).toHaveValue('8');
