@@ -199,3 +199,16 @@ export const EXPERT_RATING_PCT = Object.freeze({ 1: 0, 2: 25, 3: 50, 4: 75, 5: 1
 
 // كيف يكتمل بند الرحلة (completionSource)
 export const COMPLETION_AR = { auto: 'آلي من حالة المشارك', evidence: 'مرتبط بمكانه ودليله', manual: 'يدوي' };
+
+// ── تقييم 360 (تصور 2026-11-11، اعتمده المالك) ──
+// مجموعات المقيّمين: المدير يظهر باسم دوره (معلن له)، وغيره لا يظهر إلا مجمّعًا مع اثنين على الأقل من مجموعته
+export const FEEDBACK_GROUP_AR = { self: 'أنت', manager: 'المدير المباشر', peer: 'الزملاء', report: 'أعضاء الفريق', stakeholder: 'أصحاب المصلحة', others: 'آخرون' };
+// سؤال الصلة في أول نموذج المقيّم: وزن للجودة لا للحساب، ويعلّم المقيّم البعيد
+export const CONTACT_FREQ_AR = { weekly: 'أسبوعيًا', monthly: 'شهريًا', less: 'أقل من ذلك' };
+// الأسئلة المفتوحة الثلاثة (اختيارية)، وحدها FEEDBACK_OPEN_MAX حرفًا لكل منها
+export const FEEDBACK_OPEN_AR = {
+  continue: 'ما الذي يفعله وتريده أن يستمر عليه؟',
+  start: 'ما الذي لو بدأه أو زاد منه لصار أكثر أثرًا؟',
+  stop: 'ما الذي لو قلّل منه لصار أكثر أثرًا؟',
+};
+export const FEEDBACK_OPEN_MAX = 600;

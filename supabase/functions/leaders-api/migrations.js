@@ -111,6 +111,7 @@ export const MIGRATIONS = [
   '20261111120100_leaders_lab_pm_map',
   '20261111120200_leaders_lab_attempt_state',
   '20261111120300_leaders_lab_requirement',
+  '20261111130000_leaders_feedback360_rater_form',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -142,4 +143,5 @@ export const MIGRATION_GATES = {
   '20261111120100_leaders_lab_pm_map': ["tolerant", "محتوى فقط في جدول قائم: الأداة لا تظهر إلا لمن تُفتح له، والدالة التي تعرف نوع board تُنشر معه أو بعده"],
   '20261111120200_leaders_lab_attempt_state': ["tolerant", "الدالة تقرأ المحاولة بـ* وتكتب الأعمدة بمحاولة ثانية بدونها (lab.ts)، فقبله لا حفظ تلقائي ولا تلميح ولا فحص ولا تثبيت للمستوى، والإرسال يعمل كما كان"],
   '20261111120300_leaders_lab_requirement': ["tolerant", "الدالة تعرف النوع lab قبله وبعده (activityFor وlabStatus في logic.js)، وقبله لا متطلب من هذا النوع فلا يتغير شيء"],
+  '20261111130000_leaders_feedback360_rater_form': ["tolerant", "الدالة تقرأ questions بكل أعمدتها وتحجب المعكوسة بترتيب درجاتها قبله، وتكتب الأسئلة المفتوحة في comment إن غاب العمودان"],
 };

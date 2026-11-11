@@ -14,6 +14,8 @@ import {
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
   linkAfterDecisionOk, LINK_CLOSED_AR,
 } from './logic.js';
+import { cleanOpenAnswers, CONTACT_FREQ, OPEN_KEYS, raterItems } from './feedback360.js';
+import { FEEDBACK_OPEN_AR } from './labels.js';
 
 type Body = Record<string, any>;
 
@@ -382,16 +384,21 @@ async function raterFrom(t: unknown) {
   return r;
 }
 
-async function raterQuestions(instrumentId: string) {
-  const qs = must(await db.from('questions').select('id, dimension, code, text_ar, text_rater_ar, options, sort, tier')
+// عبارات المقيّم بحسب مجموعته (تقييم 360، المرحلة 1): observable_by إن عُلِّمت، والمعكوسة لا تُعرض عليه.
+// كل الأعمدة حتى لا يُفشل observable_by قبل ترحيله القراءة
+async function raterQuestions(instrumentId: string, relation: string) {
+  const qs = must(await db.from('questions').select('*')
     .eq('instrument_id', instrumentId).eq('active', true).eq('tier', 'behavior').order('sort')) as any[] ?? [];
-  return qs;
+  return raterItems(qs, relation);
 }
+
+// كتابة متسامحة: عمود لم يُرحَّل بعد (42703 أو PGRST204) لا يُفشل الحفظ، فيُعاد بلا الأعمدة الجديدة
+const missingColumn = (e: any) => e && (e.code === '42703' || e.code === 'PGRST204');
 
 export async function raterGet(b: Body) {
   const r = await raterFrom(b.t);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
-  const qs = await raterQuestions(r.instrument_id);
+  const qs = await raterQuestions(r.instrument_id, r.relation);
   return {
     success: true, done: r.status === 'submitted', phase: r.phase || 'post',
     participant: r.participants?.full_name || null, relation: RELATION_AR[r.relation] || null, rater: r.full_name,
@@ -405,8 +412,12 @@ export async function raterGet(b: Body) {
 export async function raterSubmit(b: Body) {
   const r = await raterFrom(b.t);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
-  const qs = await raterQuestions(r.instrument_id);
+  const qs = await raterQuestions(r.instrument_id, r.relation);
   const input = b.answers || {};
+  // سؤال الصلة في أول النموذج: إلزامي بنقرة واحدة
+  const contact_freq = CONTACT_FREQ.includes(b.contact_freq) ? b.contact_freq : null;
+  if (!contact_freq) throw new Fail('اختر كم مرة ترى عمله', 400, 'incomplete');
+  const open_answers = cleanOpenAnswers(b.open) as Record<string, string> | null;
   // قبل البرنامج: تقدير الآن وحده
   const pre = r.phase === 'pre';
   const answers: Record<string, { now: number; before?: number }> = {};
@@ -416,10 +427,17 @@ export async function raterSubmit(b: Body) {
     if (!a || !ok(a.now) || (!pre && !ok(a.before))) throw new Fail(pre ? 'أكمل التقدير لكل عبارة' : 'أكمل التقديرين لكل عبارة', 400, 'incomplete');
     answers[q.id] = pre ? { now: a.now } : { now: a.now, before: a.before };
   }
+  // الملاحظة القديمة الواحدة باقية لنسخة واجهة سابقة، والأسئلة الثلاثة في open_answers
   const comment = b.comment ? String(b.comment).trim().slice(0, 2000) || null : null;
   // D18: سطر موافقة المقيّم بإرساله تقديره بعد إشعار الخصوصية، قبل الحفظ: تعذّره يفشل الإرسال فيعيده، ولا تقدير بلا موافقته
   await logConsent('rater', r.id, 'accept');
-  must(await db.from('raters').update({ answers, comment, status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', r.id));
+  const base = { answers, status: 'submitted', submitted_at: new Date().toISOString() };
+  const saved = await db.from('raters').update({ ...base, comment, open_answers, contact_freq }).eq('id', r.id);
+  if (missingColumn(saved.error)) {
+    // قبل ترحيل 20261111130000: الأسئلة المفتوحة في الملاحظة الواحدة حتى لا يضيع نصها
+    const text = open_answers ? OPEN_KEYS.filter((k) => open_answers[k]).map((k) => `${(FEEDBACK_OPEN_AR as Record<string, string>)[k]} ${open_answers[k]}`).join('\n') : null;
+    must(await db.from('raters').update({ ...base, comment: [comment, text].filter(Boolean).join('\n').slice(0, 2000) || null }).eq('id', r.id));
+  } else must(saved);
   // إفادة المدير في الرحلة تكتمل بتقديره المنظم بعد البرنامج
   if (r.relation === 'manager' && !pre) {
     const { data: who } = await db.from('participants').select('id, organization_id').eq('id', r.participant_id).maybeSingle();

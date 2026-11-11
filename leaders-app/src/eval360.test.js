@@ -2,7 +2,11 @@
 // كل مرحلة تُختبر وحدها: 0 «جديد»، و0ب من يرى تقييم الخبير، و1 نموذج المقيّم، و2 الدورة والمجموعات، و3 التقرير والاستلام.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
+import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
+import { cleanOpenAnswers, CONTACT_FREQ, raterItems, reversedItem } from '../../supabase/functions/leaders-api/feedback360.js';
+import { FEEDBACK_OPEN_MAX } from '../../supabase/functions/leaders-api/labels.js';
 import { expertOwnRating, MIN_RATINGS, RATING_DROP, RATING_WINDOW_DAYS, ratingDrop } from '../../supabase/functions/leaders-api/logic.js';
 
 const root = join(__dirname, '../..');
@@ -64,5 +68,60 @@ describe('المرحلة 0ب: المشارك لا يرى نجوم الخبير،
   it('لوحة الخبير تقرأ الملخص الدوري، والإدارة ترى التنبيه', () => {
     expect(read('supabase/functions/leaders-api/experts.ts')).toMatch(/rating: ratings\.own/);
     expect(read('admin-app/src/screens/Experts.jsx')).toMatch(/r\.drop/);
+  });
+});
+
+describe('المرحلة 1: نموذج المقيّم', () => {
+  const LIK = (rev = false) => [0, 1, 2, 3, 4].map((s) => ({ label: `x${s}`, score: rev ? 4 - s : s })).concat([{ label: 'لا ينطبق', score: -1 }]);
+  const qs = [
+    { id: 'a', code: 'M-B1', options: LIK() },
+    { id: 'b', code: 'M-B5', options: LIK(true) },
+    { id: 'c', code: 'I-B3', options: LIK(), observable_by: ['self', 'manager'] },
+    { id: 'd', code: 'L-B5', options: LIK(true), observable_by: ['self'] },
+    { id: 'e', code: 'X', options: LIK(true), observable_by: ['peer'] },
+  ];
+  it('المعكوسة تُعرف بترتيب درجاتها ولا تُعرض على المقيّم ولو لم يُطبَّق العمود', () => {
+    expect(reversedItem(qs[0])).toBe(false);
+    expect(reversedItem(qs[1])).toBe(true);
+    expect(raterItems(qs, 'peer').map((q) => q.id)).toEqual(['a', 'e']);
+    expect(raterItems(qs, 'manager').map((q) => q.id)).toEqual(['a', 'c']);
+  });
+  it('الأسئلة المفتوحة مقصوصة بحدها، وخلوّها null', () => {
+    expect(cleanOpenAnswers({ continue: '  يلخص  ', start: '', hack: 'x', stop: 'ت'.repeat(900) })).toEqual({ continue: 'يلخص', stop: 'ت'.repeat(FEEDBACK_OPEN_MAX) });
+    expect(cleanOpenAnswers({ continue: '  ' })).toBeNull();
+    expect(cleanOpenAnswers(null)).toBeNull();
+    expect(CONTACT_FREQ).toEqual(['weekly', 'monthly', 'less']);
+  });
+  it('الخادم يعرض عبارات مجموعة المقيّم ويلزم سؤال الصلة، ويكتب كتابة متسامحة قبل الترحيل', () => {
+    const src = read('supabase/functions/leaders-api/impact.ts');
+    expect(src).toMatch(/return raterItems\(qs, relation\)/);
+    expect((src.match(/raterQuestions\(r\.instrument_id, r\.relation\)/g) || []).length).toBe(2);
+    expect(src).toMatch(/if \(!contact_freq\) throw new Fail/);
+    expect(src).toMatch(/missingColumn\(saved\.error\)/);
+  });
+  it('نموذج المقيّم: دليل قبل البدء، وسؤال الصلة، والأسئلة الثلاثة', () => {
+    const ui = read('leaders-app/src/screens/Rater.jsx');
+    expect(ui).toContain('قبل أن تبدأ');
+    expect(ui).toContain('كم مرة ترى عمله؟');
+    expect(ui).toMatch(/FEEDBACK_OPEN_AR/);
+    expect(ui).toMatch(/contact_freq: contact, open/);
+  });
+  it('الترحيل متسامح، ويعلّم المعكوسة والمشهودة، ولا يمس ما حرّرته الإدارة، وإعادته آمنة', async () => {
+    const NAME = '20261111130000_leaders_feedback360_rater_form';
+    const SQL = read(`supabase/migrations/${NAME}.sql`);
+    expect(gateOf(SQL, NAME).gate).toBe('tolerant');
+    const db = new PGlite();
+    await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
+      create table leaders.questions (id text primary key, code text, tier text);
+      create table leaders.raters (id text primary key);
+      insert into leaders.questions values ('1','M-B5','behavior'),('2','I-B3','behavior'),('3','M-B3','behavior'),('4','M-B1','behavior'),('5','L-B5','knowledge');`);
+    await db.exec(SQL);
+    await db.exec(`update leaders.questions set observable_by = array['self','peer'] where id = '2';`);
+    await db.exec(SQL);
+    const { rows } = await db.query('select id, observable_by from leaders.questions order by id');
+    expect(rows.map((r) => r.observable_by)).toEqual([['self'], ['self', 'peer'], ['self', 'manager', 'stakeholder'], null, null]);
+    await expect(db.exec(`insert into leaders.raters (id, contact_freq) values ('r', 'daily')`)).rejects.toThrow();
+    await expect(db.exec(`update leaders.questions set observable_by = array['boss'] where id = '4'`)).rejects.toThrow();
+    expect((await db.query(`select 1 from leaders.schema_migrations where name = '${NAME}'`)).rows).toHaveLength(1);
   });
 });

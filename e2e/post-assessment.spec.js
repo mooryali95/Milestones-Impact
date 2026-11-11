@@ -85,14 +85,39 @@ test('المقيّم: تقديران لكل عبارة من رابط البري�
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
   await page.goto('http://localhost:4304/rate?t=abcdefghijklmnopqrstuvwxyz');
+  // تقييم 360، المرحلة 1: دليل قصير قبل البدء، ثم سؤال الصلة، ثم العبارات، ثم ثلاثة أسئلة مفتوحة اختيارية
+  await expect(page.getByRole('heading', { name: 'قبل أن تبدأ' })).toBeVisible();
+  await expect(page.getByText('لا يظهر تقديرك له منفردًا.')).toBeVisible();
+  await page.getByRole('button', { name: 'ابدأ' }).click();
   await expect(page.getByRole('heading', { name: /سارة الأحمد/ })).toBeVisible();
-  const send = page.getByRole('button', { name: 'بقي 1' });
-  await expect(send).toBeDisabled();
-  await page.getByRole('radiogroup').nth(0).getByRole('radio', { name: 'غالبًا' }).click();
-  await page.getByRole('radiogroup').nth(1).getByRole('radio', { name: 'نادرًا', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'بقي 2' })).toBeDisabled();
+  await page.getByRole('radiogroup', { name: 'كم مرة ترى عمله؟' }).getByRole('radio', { name: 'أسبوعيًا' }).click();
+  await page.getByRole('radiogroup', { name: '1: الآن' }).getByRole('radio', { name: 'غالبًا' }).click();
+  await expect(page.getByRole('button', { name: 'بقي 1' })).toBeDisabled();
+  await page.getByRole('radiogroup', { name: '1: قبل البرنامج' }).getByRole('radio', { name: 'نادرًا', exact: true }).click();
+  await page.getByLabel('ما الذي يفعله وتريده أن يستمر عليه؟').fill('يلخص المواقف في اجتماع المراجعة');
   await page.getByRole('button', { name: 'أرسل التقدير' }).click();
   await expect(page.getByRole('heading', { name: 'شكرًا لك' })).toBeVisible();
-  expect(sent).toMatchObject({ t: 'abcdefghijklmnopqrstuvwxyz', answers: { q1: { now: 3, before: 1 } } });
+  expect(sent).toMatchObject({ t: 'abcdefghijklmnopqrstuvwxyz', answers: { q1: { now: 3, before: 1 } }, contact_freq: 'weekly', open: { continue: 'يلخص المواقف في اجتماع المراجعة' } });
+});
+
+test('المقيّم على الجوال: الدليل والنموذج بلوحة المفاتيح وبلا تمرير أفقي', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    await route.fulfill({ json: b.action === 'rater.get' ? { success: true, done: false, phase: 'pre', participant: 'سارة الأحمد', relation: 'زميل', rater: 'أحمد', questions: [
+      { id: 'q1', dimension: 'leadership', text: 'يطلب رأي الفريق قبل القرار حين يمسهم.', options: [...LIKERT, { k: 5, label: 'لا أستطيع الحكم' }] },
+    ] } : { success: true } });
+  });
+  await page.goto('http://localhost:4304/rate?t=abcdefghijklmnopqrstuvwxyz');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await page.getByRole('button', { name: 'ابدأ' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('radiogroup', { name: 'كم مرة ترى عمله؟' })).toBeVisible();
+  await page.getByRole('radio', { name: 'شهريًا' }).focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('radio', { name: 'شهريًا' })).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
 test('الإدارة: تقرير الأثر قبل وبعد', async ({ page }) => {
