@@ -35,6 +35,8 @@ export default function Hall({ onBack }) {
   const ver = useRef(0);
   // الإجابة لا تضيع: ما تعذّر إرساله (شبكة أو خادم مشغول) يُحفظ على الجهاز ويُعاد مع كل تحديث حتى يُستلم
   const [receipt, setReceipt] = useState(null);   // { sentence_id, state: 'sent' | 'pending' }
+  // إجابة رفضها الخادم (كُشفت، أو تبدلت الجملة، أو انتهى الوقت) لا تبقى على الشاشة كأنها حُفظت: يُعاد رسم الإجابة من آخر ما استلمه
+  const [rejected, setRejected] = useState(0);
   const pending = useRef(null);
   const send = useCallback(async (payload) => {
     const r = await call('katon.answer', payload);
@@ -72,7 +74,11 @@ export default function Hall({ onBack }) {
     // الدخول ورفع اليد واختيار الفريق كتابات لا يضر تكرارها: إخفاق عابر من الشبكة أو البوابة يُعاد مرة قبل أن يراه المشارك
     if (!r.success && action !== 'katon.answer' && (r.code === 'network' || r.code === 'busy')) { await new Promise((ok) => setTimeout(ok, HALL_RETRY_MS)); r = await call(action, body); }
     setBusy(false);
-    if (!r.success) { if (!(action === 'katon.answer' && pending.current)) setErr(r.message); return; }
+    if (!r.success) {
+      if (!(action === 'katon.answer' && pending.current)) setErr(r.message);
+      if (action === 'katon.answer' && !pending.current) { setRejected((n) => n + 1); load(true); }
+      return;
+    }
     if (action === 'katon.answer') { load(true); return; }
     ver.current = r.session?.version || 0; setV(r);
   };
@@ -149,7 +155,7 @@ export default function Hall({ onBack }) {
               </div>
               <p className="kt-text">{s.text_ar}</p>
               {/* حكم بثقة مدرَّجة ووسوم موقف (CBM الثلاثي)؛ me.choice هو الحكم وme.confidence درجته */}
-              <KatonAnswer compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
+              <KatonAnswer key={`${s.id}:${rejected}`} compact mine={me?.answered ? { verdict: me.choice, confidence: me.confidence, stances: me.stances || [] } : null} disabled={!canAnswer || busy}
                 onAnswer={(a) => act('katon.answer', { sentence_id: s.id, ...a })} onAsk={(text) => setAsk({ source: 'sentence', ref_id: s.id, text, label: `جملة «${Q_AR[s.question]}»` })} />
               {v.revealed && (
                 <div className="banner"><span className="ico">{me?.points > 0 ? '✓' : '•'}</span>
@@ -157,7 +163,7 @@ export default function Hall({ onBack }) {
               )}
               <p className="hall-receipt" role="status" aria-live="polite">
                 {!v.revealed && receipt?.sentence_id === s.id && receipt.state === 'pending' ? <span className="warn">لم تصل إجابتك بعد. محفوظة على جهازك ونعيد إرسالها تلقائيًا.</span>
-                  : !v.revealed && me?.answered ? <span className="ok">✓ استُلمت إجابتك. تستطيع تعديلها حتى ينتهي الوقت.</span>
+                  : !v.revealed && me?.answered ? <span className="ok">✓ استُلمت إجابتك. {timeUp ? 'انتهى الوقت، بانتظار كشف المفتاح.' : left != null ? 'تستطيع تعديلها حتى ينتهي الوقت.' : 'تستطيع تعديلها حتى يُكشف المفتاح.'}</span>
                     : timeUp && !v.revealed ? <span className="muted">انتهى وقت الإجابة. بانتظار كشف المفتاح.</span> : null}
               </p>
               {!v.revealed && <p className="small muted">أجاب {v.answered} من {v.total}. اختيارات زملائك تظهر بعد الكشف.</p>}
