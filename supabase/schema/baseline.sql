@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261111110000_leaders_test_accounts
+-- as-of migration: 20261111120300_leaders_lab_requirement
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -865,6 +865,10 @@ create table if not exists leaders.lab_attempts (
   updated_at timestamp with time zone default now() not null,
   finished_at timestamp with time zone,
   content_release text,
+  draft jsonb default '{}'::jsonb not null,
+  hints jsonb default '{}'::jsonb not null,
+  checks jsonb default '{}'::jsonb not null,
+  level text,
   constraint lab_attempts_pct_check CHECK (((pct IS NULL) OR ((pct >= 0) AND (pct <= 100)))),
   constraint lab_attempts_pkey PRIMARY KEY (id)
 );
@@ -1519,7 +1523,7 @@ create table if not exists leaders.stage_requirements (
   updated_at timestamp with time zone,
   updated_by text,
   constraint stage_requirements_check CHECK (((level IS NULL) OR (dimension IS NOT NULL))),
-  constraint stage_requirements_kind_check CHECK ((kind = ANY (ARRAY['check'::text, 'upload'::text, 'form'::text, 'meeting'::text, 'reading'::text, 'auto'::text, 'video'::text, 'workshop'::text, 'coaching'::text, 'curriculum'::text, 'model'::text, 'capstone'::text, 'survey'::text]))),
+  constraint stage_requirements_kind_check CHECK ((kind = ANY (ARRAY['check'::text, 'upload'::text, 'form'::text, 'meeting'::text, 'reading'::text, 'auto'::text, 'video'::text, 'workshop'::text, 'coaching'::text, 'curriculum'::text, 'model'::text, 'capstone'::text, 'survey'::text, 'lab'::text]))),
   constraint stage_requirements_pkey PRIMARY KEY (id),
   constraint stage_requirements_program_code_key UNIQUE (program_id, code)
 );
@@ -2275,6 +2279,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.lab_attempts add constraint lab_attempts_item_id_fkey FOREIGN KEY (item_id) REFERENCES leaders.lab_items(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.lab_attempts add constraint lab_attempts_level_fkey FOREIGN KEY (level) REFERENCES leaders.levels(key);
 exception when duplicate_object then null; end $$;
 
 do $$ begin

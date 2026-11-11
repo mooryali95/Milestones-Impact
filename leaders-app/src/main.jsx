@@ -5,6 +5,7 @@ import ErrorBoundary from './ErrorBoundary.jsx';
 import { captureAttribution } from './attribution.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
+import '../../shared/css/lab-board.css';
 import './styles.css';
 
 captureAttribution();

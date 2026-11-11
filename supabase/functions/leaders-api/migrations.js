@@ -107,6 +107,10 @@ export const MIGRATIONS = [
   '20261110210000_leaders_name_confirmation',
   '20261110220000_leaders_t360_help',
   '20261111110000_leaders_test_accounts',
+  '20261111120000_leaders_lab_pm_intro',
+  '20261111120100_leaders_lab_pm_map',
+  '20261111120200_leaders_lab_attempt_state',
+  '20261111120300_leaders_lab_requirement',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -134,4 +138,8 @@ export const MIGRATION_GATES = {
   '20261110200000_leaders_group_advisor': ["tolerant", "الدالة تتحمل غياب العمود (advisor.ts: groupAdvisorId وgroupScoped، وprograms.ts: cohortGroups"],
   '20261110210000_leaders_name_confirmation': ["tolerant", "الدالة تتحمل غياب العمود (certificates.ts: onFinalApproved، وparticipant.ts: confirmName وprofileSave)، فقبله تصدر الشهادة كما كانت"],
   '20261110220000_leaders_t360_help': ["tolerant", "نص فقط: الدالة والواجهة تعملان قبله وبعده (الواجهة تخفي النص القديم لهذا البند منذ #270)"],
+  '20261111120000_leaders_lab_pm_intro': ["tolerant", "محتوى فقط في جدول قائم بأنواع خطوات قائمة: الدالة تعمل قبله وبعده، والأداة لا تظهر إلا لمن تُفتح له"],
+  '20261111120100_leaders_lab_pm_map': ["tolerant", "محتوى فقط في جدول قائم: الأداة لا تظهر إلا لمن تُفتح له، والدالة التي تعرف نوع board تُنشر معه أو بعده"],
+  '20261111120200_leaders_lab_attempt_state': ["tolerant", "الدالة تقرأ المحاولة بـ* وتكتب الأعمدة بمحاولة ثانية بدونها (lab.ts)، فقبله لا حفظ تلقائي ولا تلميح ولا فحص ولا تثبيت للمستوى، والإرسال يعمل كما كان"],
+  '20261111120300_leaders_lab_requirement': ["tolerant", "الدالة تعرف النوع lab قبله وبعده (activityFor وlabStatus في logic.js)، وقبله لا متطلب من هذا النوع فلا يتغير شيء"],
 };

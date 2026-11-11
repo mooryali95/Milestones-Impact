@@ -752,3 +752,8 @@
 .sub-gate small { color: var(--ink-soft); }
 .la-group-adv { display: grid; gap: 4px; font-size: .82rem; margin: 6px 0; }
 .la-group-adv select { border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 8px; font: inherit; max-width: 100%; }
+/* المختبر: معاينة الأداة كمشارك بمستوى، وسطر المختبر في ملف المشارك */
+.la-lab-steps { display: grid; gap: 12px; padding-inline-start: 20px; }
+.la-lab-steps li.off { opacity: .6; }
+.la-lab-steps p { margin: 4px 0; }
+.la-labs small { display: block; }

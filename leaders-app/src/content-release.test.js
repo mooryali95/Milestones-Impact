@@ -164,7 +164,8 @@ describe('الخادم والواجهة', () => {
     expect(p).toMatch(/must\(await db\.from\('handbook_progress'\)\.insert\(\{ \.\.\.row, \.\.\.stamp \}\)\);/);
     expect(p).not.toMatch(/insert\(row\)|missingColumn/);
     const lab = api('lab.ts');
-    expect(lab).toMatch(/insert\(\{ participant_id: p\.id, item_id: it\.id, content_release: release \}\)/);
+    // المحاولة تُنشأ بالإصدار مع المستوى، وقبل ترحيل 20261111120200 بالإصدار وحده: الإصدار في الحالين
+    expect(lab).toMatch(/const row = \{ participant_id: p\.id, item_id: it\.id, content_release: release \};[\s\S]*?insert\(\{ \.\.\.row, level: it\.level \}\)[\s\S]*?insert\(row\)/);
     expect(lab).not.toMatch(/missingColumn/);
     // الإصدار null لدفعة بلا إصدار وحدها، وخطأ القراءة يرمي فلا يُختم الناتج على المحتوى الحي بصمت
     for (const s of [p, lab]) expect(s).toMatch(/content_release: \(await releaseOf\(p\)\)\?\.id \?\? null|const release = \(await releaseOf\(p\)\)\?\.id \?\? null;/);

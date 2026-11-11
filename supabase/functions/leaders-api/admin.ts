@@ -11,6 +11,7 @@ import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
 import { trackProject } from './capstone.js';
+import { labSummary } from './lab.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, runningCohort } from './programs.ts';
@@ -302,17 +303,23 @@ export async function participant(b: Body) {
     };
   });
   // السيرة لا تُوقَّع هنا لكل من يفتح الملف: تُفتح بطلب صريح عبر admin.evidence-url (للمدير، ويُسجَّل الفتح)
-  const [pts, { data: book }, { data: subs }] = await Promise.all([
+  const [pts, { data: book }, { data: subs }, { data: labTries }] = await Promise.all([
     pointsOf(p.id),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, reflection, completed_at, handbook_modules(title_ar, dimension)').eq('participant_id', p.id),
     db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
+    // المختبر للمستشار: بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
+    db.from('lab_attempts').select('*, lab_items(title_ar, dimension, spec)').eq('participant_id', p.id).not('finished_at', 'is', null),
   ]);
+  // سطر لكل أداة جرّبها: أفضل نتيجة، والمحاولات، والتلميحات، وأكثر خلط بين مجموعات اللوحة
+  const labGroups: Record<string, any[]> = {};
+  for (const a of labTries || []) (labGroups[a.item_id] ||= []).push(a);
+  const labs = Object.entries(labGroups).map(([item_id, list]) => ({ item_id, title: list[0]?.lab_items?.title_ar || '', dimension: list[0]?.lab_items?.dimension || null, ...labSummary(list, list[0]?.lab_items?.spec) }));
   return {
     success: true, participant: p, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     history: audits.data || [],
-    points: pts, book: book || [], models: subs || [],
+    points: pts, book: book || [], models: subs || [], labs,
   };
 }
 

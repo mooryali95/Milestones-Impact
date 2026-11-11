@@ -372,7 +372,7 @@ function Participant() {
   else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={() => go('hall')} lab={lab?.items} onLab={() => openLab()} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={() => go('hall')} lab={lab?.items} onLab={() => openLab()} onLabItem={(labId) => openLab(labId)} />;
 
   return (
     <>

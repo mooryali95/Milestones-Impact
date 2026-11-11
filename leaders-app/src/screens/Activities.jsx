@@ -347,7 +347,25 @@ function ModelLink({ a, onCapstone }) {
   );
 }
 
-export default function Activity({ item, open, onUpdate, onHandbook, onCapstone, setToast }) {
+// متطلب «أداة من المختبر»: يكتمل من محاولاتك في الأداة نفسها، وزر يفتحها في المختبر
+const LAB_ACCEPT_HINT = {
+  mastery: (a) => `يكتمل حين تبلغ ${a.mastery}% في أفضل محاولة.`,
+  finished: () => 'يكتمل بإنهاء محاولة واحدة.',
+  spaced: () => 'يكتمل بمحاولة ثانية بعد أسبوعين على الأقل من محاولتك الأولى.',
+};
+function LabLink({ a, onLab }) {
+  if (a.unavailable) return <p className="h">تعذر التحقق من محاولاتك في هذه الأداة الآن، فلم يُحتسب المتطلب بعد. أعد فتح الصفحة بعد قليل.</p>;
+  if (a.na) return <p className="h">هذه الأداة غير متاحة الآن، فيُحتسب لك.</p>;
+  const state = a.best == null ? 'لم تبدأ بعد' : `أفضل نتيجة ${a.best}%${a.accept === 'mastery' ? `، والإتقان ${a.mastery}%` : ''}`;
+  return (
+    <div className="act-model row between">
+      <span className="h">{state}. {a.done ? '' : (LAB_ACCEPT_HINT[a.accept] || LAB_ACCEPT_HINT.mastery)(a)}</span>
+      {onLab && a.item_id && <button className={`btn sm${a.done ? ' ghost' : ''}`} onClick={() => onLab(a.item_id)}>{a.done ? 'أعد المحاولة' : 'افتح في المختبر'}</button>}
+    </div>
+  );
+}
+
+export default function Activity({ item, open, onUpdate, onHandbook, onCapstone, onLabItem, setToast }) {
   const refresh = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
   const a = item.activity;
   if (!a) return null;
@@ -357,6 +375,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, onCapstone,
   if (a.type === 'curriculum') return <Curriculum item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
   if (a.type === 'model' || a.type === 'capstone') return <ModelLink a={a} onCapstone={open ? onCapstone : null} />;
+  if (a.type === 'lab') return <LabLink a={a} onLab={open ? onLabItem : null} />;
   return null;
 }
 

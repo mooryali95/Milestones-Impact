@@ -3,12 +3,14 @@
 // ════════════════════════════════════════════════════════════════
 // الخادم يرسل الخطوات بلا حلولها، ويصحح كل خطوة عند إرسالها ويحدد
 // التالية (قد يتفرع الموقف بحسب القرار). كل التفاعل بالنقر لا بالسحب،
-// فيعمل باللمس على الجوال. يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
+// فيعمل باللمس على الجوال (اللوحة board تضيف لوحة المفاتيح والسحب فوق النقر،
+// shared/lab/LabBoard.jsx). يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
 // باب في الكتيب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { computeSchedule, KINDS, labLevel, LINK_LABEL, LINK_TYPES, MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import LabBoard, { BOARD_LEVEL_AR, BoardInsight, boardReady, scaffoldText } from '../../../shared/lab/LabBoard.jsx';
 import { RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const pctOf = (s) => Math.round((Number(s) || 0) * 100);
@@ -317,6 +319,7 @@ function StepBody(props) {
   if (step.type === 'schedule') return <ScheduleStep {...props} />;
   if (step.type === 'plot') return <PlotStep {...props} />;
   if (step.type === 'matrix') return <MatrixStep {...props} />;
+  if (step.type === 'board') return <BoardPlay {...props} />;
   return null;
 }
 
@@ -330,19 +333,112 @@ function ready(step, v) {
   if (step.type === 'schedule') return (v?.links || []).length > 0;
   if (step.type === 'plot') return step.items.every((it) => v?.[it.id]);
   if (step.type === 'matrix') return step.rows.every((r) => Object.values(v?.[r.id] || {}).some(Boolean));
+  if (step.type === 'board') return boardReady(step, v);
   return false;
 }
 
-function Feedback({ step, result }) {
+function Feedback({ step, result, answer }) {
   const p = pctOf(result.score);
   return (
     <div className={`lab-fb ${tone(p)}`}>
       <div className="lab-fb-head"><b>{result.ok ? 'إجابة متقنة' : p >= 50 ? 'قريب' : 'راجع هذه'}</b><span className={`chip ${tone(p)}`}>{p}%</span></div>
+      {step.type === 'board' && <BoardInsight step={step} value={answer} result={result} />}
+      {step.type === 'board' && result.hints > 0 && <p className="small">عدد التلميحات التي طلبتها في هذه الخطوة: {result.hints}. التلميحات لا تُنقص النسبة إلا كشف الخانة.</p>}
+      {step.type === 'board' && result.notes?.length > 0 && (
+        <details className="lab-notes">
+          <summary>لماذا أخطأت في {result.notes.length === 1 ? 'بطاقة واحدة' : result.notes.length === 2 ? 'بطاقتين' : `${result.notes.length} بطاقات`}؟</summary>
+          {result.notes.map((x) => <small key={x.id} className="lab-note">{labelOf(step.cards, x.id)}: {x.note_ar}</small>)}
+        </details>
+      )}
       {result.feedback_ar && <p>{result.feedback_ar}</p>}
       {result.then_ar && <p className="lab-then">{result.then_ar}</p>}
       {result.broken?.length > 0 && <p className="small">صفوف بلا صاحب قرار واحد: {result.broken.map((b) => labelOf(step.rows, b.row)).join('، ')}</p>}
       {result.why && <p className="lab-why"><b>لماذا</b>{result.why}</p>}
     </div>
+  );
+}
+
+// ── اللوحة عند المشارك: حفظ تلقائي للمسودة، وتلميحات بالطلب، وفحص بحسب المستوى (المرحلة الثانية) ──
+// المسودة تُرسل بعد ثانية ونصف من آخر حركة ولا تُصحَّح، والتلميح والفحص من الخادم فلا يصل الحل مسبقًا.
+const SAVE_AR = { saving: 'يُحفظ…', saved: '✓ حُفظ', error: 'تعذّر الحفظ، ستُعاد المحاولة', off: 'الحفظ التلقائي غير متاح الآن، فأكمل اللوحة وأرسلها' };
+const AUTOSAVE_MS = 1500;
+function BoardPlay({ step, value, onChange, result, attempt, at, init }) {
+  const sc = step.scaffold || {};
+  const [hints, setHints] = useState(() => init?.hints || {});
+  const [marks, setMarks] = useState({});
+  const [save, setSave] = useState(init?.draft != null ? 'saved' : '');
+  const [checksUsed, setChecksUsed] = useState(() => Number(init?.checks_used) || 0);
+  const [checkMsg, setCheckMsg] = useState('');
+  const [msg, setMsg] = useState('');
+  const dirty = useRef(false);
+  const timer = useRef(null);
+  const latest = useRef(value);
+  const flush = async () => {
+    clearTimeout(timer.current);
+    if (!dirty.current || !attempt) return;
+    dirty.current = false;
+    setSave('saving');
+    const r = await call('lab.draft', { attempt, step: at, answer: latest.current || {} });
+    if (r.success) setSave(r.saved ? 'saved' : 'off');
+    else if (r.code !== 'step' && r.code !== 'finished') { setSave('error'); dirty.current = true; timer.current = setTimeout(flush, AUTOSAVE_MS * 4); }
+  };
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
+  // ما لم يُحفظ بعد يُرسل عند مغادرة الخطوة أو إغلاق الصفحة
+  useEffect(() => {
+    const away = () => { if (dirty.current) flushRef.current(); };
+    window.addEventListener('pagehide', away);
+    return () => { window.removeEventListener('pagehide', away); clearTimeout(timer.current); away(); };
+  }, []);
+  useEffect(() => { if (result) { dirty.current = false; clearTimeout(timer.current); } }, [result]);
+
+  const change = async (v, meta) => {
+    latest.current = v;
+    onChange(v);
+    setCheckMsg(''); setMsg('');
+    dirty.current = true;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => flushRef.current(), AUTOSAVE_MS);
+    if (!meta?.card) return;
+    setMarks((m) => { const n = { ...m }; delete n[meta.card]; return n; });
+    // التأسيسي: كل بطاقة تُفحص عند وضعها، صواب أو خطأ فقط
+    if (sc.feedback === 'instant' && meta.to && attempt) {
+      const r = await call('lab.check', { attempt, step: at, answer: v, card: meta.card });
+      if (r.success && latest.current?.[meta.card]?.[0] === meta.to[0] && latest.current?.[meta.card]?.[1] === meta.to[1]) setMarks((m) => ({ ...m, [r.card]: r.ok ? 'ok' : 'bad' }));
+    }
+  };
+  const hint = async (id) => {
+    setMsg('');
+    const r = await call('lab.hint', { attempt, step: at, card: id });
+    if (!r.success) return setMsg(r.message);
+    setHints((h) => ({ ...h, [id]: r.hint }));
+    // كشف الخانة: تُوضع البطاقة في خانتها وتُقفل
+    if (r.hint.revealed) {
+      setMarks((m) => { const n = { ...m }; delete n[id]; return n; });
+      change({ ...(latest.current || {}), [id]: [r.hint.row, r.hint.col] }, null);
+    }
+    return undefined;
+  };
+  const check = async () => {
+    setMsg('');
+    const r = await call('lab.check', { attempt, step: at, answer: latest.current || {} });
+    if (!r.success) return setMsg(r.message);
+    setChecksUsed((c) => c + 1);
+    setCheckMsg(r.wrong ? `في غير خانتها ${r.wrong} من ${r.placed} بطاقة موضوعة. الفحص لا يقول أيها.` : `كل البطاقات الموضوعة (${r.placed}) في خاناتها.`);
+    return undefined;
+  };
+  const left = Math.max(0, (sc.checks || 0) - checksUsed);
+  return (
+    <LabBoard step={step} value={value} onChange={change} result={result} marks={marks} hints={hints} onHint={result || !attempt ? null : hint}>
+      <div className="lb-tools">
+        {sc.feedback === 'check2' && (
+          <button type="button" className="lb-back" disabled={!left} onClick={check}>افحص لوحتي (المتبقي {left})</button>
+        )}
+        {checkMsg && <span className="lb-checkmsg" role="status">{checkMsg}</span>}
+        {msg && <span className="lb-save err" role="alert">{msg}</span>}
+        <span className={`lb-save${save === 'error' || save === 'off' ? ' err' : ''}`} role="status" aria-live="polite">{SAVE_AR[save] || ''}</span>
+      </div>
+    </LabBoard>
   );
 }
 
@@ -367,6 +463,8 @@ function Runner({ id, onExit, onPoints }) {
     const r = await call('lab.start', { id, fresh });
     if (!r.success) return setErr(r.message);
     setD(r);
+    // استئناف اللوحة من مسودتها المحفوظة
+    if (r.attempt.draft != null) setAnswer(r.attempt.draft);
     setMeters(r.attempt.meters);
     setPath(r.attempt.path);
     setScores(Object.fromEntries(Object.entries(r.attempt.results || {}).map(([k, v]) => [k, v.score])));
@@ -380,6 +478,8 @@ function Runner({ id, onExit, onPoints }) {
   const { item, spec } = d;
   const step = spec.steps[cur];
   const dim = dimOf(item.dimension);
+  // الخطوات الخاصة بمستوى آخر (رؤوس اللوحة للاحترافي مثلًا) لا تُعد في عدد الخطوات
+  const shown = spec.steps.filter((x) => !x.skip).length;
 
   const submit = async () => {
     setBusy(true);
@@ -417,7 +517,7 @@ function Runner({ id, onExit, onPoints }) {
       {phase === 'intro' && (
         <div className="lab-card">
           <p className="lab-story">{spec.story_ar}</p>
-          <p className="small muted">{spec.steps.length > 1 ? `${spec.steps.length} ${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} · ` : ''}نحو {item.minutes} دقيقة · {item.points} نقطة عند {MASTERY}%</p>
+          <p className="small muted">{shown > 1 ? `${shown} ${item.kind === 'scenario' ? 'قرارات وخطوات' : 'خطوات'} · ` : ''}نحو {item.minutes} دقيقة · {item.points} نقطة عند {MASTERY}%</p>
           <button className="btn gold" onClick={() => setPhase('step')}>ابدأ</button>
         </div>
       )}
@@ -432,8 +532,10 @@ function Runner({ id, onExit, onPoints }) {
           {step.title_ar && <h3>{step.title_ar}</h3>}
           {step.context_ar && <p className="lab-context">{step.context_ar}</p>}
           <p className="lab-prompt">{step.prompt_ar}</p>
-          <StepBody key={cur} step={step} value={answer} onChange={setAnswer} result={result} />
-          {result && <Feedback step={step} result={result} />}
+          {step.type === 'board' && step.scaffold && <p className="small muted lab-level">المساعدة على قدر مستواك ({BOARD_LEVEL_AR[step.scaffold.level]}): {scaffoldText(step.scaffold, true)}</p>}
+          <StepBody key={cur} step={step} value={answer} onChange={setAnswer} result={result}
+            attempt={d.attempt.id} at={cur} init={cur === d.attempt.current ? d.attempt : null} />
+          {result && <Feedback step={step} result={result} answer={answer} />}
           <div className="row lab-actions">
             {!result
               ? <button className="btn" disabled={busy || !ready(step, answer)} onClick={submit}>{busy ? 'يُصحَّح…' : 'أرسل الإجابة'}</button>
@@ -446,6 +548,7 @@ function Runner({ id, onExit, onPoints }) {
         <div className="lab-card lab-done">
           <div className={`lab-score ${tone(finish.pct)}`}><b>{finish.pct}%</b><small>{RUBRIC_LEVEL_AR[labLevel(finish.pct)]}{finish.pct >= MASTERY ? '' : ' · دون عتبة الإتقان'}</small></div>
           {finish.gained > 0 && <p className="chip gold">+{finish.gained} نقطة</p>}
+          {finish.hints > 0 && <p className="small muted">عدد التلميحات التي طلبتها في المحاولة: {finish.hints}.</p>}
           {finish.first && <p className="small muted">هذه محاولتك الأولى، وتُحفظ قياسًا ابتدائيًا يُقارن به تقدمك.</p>}
           {finish.pct < MASTERY && <p className="small">تُمنح نقاط الأداة عند {MASTERY}%. أعد المحاولة بعد مراجعة الباب.</p>}
           <Meters meters={spec.meters} values={meters} />

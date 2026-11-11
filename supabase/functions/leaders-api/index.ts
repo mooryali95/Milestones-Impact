@@ -10,7 +10,7 @@
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
-//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · achievements · certificate
+//             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
@@ -179,6 +179,9 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'lab.list': (p) => L.list(p),
   'lab.start': (p, b) => L.start(p, b),
   'lab.answer': (p, b) => L.answer(p, b),
+  'lab.draft': (p, b) => L.draft(p, b),
+  'lab.hint': (p, b) => L.hint(p, b),
+  'lab.check': (p, b) => L.check(p, b),
   'achievements': (p) => P.achievements(p),
   'certificate': (p) => Z.mine(p),
   'handbook.ping': (p, b) => V.readingPing(p, b),
@@ -333,6 +336,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.lab-item': (a, b) => A.writer(a, L.adminItem, b),
   'admin.lab-grant': (a, b) => A.writer(a, L.adminGrant, b),
   'admin.lab-revoke': (a, b) => A.writer(a, L.adminRevoke, b),
+  'admin.lab-preview': (_a, b) => L.adminPreview(b),
+  'admin.lab-cards': (_a, b) => L.adminCards(b),
   'admin.certificates': (_a, b) => Z.list(b),
   'admin.certificate': (_a, b) => Z.get(b),
   'admin.certificate-issue': (a, b) => A.writer(a, Z.issue, b),

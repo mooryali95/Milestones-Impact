@@ -1,0 +1,84 @@
+/* لوحة المختبر (shared/lab/LabBoard.jsx): مشتركة بين تطبيق القادة ومعاينة الإدارة، بقيم احتياطية لمتغيرات كل منهما */
+.lb { display: grid; gap: 10px; --lb-line: var(--line, #ddd6c8); --lb-mist: var(--mist, #f4f1ea); --lb-gold: var(--gold, #94702e); --lb-ok: var(--ok, #2f7d4f); --lb-bad: var(--bad, #b3412e); --lb-warn: var(--warn, #a86a12); --lb-muted: var(--muted, #6b6b6b); }
+.lb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lb-trayzone { display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: #fff; border: 1px solid var(--lb-line); }
+.lb-tray-head { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.lb-left { font-weight: 700; color: var(--lb-gold); }
+.lb-tray { display: flex; flex-wrap: wrap; gap: 6px; max-height: 210px; overflow-y: auto; }
+.lb-empty { font-size: 14px; color: var(--lb-muted); }
+.lb-card { font: inherit; font-size: 14px; line-height: 1.5; text-align: start; padding: 6px 10px; border-radius: 10px; border: 1.5px solid var(--lb-line); background: #fff; cursor: pointer; color: inherit; display: inline-flex; gap: 6px; align-items: baseline; touch-action: manipulation; }
+.lb-card.sm { font-size: 13px; padding: 3px 7px; }
+.lb-card.on { border-color: var(--lb-gold); box-shadow: 0 0 0 2px rgba(148,112,46,.3); }
+.lb-card:focus-visible, .lb-cell:focus-visible, .lb-back:focus-visible, .lb-rowtoggle:focus-visible { outline: 3px solid var(--lb-gold); outline-offset: 2px; }
+.lb-card.locked { cursor: default; opacity: .85; }
+.lb-card.is-ok { border-color: var(--lb-ok); background: #eef7f1; }
+.lb-card.is-half { border-color: var(--lb-warn); background: #fdf5e7; }
+.lb-card.is-bad { border-color: var(--lb-bad); background: #fbefec; }
+.lb-card.dragging { opacity: .4; }
+.lb-card.is-revealed { border-style: dashed; border-color: var(--lb-muted); background: #f3f3f3; }
+.lb-hintq { margin: 0; font-size: 14px; line-height: 1.8; padding: 6px 10px; border-radius: 8px; background: #fbf6ea; }
+.lb-hintbtn { border-color: var(--lb-gold); }
+.lb-rowhead.hint, .lb-cell.hint { box-shadow: inset 0 0 0 2px var(--lb-gold); }
+.lb-rowhead.hint .lb-rowtoggle { border-color: var(--lb-gold); }
+.lb-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; min-height: 22px; }
+.lb-checkmsg { font-size: 14px; font-weight: 600; }
+.lb-save { font-size: 13px; color: var(--lb-muted); }
+.lb-save.err { color: var(--lb-bad); }
+.lb-code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--lb-gold); }
+.lb-status { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: var(--lb-gold); }
+.lb-back { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--lb-line); background: #fff; cursor: pointer; color: inherit; }
+.lb-back[aria-pressed="true"] { border-color: var(--lb-gold); }
+.lb-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.lb-grid { display: grid; gap: 4px; min-width: 640px; }
+.lb-row { display: contents; }
+.lb-corner, .lb-colhead { font-size: 13px; font-weight: 700; padding: 6px; border-radius: 8px; background: var(--lb-mist); display: grid; gap: 2px; align-content: center; text-align: center; }
+.lb-corner { background: transparent; color: var(--lb-muted); font-weight: 400; }
+.lb-rowhead { font-size: 13px; padding: 6px 8px; border-radius: 8px; background: var(--lb-mist); display: flex; gap: 4px; flex-wrap: wrap; align-items: baseline; }
+.lb-rowhead em { font-style: normal; font-size: 12px; color: var(--lb-ok); width: 100%; }
+.lb-count { font-size: 12px; color: var(--lb-muted); font-weight: 400; }
+.lb-count.full { color: var(--lb-ok); font-weight: 700; }
+.lb-cell { min-height: 64px; border-radius: 8px; background: var(--lb-mist); padding: 5px; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; position: relative; padding-bottom: 18px; }
+.lb-cell .lb-count { position: absolute; inset-inline-end: 6px; bottom: 2px; }
+.lb-cell.target { outline: 2px dashed rgba(148,112,46,.5); cursor: pointer; }
+.lb-cell.over { background: #f6ecd6; outline-style: solid; }
+.lb-cell.solved { background: #eef4ef; }
+.lb-cellcol { width: 100%; font-size: 12px; color: var(--lb-muted); }
+.lb-solbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13px; }
+.lb-legend { display: inline-flex; gap: 6px; align-items: center; color: var(--lb-muted); }
+.lb-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.lb-legend i.revealed { border-color: var(--lb-muted); border-style: dashed; }
+.lb-legend i.ok { border-color: var(--lb-ok); } .lb-legend i.half { border-color: var(--lb-warn); } .lb-legend i.bad { border-color: var(--lb-bad); }
+.lb-ghost { position: fixed; pointer-events: none; z-index: 1000; transform: translate(50%, -50%); box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+
+/* الجوال: الصفوف مطوية، كل مجال سطر يُفتح فتظهر خلاياه الخمس عمودية، والصينية ثابتة أسفل الشاشة */
+.lb.narrow .lb-grid { display: grid; grid-template-columns: 1fr; min-width: 0; }
+.lb.narrow .lb-headrow { display: none; }
+.lb.narrow .lb-row { display: grid; gap: 4px; }
+.lb.narrow .lb-rowhead { padding: 0; background: none; }
+.lb.narrow .lb-cell { min-height: 48px; }
+.lb-rowtoggle { font: inherit; font-size: 14px; width: 100%; text-align: start; display: flex; gap: 6px; align-items: baseline; padding: 10px; border-radius: 8px; border: 1px solid var(--lb-line); background: var(--lb-mist); cursor: pointer; color: inherit; }
+.lb-rowtoggle small { margin-inline-start: auto; color: var(--lb-muted); }
+.lb-rowtoggle em { margin-inline-start: auto; font-style: normal; font-size: 12px; color: var(--lb-ok); }
+.lb-rowtoggle[aria-expanded="true"] { border-color: var(--lb-gold); }
+.lb.narrow .lb-trayzone { position: sticky; bottom: var(--lb-sticky-bottom, 0); z-index: 5; box-shadow: 0 -4px 14px rgba(0,0,0,.08); order: 2; }
+.lb.narrow .lb-tray { max-height: 132px; }
+.lb.narrow .lb-scroll { order: 1; }
+.lb.narrow .lb-solbar { order: 3; }
+
+/* الخريطة الحرارية في النتيجة */
+.lb-insight { display: grid; gap: 10px; }
+.lb-score-line { margin: 0; font-weight: 600; }
+.lb-mixups { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; line-height: 1.8; font-size: 14px; }
+.lb-heat-wrap { overflow-x: auto; }
+.lb-heat { border-collapse: separate; border-spacing: 3px; font-size: 13px; }
+.lb-heat caption { text-align: start; color: var(--lb-muted); font-size: 12px; padding-bottom: 4px; }
+.lb-heat th { font-weight: 600; padding: 4px 6px; text-align: center; }
+.lb-heat th[scope="row"] { text-align: start; }
+.lb-heat td { min-width: 44px; height: 30px; text-align: center; border-radius: 6px; background: var(--lb-mist); font-weight: 700; }
+.lb-heat td[style] { background: rgba(179,65,46,calc(var(--heat) * .5)); }
+.lb-heat td.diag { background: #eef4ef; }
+.lb-rowbars { display: grid; gap: 4px; font-size: 13px; }
+.lb-rowbar { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr auto; gap: 8px; align-items: center; }
+.lb-rowbar i { display: block; height: 8px; border-radius: 4px; background: var(--lb-bad); opacity: .7; }
+
+@media (prefers-reduced-motion: reduce) { .lb-ghost { transition: none; } }

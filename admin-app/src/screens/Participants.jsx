@@ -18,6 +18,7 @@ import { ContinuousCard, ParticipantMilestones } from './Milestones.jsx';
 import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 // عدد الأسئلة بصيغة عربية سليمة: سؤال واحد، سؤالان، 3–10 أسئلة، 11+ سؤالًا
@@ -492,6 +493,21 @@ function Person({ id, canWrite, onBack }) {
           ))}</ul>
         )}
         {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
+        {(r.labs || []).length > 0 && (
+          <>
+            <h4 className="la-phase">المختبر</h4>
+            <ul className="la-reqs la-labs">{r.labs.map((x) => (
+              <li key={x.item_id}>
+                <span>{x.title} <span className={`la-chip ${x.best >= LAB_MASTERY ? 'ok' : ''}`}>أفضل نتيجة {x.best}%</span></span>
+                <small className="la-muted">
+                  {x.attempts === 1 ? 'محاولة واحدة' : x.attempts === 2 ? 'محاولتان' : `${x.attempts} محاولات`}{x.first != null && x.attempts > 1 ? ` (الأولى ${x.first}%)` : ''}
+                  {x.hints ? ` · عدد التلميحات ${x.hints}` : ''}
+                  {x.mix ? ` · أكثر خلط: من ${x.mix.expected_ar} إلى ${x.mix.chosen_ar} (${x.mix.n})` : ''}
+                </small>
+              </li>
+            ))}</ul>
+          </>
+        )}
       </section>
 
       <ExpertAssign participantId={id} canWrite={canWrite} />

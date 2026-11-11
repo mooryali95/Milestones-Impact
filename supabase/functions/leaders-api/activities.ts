@@ -43,7 +43,9 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
   const needModels = kinds.has('model') || mine.some((r) => r.kind === 'capstone' && r.config?.sections?.length);
   const ids = mine.map((r) => r.id);
   const none = Promise.resolve({ data: [] as any[] });
-  const [mods, reading, quiz, video, ws, att, coach, content, contentProgress, lm, subs, cap] = await Promise.all([
+  // متطلب «أداة من المختبر»: محاولات المشارك في الأداة نفسها، بمفتاحها
+  const labKeys = [...new Set(mine.filter((r) => r.kind === 'lab').map((r) => String(r.config?.lab_key || '')).filter(Boolean))];
+  const [mods, reading, quiz, video, ws, att, coach, content, contentProgress, lm, subs, cap, labItems, labTries] = await Promise.all([
     kinds.has('reading') && approved
       ? db.from('handbook_modules').select('id, dimension, sort, min_level, title_ar').not('body_md', 'is', null).neq('body_md', '') : none,
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
@@ -59,7 +61,19 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     needModels && approved ? db.from('learning_models').select('id, key, dimension, sort, min_level, active, scopes, title_ar') : none,
     needModels && approved ? db.from('model_submissions').select('model_id, status').eq('participant_id', p.id) : none,
     kinds.has('capstone') ? db.from('capstones').select('status, readiness').eq('participant_id', p.id).maybeSingle().then((r: any) => ({ data: r.data ? [r.data] : [] })) : none,
+    labKeys.length ? db.from('lab_items').select('id, key, title_ar, active').in('key', labKeys) : none,
+    labKeys.length ? db.from('lab_attempts').select('item_id, pct, finished_at').eq('participant_id', p.id).not('finished_at', 'is', null) : none,
   ]);
+  // تعذر قراءة الأداة أو المحاولات لا يُعدّ «أداة غائبة» فيكتمل المتطلب بخطأ عابر: labs = null فيبقى غير مكتمل (labStatus)
+  const labsFailed = !!((labItems as any).error || (labTries as any).error);
+  if (labsFailed) console.error('lab evidence', (labItems as any).error || (labTries as any).error);
+  const labs = labsFailed ? null : Object.fromEntries((labItems.data || []).map((it: any) => {
+    const tries = (labTries.data || []).filter((a: any) => a.item_id === it.id).sort((a: any, b: any) => String(a.finished_at).localeCompare(String(b.finished_at)));
+    return [it.key, {
+      item_id: it.id, title: it.title_ar, active: it.active !== false, attempts: tries.length,
+      best: tries.length ? Math.max(...tries.map((a: any) => Number(a.pct) || 0)) : null, first_at: tries[0]?.finished_at || null, last_at: tries.at(-1)?.finished_at || null,
+    }];
+  }));
   const subBy = Object.fromEntries((subs.data || []).map((s: any) => [s.model_id, s.status]));
   const rel = kinds.has('reading') ? await releaseOf(p).catch(() => null) : null;
   const inRelease = rel?.modules?.length ? new Set(rel.modules) : null;
@@ -81,6 +95,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     models: Object.fromEntries(modelsFor(lm.data || [], levels, p.work_scope)
       .map((m: any) => [m.key, { model_id: m.id, title: m.title_ar, status: subBy[m.id] || null }])),
     capstone: cap.data?.[0] || null,
+    labs,
   };
   return Object.fromEntries(mine.map((r) => [r.id, activityFor(r, ev)]));
 }

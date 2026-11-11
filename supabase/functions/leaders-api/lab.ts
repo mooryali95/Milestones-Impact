@@ -8,11 +8,14 @@
 // المختبر قسم مستقل: يراه من فتحته له الإدارة أو لجهته (lab_grants)، ومن
 // اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
 import { all, audit, db, Fail, must } from './core.ts';
-import { releaseOf } from './programs.ts';
+import { journeyDefinition, releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
-import { seededShuffle } from './logic.js';
+import { requirementApplies, seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
-import { AUDIENCES, gradeStep, grantLive, labAward, labVisible, MASTERY, meterState, nextIndex, practicePct, publicSpec } from './lab.js';
+import {
+  AUDIENCES, BOARD_FEEDBACK, boardCheck, boardScaffold, gradeStep, grantLive, HINT_MAX, hintCount, hintFor, hintsView, labAward, labLevelOf, labVisible, MASTERY,
+  meterState, nextIndex, practicePct, publicSpec, revealedOf, boardCardStats, LEVELS,
+} from './lab.js';
 
 type Body = Record<string, any>;
 
@@ -22,20 +25,31 @@ const ANSWER_MAX = 20000;
 const ITEM_COLS = 'id, key, kind, dimension, chapter_key, min_level, sort, title_ar, summary_ar, minutes, points, active, audience, spec';
 
 // أدوات المختبر التي يراها المشارك الآن
-async function visibleItems(p: any) {
-  const levels = await approvedLevels(p).catch(() => null);
-  const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
-  const [items, grants] = await Promise.all([
-    db.from('lab_items').select(ITEM_COLS),
-    db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
-  ]);
-  return labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [] });
+// أدوات المختبر المطلوبة في رحلة المشارك (متطلب «أداة من المختبر» يخصه): تُفتح له بلا منح
+async function requiredLabKeys(p: any, levels: Record<string, string> | null) {
+  const def = await journeyDefinition(p).catch(() => null);
+  return (def?.requirements || []).filter((r: any) => r.kind === 'lab' && requirementApplies(r, levels || {}))
+    .map((r: any) => String(r.config?.lab_key || '')).filter(Boolean);
 }
 
+async function visible(p: any) {
+  const levels = await approvedLevels(p).catch(() => null);
+  const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
+  const [items, grants, required] = await Promise.all([
+    db.from('lab_items').select(ITEM_COLS),
+    db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
+    requiredLabKeys(p, levels),
+  ]);
+  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [], required }) };
+}
+const visibleItems = async (p: any) => (await visible(p)).items;
+
+// الأداة ومستوى المشارك في إطارها: به تُحسم سقالة اللوحة والخطوات الخاصة بمستويات (labLevelOf)
 async function myItem(p: any, id: unknown) {
-  const it = (await visibleItems(p)).find((x: any) => x.id === String(id || ''));
+  const { items, levels } = await visible(p);
+  const it = items.find((x: any) => x.id === String(id || ''));
   if (!it) throw new Fail('هذه الأداة غير متاحة لك', 404);
-  return it;
+  return { ...it, level: labLevelOf(levels, it.dimension) };
 }
 
 // ملخص محاولات المشارك لكل أداة: الأولى (القياس الابتدائي)، والأفضل، والعدد، والمفتوحة
@@ -70,15 +84,24 @@ export async function list(p: any) {
   return { success: true, items: items.map((it: any) => ({ ...meta(it), progress: sum[it.id] || empty })), points: { total: pts.total, rank: pts.rank } };
 }
 
-// حالة المحاولة كما يراها المشارك: ما أجاب عنه بنتائجه، والخطوة الحالية، والمؤشرات
+// حالة المحاولة كما يراها المشارك: ما أجاب عنه بنتائجه، والخطوة الحالية، والمؤشرات،
+// ومسودة الخطوة الجارية وتلميحاتها وفحوصها (للوحة) ليستأنف من حيث توقف
 function attemptView(it: any, a: any) {
   const results = a.results || {};
+  const cur = it.spec?.steps?.[a.current];
   return {
     id: a.id, current: a.current, path: a.path || [], answers: a.answers || {}, done: !!a.finished_at, pct: a.pct,
     results: Object.fromEntries((a.path || []).filter((i: number) => results[i]).map((i: number) => [i, results[i]])),
     meters: meterState(it.spec, (a.path || []).map((i: number) => results[i]?.effects)),
+    draft: a.draft?.[a.current] ?? null,
+    hints: cur?.type === 'board' ? hintsView(cur, a.hints?.[a.current]) : {},
+    checks_used: Number(a.checks?.[a.current]) || 0,
+    hint_count: hintCount(a.hints),
   };
 }
+
+// مستوى المحاولة: المثبّت عند بدئها، وإلا مستوى المشارك الآن (محاولة قبل ترحيل 20261111120200)
+const levelOfAttempt = (it: any, a: any) => (a?.level && ['beginner', 'intermediate', 'advanced'].includes(a.level) ? a.level : it.level);
 
 export async function start(p: any, b: Body) {
   const it = await myItem(p, b.id);
@@ -94,36 +117,135 @@ export async function start(p: any, b: Body) {
     if ((count ?? 0) >= STARTS_PER_DAY) throw new Fail('بدأت محاولات كثيرة اليوم، تابع غدًا', 429, 'rate');
     // D02: إصدار محتوى الدفعة مع كل محاولة، إلزامي: null لدفعة بلا إصدار وحدها، وخطأ القراءة أو الحفظ يرمي
     const release = (await releaseOf(p))?.id ?? null;
-    a = must(await db.from('lab_attempts').insert({ participant_id: p.id, item_id: it.id, content_release: release }).select('*').single());
+    const row = { participant_id: p.id, item_id: it.id, content_release: release };
+    // المستوى يُثبَّت مع المحاولة؛ وقبل ترحيل 20261111120200 تُنشأ بلا عمود المستوى (deploy-gate: tolerant)
+    const first = await db.from('lab_attempts').insert({ ...row, level: it.level }).select('*').single();
+    a = first.error ? must(await db.from('lab_attempts').insert(row).select('*').single()) : first.data;
   }
+  const level = levelOfAttempt(it, a);
   return {
     success: true,
-    item: meta(it),
-    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`)),
+    item: { ...meta(it), level },
+    spec: publicSpec(it.spec, (list: any[], salt: string) => seededShuffle(list, `${a.id}${salt}`), level),
     attempt: attemptView(it, a),
   };
 }
 
-export async function answer(p: any, b: Body) {
+// المحاولة الجارية للمشارك عند خطوتها الحالية، لأفعال ما قبل الإرسال (المسودة والتلميح والفحص)
+async function openStep(p: any, b: Body) {
   const a = must(await db.from('lab_attempts').select('*').eq('id', String(b.attempt || '')).eq('participant_id', p.id).maybeSingle());
   if (!a) throw new Fail('المحاولة غير موجودة', 404);
   if (a.finished_at) throw new Fail('انتهت هذه المحاولة، ابدأ محاولة جديدة', 409, 'finished');
   const it = await myItem(p, a.item_id);
+  const i = Number(b.step);
+  const step = it.spec?.steps?.[i];
+  if (i !== a.current || !step) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  return { a, it, i, step, level: levelOfAttempt(it, a) };
+}
+// تحديث حقل من حالة المحاولة الجارية مشروطًا بالخطوة، فلا يكتب على خطوة أُرسلت. null: العمود غير موجود بعد.
+// guard: أعمدة تُشترط قيمتها المقروءة (مقارنة ثم كتابة)، فطلبان متوازيان لا يكتب أحدهما فوق الآخر:
+// إن تغيرت منذ القراءة لم يُكتب شيء ورُمي 'race' فيعيد المستدعي القراءة (retryRace)
+async function patchOpen(a: any, i: number, patch: Body, guard: string[] = []) {
+  let q = db.from('lab_attempts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', a.id).eq('current', i).is('finished_at', null);
+  for (const col of guard) q = q.eq(col, JSON.stringify(a[col] ?? {}));
+  const res = await q.select('id');
+  if (res.error) return null;
+  if (!res.data?.length) {
+    if (guard.length) throw new Fail('وصل طلب آخر للخطوة نفسها في الوقت ذاته، أعد المحاولة', 409, 'race');
+    throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
+  }
+  return true;
+}
+// يعيد الفعل من قراءته حين يسبقه طلب متوازٍ، ثلاث مرات أقصى؛ وتغير الخطوة نفسها يكشفه openStep عند الإعادة
+async function retryRace<T>(fn: () => Promise<T>): Promise<T> {
+  for (let n = 1; ; n++) {
+    try { return await fn(); } catch (e) {
+      if (!(e instanceof Fail) || e.code !== 'race' || n >= 3) throw e;
+    }
+  }
+}
+
+// الحفظ التلقائي: مسودة الخطوة الجارية، لا تُصحَّح. saved: false قبل ترحيل الحالة فيعرف المشارك أنها لم تُحفظ
+export async function draft(p: any, b: Body) {
+  const { a, i } = await openStep(p, b);
+  if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
+  const ok = await patchOpen(a, i, { draft: { [i]: b.answer ?? null } });
+  return { success: true, saved: !!ok, at: new Date().toISOString() };
+}
+
+// تلميح لبطاقة في اللوحة: الدرجة التالية في السلّم، ويُسجَّل قبل أن يُعاد
+export const hint = (p: any, b: Body) => retryRace(() => hintOnce(p, b));
+async function hintOnce(p: any, b: Body) {
+  const { a, i, step, level } = await openStep(p, b);
+  if (step.type !== 'board') throw new Fail('التلميحات للوحة فقط');
+  const card = (step.cards || []).find((c: any) => c.id === String(b.card || ''));
+  if (!card || boardScaffold(step, level).solved_rows.includes(card.row)) throw new Fail('البطاقة غير موجودة');
+  if (!('hints' in a)) throw new Fail('التلميحات غير متاحة بعد، أكمل بلا تلميح', 503, 'unavailable');
+  const mine = { ...(a.hints?.[i] || {}) };
+  const degree = Math.min(HINT_MAX, (Number(mine[card.id]) || 0) + 1);
+  mine[card.id] = degree;
+  const ok = await patchOpen(a, i, { hints: { ...(a.hints || {}), [i]: mine } }, ['hints']);
+  if (!ok) throw new Fail('التلميحات غير متاحة بعد، أكمل بلا تلميح', 503, 'unavailable');
+  return { success: true, hint: hintFor(step, card.id, degree), hint_count: hintCount({ ...(a.hints || {}), [i]: mine }) };
+}
+
+// فحص اللوحة قبل الإرسال بسقالة المستوى: بطاقة عند وضعها للتأسيسي، وعدد الخطأ مرتين للمتوسط
+export const check = (p: any, b: Body) => retryRace(() => checkOnce(p, b));
+async function checkOnce(p: any, b: Body) {
+  const { a, i, step, level } = await openStep(p, b);
+  if (step.type !== 'board') throw new Fail('الفحص للوحة فقط');
+  if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
+  const sc = boardScaffold(step, level);
+  if (sc.feedback === 'check2') {
+    if (!('checks' in a)) throw new Fail('الفحص غير متاح بعد، أكمل وأرسل', 503, 'unavailable');
+    const used = Number(a.checks?.[i]) || 0;
+    if (used >= BOARD_FEEDBACK.check2) throw new Fail('استعملت مرتي الفحص في هذه الخطوة', 409, 'checks');
+    const r: any = boardCheck(step, b.answer, level);
+    if (r.error) throw new Fail(r.error);
+    const ok = await patchOpen(a, i, { checks: { ...(a.checks || {}), [i]: used + 1 }, draft: { [i]: b.answer ?? null } }, ['checks']);
+    if (!ok) throw new Fail('الفحص غير متاح بعد، أكمل وأرسل', 503, 'unavailable');
+    return { success: true, ...r, checks_left: BOARD_FEEDBACK.check2 - used - 1 };
+  }
+  const r: any = boardCheck(step, b.answer, level, String(b.card || ''));
+  if (r.error) throw new Fail(r.error);
+  return { success: true, ...r };
+}
+
+// ما قبل حفظ الإجابة قراءة فقط، فإعادته عند السباق آمنة؛ والنقاط بعد الحفظ المشروط
+export const answer = (p: any, b: Body) => retryRace(() => answerOnce(p, b));
+async function answerOnce(p: any, b: Body) {
+  const a = must(await db.from('lab_attempts').select('*').eq('id', String(b.attempt || '')).eq('participant_id', p.id).maybeSingle());
+  if (!a) throw new Fail('المحاولة غير موجودة', 404);
+  if (a.finished_at) throw new Fail('انتهت هذه المحاولة، ابدأ محاولة جديدة', 409, 'finished');
+  const it = await myItem(p, a.item_id);
+  const level = levelOfAttempt(it, a);
   const steps = it.spec?.steps || [];
   const i = Number(b.step);
   if (i !== a.current || !steps[i]) throw new Fail('هذه ليست الخطوة الحالية، أعد فتح الأداة', 409, 'step');
   if (JSON.stringify(b.answer ?? null).length > ANSWER_MAX) throw new Fail('الإجابة أطول من المسموح');
-  const result = gradeStep(steps[i], b.answer);
-  const next = nextIndex(it.spec, i, b.answer);
+  // البطاقة المكشوفة بالتلميح الأخير تُوضع في خانتها ودرجتها صفر
+  const result = gradeStep(steps[i], b.answer, { level, revealed: revealedOf(a.hints?.[i]) });
+  if (steps[i].type === 'board') (result as any).hints = Object.values(a.hints?.[i] || {}).reduce((n: number, d: any) => n + (Number(d) || 0), 0);
+  const next = nextIndex(it.spec, i, b.answer, level);
   const path = [...(a.path || []), i];
   const results = { ...(a.results || {}), [i]: result };
   const answers = { ...(a.answers || {}), [i]: b.answer ?? null };
   const row: Body = { path, results, answers, current: next, updated_at: new Date().toISOString() };
+  // المسودة تُمحى بالإرسال (إن وُجد عمودها)
+  if ('draft' in a) row.draft = {};
   const pct = next < 0 ? practicePct(it.spec, results, path) : null;
   if (next < 0) Object.assign(row, { pct, finished_at: new Date().toISOString() });
   // التحديث مشروط بالخطوة الحالية، فإرسال الإجابة مرتين لا يُحتسب مرتين
-  const saved = must(await db.from('lab_attempts').update(row).eq('id', a.id).eq('current', i).is('finished_at', null).select('id'));
-  if (!saved?.length) throw new Fail('سُجلت إجابة هذه الخطوة من قبل، أعد فتح الأداة', 409, 'step');
+  // واللوحة مشروطة كذلك بالتلميحات المقروءة، فتلميح كاشف يصل أثناء الإرسال لا يفلت من التصحيح
+  let save = db.from('lab_attempts').update(row).eq('id', a.id).eq('current', i).is('finished_at', null);
+  const hintGuard = steps[i].type === 'board' && 'hints' in a;
+  if (hintGuard) save = save.eq('hints', JSON.stringify(a.hints ?? {}));
+  const saved = must(await save.select('id'));
+  // بلا صف: إما أُرسلت الخطوة من قبل، وإما تغيرت التلميحات فيُعاد التصحيح من قراءة جديدة (retryRace يكشف الأولى عند الإعادة)
+  if (!saved?.length) {
+    if (hintGuard) throw new Fail('وصل طلب آخر للخطوة نفسها في الوقت ذاته، أرسل مرة أخرى', 409, 'race');
+    throw new Fail('سُجلت إجابة هذه الخطوة من قبل، أعد فتح الأداة', 409, 'step');
+  }
   let finish: any = null;
   if (next < 0) {
     const { count } = await db.from('lab_attempts').select('id', { count: 'exact', head: true })
@@ -131,7 +253,7 @@ export async function answer(p: any, b: Body) {
     const prize = labAward(it.points, pct);
     // award يمنح مرة واحدة لكل مصدر ومرجع، فالإعادة بعد الإتقان لا تضاعف النقاط
     const gained = (await award(p.id, 'lab', it.id, prize.mastery, it.title_ar)) + (await award(p.id, 'lab_bonus', it.id, prize.excellence, `تميّز: ${it.title_ar}`));
-    finish = { pct, first: count === 1, gained, closing_ar: it.spec?.closing_ar || '' };
+    finish = { pct, first: count === 1, gained, closing_ar: it.spec?.closing_ar || '', hints: hintCount(a.hints) };
   }
   const meters = meterState(it.spec, path.map((k: number) => results[k]?.effects));
   if (finish) {
@@ -230,4 +352,36 @@ export async function adminRevoke(a: Admin, b: Body) {
   const gone = must(await db.from('lab_grants').delete().eq('id', id).select('organization_id, participant_id, item_id, expires_at'));
   if (gone?.length) await audit('admin', a.email, 'lab.revoke', 'lab_grants', id, gone[0], null);
   return { success: true };
+}
+
+// معاينة الأداة كما يراها مشارك بمستوى تختاره الإدارة: السقالة والخطوات بلا حلول، ولا محاولة تُنشأ
+export async function adminPreview(b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('الأداة غير محددة');
+  const level = LEVELS.includes(String(b.level)) ? String(b.level) : 'beginner';
+  const it = must(await db.from('lab_items').select(ITEM_COLS).eq('id', id).maybeSingle());
+  if (!it) throw new Fail('الأداة غير موجودة', 404);
+  return { success: true, item: { ...meta(it), level }, spec: publicSpec(it.spec, (list: any[]) => list, level) };
+}
+
+// تحليل البطاقات: لكل لوحة في الأداة، نسبة صواب كل بطاقة وأكثر خانة خاطئة ومتوسط درجة التلميح، من المحاولات
+// التي أُجيبت فيها اللوحة، بلا حساب العرض وحسابات الاختبار (forStats)
+export async function adminCards(b: Body) {
+  const id = uuid(b.id);
+  if (!id) throw new Fail('الأداة غير محددة');
+  const it = must(await db.from('lab_items').select(ITEM_COLS).eq('id', id).maybeSingle());
+  if (!it) throw new Fail('الأداة غير موجودة', 404);
+  const boards = (it.spec?.steps || []).map((st: any, i: number) => ({ st, i })).filter((x: any) => x.st.type === 'board');
+  if (!boards.length) return { success: true, boards: [] };
+  // بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
+  const rows = await all((f, t) => db.from('lab_attempts').select('*, participants!inner(is_demo, is_test)').eq('item_id', id)
+    .eq('participants.is_demo', false).eq('participants.is_test', false).order('id').range(f, t));
+  return {
+    success: true,
+    boards: boards.map(({ st, i }: any) => ({
+      step: i, title: st.title_ar || '', rows: st.rows, cols: st.cols,
+      attempts: rows.filter((a: any) => a.answers && i in a.answers).length,
+      cards: boardCardStats(st, i, rows),
+    })),
+  };
 }
