@@ -97,6 +97,22 @@ test('استعادة الجلسة تأخذ حالة الخطة من الخادم
   await expect(page.locator('.tab', { hasText: 'النهائي' })).toBeVisible();
 });
 
+// عملية «مؤكَّدة» بلا تاريخ (save يخزن confirmed وحده): كان اسم الخلية لقارئ الشاشة ينسّق تاريخًا غير موجود فيرمي
+// fmtGregorian(undefined) ويُفرغ المصفوفة كلها (مراجعة الجولة أ على visitor-2). الآن تُرسم الخلايا الست عشرة واسمها صادق.
+test('عملية مؤكَّدة بلا تاريخ لا تُسقط المصفوفة، واسم خليتها «مؤكَّد، بلا موعد»', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await seedSession(page);
+  await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
+    { success: true, registration: { id: 'r1', name: 'مستخدم', phone: '0500000000', email: 'user@example.com', dates: {}, confirmed: { 'creation-1': true } } }) }));
+  await page.route(/supabase\.co\/rest\/v1\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.goto(BASE + '/');
+  // الاسم يتطلب حالة الخادم (confirmed)، فانتظاره يضمن أن العد بعده على الحالة التي كانت تُسقط الشجرة
+  await expect(page.locator('.cell[data-proc="creation-1"]')).toHaveAttribute('aria-label', /: مؤكَّد، بلا موعد$/);
+  await expect(page.locator('.cell')).toHaveCount(16);
+  expect(errors).toEqual([]);
+});
+
 test('انتهاء الجلسة على الخادم يُخرج المستخدم برسالة', async ({ page }) => {
   await seedSession(page);
   await page.route(FN, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(

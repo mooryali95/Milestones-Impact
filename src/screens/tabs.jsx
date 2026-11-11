@@ -93,9 +93,10 @@ export const MatrixTab = (p) => {
                   const op = OPERATIONS[tr.id][ph.id-1], key=`${tr.id}-${ph.id}`, proc=procs.find(p=>p.key===key);
                   const hasD=!!dates[key], isDone=!!confirmed[key], isHL=highlightedKeys.includes(key);
                   // الخلية زر بلوحة المفاتيح وقارئ الشاشة، واسمها العملية وحال موعدها
-                  const status = isDone ? `مؤكَّد، ${fmtGregorian(dates[key])}` : hasD ? `محدد، ${fmtGregorian(dates[key])}` : "بلا موعد";
+                  // التاريخ يُنسَّق حين يوجد وحده: «مؤكَّد» بلا تاريخ حال ممكنة (save يخزن confirmed وحده)، وfmtGregorian(undefined) يرمي
+                  const status = !hasD ? (isDone ? "مؤكَّد، بلا موعد" : "بلا موعد") : `${isDone ? "مؤكَّد" : "محدد"}، ${fmtGregorian(dates[key])}`;
                   return (
-                    <div key={key}
+                    <div key={key} data-proc={key}
                       className={`cell ${isDone?"done":""} ${hasD&&!isDone?"dated":""} ${isHL?"highlighted":""}`}
                       aria-label={`${op.nameAr}: ${status}`}
                       {...pressable(() => {

@@ -46,4 +46,23 @@ describe('useDialogFocus', () => {
     expect(document.activeElement).toBe(opener);
     opener.remove(); container.remove();
   });
+
+  it('إن زال ما فتح النافذة من الصفحة يذهب التركيز إلى البديل لا إلى أول الصفحة', () => {
+    const opener = document.createElement('button');
+    const cell = document.createElement('div'); cell.tabIndex = 0;
+    const container = document.createElement('div');
+    document.body.append(opener, cell, container);
+    opener.focus();
+    function WithFallback() {
+      const ref = useRef(null);
+      useDialogFocus(ref, 'x', () => cell);
+      return React.createElement('div', { ref, tabIndex: -1, role: 'dialog' });
+    }
+    const root = createRoot(container);
+    act(() => { root.render(React.createElement(WithFallback)); });
+    opener.remove();   // شريحة «ينقصه موعد» تختفي بعد حفظ موعدها
+    act(() => { root.unmount(); });
+    expect(document.activeElement).toBe(cell);
+    cell.remove(); container.remove();
+  });
 });

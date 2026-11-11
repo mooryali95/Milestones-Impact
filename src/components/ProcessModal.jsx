@@ -31,7 +31,9 @@ const ProcessModal = (p) => {
 
   useEscape(useCallback(() => { setSelectedCell(null); setHighlightedKeys([]); }, [setSelectedCell, setHighlightedKeys]));
   const dialogRef = useRef(null);
-  useDialogFocus(dialogRef, selectedCell.key);
+  // إن زالت الشريحة التي فتحتها يعود التركيز إلى خلية العملية نفسها في المصفوفة
+  const procKey = selectedCell.key;
+  useDialogFocus(dialogRef, procKey, () => document.querySelector(`.cell[data-proc="${procKey}"]`));
   return (
       (
         <div className="overlay" onClick={()=>{setSelectedCell(null);setHighlightedKeys([]);}}>
