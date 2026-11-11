@@ -126,18 +126,19 @@ function Initiatives({ list, outcomes }) {
         </div>
       )}
       {msg && <div className="alert err">{msg}</div>}
-      <div className="op-scroll"><table>
+      {/* على الجوال بطاقة لكل مبادرة بنمط قائمة المشاركين نفسه (org-8): كان الجدول يُمرَّر أفقيًا وزر الوثيقة خارج الشاشة */}
+      <div className="op-scroll"><table className="op-people">
         <caption className="sr-only">محفظة مبادرات الجهة</caption>
         <thead><tr><th scope="col">المبادرة</th><th scope="col">القائد</th><th scope="col">النوع</th><th scope="col">الحالة</th><th scope="col">التنفيذ</th><th scope="col">تحقق المنافع</th><th scope="col">التكلفة</th><td /></tr></thead>
         <tbody>{list.map((x) => (
           <tr key={x.participant_id || x.initiative}>
-            <td><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
-            <td>{x.full_name || <span className="muted">·</span>}</td><td>{SCOPE_AR[x.scope] || '·'}</td>
-            <td>{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
-            <td>{x.tracking ? <span className={`chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span> : '·'}</td>
-            <td>{x.tracking ? pctOf(x.tracking.benefits.realization) : '·'}</td>
-            <td>{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
-            <td>{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
+            <td className="op-name"><b>{x.initiative}</b>{x.objective && <small className="muted" style={{ display: "block" }}>{x.objective}</small>}</td>
+            <td data-label="القائد">{x.full_name || <span className="muted">·</span>}</td><td data-label="النوع">{SCOPE_AR[x.scope] || '·'}</td>
+            <td data-label="الحالة">{x.status_title}{x.status !== 'approved' && x.readiness != null ? ` · ${x.readiness}%` : ''}</td>
+            <td data-label="التنفيذ">{x.tracking ? <span className={`chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span> : '·'}</td>
+            <td data-label="تحقق المنافع">{x.tracking ? pctOf(x.tracking.benefits.realization) : '·'}</td>
+            <td data-label="التكلفة">{x.cost != null ? Math.round(x.cost).toLocaleString('en-US') : '·'}</td>
+            <td className="op-wide">{x.status === 'approved' && x.participant_id && <button className="link small" onClick={() => open(x)}>الوثيقة</button>}</td>
           </tr>
         ))}</tbody>
       </table></div>
