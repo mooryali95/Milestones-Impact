@@ -17,8 +17,7 @@ import logo from '../milestone-impact-inverted.svg';
 import IntroVideo from '../IntroVideo.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
-
-const RESEND_SECONDS = 45;
+import { RESEND_SECONDS } from '../labels.js';
 // إشعار الخصوصية والشروط قبل زر التسجيل: إكمال التسجيل بعده موافقة تُسجَّل مع نسخة السياسة
 const ConsentNote = ({ action }) => (
   <p className="small muted consent-note">

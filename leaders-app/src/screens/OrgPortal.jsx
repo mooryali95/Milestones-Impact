@@ -10,7 +10,7 @@ import JourneyMap from '../JourneyMap.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { askSignOut } from '../SignOutDialog.jsx';
 import { filterRows, sortRows, stageOf, stageOptions, isStale, NOT_STARTED, PRE_BASELINE, STALE, STALE_DAYS } from '../coord.js';
-import { LEVELS } from '../labels.js';
+import { LEVELS, RESEND_SECONDS } from '../labels.js';
 import { ErrorBox, JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
@@ -30,7 +30,15 @@ function SignIn({ onIn, initialError, initialEmail = '' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
   const ref = useRef(null);
-  useEffect(() => { if (step === 'code') ref.current?.focus(); }, [step]);
+  // والتركيز يعود إلى الحقل بعد رمز خاطئ (org-10): كان يُعطَّل أثناء الطلب فيذهب التركيز إلى الصفحة وتنغلق لوحة المفاتيح
+  useEffect(() => { if (step === 'code' && !busy) ref.current?.focus(); }, [step, busy]);
+  // إعادة إرسال الرمز من خطوته بمهلة دخول المشارك نفسها (RESEND_SECONDS)، والخادم يحد الطلبات في الساعة
+  const [wait, setWait] = useState(0);
+  useEffect(() => {
+    if (!wait) return undefined;
+    const t = setTimeout(() => setWait(wait - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
 
   const [captchaKey, setCaptchaKey] = useState(null);
   const start = async (e, captcha) => {
@@ -41,7 +49,7 @@ function SignIn({ onIn, initialError, initialEmail = '' }) {
     if (r.code === 'captcha') { const g = captchaGate(r, captcha); setCaptchaKey(g.box); return setError(g.error); }
     setCaptchaKey(null);
     if (!r.success) return setError(r.message);
-    setStep('code');
+    setStep('code'); setCode(''); setWait(RESEND_SECONDS);
   };
   const verify = async (v) => {
     setBusy(true); setError('');
@@ -78,7 +86,13 @@ function SignIn({ onIn, initialError, initialEmail = '' }) {
             <input ref={ref} className="input code-input" inputMode="numeric" autoComplete="one-time-code" aria-label="رمز التحقق" placeholder="••••••"
               value={code} disabled={busy} onChange={(e) => { const d = codeDigits(e.target.value); setCode(d); if (d.length === 6) verify(d); }} />
             {error && <div className="alert err">{error}</div>}
-            <button type="button" className="link small" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+            {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => start(null, t)} />}
+            <div className="row between small">
+              <button type="button" className="link" onClick={() => { setStep('email'); setError(''); }}>تغيير البريد</button>
+              {wait ? <span className="muted">إعادة الإرسال بعد {wait} ثانية</span>
+                : <button type="button" className="link" onClick={() => start()} disabled={busy}>أعد إرسال الرمز</button>}
+            </div>
+            <p className="muted small">لم يصل؟ تفقّد مجلد الرسائل غير المرغوبة.</p>
           </div>
         )}
       </div>
