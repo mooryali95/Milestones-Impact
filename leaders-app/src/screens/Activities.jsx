@@ -174,7 +174,7 @@ function Workshop({ item, open, setToast }) {
       {a.sessions.length > 0 ? (
         <ul className="act-list">
           {a.sessions.map((s) => (
-            <li key={s.id}>
+            <li key={s.id} className="act-session">
               <span className="grow"><b>{s.title}</b><span className="small muted"> · {fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}{s.location ? ` · ${s.location}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
@@ -233,7 +233,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
           {a.sessions.map((s) => {
             const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : [COACH_TONE[s.status] || '', COACH_STATUS[s.status] || s.status];
             return (
-              <li key={s.id}>
+              <li key={s.id} className="act-session">
                 <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
                 {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
                 {s.status === 'booked' && <AddToCalendar id={s.id} title="جلسة توجيه: برنامج القادة" start={s.starts_at} end={s.ends_at} location={a.location} url={s.join_url} />}
