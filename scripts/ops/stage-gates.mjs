@@ -12,9 +12,12 @@
 //   ... node scripts/ops/stage-gates.mjs --md=<ملف>                       ويكتب التقرير Markdown
 //
 // قراءة GitHub بـ GITHUB_TOKEN إن وُجد، وإلا بأداة gh، وإلا تُعلَن النقطة «تعذّر الفحص».
-import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+// الأحكام المشتركة مع حالة النظام في اللوحة (system.ts): الأسرار، والترحيلات بوسم بوابة النشر، وبنود م2 الآلية
+import { launchReadiness, migrationsSummary, pendingMigrations, REQUIRED_SECRETS } from '../../supabase/functions/leaders-api/readiness.js';
+import { MIGRATION_GATES, MIGRATIONS } from '../../supabase/functions/leaders-api/migrations.js';
 
 export const BASE_SCORE = 7.5;
 export const TARGET_SCORE = 9.5;
@@ -84,12 +87,12 @@ export const STAGES = [
   },
 ];
 
-// ما لا قيمة افتراضية له: مفتاح التوقيع (لا شهادة بدونه)، وقناة التنبيه (لا إنذار بغير البريد). البقية لها افتراضي آمن في docs/SECRETS.md
 // الأبواب التعليمية: ستة لكل إطار (ch1 إلى ch6). المقدمة وباب المختبرات والخاتمة أبواب هيكلية لا تدرّس مفهومًا يُقاس،
 // فاستُثنيت من شرطي المختبر والفقرة بقرار المالك في 2026-11-10 (القرار 5 في خطة الوصول إلى 90% v2)
 export const TEACHING_CHAPTERS = 18;
 
-export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'];
+// ما لا قيمة افتراضية له (مفتاح التوقيع وقناة التنبيه): من readiness.js، وتفحص قيمه حالة النظام في اللوحة
+export { REQUIRED_SECRETS };
 
 // الحكم على نقطة: pass أو fail أو unknown (تعذّر الفحص)، مع سبب بجملة
 export function judge(check, facts, attest, now = Date.now()) {
@@ -191,11 +194,12 @@ async function safe(fn) {
 
 export async function collect() {
   const f = {};
-  const repoMigrations = readdirSync(new URL('../../supabase/migrations/', import.meta.url)).filter((n) => n.endsWith('.sql')).map((n) => n.slice(0, -4));
+  // القائمة والوسم من migrations.js (يطابق المجلد بحارس CI)، كما تقرؤهما حالة النظام. حكم النقطة كما كان: أي ترحيل غير
+  // مطبّق يُبقيها مفتوحة، والسبب يفصل الحاجب والمتسامح والمؤجل بقرار
   f['m1.migrations'] = await safe(async () => {
-    const applied = new Set((await sql('select name from leaders.schema_migrations')).map((r) => r.name));
-    const pending = repoMigrations.filter((n) => !applied.has(n));
-    return { ok: !pending.length, reason: pending.length ? `معلّق: ${pending.join('، ')}` : `${applied.size} مطبّقًا، لا معلّق` };
+    const applied = (await sql('select name from leaders.schema_migrations')).map((r) => r.name);
+    const pending = pendingMigrations(MIGRATIONS, applied, MIGRATION_GATES);
+    return { ok: !pending.length, reason: pending.length ? `معلّق: ${migrationsSummary(pending)}` : `${applied.length} مطبّقًا، لا معلّق` };
   });
   f['m1.secrets'] = await safe(async () => {
     const names = new Set((await supa('/secrets')).map((s) => String(s.name)));
@@ -225,38 +229,21 @@ export async function collect() {
   });
   f['m2.golden-paths'] = await safe(() => lastRun('integration.yml', 24 * 7, ['push', 'schedule', 'workflow_dispatch']));
   const q = async (id, query, fn) => { f[id] = await safe(async () => fn(await sql(query))); };
-  // لا عبور بالفراغ: يلزم جهة فعّالة واحدة على الأقل، ولكلٍّ دفعة مفتوحة أو جارية
-  await q('m2.cohort-per-org', `select o.name, exists (select 1 from leaders.cohorts c where c.organization_id = o.id and c.status in ('open','running')) has
-      from leaders.organizations o where o.status = 'active'`,
-    (rows) => {
-      const missing = rows.filter((r) => !r.has);
-      if (!rows.length) return { ok: false, reason: 'لا جهة فعّالة بعد' };
-      return { ok: !missing.length, reason: missing.length ? `بلا دفعة: ${missing.map((r) => r.name).join('، ')}` : `${rows.length} جهة، ولكلٍّ دفعة` };
-    });
-  await q('m2.advisor', `select name, advisor_expert_id is not null has from leaders.cohorts where organization_id is not null and status in ('open','running')`,
-    (rows) => {
-      const missing = rows.filter((r) => !r.has);
-      if (!rows.length) return { ok: false, reason: 'لا دفعة جهة مفتوحة أو جارية بعد' };
-      return { ok: !missing.length, reason: missing.length ? `بلا مستشار: ${missing.map((r) => r.name).join('، ')}` : `${rows.length} دفعة جهة، ولكلٍّ مستشار` };
-    });
-  // الدفعات المفتوحة والجارية للجهات: موعد قادم أو حديث (الجلسة بلا دفعة تعمّ الدفعات)، أو صيغة الكتيب لبند حضور
-  await q('m2.sessions', `select c.name, (exists (select 1 from leaders.workshop_sessions w where w.active and (w.cohort_id = c.id or w.cohort_id is null)
-        and coalesce(w.ends_at, w.starts_at) >= now() - interval '14 days')
-      or exists (select 1 from jsonb_each(c.delivery) d where d.value ->> 'format' = 'handbook')) has
-      from leaders.cohorts c where c.organization_id is not null and c.status in ('open','running')`,
-    (rows) => {
-      const missing = rows.filter((r) => !r.has);
-      if (!rows.length) return { ok: false, reason: 'لا دفعة جهة مفتوحة أو جارية بعد' };
-      return { ok: !missing.length, reason: missing.length ? `بلا مواعيد قادمة: ${missing.map((r) => r.name).join('، ')}` : 'لكل دفعة مواعيد قادمة أو صيغة الكتيب' };
-    });
-  await q('m2.final-eval', `select final_eval is not null and final_eval <> '{}'::jsonb as ok from leaders.programs where is_default`,
-    (rows) => ({ ok: !!rows[0]?.ok, reason: rows[0]?.ok ? 'محفوظ' : 'لم يُحفظ بعد من اللوحة' }));
-  await q('m2.release-pinned', `select name, content_release is not null has from leaders.cohorts where status = 'running'`,
-    (rows) => {
-      const missing = rows.filter((r) => !r.has);
-      if (!rows.length) return { ok: false, reason: 'لا دفعة جارية بعد' };
-      return { ok: !missing.length, reason: missing.length ? `بلا إصدار: ${missing.map((r) => r.name).join('، ')}` : 'كل دفعة جارية بإصدار مثبّت' };
-    });
+  // بنود م2 الآلية بأحكام readiness.js على الصفوف نفسها التي تقرؤها حالة النظام (لا عبور بالفراغ: بلا جهة فعّالة أو
+  // دفعة جهة مفتوحة أو جارية تبقى النقطة مفتوحة). تعذّر أي قراءة يجعل النقاط الخمس «تعذّر الفحص»
+  const m2 = await safe(async () => {
+    const [organizations, cohorts, sessions, prog] = await Promise.all([
+      sql(`select id, name, status from leaders.organizations where status = 'active'`),
+      sql(`select id, name, organization_id, status, advisor_expert_id, content_release, delivery from leaders.cohorts`),
+      sql(`select cohort_id, active, starts_at, ends_at from leaders.workshop_sessions where active`),
+      sql(`select final_eval from leaders.programs where is_default`),
+    ]);
+    return { items: launchReadiness({ organizations, cohorts, sessions, finalEval: prog[0]?.final_eval ?? null }) };
+  });
+  for (const id of ['m2.cohort-per-org', 'm2.advisor', 'm2.sessions', 'm2.final-eval', 'm2.release-pinned']) {
+    const item = m2.items?.find((x) => x.check === id);
+    f[id] = item ? { ok: item.ok, reason: item.label } : { status: 'unknown', reason: m2.reason || 'تعذّر الفحص' };
+  }
   await q('m3.labs-coverage', `select count(*) total, count(*) filter (where exists (select 1 from leaders.lab_items l where l.active and l.dimension = m.dimension and l.chapter_key = m.chapter_key)) covered
       from (select distinct dimension, chapter_key from leaders.handbook_modules where chapter_key ~ '^ch[0-9]+$') m`,
     ([r]) => ({ ok: +r.total >= TEACHING_CHAPTERS && +r.covered === +r.total, reason: `${r.covered} من ${r.total} بابًا تعليميًا لها مختبر` }));

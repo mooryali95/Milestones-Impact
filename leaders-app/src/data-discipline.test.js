@@ -47,7 +47,8 @@ describe('سجل الترحيلات', () => {
   it('فحص الصحة يقرأ السجل ويقارنه بالقائمة، وتعذّر السجل يظهر ولا يُستدل بالأثر', () => {
     const sys = api('system.ts');
     expect(sys).toMatch(/from\('schema_migrations'\)\.select\('name'\)/);
-    expect(sys).toMatch(/MIGRATIONS\.filter\(\(n\) => !applied\.has\(n\)\)/);
+    // المقارنة بوسم بوابة النشر من المصدر المشترك مع بوابات المراحل (readiness.js)
+    expect(sys).toMatch(/pendingMigrations\(MIGRATIONS, \(data \|\| \[\]\)\.map\(\(r: any\) => r\.name\), MIGRATION_GATES/);
     expect(sys).toMatch(/migrations_ledger: mig\.ledger/);
     expect(sys).not.toMatch(/MARKERS|async function present\(/);
     expect(sys).toMatch(/h\.migrations_ledger \? \[\] : \['تعذّرت قراءة سجل الترحيلات/);
