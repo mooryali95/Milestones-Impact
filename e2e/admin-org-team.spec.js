@@ -45,7 +45,7 @@ async function setup(page, extra = {}) {
       'admin.org-team': orgTeam,
       'admin.cohort-team': team,
       'admin.cohort-groups': { success: true, cohort: { ...cohort, stage_modes: {} }, group_advisor_ready: true, experts: [], stages: [{ key: 'training', title_ar: 'التدريب' }], groups: [], members: [] },
-      'admin.team-add': { success: true, expert_id: 'e2', invited: false, over: true },
+      'admin.team-add': { success: true, expert_id: 'e2', invited: false, notified: true, over: true },
       'admin.team-remove': { success: true, cleared: { advisor: true, groups: 0 } },
       ...extra,
     };
@@ -95,7 +95,7 @@ test('صفحة الجهة تلخّص فرق دفعاتها، ومنها يُضا
   await add.getByRole('radio', { name: /خبير مجموعة/ }).check();
   await add.getByLabel('المجموعة').selectOption('G2');
   await add.getByRole('button', { name: 'أضف' }).click();
-  await expect(page.getByText('أُضيف م. ريم س. إلى الفريق. تنبيه: بلغ سعته المعلنة', { exact: false })).toBeVisible();
+  await expect(page.getByText('أُضيف م. ريم س. إلى الفريق وأُبلغ بالبريد. تنبيه: بلغ سعته المعلنة', { exact: false })).toBeVisible();
   expect(sent(calls, 'admin.team-add')).toMatchObject({ cohort_id: 'c1', expert_id: 'e2', role: 'coach', scope: 'group', group_id: 'G2' });
   await expect(add).toBeHidden();
 });

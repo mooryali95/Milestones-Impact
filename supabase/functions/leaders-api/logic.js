@@ -2306,6 +2306,26 @@ export function teamCoverage(cohort, members, groups, approved) {
     ungrouped: ms.filter((m) => !m.group_id).length,
   };
 }
+// مدة الدفعة، وهي مدة التكليف فيها: صياغة واحدة للوحة الإدارة وبوابة الخبير وبريد التكليف. التاريخ يوم بلا ساعة،
+// فيُقرأ ظهرًا بتوقيت الرياض فلا يرجع يومًا في منطقة زمنية أخرى
+const periodDay = (d) => (/^\d{4}-\d{2}-\d{2}/.test(String(d || ''))
+  ? new Date(`${String(d).slice(0, 10)}T12:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }) : '');
+/** @param {{ starts_on?: string | null, ends_on?: string | null } | null} c */
+export function cohortPeriodAr(c) {
+  const s = periodDay(c?.starts_on), e = periodDay(c?.ends_on);
+  if (s && e) return `${s} إلى ${e}`;
+  if (s) return `من ${s}`;
+  if (e) return `حتى ${e}`;
+  return 'لم تُحدَّد مدة الدفعة بعد';
+}
+// ما يحمله الخبير في دفعة، بصيغة من يُخاطَب عنه: للبريد وبوابة الخبير
+/** @param {{ advisor?: boolean, groups?: { name: string }[] }} a */
+export function assignmentScopeAr(a) {
+  const parts = [];
+  if (a?.advisor) parts.push('المستشار الأساسي للدفعة');
+  if (a?.groups?.length) parts.push(`خبير ${a.groups.map((g) => g.name).join('، ')}`);
+  return parts.length ? parts.join(' · ') : 'عضو فريق الدفعة';
+}
 // كم مشاركًا يخدم كل خبير في الدفعة بصفته مستشارهم الفعلي (effectiveAdvisorId): مستشار الدفعة لمن ليس لمجموعته خبير، وخبير المجموعة لأعضائها
 /** @returns {Record<string, number>} */
 export function servedBy(cohort, members, groups, approved) {

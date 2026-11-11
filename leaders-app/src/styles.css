@@ -1166,6 +1166,8 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .xpp-offer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--copper); border-radius: 8px; background: var(--brand-cream-pale); }
 .xpp-offer small { display: block; margin-top: 4px; }
 .xpp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 16px 0; }
+.xpp-assign-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.xpp-assign { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
 .xpp-person { display: grid; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .xpp-person:last-child { border-bottom: 0; }
 .xpp-torate { padding: 10px 0; border-bottom: 1px solid var(--line); }

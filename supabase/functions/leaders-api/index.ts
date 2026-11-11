@@ -227,7 +227,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
   'xp.dashboard': async (e, b) => {
     const d: any = await E.portalDashboard(e);
-    if (!d?.success || d.consent_needed || d.onboarding || b.lite === true) return d;
+    if (!d?.success || d.consent_needed || d.onboarding) return d;
+    // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
+    d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
+    if (b.lite === true) return d;
     const [reviews, participants, peers, sus] = await Promise.all([
       settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
       settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)),

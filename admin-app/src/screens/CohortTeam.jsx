@@ -48,7 +48,9 @@ function AddMember({ d, preset, onDone, onCancel }) {
     setBusy(false);
     if (!r.success) return setErr(r.message);
     const who = mode === 'invite' ? inv.full_name.trim() : picked.full_name;
-    toast(r.invited ? `أُرسلت الدعوة إلى ${inv.email.trim()}، وأُضيف ${who} إلى الفريق` : r.over ? `أُضيف ${who} إلى الفريق. تنبيه: ${OVER_AR}` : `أُضيف ${who} إلى الفريق`);
+    // الإعلام بالبريد: أُرسل، أو تعذّر (يبقى التكليف محفوظًا)، أو لا تكليف جديد فلا بريد
+    const mail = r.notified === true ? ' وأُبلغ بالبريد' : r.notified === false ? '، وتعذّر إبلاغه بالبريد فأبلغه بنفسك' : '';
+    toast(r.invited ? `أُرسلت الدعوة إلى ${inv.email.trim()}، وأُضيف ${who} إلى الفريق` : `أُضيف ${who} إلى الفريق${mail}.${r.over ? ` تنبيه: ${OVER_AR}` : ''}`);
     onDone();
   };
 

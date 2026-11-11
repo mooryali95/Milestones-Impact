@@ -6,7 +6,7 @@
 import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
+import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst } from './logic.js';
@@ -97,8 +97,9 @@ export async function adminGet(_a: Admin, b: Body) {
   };
 }
 
-// إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم
-export async function adminSave(a: Admin, b: Body) {
+// إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم. opts.assignment من «ادعُ وأضف» في فريق الدفعة (team.ts) وحده:
+// سطر التكليف في الدعوة نفسها، فلا يُرسل للمدعو بريدان. الفعل admin.expert-save يمرر ctx هنا، ولا assignment فيه
+export async function adminSave(a: Admin, b: Body, opts: { assignment?: AssignmentMail } = {}) {
   requireWrite(a);
   const fieldError = expertFieldError(b, { withAdmin: true });
   if (fieldError) throw new Fail(fieldError);
@@ -120,7 +121,7 @@ export async function adminSave(a: Admin, b: Body) {
   if (dup) throw new Fail(`لهذا البريد ملف خبير قائم (${(EXPERT_STATUS as Record<string, string>)[dup.status] || dup.status})`, 409);
   const saved = must(await db.from('experts').insert({ ...fields, email, phone, status: 'invited', source: 'admin', invited_at: now }).select('*').single());
   await audit('admin', a.email, 'expert.create', 'experts', saved.id, null, saved);
-  if (b.send_invite !== false) await invite(saved);
+  if (b.send_invite !== false) await invite(saved, opts.assignment);
   return { success: true, expert: saved, invited: b.send_invite !== false };
 }
 
@@ -128,12 +129,13 @@ export async function adminSave(a: Admin, b: Body) {
 // يمر بمسار التحقق نفسه (expert_challenges)، فيدخل المدعو ويستكمل ملفه بأسئلة الخبير ثم ينتظر الاعتماد.
 const INVITE_DAYS = 7;
 export const portalUrl = () => `${SITES.leaders}/x`;
-async function invite(e: any) {
+async function invite(e: any, assignment?: AssignmentMail) {
   const code = randomToken();
   must(await db.from('expert_challenges').insert({ expert_id: e.id, email: e.email, code_hash: await hash(code), ip: null, expires_at: new Date(Date.now() + INVITE_DAYS * 864e5).toISOString() }));
   const link = `${portalUrl()}${expertInviteHash(e.email, code)}`;
   await sendMail(e.email, 'دعوة إلى شبكة خبراء برنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
     mailText('يسعدنا أن ندعوك للانضمام إلى شبكة خبراء برنامج القادة، لتقديم خبرتك لقادة المشاريع في مراحل البرنامج.')
+    + (assignment ? assignmentNote(assignment) : '')
     + (e.status === 'active'
       ? mailText('ملفك معتمد في الشبكة. ادخل إلى لوحتك لتتابع طلبات الخدمة وجلساتك وساعات خبرتك.') + mailButton(link, 'ادخل إلى لوحة الخبير')
       : mailText('ابدأ باستكمال ملفك كخبير: أدوارك، والأبعاد التي تتقنها، ونبذة عن خبرتك. نراجعه ثم نفعّل لوحتك.') + mailButton(link, 'استكمل ملفك كخبير'))

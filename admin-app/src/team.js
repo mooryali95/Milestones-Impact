@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // يقرؤها تبويب «الفريق» في الدفعة، وقسم الفريق في صفحة الجهة، و«تكليفاته» في ملف الخبير، فلا يُكتب السطر نفسه ثلاث مرات.
 import { countAr, EXPERT_ROLE_AR, EXPERT_STATUS } from '../../supabase/functions/leaders-api/labels.js';
+import { cohortPeriodAr } from '../../supabase/functions/leaders-api/logic.js';
 
 export const roleAr = (r) => EXPERT_ROLE_AR[r]?.[0] || r;
 export const rolesAr = (rs) => (rs || []).map(roleAr).join('، ');
@@ -12,9 +13,8 @@ export const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركان
 export const expertsAr = (n) => countAr(n, 'خبير واحد', 'خبيران', 'خبراء', 'خبيرًا');
 const groupsAr = (n) => countAr(n, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة');
 
-const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
-// مدة الدفعة، وهي مدة التكليف فيها
-export const periodAr = (c) => (c?.starts_on || c?.ends_on ? [day(c.starts_on) || 'بلا بداية محددة', day(c.ends_on) || 'بلا نهاية محددة'].join(' إلى ') : 'لم تُحدَّد مدة الدفعة بعد');
+// مدة الدفعة، وهي مدة التكليف فيها (الصياغة نفسها في بريد التكليف وبوابة الخبير)
+export const periodAr = cohortPeriodAr;
 
 // الحمل بنظرة: الساعات المشغولة من المعلنة أسبوعيًا (طلب قائم أو جلسة قادمة = ساعة)، وعدد الدفعات غير المغلقة
 export function loadText(load) {

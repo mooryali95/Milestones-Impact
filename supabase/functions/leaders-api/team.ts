@@ -9,10 +9,11 @@
 // «فريق الجهة» عرض مجمّع لفرق دفعاتها، لا تكليف على مستوى الجهة.
 // الحمل تنبيه لا منع (قرار المالك): capacityOf نفسه الذي يُخرج الممتلئ من الترشيح الآلي.
 // دور التكليف وتواريخه وقبول الخبير في المرحلة 3 بترحيلها؛ هنا الدور من أدوار ملفه، والمدة مدة الدفعة.
-import { audit, db, Fail, must } from './core.ts';
+import { type AssignmentMail, audit, db, Fail, must, sendMail, teamAssignedMail } from './core.ts';
 import { cohortMembers } from './programs.ts';
 import { adminSave as expertCreate } from './experts.ts';
-import { capacityOf, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { firstName } from './hall.js';
+import { assignmentScopeAr, capacityOf, cohortPeriodAr, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
 import { EXPERT_ROLE_AR } from './labels.js';
 
 type Body = Record<string, any>;
@@ -143,8 +144,8 @@ export async function teamAdd(a: Admin, b: Body) {
     if (current.length >= TEAM_MAX) throw new Fail(`فريق الدفعة ${TEAM_MAX} خبيرًا على الأكثر`);
     const extra = Array.isArray(invite.roles) ? invite.roles.map(String) : [];
     // دوره في الدفعة أول أدوار ملفه، والدعوة رسالة واحدة تجمع الدعوة والتكليف
-    const r: any = await expertCreate(a, { full_name: invite.full_name, email: invite.email, title: invite.title, roles: [...new Set([role, ...extra])], send_invite: true,
-      assignment: { cohort: c.name, org: await orgName(c.organization_id), role: roleAr(role), starts_on: c.starts_on || null, ends_on: c.ends_on || null } });
+    const r: any = await expertCreate(a, { full_name: invite.full_name, email: invite.email, title: invite.title, roles: [...new Set([role, ...extra])], send_invite: true },
+      { assignment: await mailOf(c, role, { advisor: false, groups: [] }) });
     e = r.expert;
   } else {
     if (!isUuid(b.expert_id)) throw new Fail('اختر الخبير، أو ادعُ شخصًا جديدًا ببريده');
@@ -160,13 +161,26 @@ export async function teamAdd(a: Admin, b: Body) {
   if (scope === 'group') must(await db.from('cohort_groups').update({ advisor_expert_id: e.id }).eq('id', group.id).eq('cohort_id', c.id), 'تعذّر تعيين خبير المجموعة');
   await audit('admin', a.email, 'team.add', 'cohorts', c.id, scope === 'advisor' ? { advisor_expert_id: c.advisor_expert_id || null } : scope === 'group' ? { group: group.id, advisor_expert_id: group.advisor_expert_id || null } : null,
     { expert_id: e.id, role, scope, group: group?.id || null, invited: !!invite });
+  // إعلام الخبير القائم بتكليف جديد عليه (المرحلة 2)، مرة لكل تغيير فعلي: إعادة الإضافة بالنطاق نفسه لا ترسل شيئًا.
+  // تعذّر البريد لا يُسقط التكليف المحفوظ، ويُقال للمدير
+  let notified: boolean | null = null;   // null: لا تكليف جديد فلا بريد
+  const isNew = scope === 'cohort' ? !current.some((x) => x.expert_id === e.id) : scope === 'advisor' ? c.advisor_expert_id !== e.id : group.advisor_expert_id !== e.id;
+  if (!invite && isNew) {
+    const m = await mailOf(c, role, { advisor: scope === 'advisor', groups: group ? [group] : [] });
+    notified = await sendMail(e.email, `كُلّفت في فريق ${c.name}`, teamAssignedMail(firstName(e.full_name), m), [], { ref: `cohort:${c.id}` })
+      .then(() => true, (err) => { console.error('team.add mail', err); return false; });
+  }
   const load = invite ? null : (await loads())(e);
-  return { success: true, expert_id: e.id, invited: !!invite, load, over: !!load?.full };
+  return { success: true, expert_id: e.id, invited: !!invite, notified, load, over: !!load?.full };
 }
 
 async function orgName(id: string | null) {
   if (!id) return null;
   return (await db.from('organizations').select('name').eq('id', id).maybeSingle()).data?.name || null;
+}
+// سطور التكليف في البريد: الدفعة وجهتها، والدور من أدوار ملفه، وما يحمله فيها، ومدتها
+async function mailOf(c: any, role: string, scope: { advisor: boolean; groups: { name: string }[] }): Promise<AssignmentMail> {
+  return { cohort: c.name, org: await orgName(c.organization_id), role: roleAr(role), scope: assignmentScopeAr(scope), period: cohortPeriodAr(c) };
 }
 
 // إزالة خبير من فريق الدفعة: ومعها ما يحمله فيها (المستشار الأساسي، خبير مجموعاتها)، فيعود المشاركون للمستوى الأعم ثم للإدارة

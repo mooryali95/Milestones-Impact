@@ -13,8 +13,8 @@ import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
-import { CONTACT_EMAIL, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
-import { codeDigits, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
+import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
+import { assignmentScopeAr, codeDigits, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -284,6 +284,32 @@ function PeerQueue({ initial }) {
   );
 }
 
+// «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): كل دفعة كُلّف فيها، بجهتها ومدتها وما يحمله فيها وأعداد من يخدمهم.
+// أعداد لا أسماء: أسماء مشاركيه في «مشاركوك» من مصدر صلاحيتها. والمغلقة لا تُعرض
+function MyAssignments({ list }) {
+  if (!Array.isArray(list)) return list?.message ? <section className="card stack"><h2 className="as-h3">تكليفاتي</h2><p className="small muted" role="alert">{list.message}</p></section> : null;
+  const live = list.filter((a) => a.status !== 'closed');
+  if (!live.length) return null;
+  return (
+    <section className="card stack" aria-labelledby="xp-assign">
+      <h2 className="as-h3" id="xp-assign">تكليفاتي <small className="muted">· {live.length}</small></h2>
+      <div className="xpp-assign-list">{live.map((a) => (
+        <article key={a.cohort_id} className="xpp-assign">
+          <b>{a.org || 'دفعة أفراد'}</b>
+          <span>{a.cohort} · {assignmentScopeAr(a)}</span>
+          <small className="muted">{cohortPeriodAr(a)}</small>
+          <small className="muted">{[
+            (a.advisor || a.groups.length) ? `تخدم ${countAr(a.serves ?? 0, 'مشاركًا واحدًا', 'مشاركَين', 'مشاركين', 'مشاركًا')} بصفتك مستشارهم` : 'تُرشَّح لمشاركي الدفعة أولًا حين يطلبون خبيرًا',
+            a.participants != null ? `في الدفعة ${countAr(a.participants, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا')}` : null,
+            ...a.groups.map((g) => (g.count != null ? `${g.name}: ${g.count}` : g.name)),
+          ].filter(Boolean).join(' · ')}</small>
+        </article>
+      ))}</div>
+      <p className="small muted">أسماء من تخدمهم في «مشاركوك». لتعديل تكليف أو الاعتذار عنه راسل إدارة البرنامج.</p>
+    </section>
+  );
+}
+
 // القاعة من البوابة (المرحلة 9): دفعات المستشار وحدها، بالمكوّن المشترك مع اللوحة
 function ExpertHall({ cohorts }) {
   const [cid, setCid] = useState(cohorts[0]?.id || '');
@@ -347,7 +373,8 @@ function Dashboard({ onOut }) {
   const e = d.expert;
   const pre = d.preload || {};
   const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);
-  const isNew = !d.requests.length && !d.sessions.length && !d.stats.participants && !(d.advisor_cohorts || []).length;
+  const isNew = !d.requests.length && !d.sessions.length && !d.stats.participants && !(d.advisor_cohorts || []).length
+    && !(Array.isArray(d.assignments) && d.assignments.some((a) => a.status !== 'closed'));
   const offered = d.requests.filter((x) => x.status === 'offered');
   const now = Date.now();
   const upcoming = d.sessions.filter((s) => s.status === 'booked' && Date.parse(s.starts_at) > now).reverse();
@@ -412,6 +439,8 @@ function Dashboard({ onOut }) {
           ))}
         </section>
       )}
+
+      <MyAssignments list={d.assignments} />
 
       {isNew && <FirstSteps e={e} />}
 
