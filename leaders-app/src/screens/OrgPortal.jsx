@@ -11,7 +11,7 @@ import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { askSignOut } from '../SignOutDialog.jsx';
 import { filterRows, sortRows, stageOf, stageOptions, isStale, NOT_STARTED, PRE_BASELINE, STALE, STALE_DAYS } from '../coord.js';
 import { LEVELS } from '../labels.js';
-import { JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
+import { ErrorBox, JourneySkeleton, POPUP_BLOCKED } from '../ui.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
@@ -23,8 +23,8 @@ const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', '
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '·');
 
-function SignIn({ onIn, initialError }) {
-  const [email, setEmail] = useState('');
+function SignIn({ onIn, initialError, initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [step, setStep] = useState('email');
   const [busy, setBusy] = useState(false);
@@ -358,28 +358,44 @@ export default function OrgPortal() {
   const [me, setMe] = useState(null);
   const [boot, setBoot] = useState(true);
   const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  // تعذّر جلب الهوية والجلسة باقية (org-3): يُعرض الخطأ بمرجعه مع إعادة المحاولة، لا شاشة الدخول كأن المنسق خرج.
+  // انتهاء الجلسة أو إيقافها يمرّان بـsetCoordExpired إلى شاشة الدخول برسالتهما كما كانا
+  const [bootError, setBootError] = useState('');
 
+  const resume = async () => {
+    const r = await coordCall('coord.me', { with_dashboard: true });
+    if (r.success) setMe(r);
+    else if (coordSession.get()) setBootError(r.message);
+    return r.success;
+  };
+  const start = async () => {
+    // رابط البريد: /org/verify?e=...&t=...
+    if (location.pathname === '/org/verify') {
+      const q = new URLSearchParams(location.search);
+      history.replaceState(null, '', '/org');
+      const r = await coordCall('coord.auth-verify', { email: q.get('e'), link: q.get('t') });
+      if (r.success) { coordSession.set(r.token); setMe(r); }
+      // رابط مستعمل أو منتهٍ والجلسة في المتصفح نافذة (org-4): تُفتح اللوحة بها، وإلا يُعرض الخطأ وبريد الرابط معبأ لطلب رمز جديد
+      else if (!(coordSession.get() && (await resume()))) { setBootError(''); setError(r.message); setEmail(q.get('e') || ''); }
+    } else if (coordSession.get()) await resume();
+    setBoot(false);
+  };
   useEffect(() => {
-    setCoordExpired((m) => { setMe(null); setError(m || ''); });
-    (async () => {
-      // رابط البريد: /org/verify?e=...&t=...
-      if (location.pathname === '/org/verify') {
-        const q = new URLSearchParams(location.search);
-        history.replaceState(null, '', '/org');
-        const r = await coordCall('coord.auth-verify', { email: q.get('e'), link: q.get('t') });
-        if (r.success) { coordSession.set(r.token); setMe(r); } else setError(r.message);
-      } else if (coordSession.get()) {
-        const r = await coordCall('coord.me', { with_dashboard: true });
-        if (r.success) setMe(r);
-      }
-      setBoot(false);
-    })();
+    setCoordExpired((m) => { setMe(null); setBootError(''); setError(m || ''); });
+    start();
   }, []);
 
   const signedIn = (r) => { coordSession.set(r.token); setMe(r); };
-  const logout = async () => { if (await askSignOut('org')) setMe(null); };
+  const logout = async () => { if (await askSignOut('org')) { setMe(null); setBootError(''); } };
 
   if (boot) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (!me && bootError) return (
+    <div className="page narrow stack">
+      <ErrorBox message={bootError} onRetry={() => { setBootError(''); setBoot(true); resume().finally(() => setBoot(false)); }} />
+      <button type="button" className="link small" onClick={logout}>خروج</button>
+    </div>
+  );
   if (me?.consent_needed) return <PortalConsent role="coordinator" onAccept={async () => { const r = await coordCall('coord.consent'); if (r.success) setMe((m) => ({ ...m, ...r })); return r; }} />;
-  return me ? <Dashboard me={me} onLogout={logout} /> : <SignIn onIn={signedIn} initialError={error} />;
+  return me ? <Dashboard me={me} onLogout={logout} /> : <SignIn onIn={signedIn} initialError={error} initialEmail={email} />;
 }
