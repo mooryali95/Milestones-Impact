@@ -2279,6 +2279,8 @@ export function cleanTeamIds(ids, isId) {
 // مصدر الصلاحية)، وcohort_experts (الفريق)، وcohort_groups.advisor_expert_id (خبير المجموعة، الأخص يغلب).
 // صف واحد لكل خبير بكل ما يحمله في الدفعة. أدواره من ملفه: دور التكليف وتواريخه وقبوله في المرحلة 3 بترحيلها.
 export const TEAM_SCOPES = ['cohort', 'group', 'advisor'];
+// الخبير المعتمد الذي يحمل صلاحية في الدفعة: مصدر واحد لفريق الدفعة وصفحة الجهة وبوابة المنسق ولوحة الإدارة
+export const EXPERT_APPROVED = ['active', 'paused'];
 /** @param {{ advisor_expert_id?: string | null } | null} cohort
  *  @param {{ expert_id: string, created_at?: string | null, added_by?: string | null }[]} team صفوف cohort_experts للدفعة
  *  @param {{ id: string, name: string, advisor_expert_id?: string | null }[]} groups مجموعات الدفعة */
@@ -2318,7 +2320,7 @@ export function teamCoverage(cohort, members, groups, approved) {
  *  @param {{ team?: boolean, list?: boolean }} perms */
 export function coordTeamView({ cohort, rows, experts, groups, members }, perms) {
   if (!perms?.team) return null;
-  const ok = new Map((experts || []).filter((e) => ['active', 'paused'].includes(e.status)).map((e) => [e.id, e]));
+  const ok = new Map((experts || []).filter((e) => EXPERT_APPROVED.includes(e.status)).map((e) => [e.id, e]));
   const card = (e) => ({ full_name: e.full_name, title: e.title || null, roles: e.roles || [] });
   const adv = (rows || []).find((r) => r.advisor && ok.has(r.expert_id));
   const ms = members || [];

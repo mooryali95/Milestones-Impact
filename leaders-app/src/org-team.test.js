@@ -4,9 +4,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { capacityOf, expertAssignments, matchScore, servedBy, teamCoverage, teamRows } from '../../supabase/functions/leaders-api/logic.js';
+import { assignmentScopeAr, capacityOf, coordTeamView, EXPERT_APPROVED, expertAssignments, matchScore, servedBy, teamCoverage, teamRows } from '../../supabase/functions/leaders-api/logic.js';
+import { expertRoleAr } from '../../supabase/functions/leaders-api/labels.js';
 import { cohortFields, cohortToForm, formToCohort } from '../../admin-app/src/methodology.js';
-import { coverageNotes, loadText, rankForAdd, scopeText } from '../../admin-app/src/team.js';
+import { APPROVED, coverageNotes, loadText, rankForAdd, roleAr, scopeText } from '../../admin-app/src/team.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -21,9 +22,11 @@ describe('فريق الدفعة من مصادره الثلاثة', () => {
     expect(rows[0]).toMatchObject({ advisor: true, member: false, groups: [] });
     expect(rows[1]).toMatchObject({ advisor: false, member: true, groups: [{ id: 'G1', name: 'المجموعة 1' }] });
     expect(rows[2]).toMatchObject({ member: true, added_by: 'a@x' });
-    expect(scopeText(rows[0])).toBe('المستشار الأساسي');
+    expect(scopeText(rows[0])).toBe('المستشار الأساسي للدفعة');
     expect(scopeText(rows[1])).toBe('خبير المجموعة 1');
-    expect(scopeText(rows[2])).toBe('عضو الفريق');
+    expect(scopeText(rows[2])).toBe('عضو فريق الدفعة');
+    // مصدر واحد: سطر اللوحة هو سطر بريد التكليف وبوابة الخبير
+    expect(scopeText).toBe(assignmentScopeAr);
   });
   it('التغطية والخدمة بقاعدة الصلاحية نفسها (effectiveAdvisorId): خبير المجموعة غير المعتمد يعيد أعضاءها لمستشار الدفعة', () => {
     const members = [{ id: 'p1', group_id: 'G1' }, { id: 'p2', group_id: 'G1' }, { id: 'p3', group_id: 'G2' }, { id: 'p4', group_id: null }];
@@ -101,5 +104,19 @@ describe('نقطة واحدة للتحرير، بلا ترحيل ولا مساس
     expect(src).toMatch(/if \(scope !== 'cohort'\) throw new Fail\('المدعو الجديد يُضاف إلى الفريق أولًا/);
     expect(src).toMatch(/if \(!\(e\.roles \|\| \[\]\)\.includes\(role\)\) throw new Fail/);
     expect(src).toMatch(/if \(!APPROVED\.includes\(e\.status\)\) throw new Fail/);
+  });
+});
+
+describe('مصدر واحد لحالات الخبير المعتمد ولاسم الدور', () => {
+  it('اللوحة تقرأ EXPERT_APPROVED وexpertRoleAr نفسيهما', () => {
+    expect(APPROVED).toBe(EXPERT_APPROVED);
+    expect(EXPERT_APPROVED).toEqual(['active', 'paused']);
+    expect(roleAr).toBe(expertRoleAr);
+  });
+  it('منسق الجهة لا يرى خبيرًا غير معتمد بالقائمة نفسها', () => {
+    const rows = teamRows({ advisor_expert_id: 'a' }, [{ expert_id: 'b' }], []);
+    const v = coordTeamView({ cohort: { name: 'د' }, rows, experts: [{ id: 'a', full_name: 'أ', status: 'invited' }, { id: 'b', full_name: 'ب', status: 'paused', email: 'x@y' }], groups: [], members: [] }, { team: true });
+    expect(v.advisor).toBeNull();
+    expect(v.team).toEqual([{ full_name: 'ب', title: null, roles: [], groups: [] }]);
   });
 });

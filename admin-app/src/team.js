@@ -2,12 +2,12 @@
 // فريق الدفعة في اللوحة: صياغة واحدة للحمل والنطاق والحالة والتغطية
 // ════════════════════════════════════════════════════════════════
 // يقرؤها تبويب «الفريق» في الدفعة، وقسم الفريق في صفحة الجهة، و«تكليفاته» في ملف الخبير، فلا يُكتب السطر نفسه ثلاث مرات.
-import { countAr, EXPERT_ROLE_AR, EXPERT_STATUS } from '../../supabase/functions/leaders-api/labels.js';
-import { cohortPeriodAr } from '../../supabase/functions/leaders-api/logic.js';
+import { countAr, EXPERT_STATUS, expertRoleAr } from '../../supabase/functions/leaders-api/labels.js';
+import { assignmentScopeAr, cohortPeriodAr, EXPERT_APPROVED } from '../../supabase/functions/leaders-api/logic.js';
 
-export const roleAr = (r) => EXPERT_ROLE_AR[r]?.[0] || r;
+export const roleAr = expertRoleAr;
 export const rolesAr = (rs) => (rs || []).map(roleAr).join('، ');
-export const APPROVED = ['active', 'paused'];
+export const APPROVED = EXPERT_APPROVED;
 const cohortsAr = (n) => countAr(n, 'دفعة واحدة', 'دفعتين', 'دفعات', 'دفعة');
 export const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا');
 export const expertsAr = (n) => countAr(n, 'خبير واحد', 'خبيران', 'خبراء', 'خبيرًا');
@@ -25,14 +25,8 @@ export function loadText(load) {
 // تجاوز السعة تنبيه لا منع (قرار المالك 2026-11-11)
 export const OVER_AR = 'بلغ سعته المعلنة أو تجاوزها. التكليف ممكن، وهذا تنبيه فقط';
 
-// ما يحمله الخبير في هذه الدفعة
-export function scopeText(row) {
-  const parts = [];
-  if (row.advisor) parts.push('المستشار الأساسي');
-  if (row.groups?.length) parts.push(`خبير ${row.groups.map((g) => g.name).join('، ')}`);
-  if (!parts.length) parts.push('عضو الفريق');
-  return parts.join(' · ');
-}
+// ما يحمله الخبير في هذه الدفعة: الصياغة نفسها في بريد التكليف وبوابة الخبير (assignmentScopeAr)
+export const scopeText = assignmentScopeAr;
 // حالة ملفه: المعتمد يعمل، وغيره لا يحمل صلاحية حتى يُعتمد
 export function statusChip(status) {
   if (status === 'active') return ['معتمد', 'ok'];

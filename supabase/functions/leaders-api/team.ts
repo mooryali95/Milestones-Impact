@@ -13,15 +13,13 @@ import { type AssignmentMail, audit, db, Fail, must, sendMail, teamAssignedMail 
 import { cohortMembers } from './programs.ts';
 import { adminSave as expertCreate } from './experts.ts';
 import { firstName } from './hall.js';
-import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
-import { EXPERT_ROLE_AR } from './labels.js';
+import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, EXPERT_APPROVED as APPROVED, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { EXPERT_ROLE_AR, expertRoleAr as roleAr } from './labels.js';
 
 type Body = Record<string, any>;
 type Admin = import('./admin.ts').Admin;
 
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
-const APPROVED = ['active', 'paused'];
-const roleAr = (r: string) => (EXPERT_ROLE_AR as Record<string, string[]>)[r]?.[0] || r;
 const EXPERT_COLS = 'id, full_name, title, status, roles, dimensions, levels, weekly_hours';
 
 // حمل كل خبير: ساعاته (طلبات قائمة وجلسات قادمة، بالقاعدة نفسها في الترشيح)، وعدد الدفعات غير المغلقة التي يحمل فيها تكليفًا

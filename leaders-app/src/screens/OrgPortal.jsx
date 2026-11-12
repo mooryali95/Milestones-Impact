@@ -16,7 +16,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, expertRoleAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
@@ -166,7 +166,7 @@ function ProgramTeam({ team }) {
   if (!team) return null;
   if (!Array.isArray(team)) return <section className="card"><h3>فريق البرنامج</h3><p className="small muted" role="alert">{team.error}</p></section>;
   if (!team.length) return null;
-  const roles = (rs) => (rs || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean).join('، ');
+  const roles = (rs) => (rs || []).map(expertRoleAr).join('، ');
   return (
     <section className="card stack op-team" aria-labelledby="op-team-h">
       <h3 id="op-team-h">فريق البرنامج</h3>
