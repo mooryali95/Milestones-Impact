@@ -97,6 +97,7 @@ export function estimateTimes(ordered, startedAt = null) {
 // المراجعة كاملة لقياس واحد.
 // questions: أسئلة الأداة (بخياراتها ودرجاتها) · rows: assessment_answers { question_id, value, score, answered_at }
 // results: نسب الجوانب المخزّنة لكل بُعد { [dimension]: { knowledge, skill, behavior } } إن وُجدت، فتطابق assessment_results
+/** @param {{ questions: any[], rows: any[], startedAt?: string | null, submittedAt?: string | null, results?: Record<string, any> | null }} d */
 export function reviewAnswers({ questions, rows, startedAt = null, submittedAt = null, results = null }) {
   const byId = new Map((questions || []).map((q) => [q.id, q]));
   const answered = (rows || []).filter((r) => byId.has(r.question_id));
