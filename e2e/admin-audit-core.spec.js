@@ -67,6 +67,10 @@ for (const width of [1024, 1280, 1366]) {
     await page.setViewportSize({ width, height: 800 });
     await setup(page, '#/leaders/participants/p1');
     await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
+    // بطاقة المستوى تطوي التفاصيل (تصور 2026-11-11): يُفتح بُعد Impact وحقل ملاحظته، فيُقاس الفيض بأعرض حالاتها
+    const lc = page.locator('section.lc');
+    await lc.getByRole('button', { name: /^Impact/ }).click();
+    await lc.locator('#lc-det-impact').getByRole('button', { name: '+ ملاحظة' }).click();
     await expect(page.getByLabel('ملاحظة Impact')).toBeVisible();
     const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(over).toBeLessThanOrEqual(0);

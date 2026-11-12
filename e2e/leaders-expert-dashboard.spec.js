@@ -89,8 +89,8 @@ test('الرد على طلب يُعلَن لقارئ الشاشة، وإعادة
   await page.goto(PORTAL);
   await page.getByRole('button', { name: 'أقبل' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'قبلت طلب نورة السالم' })).toBeVisible();
-  const dash = calls.filter((c) => c.action === 'xp.dashboard');
-  expect(dash.map((c) => !!c.lite)).toEqual([false, true]);
+  // إعادة التحميل الخفيفة تلي الإعلان، فتُنتظر ولا تُقرأ لحظة ظهوره
+  await expect.poll(() => calls.filter((c) => c.action === 'xp.dashboard').map((c) => !!c.lite)).toEqual([false, true]);
 });
 
 test('فتح ملف مشارك ثم الرجوع: الأقسام تطلب حالها الحالية لا نسخة التحميل الأول', async ({ page }) => {
