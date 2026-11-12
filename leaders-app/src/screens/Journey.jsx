@@ -689,6 +689,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {approved && me.group && (
         <div className="banner"><span className="ico"><Ico name="people" /></span><div className="grow">مجموعتك: <b>{me.group.name}</b> · {me.group.members} {me.group.members > 2 ? 'أعضاء' : 'عضو'}{me.project_mode === 'group' ? '. مبادرة مجموعتكم واحدة، ووثيقة كل عضو يكتبها بنفسه وتُقيَّم باسمه.' : ''}</div></div>
       )}
+      {/* مستشارك الفعلي (خبير مجموعتك أو مستشار دفعتك): يصله ما تسلّمه ويقيّمه. الاسم وحده، والتواصل عبر الإدارة */}
+      {approved && me.advisor && (
+        <div className="banner" data-testid="my-advisor"><span className="ico"><Ico name="people" /></span><div className="grow">مستشارك: <b>{me.advisor.full_name}</b>. تصله النماذج التي تسلّمها ويقيّمها.</div></div>
+      )}
       {!approved && profile && (
         <div className="banner gold">
           <span className="ico"><Ico name="hourglass" /></span>

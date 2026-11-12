@@ -16,7 +16,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, expertRoleAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
@@ -160,6 +160,45 @@ function Initiatives({ list, outcomes }) {
   );
 }
 const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
+// «فريق البرنامج» (تصور ربط الخبراء بالجهة، قرار المالك 2026-11-11): من يخدم موظفي الجهة في كل دفعة غير مغلقة.
+// أسماء وأدوار بلا وسائل تواصل (التواصل عبر إدارة البرنامج)، وأسماء أعضاء المجموعات بصلاحية القائمة. الخادم يصفّي كل ذلك
+function ProgramTeam({ team }) {
+  if (!team) return null;
+  if (!Array.isArray(team)) return <section className="card"><h3>فريق البرنامج</h3><p className="small muted" role="alert">{team.error}</p></section>;
+  if (!team.length) return null;
+  const roles = (rs) => (rs || []).map(expertRoleAr).join('، ');
+  return (
+    <section className="card stack op-team" aria-labelledby="op-team-h">
+      <h3 id="op-team-h">فريق البرنامج</h3>
+      {team.map((t) => (
+        <div key={t.cohort.name} className="op-team-cohort">
+          {team.length > 1 && <h4>{t.cohort.name}</h4>}
+          {t.advisor ? (
+            <div className="op-team-adv"><span className="small muted">المستشار الأساسي</span><b>{t.advisor.full_name}</b>
+              {t.advisor.title && <small className="muted">{t.advisor.title}</small>}{t.advisor.bio && <p className="small">{t.advisor.bio}</p>}</div>
+          ) : <p className="small muted">لم يُعيَّن مستشار أساسي لهذه الدفعة بعد.</p>}
+          {t.team.length > 0 && <ul className="op-team-list">{t.team.map((x, i) => (
+            <li key={`${x.full_name}-${i}`}><b>{x.full_name}</b> <small className="muted">{[roles(x.roles), x.title, x.groups.length ? x.groups.join('، ') : null].filter(Boolean).join(' · ')}</small></li>
+          ))}</ul>}
+          {t.groups.length > 0 && (
+            <div className="stack">
+              <span className="small muted">المجموعات: {t.groups.length} · {countAr(t.participants, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا')}</span>
+              {t.groups.map((g) => (
+                <details key={g.name} className="op-team-group">
+                  <summary>{g.name} ({g.count}) · {g.expert || (t.advisor ? 'يتبع المستشار الأساسي' : 'بلا خبير بعد')}</summary>
+                  {g.members ? (g.members.length ? <p className="small">{g.members.join('، ')}</p> : <p className="small muted">لا أعضاء بعد.</p>)
+                    : <p className="small muted">أسماء الأعضاء لمن يرى قائمة المشاركين.</p>}
+                </details>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <p className="small muted">للتواصل مع الفريق: إدارة البرنامج.</p>
+    </section>
+  );
+}
+
 function ImpactCard({ im, onReport }) {
   if (!im) return null;
   const c = im.counts || {};
@@ -278,7 +317,9 @@ function Dashboard({ me, onLogout }) {
           </div>
         </div>
         {/* D20: الاستهلاك من الرعاية المثبتة لا من عدد المسجلين، ومعه من ينتظر قرار الرعاية */}
-        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small></div>
+        <div className="op-seats"><b>{org.seats ? (kpis.seats_used ?? kpis.total) : kpis.total}</b><small>{org.seats ? `من ${countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')}${kpis.seats_waiting ? ` · ${kpis.seats_waiting} بانتظار قرار الرعاية` : ''}` : 'مشارك'}</small>
+          {/* حساب الاختبار خارج كل أرقام اللوحة ومقاعدها (forStats)، فيُذكر عدده هنا بصدق ولا يُترك فرقًا بلا تفسير */}
+          {kpis.test_accounts > 0 && <small className="op-test">{countAr(kpis.test_accounts, 'حساب اختبار واحد', 'حسابا اختبار', 'حسابات اختبار', 'حساب اختبار')} خارج الإحصاءات</small>}</div>
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={decideRater} />
 
@@ -301,6 +342,7 @@ function Dashboard({ me, onLogout }) {
         <section className="card"><h3>طريقة الانضمام</h3><Bars obj={d.by_via} label={(k) => VIA[k] || k} total={kpis.total} /></section>
       </div>
 
+      <ProgramTeam team={d.program_team} />
       <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
       <Initiatives list={d.initiatives || []} outcomes={d.outcomes} />
 

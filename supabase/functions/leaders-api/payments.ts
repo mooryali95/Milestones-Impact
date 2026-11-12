@@ -7,7 +7,7 @@
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, Fail, must, payReminderMail, sendMail } from './core.ts';
-import { requireWrite } from './admin.ts';
+import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, settings, type Item } from './entitlements.ts';
 
@@ -380,7 +380,8 @@ export async function adminOrgFinance(_a: Admin, b: Body) {
   const s: any = await settings();
   const [{ data: ents }, { data: parts }] = await Promise.all([
     db.from('entitlements').select('participant_id, item, value_cents, currency, created_at, revoked_at').eq('organization_id', id).eq('source', 'sponsor'),
-    db.from('participants').select('id, full_name, email, status, org_via, created_at, certificates(id)').eq('organization_id', id).eq('is_demo', false),
+    // حساب العرض وحساب الاختبار خارج الكشف ومقاعده وقيمته (forStats)، كما هما خارج لوحة الجهة وبوابة منسقها
+    forStats(db.from('participants').select('id, full_name, email, status, org_via, created_at, certificates(id)').eq('organization_id', id)),
   ]);
   const pinned = new Map<string, any>();
   for (const e of (ents || []).filter((x: any) => !x.revoked_at)) {

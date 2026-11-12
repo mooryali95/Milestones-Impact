@@ -7,6 +7,7 @@
 // المعالم ويؤكّد إجابات الأقران؛ المسند إليه بطلب خدمة يقرأ فقط.
 import React, { useCallback, useEffect, useState } from 'react';
 import { xpCall } from '../api.js';
+import ExpertAnswers from './ExpertAnswers.jsx';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
 import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, finalApproveConfirm, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
@@ -159,6 +160,7 @@ export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
   const [msNote, sayMs] = useNotice();
   const [rub, setRub] = useState(null);
+  const [answers, setAnswers] = useState(false);
   const load = useCallback(() => xpCall('xp.participant', { id }).then(setD), [id]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
@@ -198,6 +200,8 @@ export default function ExpertFile({ id, onBack }) {
               {d.profile.track?.title && <p className="small">المسار: <b>{d.profile.track.title}</b></p>}
             </>
           ) : <p className="muted small">لم يُتم القياس المبدئي بعد.</p>}
+          {/* إجابات القياس لمستشار الدفعة وحده (قرار المالك 2026-11-11)، ويُسجَّل كل اطلاع */}
+          {advisor && d.assessments?.length > 0 && <button type="button" className="link small" onClick={() => setAnswers(true)}>إجابات القياس</button>}
           {p.bio && <p className="small muted">{p.bio}</p>}
           <p className="small muted">{[p.sector, p.years_experience != null ? `${p.years_experience} سنة خبرة` : null].filter(Boolean).join(' · ')}</p>
         </section>
@@ -244,6 +248,7 @@ export default function ExpertFile({ id, onBack }) {
 
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
+      {answers && advisor && <ExpertAnswers participant={p} onClose={() => setAnswers(false)} />}
     </div>
   );
 }

@@ -13,6 +13,13 @@ export const pressable = (fn) => ({
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// ظاهر يقع عليه التركيز: لا داخل ما خُبّئ بـhidden، ولا display:none ولا visibility:hidden على العنصر نفسه
+const shown = (x) => {
+  if (x.closest('[hidden]')) return false;
+  const cs = getComputedStyle(x);
+  return cs.display !== 'none' && cs.visibility !== 'hidden';
+};
+
 // النوافذ المفتوحة بترتيب فتحها: Tab وEsc للعليا وحدها (تأكيد فوق التحليل الديموغرافي مثلًا)
 const openDialogs = [];
 
@@ -41,7 +48,9 @@ export function useDialog(box, onClose, opts = {}) {
     const opener = document.activeElement;
     const me = {};
     openDialogs.push(me);
-    const items = () => [...el.querySelectorAll(FOCUSABLE)];
+    // الظاهر وحده: عنصر مخفي (قسم مطوي بـhidden أو زر للجوال وحده) لا يقع عليه التركيز، فإن كان آخر
+    // القائمة لم يدُر Tab وخرج التركيز من النافذة (كما يفعل useModalFocus في اللوحة)
+    const items = () => [...el.querySelectorAll(FOCUSABLE)].filter(shown);
     start();
     const onKey = (e) => {
       if (openDialogs[openDialogs.length - 1] !== me) return;

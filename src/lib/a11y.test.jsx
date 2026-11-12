@@ -145,3 +145,34 @@ describe('useDialog: النافذة نفسها والمحتوى المتغير �
     expect(active()).toBe('cell');
   });
 });
+
+// لوحة «إجابات القياس» في بوابة الخبير (2026-11-11): آخر عناصرها زر للجوال وحده (display:none على الحاسوب)
+// وأقسام مطوية بـhidden. كانت تدخل قائمة Tab ولا يقع عليها التركيز، فلا يدور Tab من آخر ظاهر ويخرج من النافذة.
+describe('useDialog: العناصر المخفية خارج دورة Tab', () => {
+  afterEach(() => {
+    act(() => root.unmount());
+    document.body.innerHTML = '';
+  });
+  function Panel() {
+    const box = useRef(null);
+    useDialog(box, () => {});
+    return (
+      <div ref={box} role="dialog" tabIndex={-1}>
+        <button id="first">✕</button>
+        <button id="last">آخر ظاهر</button>
+        <ol hidden><li><button id="in-hidden">داخل قسم مطوي</button></li></ol>
+        <button id="mobile-only" style={{ display: 'none' }}>للجوال وحده</button>
+      </div>
+    );
+  }
+  it('Tab من آخر عنصر ظاهر يعود إلى الأول، وShift+Tab من الأول إلى آخر ظاهر', () => {
+    mount();
+    render(<Panel />);
+    expect(active()).toBe('first');
+    document.getElementById('last').focus();
+    expect(key('Tab').defaultPrevented).toBe(true);
+    expect(active()).toBe('first');
+    key('Tab', true);
+    expect(active()).toBe('last');
+  });
+});

@@ -223,7 +223,8 @@ export const COHORT_STATUS = { planned: 'مخطط لها', open: 'التسجيل
 const INHERIT = 'كما في البرنامج';
 
 // حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, experts = [], team = false }) {
+// المستشار الأساسي وفريق الخبراء ليسا هنا: يُحرَّران من «الفريق والمجموعات» وحده (CohortTeam.jsx)، مصدر واحد للتحرير
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
     { name: 'name', label: 'اسم الدفعة' },
@@ -240,11 +241,6 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, `${r.code} · ${r.title_ar}`])),
       help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
-    { name: 'advisor_expert_id', label: 'المستشار الأساسي', type: 'select', empty: 'بلا مستشار (الإدارة وحدها)', options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
-      help: 'يصله كل نموذج يسلّمه مشاركو الدفعة ويقيّمه من لوحة الخبير؛ الإدارة ترى وتقيّم أيضًا. تغييره ينقل المعلّق إلى الجديد.' },
-    // يظهر حين يقول الخادم إن الفريق جاهز (team_ready): قبل نشر الدالة أو تطبيق الترحيل كان الحفظ يتجاهله بصمت
-    { name: 'team_expert_ids', label: 'فريق الخبراء', type: 'multi', show: () => team, options: Object.fromEntries(experts.map((e) => [e.id, e.full_name])),
-      help: 'خبراء يُعرضون على مشاركي هذه الدفعة أولًا حين يطلبون موجّهًا أو مستشارًا أو خبيرًا، ثم بقية الخبراء إن لم يكفِ الفريق. العضوية لا تمنح صلاحيات المستشار الأساسي.' },
     { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
       help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
@@ -278,8 +274,9 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', advisor_expert_id: c.advisor_expert_id || '', team_expert_ids: c.team_expert_ids || [], hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
-  delete v.schedule; delete v.stage_modes;
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
+  // الفريق والمستشار لا يُرسَلان من نموذج الدفعة: حفظه كان يستبدل الفريق بنسخة قديمة لو تغيّر من «الفريق والمجموعات» بعد فتحه
+  delete v.schedule; delete v.stage_modes; delete v.advisor_expert_id; delete v.team_expert_ids; delete v.team_ready;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
   delete v.delivery;
   return v;

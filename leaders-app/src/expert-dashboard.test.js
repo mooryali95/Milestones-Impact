@@ -18,7 +18,11 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
     expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus } };');
   });
   it('لا تجميع قبل الموافقة أو الاعتماد، ولا في إعادة التحميل الخفيفة', () => {
-    expect(dash).toContain('if (!d?.success || d.consent_needed || d.onboarding || b.lite === true) return d;');
+    // «تكليفاتي» (فريق الجهة والدفعة، المرحلة 2) تُضاف بعد الموافقة والاعتماد وقبل عودة الخفيفة، والتجميع بعدها كما كان
+    expect(dash).toContain('if (!d?.success || d.consent_needed || d.onboarding) return d;');
+    expect(dash).toContain('if (b.lite === true) return d;');
+    expect(dash.indexOf('if (b.lite === true) return d;')).toBeLessThan(dash.indexOf('await Promise.all(['));
+    expect(dash.indexOf("d.assignments = await settle('xp.assignments'")).toBeGreaterThan(dash.indexOf('d.onboarding) return d;'));
   });
   it('خطأ قسم يبقى له بشكل رد الفعل وحده، ولا يُسقط اللوحة', () => {
     const settle = index.slice(index.indexOf('async function settle'), index.indexOf('const QUIET'));

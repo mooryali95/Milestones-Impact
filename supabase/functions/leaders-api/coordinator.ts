@@ -15,6 +15,7 @@ import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
+import { coordTeam } from './team.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -102,7 +103,7 @@ export async function fromToken(token: unknown) {
 }
 
 const mePayload = (c: any) => ({
-  coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
+  coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions, c.template), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
   org: { name: c.organizations.name },
 });
 export const me = async (c: any) => ({ success: true, ...mePayload(c), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org'),
@@ -129,7 +130,7 @@ export async function logout(sessionId: string) {
 
 // ── 3. لوحة الجهة كما يراها المنسق ──
 export async function dashboardFor(c: any) {
-  const perms = coordPermissions(c.permissions);
+  const perms = coordPermissions(c.permissions, c.template);
   const d: any = await orgPayload({ id: c.organization_id });
   const ids = d.participants.map((p: any) => p.id);
 
@@ -170,11 +171,17 @@ export async function dashboardFor(c: any) {
   const weekAgo = Date.now() - 7 * 864e5;
   const avg = full.length ? Math.round(full.reduce((a: number, p: any) => a + p.progress, 0) / full.length) : 0;
   // استهلاك مقاعد العقد (D20): من ثبتت رعايته، ومن ينتظر قرار الرعاية لامتلائها أو لخروجه عن مدة العقد
-  const [{ data: seated }, { count: waiting }] = await Promise.all([
+  // وحساب الاختبار (is_test) خارجها كما هو خارج بقية أرقام اللوحة (forStats): كانت الترويسة تقول «1 من 50 مقعدًا»
+  // وخريطة الرحلة والمؤشرات صفر لأن الحساب الوحيد حساب اختبار (بلاغ المالك 2026-11-11). عدده يعود للبوابة لتذكره بصدق
+  const [{ data: seated }, { data: pending }, { data: tests }] = await Promise.all([
     db.from('entitlements').select('participant_id').eq('organization_id', c.organization_id).eq('source', 'sponsor').is('revoked_at', null),
-    db.from('sponsor_requests').select('id', { count: 'exact', head: true }).eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { count: 0 } : r)),
+    db.from('sponsor_requests').select('participant_id').eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { data: [] } : r)),
+    db.from('participants').select('id').eq('organization_id', c.organization_id).eq('is_test', true),
   ]);
-  const seatsUsed = new Set((seated || []).map((e: any) => e.participant_id)).size;
+  const testIds = new Set((tests || []).map((t: any) => t.id));
+  const counted = (list: any[] | null) => new Set((list || []).map((e: any) => e.participant_id).filter((id: string) => !testIds.has(id))).size;
+  const seatsUsed = counted(seated);
+  const waiting = counted(pending);
   // خريطة الرحلة (قرار المالك 2026-11-11): مراحل برنامج دفعة الجهة، ومن يقف عند كل منها من الرحلات المحسوبة أعلاه نفسها.
   // الأسماء لصلاحية «القائمة»، وما ينقص كل شخص لصلاحية «النشاط»، وإلا أسباب مجمّعة بلا أسماء
   const def: any = await journeyDefinition({ organization_id: c.organization_id });
@@ -201,10 +208,13 @@ export async function dashboardFor(c: any) {
       // عدد مجمّع من الصفوف الأصلية: يظهر ولو لم تُمنح صلاحية النشاط الفردي
       active_week: (rows as any[]).filter((p: any) => p.last_login_at && Date.parse(p.last_login_at) > weekAgo).length,
       approved: d.funnel.approved, completed: d.funnel.completed, avg_progress: avg,
-      seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting ?? 0,
+      seats: d.org.seats ?? null, seats_used: seatsUsed, seats_waiting: waiting, test_accounts: testIds.size,
     },
     participants,
     journey_map,
+    // «فريق البرنامج» (تصور ربط الخبراء بالجهة، قرار المالك 2026-11-11): أسماء وأدوار بلا وسائل تواصل، بصلاحية «الفريق».
+    // تعذّر قراءته يُقال في بطاقته ولا يُسقط اللوحة
+    program_team: perms.team ? await coordTeam(c.organization_id, perms).catch((e) => { console.error('coord team', e); return { error: 'تعذّر قراءة فريق البرنامج الآن، حاول بعد قليل' }; }) : null,
   };
 }
 // أثر الجهة: القياس المبدئي مقابل البعدي لمشاركيها. الأرقام المجمعة للجميع،
@@ -258,7 +268,7 @@ async function coordinatorOf(orgId: string, id?: unknown) {
 }
 async function viewersOf(orgId: string) {
   const { data } = await db.from('org_coordinators').select('*').eq('organization_id', orgId).order('created_at');
-  return (data || []).map((c: any) => ({ ...c, permissions: coordPermissions(c.permissions), template: c.template || templateOf(c.permissions), live: viewerActive(c) }));
+  return (data || []).map((c: any) => ({ ...c, permissions: coordPermissions(c.permissions, c.template), template: c.template || templateOf(c.permissions), live: viewerActive(c) }));
 }
 
 // حالة المنسق وجلساته ونشاطه الأخير
@@ -275,7 +285,7 @@ export async function adminGet(_a: Admin, b: Body) {
   const now = Date.now();
   return {
     success: true,
-    coordinator: { ...c, permissions: coordPermissions(c.permissions), template: c.template || templateOf(c.permissions) },
+    coordinator: { ...c, permissions: coordPermissions(c.permissions, c.template), template: c.template || templateOf(c.permissions) },
     coordinators,
     sessions: (sessions || []).map((s: any) => ({ ...s, active: !s.revoked_at && Date.parse(s.expires_at) > now })),
     activity: log || [],
@@ -302,7 +312,8 @@ export async function adminSave(a: Admin, b: Body) {
   if (other) throw new Fail(other.organization_id === orgId ? 'هذا البريد مطّلع في هذه الجهة بالفعل' : `هذا البريد مطّلع لجهة ${(other.organizations as any)?.name || 'أخرى'}`, 409);
 
   const template = ['executive', 'program', 'hr'].includes(b.template) ? b.template : null;
-  const permissions = coordPermissions(b.permissions ?? (template ? (COORD_TEMPLATES as any)[template] : before?.permissions));
+  // القالب يحسم افتراض صلاحية لم تُحفظ بعد («فريق البرنامج»): حفظ بيانات منسق موارد بشرية قائم لا يفتح له الفريق
+  const permissions = coordPermissions(b.permissions ?? (template ? (COORD_TEMPLATES as any)[template] : before?.permissions), template || before?.template);
   const expires = b.expires_at ? new Date(String(b.expires_at)) : null;
   if (expires && (Number.isNaN(+expires) || +expires < Date.now())) throw new Fail('تاريخ انتهاء الاطلاع يجب أن يكون في المستقبل');
   const row = {

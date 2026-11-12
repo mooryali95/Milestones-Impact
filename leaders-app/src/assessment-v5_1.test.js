@@ -53,7 +53,8 @@ describe('تعليل تجاوز التسكين', () => {
   });
   it('الخادم يرفض الاعتماد بلا تعليل، والشاشة تطلبه', () => {
     expect(read('supabase/functions/leaders-api/admin.ts')).toMatch(/overrideNeedsReason\(old\?\.level, level, b\.notes\?\.\[d\]\)/);
-    expect(read('admin-app/src/screens/Participants.jsx')).toMatch(/سبب المخالفة \(إلزامي/);
+    // بطاقة المستوى صارت مكوّنًا مستقلًا (تصور 2026-11-11، المرحلة 1)
+    expect(read('admin-app/src/screens/LevelCard.jsx')).toMatch(/سبب المخالفة \(إلزامي/);
   });
 });
 

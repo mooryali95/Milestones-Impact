@@ -4,6 +4,7 @@
 import {
   all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
+import { servedOrder } from './answer-review.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -20,7 +21,7 @@ import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor } from './entitlements.ts';
-import { notifyAdvisor } from './advisor.ts';
+import { advisorOf, notifyAdvisor } from './advisor.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -546,7 +547,7 @@ export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = 
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt }, passkeys, cells, org, payAccess] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt }, passkeys, cells, org, payAccess, adv] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -554,6 +555,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
       : null,
     accessOf(p),
+    // «مستشارك» (تصور ربط الخبراء بالجهة، المرحلة 2): المستشار الفعلي من advisorOf نفسه الذي يقرر من يقيّمه (خبير مجموعته
+    // ثم مستشار دفعته). الاسم وحده بلا بريد، وتعذّر القراءة يخفي السطر ولا يُسقط الرحلة
+    audience === 'participant' ? advisorOf(p).catch(() => null) : Promise.resolve(null),
   ]);
   // «كيف تُقيَّم» (D06 وD07): معادلة برنامج المشارك كما تُطبَّق، بلا مفاتيح
   const finalEval = def.program_id ? (await db.from('programs').select('final_eval').eq('id', def.program_id).maybeSingle()).data?.final_eval ?? null : null;
@@ -595,6 +599,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     milestone_summary,
     // مجموعته في دفعته، ونمط المشروع
     group, project_mode: def.cohort?.project_mode || 'individual', final,
+    advisor: adv ? { full_name: (adv as any).full_name } : null,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
       : continuous && { ...continuous, events: (continuous.events || []).map(({ comment: _c, ...e }: any) => e) },
@@ -759,15 +764,9 @@ export async function assessmentGet(p: any, b: Body = {}) {
     qs = forForm(qs, a.form);
   }
   const answers = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', a.id)) ?? [];
-  const order = ['milestone', 'impact', 'leadership'];
-  // الممارسة أولًا ثم المواقف ثم المعرفة: يقدّر المشارك ممارسته قبل أن تلمّح
-  // أسئلة المعرفة والمواقف إلى ما يُنتظر منه، وتأتي المعرفة بعد المواقف
-  // فلا تدله على إجاباتها.
-  const tierOrder = ['behavior', 'skill', 'knowledge'];
-  // بنود انتقال التعلم في القياس البعدي تأتي آخرًا، بعد الأطر الثلاثة
-  const last = (q: any) => (q.tier === 'transfer' ? 1 : 0);
-  qs.sort((x: any, y: any) => last(x) - last(y) || order.indexOf(x.dimension) - order.indexOf(y.dimension)
-    || tierOrder.indexOf(x.tier) - tierOrder.indexOf(y.tier) || x.sort - y.sort);
+  // ترتيب العرض من مصدر واحد مع مراجعة الإجابات في اللوحة (servedOrder): الأبعاد بترتيبها، وفي كل
+  // بُعد الممارسة ثم المواقف ثم المعرفة، وبنود انتقال التعلم في البعدي آخرًا
+  qs = servedOrder(qs);
 
   return {
     success: true,

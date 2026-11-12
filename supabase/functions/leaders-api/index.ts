@@ -44,6 +44,7 @@ import * as PR from './peer.ts';
 import * as FL from './file.ts';
 import * as SU from './sus.ts';
 import * as PV from './privacy.ts';
+import * as TM from './team.ts';
 
 type Body = Record<string, any>;
 
@@ -226,7 +227,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
   'xp.dashboard': async (e, b) => {
     const d: any = await E.portalDashboard(e);
-    if (!d?.success || d.consent_needed || d.onboarding || b.lite === true) return d;
+    if (!d?.success || d.consent_needed || d.onboarding) return d;
+    // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
+    d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
+    if (b.lite === true) return d;
     const [reviews, participants, peers, sus] = await Promise.all([
       settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
       settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)),
@@ -247,6 +251,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
   'xp.participants': (e) => FL.participants(e),
   'xp.participant': (e, b) => FL.participant(e, b),
+  'xp.assessment-answers': (e, b) => FL.assessmentAnswers(e, b),
   'xp.final-eval': (e, b) => FL.finalGet(e, b),
   'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
   'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
@@ -296,6 +301,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': (_a, b) => A.reviews(b),
   'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
+  'admin.assessment-answers': (a, b) => A.assessmentAnswers(a, b),
   'admin.approve': A.approve,
   'admin.status': A.setStatus,
   'admin.reset-assessment': A.resetAssessment,
@@ -369,7 +375,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,
   'admin.experts': () => E.adminList(),
-  'admin.expert': E.adminGet,
+  // ملف الخبير ومعه تكليفاته من المصادر الثلاثة (قراءة؛ التحرير من فريق الدفعة)
+  'admin.expert': async (a, b) => ({ ...(await E.adminGet(a, b)), assignments: await TM.assignmentsOf(String(b.id || '')) }),
   'admin.expert-save': E.adminSave,
   'admin.expert-invite': E.adminInvite,
   'admin.expert-set-status': E.adminSetStatus,
@@ -406,6 +413,11 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.final-eval-reopen': (a, b) => A.writer(a, F.reopen, b),
   'admin.final-eval-config': (a, b) => A.writer(a, F.config, b),
   'admin.cohort-groups': (_a, b) => G.cohortGroups(b),
+  // فريق الدفعة في نقطة واحدة، وملخصه لكل دفعة في صفحة الجهة (team.ts)
+  'admin.cohort-team': (_a, b) => TM.cohortTeam(b),
+  'admin.org-team': (_a, b) => TM.orgTeam(b),
+  'admin.team-add': (a, b) => A.writer(a, TM.teamAdd, b),
+  'admin.team-remove': (a, b) => A.writer(a, TM.teamRemove, b),
   'admin.cohort-group-save': (a, b) => A.writer(a, G.cohortGroupSave, b),
   'admin.cohort-group-assign': (a, b) => A.writer(a, G.cohortGroupAssign, b),
   'admin.cohort-groups-auto': (a, b) => A.writer(a, G.cohortGroupsAuto, b),

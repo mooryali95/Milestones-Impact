@@ -789,19 +789,24 @@ export function cleanAnswers(fields, answers) {
 // ── منسق الجهة ──
 // صلاحيات العرض الافتراضية: بلا درجات ولا وسائل تواصل، والتصدير مسموح
 export const COORD_DEFAULTS = { list: true, scores: false, contact: false, activity: false, export: true };
-export function coordPermissions(p) {
+// team: «فريق البرنامج» (أسماء الخبراء وأدوارهم، بلا وسائل تواصل)، مفتاح في JSON الصلاحيات نفسه بلا ترحيل (قرار المالك 2026-11-11).
+// صلاحية أُضيفت بعد إنشاء حسابات قائمة: إن لم تُحفظ صراحة فافتراضها من القالب (مفعّلة إلا لقالب الموارد البشرية)
+export function coordPermissions(p, template) {
   const x = p && typeof p === 'object' ? p : {};
-  return { list: x.list !== false, scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false };
+  return { list: x.list !== false, scores: x.scores === true, contact: x.contact === true, activity: x.activity === true, export: x.export !== false,
+    team: 'team' in x ? x.team === true : template !== 'hr' };
 }
 // قوالب المطّلعين: نقطة بداية تُضبط بعدها كل صلاحية وحدها (القالب «مخصّص» حين تختلف عنه)
 export const COORD_TEMPLATES = {
-  executive: { list: false, scores: false, contact: false, activity: false, export: false },
-  program: { list: true, scores: false, contact: false, activity: true, export: true },
-  hr: { list: true, scores: false, contact: true, activity: false, export: true },
+  executive: { list: false, scores: false, contact: false, activity: false, export: false, team: true },
+  program: { list: true, scores: false, contact: false, activity: true, export: true, team: true },
+  hr: { list: true, scores: false, contact: true, activity: false, export: true, team: false },
 };
 export function templateOf(perms) {
   const p = coordPermissions(perms);
-  return Object.keys(COORD_TEMPLATES).find((k) => Object.entries(COORD_TEMPLATES[k]).every(([x, v]) => p[x] === v)) || 'custom';
+  // حساب قائم قبل صلاحية الفريق لا يصير «مخصّصًا» لغيابها: افتراضها يتبع قالبه
+  const saved = (k) => !!perms && typeof perms === 'object' && k in perms;
+  return Object.keys(COORD_TEMPLATES).find((k) => Object.entries(COORD_TEMPLATES[k]).every(([x, v]) => (x === 'team' && !saved(x)) || p[x] === v)) || 'custom';
 }
 // المطّلع نافذ ما لم يُوقف أو تنتهِ مدته أو تتوقف جهته
 export const viewerActive = (c, now = Date.now()) => !!c && c.status !== 'suspended' && (!c.expires_at || Date.parse(c.expires_at) > now)
@@ -2174,9 +2179,8 @@ export function matchScore(e, need) {
   const lvl = LEVEL_RANK[need.level] || 0;
   const lvlFit = !lvl || !levels.length ? 0.5 : levels.includes(need.level) ? 1 : levels.some((x) => LEVEL_RANK[x] > lvl) ? 0.5 : 0;
   const fit = (dimFit * 0.6 + lvlFit * 0.4) * w.fit;
-  // السعة: ما بقي من ساعاته الأسبوعية بعد حِمله الحالي (كل طلب قائم أو جلسة قادمة = ساعة)
-  const hours = Number(e.weekly_hours) || 0;
-  const used = (e.load?.requests || 0) + (e.load?.upcoming || 0);
+  // السعة: ما بقي من ساعاته الأسبوعية بعد حِمله الحالي (capacityOf، مصدر واحد مع مؤشر الحمل في فريق الدفعة)
+  const { hours, used, full } = capacityOf(e);
   const capacity = hours > 0 ? Math.max(0, 1 - used / hours) * w.capacity : 0;
   // الجودة: التقييم من 5 حين يوجد بعدد كافٍ، وإلا محايد
   const r = e.rating?.count >= MIN_RATINGS ? e.rating.avg : null;
@@ -2185,7 +2189,15 @@ export function matchScore(e, need) {
   const continuity = (e.served ? 1 : 0) * w.continuity;
   const parts = { fit, capacity, quality, context, continuity };
   const total = Math.round(Object.values(parts).reduce((a, n) => a + n, 0) * 10) / 10;
-  return { total, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, Math.round(v * 10) / 10])), full: hours > 0 && used >= hours };
+  return { total, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, Math.round(v * 10) / 10])), full };
+}
+// سعة الخبير وحِمله: ساعاته الأسبوعية المعلنة، وما يشغلها الآن (كل طلب قائم أو جلسة قادمة = ساعة).
+// full: بلغ سعته المعلنة. في الترشيح يُخرجه من العرض الآلي، وفي فريق الدفعة تنبيه يراه المدير ولا يمنع التكليف (قرار المالك 2026-11-11)
+/** @param {{ weekly_hours?: number | null, load?: { requests?: number, upcoming?: number } }} e */
+export function capacityOf(e) {
+  const hours = Number(e?.weekly_hours) || 0;
+  const used = (e?.load?.requests || 0) + (e?.load?.upcoming || 0);
+  return { hours, used, full: hours > 0 && used >= hours };
 }
 // المرشحون: النشطون بالدور المطلوب، غير من عُرض عليهم، مرتبون بالنقاط ثم بالأقل حِملًا
 export function rankExperts(experts, need, tried = []) {
@@ -2260,6 +2272,117 @@ export function cleanTeamIds(ids, isId) {
   const out = [...new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)).filter((x) => isId(x)))];
   if (out.length > TEAM_MAX) throw new Error(`فريق الدفعة ${TEAM_MAX} خبيرًا على الأكثر`);
   return out;
+}
+
+// ── فريق الدفعة في نقطة واحدة (تصور ربط الخبراء والمجموعات بالجهة v1، الخيار ج، باعتماد المالك 2026-11-11) ──
+// الدفعة نقطة الربط، وفريقها يُقرأ من ثلاثة مصادر قائمة ولا يُضاف رابع: cohorts.advisor_expert_id (المستشار الأساسي،
+// مصدر الصلاحية)، وcohort_experts (الفريق)، وcohort_groups.advisor_expert_id (خبير المجموعة، الأخص يغلب).
+// صف واحد لكل خبير بكل ما يحمله في الدفعة. أدواره من ملفه: دور التكليف وتواريخه وقبوله في المرحلة 3 بترحيلها.
+export const TEAM_SCOPES = ['cohort', 'group', 'advisor'];
+// الخبير المعتمد الذي يحمل صلاحية في الدفعة: مصدر واحد لفريق الدفعة وصفحة الجهة وبوابة المنسق ولوحة الإدارة
+export const EXPERT_APPROVED = ['active', 'paused'];
+/** @param {{ advisor_expert_id?: string | null } | null} cohort
+ *  @param {{ expert_id: string, created_at?: string | null, added_by?: string | null }[]} team صفوف cohort_experts للدفعة
+ *  @param {{ id: string, name: string, advisor_expert_id?: string | null }[]} groups مجموعات الدفعة */
+export function teamRows(cohort, team, groups) {
+  const rows = new Map();
+  const row = (id) => {
+    if (!rows.has(id)) rows.set(id, { expert_id: id, member: false, advisor: false, groups: [], added_at: null, added_by: null });
+    return rows.get(id);
+  };
+  if (cohort?.advisor_expert_id) row(cohort.advisor_expert_id).advisor = true;
+  for (const t of team || []) Object.assign(row(t.expert_id), { member: true, added_at: t.created_at || null, added_by: t.added_by || null });
+  for (const g of groups || []) if (g.advisor_expert_id) row(g.advisor_expert_id).groups.push({ id: g.id, name: g.name });
+  // المستشار أولًا، ثم خبراء المجموعات، ثم بقية الفريق
+  const rank = (r) => (r.advisor ? 0 : r.groups.length ? 1 : 2);
+  return [...rows.values()].sort((a, b) => rank(a) - rank(b));
+}
+// مؤشرات تغطية الفريق للدفعة: من بلا مستشار فعلي (effectiveAdvisorId نفسه الذي يقرر الصلاحية)، والمجموعات بلا خبير معتمد،
+// ومن بلا مجموعة. للعرض في الدفعة وصفحة الجهة، لا تمنع شيئًا
+/** @param {{ advisor_expert_id?: string | null } | null} cohort @param {{ id: string, group_id?: string | null }[]} members
+ *  @param {{ id: string, advisor_expert_id?: string | null }[]} groups @param {Iterable<string>} approved */
+export function teamCoverage(cohort, members, groups, approved) {
+  const ok = new Set(approved || []);
+  const gAdv = new Map((groups || []).map((g) => [g.id, g.advisor_expert_id || null]));
+  const ms = members || [];
+  return {
+    members: ms.length,
+    without_advisor: ms.filter((m) => !effectiveAdvisorId({ group: gAdv.get(m.group_id) || null, cohort: cohort?.advisor_expert_id || null }, ok)).length,
+    groups: (groups || []).length,
+    groups_without_expert: (groups || []).filter((g) => !(g.advisor_expert_id && ok.has(g.advisor_expert_id))).length,
+    ungrouped: ms.filter((m) => !m.group_id).length,
+  };
+}
+// فريق البرنامج كما يراه منسق الجهة (قرار المالك 2026-11-11): الاسم والمسمى والأدوار، والنبذة القصيرة للمستشار،
+// بلا بريد ولا جوال (التواصل عبر إدارة البرنامج). المعتمدون وحدهم. والمجموعات بأسمائها وأعدادها وخبرائها،
+// وأسماء أعضائها لمن يرى قائمة المشاركين وحده. بلا صلاحية «فريق البرنامج» لا شيء
+/** @param {{ cohort: any, rows: ReturnType<typeof teamRows>, experts: any[], groups: any[], members: { id: string, name: string, group_id?: string | null }[] }} d
+ *  @param {{ team?: boolean, list?: boolean }} perms */
+export function coordTeamView({ cohort, rows, experts, groups, members }, perms) {
+  if (!perms?.team) return null;
+  const ok = new Map((experts || []).filter((e) => EXPERT_APPROVED.includes(e.status)).map((e) => [e.id, e]));
+  const card = (e) => ({ full_name: e.full_name, title: e.title || null, roles: e.roles || [] });
+  const adv = (rows || []).find((r) => r.advisor && ok.has(r.expert_id));
+  const ms = members || [];
+  return {
+    cohort: { name: cohort?.name || '', starts_on: cohort?.starts_on || null, ends_on: cohort?.ends_on || null },
+    advisor: adv ? { ...card(ok.get(adv.expert_id)), bio: ok.get(adv.expert_id).bio ? String(ok.get(adv.expert_id).bio).slice(0, 280) : null } : null,
+    team: (rows || []).filter((r) => !r.advisor && ok.has(r.expert_id)).map((r) => ({ ...card(ok.get(r.expert_id)), groups: r.groups.map((g) => g.name) })),
+    groups: (groups || []).map((g) => {
+      const inG = ms.filter((m) => m.group_id === g.id);
+      return { name: g.name, count: inG.length, expert: ok.get(g.advisor_expert_id)?.full_name || null, ...(perms.list ? { members: inG.map((m) => m.name) } : {}) };
+    }),
+    participants: ms.length,
+  };
+}
+// مدة الدفعة، وهي مدة التكليف فيها: صياغة واحدة للوحة الإدارة وبوابة الخبير وبريد التكليف. التاريخ يوم بلا ساعة،
+// فيُقرأ ظهرًا بتوقيت الرياض فلا يرجع يومًا في منطقة زمنية أخرى
+const periodDay = (d) => (/^\d{4}-\d{2}-\d{2}/.test(String(d || ''))
+  ? new Date(`${String(d).slice(0, 10)}T12:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' }) : '');
+/** @param {{ starts_on?: string | null, ends_on?: string | null } | null} c */
+export function cohortPeriodAr(c) {
+  const s = periodDay(c?.starts_on), e = periodDay(c?.ends_on);
+  if (s && e) return `${s} إلى ${e}`;
+  if (s) return `من ${s}`;
+  if (e) return `حتى ${e}`;
+  return 'لم تُحدَّد مدة الدفعة بعد';
+}
+// ما يحمله الخبير في دفعة، بصيغة من يُخاطَب عنه: للبريد وبوابة الخبير
+/** @param {{ advisor?: boolean, groups?: { name: string }[] }} a */
+export function assignmentScopeAr(a) {
+  const parts = [];
+  if (a?.advisor) parts.push('المستشار الأساسي للدفعة');
+  if (a?.groups?.length) parts.push(`خبير ${a.groups.map((g) => g.name).join('، ')}`);
+  return parts.length ? parts.join(' · ') : 'عضو فريق الدفعة';
+}
+// كم مشاركًا يخدم كل خبير في الدفعة بصفته مستشارهم الفعلي (effectiveAdvisorId): مستشار الدفعة لمن ليس لمجموعته خبير، وخبير المجموعة لأعضائها
+/** @returns {Record<string, number>} */
+export function servedBy(cohort, members, groups, approved) {
+  const ok = new Set(approved || []);
+  const gAdv = new Map((groups || []).map((g) => [g.id, g.advisor_expert_id || null]));
+  const out = {};
+  for (const m of members || []) {
+    const id = effectiveAdvisorId({ group: gAdv.get(m.group_id) || null, cohort: cohort?.advisor_expert_id || null }, ok);
+    if (id) out[id] = (out[id] || 0) + 1;
+  }
+  return out;
+}
+// تكليفات خبير من المصادر الثلاثة نفسها: سطر لكل دفعة بما يحمله فيها. للإدارة في ملفه، وللخبير في «تكليفاتي»
+/** @param {string} expertId @param {any[]} cohorts الدفعات المعنية @param {{ cohort_id: string, expert_id: string }[]} team
+ *  @param {{ id: string, cohort_id: string, name: string, advisor_expert_id?: string | null }[]} groups */
+export function expertAssignments(expertId, cohorts, team, groups) {
+  const out = new Map();
+  const byId = new Map((cohorts || []).map((c) => [c.id, c]));
+  const of = (c) => {
+    if (!out.has(c.id)) out.set(c.id, { cohort_id: c.id, cohort: c.name, organization_id: c.organization_id || null, status: c.status || null, starts_on: c.starts_on || null, ends_on: c.ends_on || null, advisor: false, member: false, groups: [] });
+    return out.get(c.id);
+  };
+  for (const c of cohorts || []) if (c.advisor_expert_id === expertId) of(c).advisor = true;
+  for (const t of team || []) if (t.expert_id === expertId && byId.has(t.cohort_id)) of(byId.get(t.cohort_id)).member = true;
+  for (const g of groups || []) if (g.advisor_expert_id === expertId && byId.has(g.cohort_id)) of(byId.get(g.cohort_id)).groups.push({ id: g.id, name: g.name });
+  // غير المغلقة أولًا، ثم الأحدث بداية
+  const closed = (a) => (a.status === 'closed' ? 1 : 0);
+  return [...out.values()].sort((a, b) => closed(a) - closed(b) || String(b.starts_on || '').localeCompare(String(a.starts_on || '')));
 }
 
 // ── التقييم في الاتجاهين ──

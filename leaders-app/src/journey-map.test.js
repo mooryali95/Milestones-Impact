@@ -116,7 +116,8 @@ describe('الربط بلوحة الجهة', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
     expect(c).toContain('journeys[r.id] = j;');
     expect(c).toContain("cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,");
-    expect(c).toMatch(/participants,\n\s+journey_map,\n\s+\};/);
+    // بعدها «فريق البرنامج» (program_team) بصلاحيته، من مصدره لا من الخريطة
+    expect(c).toMatch(/participants,\n\s+journey_map,\n/);
     // تاريخ إتمام كل بند يمر في الرحلة، ومنه أيام المكوث
     expect(read('supabase/functions/leaders-api/logic.js')).toContain('completed_at: p.completed_at || null,');
   });

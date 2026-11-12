@@ -458,6 +458,21 @@ export function orgAccessMail(name: string, org: string, items: string[]) {
     `فُتح لجهتك: ${items.join('، ')}`, '');
 }
 
+// ── الخبراء: الإعلام بالتكليف في فريق دفعة (تصور ربط الخبراء بالجهة، المرحلة 2) ──
+// إعلام بلا قبول (القبول والاعتذار في المرحلة 3 بترحيلها)، يمر بحصة البريد نفسها (sendMail). المدعو الجديد لا تصله هذه الرسالة:
+// سطر التكليف (assignmentNote) داخل دعوته نفسها، فرسالة واحدة تجمع الدعوة والتكليف
+export type AssignmentMail = { cohort: string; org: string | null; role: string; scope: string; period: string };
+export function teamAssignedMail(name: string | null, a: AssignmentMail) {
+  return shell('experts', 'كُلّفت في فريق دفعة',
+    mailText(`${hello(name)} أضافتك إدارة برنامج القادة إلى فريق <b>${esc(a.cohort)}</b>${a.org ? ` في ${esc(a.org)}` : ''}.`)
+    + mailRows([['الدور', a.role], ['التكليف', a.scope], ['المدة', a.period]])
+    + mailText('تجد تكليفاتك وعدد من تخدمهم في لوحة الخبير، تحت «تكليفاتي». إن تعذّر عليك هذا التكليف فراسل إدارة البرنامج.')
+    + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'),
+    `${a.role} في ${a.cohort}`, 'تصلك هذه الرسالة لأن إدارة برنامج القادة أضافتك إلى فريق دفعة.');
+}
+export const assignmentNote = (a: AssignmentMail) =>
+  mailNote(`<b>تكليفك:</b> ${esc(a.role)} في فريق ${esc(a.cohort)}${a.org ? ` (${esc(a.org)})` : ''}، ${esc(a.period)}. يبدأ عملك فيه بعد اعتماد ملفك.`);
+
 // ── الإدارة ──
 export function healthMail(rows: [string, string][], issues: string[]) {
   return shell('admin', 'تقرير الأسبوع: برنامج القادة',
@@ -523,6 +538,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
+  { key: 'team-assigned', family: 'experts', label: 'التكليف في فريق دفعة', subject: 'كُلّفت في فريق دفعة وزارة التجربة 2026', html: () => teamAssignedMail('منى', { cohort: 'دفعة وزارة التجربة 2026', org: 'وزارة التجربة', role: 'موجّه', scope: 'خبير المجموعة 2', period: '1 مارس 2026 إلى 30 يونيو 2026' }) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },
   { key: 'ops-alert', family: 'admin', label: 'تنبيه تشغيلي فوري', subject: 'تنبيه: internal في leaders-api', html: () => alertMail('internal', { ref: 'a1b2c3d4', action: 'me', message: 'relation "leaders.x" does not exist' }) },
 ];
