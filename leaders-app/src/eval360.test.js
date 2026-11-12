@@ -125,3 +125,121 @@ describe('المرحلة 1: نموذج المقيّم', () => {
     expect((await db.query(`select 1 from leaders.schema_migrations where name = '${NAME}'`)).rows).toHaveLength(1);
   });
 });
+
+describe('المرحلة 2: الدورة والمجموعات', async () => {
+  const F = await import('../../supabase/functions/leaders-api/feedback360.js');
+  const { DEFAULTS } = await import('../../supabase/functions/leaders-api/settings.js');
+  const S = DEFAULTS.feedback360;
+  const nom = (relation, status = 'nominated') => ({ relation, status });
+  it('السقوف من الإعدادات، والمدير واحد', () => {
+    expect(F.groupCaps(S)).toEqual({ manager: 1, peer: S.max_peer, report: S.max_report, stakeholder: S.max_stakeholder });
+    expect(F.groupCaps({ ...S, max_peer: 9 }).peer).toBe(9);
+  });
+  it('القائمة تحتاج min_others من غير المدير وتقديرًا ذاتيًا، ولا تتجاوز سقفًا', () => {
+    expect(F.nominationCheck([nom('manager'), nom('peer'), nom('peer')], S)).toMatchObject({ ok: false, reason: 'too_few', need: 1 });
+    expect(F.nominationCheck([nom('peer'), nom('report'), nom('stakeholder')], S).ok).toBe(true);
+    expect(F.nominationCheck([nom('peer'), nom('report'), nom('stakeholder')], S, { selfDone: false }).reason).toBe('self');
+    expect(F.nominationCheck([nom('manager'), nom('manager'), nom('peer'), nom('peer'), nom('peer')], S).reason).toBe('over_cap');
+    expect(F.nominationCheck([nom('peer'), nom('peer'), nom('peer')], { ...S, min_others: 4, min_group: 3 }).need).toBe(1);
+  });
+  it('الأعداد لكل مجموعة بلا أسماء، والملغى لا يُعد', () => {
+    const c = F.groupCounts([nom('peer', 'invited'), nom('peer', 'submitted'), nom('peer', 'revoked'), nom('manager', 'submitted')]);
+    expect(c.peer).toEqual({ invited: 2, submitted: 1 });
+    expect(c.manager).toEqual({ invited: 1, submitted: 1 });
+    expect(Object.keys(c.peer)).toEqual(['invited', 'submitted']);
+  });
+  it('الموجة الثانية بعد إغلاق الأولى بالفاصل المضبوط', () => {
+    const now = Date.parse('2026-11-12T00:00:00Z');
+    expect(F.nextWave([], S, now)).toEqual({ ok: true, wave: 't1' });
+    expect(F.nextWave([{ wave: 't1', status: 'open' }], S, now).reason).toBe('t1_running');
+    const t1 = { wave: 't1', status: 'released', closed_at: '2026-10-01T00:00:00Z' };
+    expect(F.nextWave([t1], S, now)).toMatchObject({ ok: false, reason: 'gap' });
+    expect(F.nextWave([t1], { ...S, round_gap_days: 30 }, now)).toEqual({ ok: true, wave: 't2' });
+    expect(F.nextWave([t1, { wave: 't2', status: 'open' }], S, now).reason).toBe('done');
+    expect(F.nextWave([{ wave: 't1', status: 'cancelled' }], S, now).wave).toBe('t1');
+  });
+  it('التذكير في أيامه المضبوطة مرة واحدة لكل يوم', () => {
+    const c = { status: 'open', opens_at: '2026-11-01T00:00:00Z', reminded_days: [] };
+    const at = (d) => Date.parse('2026-11-01T00:00:00Z') + d * 864e5;
+    expect(F.remindersDue(c, S, at(4))).toEqual([]);
+    expect(F.remindersDue(c, S, at(5))).toEqual([5]);
+    expect(F.remindersDue({ ...c, reminded_days: [5] }, S, at(11))).toEqual([10]);
+    expect(F.remindersDue(c, { ...S, remind_days: [2] }, at(3))).toEqual([2]);
+    expect(F.remindersDue({ ...c, status: 'closed' }, S, at(11))).toEqual([]);
+  });
+  it('وعد الإخفاء: المدير باسم دوره، وغيره مجمّعًا بحد الإعدادات', () => {
+    expect(F.feedbackPromiseAr('manager', S)).toMatch(/باسم دورك/);
+    expect(F.feedbackPromiseAr('peer', S)).toMatch(/مقيّمَين آخرين/);
+    expect(F.feedbackPromiseAr('peer', { ...S, min_group: 5 })).toMatch(/4 مقيّمين آخرين/);
+  });
+
+  const srv = read('supabase/functions/leaders-api/feedback360.ts');
+  const imp = read('supabase/functions/leaders-api/impact.ts');
+  it('الخادم يعيد استعمال بنية المقيّمين: التحقق من النطاق والبريد بمرجع المقيّم وحصته والسجل', () => {
+    expect(srv).toMatch(/import \{ raterCheck, RELATION_AR \} from '\.\/impact\.ts';/);
+    expect(srv).toMatch(/await raterCheck\(p, email\)/);
+    expect(srv).toMatch(/raterMail\(r\.full_name, p\.full_name \|\| 'زميلك', link, 'f360'/);
+    expect(srv.match(/\{ kind: 'bulk', ref: `rater:\$\{r\.id\}` \}/g)).toHaveLength(2);
+    expect(srv).toMatch(/const s = \(await appSettings\(\)\)\.feedback360;/);
+    // لا رقم من الحدود في الخادم: كلها من الإعدادات
+    expect(srv).not.toMatch(/min_group: \d|window_days: \d|\* 14|\[5, 10\]/);
+  });
+  it('المستشار الفعلي وحده يعتمد القائمة، واعتماده تأكيد D19 لكل بريد', () => {
+    expect(srv).toMatch(/async function requireEffectiveAdvisor[\s\S]{0,400}const adv = p \? await advisorOf\(p as any\) : null;\s*if \(!p \|\| adv\?\.id !== e\.id\) throw new Fail\('أنت لست مستشار هذا المشارك', 403/);
+    expect(srv).toMatch(/verification: 'confirmed', verified_by: who/);
+    expect(srv).toMatch(/if \(\(await advisorOf\(c\.participants\)\)\?\.id !== e\.id\) continue;/);
+  });
+  it('المشارك يرى قائمته قبل الفتح وأعدادًا بعده', () => {
+    expect(srv).toMatch(/const before = \['nominating', 'approval'\]\.includes\(c\.status\);[\s\S]{0,400}nominees: before \?/);
+  });
+  it('قياس الأثر لا يقرأ مقيّمي 360، والمرشح بلا رابط، وE-MGR للبعدي وحده', () => {
+    expect(imp).toMatch(/export const IMPACT_PHASES = \['pre', 'post'\];/);
+    expect(imp.match(/\.in\('phase', IMPACT_PHASES\)/g)).toHaveLength(4);
+    expect(imp).toMatch(/r\.status === 'nominated'\) throw new Fail\('الرابط غير صالح أو أُلغي'/);
+    expect(imp).toMatch(/if \(r\.relation === 'manager' && r\.phase === 'post'\)/);
+    expect(imp).toMatch(/const pre = r\.phase !== 'post';/);
+  });
+  it('مراسي السلم ووعد الإخفاء للمقيّم من الإعدادات', () => {
+    expect(imp).toMatch(/const f360 = r\.phase === 'f360' \? \(await appSettings\(\)\)\.feedback360 : null;/);
+    expect(imp).toMatch(/f360\.scale_labels\[Number\(o\.score\)\]/);
+    expect(imp).toMatch(/promise: feedbackPromiseAr\(r\.relation, f360\)/);
+  });
+  it('360 للتطوير وحده: لا يقرؤه التقييم الختامي ولا الشهادة ولا التقييم المستمر ولا تقرير الأثر', () => {
+    for (const f of ['final.js', 'final.ts', 'certificates.ts', 'continuous.js', 'logic.js']) {
+      expect(read(`supabase/functions/leaders-api/${f}`), f).not.toMatch(/feedback_cycles|feedback360|'f360'/);
+    }
+  });
+  it('الأفعال موصولة، والمهمة الساعية تذكّر وتغلق', () => {
+    const idx = read('supabase/functions/leaders-api/index.ts');
+    for (const a of ['f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'xp.f360', 'xp.f360-decide', 'admin.f360']) expect(idx).toContain(`'${a}':`);
+    expect(idx).toMatch(/'admin\.f360-close': \(a, b\) => A\.writer\(a, FB\.adminClose, b\)/);
+    expect(idx).toMatch(/feedback360: await FB\.sweep\(\)/);
+  });
+  it('الترحيل: الدورة والقيود وتفرد المقيّم بدورته، وإعادته آمنة', async () => {
+    const NAME = '20261111130200_leaders_feedback_cycles';
+    const SQL = read(`supabase/migrations/${NAME}.sql`);
+    expect(gateOf(SQL, NAME).gate).toBe('tolerant');
+    const db = new PGlite();
+    await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
+      create role anon; create role authenticated;
+      create table leaders.participants (id uuid primary key); create table leaders.instruments (id uuid primary key); create table leaders.coaching_sessions (id uuid primary key);
+      create table leaders.raters (id uuid primary key default gen_random_uuid(), participant_id uuid, email text, phase text default 'post', relation text default 'manager', status text default 'invited',
+        constraint raters_participant_email_phase_key unique (participant_id, email, phase));
+      insert into leaders.participants values ('00000000-0000-4000-8000-000000000001'); insert into leaders.instruments values ('00000000-0000-4000-8000-0000000000aa');`);
+    await db.exec(SQL);
+    await db.exec(SQL);
+    const P = "'00000000-0000-4000-8000-000000000001'", I = "'00000000-0000-4000-8000-0000000000aa'";
+    const { rows: [c1] } = await db.query(`insert into leaders.feedback_cycles (participant_id, wave, instrument_id) values (${P}, 't1', ${I}) returning id`);
+    const { rows: [c2] } = await db.query(`insert into leaders.feedback_cycles (participant_id, wave, instrument_id) values (${P}, 't2', ${I}) returning id`);
+    await expect(db.exec(`insert into leaders.feedback_cycles (participant_id, wave, instrument_id) values (${P}, 't1', ${I})`)).rejects.toThrow();
+    // المقيّم نفسه في الموجتين، ومقيّم الأثر كما كان
+    await db.exec(`insert into leaders.raters (participant_id, email, phase, relation, status, cycle_id) values (${P}, 'a@x.sa', 'f360', 'stakeholder', 'nominated', '${c1.id}'), (${P}, 'a@x.sa', 'f360', 'peer', 'nominated', '${c2.id}')`);
+    await db.exec(`insert into leaders.raters (participant_id, email, phase) values (${P}, 'a@x.sa', 'post')`);
+    await expect(db.exec(`insert into leaders.raters (participant_id, email, phase, cycle_id) values (${P}, 'a@x.sa', 'f360', '${c1.id}')`)).rejects.toThrow();
+    await expect(db.exec(`insert into leaders.raters (participant_id, email, phase) values (${P}, 'a@x.sa', 'post')`)).rejects.toThrow();
+    // f360 بلا دورة، أو دورة لغير f360: مرفوض
+    await expect(db.exec(`insert into leaders.raters (participant_id, email, phase) values (${P}, 'b@x.sa', 'f360')`)).rejects.toThrow();
+    await expect(db.exec(`update leaders.feedback_cycles set status = 'done'`)).rejects.toThrow();
+    expect((await db.query(`select 1 from leaders.schema_migrations where name = '${NAME}'`)).rows).toHaveLength(1);
+  });
+});

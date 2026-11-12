@@ -13,6 +13,7 @@
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
+//             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
@@ -46,6 +47,7 @@ import * as SU from './sus.ts';
 import * as PV from './privacy.ts';
 import * as TM from './team.ts';
 import * as ST from './settings.ts';
+import * as FB from './feedback360.ts';
 
 type Body = Record<string, any>;
 
@@ -82,6 +84,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
     pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
     policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
+    // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
+    feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
@@ -93,7 +97,7 @@ const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility',
   'me.privacy', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
-const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
+const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
   if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
@@ -196,6 +200,13 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'impact.mine': (p) => I.mine(p),
   'rater.invite': (p, b) => I.invite(p, b),
   'rater.revoke': (p, b) => I.revoke(p, b),
+  // تقييم 360 للتطوير (feedback360.ts): الدورة والتقدير الذاتي والترشيح بالمجموعات والإرسال إلى المستشار
+  'f360.mine': (p) => FB.mine(p),
+  'f360.start': (p) => FB.start(p),
+  'f360.self': (p, b) => FB.saveSelf(p, b),
+  'f360.nominate': (p, b) => FB.nominate(p, b),
+  'f360.remove': (p, b) => FB.removeNominee(p, b),
+  'f360.submit': (p, b) => FB.submitList(p, b),
   'capstone.get': (p) => X.get(p),
   'capstone.summary': (p, b) => X.saveSummary(p, b),
   'capstone.submit': (p) => X.submit(p),
@@ -232,14 +243,18 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
     d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
     if (b.lite === true) return d;
-    const [reviews, participants, peers, sus] = await Promise.all([
+    // تقييم 360 (feedback360.ts): قوائم بانتظار اعتماد المستشار ودوراته، في الرحلة نفسها
+    const [reviews, participants, peers, sus, f360] = await Promise.all([
       settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
-      settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)),
+      settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)), settle('xp.f360', FB.advisorList(e)),
     ]);
-    return { ...d, preload: { reviews, participants, peers, sus } };
+    return { ...d, preload: { reviews, participants, peers, sus, f360 } };
   },
   'xp.consent': (e) => E.portalConsent(e),
   'xp.rater-confirm': (e, b) => FL.raterConfirm(e, b),
+  // تقييم 360: المستشار الفعلي يعتمد قائمة المقيّمين أو يعيدها بملاحظة
+  'xp.f360': (e) => FB.advisorList(e),
+  'xp.f360-decide': (e, b) => FB.advisorDecide(e, b),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
   'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
   'xp.reviews': (e) => V2.reviews(e),
@@ -294,6 +309,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   // الإعدادات العامة: مخزن واحد لكل قيمة يضبطها المالك (settings.js)، والحفظ للمدير ذي الكتابة ويُسجَّل
   'admin.settings': () => ST.adminGet(),
   'admin.settings-save': (a, b) => A.writer(a, ST.adminSave, b),
+  // تقييم 360: حالة الدورات ونسب الاستجابة بلا نتيجة فرد، وإغلاق نافذة مبكرًا
+  'admin.f360': (_a, b) => FB.adminList(b),
+  'admin.f360-close': (a, b) => A.writer(a, FB.adminClose, b),
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   'admin.mail-send-test': S.mailSendTest,
   'admin.visits': (_a, b) => S.visits(b),

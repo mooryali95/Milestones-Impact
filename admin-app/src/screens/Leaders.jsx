@@ -27,6 +27,7 @@ const ContentBank = lazy(() => import('./ContentBank.jsx'));
 const Experts = lazy(() => import('./Experts.jsx'));
 const MailGallery = lazy(() => import('./MailGallery.jsx'));
 const AppSettings = lazy(() => import('./AppSettings.jsx'));
+const Feedback360 = lazy(() => import('./Feedback360.jsx'));
 import { Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { TABS } from '../leaders-tabs.js';
@@ -41,7 +42,7 @@ const TAB_GROUPS = [
   ['اليومي', ['overview', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings']],
-  ['النتائج', ['payments', 'impact', 'certs', 'mail']],
+  ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
@@ -92,6 +93,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
+  else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
   else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;

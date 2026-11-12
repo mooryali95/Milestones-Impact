@@ -34,3 +34,67 @@ export function cleanOpenAnswers(o) {
   }
   return Object.keys(out).length ? out : null;
 }
+
+// ── المرحلة 2: الدورة والمجموعات ──
+// القيم القابلة للضبط (الحدود والسقوف والنافذة والتذكير والفاصل بين الموجتين) من الإعدادات العامة
+// (settings.js، المجموعة feedback360)، ويمررها الخادم في s. لا رقم منها هنا.
+export const WAVES = ['t1', 't2'];
+export const NOMINEE_GROUPS = FEEDBACK_GROUPS;   // من يُرشَّح: المدير والزملاء والفريق وأصحاب المصلحة (الذات ليست ترشيحًا)
+// حالات الدورة بترتيبها: الترشيح، ثم اعتماد المستشار، ثم النافذة، ثم الإغلاق، ثم التسليم في الجلسة
+export const CYCLE_STATUS = ['nominating', 'approval', 'open', 'closed', 'released', 'cancelled'];
+export const CYCLE_STATUS_AR = {
+  nominating: 'الترشيح', approval: 'بانتظار اعتماد المستشار', open: 'مفتوح للمقيّمين', closed: 'أُغلق، بانتظار جلسة الاستلام', released: 'سُلّم لك', cancelled: 'أُلغي',
+};
+const day = 864e5;
+
+// سقف كل مجموعة: المدير واحد، وغيره من الإعدادات
+export const groupCaps = (s) => ({ manager: 1, peer: s.max_peer, report: s.max_report, stakeholder: s.max_stakeholder });
+
+// العدد في كل مجموعة من صفوف المقيّمين (بلا أسماء): المرشح أو المدعو، ومن أرسل
+export function groupCounts(raters = []) {
+  const out = Object.fromEntries(NOMINEE_GROUPS.map((g) => [g, { invited: 0, submitted: 0 }]));
+  for (const r of raters) {
+    if (!out[r.relation] || r.status === 'revoked') continue;
+    out[r.relation].invited += 1;
+    if (r.status === 'submitted') out[r.relation].submitted += 1;
+  }
+  return out;
+}
+
+// هل تكفي القائمة لإرسالها إلى المستشار: لا تتجاوز سقفًا، ومن غير المدير ما يكفي لإصدار التقرير (min_others).
+// الإرسال يحتاج كذلك تقديرك الذاتي، فالتقرير يقارن به
+export function nominationCheck(nominees, s, { selfDone = true } = {}) {
+  const counts = groupCounts(nominees);
+  const caps = groupCaps(s);
+  for (const g of NOMINEE_GROUPS) if (counts[g].invited > caps[g]) return { ok: false, reason: 'over_cap', group: g, counts };
+  const others = NOMINEE_GROUPS.filter((g) => g !== 'manager').reduce((n, g) => n + counts[g].invited, 0);
+  if (others < s.min_others) return { ok: false, reason: 'too_few', need: s.min_others - others, counts };
+  if (!selfDone) return { ok: false, reason: 'self', counts };
+  return { ok: true, counts };
+}
+
+// هل يبدأ المشارك موجة: الأولى إن لم تكن، والثانية بعد إغلاق الأولى بفاصل round_gap_days على الأقل
+export function nextWave(cycles = [], s, now = Date.now()) {
+  const live = cycles.filter((c) => c.status !== 'cancelled');
+  const t1 = live.find((c) => c.wave === 't1');
+  if (!t1) return { ok: true, wave: 't1' };
+  if (live.some((c) => c.wave === 't2')) return { ok: false, reason: 'done' };
+  if (!['closed', 'released'].includes(t1.status) || !t1.closed_at) return { ok: false, reason: 't1_running' };
+  const at = Date.parse(t1.closed_at) + s.round_gap_days * day;
+  return now >= at ? { ok: true, wave: 't2' } : { ok: false, reason: 'gap', at: new Date(at).toISOString() };
+}
+
+// أيام التذكير التي حلّت ولم يُرسل تذكيرها بعد، من فتح النافذة
+export function remindersDue(cycle, s, now = Date.now()) {
+  if (cycle?.status !== 'open' || !cycle.opens_at) return [];
+  const passed = (now - Date.parse(cycle.opens_at)) / day;
+  const sent = new Set(cycle.reminded_days || []);
+  return s.remind_days.filter((d) => passed >= d && !sent.has(d));
+}
+
+// وعد الإخفاء للمقيّم بحسب مجموعته: المدير يظهر باسم دوره (معلن له مسبقًا)، وغيره مجمّعًا مع min_group - 1 على الأقل
+export function feedbackPromiseAr(relation, s) {
+  if (relation === 'manager') return 'تقديرك يظهر للمشارك باسم دورك (المدير المباشر)، ولا يظهر اسمك. والملاحظات المكتوبة تظهر حرفيًا بلا نسبة إلى أحد.';
+  const more = Math.max(1, s.min_group - 1);
+  return `يُجمع تقديرك مع ${more === 1 ? 'مقيّم آخر' : more === 2 ? 'مقيّمَين آخرين' : `${more} مقيّمين آخرين`} على الأقل من مجموعتك، ولا يظهر منفردًا. والملاحظات المكتوبة تظهر حرفيًا بلا نسبة إلى أحد.`;
+}

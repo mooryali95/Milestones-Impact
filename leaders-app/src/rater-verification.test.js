@@ -73,9 +73,10 @@ describe('الخادم', () => {
   });
   it('المشارك يرى حالة مقيّمه وسببها بلا بصمة الرمز ولا التقديرات، ويلغي المنتظر', () => {
     expect(imp).toMatch(/db\.from\('raters'\)\.select\('\*'\)\.eq\('participant_id', p\.id\)\.neq\('status', 'revoked'\)/);
+    // مقيّمو 360 لا يظهرون في قائمة الأثر ولا يُلغَون منها (IMPACT_PHASES)
     const view = imp.slice(imp.indexOf('const raterView'), imp.indexOf('// D19: حكم التحقق'));
     expect(view).not.toMatch(/token_hash|answers/);
-    expect(imp).toMatch(/\.eq\('participant_id', p\.id\)\.in\('status', \['invited', 'awaiting'\]\)/);
+    expect(imp).toMatch(/\.eq\('participant_id', p\.id\)\.in\('phase', IMPACT_PHASES\)\.in\('status', \['invited', 'awaiting'\]\)/);
   });
   it('المقيّم يوافق بإرسال تقديره، وبريد دعوته يحمل إشعار الخصوصية', () => {
     expect(imp).toMatch(/await logConsent\('rater', r\.id, 'accept'\);/);

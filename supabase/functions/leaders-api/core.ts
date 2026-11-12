@@ -324,8 +324,19 @@ export function nameConfirmMail(name: string, url: string) {
     'خطوة واحدة قبل صدور شهادتك');
 }
 
-// phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة
-export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' = 'post') {
+// phase 'pre': تقدير الممارسة الحالية قبل بدء البرنامج، ويُعاد بعده للمقارنة.
+// phase 'f360': تقييم 360 للتطوير (تصور 2026-11-11): تقدير واحد لكل عبارة، ووعد الإخفاء بحسب مجموعة المقيّم
+// (feedbackPromiseAr في feedback360.js)، والمهلة نافذة الدورة لا 30 يومًا.
+export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' | 'f360' = 'post', f360?: { promise: string; closes: string; reminder?: boolean }) {
+  if (phase === 'f360' && f360) {
+    return shell('journey', f360.reminder ? `تذكير: تقديرك لـ${who}` : `طلب تقدير من ${who}`,
+      mailText(`${hello(rater)} ${f360.reminder ? `لم يصلنا تقديرك بعد لـ${esc(who)}، والنافذة تُغلق ${esc(f360.closes)}.` : `يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ورشّحك مستشاره لتقييم 360 للتطوير: مرآة لممارسته يناقشها معه في جلسة توجيه، ولا تدخل أي تقييم أو شهادة.`}`)
+      + mailText('عبارات قصيرة تقدّر كلًّا منها كما رأيته في الأشهر الثلاثة الأخيرة، و«لا أستطيع الحكم» لما لم تشهده، ثم ثلاثة أسئلة اختيارية. يستغرق ذلك نحو عشر دقائق.')
+      + mailText(esc(f360.promise))
+      + mailButton(link, 'ابدأ التقدير')
+      + mailNote(`الرابط خاص بك وصالح حتى ${esc(f360.closes)}. نحفظ اسمك وبريدك وصلتك به وتقديرك لتقرير تطويري له وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
+      `عشر دقائق لتقييم 360 لـ${who}`, '');
+  }
   const pre = phase === 'pre';
   return shell('journey', `طلب تقدير من ${who}`,
     mailText(`${hello(rater)} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
@@ -335,6 +346,24 @@ export function raterMail(rater: string | null, who: string, link: string, phase
     + mailButton(link, 'ابدأ التقدير')
     + mailNote(`الرابط خاص بك وصالح 30 يومًا. نحفظ اسمك وبريدك وصلتك به وتقديرك لقياس أثر البرنامج وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
     `${pre ? 'ثلاث' : 'خمس'} دقائق لتقدير ممارسة ${who}`, '');
+}
+
+// ── تقييم 360 للتطوير: رسائل الدورة (المستشار يعتمد القائمة ويسلّم التقرير في جلسة) ──
+export const FEEDBACK_MAIL = {
+  list: { subject: (who: string) => `قائمة مقيّمي 360 بانتظار اعتمادك: ${who}` },
+  returned: { subject: () => 'أعاد مستشارك قائمة مقيّمي 360 بملاحظة' },
+  ready: { subject: (who: string) => `تقرير 360 جاهز لجلسة الاستلام: ${who}` },
+  released: { subject: () => 'تقرير 360 الخاص بك متاح الآن' },
+} as const;
+export function feedbackMail(kind: keyof typeof FEEDBACK_MAIL, name: string | null, who: string, opts: { note?: string | null; url: string }) {
+  const body = {
+    list: mailText(`${hello(name)} رشّح ${esc(who)} مقيّميه لتقييم 360، والقائمة بانتظار اعتمادك بصفتك مستشاره. تأكد من تنوعها (المدير والزملاء والفريق وأصحاب المصلحة)، ومن أن فيها من يختلف معه لا المادحين وحدهم.`),
+    returned: mailText(`${hello(name)} أعاد مستشارك قائمة مقيّميك بملاحظة: ${esc(opts.note || '')}. عدّلها وأرسلها مرة أخرى.`),
+    ready: mailText(`${hello(name)} أُغلقت نافذة تقييم 360 لـ${esc(who)}، وتقريره جاهز لتطّلع عليه قبل جلسة الاستلام. لا يراه المشارك حتى تسلّمه له في الجلسة.`),
+    released: mailText(`${hello(name)} سلّمك مستشارك تقرير 360: ما يراه فيك مديرك وزملاؤك وفريقك مقارنة بتقديرك، وملاحظاتهم المكتوبة بلا نسبة إلى أحد. للتطوير وحده، ولا يدخل أي تقييم أو شهادة.`),
+  }[kind];
+  const cta = { list: 'راجع القائمة واعتمدها', returned: 'عدّل القائمة', ready: 'اقرأ التقرير', released: 'افتح تقريرك' }[kind];
+  return shell('journey', (FEEDBACK_MAIL[kind].subject as (w: string) => string)(who), body + mailButton(opts.url, cta), '');
 }
 
 // D19: مقيّم بانتظار تأكيد المستشار أو المنسق قبل إرسال دعوته، بلا عنوانه في البريد
@@ -528,7 +557,13 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
   { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
   { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },
-  { key: 'rater', family: 'journey', label: 'طلب تقدير 360', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
+  { key: 'rater', family: 'journey', label: 'طلب تقدير الأثر بعد البرنامج', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'post') },
+  { key: 'f360-invite', family: 'journey', label: 'تقييم 360: دعوة المقيّم', subject: 'طلب تقدير من سارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'f360', { promise: 'يُجمع تقديرك مع مقيّمَين آخرين على الأقل من مجموعتك، ولا يظهر منفردًا.', closes: 'الأحد 22 نوفمبر' }) },
+  { key: 'f360-reminder', family: 'journey', label: 'تقييم 360: تذكير المقيّم', subject: 'تذكير: تقديرك لسارة', html: () => raterMail('أحمد', 'سارة الحربي', CONFIG.appUrl, 'f360', { promise: 'يُجمع تقديرك مع مقيّمَين آخرين على الأقل من مجموعتك، ولا يظهر منفردًا.', closes: 'الأحد 22 نوفمبر', reminder: true }) },
+  { key: 'f360-list', family: 'journey', label: 'تقييم 360: القائمة بانتظار المستشار', subject: FEEDBACK_MAIL.list.subject('سارة'), html: () => feedbackMail('list', 'د. منى', 'سارة الحربي', { url: `${CONFIG.appUrl}/x` }) },
+  { key: 'f360-returned', family: 'journey', label: 'تقييم 360: أعاد المستشار القائمة', subject: FEEDBACK_MAIL.returned.subject(), html: () => feedbackMail('returned', 'سارة', 'سارة', { note: 'أضف زميلًا من خارج فريقك المباشر.', url: CONFIG.appUrl }) },
+  { key: 'f360-ready', family: 'journey', label: 'تقييم 360: التقرير جاهز للمستشار', subject: FEEDBACK_MAIL.ready.subject('سارة'), html: () => feedbackMail('ready', 'د. منى', 'سارة الحربي', { url: `${CONFIG.appUrl}/x` }) },
+  { key: 'f360-released', family: 'journey', label: 'تقييم 360: التقرير متاح للمشارك', subject: FEEDBACK_MAIL.released.subject(), html: () => feedbackMail('released', 'سارة', 'سارة', { url: CONFIG.appUrl }) },
   { key: 'workshop-invite', family: 'sessions', label: 'دعوة الجلسة التدريبية', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-day', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل يوم', subject: WORKSHOP_MAIL.day.subject, html: () => workshopMail('day', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },

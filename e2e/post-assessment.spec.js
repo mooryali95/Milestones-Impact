@@ -92,9 +92,9 @@ test('المقيّم: تقديران لكل عبارة من رابط البري�
   await expect(page.getByRole('heading', { name: /سارة الأحمد/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'بقي 2' })).toBeDisabled();
   await page.getByRole('radiogroup', { name: 'كم مرة ترى عمله؟' }).getByRole('radio', { name: 'أسبوعيًا' }).click();
-  await page.getByRole('radiogroup', { name: '1: الآن' }).getByRole('radio', { name: 'غالبًا' }).click();
+  await page.getByRole('radiogroup', { name: /بقرار موثق\. الآن/ }).getByRole('radio', { name: 'غالبًا' }).click();
   await expect(page.getByRole('button', { name: 'بقي 1' })).toBeDisabled();
-  await page.getByRole('radiogroup', { name: '1: قبل البرنامج' }).getByRole('radio', { name: 'نادرًا', exact: true }).click();
+  await page.getByRole('radiogroup', { name: /بقرار موثق\. قبل البرنامج/ }).getByRole('radio', { name: 'نادرًا', exact: true }).click();
   await page.getByLabel('ما الذي يفعله وتريده أن يستمر عليه؟').fill('يلخص المواقف في اجتماع المراجعة');
   await page.getByRole('button', { name: 'أرسل التقدير' }).click();
   await expect(page.getByRole('heading', { name: 'شكرًا لك' })).toBeVisible();
