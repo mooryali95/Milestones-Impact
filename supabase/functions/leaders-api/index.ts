@@ -45,6 +45,7 @@ import * as FL from './file.ts';
 import * as SU from './sus.ts';
 import * as PV from './privacy.ts';
 import * as TM from './team.ts';
+import * as ST from './settings.ts';
 
 type Body = Record<string, any>;
 
@@ -290,6 +291,9 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
 
 const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>> = {
   'admin.health': () => S.health(),
+  // الإعدادات العامة: مخزن واحد لكل قيمة يضبطها المالك (settings.js)، والحفظ للمدير ذي الكتابة ويُسجَّل
+  'admin.settings': () => ST.adminGet(),
+  'admin.settings-save': (a, b) => A.writer(a, ST.adminSave, b),
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   'admin.mail-send-test': S.mailSendTest,
   'admin.visits': (_a, b) => S.visits(b),

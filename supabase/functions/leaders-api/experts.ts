@@ -62,7 +62,7 @@ async function alertApplication(id: string, fields: { full_name: string | null; 
   const { data: first } = await db.from('experts').select('id').eq('source', 'application').gte('created_at', since)
     .order('created_at').order('id').limit(1).maybeSingle();
   if (first?.id !== id) return;
-  await sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير جديد',
+  await sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير',
     mailText(`${esc(fields.full_name)}${fields.title ? ` · ${esc(fields.title)}` : ''}`)
     + mailText(`تصلك رسالة واحدة على الأكثر كل ${APPLY_ALERT_HOURS} ساعات، وما يصل بعدها من طلبات تجده في القائمة نفسها.`)
     + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلبات')), [], { kind: 'bulk' });
