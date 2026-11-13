@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
@@ -116,6 +117,12 @@ function Reissue({ c, onClose, onDone }) {
   );
 }
 
+const CERT_COLS = [
+  { key: 'serial', label: 'الرقم', width: 22, get: (c) => c.serial }, { key: 'name', label: 'الاسم', width: 26, get: (c) => c.name_ar },
+  { key: 'name_en', label: 'الاسم بالإنجليزية', width: 26, get: (c) => c.name_en }, { key: 'org', label: 'الجهة', width: 24, get: (c) => c.org_name },
+  { key: 'issued', label: 'الإصدار', width: 16, get: (c) => date(c.issued_at) }, { key: 'status', label: 'الحالة', width: 12, get: (c) => ST[c.status]?.[0] || c.status },
+  { key: 'reason', label: 'سبب الإلغاء', width: 30, get: (c) => c.revoke_reason }, { key: 'link', label: 'رابط التحقق', width: 44, get: (c) => `${SITES.leaders}/v/${c.serial}` },
+];
 const CERT_SORTS = { serial: (c) => c.serial, name: (c) => c.name_ar, org: (c) => c.org_name, issued: (c) => c.issued_at, status: (c) => ST[c.status]?.[0] };
 
 export default function Certificates({ canWrite, onPerson, orgs = [] }) {
@@ -164,7 +171,8 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
         <h3>سجل الشهادات</h3>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>
         <FilterBar scope="certs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={presets} counts={counts}
-          shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة" />
+          shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة"
+          actions={<ExportButton scope="certs" meta={{ kind: 'CRT', title: 'سجل الشهادات', sheet: 'الشهادات', file: 'Certificates' }} columns={CERT_COLS} all={all} filtered={rows} noun="شهادة" />} />
         {!rows.length ? <p className="la-muted">لا نتائج لهذه الفلاتر.</p> : (
           <div className="table-wrap"><table className="data-table">
             <thead><tr><SortTh k="serial" state={f} set={setF}>الرقم</SortTh><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="issued" state={f} set={setF}>الإصدار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>

@@ -12,6 +12,7 @@ import {
   applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, ratingLabel, splitList, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
@@ -610,6 +611,13 @@ function Preview({ catalog, canWrite, open }) {
   );
 }
 
+const REVIEW_COLS = [
+  { key: 'who', label: 'المشارك', width: 26, get: (x) => x.participants?.full_name }, { key: 'email', label: 'البريد', width: 30, get: (x) => x.participants?.email },
+  { key: 'org', label: 'الجهة', width: 24, get: (x) => x.participants?.organization_name }, { key: 'model', label: 'النموذج', width: 30, get: (x) => x.learning_models?.title_ar },
+  { key: 'dim', label: 'البُعد', width: 14, get: (x) => DIM_EN[x.learning_models?.dimension] }, { key: 'at', label: 'سُلّم', width: 16, get: (x) => date(x.submitted_at) },
+  { key: 'status', label: 'الحالة', width: 16, get: (x) => SUB_ST[x.status]?.[0] || x.status }, { key: 'rating', label: 'التقييم', width: 18, get: (x) => ratingLabel(x.rating) },
+  { key: 'bonus', label: 'نقاط إضافية', width: 12, get: (x) => x.bonus || 0 }, { key: 'reviewed', label: 'قُيّم', width: 16, get: (x) => date(x.reviewed_at) },
+];
 const REVIEW_SORTS = {
   who: (x) => x.participants?.full_name, model: (x) => x.learning_models?.title_ar, at: (x) => x.submitted_at,
   status: (x) => SUB_ST[x.status]?.[0] || x.status, rating: (x) => x.rating,
@@ -631,7 +639,8 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
     <section className="la-card">
       <FilterBar scope="reviews" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields}
         shown={rows.length} total={all.length} noun="عمل" placeholder="ابحث بالمشارك أو الجهة أو النموذج"
-        capped={r?.capped ? { limit: r.limit } : null} />
+        capped={r?.capped ? { limit: r.limit } : null}
+        actions={<ExportButton scope="reviews" meta={{ kind: 'SUB', title: 'أعمال النماذج التعليمية', sheet: 'الأعمال', file: 'Submissions' }} columns={REVIEW_COLS} all={all} filtered={rows} noun="عمل" />} />
       {!r ? <Spinner /> : !r.success ? <div className="la-err" role="alert">{r.message}</div> : (
         <div className="table-wrap"><table className="data-table">
           <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="model" state={f} set={setF}>النموذج</SortTh><SortTh k="at" state={f} set={setF}>سُلّم</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="rating" state={f} set={setF}>التقييم</SortTh><th /></tr></thead>

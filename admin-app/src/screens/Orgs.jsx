@@ -6,6 +6,7 @@ import OrgFinance from './OrgFinance.jsx';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
@@ -220,18 +221,15 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const titleOf = (k) => all.find((p) => p.track === k)?.track_title || '';
   const allOn = rows.length > 0 && rows.every((p) => picked.has(p.id));
 
-  // محرك الوثائق وExcel يُحمَّلان عند الطلب فقط
-  const exportXlsx = async () => {
-    const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const cols = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الحالة', 18], ['المسار', 10], ['اسم المسار', 28], ['معتمد', 8], ['آخر دخول', 16], ['التسجيل', 16], ['طريقة الانتساب', 16], ['الحملة', 14], ['الموقع المُحيل', 22]];
-    await exportWorkbook(
-      { kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code },
-      cols.map(([label, width]) => ({ label, width })),
-      all.map((p) => [p.full_name, p.email, p.phone, p.job_title, STATUS[p.status] || p.status, p.track, p.track_title,
-        p.approved ? 'نعم' : 'لا', date(p.last_login_at), date(p.created_at), VIA[p.org_via || 'none'], p.campaign, p.referrer_host]),
-    );
-    toast(`صُدّر ${all.length} مشارك`);
-  };
+  const memberCols = [
+    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
+    { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
+    { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status }, { key: 'track', label: 'المسار', width: 10, get: (p) => p.track },
+    { key: 'track_title', label: 'اسم المسار', width: 28, get: (p) => p.track_title }, { key: 'approved', label: 'معتمد', width: 8, get: (p) => (p.approved ? 'نعم' : 'لا') },
+    { key: 'seen', label: 'آخر دخول', width: 16, get: (p) => date(p.last_login_at) }, { key: 'joined', label: 'التسجيل', width: 16, get: (p) => date(p.created_at) },
+    { key: 'via', label: 'طريقة الانتساب', width: 16, get: (p) => VIA[p.org_via || 'none'] }, { key: 'campaign', label: 'الحملة', width: 14, get: (p) => p.campaign },
+    { key: 'referrer', label: 'الموقع المُحيل', width: 22, get: (p) => p.referrer_host },
+  ];
   const printReport = async () => {
     const win = window.open('', '_blank');
     const [{ writeDocument }, { orgReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
@@ -260,7 +258,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
             <div><h2>{o.name}</h2><small>{[o.sector, o.contact_name, o.contact_email].filter(Boolean).join(' · ')}</small></div></div>
           <div className="la-row">
             {!isNone && <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>}
-            <button className="btn-sm ghost" onClick={exportXlsx}>تصدير Excel</button>
+            <ExportButton scope="org-members" className="btn-sm ghost" meta={{ kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code }}
+              columns={memberCols} all={all} filtered={rows} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
             <button className="btn-sm ghost" onClick={printReport}>تقرير الجهة</button>
             {canWrite && !isNone && <button className="btn-sm ghost" onClick={() => onEdit(orgs.find((x) => x.id === o.id) || o)}>تحرير</button>}
           </div>

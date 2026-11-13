@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { csvText, filterPeople, inviteUrl, L, trackOf, trackOfPlacements, validCampaign } from './leaders.js';
+import { filterPeople, inviteUrl, L, trackOf, trackOfPlacements, validCampaign } from './leaders.js';
 import { session } from './api.js';
 
 const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
@@ -27,12 +27,6 @@ it('روابط الدعوة والحملات', () => {
   expect(inviteUrl({ invite_code: 'abc' }, 'whatsapp')).toBe('https://leaders.sunkvalue.com/j/abc/whatsapp');
   expect(validCampaign('email_1')).toBe(true);
   expect(validCampaign('واتساب')).toBe(false);
-});
-
-it('csvText يبدأ بعلامة BOM ويهرّب علامات الاقتباس', () => {
-  const t = csvText(['a'], [['x"y']]);
-  expect(t.charCodeAt(0)).toBe(0xfeff);
-  expect(t).toContain('"x""y"');
 });
 
 // admin-core-1: فعل المرحلة كان يُرسل في حقل action فيكتب فوق اسم الإجراء، فيرد الخادم «إجراء غير معروف» ولا يصل التدخل

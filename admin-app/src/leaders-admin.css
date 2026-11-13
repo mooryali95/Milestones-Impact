@@ -910,3 +910,10 @@
 /* فهرس ملف المشارك: ينقل إلى القسم، ويلتف على الجوال */
 .pf-index { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
 .inbox-contacts { margin: 10px 0 0; }
+
+/* ── نافذة التصدير الموحد (ExportButton) ── */
+.exp-form { padding: 22px; display: grid; gap: 12px; }
+.exp-set { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 0; min-inline-size: 0; }
+.exp-set legend { padding: 0 6px; font-weight: 700; font-size: .88rem; }
+.exp-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 14px; max-height: 38vh; overflow-y: auto; }
+.exp-acts { display: flex; gap: 10px; margin-bottom: 4px; }

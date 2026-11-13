@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Ico from '../../../shared/ui/Ico.jsx';
 import { call, fmtDate } from '../api.js';
 import { timeOnly } from '../dates.js';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { CONTACT_FIELDS, countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
@@ -63,6 +64,15 @@ function Drawer({ r, onClose, onStatus }) {
     </>
   );
 }
+// أعمدة التصدير (الزر الموحد)
+const CONTACT_COLS = [
+  { key: 'name', label: 'الاسم', width: 24, get: (r) => r.name }, { key: 'org', label: 'الجهة', width: 24, get: (r) => r.organization },
+  { key: 'email', label: 'البريد', width: 30, get: (r) => r.email }, { key: 'phone', label: 'الجوال', width: 16, get: (r) => r.phone },
+  { key: 'interest', label: 'نوع الطلب', width: 20, get: (r) => INTEREST_AR[r.interest] || r.interest },
+  { key: 'source', label: 'المصدر', width: 16, get: (r) => SOURCE_AR[r.product] || r.product },
+  { key: 'message', label: 'الرسالة', width: 60, get: (r) => r.message }, { key: 'date', label: 'التاريخ', width: 20, get: (r) => fmtDate(r.created_at) },
+  { key: 'status', label: 'الحالة', width: 12, get: (r) => STATUS_AR[r.status] || r.status },
+];
 
 export default function Contacts() {
   const { toast } = useUI();
@@ -128,7 +138,10 @@ export default function Contacts() {
 
       <FilterBar scope="contacts" state={f} set={setF} clear={clearF} replace={replaceF} fields={CONTACT_FIELDS}
         shown={list.length} total={all.length} noun="طلب" placeholder="بحث بالاسم أو البريد أو الجهة..."
-        actions={<button className="refresh-btn" type="button" onClick={load}>↻ تحديث</button>} />
+        actions={<>
+          <ExportButton scope="contacts" meta={{ kind: 'CNT', title: 'طلبات التواصل', sheet: 'الطلبات', file: 'Contacts' }} columns={CONTACT_COLS} all={all} filtered={list} noun="طلب" />
+          <button className="refresh-btn" type="button" onClick={load}>↻ تحديث</button>
+        </>} />
 
       <div className="table-wrap">
         <table className="data-table">

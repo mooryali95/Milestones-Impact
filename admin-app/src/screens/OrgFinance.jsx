@@ -4,7 +4,8 @@
 // المصدر admin.org-finance. القيمة لكل مشارك مثبّتة لحظة ربطه (تغيير سعر الجهة لا يعيد كتابتها)،
 // ومن تجاوز المقاعد يُربط ويُعفى ويُعلَّم «فوق المقاعد» لقرار فوترة إضافية.
 import React, { useCallback, useEffect, useState } from 'react';
-import { csvText, date, download, L, STATUS, VIA } from '../leaders.js';
+import { date, L, STATUS, VIA } from '../leaders.js';
+import ExportButton from '../ExportButton.jsx';
 import { Spinner } from '../ui.jsx';
 
 // العملة من الخادم: عملة التثبيت لقيم الجهة (المصدر admin.org-finance)، لا رمز ثابت
@@ -19,16 +20,19 @@ export default function OrgFinance({ id, onPerson }) {
   const { org: o, kpis: k, rows } = d;
   const money = moneyIn(d.currency);
   const f = k.funnel;
-  const statement = () => download(new Blob([csvText(
-    ['المشارك', 'البريد', 'تاريخ الانضمام', 'طريقة الربط', `القيمة (${d.currency || 'USD'})`, 'الحالة', 'شهادة', 'فوق المقاعد'],
-    rows.map((r) => [r.full_name, r.email, String(r.joined).slice(0, 10), VIA[r.via] || r.via || '', r.value_cents == null ? '' : r.value_cents / 100, STATUS[r.status] || r.status, r.certified ? 'نعم' : '', r.over_seats ? 'نعم' : '']),
-  )], { type: 'text/csv;charset=utf-8' }), `كشف-${o.name}-${new Date().toISOString().slice(0, 10)}.csv`);
+  const statementCols = [
+    { key: 'name', label: 'المشارك', width: 26, get: (r) => r.full_name }, { key: 'email', label: 'البريد', width: 30, get: (r) => r.email },
+    { key: 'joined', label: 'تاريخ الانضمام', width: 16, get: (r) => date(r.joined) }, { key: 'via', label: 'طريقة الربط', width: 18, get: (r) => VIA[r.via] || r.via },
+    { key: 'value', label: `القيمة (${d.currency || 'USD'})`, width: 14, get: (r) => (r.value_cents == null ? '' : r.value_cents / 100) },
+    { key: 'status', label: 'الحالة', width: 18, get: (r) => STATUS[r.status] || r.status }, { key: 'cert', label: 'شهادة', width: 8, get: (r) => !!r.certified },
+    { key: 'over', label: 'فوق المقاعد', width: 12, get: (r) => !!r.over_seats },
+  ];
   const pct = (n) => (f.registered ? `${Math.round((n / f.registered) * 100)}%` : '0%');
   return (
     <section className="la-card org-fin">
       <div className="la-row between">
         <h3>الرعاية والتكلفة</h3>
-        <button className="btn-sm ghost" onClick={statement}>كشف حساب CSV</button>
+        <ExportButton scope="org-statement" className="btn-sm ghost" label="كشف حساب Excel" meta={{ kind: 'FIN', title: `كشف حساب ${o.name}`, for: o.name, sheet: 'كشف الحساب', file: 'Statement', code: o.invite_code }} columns={statementCols} all={rows} noun="مشارك" />
       </div>
       <p className="la-muted small">
         السعر التعاقدي: <b dir="ltr">{o.contract_cents == null ? `${money(d.list_cents)} (المعلن)` : money(o.contract_cents)}</b> للمشارك

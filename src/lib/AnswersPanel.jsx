@@ -5,7 +5,7 @@
 // البيانات من admin.assessment-answers أو xp.assessment-answers (الدالة نفسها في الخادم)، والتصنيف والزمن
 // محسوبان هناك في answer-review.js. هنا العرض وحده: الملخص أولًا، ثم المرشحات، ثم الأقسام المطوية.
 // سلوك النافذة (التركيز وحبسه وEsc وإعادته) من غلاف كل تطبيق: useModalFocus/useEscape في اللوحة،
-// وuseDialog في بوابة الخبير. والتصدير CSV يُمرَّر من اللوحة وحدها (onCsv)، فلا زر له عند المستشار.
+// وuseDialog في بوابة الخبير. والتصدير يُمرَّر من اللوحة وحدها (onCsv)، فلا زر له عند المستشار.
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DIM_AR, DIM_SHORT } from '../../supabase/functions/leaders-api/labels.js';
@@ -166,7 +166,7 @@ export default function AnswersPanel({ boxRef, who, data, error, onRetry, onClos
               )}
               <span className="ap-actions">
                 <button type="button" className="ap-btn" onClick={() => window.print()}>طباعة</button>
-                {onCsv && <button type="button" className="ap-btn" onClick={() => onCsv(data)}>CSV</button>}
+                {onCsv && <button type="button" className="ap-btn" onClick={() => onCsv(data)}>تصدير Excel</button>}
               </span>
             </div>
 

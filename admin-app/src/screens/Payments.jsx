@@ -4,8 +4,9 @@
 // المصدر: admin.payments (payments + entitlements + payment_events). الحق لا يُكتب إلا من إشعار Creem
 // الموقّع أو منحة إدارية مسجّلة، والمطابقة تستعلم Creem مباشرة لدفعة فات إشعارها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { csvText, date, dateTime, download, L } from '../leaders.js';
+import { date, dateTime, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
 
@@ -83,6 +84,19 @@ const ENT_FIELDS = [
   { key: 'state', label: 'الحالات', aria: 'الحالة', get: (e) => (e.revoked_at ? 'revoked' : 'live'), options: [['live', 'ساري'], ['revoked', 'مسحوب']] },
 ];
 const ENT_SORTS = { who: (e) => e.participants?.full_name, item: (e) => ITEM[e.item], source: (e) => SRC[e.source] || e.source, at: (e) => e.created_at, state: (e) => (e.revoked_at ? 1 : 0) };
+const PAY_COLS = [
+  { key: 'at', label: 'التاريخ', width: 20, get: (p) => dateTime(p.paid_at || p.created_at) }, { key: 'who', label: 'المشارك', width: 26, get: (p) => p.participants?.full_name },
+  { key: 'email', label: 'البريد', width: 30, get: (p) => p.email }, { key: 'item', label: 'البند', width: 18, get: (p) => ITEM[p.item] },
+  { key: 'amount', label: 'المبلغ', width: 12, get: (p) => (p.amount_cents || 0) / 100 }, { key: 'currency', label: 'العملة', width: 10, get: (p) => p.currency },
+  { key: 'status', label: 'الحالة', width: 12, get: (p) => PAY_ST[p.status]?.[0] || p.status }, { key: 'mode', label: 'الوضع', width: 10, get: (p) => (p.mode === 'test' ? 'اختبار' : 'إنتاج') },
+  { key: 'order', label: 'رقم الطلب', width: 24, get: (p) => p.order_id }, { key: 'checkout', label: 'صفحة الدفع', width: 24, get: (p) => p.checkout_id },
+];
+const ENT_COLS = [
+  { key: 'who', label: 'المشارك', width: 26, get: (e) => e.participants?.full_name }, { key: 'email', label: 'البريد', width: 30, get: (e) => e.participants?.email },
+  { key: 'item', label: 'البند', width: 18, get: (e) => ITEM[e.item] }, { key: 'source', label: 'المصدر', width: 16, get: (e) => SRC[e.source] || e.source },
+  { key: 'by', label: 'منحه', width: 22, get: (e) => e.granted_by }, { key: 'at', label: 'التاريخ', width: 16, get: (e) => date(e.created_at) },
+  { key: 'state', label: 'الحالة', width: 10, get: (e) => (e.revoked_at ? 'مسحوب' : 'ساري') },
+];
 
 export default function Payments({ canWrite, onPerson }) {
   const { toast, confirm } = useUI();
@@ -113,10 +127,6 @@ export default function Payments({ canWrite, onPerson }) {
     const r = await L('admin.payment-grant', { participant_id: e.participant_id, item: e.item, revoke: true });
     toast(r.success ? 'سُحب الحق' : r.message); if (r.success) load();
   };
-  const exportCsv = () => download(new Blob([csvText(
-    ['التاريخ', 'المشارك', 'البريد', 'البند', 'المبلغ', 'العملة', 'الحالة', 'الوضع', 'رقم الطلب', 'صفحة الدفع'],
-    rows.map((p) => [p.created_at, p.participants?.full_name || '', p.email, ITEM[p.item], (p.amount_cents || 0) / 100, p.currency, PAY_ST[p.status]?.[0] || p.status, p.mode, p.order_id || '', p.checkout_id || '']),
-  )], { type: 'text/csv;charset=utf-8' }), `payments-${new Date().toISOString().slice(0, 10)}.csv`);
 
   return (
     <div className="pay-admin">
@@ -144,11 +154,12 @@ export default function Payments({ canWrite, onPerson }) {
       {tab === 'payments' && (
         <FilterBar scope="payments" state={f} set={setF} clear={clearF} replace={replaceF} fields={PAY_FIELDS}
           shown={rows.length} total={allPay.length} noun="عملية" placeholder="بحث بالاسم أو البريد أو رقم الطلب"
-          actions={<button className="refresh-btn" type="button" onClick={exportCsv} disabled={!rows.length}>تصدير CSV{rows.length !== allPay.length ? ` (${rows.length})` : ''}</button>} />
+          actions={<ExportButton scope="payments" meta={{ kind: 'PAY', title: 'عمليات الدفع', sheet: 'العمليات', file: 'Payments' }} columns={PAY_COLS} all={allPay} filtered={rows} noun="عملية" />} />
       )}
       {tab === 'entitlements' && (
         <FilterBar scope="entitlements" state={ef} set={setEf} clear={clearEf} replace={replaceEf} fields={ENT_FIELDS}
-          shown={ents.length} total={allEnt.length} noun="استحقاق" placeholder="بحث بالاسم أو البريد" />
+          shown={ents.length} total={allEnt.length} noun="استحقاق" placeholder="بحث بالاسم أو البريد"
+          actions={<ExportButton scope="entitlements" meta={{ kind: 'ENT', title: 'الاستحقاقات', sheet: 'الاستحقاقات', file: 'Entitlements' }} columns={ENT_COLS} all={allEnt} filtered={ents} noun="استحقاق" />} />
       )}
 
       {tab === 'payments' && (

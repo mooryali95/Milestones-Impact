@@ -82,9 +82,12 @@ test('إجابات القياس (الحاسوب): تُحمَّل عند الطل
   await expect(d.getByRole('button', { name: /⚡ سريع/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(d.locator('.ap-item:visible')).toHaveCount(1);
   await d.getByRole('button', { name: /^الكل/ }).click();
-  // CSV للمدير
-  const [file] = await Promise.all([page.waitForEvent('download'), d.getByRole('button', { name: 'CSV' }).click()]);
-  expect(file.suggestedFilename()).toBe('answers-11111111-baseline.csv');
+  // التصدير للمدير بالزر الموحد
+  await d.getByRole('button', { name: 'تصدير Excel' }).click();
+  const box = page.getByRole('dialog', { name: 'تصدير Excel' });
+  const [file] = await Promise.all([page.waitForEvent('download'), box.getByRole('button', { name: /^صدّر/ }).click()]);
+  expect(file.suggestedFilename()).toMatch(/^Milestone-Impact_Answers_11111111-baseline_\d{4}-\d{2}-\d{2}\.xlsx$/);
+  await expect(box).toBeHidden();
   // Esc يغلق، والتركيز يعود إلى ما فتحها، والعنوان يُنظَّف
   await page.keyboard.press('Escape');
   await expect(d).toHaveCount(0);

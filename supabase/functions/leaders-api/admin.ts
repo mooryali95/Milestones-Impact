@@ -622,28 +622,39 @@ export async function approve(a: Admin, b: Body) {
   return { success: true };
 }
 
+// تغيير الحالة، المدخل الواحد لشخص من ملفه أو لمجموعة من القائمة (participant_ids، حتى BULK_MAX):
+// القواعد نفسها لكل واحد: سبب مكتوب للإيقاف والانسحاب يُحفظ في ملفه ويُبلَّغ به، ورد المقعد لمن ينسحب قبل أول باب.
+export const BULK_MAX = 50;
 export async function setStatus(a: Admin, b: Body) {
   requireWrite(a);
   const allowed = ['registered', 'profiled', 'assessing', 'pending_approval', 'placed', 'enrolled', 'completed', 'withdrawn', 'suspended'];
   if (!allowed.includes(b.status)) throw new Fail('حالة غير صالحة');
+  const bulk = Array.isArray(b.participant_ids);
+  const ids = [...new Set((bulk ? b.participant_ids : [b.participant_id]).map(String).filter(isUuid))] as string[];
+  if (!ids.length) throw new Fail('اختر من تُغيَّر حالتهم');
+  if (ids.length > BULK_MAX) throw new Fail(`الحد ${BULK_MAX} مشاركًا في المرة الواحدة`);
   // الإيقاف والانسحاب بسبب مكتوب: يُحفظ في السجل، ويُكتب في ملف المشارك ويُبلَّغ به بالبريد (notice-rules.js)
   const reason = statusNeedsReason(b.status) ? cleanStatusReason(b.reason) : null;
   if (statusNeedsReason(b.status) && !reason) throw new Fail('اكتب سبب الإيقاف أو الانسحاب: يُحفظ في ملف المشارك ويُبلَّغ به', 400, 'reason');
-  must(await db.from('participants').update({ status: b.status }).eq('id', String(b.participant_id)));
-  await audit('admin', a.email, 'participant.status', 'participants', String(b.participant_id), null, { status: b.status, ...(reason ? { reason } : {}) });
-  if (reason) await OB.record(String(b.participant_id), { code: 'account_status', ref: `${b.status}:${new Date().toISOString().slice(0, 10)}`, ...RULES.account_status({ status: b.status, reason }) });
-  // D20: من ينسحب قبل فتح أول باب يُرد مقعده إلى عقد جهته
-  if (b.status === 'withdrawn') {
-    const pid = String(b.participant_id);
-    const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('participant_id', pid);
-    if (!count) {
-      const { data: back } = await db.from('entitlements').update({ revoked_at: new Date().toISOString(), revoked_by: 'seat-return' })
-        .eq('participant_id', pid).eq('source', 'sponsor').is('revoked_at', null).select('organization_id');
-      if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
+  // من هو على الحالة المطلوبة أصلًا يُتخطى: لا سجل ولا بريد مكرر
+  const current = (must(await db.from('participants').select('id, status').in('id', ids)) ?? []) as any[];
+  const todo = current.filter((p) => p.status !== b.status).map((p) => p.id as string);
+  for (const pid of todo) {
+    must(await db.from('participants').update({ status: b.status }).eq('id', pid));
+    await audit('admin', a.email, 'participant.status', 'participants', pid, null, { status: b.status, ...(reason ? { reason } : {}), ...(bulk ? { bulk: ids.length } : {}) });
+    if (reason) await OB.record(pid, { code: 'account_status', ref: `${b.status}:${new Date().toISOString().slice(0, 10)}`, ...RULES.account_status({ status: b.status, reason }) });
+    // D20: من ينسحب قبل فتح أول باب يُرد مقعده إلى عقد جهته
+    if (b.status === 'withdrawn') {
+      const { count } = await db.from('handbook_progress').select('module_id', { count: 'exact', head: true }).eq('participant_id', pid);
+      if (!count) {
+        const { data: back } = await db.from('entitlements').update({ revoked_at: new Date().toISOString(), revoked_by: 'seat-return' })
+          .eq('participant_id', pid).eq('source', 'sponsor').is('revoked_at', null).select('organization_id');
+        if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
+      }
     }
   }
   // D05: الحالة لا تُصدر شهادة؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات (final.ts)
-  return { success: true, certificate: null };
+  return { success: true, certificate: null, done: todo.length, skipped: ids.length - todo.length };
 }
 
 // إعادة القياس: يُلغى القياس الحالي ويُفتح جديد، والمستوى المعتمد يبقى حتى يُعتمد غيره

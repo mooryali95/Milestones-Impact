@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { RequestsBoard } from './ExpertMatch.jsx';
@@ -214,6 +215,18 @@ function Profile({ id, canWrite, onBack }) {
 
 // أعمدة الفرز: القيمة التي يُرتَّب بها كل عمود
 const SORTS = { name: (e) => e.full_name, hours: (e) => e.weekly_hours, given: (e) => e.stats?.hours || null, status: (e) => EXPERT_STATUS[e.status] };
+const roleLabels = Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]));
+const EXPERT_COLS = [
+  { key: 'name', label: 'الخبير', width: 26, get: (e) => e.full_name }, { key: 'email', label: 'البريد', width: 30, get: (e) => e.email },
+  { key: 'title', label: 'المسمى', width: 26, get: (e) => e.title }, { key: 'roles', label: 'الأدوار', width: 24, get: (e) => (e.roles || []).map((k) => roleLabels[k] || k) },
+  { key: 'dims', label: 'الأبعاد', width: 24, get: (e) => (e.dimensions || []).map((k) => DIM_AR[k] || k) },
+  { key: 'levels', label: 'المستويات', width: 20, get: (e) => (e.levels || []).map((k) => LEVEL_AR[k] || k) },
+  { key: 'committees', label: 'اللجان', width: 20, get: (e) => (e.committees || []).map((k) => COMMITTEE_AR[k] || k) },
+  { key: 'sectors', label: 'القطاعات', width: 24, get: (e) => e.sectors || [] },
+  { key: 'hours', label: 'ساعات أسبوعيًا', width: 14, get: (e) => e.weekly_hours },
+  { key: 'given', label: 'ساعات قدّمها', width: 14, get: (e) => e.stats?.hours || 0 }, { key: 'served', label: 'مشاركون خدمهم', width: 14, get: (e) => e.stats?.participants || 0 },
+  { key: 'status', label: 'الحالة', width: 14, get: (e) => EXPERT_STATUS[e.status] }, { key: 'joined', label: 'أُضيف', width: 16, get: (e) => date(e.created_at) },
+];
 
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
@@ -261,7 +274,8 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
-            capped={d.capped ? { limit: d.limit } : null} />
+            capped={d.capped ? { limit: d.limit } : null}
+            actions={<ExportButton scope="experts" meta={{ kind: 'EXP', title: 'شبكة الخبراء', sheet: 'الخبراء', file: 'Experts' }} columns={EXPERT_COLS} all={all} filtered={rows} noun="خبير" />} />
           {!all.length ? <p className="la-muted ce-empty">لا خبراء بعد. أضف أول خبير، أو شارك رابط «انضم كخبير».</p> : (
             <div className="table-wrap"><table className="data-table la-cards ex-table">
               <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
