@@ -21,7 +21,7 @@ describe('8.1 لوحة الجهة', () => {
   });
   it('أجزاء اللوحة على الخادم متوازية', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
-    expect(c).toContain('await Promise.all([dashboardFor(c), impactFor(c), initiativesFor(c.organization_id)]);');
+    expect(c).toContain('await Promise.all([dashboardFor(c), impactFor(c), vis.coord_initiatives ? initiativesFor(c.organization_id) : Promise.resolve([])]);');
   });
   it('الطلب التمهيدي مخزّن في الدوال الثلاث التي تخدم واجهات', () => {
     expect(read('supabase/functions/leaders-api/core.ts')).toContain("'Access-Control-Max-Age': '86400',");

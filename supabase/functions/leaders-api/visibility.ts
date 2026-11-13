@@ -25,6 +25,14 @@ export async function visibilityOfParticipant(participantId: string): Promise<Vi
   return visibilityOfCohort(cohort?.id || null);
 }
 
+/** رؤية مسؤول الجهة: من دفعة جهته الجارية أو المفتوحة (الأحدث)، وإلا الإعداد العام */
+export async function visibilityOfOrg(orgId: string | null | undefined): Promise<Vis> {
+  if (!orgId) return visibilityOfCohort(null);
+  const { data } = await db.from('cohorts').select('id, status, starts_on, created_at').eq('organization_id', orgId).in('status', ['open', 'running']);
+  const own = ((data || []) as any[]).sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')))[0];
+  return visibilityOfCohort(own?.id || null);
+}
+
 /** يرفض الفعل إن كان مفتاحه محجوبًا، برسالة تسمّيه */
 export function requireVisible(vis: Vis, key: string) {
   if (vis[key] === false) throw new Fail(`هذه الصلاحية محجوبة بإعداد الرؤية: ${visibilityLabel(key)}`, 403, 'visibility');

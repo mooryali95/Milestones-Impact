@@ -18,6 +18,7 @@ import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
 import { coordTeam } from './team.ts';
 import { orgFeedback } from './feedback360.ts';
+import { visibilityOfOrg } from './visibility.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -243,7 +244,9 @@ export async function impactFor(c: any) {
 export async function dashboard(c: any) {
   // الأجزاء المستقلة متوازية (التدقيق 2026-11-10، البند 8.1): كانت الملخص ثم الأثر ثم المبادرات ثم المقيّمون واحدًا بعد آخر
   const list = coordPermissions(c.permissions).list;
-  const [r, impact, inits]: any[] = await Promise.all([dashboardFor(c), impactFor(c), initiativesFor(c.organization_id)]);
+  // مفاتيح الرؤية (visibility.js) فوق صلاحيات الحساب الفردية: قسم محجوب عن الجهة لا يُقرأ أصلًا
+  const vis = await visibilityOfOrg(c.organization_id);
+  const [r, impact, inits]: any[] = await Promise.all([dashboardFor(c), impactFor(c), vis.coord_initiatives ? initiativesFor(c.organization_id) : Promise.resolve([])]);
   r.impact = impact;
   // محفظة مبادرات الدفعة: المعتمدة وحدها، فالمسودة عمل المشارك قبل أن يكتمل
   // والأسماء فيها لمن يرى قائمة المشاركين فقط
@@ -259,7 +262,7 @@ export async function dashboard(c: any) {
   ]);
   r.raters_pending = raters;
   // تقييم 360: أعداد ونسبة استجابة، ومتوسط كل إطار فوق حد الجهة وحده (orgTotals)، لمن يرى الدرجات. لا صف فردي أبدًا
-  r.feedback360 = coordPermissions(c.permissions).scores ? await orgFeedback((r.participants || []).map((p: any) => p.id)).catch(() => null) : null;
+  r.feedback360 = coordPermissions(c.permissions).scores && vis.coord_f360 ? await orgFeedback((r.participants || []).map((p: any) => p.id)).catch(() => null) : null;
   return r;
 }
 

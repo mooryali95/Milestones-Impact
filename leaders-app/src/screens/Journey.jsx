@@ -793,7 +793,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <div className="j-main" data-tour="stages">
           {/* تحت «خطوتك التالية» لا فوقها: الفعل التالي أول ما يراه المشارك، ثم مواعيده وتقدمه */}
           {approved && me.milestones?.length > 0 && <Fold title="معالمك" meta={`${me.milestone_summary.done} من ${me.milestone_summary.total} منجزة${me.milestone_summary.late ? ` · ${me.milestone_summary.late} متأخرة` : ''}`}><Milestones list={me.milestones} summary={me.milestone_summary} /></Fold>}
-          {approved && <HowEvaluated policy={me.final_policy} />}
+          {approved && me.final_policy && <HowEvaluated policy={me.final_policy} />}
           {me.final && (
             <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico"><Ico name="cap" /></span>
               <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}

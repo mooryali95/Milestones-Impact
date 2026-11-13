@@ -334,7 +334,7 @@ describe('المرحلة 3: التقرير والاستلام', async () => {
     expect(srv).toMatch(/export async function adminReport\(a: Admin, b: Body\) \{\n  requireWrite\(a\);/);
     expect(srv).toMatch(/audit\('admin', a\.email, 'admin\.f360-report-view'/);
     const coord = read('supabase/functions/leaders-api/coordinator.ts');
-    expect(coord).toMatch(/r\.feedback360 = coordPermissions\(c\.permissions\)\.scores \? await orgFeedback\(/);
+    expect(coord).toMatch(/r\.feedback360 = coordPermissions\(c\.permissions\)\.scores && vis\.coord_f360 \? await orgFeedback\(/);
     expect(srv).toMatch(/return orgTotals\(reports, s\);/);
   });
   it('مصدر واحد للتقرير: الشاشات الثلاث تعرض ناتج feedbackReport بمكوّن واحد', () => {
