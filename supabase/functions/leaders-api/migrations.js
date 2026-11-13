@@ -114,6 +114,7 @@ export const MIGRATIONS = [
   '20261111130000_leaders_feedback360_rater_form',
   '20261111130100_leaders_app_settings',
   '20261111130200_leaders_feedback_cycles',
+  '20261113100000_leaders_expert_committees',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -148,4 +149,5 @@ export const MIGRATION_GATES = {
   '20261111130000_leaders_feedback360_rater_form': ["tolerant", "الدالة تقرأ questions بكل أعمدتها وتحجب المعكوسة بترتيب درجاتها قبله، وتكتب الأسئلة المفتوحة في comment إن غاب العمودان"],
   '20261111130100_leaders_app_settings': ["tolerant", "الدالة تتحمل غياب الجدول (settings.ts: appSettings تعيد القيم الافتراضية من settings.js)، فقبله تعمل الحدود كما كانت ويرفض الحفظ بسبب واضح"],
   '20261111130200_leaders_feedback_cycles': ["tolerant", "الدالة تتحمل غياب الجدول (feedback360.ts: الشاشة تقول «غير متاح بعد» ولا تُفشل شيئًا)، والمقيّمون القائمون يُقرؤون بمرحلتيهم pre وpost وحدهما قبله وبعده"],
+  '20261113100000_leaders_expert_committees': ["tolerant", "الدالة تحفظ ملف الخبير بلا العمود، وتقول عن عضوية اللجنة «تُحفظ بعد تطبيق ترحيلها» (experts.ts adminSave)، والقراءة بـ* فلا تتأثر"],
 };

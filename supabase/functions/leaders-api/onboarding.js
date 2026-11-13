@@ -50,3 +50,15 @@ export function onboardingOf(p, a = null) {
     remaining: total ? `أجاب ${answered} من ${total}، وبقي ${Math.max(0, total - answered)}` : `أجاب ${answered}`,
   };
 }
+
+// ── تذكير المتعثر قبل الاعتماد (admin.remind-stuck): نص يسمّي ما بقي عليه هو، لا «لديك خطوات» ──
+export const STUCK_STEPS = ['profile', 'assessment_todo', 'assessment_doing'];
+export const REMIND_GAP_DAYS = 3;   // لا يُذكَّر الشخص نفسه مرتين في أقل منها (آليًا أو يدويًا: reminded_at واحد)
+export const STUCK_MAIL_SUBJECT = 'خطوة واحدة لتبدأ رحلتك في برنامج القادة';
+/** @param {{ step: string, missing?: string[], answered?: number, total?: number }} o ناتج onboardingOf */
+export function stuckMailText(o) {
+  if (o?.step === 'profile') return `بقي إكمال ملفك الشخصي (${(o.missing || []).join('، ')}). دقيقتان وتنتقل بعدها إلى قياس تحديد المستوى.`;
+  if (o?.step === 'assessment_doing') return `أجبت ${o.answered}${o.total ? ` من ${o.total}` : ''} في قياس تحديد المستوى، وإجاباتك محفوظة. أكمل من حيث توقفت ليُعتمد مسارك.`;
+  if (o?.step === 'assessment_todo') return 'ملفك مكتمل، وبقي قياس تحديد المستوى. تقدمك يُحفظ سؤالًا سؤالًا، فتكمله على أكثر من جلسة إن شئت.';
+  return null;
+}

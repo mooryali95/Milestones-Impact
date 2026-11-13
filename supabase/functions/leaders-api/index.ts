@@ -341,6 +341,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.create-participant': A.createParticipant,
   'admin.participants-import': A.participantsImport,
   'admin.participant-save': A.participantSave,
+  'admin.remind-stuck': A.remindStuck,
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
   'admin.sus': () => SU.adminSummary(),

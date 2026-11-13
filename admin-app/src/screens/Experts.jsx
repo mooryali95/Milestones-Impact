@@ -10,6 +10,7 @@ import FilterBar, { useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts } from '../filters.js';
 import { RequestsBoard } from './ExpertMatch.jsx';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
+import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { COHORT_STATUS } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
@@ -33,7 +34,7 @@ const PRESETS = [
   { key: 'invited', label: 'مدعوون', test: (e) => e.status === 'invited' },
   { key: 'off', label: 'متوقفون', test: (e) => ['paused', 'suspended'].includes(e.status) },
 ];
-const EMPTY = { full_name: '', email: '', phone: '', title: '', bio: '', linkedin_url: '', roles: [], dimensions: [], levels: [], sectors: '', languages: ['ar'], weekly_hours: '', years_experience: '', hourly_rate: '', admin_note: '' };
+const EMPTY = { full_name: '', email: '', phone: '', title: '', bio: '', linkedin_url: '', roles: [], dimensions: [], levels: [], sectors: '', languages: ['ar'], weekly_hours: '', years_experience: '', hourly_rate: '', admin_note: '', committees: [] };
 
 const Chips = ({ list, labels }) => (list?.length ? <span className="ex-chips">{list.map((k) => <span key={k} className="la-chip">{labels[k] || k}</span>)}</span> : <span className="la-muted">·</span>);
 
@@ -59,7 +60,7 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
     setBusy(true);
     const r = await L('admin.expert-save', { ...v, ...(isNew ? {} : { id: initial.id }) });
     setBusy(false);
-    toast(r.success ? (isNew ? (r.invited ? 'أُضيف الخبير وأُرسلت دعوته' : 'أُضيف الخبير') : 'حُفظ الملف') : r.message);
+    toast(r.success ? (isNew ? (r.invited ? 'أُضيف الخبير وأُرسلت دعوته' : 'أُضيف الخبير') : r.committees_ready === false ? 'حُفظ الملف. عضوية اللجنة تُحفظ بعد تطبيق ترحيلها' : 'حُفظ الملف') : r.message);
     if (r.success) onSaved(r.expert);
   };
   return (
@@ -85,6 +86,14 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
           <div><span className="of-label">اللغات</span><Toggles value={v.languages} options={Object.entries(LANG)} onChange={(languages) => setV({ ...v, languages })} /></div>
           <label className="of-field"><span className="of-label">القطاعات</span><input value={v.sectors} onChange={set('sectors')} placeholder="حكومي، طاقة، صحة" /><small className="la-muted">افصل بينها بفاصلة</small></label>
         </div>
+
+        {!isNew && (
+          <>
+            <h4>لجان الحوكمة <small className="la-muted">· من يراجع المحتوى والقياس ويعتمده. المصدر الوحيد لعضوية اللجنتين</small></h4>
+            <Toggles value={v.committees || []} options={Object.entries(COMMITTEE_AR)} onChange={(committees) => setV({ ...v, committees })} />
+            <small className="la-muted">مقعد كل إطار في لجنة المحتوى يُقرأ من «الأبعاد» أعلاه، فلا يُكتب مرتين.</small>
+          </>
+        )}
 
         <h4>الطاقة والتكلفة <small className="la-muted">· للإدارة وحدها، لا تظهر للخبير ولا للمشارك</small></h4>
         <div className="ex-grid">
@@ -206,7 +215,7 @@ function Profile({ id, canWrite, onBack }) {
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source']);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee']);
   const load = useCallback(async () => setD(await L('admin.experts')), []);
   useEffect(() => { if (!expertId) load(); }, [load, expertId]);
   const all = d?.experts || [];
@@ -215,6 +224,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
     { key: 'dim', label: 'الأبعاد', get: (e) => e.dimensions, options: Object.entries(DIM_AR) },
     { key: 'level', label: 'المستويات', get: (e) => e.levels, options: Object.entries(LEVEL_AR) },
     { key: 'source', label: 'المصادر', get: (e) => e.source, options: [['application', 'طلب انضمام'], ['admin', 'أضافته الإدارة']] },
+    { key: 'committee', label: 'اللجان', get: (e) => e.committees || [], options: Object.entries(COMMITTEE_AR) },
   ], []);
   const rows = useMemo(() => applyFilters(all, { fields, presets: PRESETS, text: (e) => [e.full_name, e.email, e.title, ...(e.sectors || [])].join(' ') }, f), [all, f, fields]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
@@ -230,6 +240,15 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
         <div className="stat-card"><div className="stat-label">ساعات مقدّمة</div><div className="stat-value">{d ? Math.round(all.reduce((a, e) => a + (e.stats?.hours || 0), 0) * 10) / 10 : '·'}</div><div className="stat-sub">من {hours} ساعة متاحة أسبوعيًا</div></div>
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
           <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => e.roles.includes(k)).length}</b>{l}</span>)}</div></div>
+        {/* لجنتا المحتوى والقياس من سجل الخبراء نفسه (committees.js): من فيهما وما ينقص كل لجنة */}
+        {(d.committees || []).map((c) => (
+          <div key={c.key} className="stat-card ex-committee"><div className="stat-label">{c.title}</div>
+            <div className="ex-cover-list">
+              {c.members.length ? c.members.map((m) => <span key={m.id}>{m.name}</span>) : <span className="la-muted">لا أعضاء</span>}
+            </div>
+            {c.ready ? <small className="la-chip ok">مكتملة</small> : <small className="la-chip warn">{c.gaps.join('، ')}</small>}
+          </div>
+        ))}
       </div>
       <RequestsBoard canWrite={canWrite} onPerson={onPerson} />
       {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
@@ -245,7 +264,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
-                  <td data-label="الأدوار"><Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} /></td>
+                  <td data-label="الأدوار"><Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />{e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
                   <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
                   <td data-label="الطاقة">{e.weekly_hours != null ? `${e.weekly_hours} س/أسبوع` : '·'}</td>
                   <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <span className="la-muted">·</span>}</td>

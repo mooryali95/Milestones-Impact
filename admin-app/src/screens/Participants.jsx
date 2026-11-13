@@ -23,7 +23,7 @@ import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
-import { ONBOARDING_AR } from '../../../supabase/functions/leaders-api/onboarding.js';
+import { ONBOARDING_AR, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
@@ -39,7 +39,6 @@ const PRESETS = [
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
 ];
-const STUCK = ['profile', 'assessment_todo', 'assessment_doing'];
 const KEYS = ['q', 'view', 'status', 'step', 'org', 'track', 'joined', 'seen'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
@@ -122,6 +121,15 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
   };
+  // تذكير المتعثرين من المحددين: الخادم يتخطى من أكمل ومن ذُكِّر قريبًا، والرد يقول كم أُرسل وكم تُخطّي ولماذا
+  const pickedStuck = all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).length;
+  const remind = async () => {
+    if (!(await confirm(`إرسال بريد تذكير إلى ${pickedStuck} ممن لم يكملوا التسجيل؟ كل بريد يسمّي ما بقي على صاحبه.`))) return;
+    const r = await L('admin.remind-stuck', { participant_ids: all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).map((p) => p.id) });
+    if (!r.success) return toast(r.message);
+    toast(`أُرسل ${r.sent} تذكير${r.skipped?.recent ? `، وتُخطّي ${r.skipped.recent} ذُكِّروا خلال ${r.gap_days} أيام` : ''}`);
+    setPicked(new Set());
+  };
   const exportCsv = async () => {
     const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
     const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['أين توقف', 18], ['المتبقي', 40], ['التسجيل', 16], ['آخر دخول', 16]];
@@ -159,6 +167,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <span><b>{picked.size}</b> محدد</span>
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
+          {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}

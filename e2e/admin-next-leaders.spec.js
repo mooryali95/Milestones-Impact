@@ -202,3 +202,18 @@ test('قائمة المشاركين: «أين توقف» للمتعثر قبل �
   await row.click();
   await expect(page.locator('.la-where')).toContainText('أين توقف: القياس جارٍ. أجاب 42 من 63، وبقي 21.');
 });
+
+test('قائمة المشاركين: تذكير المحددين ممن لم يكملوا، والرد يقول كم أُرسل وكم تُخطّي', async ({ page }) => {
+  const stuck = { id: 'p3', full_name: 'هند السالم', email: 'h@x.com', organization_id: 'o1', organization_name: 'وزارة التجربة', status: 'registered', placements: [], created_at: '2026-11-11',
+    onboarding: { step: 'profile', label: 'لم يكمل الملف', missing: ['الجوال'], remaining: 'ينقص الملف: الجوال' } };
+  const calls = await setup(page, {
+    'admin.participants': { success: true, participants: [...people.map((p) => ({ ...p, onboarding: { step: 'done', label: 'معتمد', remaining: '' } })), stuck] },
+    'admin.remind-stuck': { success: true, sent: 1, skipped: { done: 0, recent: 0 }, gap_days: 3 },
+  });
+  await page.getByRole('checkbox', { name: 'تحديد الكل' }).check();
+  // الزر يعدّ المتعثرين من المحددين وحدهم
+  await page.getByRole('button', { name: 'ذكّر من لم يكمل (1)' }).click();
+  await page.getByRole('button', { name: /^(تأكيد|نعم|متابعة|موافق)/ }).click();
+  await expect(page.getByText('أُرسل 1 تذكير')).toBeVisible();
+  expect(calls.find((c) => c.action === 'admin.remind-stuck').participant_ids).toEqual(['p3']);
+});

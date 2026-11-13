@@ -2,6 +2,7 @@
 // أساسيات leaders-api: الاتصال، التشفير، الردود، البريد
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
@@ -253,6 +254,11 @@ export function reminderMail(name: string, open: number) {
     mailText(`${hello(name)} لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.`)
     + mailButton(CONFIG.appUrl, 'أكمل رحلتي'),
     `${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك`);
+}
+
+// تذكير المتعثر قبل الاعتماد بما بقي عليه هو (onboarding.js stuckMailText): يرسله المدير لمن يختارهم
+export function stuckMail(name: string, text: string) {
+  return shell('journey', 'خطوة واحدة لتبدأ رحلتك', mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, 'أكمل الآن'), text);
 }
 
 // pay: يبقى رسم البرنامج (D04)، فيحمل البريد رابط الدفع وصفحته تعرض المسار المعتمد والسعر وسياسة الاسترداد
@@ -554,6 +560,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
   { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
+  { key: 'stuck', family: 'journey', label: 'تذكير من لم يكمل التسجيل (يدوي)', subject: STUCK_MAIL_SUBJECT, html: () => stuckMail('سارة', stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })!) },
   { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
   { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
   { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },

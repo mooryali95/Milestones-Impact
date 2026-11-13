@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
@@ -19,7 +19,7 @@ import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
-import { onboardingOf, servedTotal } from './onboarding.js';
+import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
 
 type Body = Record<string, any>;
@@ -278,6 +278,29 @@ async function effortFor(a: { id: string; instrument_id?: string; started_at?: s
     db.from('assessment_answers').select('question_id, value, score, answered_at').eq('assessment_id', row.id),
   ]);
   return reviewAnswers({ questions: qs.data || [], rows: rows.data || [], startedAt: row.started_at, submittedAt: row.submitted_at, timing: (await appSettings()).answer_review }).effort;
+}
+
+// تذكير يدوي لمن لم يكمل التسجيل: بريد يسمّي ما بقي على كل شخص (ملفه، أو القياس وكم أجاب منه).
+// يتخطى من أكمل، ومن ذُكِّر (آليًا أو يدويًا) خلال REMIND_GAP_DAYS، والبريد من حصة الرسائل الجماعية فيُصفّ عند بلوغ الحد اليومي.
+export async function remindStuck(a: Admin, b: Body) {
+  requireWrite(a);
+  const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).map(String).filter(isUuid))].slice(0, 50) as string[];
+  if (!ids.length) throw new Fail('اختر من تذكّرهم');
+  const rows = (must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, years_experience, status, reminded_at, is_demo').in('id', ids)) ?? []) as any[];
+  const progress = await baselineProgress(ids);
+  const since = Date.now() - REMIND_GAP_DAYS * 864e5;
+  let sent = 0, done = 0, recent = 0;
+  for (const p of rows) {
+    const o = onboardingOf(p, progress[p.id] || null);
+    const text = stuckMailText(o);
+    if (p.is_demo || !p.email || !STUCK_STEPS.includes(o.step) || !text) { done += 1; continue; }
+    if (p.reminded_at && Date.parse(p.reminded_at) > since) { recent += 1; continue; }
+    await db.from('participants').update({ reminded_at: new Date().toISOString() }).eq('id', p.id);
+    await sendMail(p.email, STUCK_MAIL_SUBJECT, stuckMail(p.full_name, text), [], { kind: 'bulk', ref: `participant:${p.id}` });
+    await audit('admin', a.email, 'participant.remind', 'participants', p.id, null, { step: o.step });
+    sent += 1;
+  }
+  return { success: true, sent, skipped: { done, recent }, gap_days: REMIND_GAP_DAYS };
 }
 
 // القياس المبدئي الأحدث غير الملغى لكل مشارك: حالته وكم أجاب من كم (بصيغته)، وآخر حفظ لإجابة.

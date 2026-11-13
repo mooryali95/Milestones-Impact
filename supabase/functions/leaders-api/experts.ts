@@ -12,6 +12,7 @@ import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
+import { cleanCommittees, committeeCoverage } from './committees.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -76,7 +77,8 @@ export async function adminList() {
   ]);
   const by: Record<string, any[]> = {};
   for (const x of sessions || []) (by[x.expert_id] ||= []).push(x);
-  return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })) };
+  // تغطية لجنتي المحتوى والقياس من السجل نفسه (committees.js): من فيهما، وما ينقص كل لجنة
+  return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })), committees: committeeCoverage(rows) };
 }
 
 export async function adminGet(_a: Admin, b: Body) {
@@ -111,9 +113,18 @@ export async function adminSave(a: Admin, b: Body, opts: { assignment?: Assignme
   if (b.id) {
     const before = must(await db.from('experts').select('*').eq('id', String(b.id)).maybeSingle());
     if (!before) throw new Fail('الخبير غير موجود', 404);
-    const saved = must(await db.from('experts').update({ ...fields, phone, updated_at: now }).eq('id', before.id).select('*').single());
+    let saved = must(await db.from('experts').update({ ...fields, phone, updated_at: now }).eq('id', before.id).select('*').single());
+    // عضوية اللجان في تحديث مستقل: قبل تطبيق ترحيلها (20261113100000) يُحفظ الملف ويُقال ذلك بدل أن يفشل الحفظ كله
+    let committees_ready = true;
+    if ('committees' in b) {
+      const next = cleanCommittees(b.committees);
+      if (next.slice().sort().join() !== [...(before.committees || [])].sort().join()) {
+        const up = await db.from('experts').update({ committees: next }).eq('id', before.id).select('*').single();
+        if (up.error) committees_ready = false; else saved = up.data;
+      }
+    }
     await audit('admin', a.email, 'expert.update', 'experts', saved.id, before, saved);
-    return { success: true, expert: saved };
+    return { success: true, expert: saved, committees_ready };
   }
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('بريد الخبير غير صحيح');

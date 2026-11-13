@@ -81,3 +81,37 @@ describe('جاهزية الدفعة', () => {
     expect(s.find((x) => x.key === 'advisor').detail).toBe('د. سلمان، ومعه 2 في الفريق');
   });
 });
+
+import { cleanCommittees, committeeCoverage } from '../../supabase/functions/leaders-api/committees.js';
+import { stuckMailText, STUCK_STEPS } from '../../supabase/functions/leaders-api/onboarding.js';
+
+describe('لجنتا المحتوى والقياس من سجل الخبراء', () => {
+  const ex = (id, committees, dimensions, status = 'active') => ({ id, full_name: `خبير ${id}`, committees, dimensions, status });
+  it('لجنة المحتوى تكتمل بعضو لكل إطار، والقياس بثلاثة، وغير الفاعل لا يُعدّ', () => {
+    const [content, measurement] = committeeCoverage([
+      ex('1', ['content', 'measurement'], ['milestone', 'impact']), ex('2', ['content'], ['leadership']),
+      ex('3', ['measurement'], []), ex('4', ['measurement'], [], 'paused'),
+    ]);
+    expect(content).toMatchObject({ ready: true, gaps: [] });
+    expect(content.members.map((m) => m.id)).toEqual(['1', '2']);
+    expect(measurement).toMatchObject({ ready: false, gaps: ['2 من 3 مقاعد'] });
+  });
+  it('إطار بلا عضو يُسمّى باسمه، واللجنة الفارغة تقول ذلك', () => {
+    const [content, measurement] = committeeCoverage([ex('1', ['content'], ['milestone'])]);
+    expect(content.gaps[0]).toMatch(/^لا عضو لإطار .+ ولا .+$/);
+    expect(measurement.gaps).toEqual(['لا أعضاء بعد']);
+  });
+  it('القيم خارج اللجنتين تُسقط', () => {
+    expect(cleanCommittees(['content', 'x', 'content', 'measurement'])).toEqual(['content', 'measurement']);
+    expect(cleanCommittees(null)).toEqual([]);
+  });
+});
+
+describe('بريد تذكير المتعثر يسمّي ما بقي عليه', () => {
+  it('لكل خطوة تعثر نصها، ولمن أكمل لا نص', () => {
+    expect(stuckMailText({ step: 'profile', missing: ['الجوال', 'سنوات الخبرة'] })).toContain('(الجوال، سنوات الخبرة)');
+    expect(stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })).toContain('أجبت 42 من 63');
+    for (const s of STUCK_STEPS) expect(stuckMailText({ step: s, missing: ['x'], answered: 1, total: 2 })).toBeTruthy();
+    expect(stuckMailText({ step: 'approval' })).toBeNull();
+  });
+});
