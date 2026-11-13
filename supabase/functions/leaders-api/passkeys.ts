@@ -97,7 +97,12 @@ export async function registerVerify(p: any, b: Body) {
 }
 
 // الدخول بمفتاح المرور: بلا بريد، المتصفح يعرض المفاتيح المحفوظة للنطاق
+// حد الإغراق: الطلب مفتوح بلا جلسة وكل نداء يكتب صفًّا، فيُرفض ما زاد على CHALLENGE_FLOOD في الدقيقة (كما في user-api وadmin-api)
+const CHALLENGE_FLOOD = 120;
 export async function authOptions() {
+  const { count } = await db.from('webauthn_challenges').select('id', { count: 'exact', head: true })
+    .eq('purpose', 'authenticate').gte('created_at', new Date(Date.now() - 60e3).toISOString());
+  if ((count ?? 0) >= CHALLENGE_FLOOD) throw new Fail('محاولات كثيرة، انتظر دقيقة', 429, 'rate');
   const options = await authenticationOptionsFor();
   await saveChallenge(options.challenge, 'authenticate', null);
   return { success: true, options };

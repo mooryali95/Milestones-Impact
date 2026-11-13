@@ -94,7 +94,10 @@ const workshopReq = sql(`select id from leaders.stage_requirements where kind = 
 if (!workshopReq) { console.error('لا متطلب ورشة مزروع (T-ATTEND) لربط جلسة القاعة به'); process.exit(2); }
 const workshopId = sql(`insert into leaders.workshop_sessions (requirement_id, title_ar, starts_at, ends_at, secret, cohort_id) values (${q(workshopReq)}, ${q(`يوم تدريبي ${run}`)}, now() - interval '10 minutes', now() + interval '3 hours', ${q(randomBytes(16).toString('hex'))}, ${q(cohortId)}) returning id`);
 const adminToken = randomBytes(32).toString('base64url');
-sql(`insert into public.api_sessions (token_hash, kind, subject, meta, expires_at) values (${q(sha(adminToken))}, 'admin', 'load@test', '{"email":"load@test","role":"super_admin","method":"passkey"}', now() + interval '1 hour')`);
+// مدير حقيقي في admin_users: leaders-api يقرأ الدور والتفعيل من الصف الحي لا من نسخة الجلسة (M6)
+const adminId = sql(`insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at) values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${q(`${run}-load@test.invalid`)}, now(), now()) returning id`);
+sql(`insert into public.admin_users (id, email, name, role_id, is_active) values (${q(adminId)}, ${q(`${run}-load@test.invalid`)}, 'Load Test', 'super_admin', true)`);
+sql(`insert into public.api_sessions (token_hash, kind, subject, meta, expires_at) values (${q(sha(adminToken))}, 'admin', ${q(adminId)}, '{"email":"load@test","role":"super_admin","method":"passkey"}', now() + interval '1 hour')`);
 const admin = (action, body = {}) => call(action, body, adminToken, ADMIN_ORIGIN);
 
 let fails = 0;
@@ -309,7 +312,8 @@ if (out) writeFileSync(out, JSON.stringify({ devices: N, rounds: ROUNDS, seconds
 sql(`delete from leaders.workshop_sessions where id = ${q(workshopId)}`);
 sql(`delete from leaders.participants where email like ${q(`${run}-%`)}`);
 sql(`delete from leaders.cohorts where id = ${q(cohortId)}`);
-sql(`delete from public.api_sessions where subject = 'load@test'`);
+sql(`delete from public.api_sessions where subject = ${q(adminId)}`);
+sql(`delete from auth.users where id = ${q(adminId)}`);   // يحذف صف admin_users معه (cascade)
 sql(`update leaders.katon_topics set status = ${q(topicWas)} where id = ${q(topicId)}`);
 
 console.log(fails ? `\n✗ ${fails} فحوص فشلت` : '\n✓ القاعة سليمة تحت الحمل');
