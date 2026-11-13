@@ -5,13 +5,12 @@
 //   بعد الرفع تُعرض لقطة الحساب بإصدار معادلتها لا حسابًا حيًا؛ والقرارات التي تلزمها ملاحظات تطلبها.
 // • FinalConfig: إعداد البرنامج (الأوزان، طريقة القياس النهائي، قواعد التغطية، حدود القرار، الاعتماد واللجنة).
 import React, { useCallback, useEffect, useState } from 'react';
-import { L, withRunningReason } from '../leaders.js';
+import { dateTime as when, L, withRunningReason } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CONTINUOUS_SOURCE_AR, KATON_ENABLED } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE_AR, FINAL_STATUS_AR, finalApproveConfirm, finalConfig, NOTES_REQUIRED, voteNoticeAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
-const when = (d) => (d ? new Date(d).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 export function FinalEvalCard({ participantId, canWrite }) {
   const { toast, prompt, confirm } = useUI();

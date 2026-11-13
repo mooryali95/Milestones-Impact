@@ -5,14 +5,13 @@
 // للمختبر كله أو لأداة منه، ولمدة مفتوحة أو حتى تاريخ. والأداة "لكل المعتمدين"
 // تظهر أيضًا لكل من اعتُمد مستواه في إطارها دون منح.
 import React, { useCallback, useEffect, useState } from 'react';
-import { L, DIM, LVL } from '../leaders.js';
+import { date as day, L, DIM, LVL } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 
 import { KINDS } from '../../../supabase/functions/leaders-api/lab.js';
 import LabBoard, { BOARD_LEVEL_AR, scaffoldText } from '../../../shared/lab/LabBoard.jsx';
 const KIND = KINDS;
-const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 function Grants({ data, reload, canWrite }) {
   const { toast, confirm } = useUI();

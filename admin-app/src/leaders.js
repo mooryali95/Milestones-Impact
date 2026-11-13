@@ -39,7 +39,8 @@ export function trackOf(levels) {
 }
 export const trackOfPlacements = (pl) => trackOf(Object.fromEntries((pl || []).map((x) => [x.dimension, x.level])));
 
-export const date = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+export { date, dateOnly, dateTime, dayMonth, timeOnly, weekTime } from './dates.js';
+import { date } from './dates.js';
 
 export const APP_URL = SITES.leaders;
 export const inviteUrl = (o, c) => `${APP_URL}/j/${encodeURIComponent(o.invite_code || '')}${c ? `/${encodeURIComponent(c)}` : ''}`;

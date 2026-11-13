@@ -7,8 +7,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
-import FilterBar, { useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts } from '../filters.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { latinDigits } from '../../../supabase/functions/leaders-api/logic.js';
 
@@ -116,11 +116,13 @@ function Reissue({ c, onClose, onDone }) {
   );
 }
 
+const CERT_SORTS = { serial: (c) => c.serial, name: (c) => c.name_ar, org: (c) => c.org_name, issued: (c) => c.issued_at, status: (c) => ST[c.status]?.[0] };
+
 export default function Certificates({ canWrite, onPerson, orgs = [] }) {
   const { toast, prompt } = useUI();
   const [d, setD] = useState(null);
   const [reissue, setReissue] = useState(null);
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'org', 'issued']);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'org', 'issued', 'sort'], {}, { scope: 'certs' });
   const load = useCallback(async () => setD(await L('admin.certificates', {})), []);
   useEffect(() => { load(); }, [load]);
 
@@ -144,7 +146,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
     { key: 'issued', label: 'الإصدار', all: 'أي تاريخ إصدار', type: 'period', get: (c) => c.issued_at },
   ], [orgs]);
   const presets = useMemo(() => Object.entries(ST).map(([k, [l]]) => ({ key: k, label: l, test: (c) => c.status === k })), []);
-  const rows = useMemo(() => applyFilters(all, { fields, presets, text: (c) => [c.serial, c.name_ar, c.name_en, c.org_name].join(' ') }, f), [all, f, fields, presets]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets, text: (c) => [c.serial, c.name_ar, c.name_en, c.org_name].join(' ') }, f), CERT_SORTS, f.sort), [all, f, fields, presets]);
   const counts = useMemo(() => presetCounts(all, presets), [all, presets]);
   // المؤشرات من الخادم بمرشح الإحصاءات (بلا حساب العرض وحسابات الاختبار)، لا من صفوف السجل التي تُظهر الاختبار بشارته.
   // الخادم قبل نشر هذا التحديث لا يرسلها: تُعدّ من الصفوف كما كانت
@@ -165,7 +167,7 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
           shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة" />
         {!rows.length ? <p className="la-muted">لا نتائج لهذه الفلاتر.</p> : (
           <div className="table-wrap"><table className="data-table">
-            <thead><tr><th>الرقم</th><th>الاسم</th><th>الجهة</th><th>الإصدار</th><th>الحالة</th><th /></tr></thead>
+            <thead><tr><SortTh k="serial" state={f} set={setF}>الرقم</SortTh><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="issued" state={f} set={setF}>الإصدار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>
             <tbody>{rows.map((c) => {
               const [l, t] = ST[c.status] || [c.status, ''];
               return (

@@ -565,8 +565,6 @@
 .cps { display: grid; gap: 16px; }
 .cps-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
 .cps-head h2 { margin: 4px 0 8px; font-size: 1.25rem; }
-.cps-filter button { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: .78rem; }
-.cps-filter button.on { background: var(--petrol); color: var(--sand-cream); border-color: var(--petrol); }
 .cps-secs, .cps-checks { margin: 0 0 14px; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .86rem; }
 .cps-secs li small, .cps-checks li small { display: block; color: var(--ink-mid); font-size: .76rem; }
 .cps-secs li.ok > span::after, .cps-checks li.ok::marker { color: var(--st-ok); }
@@ -685,8 +683,6 @@
 .pay-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
 .pay-kpis span { display: grid; padding: 12px 14px; border-radius: 10px; background: var(--sand-light); font-size: .74rem; color: var(--ink-light); border-top: 2px solid var(--gold); }
 .pay-kpis b { font-family: var(--font-en); font-size: 1.7rem; color: var(--petrol-s); }
-.pay-filters { gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.pay-filters .la-search { flex: 1; min-width: 200px; }
 .pay-health { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .pay-health li { display: grid; grid-template-columns: 20px 140px 1fr; gap: 8px; align-items: baseline; }
 .pay-health li.ok b { color: var(--st-ok); }

@@ -52,7 +52,8 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('د. سارة الحربي');
   if (SHOT) await page.locator('.ex').screenshot({ path: `${SHOT}/experts.png` });
-  await page.getByRole('button', { name: 'مسح الكل' }).click();
+  // في الشاشة شريطان (طلبات الإسناد وشبكة الخبراء): المسح هنا لشريط الشبكة
+  await page.locator('.la-card', { hasText: 'شبكة الخبراء' }).getByRole('button', { name: 'مسح الكل' }).click();
   await page.getByText('خالد العتيبي').click();
   await expect(page.getByRole('heading', { name: 'خالد العتيبي' })).toBeVisible();
   await expect(page.locator('.ex-service')).toContainText('2.5');

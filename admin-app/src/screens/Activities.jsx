@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BRAND } from '../../../shared/js/brand.js';
 import QRCode from 'qrcode';
-import { L } from '../leaders.js';
+import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
@@ -19,7 +19,6 @@ import { minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, sessionsAr }
 // عنوان المتطلب برموزه مملوءة كما يراه المشارك: «حضور الأيام التدريبية (أربعة أيام)» لا «({days:T-ATTEND})» (التدقيق 2026-11-10، البند 9.9)
 const reqTitle = (r) => renderJourneyText(r?.title_ar || '', { reqs: r ? [r] : [] });
 
-const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 const SESSION_FIELDS = [
   { name: 'title_ar', label: 'عنوان الجلسة (مثل: اليوم الأول، Milestone)' },
   { name: 'mode', label: 'الطريقة', type: 'select', options: { in_person: SESSION_MODE_AR.in_person, online: SESSION_MODE_AR.online } },

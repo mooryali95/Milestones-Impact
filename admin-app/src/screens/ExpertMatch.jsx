@@ -6,6 +6,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MATCH_WEIGHTS, OFFER_HOURS } from '../../../supabase/functions/leaders-api/logic.js';
 
@@ -97,16 +99,24 @@ export function ExpertAssign({ participantId, canWrite }) {
 }
 
 // في تبويب الخبراء: كل طلبات الإسناد بحالاتها، والإلغاء وإعادة المحاولة
+const REQ_PRESETS = [
+  { key: 'live', label: 'قائمة', test: (x) => LIVE.includes(x.status) },
+  { key: 'offered', label: 'بانتظار رد الخبير', test: (x) => x.status === 'offered' },
+  { key: 'unmatched', label: 'بلا خبير', test: (x) => x.status === 'unmatched' },
+];
+const REQ_FIELDS = [{ key: 'role', label: 'الخدمات', get: (x) => x.role, options: Object.entries(EXPERT_ROLE_AR).map(([k, [l]]) => [k, l]) }];
+const REQ_SORTS = { who: (x) => x.participants?.full_name, role: (x) => roleAr(x.role), expert: (x) => x.experts?.full_name, status: (x) => EXPERT_REQUEST_STATUS[x.status] };
 export function RequestsBoard({ canWrite, onPerson }) {
   const { toast, prompt } = useUI();
   const [d, setD] = useState(null);
-  const [st, setSt] = useState('live');
+  // داخل شاشة الخبراء ولها شريطها وعنوانها، فحالة هذا الشريط لا تُكتب في العنوان (url: false)
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'sort'], {}, { scope: 'expert-requests', defaults: { view: 'live' }, url: false });
   const load = useCallback(async () => setD(await L('admin.expert-requests')), []);
   useEffect(() => { load(); }, [load]);
   if (!d) return <section className="la-card"><h3>طلبات الإسناد</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card"><h3>طلبات الإسناد</h3><div className="la-err">{d.message}</div></section>;
   const all = d.requests;
-  const rows = all.filter((x) => (st === 'live' ? LIVE.includes(x.status) : st === 'all' ? true : x.status === st));
+  const rows = sortRows(applyFilters(all, { fields: REQ_FIELDS, presets: REQ_PRESETS, text: (x) => [x.participants?.full_name, x.participants?.email, x.experts?.full_name].join(' ') }, f), REQ_SORTS, f.sort);
   const act = async (action, x, ok) => {
     const reason = action.endsWith('cancel') ? await prompt('سبب الإلغاء؟', '', { danger: true, ok: 'إلغاء الطلب' }) : '';
     if (action.endsWith('cancel') && !reason?.trim()) return;
@@ -114,16 +124,14 @@ export function RequestsBoard({ canWrite, onPerson }) {
     toast(r.success ? ok : r.message);
     if (r.success) load();
   };
-  const n = (s) => all.filter((x) => x.status === s).length;
   return (
     <section className="la-card xm-board">
-      <div className="la-row between"><h3>طلبات الإسناد</h3>
-        <div className="flt-presets la-row">{[['live', `قائمة (${all.filter((x) => LIVE.includes(x.status)).length})`], ['offered', `بانتظار رد الخبير (${n('offered')})`], ['unmatched', `بلا خبير (${n('unmatched')})`], ['all', 'الكل']].map(([k, l]) => (
-          <button key={k} className={`flt-preset${st === k ? ' on' : ''}`} onClick={() => setSt(k)}>{l}</button>
-        ))}</div></div>
-      {!rows.length ? <p className="la-muted">لا طلبات هنا. أسند خبيرًا من ملف أي مشارك.</p> : (
+      <h3>طلبات الإسناد</h3>
+      <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS)}
+        shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null} />
+      {!rows.length ? <p className="la-muted">{all.length ? 'لا طلبات لهذه الفلاتر.' : 'لا طلبات هنا. أسند خبيرًا من ملف أي مشارك.'}</p> : (
         <div className="table-wrap"><table className="data-table la-cards">
-          <thead><tr><th>المشارك</th><th>الخدمة</th><th>الخبير</th><th>الحالة</th><th /></tr></thead>
+          <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="role" state={f} set={setF}>الخدمة</SortTh><SortTh k="expert" state={f} set={setF}>الخبير</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>
           <tbody>{rows.map((x) => (
             <tr key={x.id}>
               <td data-label="المشارك"><button className="link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button></td>

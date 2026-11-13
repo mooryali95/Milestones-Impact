@@ -5,19 +5,21 @@
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
 // للتحسين مرة أو تقبلها فيُطلب تأييد راعيها. الفصول نفسها نماذج تعليمية،
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
 
 const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
-const FILTERS = [...['submitted', 'accepted', 'returned', 'approved'].map((k) => [k, STATUS[k]]), ['', 'الكل']];
+const FILTERS = ['submitted', 'accepted', 'returned', 'approved'].map((k) => [k, STATUS[k]]);
 
 async function openDoc(doc, toast) {
   const win = window.open('', '_blank');
@@ -171,22 +173,34 @@ function Detail({ id, canWrite, onBack, onPerson }) {
   );
 }
 
+// الوثائق كلها مرة واحدة والفلترة في المتصفح (شريط الفلترة الموحد)، وتبدأ بما ينتظر القرار
+const CAP_PRESETS = FILTERS.map(([k, l]) => ({ key: k, label: l, test: (x) => x.status === k }));
+const CAP_SORTS = {
+  name: (x) => x.initiative, lead: (x) => x.full_name, org: (x) => x.organization, scope: (x) => SCOPE[x.scope],
+  status: (x) => STATUS[x.status], ready: (x) => x.readiness, score: (x) => x.score, at: (x) => x.submitted_at,
+};
+
 export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
-  const [status, setStatus] = useState('submitted');
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'org', 'scope', 'sort'], {}, { scope: 'capstones', defaults: { view: 'submitted' } });
   const [list, setList] = useState(null);
-  useEffect(() => { if (!capId) L('admin.capstones', status ? { status } : {}).then(setList); }, [status, capId]);
+  useEffect(() => { if (!capId) L('admin.capstones', {}).then(setList); }, [capId]);
+  const all = (list?.success && list.capstones) || [];
+  const fields = useMemo(() => [
+    { key: 'org', label: 'الجهات', get: (x) => x.organization || '', options: [...new Set(all.map((x) => x.organization).filter(Boolean))].sort().map((o) => [o, o]) },
+    { key: 'scope', label: 'الأنواع', get: (x) => x.scope, options: Object.entries(SCOPE) },
+  ], [all]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets: CAP_PRESETS, text: (x) => [x.initiative, x.full_name, x.organization].join(' ') }, f), CAP_SORTS, f.sort), [all, f, fields]);
   if (capId) return <Detail id={capId} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} />;
   return (
     <section className="la-card">
-      <div className="la-row between">
-        <h3>مشاريع التخرج: وثائق المبادرات</h3>
-        <div className="la-row cps-filter">{FILTERS.map(([k, l]) => <button key={k} className={status === k ? 'on' : ''} onClick={() => { setList(null); setStatus(k); }}>{l}</button>)}</div>
-      </div>
+      <h3>مشاريع التخرج: وثائق المبادرات</h3>
       <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتيب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
-      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !list.capstones.length ? <Empty compact title="لا وثائق في هذه الحالة" hint="غيّر الحالة من الأعلى لترى ما هو قيد البناء أو المعتمد." /> : (
+      {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
+        shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة" />}
+      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact title={all.length ? 'لا وثائق لهذه الفلاتر' : 'لا وثائق بعد'} hint={all.length ? 'غيّر الحالة من الأعلى لترى ما هو قيد البناء أو المعتمد.' : 'تظهر هنا وثيقة كل قائد حين يبدأ بناءها.'} /> : (
         <table className="la-table">
-          <thead><tr><th>المبادرة</th><th>القائد</th><th>الجهة</th><th>النوع</th><th>الحالة</th><th>الجاهزية</th><th>المعيار</th><th>سُلّمت</th></tr></thead>
-          <tbody>{list.capstones.map((x) => (
+          <thead><tr><SortTh k="name" state={f} set={setF}>المبادرة</SortTh><SortTh k="lead" state={f} set={setF}>القائد</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="scope" state={f} set={setF}>النوع</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="ready" state={f} set={setF}>الجاهزية</SortTh><SortTh k="score" state={f} set={setF}>المعيار</SortTh><SortTh k="at" state={f} set={setF}>سُلّمت</SortTh></tr></thead>
+          <tbody>{rows.map((x) => (
             <tr key={x.participant_id}>
               <td><button className="la-link" onClick={() => onOpen(x.participant_id)}>{x.initiative || 'بلا اسم'}</button></td>
               <td>{x.full_name}</td><td>{x.organization || '·'}</td><td>{SCOPE[x.scope] || '·'}</td>

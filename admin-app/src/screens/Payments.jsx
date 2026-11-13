@@ -4,14 +4,16 @@
 // المصدر: admin.payments (payments + entitlements + payment_events). الحق لا يُكتب إلا من إشعار Creem
 // الموقّع أو منحة إدارية مسجّلة، والمطابقة تستعلم Creem مباشرة لدفعة فات إشعارها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { csvText, date, download, L } from '../leaders.js';
+import { csvText, date, dateTime, download, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, sortRows } from '../filters.js';
 
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 const ITEM = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
 const PAY_ST = { paid: ['مدفوع', 'ok'], pending: ['معلّق', 'warn'], refunded: ['مسترد', 'bad'], failed: ['تعذّر', 'bad'], expired: ['انتهى', ''] };
 const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق', sponsor: 'رعاية جهة' };
-const when = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '·');
+const when = (d) => dateTime(d) || '·';
 
 function Sparkbars({ daily }) {
   const max = Math.max(1, ...daily.map((d) => d.cents));
@@ -68,27 +70,34 @@ function SettingsCard({ d, canWrite, reload }) {
   );
 }
 
+// حقول الفلترة وأعمدة الفرز لشريط الفلترة الموحد
+const PAY_FIELDS = [
+  { key: 'status', label: 'الحالات', aria: 'الحالة', get: (p) => p.status, options: Object.entries(PAY_ST).map(([k, [l]]) => [k, l]) },
+  { key: 'mode', label: 'الأوضاع', aria: 'الوضع', all: 'الإنتاج والاختبار', get: (p) => p.mode, options: [['live', 'الإنتاج'], ['test', 'الاختبار']] },
+  { key: 'item', label: 'البنود', aria: 'البند', get: (p) => p.item, options: Object.entries(ITEM) },
+];
+const PAY_SORTS = { at: (p) => p.paid_at || p.created_at, who: (p) => p.participants?.full_name || p.email, item: (p) => ITEM[p.item], amount: (p) => p.amount_cents || 0, status: (p) => PAY_ST[p.status]?.[0] || p.status };
+const ENT_FIELDS = [
+  { key: 'item', label: 'البنود', aria: 'البند', get: (e) => e.item, options: Object.entries(ITEM) },
+  { key: 'source', label: 'المصادر', aria: 'المصدر', get: (e) => e.source, options: Object.entries(SRC) },
+  { key: 'state', label: 'الحالات', aria: 'الحالة', get: (e) => (e.revoked_at ? 'revoked' : 'live'), options: [['live', 'ساري'], ['revoked', 'مسحوب']] },
+];
+const ENT_SORTS = { who: (e) => e.participants?.full_name, item: (e) => ITEM[e.item], source: (e) => SRC[e.source] || e.source, at: (e) => e.created_at, state: (e) => (e.revoked_at ? 1 : 0) };
+
 export default function Payments({ canWrite, onPerson }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [tab, setTab] = useState('payments');
-  const [q, setQ] = useState('');
-  const [st, setSt] = useState('');
-  const [mode, setMode] = useState('live');
+  // شريطان (العمليات والاستحقاقات) داخل تبويبات الشاشة، فلا يكتبان في العنوان. العمليات تبدأ بالإنتاج
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'mode', 'item', 'sort'], {}, { scope: 'payments', defaults: { mode: 'live' }, url: false });
+  const [ef, setEf, clearEf, replaceEf] = useFilters(['q', 'item', 'source', 'state', 'sort'], {}, { scope: 'entitlements', url: false });
   const load = useCallback(async () => setD(await L('admin.payments')), []);
   useEffect(() => { load(); }, [load]);
 
-  const rows = useMemo(() => {
-    if (!d?.success) return [];
-    const s = q.trim().toLowerCase();
-    return d.payments.filter((p) => (!st || p.status === st) && (!mode || p.mode === mode)
-      && (!s || [p.email, p.participants?.full_name, p.order_id, p.checkout_id].join(' ').toLowerCase().includes(s)));
-  }, [d, q, st, mode]);
-  const ents = useMemo(() => {
-    if (!d?.success) return [];
-    const s = q.trim().toLowerCase();
-    return d.entitlements.filter((e) => !s || [e.participants?.full_name, e.participants?.email].join(' ').toLowerCase().includes(s));
-  }, [d, q]);
+  const allPay = (d?.success && d.payments) || [];
+  const allEnt = (d?.success && d.entitlements) || [];
+  const rows = useMemo(() => sortRows(applyFilters(allPay, { fields: PAY_FIELDS, text: (p) => [p.email, p.participants?.full_name, p.order_id, p.checkout_id].join(' ') }, f), PAY_SORTS, f.sort), [allPay, f]);
+  const ents = useMemo(() => sortRows(applyFilters(allEnt, { fields: ENT_FIELDS, text: (e) => [e.participants?.full_name, e.participants?.email].join(' ') }, ef), ENT_SORTS, ef.sort), [allEnt, ef]);
 
   if (!d) return <Spinner />;
   if (!d.success) return <p className="la-err">{d.message}</p>;
@@ -132,22 +141,21 @@ export default function Payments({ canWrite, onPerson }) {
         {[['payments', 'العمليات'], ['requests', 'طلبات الرعاية'], ['entitlements', 'الاستحقاقات'], ['sponsors', 'رعاية الجهات'], ['settings', 'الإعداد']].map(([key, l]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{l}</button>)}
       </div>
 
-      {(tab === 'payments' || tab === 'entitlements') && (
-        <div className="la-row pay-filters">
-          <input className="la-search" placeholder="بحث بالاسم أو البريد أو رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} />
-          {tab === 'payments' && <>
-            <select value={st} onChange={(e) => setSt(e.target.value)}><option value="">كل الحالات</option>{Object.entries(PAY_ST).map(([key, [l]]) => <option key={key} value={key}>{l}</option>)}</select>
-            <select value={mode} onChange={(e) => setMode(e.target.value)}><option value="live">الإنتاج</option><option value="test">الاختبار</option><option value="">الكل</option></select>
-            <button className="btn-sm ghost" onClick={exportCsv}>تصدير CSV</button>
-          </>}
-        </div>
+      {tab === 'payments' && (
+        <FilterBar scope="payments" state={f} set={setF} clear={clearF} replace={replaceF} fields={PAY_FIELDS}
+          shown={rows.length} total={allPay.length} noun="عملية" placeholder="بحث بالاسم أو البريد أو رقم الطلب"
+          actions={<button className="refresh-btn" type="button" onClick={exportCsv} disabled={!rows.length}>تصدير CSV{rows.length !== allPay.length ? ` (${rows.length})` : ''}</button>} />
+      )}
+      {tab === 'entitlements' && (
+        <FilterBar scope="entitlements" state={ef} set={setEf} clear={clearEf} replace={replaceEf} fields={ENT_FIELDS}
+          shown={ents.length} total={allEnt.length} noun="استحقاق" placeholder="بحث بالاسم أو البريد" />
       )}
 
       {tab === 'payments' && (
         <section className="la-card">
           {rows.length ? (
             <table className="la-table">
-              <thead><tr><th>التاريخ</th><th>المشارك</th><th>البند</th><th>المبلغ</th><th>الحالة</th><th>المرجع</th><th /></tr></thead>
+              <thead><tr><SortTh k="at" state={f} set={setF}>التاريخ</SortTh><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="item" state={f} set={setF}>البند</SortTh><SortTh k="amount" state={f} set={setF}>المبلغ</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th>المرجع</th><th /></tr></thead>
               <tbody>{rows.map((p) => (
                 <tr key={p.id}>
                   <td>{when(p.paid_at || p.created_at)}</td>
@@ -191,8 +199,8 @@ export default function Payments({ canWrite, onPerson }) {
         <section className="la-card">
           <p className="la-muted small">رعاية الجهة تُثبَّت هنا لحظة سريانها فلا تسقط إن أُوقفت الجهة لاحقًا. للمنح اليدوي افتح ملف المشارك.</p>
           <table className="la-table">
-            <thead><tr><th>المشارك</th><th>البند</th><th>المصدر</th><th>التاريخ</th><th>الحالة</th><th /></tr></thead>
-            <tbody>{!ents.length && <tr><td colSpan={6}><Empty compact title="لا حقوق مثبتة بعد" hint="يظهر هنا حق كل مشارك في البرنامج: من دفعه، أو من رعاية جهته، أو من منحة يدوية." /></td></tr>}{ents.slice(0, 500).map((e) => (
+            <thead><tr><SortTh k="who" state={ef} set={setEf}>المشارك</SortTh><SortTh k="item" state={ef} set={setEf}>البند</SortTh><SortTh k="source" state={ef} set={setEf}>المصدر</SortTh><SortTh k="at" state={ef} set={setEf}>التاريخ</SortTh><SortTh k="state" state={ef} set={setEf}>الحالة</SortTh><th /></tr></thead>
+            <tbody>{!ents.length && <tr><td colSpan={6}>{allEnt.length ? <Empty compact title="لا استحقاقات لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /> : <Empty compact title="لا حقوق مثبتة بعد" hint="يظهر هنا حق كل مشارك في البرنامج: من دفعه، أو من رعاية جهته، أو من منحة يدوية." />}</td></tr>}{ents.slice(0, 500).map((e) => (
               <tr key={e.id} className={e.revoked_at ? 'off' : ''}>
                 <td><button className="la-link" onClick={() => onPerson?.(e.participant_id)}>{e.participants?.full_name || '·'}</button><br /><small className="la-muted" dir="ltr">{e.participants?.email}</small></td>
                 <td>{ITEM[e.item]}</td>

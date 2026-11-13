@@ -4,12 +4,11 @@
 // تُعرض على البروجكتر أو بمشاركة الشاشة في Meet. المكوّن المشترك HallControl (shared/hall) هو
 // نفسه في بوابة الخبير؛ هنا يُربط بإجراءات admin.hall-*، وتحته طلبات الأقران في الدفعة (المرحلة 8).
 import React, { useCallback, useEffect, useState } from 'react';
-import { L } from '../leaders.js';
+import { dateTime as when, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import HallControl from '../../../shared/hall/HallControl.jsx';
 
 const ACTION = { state: 'admin.hall', open: 'admin.hall-open', step: 'admin.hall-step', split: 'admin.hall-split', assign: 'admin.hall-assign', close: 'admin.hall-close' };
-const when = (d) => (d ? new Date(d).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 // طلبات الأقران في الدفعة كما يراها الأدمن (قراءة؛ التأكيد من بوابة الخبير)
 function PeerRequests({ cohortId }) {

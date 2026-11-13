@@ -110,3 +110,32 @@ test('مراجعة المتطلبات دفعة واحدة من النظرة ال
   await expect.poll(() => reviewed.length).toBe(2);
   expect(reviewed.map((x) => [x.participant_id, x.status])).toEqual([['p1', 'done'], ['p2', 'done']]);
 });
+
+test('القوائم: فرز بالعمود يُحفظ في العنوان، والفلاتر تبقى عند العودة للشاشة', async ({ page }) => {
+  await setup(page);
+  const contacts = ['منى', 'أحمد', 'سارة', 'خالد'].map((name, i) => ({ id: `c${i}`, name, email: `u${i}@x.sa`, status: 'new', product: 'MI-HOME', created_at: `2026-11-0${i + 1}T08:00:00Z` }));
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts } }));
+  await page.goto(`${BASE}#/contacts`);
+  await page.reload();
+  const names = () => page.locator('.data-table tbody tr td:first-child strong').allTextContents();
+  await expect(page.locator('.data-table tbody tr')).toHaveCount(4);
+  const before = await names();
+  const th = page.locator('thead th', { hasText: 'الاسم' });
+  await th.getByRole('button').click();
+  await expect(th).toHaveAttribute('aria-sort', 'ascending');
+  await expect(page).toHaveURL(/sort=name/);
+  const sorted = await names();
+  expect(sorted).toEqual([...before].sort(new Intl.Collator('ar', { numeric: true, sensitivity: 'base' }).compare));
+  await th.getByRole('button').click();
+  await expect(th).toHaveAttribute('aria-sort', 'descending');
+  expect(await names()).toEqual([...sorted].reverse());
+  await expect(page.getByRole('button', { name: 'مسح الكل' })).toHaveCount(0);   // الفرز ليس فلترة
+  // مغادرة الشاشة ثم العودة: الفرز والبحث كما تُركا
+  await page.getByRole('search').getByLabel('بحث').fill('سار');
+  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
+  await page.goto(`${BASE}#/visits`);
+  await expect(page).not.toHaveURL(/sort=/);
+  await page.goto(`${BASE}#/contacts`);
+  await expect(page.getByRole('search').getByLabel('بحث')).toHaveValue('سار');
+  await expect(page.locator('thead th', { hasText: 'الاسم' })).toHaveAttribute('aria-sort', 'descending');
+});

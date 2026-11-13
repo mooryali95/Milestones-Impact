@@ -4,6 +4,7 @@
 // المفتاح العام يرضي بوابة Supabase فقط؛ ما يصرّح فعلًا بكل إجراء هو
 // توكن جلسة المدير داخل الجسم، ويُتحقق منه على الخادم.
 import { fnUrl, SUPABASE_KEY } from '../../src/lib/api.js';
+import { dateTime } from './dates.js';
 
 const ADMIN_API = fnUrl('admin-api');
 export const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
@@ -63,7 +64,5 @@ export async function call(action, body = {}) {
 
 export const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-export function fmtDate(iso) {
-  if (!iso) return '—';
-  return new Intl.DateTimeFormat('ar-SA', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
-}
+// صيغة التاريخ من dates.js وحدها (كانت هنا ar-SA فتُظهر التاريخ هجريًا خلاف بقية اللوحة)
+export const fmtDate = (iso) => dateTime(iso) || '—';

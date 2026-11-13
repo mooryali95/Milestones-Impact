@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المحرران (الباب والنموذج) بمعاينة حية كما يراها المشارك. الكتابة عبر
 // admin.save / admin.delete / admin.reorder، والتقييم عبر admin.review-submission.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CARD_REVIEW_CRITERIA, CHARTER_KEY } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
@@ -12,6 +12,8 @@ import {
   applyTool, chapterLabs, chapterLint, clearDraft, lintHandbookMd, lintQuiz, draftKey, readDraft, writeDraft, filterHandbookMd, masterBook, maxPoints, nextSort, parseQuiz, ratingLabel, splitList, tierLabel, tiered, words,
 } from '../handbook.js';
 import Md from '../Md.jsx';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, sortRows } from '../filters.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { RUBRIC_SCALE, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
@@ -608,25 +610,32 @@ function Preview({ catalog, canWrite, open }) {
   );
 }
 
-function Reviews({ catalog, canWrite, model, setModel, onSaved }) {
-  const [status, setStatus] = useState('submitted');
+const REVIEW_SORTS = {
+  who: (x) => x.participants?.full_name, model: (x) => x.learning_models?.title_ar, at: (x) => x.submitted_at,
+  status: (x) => SUB_ST[x.status]?.[0] || x.status, rating: (x) => x.rating,
+};
+// الأعمال كلها مرة واحدة والفلترة في المتصفح (شريط الفلترة الموحد)، وتبدأ بما ينتظر التقييم
+function Reviews({ catalog, canWrite, model, onSaved }) {
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'model', 'sort'], model ? { status: 'submitted', model } : {}, { scope: 'reviews', defaults: { status: 'submitted' } });
   const [r, setR] = useState(null);
   const [sub, setSub] = useState(null);
-  const load = () => { setR(null); L('admin.submissions', { status: status || undefined, model_id: model || undefined }).then(setR); };
-  useEffect(load, [status, model]); // eslint-disable-line
+  const load = () => { setR(null); L('admin.submissions', {}).then(setR); };
+  useEffect(load, []); // eslint-disable-line
+  const all = (r?.success && r.submissions) || [];
+  const fields = useMemo(() => [
+    { key: 'status', label: 'الحالات', aria: 'حالة العمل', get: (x) => x.status, options: SUB_FILTER.filter(([k]) => k) },
+    { key: 'model', label: 'النماذج', aria: 'النموذج', get: (x) => x.model_id, options: (catalog.learning_models || []).map((m) => [m.id, m.title_ar]) },
+  ], [catalog]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields, text: (x) => [x.participants?.full_name, x.participants?.email, x.participants?.organization_name, x.learning_models?.title_ar].join(' ') }, f), REVIEW_SORTS, f.sort), [all, f, fields]);
   return (
     <section className="la-card">
-      <div className="toolbar">
-        <select className="filter-select" aria-label="حالة العمل" value={status} onChange={(e) => setStatus(e.target.value)}>{SUB_FILTER.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-        <select className="filter-select" aria-label="النموذج" value={model} onChange={(e) => setModel(e.target.value)}>
-          <option value="">كل النماذج</option>{(catalog.learning_models || []).map((m) => <option key={m.id} value={m.id}>{m.title_ar}</option>)}
-        </select>
-        {r?.success && <span className="la-muted">{r.submissions.length} عمل</span>}
-      </div>
+      <FilterBar scope="reviews" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields}
+        shown={rows.length} total={all.length} noun="عمل" placeholder="ابحث بالمشارك أو الجهة أو النموذج"
+        capped={r?.capped ? { limit: r.limit } : null} />
       {!r ? <Spinner /> : !r.success ? <div className="la-err" role="alert">{r.message}</div> : (
         <div className="table-wrap"><table className="data-table">
-          <thead><tr><th>المشارك</th><th>النموذج</th><th>سُلّم</th><th>الحالة</th><th>التقييم</th><th /></tr></thead>
-          <tbody>{r.submissions.length ? r.submissions.map((x) => (
+          <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="model" state={f} set={setF}>النموذج</SortTh><SortTh k="at" state={f} set={setF}>سُلّم</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="rating" state={f} set={setF}>التقييم</SortTh><th /></tr></thead>
+          <tbody>{rows.length ? rows.map((x) => (
             <tr key={x.id}>
               <td><b>{x.participants?.full_name || ''}</b><br /><small className="la-muted">{x.participants?.organization_name || x.participants?.email || ''}</small></td>
               <td>{x.learning_models?.title_ar || ''}<br /><small className="la-muted">{DIM_EN[x.learning_models?.dimension] || ''}</small></td>
@@ -635,7 +644,7 @@ function Reviews({ catalog, canWrite, model, setModel, onSaved }) {
               <td className="stars-c">{ratingLabel(x.rating)}{x.bonus ? <small> +{x.bonus}</small> : null}</td>
               <td><button className={`btn-sm ${x.status === 'submitted' ? 'primary' : 'ghost'}`} onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button></td>
             </tr>
-          )) : <tr><td colSpan={6} className="la-empty">لا أعمال هنا</td></tr>}</tbody>
+          )) : <tr><td colSpan={6} className="la-empty">{all.length ? 'لا أعمال لهذه الفلاتر' : 'لا أعمال هنا'}</td></tr>}</tbody>
         </table></div>
       )}
       {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) { load(); onSaved(); } }} />}
@@ -674,7 +683,7 @@ export default function Handbook({ catalog, reload, canWrite }) {
       </section>
       {view === 'models' ? <Models {...p} onReview={(id) => { setSubModel(id); setView('reviews'); }} />
         : view === 'preview' ? <Preview {...p} />
-          : view === 'reviews' ? <Reviews catalog={catalog} canWrite={canWrite} model={subModel} setModel={setSubModel} onSaved={reload} />
+          : view === 'reviews' ? <Reviews key={subModel} catalog={catalog} canWrite={canWrite} model={subModel} onSaved={reload} />
             : <Chapters {...p} />}
       {editing?.kind === 'chapter' && <ChapterEditor m={editing.m} dim={editing.dim} catalog={catalog} canWrite={canWrite} onClose={close} />}
       {editing?.kind === 'model' && <ModelEditor m={editing.m} dim={editing.dim} catalog={catalog} canWrite={canWrite} onClose={close} />}

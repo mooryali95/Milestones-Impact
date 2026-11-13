@@ -1,23 +1,34 @@
 // شريط الفلترة الموحّد: بحث، وعروض سريعة بعدّاداتها، وحقول، ورقائق للفلاتر المفعّلة،
 // وعروض محفوظة باسم. المنطق في filters.js، والحالة في عنوان الصفحة عبر useFilters.
 import React, { useEffect, useState } from 'react';
-import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, PERIODS, saveView } from './filters.js';
+import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, nextSort, PERIODS, recallState, rememberState, saveView, startState } from './filters.js';
 import { readQuery, writeQuery } from './route.js';
 
-// حالة الفلاتر لشاشة واحدة، مقروءة من العنوان ومكتوبة إليه
-export function useFilters(keys, initial = {}) {
-  const [state, setState] = useState(() => {
-    const fromUrl = decodeState(readQuery(), keys);
-    return isFiltered(fromUrl) ? fromUrl : { ...decodeState('', keys), ...initial };
-  });
-  useEffect(() => { writeQuery(encodeState(state)); }, [state]);
-  useEffect(() => () => writeQuery(''), []);   // مغادرة الشاشة تُفرغ الفلاتر من العنوان
+// حالة الفلاتر لشاشة واحدة، مقروءة من العنوان ومكتوبة إليه.
+// scope: تبقى الفلاتر عند العودة للشاشة. defaults: ما تبدأ به أول مرة. url=false لقائمة داخل صفحة لها عنوانها.
+export function useFilters(keys, initial = {}, { scope = '', defaults = {}, url = true } = {}) {
+  const [state, setState] = useState(() => startState(keys, { fromUrl: url ? readQuery() : '', initial, kept: scope ? recallState(scope) : null, defaults }));
+  useEffect(() => { if (url) writeQuery(encodeState(state)); if (scope) rememberState(scope, state); }, [state]); // eslint-disable-line
+  // مغادرة الشاشة تُفرغ الفلاتر من العنوان
+  useEffect(() => () => { if (url) writeQuery(''); }, []); // eslint-disable-line
   const set = (patch) => setState((s) => ({ ...s, ...patch }));
-  const clear = () => setState(decodeState('', keys));
+  const clear = () => setState((s) => ({ ...decodeState('', keys), ...(s.sort ? { sort: s.sort } : {}) }));   // المسح للفلاتر، والفرز يبقى
   return [state, set, clear, setState];
 }
 
-export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions }) {
+// رأس عمود يُفرز به: نقرة تصاعدي، ثم تنازلي، ثم ترتيب الخادم. الحالة في state.sort فتُحفظ مع الفلاتر
+export function SortTh({ k, state, set, children, ...rest }) {
+  const dir = state.sort === k ? 'ascending' : state.sort === `-${k}` ? 'descending' : 'none';
+  return (
+    <th scope="col" aria-sort={dir} {...rest}>
+      <button type="button" className={`th-sort ${dir}`} title="افرز بهذا العمود" onClick={() => set({ sort: nextSort(state.sort, k) })}>
+        {children}<span className="th-sort-ico" aria-hidden="true">{dir === 'ascending' ? '▲' : dir === 'descending' ? '▼' : '↕'}</span>
+      </button>
+    </th>
+  );
+}
+
+export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions, capped, sorts }) {
   const [views, setViews] = useState(() => loadViews(scope));
   const [more, setMore] = useState(false);
   const chips = activeChips(state, fields);
@@ -35,12 +46,17 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
           <input className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} onChange={(e) => set({ q: e.target.value })} />
         </div>
         {fields.slice(0, more ? fields.length : 3).map((f) => (
-          <select key={f.key} className={`filter-select${state[f.key] ? ' on' : ''}`} aria-label={f.label} value={state[f.key] || ''} onChange={(e) => set({ [f.key]: e.target.value })}>
+          <select key={f.key} className={`filter-select${state[f.key] ? ' on' : ''}`} aria-label={f.aria || f.label} value={state[f.key] || ''} onChange={(e) => set({ [f.key]: e.target.value })}>
             <option value="">{f.all || `كل ${f.label}`}</option>
             {(f.type === 'period' ? PERIODS : f.options || []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         ))}
         {fields.length > 3 && <button type="button" className="flt-more" aria-expanded={more} onClick={() => setMore(!more)}>{more ? 'فلاتر أقل' : `+ ${fields.length - 3} فلاتر`}</button>}
+        {sorts && (
+          <select className={`filter-select${state.sort ? ' on' : ''}`} aria-label="الترتيب" value={state.sort || ''} onChange={(e) => set({ sort: e.target.value })}>
+            {sorts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        )}
         {actions}
       </div>
 
@@ -74,6 +90,13 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
           </select>
         )}
       </div>
+      {capped && (
+        <div className="flt-cap" role="status">
+          القائمة بلغت حدها ({capped.limit} {noun})، فالظاهر هو الأحدث فقط، والبحث والفلاتر هنا لا ترى ما بعده.
+          {capped.onSearch && (state.q || '').trim() && <button type="button" className="flt-link" onClick={() => capped.onSearch(state.q.trim())}>ابحث عن «{state.q.trim()}» في الكل</button>}
+          {capped.onSearch && !(state.q || '').trim() && <span> اكتب في البحث ثم اختر «ابحث في الكل».</span>}
+        </div>
+      )}
     </div>
   );
 }
