@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261113100000_leaders_expert_committees
+-- as-of migration: 20261113110000_leaders_assessment_effort_retake
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -77,7 +77,12 @@ create table if not exists leaders.assessments (
   started_at timestamp with time zone default now() not null,
   submitted_at timestamp with time zone,
   form text,
+  effort jsonb,
+  retake_requested_at timestamp with time zone,
+  retake_requested_by text,
+  retake_reason text,
   constraint assessments_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
+  constraint assessments_retake_reason_chk CHECK (((retake_reason IS NULL) OR (retake_reason = ANY (ARRAY['effort'::text, 'admin'::text])))),
   constraint assessments_status_check CHECK ((status = ANY (ARRAY['in_progress'::text, 'submitted'::text, 'void'::text]))),
   constraint assessments_pkey PRIMARY KEY (id)
 );

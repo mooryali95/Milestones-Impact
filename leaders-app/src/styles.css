@@ -1599,3 +1599,8 @@ body:has(.tour) main{padding-bottom:260px}
 /* المرحلة 2، طول السطر: الفقرات الشارحة لا تمتد بعرض الشاشة العريضة (45 إلى 75 حرفًا للسطر المريح) */
 /* وحدة ch بعرض الصفر، والحرف العربي أضيق منه: 62ch نحو 75 حرفًا عربيًا */
 main p.small, main p.muted { max-inline-size: 62ch; }
+
+/* طلب إعادة القياس: بطاقة فوق مقدمة القياس، بلون التنبيه لا الخطأ (طلب لا عقوبة) */
+.retake-card { border-inline-start: 4px solid var(--warn); background: var(--st-warn-bg); margin-bottom: 14px; }
+.retake-card h2 { margin: 0 0 6px; font-size: 18px; }
+.retake-card p { margin: 0; }

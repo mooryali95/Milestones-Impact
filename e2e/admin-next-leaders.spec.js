@@ -217,3 +217,33 @@ test('قائمة المشاركين: تذكير المحددين ممن لم ي�
   await expect(page.getByText('أُرسل 1 تذكير')).toBeVisible();
   expect(calls.find((c) => c.action === 'admin.remind-stuck').participant_ids).toEqual(['p3']);
 });
+
+test('قائمة المشاركين: وسم «مستعجل» وعرضه السريع، وطلب إعادة القياس للمحددين ممن يصح منهم', async ({ page }) => {
+  const done = { step: 'approval', label: 'بانتظار الاعتماد', remaining: 'اعتماد المستوى من الإدارة' };
+  const rushed = { id: 'p3', full_name: 'هند السالم', email: 'h@x.com', organization_id: 'o1', organization_name: 'وزارة التجربة', status: 'pending_approval', placements: [], created_at: '2026-11-11',
+    onboarding: done, effort: { level: 'low', note: '46 من 60 إجابة أسرع من زمن القراءة.' }, retake: null, can_retake: true };
+  const asked = { id: 'p4', full_name: 'ماجد الحربي', email: 'm@x.com', organization_id: 'o1', organization_name: 'وزارة التجربة', status: 'profiled', placements: [], created_at: '2026-11-11',
+    onboarding: { step: 'assessment_todo', label: 'لم يبدأ القياس', remaining: 'لم يفتح القياس' }, effort: null, retake: { requested_at: '2026-11-13T10:00:00Z', reason: 'effort' }, can_retake: false };
+  const calls = await setup(page, {
+    'admin.participants': { success: true, participants: [...people.map((p) => ({ ...p, onboarding: { step: 'done' }, effort: { level: 'ok' }, retake: null, can_retake: false })), rushed, asked] },
+    'admin.reset-assessment': { success: true, done: 1, skipped: 0 },
+  });
+  const rows = page.locator('.data-table tbody tr');
+  await expect(rows.filter({ hasText: 'هند السالم' }).locator('.la-chip.bad')).toHaveText('مستعجل');
+  await expect(rows.filter({ hasText: 'ماجد الحربي' })).toContainText('طُلبت الإعادة');
+  // من جهده طبيعي بلا وسم
+  await expect(rows.filter({ hasText: 'Omar Ali' })).not.toContainText('مستعجل');
+  await expect(page.getByRole('button', { name: /طُلبت منهم الإعادة/ })).toContainText('1');
+  const chip = page.getByRole('button', { name: /أجابوا باستعجال/ });
+  await expect(chip).toContainText('1');
+  await chip.click();
+  await expect(rows).toHaveCount(1);
+  await chip.click();
+  // الكل محدد، والزر يعدّ من يصح الطلب منهم وحدهم ويرسلهم وحدهم
+  await page.getByRole('checkbox', { name: 'تحديد الكل' }).check();
+  await page.getByRole('button', { name: 'اطلب إعادة القياس (1)' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('طلب إعادة القياس من 1 مشارك؟');
+  await page.getByRole('alertdialog').getByRole('button', { name: /^(تأكيد|نعم|متابعة|موافق)/ }).click();
+  await expect(page.getByText('طُلبت الإعادة من 1')).toBeVisible();
+  expect(calls.find((c) => c.action === 'admin.reset-assessment').participant_ids).toEqual(['p3']);
+});

@@ -6,7 +6,7 @@
 
 // الجداول التي تُصدَّر بعمود المشارك فيها. القيمة: الأعمدة المحجوبة من ذلك الجدول فوق الحجب العام.
 export const EXPORT_TABLES = {
-  enrollments: [], placements: [], assessments: [], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id'],
+  enrollments: [], placements: [], assessments: ['retake_requested_by'], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id'],
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],

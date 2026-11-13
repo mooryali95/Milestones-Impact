@@ -234,6 +234,13 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   if (mode === 'intro') {
     return (
       <div className="page quiz">
+        {/* طلب إعادة من الإدارة (retake.js): النص نفسه الذي في البريد، ويبقى حتى يُسلَّم القياس الجديد */}
+        {data.retake && (
+          <div className="card retake-card" role="alert">
+            <h2>{data.retake.title}</h2>
+            <p>{data.retake.text}</p>
+          </div>
+        )}
         <div className="card stack" data-tour="assessment">
           <p className="eyebrow">{post ? 'القياس البعدي' : 'تحديد المستوى'}</p>
           <h1 style={{ fontSize: 24 }}>{resumed ? 'نكمل من حيث توقفت' : post ? 'لنرَ ما تغيّر فعلًا' : 'لنحدد نقطة انطلاقك'}</h1>

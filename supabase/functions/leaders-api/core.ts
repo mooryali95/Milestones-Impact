@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
+import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
 import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
@@ -259,6 +260,11 @@ export function reminderMail(name: string, open: number) {
 // تذكير المتعثر قبل الاعتماد بما بقي عليه هو (onboarding.js stuckMailText): يرسله المدير لمن يختارهم
 export function stuckMail(name: string, text: string) {
   return shell('journey', 'خطوة واحدة لتبدأ رحلتك', mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, 'أكمل الآن'), text);
+}
+
+// طلب إعادة القياس: النص نفسه الذي تعرضه بطاقة الموقع (retake.js retakeText)
+export function retakeMail(name: string, text: string) {
+  return shell('journey', RETAKE_TITLE, mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, RETAKE_BUTTON), text);
 }
 
 // pay: يبقى رسم البرنامج (D04)، فيحمل البريد رابط الدفع وصفحته تعرض المسار المعتمد والسعر وسياسة الاسترداد
@@ -561,6 +567,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
   { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
   { key: 'stuck', family: 'journey', label: 'تذكير من لم يكمل التسجيل (يدوي)', subject: STUCK_MAIL_SUBJECT, html: () => stuckMail('سارة', stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })!) },
+  { key: 'retake', family: 'journey', label: 'طلب إعادة قياس تحديد المستوى', subject: RETAKE_MAIL_SUBJECT, html: () => retakeMail('سارة', retakeText('effort', 35)) },
   { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
   { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
   { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },
