@@ -15,7 +15,7 @@ import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
-import { POPUP_BLOCKED } from '../ui.jsx';
+import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
 
@@ -207,7 +207,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
             <h3>فحوص الاتساق</h3>
             <p className="muted small">يفحص النظام اتساق الفصول كلما فتحت الصفحة.</p>
             <ul className="cp-checks">
-              {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{x.detail}</small>}</li>)}
+              {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}</li>)}
               {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
             </ul>
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}

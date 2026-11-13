@@ -8,6 +8,9 @@ import Ico from './Ico.jsx';
 // تُعرض في القسم الذي وقع فيه الإجراء لا في رأس صفحة طويلة، وreveal يمرّرها إلى مجال الرؤية إن وقعت خارجه
 // (قسم لا نداءات خلفية فيه، فلا تنقل الصفحة دون فعل من المستخدم). say ثابتة الهوية فتصلح اعتمادًا في useCallback.
 let noticeSeq = 0;
+// تاريخ بصيغة ISO وسط نص عربي ينقلب عرضه (2026-03-15 يظهر 15-03-2026) فيكتبه المستخدم معكوسًا: يُعزل باتجاهه
+export const isoLtr = (text) => String(text ?? '').split(/(\d{4}-\d{2}-\d{2})/).map((part, i) => (i % 2 ? <bdi key={i} dir="ltr">{part}</bdi> : part));
+
 export function useNotice() {
   const [note, setNote] = useState(null);
   const say = useCallback((text, bad = false) => setNote(text ? { text, bad: !!bad, n: ++noticeSeq } : null), []);

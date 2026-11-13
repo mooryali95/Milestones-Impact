@@ -5,9 +5,9 @@
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
 import React, { useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
-import { ErrorBox } from '../ui.jsx';
+import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
-import { fieldFilled, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import logoDark from '../milestone-impact.svg';
@@ -219,8 +219,10 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             const single = f.bind === 'initiative' || !['select', 'table'].includes(f.type);
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
-                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{f.hint}</small>}</span></label>
+                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 <Field f={f} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
+                {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
+                {f.key === 'sponsor_email' && String(answers[f.key] || '').trim() && !isEmail(String(answers[f.key]).trim()) && <p className="alert err small" role="alert">هذا البريد غير مكتمل، فلن يصل الراعي طلب التأييد. صحّحه أو اتركه فارغًا.</p>}
               </div>
             );
           })}
