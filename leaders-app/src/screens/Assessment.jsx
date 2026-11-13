@@ -9,6 +9,7 @@
 // القياس البعدي (kind="post") بالشاشة نفسها، مع تقديرين لعبارات الممارسة
 // (الآن وقبل البرنامج) وقسم أخير عن انتقال التعلم.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PACE_TEXT, PACE_TITLE, paceTracker } from '../../../supabase/functions/leaders-api/pace.js';
 import Ico from '../Ico.jsx';
 import { call } from '../api.js';
 import { ErrorBox } from '../ui.jsx';
@@ -55,6 +56,9 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
   // naBlock سؤال رُدّ فيه اختيار زائد، وreturnTo وجهة التقدم بعد تصحيح: المراجعة إن جاء منها، أو السؤال الذي أرسله إلى العبارة الأخرى
   const naLimit = !post;
   const [naBlock, setNaBlock] = useState(null);
+  // تنبيه وقائي (pace.js): إجابات متتالية أسرع من زمن القراءة، بحدود يمررها الخادم. لطيف وغير حاجب
+  const [paceNote, setPaceNote] = useState(false);
+  const pace = useRef(null);
   const [returnTo, setReturnTo] = useState(null);
   // مؤقت منقضٍ (بالدقائق) منذ بدء الإجابة في هذه الجلسة: يُعرض لا يُفرض
   const [startedAt, setStartedAt] = useState(null);
@@ -127,6 +131,8 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     if (q.retro) setBefore((x) => ({ ...x, [q.id]: b }));
     setError('');
     if (k == null) return;
+    // أول إجابة عن السؤال وحدها تُحسب في الإيقاع؛ تعديل إجابة سابقة ليس استعجالًا
+    if (answers[q.id] == null && pace.current?.answered(q.kind, Date.now())) setPaceNote(true);
     // الإجابة الجديدة تحل محل ما لم يُحفظ لهذا السؤال وحده؛ وإن فشل حفظها عادت إلى القائمة
     setPending(({ [q.id]: _old, ...rest }) => rest);
     save(q, k, b);
@@ -139,7 +145,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
       else if (returnTo != null && returnTo !== at) { setReturnTo(null); setIdx(returnTo); }
       else { setReturnTo(null); goNext(at); }
     }, ADVANCE_MS);
-  }, [q, idx, save, goNext, returnTo]);
+  }, [q, idx, save, goNext, returnTo, answers]);
   const choose = useCallback((k) => {
     // «لا ينطبق» زائد في القسم لا يُحفظ: يبقى السؤال وتحته القاعدة وطريق إلى العبارة الأخرى
     if (naLimit && isBehaviorNa(q, k) && behaviorNaCounts(qs, { ...answers, [q.id]: k })[q.dimension] > MAX_BEHAVIOR_NA) {
@@ -150,6 +156,11 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
     record(k, q?.retro ? before[q.id] ?? null : null);
   }, [record, q, before, naLimit, qs, answers]);
   useEffect(() => { setNaBlock(null); if (mode === 'review') setReturnTo(null); }, [idx, mode]);
+  useEffect(() => {
+    if (!data || data.assessment?.kind !== 'baseline') return;
+    if (!pace.current) pace.current = paceTracker(data.pace);
+    if (mode === 'q') pace.current.shown(Date.now());
+  }, [idx, mode, data]);
   const chooseBefore = useCallback((b) => record(answers[q.id] ?? null, b), [record, q, answers]);
 
   useEffect(() => {
@@ -348,6 +359,12 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
               ))}
             </div>
           </>
+        )}
+        {paceNote && (
+          <div className="alert info pace-note" role="status" style={{ marginTop: 14 }}>
+            <b>{PACE_TITLE}.</b> {PACE_TEXT}{' '}
+            <button className="link" onClick={() => setPaceNote(false)}>فهمت</button>
+          </div>
         )}
         {naNote && (
           <div className="alert info" role="alert" style={{ marginTop: 14 }}>

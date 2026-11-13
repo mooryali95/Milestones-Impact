@@ -7,6 +7,7 @@ import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
+import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
@@ -776,6 +777,8 @@ export async function assessmentGet(p: any, b: Body = {}) {
     assessment: { id: a.id, kind, status: a.status, est_minutes: inst.est_minutes, intro: inst.intro_ar, title: inst.title_ar },
     // طلب إعادة قائم من الإدارة (retake.js): بطاقة فوق مقدمة القياس بنص البريد نفسه، حتى يسلّم القياس الجديد
     retake: kind === 'baseline' ? await retakeNotice(p.id, inst.est_minutes ?? null) : null,
+    // حدود التنبيه الوقائي أثناء الإجابة (pace.js): حدود القراءة نفسها التي يحكم بها مؤشر الجهد بعد التسليم
+    pace: await paceConfig(),
     questions: qs.map((q: any) => {
       // na يميّز "لا ينطبق" في مقياس التكرار فقط، فلا يكشف إجابة صحيحة
       const opts = (q.options || []).map((o: any, k: number) => ({ k, label: o.label, ...(q.kind === 'likert' && Number(o.score) < 0 ? { na: true } : {}) }));
@@ -788,6 +791,11 @@ export async function assessmentGet(p: any, b: Body = {}) {
     answers: Object.fromEntries(answers.map((x: any) => [x.question_id, x.value?.k])),
     before: Object.fromEntries(answers.filter((x: any) => x.value?.before != null).map((x: any) => [x.question_id, x.value.before])),
   };
+}
+
+async function paceConfig() {
+  const t: any = (await appSettings().catch(() => null))?.answer_review;
+  return t ? { floor_choice: t.effort_floor_choice, floor_likert: t.effort_floor_likert, streak: t.pace_streak } : null;
 }
 
 // طلب الإعادة القائم للمشارك بعنوانه ونصه، من قياساته المبدئية نفسها (لا جدول تنبيهات)
