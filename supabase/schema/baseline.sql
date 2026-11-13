@@ -2851,7 +2851,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS raters_cycle_email_key ON leaders.raters USING
 
 CREATE INDEX IF NOT EXISTS raters_cycle_idx ON leaders.raters USING btree (cycle_id) WHERE (cycle_id IS NOT NULL);
 
-CREATE UNIQUE INDEX IF NOT EXISTS raters_participant_email_phase_key ON leaders.raters USING btree (participant_id, email, phase) WHERE (cycle_id IS NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS raters_impact_email_phase_key ON leaders.raters USING btree (participant_id, email, phase) WHERE (cycle_id IS NULL);
 
 CREATE INDEX IF NOT EXISTS raters_participant_idx ON leaders.raters USING btree (participant_id);
 

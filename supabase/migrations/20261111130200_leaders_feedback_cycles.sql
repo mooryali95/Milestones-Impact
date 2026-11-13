@@ -54,8 +54,9 @@ alter table leaders.raters add constraint raters_phase_check check (phase = any 
 alter table leaders.raters drop constraint if exists raters_cycle_phase_check;
 alter table leaders.raters add constraint raters_cycle_phase_check check ((phase = 'f360') = (cycle_id is not null));
 
+-- اسم مستقل للفهرس الجزئي: ترحيل assessment_v4 (مجمّد) يعيد إضافة القيد بالاسم القديم إن غاب، فلا يتصادم الاسمان عند إعادة التشغيل
 alter table leaders.raters drop constraint if exists raters_participant_email_phase_key;
-create unique index if not exists raters_participant_email_phase_key on leaders.raters (participant_id, email, phase) where cycle_id is null;
+create unique index if not exists raters_impact_email_phase_key on leaders.raters (participant_id, email, phase) where cycle_id is null;
 create unique index if not exists raters_cycle_email_key on leaders.raters (cycle_id, email) where cycle_id is not null;
 
 insert into leaders.schema_migrations (name) values ('20261111130200_leaders_feedback_cycles') on conflict do nothing;
