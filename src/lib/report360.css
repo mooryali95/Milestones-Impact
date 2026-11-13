@@ -1,0 +1,21 @@
+/* تقرير 360 (src/lib/Report360.jsx): للمشارك والمستشار والإدارة. ألوانه من رموز الهوية المشتركة التي يحمّلها التطبيقان. */
+.r3 { display: block; }
+.r3 > * + * { margin-top: 12px; }
+.r3-muted { color: var(--brand-slate, #5b6770); font-size: .86rem; }
+.r3-note { padding: 10px 12px; border-radius: 6px; background: var(--brand-sand, #f4efe3); }
+.r3-sec h3 { font-size: 1rem; margin: 0 0 4px; }
+.r3-sec h4 { font-size: .92rem; margin: 10px 0 4px; }
+.r3-sec ul { margin: 6px 0 0; padding-inline-start: 18px; }
+.r3-sec li + li { margin-top: 4px; }
+.r3-num { font-weight: 600; white-space: nowrap; }
+/* الجدول يمرّر أفقيًا داخل إطاره على الجوال، والصفحة لا تمرّر */
+.r3-scroll { max-width: 100%; overflow-x: auto; }
+.r3-table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+.r3-table th, .r3-table td { border-bottom: 1px solid var(--brand-line, #e4dfd3); padding: 6px 8px; text-align: start; vertical-align: top; }
+.r3-table td { text-align: center; white-space: nowrap; }
+.r3-hid { color: var(--brand-slate, #8a949b); }
+.r3-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .r3-two { grid-template-columns: 1fr; } }
+.r3-quotes { list-style: none; padding: 0; }
+.r3-quotes li { border-inline-start: 3px solid var(--brand-gold, #c9a227); padding-inline-start: 8px; }
+.r3 details summary { cursor: pointer; font-weight: 600; }

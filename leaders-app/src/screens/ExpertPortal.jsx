@@ -14,11 +14,12 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
 import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
-import { assignmentScopeAr, codeDigits, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
+import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
+import Advisor360 from './Advisor360.jsx';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 
 const HALL_ACTION = { state: 'xp.hall', open: 'xp.hall-open', step: 'xp.hall-step', split: 'xp.hall-split', assign: 'xp.hall-assign', close: 'xp.hall-close' };
@@ -191,7 +192,7 @@ function AdvisorReviews({ initial }) {
 
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
 const MINE_PAGE = 12;
-function MyParticipants({ onOpen, initial }) {
+function MyParticipants({ onOpen, initial, f360 }) {
   const [d, setD] = useState(initial ?? null);
   const load = () => xpCall('xp.participants').then(setD);
   useEffect(() => { if (!initial) load(); }, []);
@@ -208,6 +209,7 @@ function MyParticipants({ onOpen, initial }) {
   return (
     <>
     <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
+    <Advisor360 initial={f360} />
     <section className="card stack" aria-labelledby="xp-mine">
       <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
@@ -425,7 +427,7 @@ function Dashboard({ onOut }) {
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
         <div><b>{d.stats.participants}</b><span>قائد خدمته</span></div>
         <div><b>{d.stats.upcoming}</b><span>جلسة قادمة</span></div>
-        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : 'لم يكتمل'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count}` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
+        <div><b>{d.rating.avg != null ? `${d.rating.avg} / 5` : 'لم يكتمل'}</b><span>{d.rating.avg != null ? `تقييمك من ${d.rating.count} · يتحدث كل شهر إذا اجتمعت ${MIN_RATINGS} تقييمات جديدة` : `يظهر تقييمك بعد ${d.rating.min} تقييمات (${d.rating.count} حتى الآن)`}</span></div>
       </div>
 
       {offered.length > 0 && (
@@ -453,7 +455,7 @@ function Dashboard({ onOut }) {
       <PeerQueue initial={pre.peers} />
 
       <div className="xpp-cols">
-        <MyParticipants onOpen={openFile} initial={pre.participants} />
+        <MyParticipants onOpen={openFile} initial={pre.participants} f360={d.preload ? pre.f360 ?? null : undefined} />
         <section className="card stack">
           <h2 className="as-h3">جلساتك القادمة</h2>
           {upcoming.length ? upcoming.map((s) => (

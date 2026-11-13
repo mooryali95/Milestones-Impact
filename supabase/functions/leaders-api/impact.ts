@@ -14,11 +14,16 @@ import {
   levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
   linkAfterDecisionOk, LINK_CLOSED_AR,
 } from './logic.js';
+import { cleanOpenAnswers, CONTACT_FREQ, feedbackPromiseAr, OPEN_KEYS, raterItems } from './feedback360.js';
+import { appSettings } from './settings.ts';
+import { FEEDBACK_OPEN_AR } from './labels.js';
 
 type Body = Record<string, any>;
 
 const RATER_LIMIT = 3;
-const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق' };
+export const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق', stakeholder: 'أحد أصحاب المصلحة' };
+// مقيّمو قياس الأثر بمرحلتيهم وحدهما: مقيّم تقييم 360 (phase f360) للتطوير، لا يدخل الأثر ولا قائمة الأثر ولا عدّاده
+export const IMPACT_PHASES = ['pre', 'post'];
 
 // آخر قياس مُرسل من كل نوع لكل مشارك، بنتائجه. زوج أداتاه غير متطابقتين
 // (pairs_with البعدي لا يساوي مفتاح المبدئي) يُعلَّم غير قابل للمقارنة ولا
@@ -130,7 +135,7 @@ async function impactConfig() {
 // تقدير المقيّمين لكل مشارك. من قدّر قبل البرنامج وبعده يُقارن تقديراه
 // (قياس قبلي وبعدي حقيقي)، وإلا يُستعمل تقديره الرجعي "قبل البرنامج".
 async function raterData(ids: string[] | null) {
-  const rows = await allFor(ids, () => db.from('raters').select('participant_id, instrument_id, relation, answers, status, email, phase').eq('status', 'submitted').order('id'));
+  const rows = await allFor(ids, () => db.from('raters').select('participant_id, instrument_id, relation, answers, status, email, phase').eq('status', 'submitted').in('phase', IMPACT_PHASES).order('id'));
   const insts = [...new Set(rows.map((r) => r.instrument_id))];
   const qs = insts.length ? (must(await db.from('questions').select('id, code, anchor_code, dimension, options, tier, instrument_id')
     .in('instrument_id', insts).eq('tier', 'behavior')) as any[] ?? []) : [];
@@ -228,7 +233,7 @@ export async function mine(p: any) {
   const [{ rows }, raters, pre] = await Promise.all([
     compareFor([p.id]),
     // كل الأعمدة حتى لا يُفشل عمود لم يُرحَّل القراءة (D19)، ثم ما يحق للمشارك رؤيته وحده
-    db.from('raters').select('*').eq('participant_id', p.id).neq('status', 'revoked').order('invited_at')
+    db.from('raters').select('*').eq('participant_id', p.id).neq('status', 'revoked').in('phase', IMPACT_PHASES).order('invited_at')
       .then((r: any) => ((must(r) ?? []) as any[]).map(raterView)),
     preRating(p),
   ]);
@@ -264,7 +269,7 @@ export const raterView = (r: any) => ({ id: r.id, email: r.email, full_name: r.f
   flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) });
 
 // D19: حكم التحقق من بريد المقيّم بنطاقات جهة المشارك المسجلة
-async function raterCheck(p: any, email: string) {
+export async function raterCheck(p: any, email: string) {
   const org = p.organization_id ? (await db.from('organizations').select('domains').eq('id', p.organization_id).maybeSingle()).data : null;
   return raterVerification(email, { participantEmails: [p.email], orgDomains: (org as any)?.domains || [], linked: !!p.organization_id });
 }
@@ -328,7 +333,7 @@ export async function invite(p: any, b: Body) {
 }
 
 export async function revoke(p: any, b: Body) {
-  must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).in('status', ['invited', 'awaiting']));
+  must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).in('phase', IMPACT_PHASES).in('status', ['invited', 'awaiting']));
   return mine(p);
 }
 
@@ -375,29 +380,39 @@ async function raterFrom(t: unknown) {
   const token = String(t || '');
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
   const r = must(await db.from('raters').select('*, participants(full_name)').eq('token_hash', await hash(token)).maybeSingle()) as any;
-  if (!r || r.status === 'revoked') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
+  // nominated: رشّحه المشارك في تقييم 360 ولم يعتمد المستشار القائمة بعد، فلا رابط له
+  if (!r || r.status === 'revoked' || r.status === 'nominated') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
   if (new Date(r.expires_at) < new Date() && r.status !== 'submitted') throw new Fail('انتهت صلاحية الرابط، اطلب دعوة جديدة', 410, 'expired');
   // بعد الإرسال: اطلاع محدود المدة (4.5)
   if (r.status === 'submitted' && !linkAfterDecisionOk(r.submitted_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
   return r;
 }
 
-async function raterQuestions(instrumentId: string) {
-  const qs = must(await db.from('questions').select('id, dimension, code, text_ar, text_rater_ar, options, sort, tier')
+// عبارات المقيّم بحسب مجموعته (تقييم 360، المرحلة 1): observable_by إن عُلِّمت، والمعكوسة لا تُعرض عليه.
+// كل الأعمدة حتى لا يُفشل observable_by قبل ترحيله القراءة
+async function raterQuestions(instrumentId: string, relation: string) {
+  const qs = must(await db.from('questions').select('*')
     .eq('instrument_id', instrumentId).eq('active', true).eq('tier', 'behavior').order('sort')) as any[] ?? [];
-  return qs;
+  return raterItems(qs, relation);
 }
+
+// كتابة متسامحة: عمود لم يُرحَّل بعد (42703 أو PGRST204) لا يُفشل الحفظ، فيُعاد بلا الأعمدة الجديدة
+const missingColumn = (e: any) => e && (e.code === '42703' || e.code === 'PGRST204');
 
 export async function raterGet(b: Body) {
   const r = await raterFrom(b.t);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
-  const qs = await raterQuestions(r.instrument_id);
+  const qs = await raterQuestions(r.instrument_id, r.relation);
+  // تقييم 360: مراسي السلم ووعد الإخفاء من الإعدادات العامة (scale_labels وmin_group)، بحسب مجموعة المقيّم
+  const f360 = r.phase === 'f360' ? (await appSettings()).feedback360 : null;
+  const label = (o: any) => (o.score < 0 ? 'لا أستطيع الحكم' : f360 ? f360.scale_labels[Number(o.score)] ?? o.label : o.label);
   return {
     success: true, done: r.status === 'submitted', phase: r.phase || 'post',
     participant: r.participants?.full_name || null, relation: RELATION_AR[r.relation] || null, rater: r.full_name,
+    ...(f360 ? { promise: feedbackPromiseAr(r.relation, f360), closes_at: r.expires_at } : {}),
     questions: qs.map((q) => ({
       id: q.id, dimension: q.dimension, text: q.text_rater_ar || q.text_ar,
-      options: (q.options || []).map((o: any, k: number) => ({ k, label: o.score < 0 ? 'لا أستطيع الحكم' : o.label })),
+      options: (q.options || []).map((o: any, k: number) => ({ k, label: label(o) })),
     })),
   };
 }
@@ -405,10 +420,14 @@ export async function raterGet(b: Body) {
 export async function raterSubmit(b: Body) {
   const r = await raterFrom(b.t);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
-  const qs = await raterQuestions(r.instrument_id);
+  const qs = await raterQuestions(r.instrument_id, r.relation);
   const input = b.answers || {};
-  // قبل البرنامج: تقدير الآن وحده
-  const pre = r.phase === 'pre';
+  // سؤال الصلة في أول النموذج: إلزامي بنقرة واحدة
+  const contact_freq = CONTACT_FREQ.includes(b.contact_freq) ? b.contact_freq : null;
+  if (!contact_freq) throw new Fail('اختر كم مرة ترى عمله', 400, 'incomplete');
+  const open_answers = cleanOpenAnswers(b.open) as Record<string, string> | null;
+  // تقدير الآن وحده قبل البرنامج وفي تقييم 360، وتقديران (الآن وقبل البرنامج) في تقدير الأثر البعدي وحده
+  const pre = r.phase !== 'post';
   const answers: Record<string, { now: number; before?: number }> = {};
   for (const q of qs) {
     const a = input[q.id];
@@ -416,12 +435,19 @@ export async function raterSubmit(b: Body) {
     if (!a || !ok(a.now) || (!pre && !ok(a.before))) throw new Fail(pre ? 'أكمل التقدير لكل عبارة' : 'أكمل التقديرين لكل عبارة', 400, 'incomplete');
     answers[q.id] = pre ? { now: a.now } : { now: a.now, before: a.before };
   }
+  // الملاحظة القديمة الواحدة باقية لنسخة واجهة سابقة، والأسئلة الثلاثة في open_answers
   const comment = b.comment ? String(b.comment).trim().slice(0, 2000) || null : null;
   // D18: سطر موافقة المقيّم بإرساله تقديره بعد إشعار الخصوصية، قبل الحفظ: تعذّره يفشل الإرسال فيعيده، ولا تقدير بلا موافقته
   await logConsent('rater', r.id, 'accept');
-  must(await db.from('raters').update({ answers, comment, status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', r.id));
+  const base = { answers, status: 'submitted', submitted_at: new Date().toISOString() };
+  const saved = await db.from('raters').update({ ...base, comment, open_answers, contact_freq }).eq('id', r.id);
+  if (missingColumn(saved.error)) {
+    // قبل ترحيل 20261111130000: الأسئلة المفتوحة في الملاحظة الواحدة حتى لا يضيع نصها
+    const text = open_answers ? OPEN_KEYS.filter((k) => open_answers[k]).map((k) => `${(FEEDBACK_OPEN_AR as Record<string, string>)[k]} ${open_answers[k]}`).join('\n') : null;
+    must(await db.from('raters').update({ ...base, comment: [comment, text].filter(Boolean).join('\n').slice(0, 2000) || null }).eq('id', r.id));
+  } else must(saved);
   // إفادة المدير في الرحلة تكتمل بتقديره المنظم بعد البرنامج
-  if (r.relation === 'manager' && !pre) {
+  if (r.relation === 'manager' && r.phase === 'post') {
     const { data: who } = await db.from('participants').select('id, organization_id').eq('id', r.participant_id).maybeSingle();
     const reqId = who ? await requirementIdByCode(who, 'E-MGR') : null;
     if (reqId) {
@@ -431,7 +457,7 @@ export async function raterSubmit(b: Body) {
       });
     }
   }
-  await audit('system', null, 'rater.submit', 'raters', r.id, null, { participant_id: r.participant_id, relation: r.relation });
+  await audit('system', null, 'rater.submit', 'raters', r.id, null, { participant_id: r.participant_id, relation: r.relation, phase: r.phase, ...(r.cycle_id ? { cycle_id: r.cycle_id } : {}) });
   return { success: true };
 }
 
@@ -448,7 +474,7 @@ export async function adminReport(b: Body) {
   // بلا تصفية يُقرأ الكل مباشرة، فلا تُمرَّر آلاف المعرّفات في الروابط
   const scoped = b.organization_id || b.participant_id ? people.map((p) => p.id) : null;
   const { rows, cfg } = await compareFor(scoped);
-  const raters = scoped && !scoped.length ? [] : await allFor(scoped, () => db.from('raters').select('participant_id, status').order('id'));
+  const raters = scoped && !scoped.length ? [] : await allFor(scoped, () => db.from('raters').select('participant_id, status').in('phase', IMPACT_PHASES).order('id'));
   const rCount = (pid: string, s: string) => raters.filter((r: any) => r.participant_id === pid && r.status === s).length;
 
   const list = people.map((p) => ({

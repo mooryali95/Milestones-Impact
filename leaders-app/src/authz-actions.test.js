@@ -29,7 +29,9 @@ const ADMIN_READS = new Set(['health', 'mail-gallery', 'visits', 'trends', 'item
   'curriculum', 'programs', 'payments', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones',
   'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'org-team', 'capstones', 'capstone', 'outcomes',
   // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
-  'assessment-answers']);
+  'assessment-answers',
+  // تقييم 360: حالة الدورات وأعدادها بلا نتيجة فرد
+  'f360']);
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {
@@ -47,7 +49,7 @@ describe('4.4 صلاحيات الأدوار على الخادم', () => {
     expect(gaps).toEqual([]);
   });
   it('كل فعل خبير يمس مشاركًا أو دفعة أو طلبًا محصور فيما أُسند إليه', () => {
-    const scoped = /requireAdvisorOf|requireAdvisorCohort|hallSessionOf|requestFor|myParticipantIds|advisorOf|advisorCohorts|cohortsOf|assigned|e\.id|expert_id|mine\(/;
+    const scoped = /requireAdvisorOf|requireAdvisorCohort|requireEffectiveAdvisor|hallSessionOf|requestFor|myParticipantIds|advisorOf|advisorCohorts|cohortsOf|assigned|e\.id|expert_id|mine\(/;
     const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key)).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl)).map(({ key }) => key);
     expect(gaps).toEqual([]);
   });

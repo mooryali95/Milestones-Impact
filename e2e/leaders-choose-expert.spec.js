@@ -41,8 +41,13 @@ test('المشارك يختار خبيره من ثلاثة مرشحين', async 
   await expect(card.getByRole('button', { name: 'اختره' }).first()).toBeDisabled();
   await card.getByLabel(/ما الذي تحتاجه/).fill('مراجعة سجل المخاطر قبل عرضه على الراعي');
   await card.getByLabel('متى').selectOption('tracking');
-  await expect(card.getByText('★ 4.7 (9 تقييم)')).toBeVisible();
-  await expect(card.getByText('خبير جديد في البرنامج')).toHaveCount(2);
+  // غياب التقييم المعلن لا يُقرأ «خبيرًا جديدًا» (تصور 360، المرحلة 0)، والمشارك لا يرى نجوم الخبير
+  // ولو وصلت من خادم قديم (المرحلة 0ب): التقييم داخل الترتيب وحده، وتشرحه «كيف نرشّح؟»
+  await expect(card).not.toContainText('جديد');
+  await expect(card).not.toContainText('★');
+  await expect(card).not.toContainText('4.7');
+  await card.getByText('كيف نرشّح؟').click();
+  await expect(card).toContainText('لا نعرض تقييم الخبير');
   await expect(card).not.toContainText(/ريال|ساعة/);
   await card.getByRole('button', { name: 'اختره' }).first().click();
   await expect(card).toContainText('معروض على خبير');

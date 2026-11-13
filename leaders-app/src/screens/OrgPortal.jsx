@@ -224,6 +224,26 @@ function ImpactCard({ im, onReport }) {
   );
 }
 
+// تقييم 360 للتطوير: ما تراه الجهة مجموع لا فرد (orgTotals في feedback360.js). المتوسطات فوق حد الجهة المضبوط
+// في الإعدادات وحده، ولا صف فردي ولو وافق المشارك على اطلاع جهته على مستوياته
+function Feedback360Card({ f }) {
+  if (!f) return null;
+  return (
+    <section className="card op-impact" aria-labelledby="op-f360">
+      <h3 id="op-f360">تقييم 360 للتطوير</h3>
+      <p className="small muted">تقارير مكتملة: {f.reports} · استجابة المقيّمين: {f.response_pct == null ? '—' : `${f.response_pct}%`} ({f.submitted} من {f.invited})</p>
+      {f.dims ? (
+        <div className="op-scroll"><table>
+          <caption className="sr-only">متوسط تقييم 360 في الجهة لكل إطار: تقدير المشاركين لأنفسهم وتقدير مقيّميهم</caption>
+          <thead><tr><th scope="col">الإطار</th><th scope="col">تقديرهم لأنفسهم</th><th scope="col">تقدير مقيّميهم</th></tr></thead>
+          <tbody>{f.dims.map((d) => <tr key={d.dimension}><td><b>{DIMS.find(([k]) => k === d.dimension)?.[1]}</b><br /><small className="muted">{DIM_AR[d.dimension]}</small></td><td>{d.self ?? '·'}</td><td>{d.all ?? '·'}</td></tr>)}</tbody>
+        </table></div>
+      ) : <p className="small muted">تظهر المتوسطات حين تكتمل {f.min} تقارير على الأقل، حفاظًا على خصوصية المشاركين ومقيّميهم.</p>}
+      <p className="small muted">للتطوير وحده: لا يدخل تقييم أحد ولا شهادته، ولا تظهر للجهة نتيجة فرد.</p>
+    </section>
+  );
+}
+
 // رابط تسجيل موظفي الجهة كما في رسالة دعوة المنسق (org-6)، بنسخ بنقرة. لا يظهر لجهة موقوفة (الخادم لا يرسله)
 function JoinLink({ url }) {
   const [copied, setCopied] = useState(false);
@@ -344,6 +364,7 @@ function Dashboard({ me, onLogout }) {
 
       <ProgramTeam team={d.program_team} />
       <ImpactCard im={d.impact} onReport={perms.export ? printImpact : null} />
+      <Feedback360Card f={d.feedback360} />
       <Initiatives list={d.initiatives || []} outcomes={d.outcomes} />
 
       {perms.list === false ? <section className="card"><h3>المشاركون</h3><p className="muted">صلاحيتك أرقام مجمّعة عن مشاركي جهتك، بلا أسماء ولا صفوف فردية.</p></section> : <section className="card op-table">

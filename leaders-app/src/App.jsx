@@ -28,6 +28,8 @@ const OrgPortal = lazy(() => import('./screens/OrgPortal.jsx'));
 const Verify = lazy(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
 const Impact = lazy(() => import('./screens/Impact.jsx'));
+const Feedback360 = lazy(() => import('./screens/Feedback360.jsx'));
+const Feedback360Entry = lazy(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
 const Rater = lazy(() => import('./screens/Rater.jsx'));
 const Sponsor = lazy(() => import('./screens/Sponsor.jsx'));
 const Outcome = lazy(() => import('./screens/Outcome.jsx'));
@@ -360,7 +362,7 @@ function Participant() {
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
-    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}</>;
+    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}{gateDone(me, 'profile') && me.profile?.approved && <Feedback360Entry onOpen={() => go('f360')} />}</>;
   } else if (seatHold(me) && (!paidFor('assessment') || !paidFor('program'))) screen = <SponsorshipPending />;   // D20: لا بوابة دفع أثناء قرار الرعاية
   else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
   else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
@@ -372,6 +374,7 @@ function Participant() {
   else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
+  else if (view === 'f360' && me.profile?.approved) screen = <Feedback360 onBack={() => go('profile')} />;
   else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={() => go('hall')} lab={lab?.items} onLab={() => openLab()} onLabItem={(labId) => openLab(labId)} />;
 
   return (

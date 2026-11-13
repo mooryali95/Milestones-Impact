@@ -39,7 +39,8 @@ describe('لوحة الجهة', () => {
     const o = read('leaders-app/src/screens/OrgPortal.jsx');
     expect(o).toContain("countAr(org.seats, 'مقعد واحد', 'مقعدين', 'مقاعد', 'مقعدًا')");
     expect(o).not.toContain('أجروا القياس المبدئي');
-    expect(o.match(/<caption className="sr-only">/g)).toHaveLength(3);
+    // الجداول الأربعة (ومنها مجاميع تقييم 360) لكل منها عنوان لقارئ الشاشة
+    expect(o.match(/<caption className="sr-only">/g)).toHaveLength(4);
     expect(o).not.toMatch(/<th>/);
     expect(o).toContain('<label className="op-search"><span className="small">ابحث</span>');
   });

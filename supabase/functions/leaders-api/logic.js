@@ -2405,6 +2405,41 @@ export function ratingSummary(rows = []) {
   return { avg, count: n, visible: n >= MIN_RATINGS };
 }
 
+// ── من يرى تقييم الخبير (تصور 360، المرحلة 0ب، قرار المالك 2026-11-11) ──
+// المشارك لا يرى نجوم الخبير أبدًا: التقييم يعمل داخل الترشيح (MATCH_WEIGHTS.quality) وتراه الإدارة كاملًا.
+// والخبير يرى ملخصه بنافذة دورية لا مع كل تقييم: بعد بلوغ MIN_RATINGS يتحدث الملخص حين تجتمع MIN_RATINGS
+// تقييمات جديدة ويمضي RATING_WINDOW_DAYS على آخر تحديث، أيهما أبعد. فلا يستدل من تغير المتوسط صباحًا على
+// تقييم من جلس معه أمس. والمعايير مقربة إلى نصف درجة.
+export const RATING_WINDOW_DAYS = 30;
+/** @param {{overall:number, scores?:Record<string,number>, created_at:string}[]} rows @param {string[]} keys */
+export function expertOwnRating(rows = [], keys = [], now = Date.now()) {
+  const t = (x) => Date.parse(x.created_at) || 0;
+  const list = [...rows].sort((a, b) => t(a) - t(b));
+  let cut = 0, at = null;
+  for (;;) {
+    const need = cut + MIN_RATINGS;
+    if (list.length < need) break;
+    const ready = cut === 0 ? t(list[need - 1]) : Math.max(t(list[need - 1]), at + RATING_WINDOW_DAYS * 864e5);
+    if (ready > now) break;
+    let k = need;
+    while (k < list.length && t(list[k]) <= ready) k++;
+    cut = k; at = ready;
+  }
+  const shown = list.slice(0, cut);
+  if (!cut) return { visible: false, count: list.length, min: MIN_RATINGS };
+  const half = (v) => Math.round(v * 2) / 2;
+  const criteria = Object.fromEntries(keys.map((k) => [k, half(shown.reduce((a, x) => a + Number(x.scores?.[k] || 0), 0) / cut)]));
+  return { visible: true, avg: ratingSummary(shown).avg, count: cut, criteria, updated_at: new Date(at).toISOString(), pending: list.length - cut };
+}
+// تنبيه الإدارة: متوسط آخر RATING_DROP.last تقييمات تحت RATING_DROP.below
+export const RATING_DROP = { last: 5, below: 3.5 };
+export function ratingDrop(rows = []) {
+  const last = [...rows].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, RATING_DROP.last);
+  if (last.length < RATING_DROP.last) return null;
+  const avg = ratingSummary(last).avg;
+  return avg < RATING_DROP.below ? { avg, last: RATING_DROP.last } : null;
+}
+
 // ── الاسم على الشهادة (التدقيق 2026-11-10، البند 7.3) ──
 // مصدر واحد للواجهة والخادم: اسمان على الأقل بالحروف (مع التشكيل والفواصل المعتادة في الأسماء)، كل منهما حرفان فأكثر،
 // بلا أرقام ولا رموز. الإنجليزي بالحروف اللاتينية واسمان على الأقل. والمسمى ثلاثة أحرف على الأقل.
