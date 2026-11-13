@@ -194,3 +194,32 @@ export function Empty({ title, hint, children, compact = false }) {
     </div>
   );
 }
+
+// فهرس أقسام صفحة طويلة: ينقل إلى القسم ويضع التركيز عليه. sections: [[معرّف العنصر، الاسم]]، وما ليس في الصفحة يُخفى
+export function SectionIndex({ label, sections }) {
+  const [here, setHere] = useState(null);
+  useEffect(() => { setHere(sections.filter(([id]) => document.getElementById(id)).map(([id]) => id)); }, [sections]);
+  const go = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } };
+  return (
+    <nav className="pf-index" aria-label={label}>
+      {sections.filter(([id]) => !here || here.includes(id)).map(([id, name]) => <button key={id} type="button" className="la-pill" onClick={() => go(id)}>{name}</button>)}
+    </nav>
+  );
+}
+
+// حاجز أخطاء لمنطقة الشاشة: خطأ في رسم شاشة واحدة يعرض رسالة وزر إعادة، ولا يُسقط اللوحة كلها صفحةً بيضاء.
+// يُعطى key بالتبويب فيُصفَّر عند الانتقال، والترويسة والتنقل خارجه فيبقيان يعملان.
+export class ScreenBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error) { console.error('تعذّر رسم الشاشة:', error); }   // eslint-disable-line no-console
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="la-err" role="alert">
+        تعذّر عرض هذه الشاشة. بقية اللوحة تعمل، وبياناتك لم تتأثر.{' '}
+        <button className="btn-sm ghost" type="button" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>
+      </div>
+    );
+  }
+}

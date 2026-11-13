@@ -208,7 +208,7 @@ test('البحث الشامل والإعدادات: Tab لا يخرج منهما
   await expect(pal).toBeHidden();
   await expect(search).toBeFocused();
 
-  const gear = page.getByRole('button', { name: 'الإعدادات' });
+  const gear = page.getByRole('button', { name: 'الإعدادات', exact: true });   // وفي تبويبات القادة «الإعدادات العامة»
   await gear.click();
   const set = page.getByRole('dialog', { name: 'الإعدادات' });
   await expect(set).toBeVisible();

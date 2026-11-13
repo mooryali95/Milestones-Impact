@@ -161,8 +161,10 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
   if (!d) return <Spinner />;
   const { o, r, im, h } = d;
   if (!o.success) return <div className="la-err" role="alert">{o.message}</div>;
-  const st = (k) => o.by_status[k] || 0;
-  const max = Math.max(1, ...DIMS.flatMap((x) => LVLS.map((l) => o.matrix[x][l])));
+  const st = (k) => o.by_status?.[k] || 0;
+  // رد ناقص لا يُسقط صفحة الدخول: الخانة الغائبة صفر
+  const cellOf = (x, l) => o.matrix?.[x]?.[l] || 0;
+  const max = Math.max(1, ...DIMS.flatMap((x) => LVLS.map((l) => cellOf(x, l))));
   const bk = o.book;
   const waiting = [...(r.pending_approval || []), ...(r.submitted || [])];
   const placed = Object.values(o.overall || {}).reduce((a, n) => a + n, 0);
@@ -210,7 +212,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
           <table className="la-matrix">
             <thead><tr><th />{DIMS.map((x) => <th key={x}>{DIM_EN[x]}<small>{DIM[x]}</small></th>)}</tr></thead>
             <tbody>{[...LVLS].reverse().map((l) => (
-              <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (o.matrix[x][l] / max).toFixed(2) }}><b>{o.matrix[x][l]}</b></td>)}</tr>
+              <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (cellOf(x, l) / max).toFixed(2) }}><b>{cellOf(x, l)}</b></td>)}</tr>
             ))}</tbody>
           </table>
           <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من {TRACK_COUNT} مسارًا.</p>
@@ -218,7 +220,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
         <section className="la-card">
           <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من {TRACK_COUNT} مسارًا مشغولة</span></div>
           {(o.top_tracks || []).length ? (
-            <ul className="la-queue">{o.top_tracks.map((t) => (
+            <ul className="la-queue">{(o.top_tracks || []).map((t) => (
               <li key={t.key}><button className="la-link" onClick={() => onTrack(t.key)}><code className="la-code">{t.key}</code> {t.title || ''}</button><b>{t.n}</b></li>
             ))}</ul>
           ) : <p className="la-muted">لا مسارات بعد.</p>}
@@ -266,7 +268,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
         <section className="la-card">
           <div className="la-row between"><h3>الجهات</h3>{o.orgs_count != null && <span className="la-muted">{o.orgs_count} جهة لديها مشاركون</span>}</div>
           {(o.top_orgs || []).length ? (
-            <ul className="la-queue">{o.top_orgs.map((g) => (
+            <ul className="la-queue">{(o.top_orgs || []).map((g) => (
               <li key={g.id}><button className="la-link" onClick={() => (onOrg ? onOrg(g.id) : setOrg(g.id))}>{g.name || orgs.find((x) => x.id === g.id)?.name || 'جهة'}</button><b>{g.n}</b></li>
             ))}</ul>
           ) : <p className="la-muted">{o.top_orgs ? 'لا مشاركين مرتبطين بجهة بعد.' : 'يظهر بعد تحديث الخادم.'}</p>}

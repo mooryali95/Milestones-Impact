@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
@@ -275,11 +275,19 @@ export async function participants(b: Body) {
   }
   const rows = (must(await q) ?? []) as any[];
   const progress = await baselineProgress(rows.map((r) => r.id));
+  // دفعة كل مشارك بالقاعدة نفسها التي تحكم رحلته (pickCohort): تسجيله الصريح، ثم دفعة جهته، ثم الافتراضية. لفلتر «الدفعات» في القائمة
+  const [cohorts, enr] = await Promise.all([
+    db.from('cohorts').select('id, name, status, is_default, organization_id, starts_on, created_at').then((r) => (r.data || []) as any[]),
+    allFor(rows.map((r) => r.id), () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id')).catch(() => [] as any[]),
+  ]);
+  const enrBy = new Map<string, any[]>();
+  for (const e of enr as any[]) { if (!enrBy.has(e.participant_id)) enrBy.set(e.participant_id, []); enrBy.get(e.participant_id)!.push(e); }
+  const cohortId = (r: any) => pickCohort({ enrollments: enrBy.get(r.id) || [], cohorts, organizationId: r.organization_id || null }).cohort?.id || null;
   // effort وretake من سجل القياس نفسه (المصدر الواحد): وسم المستعجل وفلتره، وطلب الإعادة القائم
   return { success: true, participants: rows.map((r) => {
     const g = progress[r.id] || null;
-    return { ...r, onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
-  }), ...capInfo(rows) };
+    return { ...r, cohort_id: cohortId(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
+  }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), ...capInfo(rows) };
 }
 
 // تذكير يدوي لمن لم يكمل التسجيل: بريد يسمّي ما بقي على كل شخص (ملفه، أو القياس وكم أجاب منه).

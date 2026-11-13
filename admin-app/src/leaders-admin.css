@@ -917,3 +917,28 @@
 .exp-set legend { padding: 0 6px; font-weight: 700; font-size: .88rem; }
 .exp-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 14px; max-height: 38vh; overflow-y: auto; }
 .exp-acts { display: flex; gap: 10px; margin-bottom: 4px; }
+
+/* ── الرؤية الشاملة (Insight.jsx): جدول المراحل وسجل التغييرات ── */
+.ins-bar { margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+.ins-table td, .ins-table th { text-align: center; white-space: nowrap; }
+.ins-table td:first-child, .ins-table th:first-child { text-align: start; white-space: normal; min-inline-size: 150px; }
+.ins-table tfoot td, .ins-table tfoot th { border-top: 2px solid var(--line); padding: 10px 12px; }
+.ins-n { display: inline-block; min-inline-size: 30px; padding: 2px 8px; border-radius: 999px; font-weight: 700; text-decoration: none; color: inherit; background: color-mix(in srgb, var(--st-ok) 12%, transparent); }
+.ins-n:hover, .ins-n:focus-visible { text-decoration: underline; }
+.ins-n.stuck { background: color-mix(in srgb, var(--st-warn) 20%, transparent); }
+.ins-n.wait { background: color-mix(in srgb, var(--brand-gold) 26%, transparent); }
+.ins-n.out { background: color-mix(in srgb, var(--st-bad) 12%, transparent); }
+.ins-key { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78rem; margin-inline-start: 6px; }
+.ins-key.stuck { background: color-mix(in srgb, var(--st-warn) 20%, transparent); }
+.ins-key.wait { background: color-mix(in srgb, var(--brand-gold) 26%, transparent); }
+.ins-log { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 2px; }
+.ins-log li { display: grid; grid-template-columns: 170px auto 1fr auto; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.ins-log time { color: var(--ink-light); font-size: .8rem; white-space: nowrap; }
+.ins-log-t { min-inline-size: 0; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .ins-log li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* ── صفحة الدفعة برابطها: بنود الجاهزية ── */
+.cohort-setup { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 6px; }
+.cohort-setup li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-warn); }
+.cohort-setup li.ok { border-inline-start-color: var(--st-ok); }
+.cohort-setup li span { flex: 1; min-inline-size: 180px; color: var(--ink-mid); font-size: .88rem; }

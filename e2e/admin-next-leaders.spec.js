@@ -41,6 +41,7 @@ async function setup(page, overrides = {}) {
   });
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.goto(`${BASE}#/leaders/participants`);   // الدخول يفتح النظرة العامة، وهذا الاختبار لقائمة المشاركين
   return calls;
 }
 
@@ -175,6 +176,7 @@ test('المراقب يرى دون أدوات التعديل', async ({ page }) 
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مراقب', email: 'v@x', role_id: 'viewer' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.goto(`${BASE}#/leaders/participants`);   // الدخول يفتح النظرة العامة، وهذا الاختبار لقائمة المشاركين
   await expect(page.getByText('عرض فقط')).toBeVisible();
   await expect(page.getByRole('button', { name: '+ مشارك' })).toHaveCount(0);
   await expect(page.getByLabel('تحديد الكل')).toHaveCount(0);

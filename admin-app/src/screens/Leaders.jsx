@@ -28,7 +28,8 @@ const Experts = lazy(() => import('./Experts.jsx'));
 const MailGallery = lazy(() => import('./MailGallery.jsx'));
 const AppSettings = lazy(() => import('./AppSettings.jsx'));
 const Feedback360 = lazy(() => import('./Feedback360.jsx'));
-import { Spinner } from '../ui.jsx';
+const Insight = lazy(() => import('./Insight.jsx'));
+import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { TABS } from '../leaders-tabs.js';
 
@@ -39,7 +40,7 @@ const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'le
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
 // الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
 const TAB_GROUPS = [
-  ['اليومي', ['overview', 'participants', 'hall', 'capstones', 'activities', 'experts']],
+  ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings']],
   ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mail']],
@@ -50,12 +51,13 @@ const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
 export default function Leaders({ canWrite, pending }) {
   const route = useRoute();
-  const tab = TAB_KEYS.has(route.tab) ? route.tab : 'participants';
+  const tab = TAB_KEYS.has(route.tab) ? route.tab : 'overview';
   const person = tab === 'participants' ? route.id : null;
   const orgId = tab === 'orgs' ? route.id : null;
   const track = tab === 'tracks' ? route.id : null;
   const capId = tab === 'capstones' ? route.id : null;
   const expertId = tab === 'experts' ? route.id : null;
+  const cohortId = tab === 'programs' ? route.id : null;
   const [orgData, setOrgData] = useState(null);
   // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
   useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
@@ -90,6 +92,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (NEEDS_CATALOG.has(tab) && !catalog.success) body = <div className="la-err" role="alert">{catalog.message}</div>;
   else if (tab === 'overview') body = <Overview canWrite={canWrite} pending={pending} orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={(id) => (id ? openPerson(id) : at('participants'))} initialStatus={status} />;
+  else if (tab === 'insight') body = <Insight onPerson={openPerson} onExpert={(id) => navigate({ ctx: 'leaders', tab: 'experts', id })} />;
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
@@ -99,7 +102,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
-  else if (tab === 'programs') body = <Programs canWrite={canWrite} onEditJourney={(id) => { pickProgram(id); at('journey'); }} />;
+  else if (tab === 'programs') body = <Programs canWrite={canWrite} cohortId={cohortId} onCohort={(id) => { at('programs', id); window.scrollTo({ top: 0 }); }} onEditJourney={(id) => { pickProgram(id); at('journey'); }} />;
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
@@ -137,7 +140,7 @@ export default function Leaders({ canWrite, pending }) {
           </div>
         ))}
       </nav>
-      <div className="la-body"><Suspense fallback={<Spinner />}>{body}</Suspense></div>
+      <div className="la-body"><ScreenBoundary key={tab}><Suspense fallback={<Spinner />}>{body}</Suspense></ScreenBoundary></div>
       </div>
     </div>
   );

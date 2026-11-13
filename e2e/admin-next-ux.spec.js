@@ -32,12 +32,13 @@ async function setup(page, hash = '') {
 test('لكل شاشة رابط: التحديث يبقيك فيها، وزر الرجوع يعيد السابقة', async ({ page }) => {
   await setup(page);
   await page.getByRole('button', { name: /تطبيق القادة/ }).click();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: /^المشاركون/ }).click();
   await page.getByText('سارة الأحمد').first().click();
   await expect(page).toHaveURL(/#\/leaders\/participants\/p1$/);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/#\/leaders$/);
+  await expect(page).toHaveURL(/#\/leaders\/participants$/);
   await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
 });
 
@@ -138,4 +139,61 @@ test('القوائم: فرز بالعمود يُحفظ في العنوان، و�
   await page.goto(`${BASE}#/contacts`);
   await expect(page.getByRole('search').getByLabel('بحث')).toHaveValue('سار');
   await expect(page.locator('thead th', { hasText: 'الاسم' })).toHaveAttribute('aria-sort', 'descending');
+});
+
+test('الدخول يفتح النظرة العامة لتطبيق القادة، وخطأ في رسم شاشة لا يُسقط اللوحة', async ({ page }) => {
+  await setup(page);
+  await expect(page).toHaveURL(/#\/leaders$/);
+  await expect(page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
+  // رد يُسقط رسم شاشة المشاركين: الحاجز يعرض رسالة، والتنقل يبقى يعمل
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.participants') return route.fallback();
+    await route.fulfill({ json: { success: true, participants: [null] } });
+  });
+  await page.goto(`${BASE}#/leaders/participants`);
+  await expect(page.getByRole('alert').filter({ hasText: 'تعذّر عرض هذه الشاشة' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'نظرة عامة' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'تعذّر عرض هذه الشاشة' })).toHaveCount(0);
+});
+
+test('الرؤية الشاملة: الخانة تفتح أصحابها في قائمة المشاركين، وحِمل الخبراء، وماذا تغيّر', async ({ page }) => {
+  await setup(page);
+  const stages = (o) => ({ profile: 0, assessment_todo: 0, assessment_doing: 0, approval: 0, placed: 0, enrolled: 0, completed: 0, out: 0, ...o });
+  const g = (key, name, total, st, extra = {}) => ({ key, name, total, stages: stages(st), stuck: (st.profile || 0) + (st.assessment_doing || 0), waiting: st.approval || 0, active_week: 1, approved_pct: 50, completed_pct: 0, active_pct: 50, ...extra });
+  const calls = [];
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    calls.push(b);
+    if (b.action === 'admin.insight') return route.fulfill({ json: { success: true,
+      by_org: { groups: [g('o1', 'وزارة التجربة', 3, { profile: 2, approval: 1 }), g('none', 'بدون جهة', 1, { enrolled: 1 })], total: g('all', 'الإجمالي', 4, { profile: 2, approval: 1, enrolled: 1 }) },
+      by_cohort: { groups: [g('c1', 'دفعة الخريف', 4, { profile: 2, approval: 1, enrolled: 1 }, { status: 'running', org: 'وزارة التجربة' })], total: g('all', 'الإجمالي', 4, { profile: 2, approval: 1, enrolled: 1 }) },
+      experts: [{ id: 'e1', name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'], hours: 4, requests: 3, upcoming: 2, people: 3, demand: 5, state: 'over', share: 125 }, { id: 'e2', name: 'خالد العتيبي', title: '', roles: ['coach'], hours: 6, requests: 0, upcoming: 0, people: 0, demand: 0, state: 'idle', share: 0 }] } });
+    if (b.action === 'admin.changes') return route.fulfill({ json: { success: true, more: false, next: null, changes: [{ id: 1, at: '2026-11-13T09:00:00Z', area: 'participant', area_ar: 'المشاركون', text: 'تغيّرت حالته', known: true, actor_type: 'admin', by: 'a@x', participant_id: 'p1', who: 'سارة الأحمد', detail: 'مخالفة الميثاق' }] } });
+    return route.fallback();
+  });
+  await page.goto(`${BASE}#/leaders/insight`);
+  const table = page.locator('.ins-table');
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(table.locator('tfoot')).toContainText('4');
+  // خانة «لم يكمل الملف» للوزارة = 2، ورابطها يحمل فلتر الجهة والخطوة
+  const cell = table.locator('tbody tr', { hasText: 'وزارة التجربة' }).locator('a.ins-n').first();
+  await expect(cell).toHaveText('2');
+  await expect(cell).toHaveAttribute('href', '#/leaders/participants?org=o1&step=profile');
+  await page.getByRole('tab', { name: 'بالدفعة' }).click();
+  await expect(page.locator('.ins-table tbody tr')).toContainText('دفعة الخريف');
+  await expect(page.locator('.ins-table tbody tr a.ins-n').first()).toHaveAttribute('href', '#/leaders/participants?cohort=c1&step=profile');
+  await page.getByRole('tab', { name: 'حِمل الخبراء' }).click();
+  await expect(page.locator('.data-table tbody tr').first()).toContainText('فوق طاقته');
+  await page.getByLabel('الحِمل', { exact: true }).selectOption('idle');
+  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'ماذا تغيّر' }).click();
+  await expect(page.locator('.ins-log li')).toContainText('تغيّرت حالته');
+  await expect.poll(() => calls.find((c) => c.action === 'admin.changes')).toMatchObject({ days: 7 });
+  await page.getByLabel('المجال', { exact: true }).selectOption('cohort');
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.changes').at(-1)).toMatchObject({ area: 'cohort' });
+  // القسم المختار يبقى عند العودة
+  await page.goto(`${BASE}#/leaders/overview`);
+  await page.goto(`${BASE}#/leaders/insight`);
+  await expect(page.getByRole('tab', { name: 'ماذا تغيّر' })).toHaveAttribute('aria-selected', 'true');
 });

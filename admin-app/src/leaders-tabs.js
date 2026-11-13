@@ -3,6 +3,6 @@
 import { TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
-  ['overview', 'نظرة عامة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
+  ['overview', 'نظرة عامة'], ['insight', 'الرؤية الشاملة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
   ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['handbook', 'كتيب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['f360', 'تقييم 360'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'], ['settings', 'الإعدادات العامة'],
 ];

@@ -20,7 +20,8 @@ const LOGO = '/assets/milestone-impact-inverted.svg';
 
 // السياق يُحفظ للجلسة، فالتحديث يعيدك حيث كنت
 const CTX_KEY = 'mi_admin_next_ctx';
-const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return ['leaders', 'matrix', 'visits'].includes(c) ? c : 'contacts'; } catch { return 'contacts'; } };
+// الدخول يفتح تطبيق القادة على نظرته العامة (صندوق «ينتظرني»)، لا طلبات التواصل: هناك ما ينتظر القرار. ومن ترك سياقًا آخر في جلسته يعود إليه
+const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return ['contacts', 'matrix', 'visits'].includes(c) ? c : 'leaders'; } catch { return 'leaders'; } };
 
 function Dashboard({ user, onUser, onLogout }) {
   const [settings, setSettings] = useState(false);

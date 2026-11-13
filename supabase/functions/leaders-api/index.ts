@@ -49,6 +49,7 @@ import * as TM from './team.ts';
 import * as ST from './settings.ts';
 import * as FB from './feedback360.ts';
 import * as OB from './observations.ts';
+import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
 
 type Body = Record<string, any>;
@@ -345,6 +346,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.create-participant': A.createParticipant,
   'admin.participants-import': A.participantsImport,
   'admin.participant-save': A.participantSave,
+  'admin.insight': () => IN.adminInsight(),
+  'admin.changes': (_a, b) => IN.adminChanges(b),
   'admin.inbox': (_a, b) => A.inbox(b),
   'admin.remind-stuck': A.remindStuck,
   'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),

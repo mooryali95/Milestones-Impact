@@ -64,6 +64,7 @@ test('الدخول برمز خاطئ يعرض الخطأ، والصحيح يفت
 test('طلبات التواصل: إحصاءات وبحث وصفحات ودرج يغيّر الحالة', async ({ page }) => {
   const calls = await mock(page);
   await signIn(page);
+  await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
   await expect(page.locator('.stat-card.s-total .stat-value')).toHaveText('23');
   await expect(page.locator('.data-table tbody tr')).toHaveCount(20);
   await page.getByRole('button', { name: '2', exact: true }).click();
@@ -86,6 +87,7 @@ test('طلبات التواصل: إحصاءات وبحث وصفحات ودرج �
 test('فشل تغيير الحالة يعيدها كما كانت', async ({ page }) => {
   await mock(page, { 'update-contact': { success: false, message: 'رفض الخادم' } });
   await signIn(page);
+  await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
   await page.getByText('متواصل 1', { exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'تم الرد' }).click();
   await expect(page.getByRole('status')).toHaveText('رفض الخادم');
@@ -95,6 +97,7 @@ test('فشل تغيير الحالة يعيدها كما كانت', async ({ pag
 test('خطأ التحميل يعرض زر إعادة المحاولة', async ({ page }) => {
   await mock(page, { 'list-contacts': { success: false, message: 'تعذّر الاتصال' } });
   await signIn(page);
+  await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
   await expect(page.getByText('خطأ في تحميل البيانات: تعذّر الاتصال')).toBeVisible();
   await expect(page.getByRole('button', { name: 'حاول مرة أخرى' })).toBeVisible();
 });
