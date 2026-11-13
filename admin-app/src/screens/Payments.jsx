@@ -33,7 +33,7 @@ function SettingsCard({ d, canWrite, reload }) {
     const r = await L('admin.payment-settings', { enabled, assessment_product: v.assessment_product, program_product: v.program_product,
       assessment_cents: Math.round(Number(v.assessment) * 100), program_cents: Math.round(Number(v.program) * 100) });
     setBusy(false);
-    toast(r.success ? (enabled ? 'الدفع مفعّل' : 'حُفظت الإعدادات') : r.message);
+    toast(r.success ? (enabled ? (r.grandfathered ? `الدفع مفعّل، وأُعفي ${r.grandfathered} مشاركًا قائمًا` : 'الدفع مفعّل') : 'حُفظت الإعدادات') : r.message);
     if (r.success) reload();
   };
   const h = d.health;
@@ -42,8 +42,9 @@ function SettingsCard({ d, canWrite, reload }) {
     <section className="la-card">
       <h3>الإعداد والجاهزية</h3>
       <ul className="pay-health">
-        {row(h.api_key, 'مفتاح Creem', h.api_key ? (h.mode === 'test' ? 'وضع الاختبار' : 'وضع الإنتاج') : 'أضف CAREEM_SECRET_KEY في أسرار الدالة')}
-        {row(h.webhook_secret, 'سرّ الإشعارات', h.webhook_secret ? 'موجود' : 'أضف CAREEM_WEBHOOK_SECRET')}
+        {row(h.api_key, 'مفتاح Creem', h.api_key ? (h.mode === 'test' ? 'وضع الاختبار' : 'وضع الإنتاج') : 'أضف CREEM_API_KEY في أسرار الدالة')}
+        {s.enabled && h.mode === 'test' && row(false, 'المفتاح تجريبي والدفع مفعّل', 'الدفعات التجريبية تمنح وصولًا حقيقيًا بلا تحصيل. بدّل المفتاح وسرّ الإشعارات إلى الحيّين قبل استقبال مشاركين')}
+        {row(h.webhook_secret, 'سرّ الإشعارات', h.webhook_secret ? 'موجود' : 'أضف CREEM_WEBHOOK_SECRET')}
         {row(!!h.last_event, 'آخر إشعار', h.last_event ? `${h.last_event.type} · ${when(h.last_event.received_at)}` : 'لم يصل إشعار بعد')}
         {row(!h.failed_events, 'معالجة الإشعارات', h.failed_events ? `${h.failed_events} إشعار تعذّرت معالجته من آخر 20` : 'سليمة')}
       </ul>
@@ -54,7 +55,7 @@ function SettingsCard({ d, canWrite, reload }) {
         <label>معرّف منتج البرنامج<input dir="ltr" value={v.program_product} disabled={!canWrite} onChange={(e) => setV({ ...v, program_product: e.target.value })} /></label>
         <label>سعر البرنامج (USD)<input dir="ltr" inputMode="decimal" value={v.program} disabled={!canWrite} onChange={(e) => setV({ ...v, program: e.target.value })} /></label>
       </div>
-      <p className="la-muted small">السعر هنا للعرض والتقارير؛ المبلغ الفعلي يأخذه Creem من المنتج نفسه، فاجعلهما متطابقين.</p>
+      <p className="la-muted small">المبلغ الفعلي يأخذه Creem من المنتج نفسه، والسعر هنا حد أدنى: دفعة أقل منه أو بعملة غير الدولار تُعلَّق ولا تمنح وصولًا. اجعلهما متطابقين.</p>
       {canWrite && (
         <div className="la-row">
           <button className="btn-sm ghost" disabled={busy} onClick={() => save(s.enabled)}>احفظ</button>

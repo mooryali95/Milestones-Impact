@@ -13,6 +13,8 @@ const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 // ما يحتاجه الدخول برمز البريد في البوابات الثلاث: غياب أي منها يوقفه
 const SETS = {
   signin: ['LEADERS_TOKEN_PEPPER', 'RESEND_API_KEY', 'LEADERS_TURNSTILE_SECRET', 'LEADERS_TURNSTILE_SITE_KEY'],
+  // الدفع: مفتاح Creem وسرّ إشعاراته. يُقبل الاسم القديم CAREEM_* أيضًا (payments.ts)، فيُفحص بـ --require=pay يدويًا قبل التفعيل
+  pay: ['CREEM_API_KEY|CAREEM_SECRET_KEY', 'CREEM_WEBHOOK_SECRET|CAREEM_WEBHOOK_SECRET'],
 };
 
 if (!TOKEN) { console.error('SUPABASE_ACCESS_TOKEN مطلوب'); process.exit(2); }
@@ -24,8 +26,10 @@ if (!r.ok) { console.error(`✗ تعذّرت قراءة أسماء الأسرا�
 // الاستجابة تحمل حقلًا للقيمة أيضًا؛ لا يُقرأ ولا يُطبع منه شيء
 const names = new Set((await r.json()).map((s) => String(s.name)));
 console.log(`أسرار الدوال المضبوطة (أسماء فقط): ${[...names].sort().join('، ') || 'لا شيء'}`);
-for (const n of need) console.log(`${names.has(n) ? '✓' : '✗'} ${n}`);
-const missing = need.filter((n) => !names.has(n));
+// «أ|ب»: يكفي أحد الاسمين (اسم قديم ما زال مقبولًا)
+const has = (n) => n.split('|').some((x) => names.has(x));
+for (const n of need) console.log(`${has(n) ? '✓' : '✗'} ${n.replace('|', ' أو ')}`);
+const missing = need.filter((n) => !has(n));
 if (missing.length) {
   console.log(`::error::أسرار مطلوبة غير مضبوطة: ${missing.join('، ')}. اضبطها في Supabase ← Edge Functions ← Secrets (docs/SECRETS.md)`);
   process.exit(1);

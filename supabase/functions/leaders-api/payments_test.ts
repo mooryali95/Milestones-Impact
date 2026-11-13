@@ -1,7 +1,7 @@
 // الدفع: توقيع إشعار Creem (HMAC-SHA256) يُفحص قبل أي كتابة، ووضع المفتاح من بادئته
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { eventMode, modeOf, paidIssues, settleable, webhook } = await import('./payments.ts');
+const { eventMode, modeOf, paidIssues, paymentRefs, settleable, webhook } = await import('./payments.ts');
 const { Fail } = await import('./core.ts');
 
 const SECRET = 'whsec-test';
@@ -66,4 +66,15 @@ Deno.test('مرفوض 1: مبلغ أقل أو عملة أو منتج أو وضع
 
 Deno.test('مرفوض 2: لا تسوية لدفعة مستردة أو مسوّاة، والمعلّقة والمنتهية والفاشلة تُسوّى', () => {
   assertEquals(['pending', 'expired', 'failed', 'paid', 'refunded'].map((status) => settleable({ status })), [true, true, true, false, false]);
+});
+
+Deno.test('مراجع الدفعة: checkout وorder كائنين أو معرّفين نصيين، وrequest_id غير المعرّف لا يُستعلم به', () => {
+  const id = '11111111-2222-4333-8444-555555555555';
+  assertEquals(paymentRefs({ request_id: id, checkout: { id: 'ch_1' }, order: { id: 'ord_1' } }), { request: id, checkout: 'ch_1', order: 'ord_1' });
+  // إشعار استرداد: المعرّفات نصوص
+  assertEquals(paymentRefs({ id: 'ref_1', checkout: 'ch_2', order: 'ord_2' }), { request: null, checkout: 'ch_2', order: 'ord_2' });
+  assertEquals(paymentRefs({ order: { id: 'ord_3', metadata: { payment_id: id } } }), { request: id, checkout: null, order: 'ord_3' });
+  assertEquals(paymentRefs({ request_id: 'not-a-uuid', order_id: 'ord_4' }), { request: null, checkout: null, order: 'ord_4' });
+  assertEquals(paymentRefs({ id: 'ch_5' }).checkout, 'ch_5');
+  assertEquals(paymentRefs(null), { request: null, checkout: null, order: null });
 });
