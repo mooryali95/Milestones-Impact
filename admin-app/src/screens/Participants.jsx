@@ -21,7 +21,7 @@ import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
 import { PreviewAs } from './CohortVisibility.jsx';
 import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
-import { FileExtras, FileFlags, Observations, Timeline } from './PersonFile.jsx';
+import { FileExtras, FileFlags, FileIndex, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -435,6 +435,7 @@ function Person({ id, canWrite, onBack }) {
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
           <FileFlags flags={r.flags} />
+          <FileIndex />
           {r.retake && <p className="la-where" role="status"><b>طُلبت إعادة القياس</b> {date(r.retake.requested_at)} ({r.retake.reason === 'effort' ? 'لاستعجال في الإجابة' : 'بقرار إداري'})، ولم يسلّم قياسًا جديدًا بعد.</p>}
           {STUCK.includes(r.onboarding?.step) && (
             <p className="la-where" role="status">
@@ -480,7 +481,7 @@ function Person({ id, canWrite, onBack }) {
       <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
 
       <section className="la-card">
-        <div className="la-row between"><h3>الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
+        <div className="la-row between"><h3 id="pf-journey-h">الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
         <div className="la-journey">{r.journey.map((s) => (
           <div key={s.key} className={`la-stage ${s.status}`}>
             <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{s.skipped ? 'أُعفي منها' : STAGE_STATUS_AR[s.status]}</span></div>
@@ -507,7 +508,7 @@ function Person({ id, canWrite, onBack }) {
       </section>
 
       <section className="la-card la-book-card">
-        <div className="la-row between"><h3>كتاب القائد والنماذج</h3><span className="rank-chip">{pts.rank.title} · {pts.total} نقطة</span></div>
+        <div className="la-row between"><h3 id="pf-book-h">كتاب القائد والنماذج</h3><span className="rank-chip">{pts.rank.title} · {pts.total} نقطة</span></div>
         <div className="la-book-kpis">
           <span><b>{book.length}</b>باب أتمّه</span>
           <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>

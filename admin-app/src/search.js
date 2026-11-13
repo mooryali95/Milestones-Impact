@@ -32,4 +32,4 @@ export function rank(query, items, { perKind = 6 } = {}) {
   return scored.filter(({ it }) => (per[it.kind] = (per[it.kind] || 0) + 1) <= perKind).map(({ it }) => it);
 }
 
-export const KIND_LABEL = { participant: 'مشارك', org: 'جهة', track: 'مسار', chapter: 'باب', model: 'نموذج', tab: 'قسم' };
+export const KIND_LABEL = { participant: 'مشارك', org: 'جهة', expert: 'خبير', cohort: 'دفعة', capstone: 'مبادرة', track: 'مسار', chapter: 'باب', model: 'نموذج', tab: 'قسم' };

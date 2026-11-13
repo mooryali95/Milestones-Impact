@@ -16,6 +16,7 @@ async function setup(page, hash = '') {
       'admin.participant': person, 'admin.catalog': catalog,
       'admin.overview': { success: true, total: 1, by_status: {}, pending_reviews: 0, matrix: { milestone: { beginner: 0, intermediate: 0, advanced: 0 }, impact: { beginner: 0, intermediate: 0, advanced: 0 }, leadership: { beginner: 0, intermediate: 0, advanced: 0 } } },
       'admin.reviews': { success: true, pending_approval: [{ id: 'p1', full_name: 'سارة الأحمد' }], submitted: [] },
+      'admin.inbox': { success: true, total: 0, late: 0, skipped: [], counts: {}, items: [] },
       'admin.submissions': { success: true, submissions: [{ id: 's1' }, { id: 's2' }] },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
