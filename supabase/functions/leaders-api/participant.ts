@@ -7,6 +7,7 @@ import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
+import { noticesFor } from './observations.ts';
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
@@ -617,6 +618,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
     baseline_submitted_at: baselineAt,
     final_policy: { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
+    // تنبيهات وملاحظات مرئية لم يطّلع عليها بعد (participant_observations): بطاقة في رحلته حتى يضغط «اطّلعت»
+    notices: audience === 'participant' ? await noticesFor(p.id) : [],
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
   };

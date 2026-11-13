@@ -343,7 +343,8 @@ export async function participant(b: Body) {
       .eq('participant_id', p.id).order('started_at', { ascending: false }),
     db.from('participant_requirements').select('*, stage_requirements(code, title_ar, stage_key, kind)').eq('participant_id', p.id),
     db.from('handbook_views').select('viewed_at').eq('participant_id', p.id).order('viewed_at', { ascending: false }).limit(1),
-    db.from('audit_log').select('*').eq('entity_id', p.id).order('created_at', { ascending: false }).limit(30),
+    // الخط الزمني: ما جرى عليه (entity_id) وما فعله هو (actor بمعرّفه)، لا آخر ثلاثين على كيانه وحده
+    db.from('audit_log').select('*').or(`entity_id.eq.${p.id},actor.eq.${p.id}`).order('created_at', { ascending: false }).limit(150),
   ]);
   const [state, { data: model }] = await Promise.all([
     mePayload(p, 'admin'),

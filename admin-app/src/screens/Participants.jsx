@@ -19,6 +19,7 @@ import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
+import { FileExtras, FileFlags, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -423,6 +424,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
+          <FileFlags flags={r.flags} />
           {r.retake && <p className="la-where" role="status"><b>طُلبت إعادة القياس</b> {date(r.retake.requested_at)} ({r.retake.reason === 'effort' ? 'لاستعجال في الإجابة' : 'بقرار إداري'})، ولم يسلّم قياسًا جديدًا بعد.</p>}
           {STUCK.includes(r.onboarding?.step) && (
             <p className="la-where" role="status">
@@ -525,9 +527,10 @@ function Person({ id, canWrite, onBack }) {
 
       <ExpertAssign participantId={id} canWrite={canWrite} />
 
-      <section className="la-card"><h3>السجل</h3><ul className="la-log">
-        {(r.history || []).length ? r.history.map((h, i) => <li key={i}><small>{date(h.created_at)}</small> {h.action} <small className="la-muted">{h.actor}</small></li>) : <li className="la-muted">لا شيء</li>}
-      </ul></section>
+      {/* ملف المشارك الكامل (تصور 2026-11-13): ما لم يكن يُعرض، ثم الملاحظات، ثم خط زمني واحد بالعربية بدل رموز السجل */}
+      <FileExtras r={r} />
+      <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
+      <Timeline rows={r.timeline} />
 
       {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
     </>

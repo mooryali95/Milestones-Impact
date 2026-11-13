@@ -247,3 +247,41 @@ test('قائمة المشاركين: وسم «مستعجل» وعرضه السر
   await expect(page.getByText('طُلبت الإعادة من 1')).toBeVisible();
   expect(calls.find((c) => c.action === 'admin.reset-assessment').participant_ids).toEqual(['p3']);
 });
+
+test('ملف المشارك الكامل: ملخص الأعلام، وإضافة ملاحظة مرئية بتأكيد، والخط الزمني بالعربية', async ({ page }) => {
+  const obs = { id: 'ob1', kind: 'warning', source: 'system', title: 'غياب عن جلسة توجيه', body: 'سُجّل غيابك عن جلسة الأحد.', visible: true, created_at: '2026-11-12T10:00:00Z', acknowledged_at: null };
+  const calls = await setup(page, {
+    'admin.participant': { ...person,
+      flags: [{ key: 'effort', tone: 'bad', label: 'أجاب القياس باستعجال', detail: '46 من 60' }, { key: 'no_show', tone: 'warn', label: 'غاب عن جلسة توجيه', detail: '' }],
+      observations: [obs],
+      sessions: [{ id: 's1', status: 'no_show', starts_at: '2026-11-10T09:00:00Z', expert: 'د. سلمان' }],
+      capstone: { status: 'returned', readiness: 40, revisions: 2, review_note: 'أكمل سجل المخاطر' }, feedback360: [], attendance: [],
+      timeline: [{ at: '2026-11-12T10:00:00Z', kind: 'warning', tone: 'warn', text: 'تنبيه: غياب عن جلسة توجيه', by: 'النظام', detail: 'سُجّل غيابك عن جلسة الأحد.' },
+        { at: '2026-11-10T08:00:00Z', kind: 'event', tone: 'info', text: 'سلّم القياس', by: 'المشارك', detail: '' }] },
+    'admin.observation-add': { success: true, observation: { id: 'ob2' } },
+  });
+  await page.locator('.data-table tbody tr').filter({ hasText: 'سارة الأحمد' }).click();
+  const flags = page.getByRole('list', { name: 'ملخص الأعلام' });
+  await expect(flags.locator('.la-chip.bad')).toHaveText('أجاب القياس باستعجال');
+  await expect(flags).toContainText('غاب عن جلسة توجيه');
+  // ما كان غائبًا: الجلسات بحالتها من المصدر الواحد، والمبادرة بعدد إعاداتها
+  await expect(page.getByText('لم يحضر')).toBeVisible();
+  await expect(page.getByText('أُعيدت 2 مرة')).toBeVisible();
+  // ملاحظة النظام بلا حذف، وحالتها عند المشارك ظاهرة
+  const list = page.locator('.pf-obs-list');
+  await expect(list).toContainText('مرئية للمشارك، ولم يطّلع عليها بعد');
+  await expect(list.getByRole('button', { name: 'حذف' })).toHaveCount(0);
+  // إضافة ملاحظة مرئية: تأكيد يذكر البطاقة والبريد
+  await page.getByLabel('النوع').selectOption('commendation');
+  await page.getByLabel('نص الملاحظة').fill('قدّم عرضًا واضحًا في جلسة القاعة.');
+  await page.getByLabel(/يراها المشارك/).check();
+  await page.getByRole('button', { name: 'أضف إلى الملف' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('مرئية للمشارك');
+  await page.getByRole('alertdialog').getByRole('button', { name: /^(تأكيد|نعم|متابعة|موافق)/ }).click();
+  await expect(page.getByText('حُفظت وأُبلغ المشارك')).toBeVisible();
+  expect(calls.find((c) => c.action === 'admin.observation-add')).toMatchObject({ participant_id: 'p1', kind: 'commendation', visible: true });
+  // الخط الزمني بالعربية لا برموز السجل
+  const time = page.locator('.pf-time');
+  await expect(time.locator('li').first()).toContainText('تنبيه: غياب عن جلسة توجيه');
+  await expect(time).not.toContainText('assessment.submit');
+});

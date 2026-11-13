@@ -18,6 +18,8 @@ import { forParticipant as peerFor } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { overallLevel } from './logic.js';
+import * as OB from './observations.ts';
+import { flagsOf, timelineOf } from './observations.js';
 import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
 
 type Body = Record<string, any>;
@@ -41,13 +43,40 @@ async function around(p: any, cohortId: string | null, viewer: { email: string }
   };
 }
 
+// ما كان غائبًا عن الملف: وثيقة المبادرة، ودورات تقييم 360، وحضور الورش. قراءة فقط، وتعذّر جدول لا يُسقط الملف
+async function moreFor(pid: string) {
+  const [cap, f360, att] = await Promise.all([
+    db.from('capstones').select('id, status, readiness, revisions, review_note, submitted_at, updated_at').eq('participant_id', pid).maybeSingle(),
+    db.from('feedback_cycles').select('wave, status, opens_at, closes_at, released_at').eq('participant_id', pid).order('created_at'),
+    db.from('workshop_attendance').select('checked_in_at, method, workshop_sessions(title_ar, starts_at)').eq('participant_id', pid).order('checked_in_at', { ascending: false }).limit(50),
+  ]);
+  return {
+    capstone: cap.error ? null : cap.data || null,
+    feedback360: f360.error ? [] : f360.data || [],
+    attendance: att.error ? [] : (att.data || []).map((x: any) => ({ at: x.checked_in_at, method: x.method, title: x.workshop_sessions?.title_ar || null, starts_at: x.workshop_sessions?.starts_at || null })),
+  };
+}
+
+// ملاحظة المستشار على مشارك في دفعته (xp.observation-add)
+export async function observationAdd(e: any, b: Body) {
+  await requireAdvisorOf(e, String(b.participant_id || ''));
+  return OB.advisorAdd({ email: e.email }, b);
+}
+
 export async function participantFile(id: string, audience: 'admin' | 'expert', opts: { viewer?: { email: string }; advisor?: boolean } = {}) {
   const base: any = await adminParticipant({ id });
   const cohort = base.program?.cohort || null;
   const extra = await around(base.participant, cohort?.id || null, opts.viewer || null);
   const needs = needsFor({ submissions: base.models || [], milestones: base.milestones || [], final: extra.final?.record || null, peerAnswers: extra.peer.pending_answers, sessions: [] });
   const common = { ...extra, needs, cohort: cohort ? { id: cohort.id, name: cohort.name, starts_on: cohort.starts_on, ends_on: cohort.ends_on, supervision: cohort.supervision || 'peers_expert', content_release: cohort.content_release ?? null } : null };
-  if (audience === 'admin') return { ...base, ...common };
+  // ملف المشارك الكامل (تصور 2026-11-13): الملاحظات، وما لم يكن يُعرض (المبادرة و360 والحضور)، ثم ملخص الأعلام
+  // والخط الزمني مشتقين مما سبق. للإدارة كاملًا، ولمستشار الدفعة بلا سجل التدقيق.
+  const observations = await OB.listFor(base.participant.id);
+  if (audience === 'admin') {
+    const more = await moreFor(base.participant.id);
+    const file = { ...base, ...common, ...more, observations };
+    return { ...file, flags: flagsOf(file), timeline: timelineOf({ history: base.history || [], observations }) };
+  }
   // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية؛ والختامي والمعالم بكامل الصلاحية لمستشار الدفعة وحده
   const p = base.participant;
   return {
@@ -63,6 +92,9 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
     points: base.points, book: (base.book || []).map((b: any) => ({ title: b.handbook_modules?.title_ar, quiz_score: b.quiz_score, quiz_total: b.quiz_total, completed_at: b.completed_at })),
     ...common,
     final: opts.advisor ? common.final : (common.final ? { live: { score: common.final.live?.score ?? null, decision: common.final.live?.decision ?? null }, record: common.final.record ? { status: common.final.record.status } : null } : null),
+    // ملاحظات الملف وأعلامه لمستشار الدفعة وحده؛ الخبير المسند بطلب خدمة لا يراها
+    observations: opts.advisor ? observations : [],
+    flags: opts.advisor ? flagsOf({ participant: p, effort: base.effort, retake: base.retake, onboarding: base.onboarding, milestone_summary: base.milestone_summary, sessions: extra.sessions, models: base.models, continuous: base.continuous, observations }) : [],
     scope: opts.advisor ? 'advisor' : 'assigned',
   };
 }

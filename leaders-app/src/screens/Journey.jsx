@@ -619,6 +619,33 @@ function Continuous({ c }) {
   );
 }
 
+// تنبيهات وملاحظات من الإدارة أو المستشار أو النظام (participant_observations المرئية): بطاقة أعلى الرحلة حتى يضغط «اطّلعت».
+// النص نفسه الذي في البريد وفي ملفه عند الإدارة. بعد الاطلاع تختفي من هنا وتبقى في ملفه.
+function Notices({ list }) {
+  const [items, setItems] = useState(list || []);
+  const [busy, setBusy] = useState(null);
+  useEffect(() => { setItems(list || []); }, [list]);
+  if (!items.length) return null;
+  const ack = async (id) => {
+    setBusy(id);
+    const r = await call('me.notice-ack', { id });
+    setBusy(null);
+    if (r.success) setItems(r.notices || []);
+  };
+  return (
+    <section className="notices" aria-label="تنبيهات وملاحظات">
+      {items.map((n) => (
+        <article key={n.id} className={`card notice ${n.kind}`} role={n.kind === 'warning' ? 'alert' : 'status'}>
+          <p className="eyebrow">{n.kind_ar}</p>
+          {n.title && <h2>{n.title}</h2>}
+          <p>{n.body}</p>
+          <button type="button" className="btn sm ghost" disabled={busy === n.id} onClick={() => ack(n.id)}>اطّلعت</button>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab, onLabItem }) {
   const { journey, profile, participant } = me;
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
@@ -663,6 +690,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
   return (
     <div className="page wide">
+      <Notices list={me.notices} />
       <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>

@@ -61,3 +61,29 @@ test('تنبيه وقائي: إجابات متتالية أسرع من زمن ا
   await note.getByRole('button', { name: 'فهمت' }).click();
   await expect(note).toHaveCount(0);
 });
+
+test('تنبيه من ملف المشارك: بطاقة أعلى الرحلة بنصها، و«اطّلعت» يخفيها ويرسل الإقرار', async ({ page }) => {
+  const stage = (key, title_ar, status) => ({ key, title_ar, phase: 'admission', status, items: [], done: 0, total: 0 });
+  const notice = { id: 'ob1', kind: 'warning', kind_ar: 'تنبيه', title: 'غياب عن جلسة توجيه', body: 'سُجّل غيابك عن جلسة الأحد. احجز موعدًا بديلًا.' };
+  const me = {
+    success: true,
+    participant: { id: 'p1', full_name: 'سارة عبدالله الأحمد', email: 'sara@x.sa', status: 'pending_approval', consented_at: '2026-11-01T00:00:00Z' },
+    profile: { approved: false, dimensions: [] }, journey: [stage('profile', 'الملف الشخصي', 'done'), stage('assessment', 'تحديد المستوى', 'done'), stage('approval', 'اعتماد المستوى', 'active')],
+    progress: 30, passkeys: 1, prompt_passkey: false, milestones: [], notices: [notice],
+  };
+  const sent = [];
+  await page.route(/functions\/v1\/leaders-api/, (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    sent.push(b);
+    route.fulfill({ json: b.action === 'me.notice-ack' ? { success: true, notices: [] } : me });
+  });
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 'tok-notice-000000000000000000'); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.goto(APP);
+  const card = page.locator('.notice.warning');
+  await expect(card).toHaveAttribute('role', 'alert');
+  await expect(card.getByRole('heading', { name: 'غياب عن جلسة توجيه' })).toBeVisible();
+  await expect(card).toContainText('احجز موعدًا بديلًا');
+  await card.getByRole('button', { name: 'اطّلعت' }).click();
+  await expect(page.locator('.notice')).toHaveCount(0);
+  expect(sent.find((b) => b.action === 'me.notice-ack').id).toBe('ob1');
+});

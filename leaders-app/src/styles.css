@@ -1604,3 +1604,12 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .retake-card { border-inline-start: 4px solid var(--warn); background: var(--st-warn-bg); margin-bottom: 14px; }
 .retake-card h2 { margin: 0 0 6px; font-size: 18px; }
 .retake-card p { margin: 0; }
+
+/* تنبيهات وملاحظات المشارك أعلى الرحلة (participant_observations المرئية) */
+.notices { display: grid; gap: 10px; margin-bottom: 14px; }
+.notice { border-inline-start: 4px solid var(--line); }
+.notice.warning { border-inline-start-color: var(--warn); background: var(--st-warn-bg); }
+.notice.commendation { border-inline-start-color: var(--st-ok); }
+.notice h2 { margin: 2px 0 6px; font-size: 18px; }
+.notice p { margin: 0 0 10px; white-space: pre-wrap; }
+.notice .eyebrow { margin: 0; }
