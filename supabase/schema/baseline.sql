@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261113120000_leaders_participant_observations
+-- as-of migration: 20261113130000_leaders_cohort_visibility
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -323,6 +323,7 @@ create table if not exists leaders.cohorts (
   hidden_requirements text[] default '{}'::text[] not null,
   supervision text default 'peers_expert'::text not null,
   content_release text,
+  visibility jsonb default '{}'::jsonb not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
@@ -331,6 +332,7 @@ create table if not exists leaders.cohorts (
   constraint cohorts_supervision_check CHECK ((supervision = ANY (ARRAY['peers_expert'::text, 'expert_only'::text, 'mixed'::text]))),
   constraint cohorts_track_check CHECK ((track = ANY (ARRAY['individual'::text, 'institutional'::text]))),
   constraint cohorts_uniform_level_check CHECK (((level_mode <> 'uniform'::text) OR (content_level IS NOT NULL))),
+  constraint cohorts_visibility_object_chk CHECK ((jsonb_typeof(visibility) = 'object'::text)),
   constraint cohorts_pkey PRIMARY KEY (id)
 );
 

@@ -46,7 +46,7 @@ function RubricForm({ m, onSave, onClose }) {
 }
 
 // التقييم الختامي من البوابة: تعديل بتعليل، رفع للاعتماد، واعتماد أو إعادة (الخادم يطبّق قواعد اللجنة والتوقيعين)
-function AdvisorNotes({ pid, flags, list, reload }) {
+function AdvisorNotes({ pid, flags, list, reload, canAdd = true }) {
   const [v, setV] = useState({ kind: 'note', body: '', visible: false });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -62,7 +62,7 @@ function AdvisorNotes({ pid, flags, list, reload }) {
     <section className="card stack" aria-label="ملاحظات الملف">
       <h3>ملاحظات الملف</h3>
       {flags?.length > 0 && <p className="chips">{flags.map((f, i) => <span key={i} className={`chip ${f.tone === 'bad' || f.tone === 'warn' ? 'warn' : ''}`} title={f.detail || undefined}>{f.label}</span>)}</p>}
-      <form className="stack" onSubmit={save}>
+      {canAdd && <form className="stack" onSubmit={save}>
         <div className="row">
           <select aria-label="النوع" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
             {Object.entries(OBS_KIND_AR).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -71,7 +71,7 @@ function AdvisorNotes({ pid, flags, list, reload }) {
         </div>
         <textarea aria-label="نص الملاحظة" rows={3} required minLength={3} maxLength={2000} placeholder="الواقعة وتاريخها وما يُنتظر بعدها" value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} />
         <div className="row"><button className="btn sm" disabled={busy}>{busy ? 'لحظة…' : 'أضف إلى ملفه'}</button>{msg && <span className="small muted" role="status">{msg}</span>}</div>
-      </form>
+      </form>}
       {list?.length > 0 && (
         <ul className="plain stack">{list.slice(0, 10).map((o) => (
           <li key={o.id}><span className={`chip ${o.kind === 'warning' ? 'warn' : ''}`}>{OBS_KIND_AR[o.kind]}</span> {o.title && <b>{o.title}. </b>}{o.body} <span className="small muted">· {OBS_SOURCE_AR[o.source]}{o.visible ? '' : ' · داخلية'}</span></li>
@@ -218,7 +218,7 @@ export default function ExpertFile({ id, onBack }) {
         <div className="row between">
           <div><p className="eyebrow">ملف المشارك</p><h1>{p.full_name}</h1>
             <p className="muted small">{[p.job_title, p.organization_name, d.cohort?.name ? `دفعة ${d.cohort.name}` : null, d.team_ar, d.cohort?.content_release ? `إصدار المحتوى ${d.cohort.content_release}` : null].filter(Boolean).join(' · ')}</p>
-            <p className="small ltr">{p.email}{p.phone ? ` · ${p.phone}` : ''}</p></div>
+            {(p.email || p.phone) ? <p className="small ltr">{[p.email, p.phone].filter(Boolean).join(' · ')}</p> : <p className="small muted">وسائل التواصل محجوبة بإعداد البرنامج.</p>}</div>
           <span className="chip gold">{advisor ? 'أنت مستشار دفعته' : 'مسند إليك بطلب خدمة'}</span>
         </div>
         <div className="xf-needs" aria-label="المطلوب منك الآن">
@@ -229,7 +229,7 @@ export default function ExpertFile({ id, onBack }) {
 
       <div className="xpp-cols">
         {/* ملف المشارك لمستشار دفعته: أعلامه وملاحظاته من المصدر نفسه الذي تقرؤه الإدارة، وله أن يضيف ملاحظة */}
-        {advisor && <AdvisorNotes pid={id} flags={d.flags} list={d.observations} reload={load} />}
+        {advisor && <AdvisorNotes pid={id} flags={d.flags} list={d.observations} reload={load} canAdd={d.can?.observe !== false} />}
         <section className="card stack" aria-label="من هو">
           <h3>من هو</h3>
           {d.profile ? (
@@ -242,7 +242,7 @@ export default function ExpertFile({ id, onBack }) {
           ) : <p className="muted small">{d.onboarding?.remaining ? `${d.onboarding.label}: ${d.onboarding.remaining}.` : 'لم يُتم القياس المبدئي بعد.'}</p>}
           {d.effort?.level && d.effort.level !== 'ok' && <p className="alert info small" role="note"><b>{EFFORT_AR[d.effort.level]}:</b> {d.effort.note}</p>}
           {/* إجابات القياس لمستشار الدفعة وحده (قرار المالك 2026-11-11)، ويُسجَّل كل اطلاع */}
-          {advisor && d.assessments?.length > 0 && <button type="button" className="link small" onClick={() => setAnswers(true)}>إجابات القياس</button>}
+          {advisor && d.can?.answers !== false && d.assessments?.length > 0 && <button type="button" className="link small" onClick={() => setAnswers(true)}>إجابات القياس</button>}
           {p.bio && <p className="small muted">{p.bio}</p>}
           <p className="small muted">{[p.sector, p.years_experience != null ? `${p.years_experience} سنة خبرة` : null].filter(Boolean).join(' · ')}</p>
         </section>

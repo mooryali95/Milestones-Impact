@@ -117,6 +117,7 @@ export const MIGRATIONS = [
   '20261113100000_leaders_expert_committees',
   '20261113110000_leaders_assessment_effort_retake',
   '20261113120000_leaders_participant_observations',
+  '20261113130000_leaders_cohort_visibility',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -152,4 +153,5 @@ export const MIGRATION_GATES = {
   '20261111130100_leaders_app_settings': ["tolerant", "الدالة تتحمل غياب الجدول (settings.ts: appSettings تعيد القيم الافتراضية من settings.js)، فقبله تعمل الحدود كما كانت ويرفض الحفظ بسبب واضح"],
   '20261111130200_leaders_feedback_cycles': ["tolerant", "الدالة تتحمل غياب الجدول (feedback360.ts: الشاشة تقول «غير متاح بعد» ولا تُفشل شيئًا)، والمقيّمون القائمون يُقرؤون بمرحلتيهم pre وpost وحدهما قبله وبعده"],
   '20261113100000_leaders_expert_committees': ["tolerant", "الدالة تحفظ ملف الخبير بلا العمود، وتقول عن عضوية اللجنة «تُحفظ بعد تطبيق ترحيلها» (experts.ts adminSave)، والقراءة بـ* فلا تتأثر"],
+  '20261113130000_leaders_cohort_visibility': ["tolerant", "الدالة تقرأ العمود إن وُجد وتعمل بالافتراضي العام إن غاب (visibility.ts visibilityOf)، والحفظ قبل الترحيل يقول ذلك بدل أن يفشل"],
 };

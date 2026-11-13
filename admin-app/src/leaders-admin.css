@@ -889,3 +889,17 @@
 .pf-time li.ok b { color: var(--st-ok); }
 .pf-when { color: var(--ink-soft); }
 @media (max-width: 600px) { .pf-time li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* رؤية الدفعة ومعاينة «بعين الخبير» (CohortVisibility.jsx) */
+.cv-form { max-inline-size: 640px; }
+.cv-group { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; min-inline-size: 0; }
+.cv-group legend { font-weight: 700; padding: 0 6px; }
+.cv-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.cv-row:last-child { border-bottom: 0; }
+.cv-row > span { display: grid; flex: 1 1 220px; min-inline-size: 0; }
+.cv-row small { font-size: .8rem; }
+.cv-row select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; max-inline-size: 100%; }
+.cv-sees { list-style: none; margin: 8px 0; padding: 0; }
+.cv-sees li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cv-sees li.ok > span { color: var(--st-ok); font-weight: 700; }
+.cv-sees li.off { color: var(--ink-soft); }

@@ -19,6 +19,7 @@ import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
+import { PreviewAs } from './CohortVisibility.jsx';
 import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
 import { FileExtras, FileFlags, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
@@ -287,6 +288,7 @@ const EDIT_FIELDS = [
 
 function Person({ id, canWrite, onBack }) {
   const { toast, confirm, prompt } = useUI();
+  const [previewAs, setPreviewAs] = useState(false);
   const [r, setR] = useState(null);
   const [status, setStatus] = useState('');
   const [levels, setLevels] = useState({});
@@ -451,6 +453,8 @@ function Person({ id, canWrite, onBack }) {
               <button className="btn-sm ghost" disabled={status === p.status} onClick={changeStatus}>تغيير الحالة</button>
               <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
               <button className="btn-sm ghost" onClick={() => setEditing(true)}>تعديل البيانات</button>
+              {/* ما يصل المستشار أو الخبير المسند عن هذا المشارك بمفاتيح الرؤية النافذة (visibility.js) */}
+              <button className="btn-sm ghost" onClick={() => setPreviewAs(true)}>عاين بعين الخبير</button>
               {/* حساب اختبار داخلي: خارج الإحصاءات وحدها، ويبقى حسابًا عاديًا (قرار المالك 2026-11-11) */}
               <button className="btn-sm ghost" title="يُستبعد من النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر"
                 onClick={() => act('admin.participant-save', { participant_id: p.id, fields: { is_test: !p.is_test } }, p.is_test ? 'عاد محسوبًا في الإحصاءات' : 'صار حساب اختبار، خارج الإحصاءات')}>
@@ -540,6 +544,7 @@ function Person({ id, canWrite, onBack }) {
       <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
       <Timeline rows={r.timeline} />
 
+      {previewAs && <PreviewAs participantId={p.id} onClose={() => setPreviewAs(false)} />}
       {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
     </>
   );

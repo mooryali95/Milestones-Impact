@@ -285,3 +285,23 @@ test('ملف المشارك الكامل: ملخص الأعلام، وإضافة
   await expect(time.locator('li').first()).toContainText('تنبيه: غياب عن جلسة توجيه');
   await expect(time).not.toContainText('assessment.submit');
 });
+
+test('عاين بعين الخبير: ما يُرى وما حُجب عن المستشار ثم عن الخبير المسند، من حمولة الخادم', async ({ page }) => {
+  const sees = (contact) => [{ label: 'وسائل التواصل', visible: contact, value: contact ? 's@x.com' : null }, { label: 'المستويات ونتيجة القياس', visible: true, value: null }, { label: 'ملاحظات الملف', visible: false, value: null }];
+  const calls = await setup(page, {});
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.preview-as') return route.fallback();
+    calls.push(b);
+    await route.fulfill({ json: { success: true, as: b.as, name: 'سارة الأحمد', sees: sees(b.as === 'advisor'), can: { answers: b.as === 'advisor', observe: false, final_edit: false, hall: false } } });
+  });
+  await page.locator('.data-table tbody tr').filter({ hasText: 'سارة الأحمد' }).click();
+  await page.getByRole('button', { name: 'عاين بعين الخبير' }).click();
+  const dlg = page.getByRole('dialog', { name: 'معاينة بعين الخبير' });
+  await expect(dlg.locator('.cv-sees li.ok')).toHaveCount(2);
+  await expect(dlg).toContainText('ما يحق له فعله: فتح الإجابات.');
+  await dlg.getByRole('button', { name: 'خبير مسند بطلب' }).click();
+  await expect(dlg.locator('.cv-sees li.off').first()).toContainText('وسائل التواصل');
+  await expect(dlg).toContainText('ما يحق له فعله: القراءة فقط.');
+  expect(calls.filter((c) => c.action === 'admin.preview-as').map((c) => c.as)).toEqual(['advisor', 'assigned']);
+});
