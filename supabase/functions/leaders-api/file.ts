@@ -55,6 +55,8 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
     participant: { id: p.id, full_name: p.full_name, email: p.email, phone: p.phone, job_title: p.job_title, organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null, status: p.status, bio: p.bio || null, linkedin_url: p.linkedin_url || null },
     profile: base.profile, journey: base.journey, progress: base.progress, milestones: base.milestones, milestone_summary: base.milestone_summary, group: base.group, continuous: base.continuous,
     program: base.program ? { id: base.program.id } : null,
+    // أين توقف قبل الاعتماد (الملف ثم القياس: كم أجاب من كم) لكل خبير مرتبط، ومؤشر الجهد لمستشار الدفعة وحده كإجابات القياس
+    onboarding: base.onboarding || null, effort: opts.advisor ? base.effort || null : null,
     assessments: (base.assessments || []).filter((a: any) => a.status === 'submitted').map((a: any) => ({ id: a.id, kind: a.instruments?.kind, submitted_at: a.submitted_at,
       results: (a.assessment_results || []).map((r: any) => ({ dimension: r.dimension, level: r.level, composite_pct: r.composite_pct })) })),
     models: (base.models || []).map((m: any) => ({ id: m.id, status: m.status, status_ar: (SUBMISSION_STATUS_ADMIN as Record<string, string>)[m.status], rating: m.rating, submitted_at: m.submitted_at, title: m.learning_models?.title_ar || '' })),

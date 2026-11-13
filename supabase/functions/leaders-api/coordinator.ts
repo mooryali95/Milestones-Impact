@@ -4,13 +4,14 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
-import { journeyDefinition } from './programs.ts';
+import { journeyDefinition, memberCounts } from './programs.ts';
+import { cohortSetup, setupMissing } from './cohort-setup.js';
 import { journeyMap } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
-import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
+import { pickCohort, coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -253,7 +254,8 @@ export async function dashboard(c: any) {
   // D19: مقيّمون بانتظار تأكيد المنسق، لمن يرى قائمة المشاركين
   const [raters] = await Promise.all([
     list ? awaitingFor((r.participants || []).map((p: any) => p.id)) : Promise.resolve([]),
-    audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id),
+    // عرض الإدارة لخريطة الجهة (adminJourney) يمر من هنا بلا حساب منسق، ويُسجَّل باسمه هناك لا كدخول منسق
+    c.id ? audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id) : Promise.resolve(),
   ]);
   r.raters_pending = raters;
   // تقييم 360: أعداد ونسبة استجابة، ومتوسط كل إطار فوق حد الجهة وحده (orgTotals)، لمن يرى الدرجات. لا صف فردي أبدًا
@@ -416,6 +418,39 @@ export async function adminPreview(_a: Admin, b: Body) {
   const c = await coordinatorOf(String(b.organization_id || ''), b.id);
   if (!c) throw new Fail('لا يوجد مطّلع بهذا التحديد في الجهة', 404);
   return dashboardFor(c);
+}
+
+// ── خريطة رحلة الجهة للإدارة، وجاهزية دفعتها ──
+// الخريطة هي نفسها التي تراها بوابة الجهة (dashboardFor ثم journeyMap)، بالأسماء وما ينقص كل شخص: مصدر واحد بلا عدّ ثانٍ.
+// والجاهزية (cohortSetup) من حقول الدفعة نفسها: المستشار، والمدة، والجدول، والجلسات.
+export async function adminJourney(a: Admin, b: Body) {
+  const orgId = String(b.organization_id || '');
+  const [d, cohorts, enr, people] = await Promise.all([
+    dashboardFor({ id: null, organization_id: orgId, permissions: { list: true, activity: true, export: false, team: false }, template: null }) as Promise<any>,
+    db.from('cohorts').select('*'),
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+    db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
+  ]);
+  const cohort: any = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: orgId }).cohort;
+  const own = cohort && cohort.organization_id === orgId ? cohort : null;
+  let setup: any[] = [];
+  if (own) {
+    const [adv, team, sessions] = await Promise.all([
+      own.advisor_expert_id ? db.from('experts').select('full_name').eq('id', own.advisor_expert_id).maybeSingle() : Promise.resolve({ data: null }),
+      db.from('cohort_experts').select('expert_id', { count: 'exact', head: true }).eq('cohort_id', own.id),
+      db.from('workshop_sessions').select('id', { count: 'exact', head: true }).eq('cohort_id', own.id).gte('starts_at', new Date().toISOString()),
+    ]);
+    setup = cohortSetup({
+      cohort: own, advisorName: (adv as any).data?.full_name || null, teamCount: (team as any).count || 0,
+      members: memberCounts(people.data || [], enr.data || [], cohorts.data || [])[own.id] || 0, upcomingSessions: (sessions as any).count || 0,
+    });
+  }
+  await audit('admin', a.email, 'admin.org-journey', 'organizations', orgId);
+  return {
+    success: true, journey_map: d.journey_map || null,
+    cohort: own ? { id: own.id, name: own.name, status: own.status } : null,
+    setup, setup_missing: setupMissing(setup),
+  };
 }
 
 // ── 5. الملخص الأسبوعي (من cron.reminders) ──

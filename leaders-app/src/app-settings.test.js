@@ -20,7 +20,7 @@ describe('التعريف والقيم الافتراضية', () => {
     expect(DEFAULTS.feedback360.scale_labels).toHaveLength(5);
   });
   it('حدود الزمن الافتراضية هي قرارات المالك السابقة نفسها', () => {
-    expect(DEFAULTS.answer_review).toEqual({ idle_seconds: 300, fast_ratio: 0.3, fast_min_sample: 3, fast_floor_choice: 3, fast_floor_likert: 1.5 });
+    expect(DEFAULTS.answer_review).toEqual({ idle_seconds: 300, fast_ratio: 0.3, fast_min_sample: 3, fast_floor_choice: 3, fast_floor_likert: 1.5, effort_floor_choice: 5, effort_floor_likert: 2, effort_low_share: 0.25 });
     expect(IDLE_SECONDS).toBe(300);
     expect(FAST_FLOOR_SECONDS).toEqual({ choice: 3, likert: 1.5 });
   });

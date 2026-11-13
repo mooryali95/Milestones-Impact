@@ -13,6 +13,7 @@ import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 import OrgTeam from './OrgTeam.jsx';
+import OrgJourney from './OrgJourney.jsx';
 
 
 export function Funnel({ f, big }) {
@@ -273,6 +274,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
+      {!isNone && <OrgJourney key={`journey-${o.id}`} orgId={o.id} />}
       {!isNone && <OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} />}
       {!isNone && <CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
 

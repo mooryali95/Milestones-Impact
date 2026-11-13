@@ -359,6 +359,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.coordinator-revoke': C.adminRevokeSessions,
   'admin.coordinator-remove': (a, b) => A.superWriter(a, C.adminRemove, b),
   'admin.coordinator-preview': C.adminPreview,
+  'admin.org-journey': C.adminJourney,
   'admin.book-preview': (_a, b) => A.bookPreview(b),
   'admin.submissions': (_a, b) => A.submissions(b),
   'admin.submission': (_a, b) => A.submission(b),

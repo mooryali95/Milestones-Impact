@@ -269,6 +269,17 @@ export async function participants(b: Body) {
   return { success: true, participants: rows.map((r) => ({ ...r, onboarding: onboardingOf(r, progress[r.id] || null) })) };
 }
 
+// مؤشر الجهد لقياس مُسلَّم: الأسئلة والإجابات نفسها التي تقرؤها مراجعة الإجابات، بلا تسجيل فتح (لا يعرض إجابة)
+async function effortFor(a: { id: string; instrument_id?: string; started_at?: string | null; submitted_at?: string | null }) {
+  const row = a.instrument_id ? a : must(await db.from('assessments').select('id, instrument_id, started_at, submitted_at').eq('id', a.id).maybeSingle()) as any;
+  if (!row) return null;
+  const [qs, rows] = await Promise.all([
+    db.from('questions').select('id, code, dimension, tier, kind, options, sort, retro, form').eq('instrument_id', row.instrument_id),
+    db.from('assessment_answers').select('question_id, value, score, answered_at').eq('assessment_id', row.id),
+  ]);
+  return reviewAnswers({ questions: qs.data || [], rows: rows.data || [], startedAt: row.started_at, submittedAt: row.submitted_at, timing: (await appSettings()).answer_review }).effort;
+}
+
 // القياس المبدئي الأحدث غير الملغى لكل مشارك: حالته وكم أجاب من كم (بصيغته)، وآخر حفظ لإجابة.
 // قراءتان ثابتتان مهما كثر المشاركون: القياسات بعدّ إجاباتها، وأسئلة الأدوات المعنية.
 export async function baselineProgress(ids: string[]) {
@@ -343,13 +354,16 @@ export async function participant(b: Body) {
   const labGroups: Record<string, any[]> = {};
   for (const a of labTries || []) (labGroups[a.item_id] ||= []).push(a);
   const labs = Object.entries(labGroups).map(([item_id, list]) => ({ item_id, title: list[0]?.lab_items?.title_ar || '', dimension: list[0]?.lab_items?.dimension || null, ...labSummary(list, list[0]?.lab_items?.spec) }));
+  // مؤشر الجهد لآخر قياس مبدئي مُسلَّم: من مراجعة الإجابات نفسها (reviewAnswers)، يظهر في بطاقة المستوى قبل الاعتماد
+  const lastBase: any = (results.data || []).find((x: any) => x.status === 'submitted' && x.instruments?.kind === 'baseline');
+  const effort = lastBase ? await effortFor(lastBase) : null;
   // أين توقف قبل الاعتماد: الملف ثم القياس (كم أجاب من كم، وآخر حفظ)، من المصدر نفسه الذي تقرؤه القائمة
   const prog = (await baselineProgress([p.id]))[p.id] || null;
   const lastAnswer = prog && prog.status === 'in_progress' && prog.answered
     ? (await db.from('assessment_answers').select('answered_at').eq('assessment_id', prog.id).order('answered_at', { ascending: false }).limit(1)).data?.[0]?.answered_at || null
     : null;
   return {
-    success: true, participant: p, onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
+    success: true, participant: p, effort, onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     placement_model: model || DEFAULT_MODEL,   // حدود مقياس المؤشر في بطاقة المستوى (للعرض وحده)

@@ -427,7 +427,7 @@ function Person({ id, canWrite, onBack }) {
           )}
         </section>
 
-        <LevelCard prof={prof} latest={latest} model={r.placement_model} canWrite={canWrite} levels={levels} setLevels={setLevels}
+        <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
           notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} onAnswers={canWrite ? openAnswers : null} />
         {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       </div>
