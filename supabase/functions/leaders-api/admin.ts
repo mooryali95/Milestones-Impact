@@ -7,7 +7,7 @@ import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stu
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
-import { DIM_AR, RUBRIC_SCALE } from './labels.js';
+import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
@@ -21,6 +21,7 @@ import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
+import { inboxOf } from './inbox.js';
 import * as OB from './observations.ts';
 import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from './notice-rules.js';
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
@@ -499,6 +500,41 @@ export async function reviews(b: Body = {}) {
   const { data: waiting } = await scopeOrg(db.from('participants').select('id, full_name, email, organization_name, updated_at')
     .eq('status', 'pending_approval').eq('is_demo', false), b.org).order('updated_at', { ascending: true }).limit(200);
   return { success: true, submitted: rows, pending_approval: waiting || [] };
+}
+
+// ── صندوق «ينتظرني»: كل ما ينتظر قرار الإدارة من جداوله، في قائمة واحدة بعمره (inbox.js) ──
+// قراءات متوازية، وتعذّر مصدر واحد لا يُسقط الصندوق: يظهر الباقي ويُسمّى المتعذّر في skipped.
+export async function inbox(_b: Body = {}) {
+  const P = 'participants!inner(full_name, is_demo)';
+  const q = {
+    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).limit(200),
+    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
+    model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
+    capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
+    expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(100),
+    expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(100),
+    sponsor: db.from('sponsor_requests').select(`id, participant_id, kind, created_at, ${P}`).eq('status', 'pending').limit(100),
+    erasure: db.from('erasure_requests').select(`id, participant_id, created_at, ${P}`).eq('status', 'pending').limit(100),
+    coaching_confirm: db.from('coaching_sessions').select(`id, participant_id, starts_at, ends_at, ${P}`).eq('status', 'booked').lt('ends_at', new Date().toISOString()).limit(100),
+  };
+  const keys = Object.keys(q) as (keyof typeof q)[];
+  const res = await Promise.all(keys.map((k) => q[k]));
+  const rows: Record<string, any[]> = {}, skipped: string[] = [];
+  keys.forEach((k, i) => { if (res[i].error) skipped.push(k); rows[k] = (res[i].data || []) as any[]; });
+  const name = (r: any) => r.participants?.full_name || '';
+  const src = {
+    approval: rows.approval.map((r) => ({ id: r.id, participant_id: r.id, title: r.full_name, sub: r.organization_name || '', at: r.updated_at })),
+    requirement: rows.requirement.map((r) => ({ id: `${r.participant_id}:${r.requirement_id}`, participant_id: r.participant_id, title: name(r), sub: r.stage_requirements?.title_ar || '', at: r.completed_at })),
+    model: rows.model.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.learning_models?.title_ar || '', at: r.submitted_at })),
+    // وثيقة المبادرة مفتاحها المشارك، وصفحتها في تبويب مشاريع التخرج بمعرّفه
+    capstone: rows.capstone.map((r) => ({ id: r.participant_id, title: name(r), sub: 'وثيقة المبادرة', at: r.submitted_at })),
+    expert_application: rows.expert_application.map((r) => ({ id: r.id, title: r.full_name, sub: r.title || '', at: r.created_at })),
+    expert_unmatched: rows.expert_unmatched.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: expertRoleAr(r.role), at: r.created_at })),
+    sponsor: rows.sponsor.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.kind === 'contract' ? 'خارج مدة العقد' : 'المقاعد ممتلئة', at: r.created_at })),
+    erasure: rows.erasure.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'مهلته 30 يومًا', at: r.created_at })),
+    coaching_confirm: rows.coaching_confirm.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'حضر أم لم يحضر؟', at: r.ends_at || r.starts_at })),
+  };
+  return { success: true, ...inboxOf(src), skipped };
 }
 
 // الملفات الخاصة (السيرة والأدلة): للمدير وحده لا للمراقب، بمسار على شكل مسارات الرفع يبدأ بمعرّف

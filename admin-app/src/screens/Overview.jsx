@@ -3,6 +3,7 @@
 // والمستوى العام، والجهات، والقياس القبلي والبعدي، والكتاب والنماذج
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
+import Inbox from './Inbox.jsx';
 import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date } from '../leaders.js';
 import { LVLS } from '../methodology.js';
 import { Spinner, useUI } from '../ui.jsx';
@@ -191,25 +192,8 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       </div>
 
       <div className="la-grid2">
-        <section className="la-card">
-          <h3>ينتظر قرارك</h3>
-          {!waiting.length && !bk?.to_review && !pending?.contacts ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
-            <ul className="la-queue">
-              {(r.pending_approval || []).map((p) => (
-                <li key={`a${p.id}`}><button className="la-link" onClick={() => onPerson(p.id)}>{p.full_name}</button><span className="la-chip warn">اعتماد المسار</span><small>{p.organization_name || ''}</small></li>
-              ))}
-              {(r.submitted || []).length > 0 && (
-                <li><button className="la-link" onClick={() => document.getElementById('rq')?.scrollIntoView({ behavior: 'smooth' })}>متطلبات مرسلة للمراجعة</button><span className="la-chip">تحت</span><b>{r.submitted.length}</b></li>
-              )}
-              {pending?.contacts ? (
-                <li><a className="la-link" href="#/contacts">طلبات تواصل جديدة</a><span className="la-chip">الموقع</span><b>{pending.contacts}</b></li>
-              ) : null}
-              {bk?.to_review ? (
-                <li><button className="la-link" onClick={() => onTab?.('handbook')}>نماذج تعليمية مُرسلة</button><span className="la-chip warn">تقييم</span><b>{bk.to_review}</b></li>
-              ) : null}
-            </ul>
-          )}
-        </section>
+        {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox): كان هنا أربعة أنواع والباقي موزع على شاشاته */}
+        <Inbox contacts={pending?.contacts || 0} />
         <section className="la-card">
           <div className="la-row between"><h3>المستوى العام</h3><span className="la-muted">{placed} مُسكَّن</span></div>
           {o.overall ? (

@@ -34,6 +34,10 @@ async function setup(page) {
       'admin.catalog': catalog,
       'admin.overview': { success: true, total: 5, by_status: { pending_approval: 2, enrolled: 1 }, pending_reviews: 1, matrix: { milestone: { beginner: 3, intermediate: 1, advanced: 1 }, impact: { beginner: 5, intermediate: 0, advanced: 0 }, leadership: { beginner: 2, intermediate: 2, advanced: 1 } }, funnel: { registered: 5, profiled: 4, assessed: 3, approved: 1, completed: 0 }, tracks_used: 1, top_tracks: [{ key: 'M1I1L2', title: 'مسار البداية', n: 3 }] },
       'admin.reviews': { success: true, pending_approval: [{ id: 'p1', full_name: 'سارة الأحمد' }], submitted: [] },
+      // صندوق «ينتظرني» (admin.inbox): اعتماد ونموذج، بعمرهما ووجهتهما
+      'admin.inbox': { success: true, total: 2, late: 1, skipped: [], counts: { approval: 1, model: 1 }, items: [
+        { kind: 'approval', kind_ar: 'اعتماد مسار', id: 'p1', title: 'سارة الأحمد', sub: 'وزارة التجربة', at: '2026-11-01', days: 12, late: true, to: { tab: 'participants', id: 'p1' } },
+        { kind: 'model', kind_ar: 'نموذج للتقييم', id: 'm1', title: 'خالد العتيبي', sub: 'سجل المخاطر', at: '2026-11-12', days: 1, late: false, to: { tab: 'participants', id: 'p2' } }] },
       'admin.track': { success: true, track: { key: 'M1I1L2', title_ar: 'مسار البداية', summary_ar: 'لمن يبدأ', focus_ar: '1. المعالم\n2. الأثر' }, participants: [{ id: 'p1', full_name: 'سارة الأحمد', email: 's@x.com', status: 'enrolled', approved: true }], handbook: [{ id: 'h1', dimension: 'milestone', title: 'باب', md: '## عنوان\n- بند **مهم**\n@chain سلسلة' }], levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' } },
       'admin.save': { success: true }, 'admin.reorder': { success: true }, 'admin.delete': { success: true },
     };
@@ -78,7 +82,13 @@ test('نظرة عامة: المستوى العام والجهات والقياس
   await expect(page.getByRole('heading', { name: 'المستوى العام' })).toBeVisible();
   await expect(page.getByText('baseline-v2')).toBeVisible();
   await expect(page.locator('.la-impact td.up')).toHaveText('+15');
-  await expect(page.getByRole('button', { name: 'نماذج تعليمية مُرسلة' })).toBeVisible();
+  // الصندوق الواحد: النموذج المنتظر بنوعه وعمره، والمتأخر عن مهلته معلَّم، والرقاقة تفلتر بالنوع
+  const inbox = page.locator('.inbox');
+  await expect(inbox.getByRole('heading')).toContainText('2، منها 1 تجاوزت مهلتها');
+  await expect(inbox.locator('li.late')).toContainText('سارة الأحمد');
+  await inbox.getByRole('button', { name: /نموذج للتقييم/ }).click();
+  await expect(inbox.locator('.inbox-list li')).toHaveCount(1);
+  await expect(inbox.locator('.inbox-list li')).toContainText('سجل المخاطر');
   await expect(page.getByRole('button', { name: 'سفراء' })).toBeVisible();
 });
 

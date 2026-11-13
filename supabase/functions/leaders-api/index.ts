@@ -345,6 +345,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.create-participant': A.createParticipant,
   'admin.participants-import': A.participantsImport,
   'admin.participant-save': A.participantSave,
+  'admin.inbox': (_a, b) => A.inbox(b),
   'admin.remind-stuck': A.remindStuck,
   'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),
   'admin.observation-remove': (a, b) => A.writer(a, OB.adminRemove, b),

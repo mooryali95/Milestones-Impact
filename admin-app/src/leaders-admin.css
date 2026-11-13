@@ -903,3 +903,14 @@
 .cv-sees li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .cv-sees li.ok > span { color: var(--st-ok); font-weight: 700; }
 .cv-sees li.off { color: var(--ink-soft); }
+
+/* صندوق «ينتظرني» (Inbox.jsx) */
+.inbox-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.inbox-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.inbox-list li:last-child { border-bottom: 0; }
+.inbox-age { margin-inline-start: auto; color: var(--ink-soft); white-space: nowrap; }
+.inbox-list li.late .inbox-age { color: var(--st-warn-text); font-weight: 700; }
+
+/* فهرس ملف المشارك: ينقل إلى القسم، ويلتف على الجوال */
+.pf-index { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.inbox-contacts { margin: 10px 0 0; }
