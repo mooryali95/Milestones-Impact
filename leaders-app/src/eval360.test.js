@@ -109,7 +109,7 @@ describe('المرحلة 1: نموذج المقيّم', () => {
   it('الترحيل متسامح، ويعلّم المعكوسة والمشهودة، ولا يمس ما حرّرته الإدارة، وإعادته آمنة', async () => {
     const NAME = '20261111130000_leaders_feedback360_rater_form';
     const SQL = read(`supabase/migrations/${NAME}.sql`);
-    expect(gateOf(SQL, NAME).gate).toBe('tolerant');
+    expect(gateOf(SQL, NAME).gate).toBe('blocking');   // في بيان البصمات منذ تطبيقه 2026-11-13
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create table leaders.questions (id text primary key, code text, tier text);
@@ -218,7 +218,7 @@ describe('المرحلة 2: الدورة والمجموعات', async () => {
   it('الترحيل: الدورة والقيود وتفرد المقيّم بدورته، وإعادته آمنة', async () => {
     const NAME = '20261111130200_leaders_feedback_cycles';
     const SQL = read(`supabase/migrations/${NAME}.sql`);
-    expect(gateOf(SQL, NAME).gate).toBe('tolerant');
+    expect(gateOf(SQL, NAME).gate).toBe('blocking');   // في بيان البصمات منذ تطبيقه 2026-11-13
     const db = new PGlite();
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create role anon; create role authenticated;
