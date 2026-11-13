@@ -45,7 +45,13 @@ test('تقرير الجهة يفتح وثيقة بالهوية: الشعار و�
 
 test('تصدير المشاركين ملف xlsx حقيقي من اليمين لليسار بالترويسة وحقوق النشر', async ({ page }) => {
   await admin(page);
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'تصدير Excel' }).click()]);
+  // الزر الموحد يسأل ماذا يُصدَّر وأي أعمدة، ثم يخرج الملف
+  await page.getByRole('button', { name: 'تصدير Excel' }).click();
+  const box = page.getByRole('dialog', { name: 'تصدير Excel' });
+  await expect(box.getByRole('checkbox', { name: 'البريد' })).toBeChecked();
+  await box.getByRole('checkbox', { name: 'الجوال' }).uncheck();
+  const [dl] = await Promise.all([page.waitForEvent('download'), box.getByRole('button', { name: /^صدّر/ }).click()]);
+  await expect(box).toBeHidden();
   expect(dl.suggestedFilename()).toMatch(/^Milestone-Impact_Participants_\d{4}-\d{2}-\d{2}\.xlsx$/);
   const path = await dl.path();
   expect(readFileSync(path).subarray(0, 2).toString()).toBe('PK');
@@ -56,4 +62,9 @@ test('تصدير المشاركين ملف xlsx حقيقي من اليمين ل�
   expect(shared).toContain('MILESTONE IMPACT');
   expect(shared).toContain('سارة الأحمد');
   expect(shared).toContain('جميع الحقوق محفوظة');
+  expect(shared).toContain('البريد');
+  expect(shared).not.toContain('الجوال');   // العمود الذي أُزيل لا يخرج في الملف
+  // الاختيار يُحفظ لهذه القائمة
+  await page.getByRole('button', { name: 'تصدير Excel' }).click();
+  await expect(page.getByRole('dialog', { name: 'تصدير Excel' }).getByRole('checkbox', { name: 'الجوال' })).not.toBeChecked();
 });

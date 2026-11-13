@@ -48,19 +48,6 @@ export const validCampaign = (c) => /^[a-z0-9_-]{1,40}$/.test(c);
 export const orgColor = (o) => o?.color || BRAND.gold;
 export const domainsOf = (o) => (Array.isArray(o?.domains) ? o.domains : []);
 
-// تصدير CSV بترميز يفتحه Excel بالعربية
-export function csvText(head, rows) {
-  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return '\ufeff' + [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
-}
-export const csvBlob = (head, rows) => new Blob([csvText(head, rows)], { type: 'text/csv;charset=utf-8' });
-export function download(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
 
 export function filterPeople(list, { q = '', track = '' }) {
   const s = q.trim().toLowerCase();

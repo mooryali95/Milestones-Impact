@@ -305,3 +305,38 @@ test('عاين بعين الخبير: ما يُرى وما حُجب عن الم�
   await expect(dlg).toContainText('ما يحق له فعله: القراءة فقط.');
   expect(calls.filter((c) => c.action === 'admin.preview-as').map((c) => c.as)).toEqual(['advisor', 'assigned']);
 });
+
+test('الإجراءات الجماعية: تغيير الحالة بسبب مكتوب والإلحاق بدفعة بطلب واحد، وتصدير المحدد وحده', async ({ page }) => {
+  const calls = await setup(page, {
+    'admin.status': { success: true, done: 2, skipped: 0 },
+    'admin.programs': { success: true, programs: [], cohorts: [{ id: 'c1', name: 'دفعة الخريف', status: 'open', is_default: false }] },
+    'admin.cohort-enroll': { success: true, enrolled: 2 },
+  });
+  await page.getByLabel('تحديد الكل').check();
+  // الإيقاف بلا سبب لا يُرسل
+  await page.getByLabel('تغيير حالة المحددين').selectOption('suspended');
+  await page.getByRole('button', { name: 'غيّر الحالة' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تغيير الحالة' }).click();
+  const ask = page.getByRole('dialog');
+  await ask.getByRole('textbox').fill('مخالفة ميثاق البرنامج بعد تنبيهين مكتوبين');
+  await ask.getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.status')).toMatchObject({ participant_ids: ['p1', 'p2'], status: 'suspended', reason: 'مخالفة ميثاق البرنامج بعد تنبيهين مكتوبين' });
+  expect(calls.filter((c) => c.action === 'admin.status')).toHaveLength(1);
+  // القائمة تُعاد بعد التغيير ويُلغى التحديد: ننتظر ذلك قبل تحديد جديد
+  await expect(page.getByText('غُيّرت حالة 2')).toBeVisible();
+  await expect(page.getByLabel('تحديد Omar Ali')).not.toBeChecked();
+  // الإلحاق بدفعة
+  await page.getByLabel('تحديد Omar Ali').check();
+  await page.getByLabel('إلحاق المحددين بدفعة').selectOption('c1');
+  await page.getByRole('button', { name: 'ألحقهم' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-enroll')).toMatchObject({ cohort_id: 'c1', participant_ids: ['p2'] });
+  // التصدير يعرض «المحدد» أولًا حين يُحدَّد شيء
+  await page.getByLabel('تحديد سارة الأحمد').check();
+  await page.getByRole('button', { name: /تصدير Excel \(1 محدد\)/ }).click();
+  const box = page.getByRole('dialog', { name: 'تصدير Excel' });
+  await expect(box.getByRole('radio', { name: /المحدد/ })).toBeChecked();
+  await expect(box.getByRole('button', { name: 'صدّر 1 مشارك' })).toBeEnabled();
+  await box.getByRole('button', { name: 'لا شيء' }).click();
+  await expect(box.getByRole('button', { name: /^صدّر/ })).toBeDisabled();
+});

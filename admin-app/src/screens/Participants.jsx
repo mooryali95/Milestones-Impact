@@ -9,6 +9,7 @@ import {
   date, dayMonth, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Spinner, useUI, Empty } from '../ui.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { Submission } from './Handbook.jsx';
@@ -21,6 +22,9 @@ import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
 import { PreviewAs } from './CohortVisibility.jsx';
 import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
+
+// حد الإجراء الجماعي (يطابق BULK_MAX في admin.ts، والخادم هو الحكم)
+const BULK_MAX = 50;
 import { FileExtras, FileFlags, FileIndex, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
@@ -77,7 +81,7 @@ export function Where({ o }) {
 }
 
 function List({ orgs, canWrite, onOpen, initialStatus }) {
-  const { toast, confirm } = useUI();
+  const { toast, confirm, prompt } = useUI();
   const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {}, { scope: 'participants' });
   const [list, setList] = useState(null);
   const [error, setError] = useState('');
@@ -154,18 +158,49 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(`طُلبت الإعادة من ${r.done}${r.skipped ? `، وتُخطّي ${r.skipped}` : ''}`);
     setPicked(new Set()); load();
   };
-  const exportCsv = async () => {
-    const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['أين توقف', 18], ['المتبقي', 40], ['جدية الإجابة', 16], ['طلب الإعادة', 16], ['التسجيل', 16], ['آخر دخول', 16]];
-    const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
-    await exportWorkbook(
-      { kind: 'PPL', title: 'مشاركو برنامج القادة', subtitle: shown.length === all.length ? 'كل المشاركين' : `${shown.length} من ${all.length} حسب الفلاتر`, sheet: 'المشاركون', file: 'Participants' },
-      head.map(([label, width]) => ({ label, width })),
-      shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
-        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, p.onboarding?.label || '', p.onboarding?.remaining || '', EFFORT_AR[p.effort?.level] || '', p.retake ? date(p.retake.requested_at) : '', date(p.created_at), date(p.last_login_at)]),
-    );
-    toast(`صُدّر ${shown.length} مشارك`);
+  // أعمدة التصدير: تعريف واحد، والزر الموحد يسأل ماذا يُصدَّر وأي أعمدة
+  const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
+  // تغيير الحالة والإلحاق بدفعة للمحددين: الإجراءان نفساهما اللذان في ملف المشارك (admin.status و admin.cohort-enroll)، بطلب واحد
+  const [statusTo, setStatusTo] = useState('');
+  const [cohortTo, setCohortTo] = useState('');
+  const [cohorts, setCohorts] = useState([]);
+  useEffect(() => { if (canWrite) L('admin.programs', {}).then((x) => setCohorts(x.success ? (x.cohorts || []).filter((c) => !c.is_default && c.status !== 'closed') : [])); }, [canWrite]);
+  const bulkStatus = async () => {
+    if (!statusTo) return toast('اختر الحالة');
+    if (picked.size > BULK_MAX) return toast(`الحد ${BULK_MAX} مشاركًا في المرة الواحدة`);
+    if (!(await confirm(`تغيير حالة ${picked.size} مشارك إلى «${STATUS[statusTo]}»؟`, { danger: statusNeedsReason(statusTo), ok: 'تغيير الحالة' }))) return;
+    let reason;
+    if (statusNeedsReason(statusTo)) {
+      reason = await prompt(`سبب الإيقاف أو الانسحاب (يُحفظ في ملف كل واحد من الـ${picked.size} ويُبلَّغ به بالبريد):`);
+      if (reason === null) return;
+      if (String(reason).trim().length < STATUS_REASON_MIN) return toast('اكتب السبب بوضوح');
+    }
+    const r = await L('admin.status', { participant_ids: [...picked], status: statusTo, ...(reason ? { reason } : {}) });
+    if (!r.success) return toast(r.message);
+    toast(`غُيّرت حالة ${r.done ?? picked.size}${r.skipped ? `، وتُخطّي ${r.skipped} على الحالة نفسها` : ''}`);
+    setPicked(new Set()); setStatusTo(''); load(serverQ);
   };
+  const bulkEnroll = async () => {
+    const c = cohorts.find((x) => x.id === cohortTo);
+    if (!c) return toast('اختر الدفعة');
+    if (!(await confirm(`إلحاق ${picked.size} مشارك بدفعة «${c.name}»؟ من كان مسجّلًا صراحةً في دفعة أخرى يُسحب منها.`))) return;
+    const r = await L('admin.cohort-enroll', { cohort_id: c.id, participant_ids: [...picked] });
+    toast(r.success ? `أُلحق ${r.enrolled} مشارك بدفعة «${c.name}»` : r.message);
+    if (r.success) { setPicked(new Set()); setCohortTo(''); }
+  };
+  const exportCols = [
+    { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
+    { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
+    { key: 'org', label: 'الجهة', width: 24, get: (p) => orgOf(p)?.name || p.organization_name },
+    { key: 'years', label: 'سنوات الخبرة', width: 12, get: (p) => p.years_experience },
+    ...DIMS.map((d) => ({ key: `lvl_${d}`, label: DIM_EN[d], width: 12, get: (p) => lv(p, d) })),
+    { key: 'track', label: 'المسار', width: 10, get: (p) => trackOfPlacements(p.placements) },
+    { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status },
+    { key: 'step', label: 'أين توقف', width: 18, get: (p) => p.onboarding?.label }, { key: 'remaining', label: 'المتبقي', width: 40, get: (p) => p.onboarding?.remaining },
+    { key: 'effort', label: 'جدية الإجابة', width: 16, get: (p) => EFFORT_AR[p.effort?.level] },
+    { key: 'retake', label: 'طلب الإعادة', width: 16, get: (p) => (p.retake ? date(p.retake.requested_at) : '') },
+    { key: 'joined', label: 'التسجيل', width: 16, get: (p) => date(p.created_at) }, { key: 'seen', label: 'آخر دخول', width: 16, get: (p) => date(p.last_login_at) },
+  ];
 
   return (
     <>
@@ -173,7 +208,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         shown={shown.length} total={all.length} noun="مشارك" placeholder="ابحث بالاسم أو البريد أو الجوال أو الجهة"
         capped={cap ? { limit: cap, onSearch: (q) => load(q) } : null}
         actions={<>
-          <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel{shown.length !== all.length ? ` (${shown.length})` : ''}</button>
+          <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
+            all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
@@ -193,6 +229,16 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <span><b>{picked.size}</b> محدد</span>
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
+          <select className="filter-select" aria-label="تغيير حالة المحددين" value={statusTo} onChange={(e) => setStatusTo(e.target.value)}>
+            <option value="">تغيير الحالة إلى…</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <button className="btn-sm ghost" onClick={bulkStatus} disabled={!statusTo}>غيّر الحالة</button>
+          {cohorts.length > 0 && <>
+            <select className="filter-select" aria-label="إلحاق المحددين بدفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
+              <option value="">إلحاق بدفعة…</option>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo}>ألحقهم</button>
+          </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
           {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>

@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -105,6 +106,13 @@ const REQ_PRESETS = [
   { key: 'unmatched', label: 'بلا خبير', test: (x) => x.status === 'unmatched' },
 ];
 const REQ_FIELDS = [{ key: 'role', label: 'الخدمات', get: (x) => x.role, options: Object.entries(EXPERT_ROLE_AR).map(([k, [l]]) => [k, l]) }];
+const REQ_COLS = [
+  { key: 'who', label: 'المشارك', width: 26, get: (x) => x.participants?.full_name }, { key: 'email', label: 'البريد', width: 30, get: (x) => x.participants?.email },
+  { key: 'role', label: 'الخدمة', width: 18, get: (x) => roleAr(x.role) }, { key: 'dim', label: 'البُعد', width: 14, get: (x) => DIM_AR[x.dimension] },
+  { key: 'expert', label: 'الخبير', width: 26, get: (x) => x.experts?.full_name }, { key: 'score', label: 'درجة المطابقة', width: 12, get: (x) => x.score },
+  { key: 'status', label: 'الحالة', width: 18, get: (x) => EXPERT_REQUEST_STATUS[x.status] }, { key: 'manual', label: 'سبب الإسناد اليدوي', width: 30, get: (x) => x.manual_reason },
+  { key: 'at', label: 'التاريخ', width: 16, get: (x) => date(x.created_at) },
+];
 const REQ_SORTS = { who: (x) => x.participants?.full_name, role: (x) => roleAr(x.role), expert: (x) => x.experts?.full_name, status: (x) => EXPERT_REQUEST_STATUS[x.status] };
 export function RequestsBoard({ canWrite, onPerson }) {
   const { toast, prompt } = useUI();
@@ -128,7 +136,8 @@ export function RequestsBoard({ canWrite, onPerson }) {
     <section className="la-card xm-board">
       <h3>طلبات الإسناد</h3>
       <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS)}
-        shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null} />
+        shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null}
+        actions={<ExportButton scope="expert-requests" meta={{ kind: 'REQ', title: 'طلبات إسناد الخبراء', sheet: 'الطلبات', file: 'Expert-Requests' }} columns={REQ_COLS} all={all} filtered={rows} noun="طلب" />} />
       {!rows.length ? <p className="la-muted">{all.length ? 'لا طلبات لهذه الفلاتر.' : 'لا طلبات هنا. أسند خبيرًا من ملف أي مشارك.'}</p> : (
         <div className="table-wrap"><table className="data-table la-cards">
           <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="role" state={f} set={setF}>الخدمة</SortTh><SortTh k="expert" state={f} set={setF}>الخبير</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>

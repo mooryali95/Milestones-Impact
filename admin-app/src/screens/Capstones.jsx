@@ -11,6 +11,7 @@ import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/function
 import { LEVEL_AR, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
@@ -175,6 +176,13 @@ function Detail({ id, canWrite, onBack, onPerson }) {
 
 // الوثائق كلها مرة واحدة والفلترة في المتصفح (شريط الفلترة الموحد)، وتبدأ بما ينتظر القرار
 const CAP_PRESETS = FILTERS.map(([k, l]) => ({ key: k, label: l, test: (x) => x.status === k }));
+const CAP_COLS = [
+  { key: 'name', label: 'المبادرة', width: 34, get: (x) => x.initiative }, { key: 'lead', label: 'القائد', width: 26, get: (x) => x.full_name },
+  { key: 'org', label: 'الجهة', width: 24, get: (x) => x.organization }, { key: 'scope', label: 'النوع', width: 10, get: (x) => SCOPE[x.scope] },
+  { key: 'status', label: 'الحالة', width: 18, get: (x) => STATUS[x.status] }, { key: 'sponsor', label: 'الراعي', width: 16, get: (x) => SPONSOR[x.sponsor_status] },
+  { key: 'ready', label: 'الجاهزية %', width: 12, get: (x) => x.readiness }, { key: 'score', label: 'المعيار', width: 10, get: (x) => x.score },
+  { key: 'health', label: 'صحة التنفيذ', width: 16, get: (x) => x.tracking?.health_title }, { key: 'at', label: 'سُلّمت', width: 16, get: (x) => date(x.submitted_at) },
+];
 const CAP_SORTS = {
   name: (x) => x.initiative, lead: (x) => x.full_name, org: (x) => x.organization, scope: (x) => SCOPE[x.scope],
   status: (x) => STATUS[x.status], ready: (x) => x.readiness, score: (x) => x.score, at: (x) => x.submitted_at,
@@ -196,7 +204,8 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
       <h3>مشاريع التخرج: وثائق المبادرات</h3>
       <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتيب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
       {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
-        shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة" />}
+        shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة"
+        actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'مشاريع التخرج', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}
       {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact title={all.length ? 'لا وثائق لهذه الفلاتر' : 'لا وثائق بعد'} hint={all.length ? 'غيّر الحالة من الأعلى لترى ما هو قيد البناء أو المعتمد.' : 'تظهر هنا وثيقة كل قائد حين يبدأ بناءها.'} /> : (
         <table className="la-table">
           <thead><tr><SortTh k="name" state={f} set={setF}>المبادرة</SortTh><SortTh k="lead" state={f} set={setF}>القائد</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="scope" state={f} set={setF}>النوع</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="ready" state={f} set={setF}>الجاهزية</SortTh><SortTh k="score" state={f} set={setF}>المعيار</SortTh><SortTh k="at" state={f} set={setF}>سُلّمت</SortTh></tr></thead>

@@ -8,6 +8,7 @@ import { call } from '../api.js';
 import { date } from '../dates.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
+import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { buildProcs, PROC_COUNT } from '../../../src/lib/procs.js';
@@ -78,6 +79,12 @@ function Overview({ regs, procs, onOpen, onTab }) {
 }
 
 const REG_SORTS = { name: (r) => r.name, booked: (r) => booked(r), confirmed: (r) => confirmedOf(r), network: (r) => people(r).length, joined: (r) => r.registeredAt, status: (r) => STATUS_AR[statusOf(r)][0] };
+const REG_COLS = [
+  { key: 'name', label: 'الاسم', width: 26, get: (r) => r.name }, { key: 'email', label: 'البريد', width: 30, get: (r) => r.email }, { key: 'phone', label: 'الجوال', width: 16, get: (r) => r.phone },
+  { key: 'booked', label: 'بموعد', width: 10, get: (r) => booked(r) }, { key: 'confirmed', label: 'مؤكدة', width: 10, get: (r) => confirmedOf(r) }, { key: 'network', label: 'الشبكة', width: 10, get: (r) => people(r).length },
+  { key: 'status', label: 'الحالة', width: 18, get: (r) => STATUS_AR[statusOf(r)][0] }, { key: 'joined', label: 'التسجيل', width: 16, get: (r) => fmt(r.registeredAt) },
+  { key: 'submitted', label: 'التقديم', width: 16, get: (r) => (r.submittedAt ? fmt(r.submittedAt) : '') },
+];
 
 function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'joined', 'sort'], {}, { scope: 'matrix' });
@@ -90,12 +97,7 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
     <section className="la-card">
       <FilterBar scope="matrix" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
         shown={rows.length} total={regs.length} noun="تسجيل" placeholder="ابحث بالاسم أو البريد أو الجوال"
-        actions={<button className="refresh-btn" type="button" disabled={!rows.length} onClick={async () => {
-          const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-          await exportWorkbook({ kind: 'MTX', title: 'تسجيلات مصفوفة التأثير', subtitle: rows.length === regs.length ? 'كل التسجيلات' : `${rows.length} من ${regs.length} حسب الفلاتر`, sheet: 'التسجيلات', file: 'Impact-Matrix' },
-            [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['بموعد', 10], ['مؤكدة', 10], ['الشبكة', 10], ['الحالة', 18], ['التسجيل', 16], ['التقديم', 16]].map(([label, width]) => ({ label, width })),
-            rows.map((r) => [r.name, r.email, r.phone, booked(r), confirmedOf(r), people(r).length, STATUS_AR[statusOf(r)][0], fmt(r.registeredAt), r.submittedAt ? fmt(r.submittedAt) : '']));
-        }}>تصدير Excel{rows.length !== regs.length ? ` (${rows.length})` : ''}</button>} />
+        actions={<ExportButton scope="matrix" meta={{ kind: 'MTX', title: 'تسجيلات مصفوفة التأثير', sheet: 'التسجيلات', file: 'Impact-Matrix' }} columns={REG_COLS} all={regs} filtered={rows} noun="تسجيل" />} />
       <div className="table-wrap"><table className="data-table la-cards mx-table">
         <thead><tr><SortTh k="name" state={f} set={setF}>المسجّل</SortTh><SortTh k="booked" state={f} set={setF}>الإنجاز</SortTh><SortTh k="confirmed" state={f} set={setF}>التأكيد</SortTh><SortTh k="network" state={f} set={setF}>الشبكة</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
         <tbody>{rows.length ? rows.map((r) => {
