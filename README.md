@@ -1,6 +1,6 @@
 # Milestone Impact — مصفوفة التأثير وبرنامج القادة
 
-مستودع واحد يغذي خمس منصات، وخلفيتها Supabase (المشروع `eormhcupwgwpllhrfxxg`) بدوال حافة وترحيلات SQL كلها في المستودع. دليل التشغيل اليومي في `RUNBOOK.md`، والأسرار في `docs/SECRETS.md`، وسجل التسليم في `HANDOFF.md` و`docs/journey/`.
+مستودع واحد يغذي خمس منصات، وخلفيتها Supabase (المشروع `eormhcupwgwpllhrfxxg`) بدوال حافة وترحيلات SQL كلها في المستودع. دليل التشغيل اليومي في `RUNBOOK.md`، والأسرار في `docs/SECRETS.md`، وسجل التسليم والتدقيقات في المستودع الخاص `mooryali95/MI-private` (انظر `docs/README.md`).
 
 ## المنصات
 
