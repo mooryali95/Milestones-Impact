@@ -19,6 +19,25 @@ describe('server-sec-1: دخول لوحة الإدارة بمطابقة تامة
     expect(api.match(/const email = String\(body\.email \|\| ""\)\.trim\(\)\.toLowerCase\(\);/g).length).toBeGreaterThanOrEqual(3);
     expect(api).toContain('const newEmail = String(body.newEmail || "").trim().toLowerCase();');
     const isEmail = new Function(`${api.match(/const isEmail = [^\n]+/)[0].replace("(s: string)", "(s)")}; return isEmail;`)();
-    expect(isEmail('omar_x@outlook.com')).toBe(true);
+    expect(isEmail('first_last@example.com')).toBe(true);
+  });
+});
+
+// المستودع عام: لا بريد شخصي في الكود ولا في الترحيلات ولا في السكربتات (الاختبارات تستعمل عناوين وهمية وهي خارج الفحص)
+describe('لا بيانات شخصية في المصدر', () => {
+  it('لا عنوان بريد على نطاق شخصي في الدوال والترحيلات والسكربتات', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const root = join(__dirname, '../..');
+    const files = [];
+    const walk = (dir) => readdirSync(dir).forEach((n) => {
+      const f = join(dir, n);
+      if (statSync(f).isDirectory()) { if (!/node_modules|\.git$/.test(f)) walk(f); } else if (/\.(ts|js|mjs|sql|sh|toml|yml)$/.test(n) && !/(_test\.ts|\.test\.js)$/.test(n)) files.push(f);
+    });
+    ['supabase', 'scripts', '.github'].forEach((d) => walk(join(root, d)));
+    const personal = /[A-Za-z0-9._%+-]+@(gmail|hotmail|outlook|yahoo|icloud|live|msn)\.[a-z.]+/i;
+    // استثناءان معلَّلان: ترحيل مطبّق على الإنتاج لا تُغيَّر بايتاته (applied-manifest يرفض)، وسكربت التكامل الذي ينشئ الحساب الذي يشترطه ذلك الترحيل
+    const frozen = ['/supabase/migrations/20261022110000_multiple_owners.sql', '/scripts/integration/apply-migrations.sh'];
+    expect(files.filter((f) => personal.test(readFileSync(f, 'utf8'))).map((f) => f.replace(root, '')).filter((f) => !frozen.includes(f))).toEqual([]);
   });
 });
