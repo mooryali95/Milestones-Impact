@@ -193,7 +193,9 @@ export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, ca
   const printReport = async () => {
     const win = window.open('', '_blank');
     const [{ writeDocument }, { impactReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
-    const { meta, body } = impactReport(r, { org: org ? orgs.find((o) => o.id === org)?.name || null : null });
+    // الطبقة الثالثة (منافع المبادرات) من admin.outcomes بالنطاق نفسه؛ تعذّرها لا يمنع التقرير
+    const out = await L('admin.outcomes', org ? { organization_id: org } : {}).catch(() => null);
+    const { meta, body } = impactReport(r, { org: org ? orgs.find((o) => o.id === org)?.name || null : null, outcomes: out?.success ? out.totals : null });
     if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض التقرير');
   };
 

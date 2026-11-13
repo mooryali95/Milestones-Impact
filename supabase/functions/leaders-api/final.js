@@ -45,6 +45,12 @@ export const FINAL_DEFAULTS = {
   zero_after_end: ['project', 'post'],
   // فرق الدرجة النهائية عن الآلية (بتعديل المكوّنات أو الدرجة) يتجاوز هذا يحتاج توقيعين ولو كان الاعتماد بخبير واحد
   large_adjust: 15,
+  // درجة على هذه المسافة أو أقل من أي حد قرار تُعلَّم «قريبة من الحد» للخبير (معلومة، لا تغيّر المقترح). صفر يعطّلها.
+  // 3 قيمة أولية دون خطأ القياس المتوقع، وتُضبط على الخطأ المحسوب بعد الدفعة الأولى (خارطة آفاق القياس، البند 1)
+  near_cut: 3,
+  // أرضية مكوّن المشروع: دونها لا يُقترح «اجتاز» كاملًا بل «اجتاز بملاحظات»، فلا يعوّض الالتزامُ بالمواعيد وثيقةً ضعيفة.
+  // صفر = معطّلة (الافتراضي)، وتفعيلها قرار لجنة القياس في جلسة ضبط الحدود
+  project_floor: 0,
   // القياس النهائي: الطريقة ودرجات اتجاه المكسب ومحك الإتقان على الاختبار الموضوعي (K+S).
   // D06: في الدفعة الأولى الإتقان المحكّي بمحك مؤقت 70، والمكسب الفردي لا يدخل الدرجة بل يُعرض وصفًا
   measure: { mode: 'mastery', gain_scores: { up: 100, flat: 60, down: 20 }, mastery_cut: 70 },
@@ -85,6 +91,8 @@ export function finalConfig(raw) {
     fail_min_coverage: intIn(r.fail_min_coverage, FINAL_DEFAULTS.fail_min_coverage, 0, 100),
     zero_after_end: Array.isArray(r.zero_after_end) ? r.zero_after_end.filter((k) => Object.hasOwn(FINAL_COMPONENT_AR, k)) : [...FINAL_DEFAULTS.zero_after_end],
     large_adjust: intIn(r.large_adjust, FINAL_DEFAULTS.large_adjust, 1, 100),
+    near_cut: intIn(r.near_cut, FINAL_DEFAULTS.near_cut, 0, 20),
+    project_floor: intIn(r.project_floor, FINAL_DEFAULTS.project_floor, 0, 100),
     measure: { mode: Object.hasOwn(FINAL_MEASURE_AR, m.mode) ? m.mode : FINAL_DEFAULTS.measure.mode, gain_scores: gain, mastery_cut: intIn(m.mastery_cut, FINAL_DEFAULTS.measure.mastery_cut, 1, 100) },
     sources: Object.fromEntries(Object.entries(FINAL_DEFAULTS.sources).map(([k, d]) => [k, intIn(r.sources?.[k], d, 0, 10)])),
     min_events: intIn(r.min_events, FINAL_DEFAULTS.min_events, 1, 20),
@@ -213,6 +221,13 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   const evidence = rows.some((x) => ['project', 'post'].includes(x.key) && x.value != null && !x.zeroed && x.weight > 0);
   const fail_blocked = suggested === 'fail' && !(coverage >= cfg.fail_min_coverage && evidence);
   if (fail_blocked) suggested = 'extend';
+  // أرضية المشروع (إن فُعّلت): مشروع حاضر دونها ينزل «اجتاز» إلى «اجتاز بملاحظات»
+  const project = rows.find((x) => x.key === 'project');
+  const floor_capped = suggested === 'pass' && cfg.project_floor > 0 && project?.value != null && project.weight > 0 && project.value < cfg.project_floor;
+  if (floor_capped) suggested = 'pass_notes';
+  // قرب الدرجة من أي حد قرار: فرق أصغر من هامش الخطأ لا يحمل قرارًا آليًا وحده
+  const near = score == null || !(cfg.near_cut > 0) ? null
+    : Object.entries(cfg.thresholds).map(([k, t]) => ({ key: k, cut: t, gap: Math.abs(score - t) })).filter((x) => x.gap <= cfg.near_cut).sort((a, b) => a.gap - b.gap)[0] || null;
   const dec = adjust?.decision?.value && Object.hasOwn(FINAL_DECISION_AR, adjust.decision.value) ? adjust.decision.value : suggested;
   const missing = rows.filter((x) => x.value == null && x.weight > 0).map((x) => x.label);
   const zeroed = rows.filter((x) => x.zeroed).map((x) => x.label);
@@ -223,7 +238,7 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   return {
     components: rows.map((x) => ({ ...x, share: x.value != null && x.weight > 0 && wsum ? Math.round((x.weight / wsum) * 100) : 0 })),
     auto_score, formula_score, score, score_adjusted: score !== auto_score, coverage, missing, zeroed, ended,
-    suggested, fail_blocked, decision: dec, departs, large_adjust, failed,
+    suggested, fail_blocked, floor_capped, near_cut: near, decision: dec, departs, large_adjust, failed,
     notes_to_participant: adjust?.notes_to_participant || null,
     config: cfg, config_version: cfg.version,
   };

@@ -1,8 +1,9 @@
 /* ════════════════════════════════════════════════════════════════════
    ░░  مقياس جاهزية الأثر — Impact Readiness Assessment  ░░
    ════════════════════════════════════════════════════════════════════
-   - ١٢ سؤالاً موزعة على حلقات سلسلة الأثر الخمس
-   - نتيجة فورية: درجة كلية، ومستوى نضج، ومخطط للحلقات
+   - ١٥ عبارة: ثلاث لكل حلقة من حلقات سلسلة النتائج الخمس
+   - نتيجة فورية: درجة كلية، وقراءة أولية، ومخطط للحلقات
+   - العبارات والسلّم والحساب في assessment-core.js (يُحمَّل قبل هذا الملف، وله اختبار وحدة)
    - التقرير التفصيلي مقابل الاسم والجهة والبريد، يُرسل طلبًا عبر قناة الموقع
      الموحدة (window.MIContact في typeform.js: إجراء contact في send-otp)
    - طباعة التقرير أو حفظه PDF من المتصفح
@@ -16,72 +17,10 @@
     timeoutMs:      15000,
   };
 
-  // ──────────────────────────────────────────────
-  // سلسلة الأثر: الحلقات والأسئلة والتوصيات
-  // ──────────────────────────────────────────────
-  const LINKS = [
-    {
-      key: 'inputs', name: 'المدخلات', en: 'Inputs',
-      questions: [
-        'لكل مبادرة تكليفٌ موثّق يحدّد مالكها وغايتها والموارد المرصودة لها.',
-        'تُربط الميزانيات والموارد بأهداف أثرٍ محدّدة، لا بالبنود التشغيلية وحدها.',
-      ],
-      advice: 'ابدؤوا بوثيقة تكليف موحّدة لكل مبادرة تسمّي المالك والغاية والموارد، واربطوا كل بند في الميزانية بنتيجة يُراد تحقيقها.',
-    },
-    {
-      key: 'activities', name: 'الأنشطة', en: 'Activities',
-      questions: [
-        'تُدار المشروعات وفق منهجية معتمدة بمراحل ونقاط قرار واضحة.',
-        'تُرصد المخاطر والانحرافات دوريًا وتُصعَّد عبر مسار حوكمة معلوم.',
-      ],
-      advice: 'اعتمدوا دورة حياة موحّدة للمشروع ببوابات قرار، وسجلًّا للمخاطر يُراجع في اجتماع دوري بصلاحيات تصعيد واضحة.',
-    },
-    {
-      key: 'outputs', name: 'المخرجات', en: 'Outputs',
-      questions: [
-        'تُعرَّف مخرجات كل مشروع بمعايير قبول قابلة للتحقق قبل البدء.',
-        'تُسلَّم المخرجات وتُوثَّق بمحاضر استلام رسمية.',
-      ],
-      advice: 'حدّدوا لكل مخرج معيار قبول مكتوبًا قبل التنفيذ، ولا تُغلق مرحلة إلا بمحضر استلام موقّع من صاحب القرار.',
-    },
-    {
-      key: 'outcomes', name: 'النتائج', en: 'Outcomes',
-      questions: [
-        'تتوفر مؤشرات نتائج تقيس التغيّر لدى المستفيد، لا حجم النشاط.',
-        'تُجمع بيانات خط الأساس قبل التدخل للمقارنة بها.',
-        'تُراجَع النتائج دوريًا على مستوى القيادة لاتخاذ قرارات تصحيحية.',
-      ],
-      advice: 'انقلوا القياس من عدّ الأنشطة إلى رصد التغيّر: خط أساس قبل التدخل، ومؤشر نتيجة لكل هدف، ومراجعة قيادية ربع سنوية.',
-    },
-    {
-      key: 'impact', name: 'الأثر', en: 'Impact',
-      questions: [
-        'يُقاس الأثر بعد انتهاء المشروع بمدة كافية لإثبات استدامته.',
-        'يُعبَّر عن الأثر بقيمة اقتصادية أو اجتماعية تُعرض على الممولين وأصحاب القرار.',
-        'تُغذّي دروس الأثر قرارات المحفظة والتخطيط للدورة التالية.',
-      ],
-      advice: 'صمّموا قياسًا لاحقًا بعد الإغلاق، وترجموا الأثر إلى قيمة مالية واجتماعية معلنة، واجعلوا خلاصاته مدخلًا إلزاميًا لتخطيط المحفظة.',
-    },
-  ];
-
-  const SCALE = [
-    { v: 0, label: 'غير قائم' },
-    { v: 1, label: 'في بداياته' },
-    { v: 2, label: 'قائم جزئيًا' },
-    { v: 3, label: 'راسخ ومُقاس' },
-  ];
-
-  const LEVELS = [
-    { min: 0,  name: 'مرحلة النية',          desc: 'النوايا حاضرة، لكن الأثر لا يزال رهين الاجتهاد الفردي. الأولوية لبناء الأساس: تكليف واضح ومنهجية معتمدة.' },
-    { min: 40, name: 'مرحلة التأسيس',        desc: 'ثمة ممارسات قائمة، لكنها غير منتظمة. الأولوية لتوحيد المنهجية وربط المخرجات بنتائج قابلة للقياس.' },
-    { min: 60, name: 'مرحلة الانضباط',       desc: 'التنفيذ منضبط والمخرجات موثّقة. الخطوة التالية إثبات النتائج وترجمة الأثر إلى قيمة معلنة.' },
-    { min: 80, name: 'مرحلة الأثر المؤسسي', desc: 'الأثر يُقاس ويُدار ويُغذّي القرار. الأولوية لصون هذا المستوى وتعميمه على المحفظة كاملة.' },
-  ];
-
-  // تسطيح الأسئلة مع ربط كل سؤال بحلقته
-  const QUESTIONS = [];
-  LINKS.forEach((link, li) => link.questions.forEach(text => QUESTIONS.push({ text, li })));
-  const TOTAL = QUESTIONS.length;
+  // المحتوى والحساب من assessment-core.js
+  const CORE = window.MIAssessmentCore;
+  if (!CORE) { console.error('[Assessment] assessment-core.js not loaded'); return; }
+  const { LINKS, SCALE, QUESTIONS, TOTAL } = CORE;
 
   // ──────────────────────────────────────────────
   // DOM
@@ -185,28 +124,16 @@
   });
 
   // ──────────────────────────────────────────────
-  // الحساب
+  // النتيجة (الحساب في CORE.scoreReadiness)
   // ──────────────────────────────────────────────
-  function compute() {
-    const max = SCALE[SCALE.length - 1].v;
-    const perLink = LINKS.map((link, li) => {
-      const vals = QUESTIONS.map((q, i) => (q.li === li ? answers[i] : null)).filter(v => v !== null);
-      const pct = Math.round((vals.reduce((a, b) => a + b, 0) / (vals.length * max)) * 100);
-      return { name: link.name, en: link.en, advice: link.advice, pct };
-    });
-    const total = Math.round((answers.reduce((a, b) => a + b, 0) / (TOTAL * max)) * 100);
-    const level = [...LEVELS].reverse().find(l => total >= l.min);
-    const sorted = [...perLink].sort((a, b) => a.pct - b.pct);
-    return { total, level, perLink, weakest: sorted[0], strongest: sorted[sorted.length - 1] };
-  }
-
   function finish() {
     qBar.style.width = '100%';
-    result = compute();
+    result = CORE.scoreReadiness(answers);
     $('#asScore').textContent = result.total;
     $('#asLevel').textContent = result.level.name;
     $('#asLevelDesc').textContent = result.level.desc;
-    $('#asWeakest').textContent = result.weakest.name;
+    $('#asWeakLabel').textContent = result.focus.label;
+    $('#asWeakest').textContent = result.focus.names;
     $('#asChart').innerHTML = chartHTML(result.perLink);
     show('result');
   }
@@ -216,7 +143,7 @@
   // ──────────────────────────────────────────────
   function chartHTML(perLink) {
     return '<ul class="as-bars" aria-label="نتيجة كل حلقة من حلقات سلسلة النتائج">' + perLink.map(l => `
-      <li class="as-bars__row${l === result.weakest ? ' is-weak' : ''}">
+      <li class="as-bars__row${result.focus.links.includes(l) ? ' is-weak' : ''}">
         <span class="as-bars__name">${l.name}</span>
         <span class="as-bars__track"><span class="as-bars__fill" style="width:${Math.max(2, l.pct)}%"></span></span>
         <span class="as-bars__pct">${l.pct}%</span>
@@ -312,9 +239,9 @@
   }
 
   function summaryText() {
-    return `الدرجة الكلية: ${result.total}% (${result.level.name})\n` +
+    return `الدرجة الكلية: ${result.total}% (قراءة أولية: ${result.level.name})\n` +
       result.perLink.map(l => `${l.name}: ${l.pct}%`).join('\n') +
-      `\nالحلقة الأضعف: ${result.weakest.name}`;
+      `\n${result.focus.label} ${result.focus.names}`.trimEnd();
   }
 
   // الخادم يطوي الأسطر في سطر واحد، فالملخص في الطلب مفصول بفواصل منقوطة ليُقرأ في اللوحة
@@ -356,7 +283,7 @@
       `<span>أُعدّ لـ <strong>${esc(data.organization)}</strong></span><span>${esc(data.name)}</span><span>${date}</span>`;
 
     $('#asReportLinks').innerHTML = priorities.map((l, i) => `
-      <li class="as-rlink${i === 0 ? ' is-first' : ''}">
+      <li class="as-rlink${result.focus.links.includes(l) || (i === 0 && result.focus.kind !== 'even') ? ' is-first' : ''}">
         <div class="as-rlink__head">
           <span class="as-rlink__rank">${String(i + 1).padStart(2, '0')}</span>
           <span class="as-rlink__name">${l.name} <em>${l.en}</em></span>

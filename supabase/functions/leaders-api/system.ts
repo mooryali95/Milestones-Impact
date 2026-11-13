@@ -5,7 +5,8 @@
 // ما لم يُطبَّق بعد مقارنًا بمجلد الترحيلات، ومعه الأسرار الناقصة واستهلاك البريد اليوم.
 import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
-import { itemAnalysis, TIERS, weeklySeries } from './logic.js';
+import { compositeReliability, DEFAULT_MODEL, itemAnalysis, TIERS, weeklySeries } from './logic.js';
+import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
 import { launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
@@ -122,7 +123,7 @@ export async function itemReport(b: Record<string, any>) {
   const id = String(b.instrument_id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Fail('أداة القياس غير محددة');
   const { data: questions } = await db.from('questions').select('id, code, dimension, tier, kind, text_ar, options, active, form').eq('instrument_id', id).eq('active', true);
-  const sessions = await all((f, t) => db.from('assessments').select('id, form').eq('instrument_id', id).eq('status', 'submitted').range(f, t));
+  const sessions = await all((f, t) => db.from('assessments').select('id, form, participant_id').eq('instrument_id', id).eq('status', 'submitted').range(f, t));
   const ids = sessions.map((x: any) => x.id);
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 200) {
@@ -134,7 +135,52 @@ export async function itemReport(b: Record<string, any>) {
   // ولا تمييز بُعد القيادة الذي تحمله شكليًا
   const scored = (questions || []).filter((q: any) => TIERS.includes(q.tier));
   const r = itemAnalysis(scored, rows.map((x) => ({ assessment_id: x.assessment_id, question_id: x.question_id, score: x.score, k: x.value?.k })), { forms });
-  return { success: true, instrument_id: id, ...r };
+  return { success: true, instrument_id: id, ...r, evidence: await evidenceReport(scored, rows, sessions, forms) };
+}
+
+// أدلة القياس من الإجابات نفسها: خطأ القياس ودقة التصنيف لكل إطار، ومخالفة المستشار للمستوى الآلي،
+// وتوزيع المسارات، وعدالة الفقرات بين الأقل خبرة والأكثر. استشاري كله (evidence.js)، وتعذّر قراءة جزء منه
+// لا يُسقط تقرير الفقرات: يعود null ويُسجَّل
+const FAIRNESS_YEARS = 5;
+async function evidenceReport(scored: any[], rows: any[], sessions: any[], forms: Record<string, string>) {
+  try {
+    const ids = sessions.map((x: any) => x.id);
+    const pids = [...new Set(sessions.map((x: any) => x.participant_id).filter(Boolean))];
+    const part = <T>(xs: T[], n = 200) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+    const results: any[] = [], placements: any[] = [], people: any[] = [];
+    for (const p of part(ids)) results.push(...await all((f, t) => db.from('assessment_results').select('assessment_id, dimension, level, composite_pct').in('assessment_id', p).range(f, t)));
+    for (const p of part(pids)) {
+      placements.push(...await all((f, t) => db.from('placements').select('participant_id, dimension, level, approved_at, assessment_id').in('participant_id', p).range(f, t)));
+      people.push(...await all((f, t) => db.from('participants').select('id, years_experience').in('id', p).range(f, t)));
+    }
+    const { data: model } = await db.from('placement_model').select('*').eq('id', 1).maybeSingle();
+    const composites: Record<string, number[]> = {};
+    const computed: Record<string, string> = {};
+    for (const r of results) {
+      if (r.composite_pct != null) (composites[r.dimension] ||= []).push(Number(r.composite_pct));
+      computed[`${r.assessment_id}:${r.dimension}`] = r.level;
+    }
+    const byP: Record<string, any> = {};
+    for (const pl of placements) if (pl.approved_at) (byP[pl.participant_id] ||= {})[pl.dimension] = pl.level;
+    const levelsList = Object.values(byP).filter((l: any) => Object.keys(l).length === 3);
+    const reliability = compositeReliability(scored, rows, { forms, model: model || DEFAULT_MODEL });
+    const evidence: any = measurementEvidence({ reliability, composites, model: model || DEFAULT_MODEL, placements, computed, levelsList, respondents: sessions.length });
+    // العدالة: الأقل خبرة (دون FAIRNESS_YEARS سنوات) مقابل الأكثر، على فقرات المعرفة
+    const years = Object.fromEntries(people.map((x: any) => [x.id, x.years_experience]));
+    const groupOf: Record<string, string> = {};
+    for (const x of sessions) { const y = years[x.participant_id]; if (y != null) groupOf[x.id] = Number(y) < FAIRNESS_YEARS ? 'focal' : 'ref'; }
+    const answers = new Map<string, Map<string, number>>();
+    for (const x of rows) {
+      if (x.score == null || Number(x.score) < 0) continue;
+      if (!answers.has(x.assessment_id)) answers.set(x.assessment_id, new Map());
+      answers.get(x.assessment_id)!.set(x.question_id, Number(x.score));
+    }
+    evidence.fairness = { split_ar: `خبرة دون ${FAIRNESS_YEARS} سنوات مقابل ${FAIRNESS_YEARS} فأكثر`, ...fairnessReport(scored, answers, groupOf) };
+    return evidence;
+  } catch (e) {
+    console.error('evidenceReport:', (e as Error).message);
+    return null;
+  }
 }
 
 // اتجاه البرنامج للمالك: 12 أسبوعًا من التسجيل والقياس والاعتماد والنشاط

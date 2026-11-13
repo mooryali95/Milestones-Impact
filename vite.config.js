@@ -27,6 +27,8 @@ export default defineConfig({
     // describe/it/expect بلا استيراد — كما كانت مع Jest، فلا تتغيّر الاختبارات.
     globals: true,
     environment: 'jsdom',
-    include: ['src/**/*.test.{js,jsx}', 'leaders-app/src/**/*.test.{js,jsx}', 'admin-app/src/**/*.test.{js,jsx}'],
+    include: ['src/**/*.test.{js,jsx}', 'leaders-app/src/**/*.test.{js,jsx}', 'admin-app/src/**/*.test.{js,jsx}',
+      // اختبارات سكربتات الموقع الثابت home/: خارج home/ لأن المجلد يُنشر كما هو
+      'tests/home/**/*.test.js'],
   },
 });

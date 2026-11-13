@@ -124,7 +124,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
           <div className="lp-hero-logo lp-a2"><Wordmark width={280} variant="inverted" /></div>
           <h1 className="lp-hero-title lp-a3">هندسة القيمة</h1>
           <div className="lp-hero-en lp-a3">MILESTONE IMPACT</div>
-          <p className="lp-hero-sub lp-a4">نموذج تحوّلي من ست عشرة عملية استراتيجية،<br/>يعمل على القيمة الكامنة في الإنسان، ويحوّلها إلى أثر قابل للقياس</p>
+          <p className="lp-hero-sub lp-a4">نموذج تحوّلي من ست عشرة عملية استراتيجية،<br/>يعمل على القيمة الكامنة في الإنسان، ويرسم لها مسارًا واضحًا نحو أثر يمكن قياسه</p>
           <div className="lp-hero-line lp-a4"/>
           <div className="lp-hero-actions lp-a5">
             <button className="lp-btn-primary" onClick={onRegister}>بدء الرحلة</button>
@@ -198,7 +198,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
             {[
               {n:"١",title:"التسجيل والتوثيق",desc:"تسجيل البيانات والدخول إلى مصفوفة العمليات الست عشرة، حيث تُبنى كل عملية على ما سبقها"},
               {n:"٢",title:"التحليل والتخطيط",desc:"تحديد مواعيد كل عملية، وبناء الخريطة الزمنية مع تحليل ديموغرافي للشبكة البشرية المحيطة"},
-              {n:"٣",title:"الأثر والتحول",desc:"إكمال الخطة التحوّلية واستلام التقرير الكامل: أثر مقيس، وقيمة محوّلة"},
+              {n:"٣",title:"الأثر والتحول",desc:"إكمال الخطة التحوّلية واستلام التقرير الكامل: خطة واضحة، ومسار يمكن تتبعه"},
             ].map((s,i)=>(
               <div key={i} className="lp-step">
                 <div className="lp-step-num">{s.n}</div>
@@ -215,7 +215,7 @@ export default function Landing({ onRegister, onResume, onAdmin, OPERATIONS }) {
         <div className="lp-cta-final-inner">
           <div className="lp-section-label" style={{marginBottom:"1.2rem"}}>ابدأ الآن</div>
           <div className="lp-cta-final-title">القيمة الكامنة تنتظر</div>
-          <div className="lp-cta-final-sub">ست عشرة عملية • مسار واحد • أثر قابل للقياس</div>
+          <div className="lp-cta-final-sub">ست عشرة عملية • مسار واحد • خطة يمكن تتبعها</div>
           <div style={{display:"flex",gap:"1rem",justifyContent:"center",flexWrap:"wrap"}}>
             <button className="lp-btn-primary" onClick={onRegister}>بدء الرحلة ←</button>
             <button className="lp-btn-ghost" onClick={onResume}>استئناف الجلسة</button>

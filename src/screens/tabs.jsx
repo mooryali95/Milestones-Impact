@@ -281,7 +281,7 @@ export const ReportTab = (p) => {
         {(()=>{
           const analysis=analyzeBookings(procs,dates,confirmed);
           if(!analysis) return <div className="rpt-card rpt-empty"><h3>تحتاج حجوزات إضافية</h3><p>أكمل <strong>3 حجوزات</strong> على الأقل</p></div>;
-          const {pattern,trackCoverage,phaseCoverage,weightBalance,avgPhase,readinessAr,depGaps,recommendations,timeline,trackDist,totalBooked,isComplete}=analysis;
+          const {pattern,trackCoverage,phaseCoverage,weightBalance,furthestPhase,readinessAr,depGaps,recommendations,timeline,trackDist,totalBooked,isComplete}=analysis;
           return <>
             <div className="rpt-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:".5rem"}}>
               <div><div style={{display:"flex",alignItems:"center",gap:".5rem"}}><MILogo size={18} color={BRAND.color}/><strong style={{fontFamily:"var(--font-ar)",color:BRAND.dark}}>Milestone Impact</strong></div><div style={{fontSize:".75rem",color:"#999",marginTop:".15rem"}}>تقرير مولّد تلقائياً</div></div>
@@ -289,7 +289,7 @@ export const ReportTab = (p) => {
             </div>
             <div className="rpt-card"><div className="rpt-pattern">
               <div className="rpt-pattern-icon">{pattern.icon}</div>
-              <div className="rpt-pattern-name">نمط {pattern.nameAr}</div>
+              <div className="rpt-pattern-name">شكل الخطة: {pattern.nameAr}</div>
               <div className="rpt-pattern-desc">{pattern.desc}</div>
             </div>
             {isComplete && <div style={{textAlign:"center",padding:".6rem",background:"rgba(91,123,58,0.06)",borderRadius:"2px",marginTop:"-.5rem"}}>
@@ -299,7 +299,7 @@ export const ReportTab = (p) => {
               <div className="rpt-stats">
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:BRAND.color}}>{totalBooked}</div><div className="rpt-stat-l">محجوزة</div></div>
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#5B7B3A"}}>{trackCoverage.covered}/4</div><div className="rpt-stat-l">مسارات</div></div>
-                <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#8B6914"}}>{avgPhase}</div><div className="rpt-stat-l">متوسط المرحلة</div></div>
+                <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#8B6914"}}>{furthestPhase}</div><div className="rpt-stat-l">أبعد مرحلة</div></div>
                 <div className="rpt-stat"><div className="rpt-stat-v" style={{color:"#6B4E3D"}}>{readinessAr}</div><div className="rpt-stat-l">الجاهزية</div></div>
               </div>
             </div>
