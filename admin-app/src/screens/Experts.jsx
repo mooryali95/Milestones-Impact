@@ -241,7 +241,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
           <div className="ex-cover-list">{ROLES.map(([k, [l]]) => <span key={k}><b>{active.filter((e) => e.roles.includes(k)).length}</b>{l}</span>)}</div></div>
         {/* لجنتا المحتوى والقياس من سجل الخبراء نفسه (committees.js): من فيهما وما ينقص كل لجنة */}
-        {(d.committees || []).map((c) => (
+        {(d?.committees || []).map((c) => (
           <div key={c.key} className="stat-card ex-committee"><div className="stat-label">{c.title}</div>
             <div className="ex-cover-list">
               {c.members.length ? c.members.map((m) => <span key={m.id}>{m.name}</span>) : <span className="la-muted">لا أعضاء</span>}
