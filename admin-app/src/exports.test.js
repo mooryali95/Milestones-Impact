@@ -45,3 +45,14 @@ describe('التصدير الموحد', () => {
     expect(bad.map((f) => f.replace(__dirname, ''))).toEqual([]);
   });
 });
+
+describe('حالات الفراغ في اللوحة', () => {
+  it('لا رسالة فراغ مرتجلة في شاشة: المكوّن الموحد Empty أو NoMatch وحدهما، ولا عنوان إنجليزي فوق الصفحات', () => {
+    const dir = join(__dirname, 'screens');
+    const bad = readdirSync(dir).filter((f) => /\.jsx$/.test(f)).filter((f) => {
+      const s = readFileSync(join(dir, f), 'utf8');
+      return /className="la-empty"|className="empty-state"|ce-empty"/.test(s) || /className="page-eyebrow">[A-Za-z]/.test(s);
+    });
+    expect(bad).toEqual([]);
+  });
+});

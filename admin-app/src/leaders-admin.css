@@ -28,7 +28,6 @@
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
 .la-note { background: var(--sand-light); border-inline-start: 3px solid var(--gold); padding: 10px 14px; margin: 14px 0; font-size: .84rem; }
 .la-muted { color: var(--ink-light); font-size: .82rem; }
-.la-empty { text-align: center; padding: 30px; color: var(--ink-light); }
 .la-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
 .la-card h3 { font-size: 1rem; margin-bottom: 12px; color: var(--petrol-mid); }
 .la-card.off, .la-stage-ed.off { opacity: .6; }
@@ -675,7 +674,7 @@
   background: linear-gradient(135deg, var(--petrol), var(--petrol-mid)); color: var(--off-white); }
 .pay-hero > div:first-child { display: grid; gap: 6px; justify-items: start; }
 .pay-hero .la-muted { color: var(--gold-light); opacity: .85; }
-.pay-eyebrow { font-size: .7rem; letter-spacing: .28em; color: var(--gold-light); margin: 0; }
+.pay-eyebrow { font-size: .78rem; letter-spacing: 0; color: var(--gold-light); margin: 0; }
 .pay-total { font-family: var(--font-en); font-size: 3.2rem; line-height: 1; color: var(--gold-pale); }
 .pay-spark { display: flex; align-items: flex-end; gap: 3px; height: 84px; }
 .pay-spark i { flex: 1; border-radius: 2px 2px 0 0; background: rgba(255, 255, 255, .12); }

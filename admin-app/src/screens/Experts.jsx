@@ -5,7 +5,7 @@
 // والساعات والتقييم تُبنى فوقه في المراحل التالية. سعر الساعة للإدارة وحدها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -276,7 +276,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
             capped={d.capped ? { limit: d.limit } : null}
             actions={<ExportButton scope="experts" meta={{ kind: 'EXP', title: 'شبكة الخبراء', sheet: 'الخبراء', file: 'Experts' }} columns={EXPERT_COLS} all={all} filtered={rows} noun="خبير" />} />
-          {!all.length ? <p className="la-muted ce-empty">لا خبراء بعد. أضف أول خبير، أو شارك رابط «انضم كخبير».</p> : (
+          {!all.length ? <Empty title="لا خبراء بعد" hint="أضف أول خبير، أو شارك رابط «انضم كخبير»." /> : (
             <div className="table-wrap"><table className="data-table la-cards ex-table">
               <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
@@ -288,7 +288,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
                   <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <span className="la-muted">·</span>}</td>
                   <td data-label="الحالة"><span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span></td>
                 </tr>
-              )) : <tr><td colSpan={6} className="la-empty">لا نتائج لهذه الفلاتر.</td></tr>}</tbody>
+              )) : <tr><td colSpan={6}><NoMatch what="خبراء" /></td></tr>}</tbody>
             </table></div>
           )}
         </>}

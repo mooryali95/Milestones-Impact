@@ -9,7 +9,7 @@ import {
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, SectionIndex, Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, SectionIndex, Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -121,7 +121,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
         shown={shown.length} total={list.length} noun="جهة" placeholder="ابحث باسم الجهة أو القطاع أو النطاق أو جهة التواصل"
         sorts={[['', 'الترتيب: الأحدث'], ['name', 'بالاسم'], ['-total', 'الأكثر مشاركين'], ['-pending', 'الأكثر انتظارًا لاعتمادك'], ['-active', 'الأنشط هذا الأسبوع']]} />
       {!shown.length && (list.length
-        ? <Empty compact title="لا جهات لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." />
+        ? <NoMatch what="جهات" />
         : <Empty title="لا جهات بعد" hint="الجهة ترعى مشاركيها: لها رابط دعوة ومقاعد ومنسق يتابعهم.">{canWrite && <button className="btn-sm primary" type="button" onClick={onAdd}>+ جهة جديدة</button>}</Empty>)}
       <div className="la-orgs">
         {shown.map((o) => (
@@ -324,7 +324,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
               <td>{date(p.last_login_at)}</td>
               <td>{date(p.created_at)}{p.org_via && <><br /><small className="la-muted">{VIA[p.org_via]}{p.campaign && <> · <span dir="ltr">{p.campaign}</span></>}</small></>}</td>
             </tr>
-          )) : <tr><td colSpan={7} className="la-empty">لا نتائج</td></tr>}</tbody>
+          )) : <tr><td colSpan={7}>{all.length ? <NoMatch what="مشاركين" /> : <Empty compact title="لا مشاركين في هذه الجهة بعد" hint="يظهرون هنا حين يسجّلون برابط دعوتها أو تنقلهم إليها." />}</td></tr>}</tbody>
         </table></div>
       </section>
     </>

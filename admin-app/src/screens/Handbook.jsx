@@ -15,7 +15,7 @@ import Md from '../Md.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
-import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { RUBRIC_SCALE, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
@@ -653,7 +653,7 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
               <td className="stars-c">{ratingLabel(x.rating)}{x.bonus ? <small> +{x.bonus}</small> : null}</td>
               <td><button className={`btn-sm ${x.status === 'submitted' ? 'primary' : 'ghost'}`} onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button></td>
             </tr>
-          )) : <tr><td colSpan={6} className="la-empty">{all.length ? 'لا أعمال لهذه الفلاتر' : 'لا أعمال هنا'}</td></tr>}</tbody>
+          )) : <tr><td colSpan={6}>{all.length ? <NoMatch what="أعمال" /> : <Empty compact title="لا أعمال مسلَّمة بعد" hint="يظهر هنا كل نموذج يسلّمه مشارك، وما ينتظر تقييمك أولًا." />}</td></tr>}</tbody>
         </table></div>
       )}
       {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) { load(); onSaved(); } }} />}

@@ -45,7 +45,7 @@ test('حساب المالك مقفل في جدول المستخدمين', async 
   }[route.request().postDataJSON().action] || { success: true, contacts: [] } }));
   await page.addInitScript(signedIn(), { email: 'o@example.com', name: 'المالك', role_id: 'super_admin', is_owner: true });
   await page.goto(BASE);
-  await page.getByRole('button', { name: 'الإعدادات' }).click();
+  await page.getByRole('button', { name: 'الإعدادات', exact: true }).click();
   await expect(page.getByLabel('دور المالك')).toBeDisabled();
   await expect(page.getByLabel('دور مدير')).toBeEnabled();
 });

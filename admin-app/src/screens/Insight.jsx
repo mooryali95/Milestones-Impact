@@ -8,7 +8,7 @@ import { dateTime, L } from '../leaders.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, encodeState, sortRows } from '../filters.js';
-import { Empty, Spinner } from '../ui.jsx';
+import { Empty, NoMatch, Spinner } from '../ui.jsx';
 import { ACTOR_AR, CHANGE_AREAS, LOAD_AR, LOAD_TONE, PIPELINE, PIPELINE_AR, stageFilter, STUCK_STAGES, WAITING_STAGES } from '../../../supabase/functions/leaders-api/insight.js';
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { COHORT_STATUS as COHORT_STATUS_AR } from '../methodology.js';
@@ -92,7 +92,7 @@ function Load({ experts, onExpert }) {
             <td data-label="ساعات أسبوعيًا">{e.hours ?? '·'}</td><td data-label="طلبات قائمة">{e.requests}</td><td data-label="جلسات قادمة">{e.upcoming}</td><td data-label="يخدمهم">{e.people}</td>
             <td data-label="الحِمل">{e.share != null && <><progress className="la-mini" max={100} value={Math.min(100, e.share)} aria-label={`الحِمل ${e.share}%`} /> {e.share}% </>}<span className={`la-chip ${LOAD_TONE[e.state]}`}>{LOAD_AR[e.state]}</span></td>
           </tr>
-        )) : <tr><td colSpan={7}><Empty compact title="لا خبراء لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /></td></tr>}</tbody>
+        )) : <tr><td colSpan={7}><NoMatch what="خبراء" /></td></tr>}</tbody>
       </table></div>
     </>
   );

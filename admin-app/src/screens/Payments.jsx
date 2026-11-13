@@ -5,7 +5,7 @@
 // الموقّع أو منحة إدارية مسجّلة، والمطابقة تستعلم Creem مباشرة لدفعة فات إشعارها.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, dateTime, L } from '../leaders.js';
-import { Empty, Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
@@ -132,7 +132,7 @@ export default function Payments({ canWrite, onPerson }) {
     <div className="pay-admin">
       <div className="pay-hero">
         <div>
-          <p className="pay-eyebrow" dir="ltr">REVENUE · CREEM</p>
+          <p className="pay-eyebrow">الإيراد · <span dir="ltr">Creem</span></p>
           <b className="pay-total" dir="ltr">{money(k.revenue_cents)}</b>
           <span className="la-muted">إيراد الإنتاج المؤكد{k.refunds_cents ? ` · مسترد ${money(k.refunds_cents)}` : ''}</span>
           <span className={`la-chip ${d.settings.enabled ? 'ok' : 'warn'}`}>{d.settings.enabled ? 'الدفع مفعّل' : 'الدفع مطفأ: يمر الجميع مجانًا'}</span>
@@ -179,7 +179,7 @@ export default function Payments({ canWrite, onPerson }) {
                 </tr>
               ))}</tbody>
             </table>
-          ) : <p className="la-empty">لا عمليات بهذه التصفية.</p>}
+          ) : (allPay.length ? <NoMatch what="عمليات" /> : <Empty compact title="لا عمليات دفع بعد" hint="تظهر هنا كل عملية لحظة بدئها، وتتأكد بإشعار Creem." />)}
         </section>
       )}
 
@@ -202,7 +202,7 @@ export default function Payments({ canWrite, onPerson }) {
               <thead><tr><th>الجهة</th><th>مشاركون مرعيون</th><th>قيمة المغطّى</th></tr></thead>
               <tbody>{d.sponsors.map((g) => <tr key={g.id}><td>{g.name}</td><td>{g.participants}</td><td dir="ltr">{money(g.cents)}</td></tr>)}</tbody>
             </table>
-          ) : <p className="la-empty">لا مشاركين مرعيين بعد.</p>}
+          ) : <Empty compact title="لا مشاركين مرعيين بعد" hint="تظهر هنا كل جهة ترعى مشاركيها وقيمة ما غطّته." />}
         </section>
       )}
 
@@ -211,7 +211,7 @@ export default function Payments({ canWrite, onPerson }) {
           <p className="la-muted small">رعاية الجهة تُثبَّت هنا لحظة سريانها فلا تسقط إن أُوقفت الجهة لاحقًا. للمنح اليدوي افتح ملف المشارك.</p>
           <table className="la-table">
             <thead><tr><SortTh k="who" state={ef} set={setEf}>المشارك</SortTh><SortTh k="item" state={ef} set={setEf}>البند</SortTh><SortTh k="source" state={ef} set={setEf}>المصدر</SortTh><SortTh k="at" state={ef} set={setEf}>التاريخ</SortTh><SortTh k="state" state={ef} set={setEf}>الحالة</SortTh><th /></tr></thead>
-            <tbody>{!ents.length && <tr><td colSpan={6}>{allEnt.length ? <Empty compact title="لا استحقاقات لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /> : <Empty compact title="لا حقوق مثبتة بعد" hint="يظهر هنا حق كل مشارك في البرنامج: من دفعه، أو من رعاية جهته، أو من منحة يدوية." />}</td></tr>}{ents.slice(0, 500).map((e) => (
+            <tbody>{!ents.length && <tr><td colSpan={6}>{allEnt.length ? <NoMatch what="استحقاقات" /> : <Empty compact title="لا حقوق مثبتة بعد" hint="يظهر هنا حق كل مشارك في البرنامج: من دفعه، أو من رعاية جهته، أو من منحة يدوية." />}</td></tr>}{ents.slice(0, 500).map((e) => (
               <tr key={e.id} className={e.revoked_at ? 'off' : ''}>
                 <td><button className="la-link" onClick={() => onPerson?.(e.participant_id)}>{e.participants?.full_name || '·'}</button><br /><small className="la-muted" dir="ltr">{e.participants?.email}</small></td>
                 <td>{ITEM[e.item]}</td>
@@ -287,7 +287,7 @@ function SponsorRequests({ canWrite, onPerson, onChange }) {
             </tr>
           ))}</tbody>
         </table>
-      ) : <p className="la-empty">لا طلبات رعاية {all ? '' : 'قيد المراجعة'}.</p>}
+      ) : <Empty compact title={all ? 'لا طلبات رعاية' : 'لا طلبات رعاية قيد المراجعة'} hint="يظهر هنا من كتب جهة راعية عند التسجيل ولم تُطابق جهة مسجلة." />}
     </section>
   );
 }

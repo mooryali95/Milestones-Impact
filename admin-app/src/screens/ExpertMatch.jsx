@@ -5,7 +5,7 @@
 // والحالة من expert_requests وحدها. لا منطق ترشيح في الواجهة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -138,7 +138,7 @@ export function RequestsBoard({ canWrite, onPerson }) {
       <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS)}
         shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null}
         actions={<ExportButton scope="expert-requests" meta={{ kind: 'REQ', title: 'طلبات إسناد الخبراء', sheet: 'الطلبات', file: 'Expert-Requests' }} columns={REQ_COLS} all={all} filtered={rows} noun="طلب" />} />
-      {!rows.length ? <p className="la-muted">{all.length ? 'لا طلبات لهذه الفلاتر.' : 'لا طلبات هنا. أسند خبيرًا من ملف أي مشارك.'}</p> : (
+      {!rows.length ? (all.length ? <NoMatch what="طلبات" /> : <Empty compact title="لا طلبات إسناد بعد" hint="أسند خبيرًا من ملف أي مشارك، ويظهر طلبه هنا بحالته." />) : (
         <div className="table-wrap"><table className="data-table la-cards">
           <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="role" state={f} set={setF}>الخدمة</SortTh><SortTh k="expert" state={f} set={setF}>الخبير</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>
           <tbody>{rows.map((x) => (

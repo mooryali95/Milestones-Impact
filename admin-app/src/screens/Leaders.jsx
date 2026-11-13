@@ -118,7 +118,7 @@ export default function Leaders({ canWrite, pending }) {
     <div className="dash-body">
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-eyebrow">Leaders Program</div>
+          <div className="page-eyebrow">المنتج الأول</div>
           <h1 className="page-title">تطبيق القادة</h1>
           <div className="page-title-ar">leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات</div>
         </div>

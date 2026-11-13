@@ -25,7 +25,7 @@ export default function Visits() {
     <div className="dash-body">
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-eyebrow">Site Analytics</div>
+          <div className="page-eyebrow">تحليلات الموقع</div>
           <h1 className="page-title">زيارات الموقع</h1>
           <div className="page-title-ar">بلا عنوان IP ولا كوكي، فالرقم زيارات لا أشخاص</div>
         </div>
