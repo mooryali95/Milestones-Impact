@@ -243,3 +243,105 @@ describe('المرحلة 2: الدورة والمجموعات', async () => {
     expect((await db.query(`select 1 from leaders.schema_migrations where name = '${NAME}'`)).rows).toHaveLength(1);
   });
 });
+
+describe('المرحلة 3: التقرير والاستلام', async () => {
+  const F = await import('../../supabase/functions/leaders-api/feedback360.js');
+  const { DEFAULTS } = await import('../../supabase/functions/leaders-api/settings.js');
+  const S = DEFAULTS.feedback360;
+  const opts = [0, 1, 2, 3, 4].map((score) => ({ score })).concat([{ score: -1 }]);
+  const q = (id, dimension, extra = {}) => ({ id, dimension, text_rater_ar: `عبارة ${id}`, options: opts, ...extra });
+  const items = [q('m1', 'milestone'), q('m2', 'milestone'), q('i1', 'impact'), q('l1', 'leadership'), q('l2', 'leadership')];
+  // k = الدرجة المخزنة (0..4) فالقيمة على السلم k + 1، و5 = لا أستطيع الحكم
+  const rater = (relation, ks, extra = {}) => ({ relation, status: 'submitted', answers: Object.fromEntries(Object.entries(ks).map(([id, k]) => [id, { now: k }])), ...extra });
+  const all = (k) => Object.fromEntries(items.map((x) => [x.id, k]));
+  const self = { m1: 4, m2: 1, i1: 2, l1: 2, l2: 2 };
+
+  it('لا تقرير بأقل من min_others من غير المدير، ويُقال كم ينقص', () => {
+    const r = F.feedbackReport({ items, selfAnswers: self, raters: [rater('manager', all(3)), rater('peer', all(3)), rater('peer', all(3))], s: S });
+    expect(r).toMatchObject({ releasable: false, need: 1 });
+    expect(r.items).toBeUndefined();
+  });
+  it('المدير باسم دوره، والمجموعة دون الحد تُجمع في «آخرون» إن بلغته', () => {
+    const raters = [rater('manager', all(2)), rater('peer', all(3)), rater('peer', all(3)), rater('peer', all(3)), rater('report', all(1)), rater('stakeholder', all(2)), rater('stakeholder', all(2))];
+    const r = F.feedbackReport({ items, selfAnswers: self, raters, s: S, seed: 'c' });
+    expect(r.columns.map((c) => c.key)).toEqual(['manager', 'peer', 'others', 'all']);
+    expect(r.columns.find((c) => c.key === 'others')).toMatchObject({ n: 3, merged: ['أعضاء الفريق', 'أصحاب المصلحة'] });
+    expect(r.dims.find((d) => d.dimension === 'milestone').cells).toMatchObject({ manager: { avg: 3 }, peer: { avg: 4 }, others: { avg: 2.7 } });
+  });
+  it('ما دون الحد ولا يبلغه مجموعًا يُضم إلى أكبر مجموعة ظاهرة، فلا يُستنتج بالطرح', () => {
+    const raters = [rater('peer', all(3)), rater('peer', all(3)), rater('peer', all(3)), rater('report', all(0))];
+    const r = F.feedbackReport({ items, selfAnswers: self, raters, s: S });
+    expect(r.columns.map((c) => c.key)).toEqual(['peer', 'all']);
+    expect(r.columns[0]).toMatchObject({ n: 4, merged: ['أعضاء الفريق'] });
+    expect(r.columns[0].label_ar).toMatch(/ومن ضُمّ إليهم/);
+  });
+  it('خلية العبارة تُحجب إن قلّ من قدّرها عن الحد، و«كل المقيّمين» يحتاج الحد من غير المدير', () => {
+    const na = { ...all(3), l2: 5 };
+    const raters = [rater('manager', all(4)), rater('peer', all(3)), rater('peer', all(3)), rater('peer', na)];
+    const r = F.feedbackReport({ items, selfAnswers: self, raters, s: S });
+    const l2 = r.items.find((x) => x.id === 'l2');
+    expect(l2.cells.peer).toBeNull();
+    expect(l2.cells.all).toBeNull();
+    expect(l2.cells.manager).toMatchObject({ avg: 5 });
+    expect(l2.na).toBe(1);
+  });
+  it('القوة الخفية والنقطة العمياء بفرق الإعدادات، والأعلى والأدنى بلا تداخل', () => {
+    const raters = [rater('peer', all(2)), rater('peer', all(2)), rater('peer', all(2))];
+    const r = F.feedbackReport({ items, selfAnswers: self, raters, s: S });
+    expect(r.blind.map((x) => x.id)).toEqual(['m1']);
+    expect(r.strengths.map((x) => x.id)).toEqual(['m2']);
+    expect(r.blind[0]).toMatchObject({ self: 5, others: 3, diff: -2 });
+    const wide = F.feedbackReport({ items, selfAnswers: self, raters, s: { ...S, gap_points: 2 } });
+    expect(wide.strengths).toEqual([]);
+    expect(wide.blind.map((x) => x.id)).toEqual(['m1']);
+    expect(new Set([...r.top, ...r.bottom].map((x) => x.id)).size).toBe(r.top.length + r.bottom.length);
+  });
+  it('الملاحظات حرفية بلا نسبة، بترتيب ثابت لا يتبع الإرسال، والمحجوبة لا تظهر', () => {
+    const raters = ['أ', 'ب', 'ج', 'د'].map((t, i) => rater('peer', all(2), { open_answers: { continue: `ملاحظة ${t}` }, comment_hidden: i === 3 }));
+    const r1 = F.feedbackReport({ items, selfAnswers: self, raters, s: S, seed: 'c1' });
+    const r2 = F.feedbackReport({ items, selfAnswers: self, raters: [...raters].reverse(), s: S, seed: 'c1' });
+    expect(r1.comments.continue).toHaveLength(3);
+    expect(r1.comments.continue).not.toContain('ملاحظة د');
+    expect(r1.comments.continue).toEqual(r2.comments.continue);
+    expect(JSON.stringify(r1.comments)).not.toMatch(/peer|relation|email/);
+  });
+  it('الموجة الثانية تحمل أرقام الأولى لكل إطار', () => {
+    const raters = [rater('peer', all(1)), rater('peer', all(1)), rater('peer', all(1))];
+    const previous = F.feedbackReport({ items, selfAnswers: self, raters, s: S });
+    const r = F.feedbackReport({ items, selfAnswers: self, raters: raters.map((x) => ({ ...x, answers: Object.fromEntries(items.map((y) => [y.id, { now: 3 }])) })), s: S, previous });
+    expect(r.dims.find((d) => d.dimension === 'impact')).toMatchObject({ prev: { all: 2 }, cells: { all: { avg: 4 } } });
+  });
+  it('المعكوسة لا تدخل التقرير', () => {
+    const rev = q('m5', 'milestone', { options: [4, 3, 2, 1, 0].map((score) => ({ score })) });
+    expect(F.reportItems([...items, rev, q('x', 'impact', { observable_by: ['self'] })]).map((x) => x.id)).toEqual(items.map((x) => x.id));
+  });
+  it('الجهة: أعداد ونسبة استجابة، والمتوسطات فوق org_min وحده', () => {
+    const one = F.feedbackReport({ items, selfAnswers: self, raters: [rater('peer', all(2)), rater('peer', all(2)), rater('peer', all(2))], s: S });
+    expect(F.orgTotals([one, one], S)).toMatchObject({ reports: 2, dims: null, invited: 6, submitted: 6, response_pct: 100 });
+    const t = F.orgTotals(Array(S.org_min).fill(one), S);
+    expect(t.dims.find((d) => d.dimension === 'impact')).toEqual({ dimension: 'impact', self: 3, all: 3 });
+    expect(JSON.stringify(t)).not.toMatch(/items|comments/);
+  });
+
+  const srv = read('supabase/functions/leaders-api/feedback360.ts');
+  it('المشارك لا يرى تقريره قبل أن يسلّمه المستشار، والمستشار الفعلي وحده يسلّم ويُسجَّل اطلاعه', () => {
+    expect(srv).toMatch(/if \(c\.status !== 'released'\) throw new Fail\('يسلّمك مستشارك تقريرك في جلسة التوجيه/);
+    expect(srv.match(/const c = await cycleById\(b\.cycle_id\);\n  const p = await requireEffectiveAdvisor\(e, c\.participant_id\);/g)).toHaveLength(2);
+    expect(srv).toMatch(/audit\('system', `expert:\$\{e\.email\}`, 'expert\.f360-report-view'/);
+    expect(srv).toMatch(/status: 'released', released_by: `expert:\$\{e\.email\}`/);
+  });
+  it('اطلاع الإدارة على تقرير فرد للمدير ذي الكتابة ويُسجَّل، والجهة مجموع لا فرد', () => {
+    expect(srv).toMatch(/export async function adminReport\(a: Admin, b: Body\) \{\n  requireWrite\(a\);/);
+    expect(srv).toMatch(/audit\('admin', a\.email, 'admin\.f360-report-view'/);
+    const coord = read('supabase/functions/leaders-api/coordinator.ts');
+    expect(coord).toMatch(/r\.feedback360 = coordPermissions\(c\.permissions\)\.scores \? await orgFeedback\(/);
+    expect(srv).toMatch(/return orgTotals\(reports, s\);/);
+  });
+  it('مصدر واحد للتقرير: الشاشات الثلاث تعرض ناتج feedbackReport بمكوّن واحد', () => {
+    expect(srv.match(/feedbackReport\(/g).length).toBe(2);
+    for (const f of ['leaders-app/src/screens/Feedback360.jsx', 'leaders-app/src/screens/Advisor360.jsx', 'admin-app/src/screens/Feedback360.jsx']) {
+      expect(read(f), f).toMatch(/from '\.\.\/\.\.\/\.\.\/src\/lib\/Report360\.jsx';/);
+    }
+    expect(read('src/lib/Report360.jsx')).not.toMatch(/avg\s*[=:]\s*[^>]*reduce|min_group/);
+  });
+});

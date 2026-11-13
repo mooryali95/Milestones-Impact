@@ -9,7 +9,7 @@ import { call } from '../api.js';
 import { dimOf } from '../labels.js';
 import { ErrorBox } from '../ui.jsx';
 import { CYCLE_STATUS_AR, nominationCheck } from '../../../supabase/functions/leaders-api/feedback360.js';
-import { FEEDBACK_GROUP_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import Report360 from '../../../src/lib/Report360.jsx';
 
 const WAVE_AR = { t1: 'الموجة الأولى', t2: 'الموجة الثانية' };
 const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
@@ -187,11 +187,56 @@ export default function Feedback360({ onBack }) {
       )}
       {cycle && ['open', 'closed'].includes(cycle.status) && <Counts data={data} cycle={cycle} />}
       {cycle?.status === 'closed' && <div className="card"><p className="small muted" role="status">أُغلقت النافذة. يسلّمك مستشارك تقريرك في جلسة توجيه، فتقرؤه معه أول مرة.</p></div>}
-      {cycle?.status === 'released' && <div className="card"><p className="small muted" role="status">سلّمك مستشارك تقريرك في جلسة التوجيه.</p></div>}
+      {cycle?.status === 'released' && <Report360Section cycle={cycle} />}
     </div>
   );
 }
 
+
+// التقرير بعد التسليم، ثم خطة التطوير: سلوكان أو ثلاثة وما سيفعله في كل منها
+function Report360Section({ cycle }) {
+  const [r, setR] = useState(null);
+  useEffect(() => { call('f360.report', { cycle_id: cycle.id }).then(setR); }, [cycle.id]);
+  if (!r) return <div className="card"><p className="muted small" role="status">جارٍ تحميل تقريرك…</p></div>;
+  if (!r.success) return <div className="card"><div className="alert err" role="alert">{r.message}</div></div>;
+  return (
+    <>
+      <section className="card stack" aria-labelledby="f360-report"><h2 className="as-h3" id="f360-report">تقريرك</h2><Report360 data={r} audience="participant" /></section>
+      {r.report.releasable && <Plan cycle={cycle} initial={r.cycle?.plan} />}
+    </>
+  );
+}
+
+function Plan({ cycle, initial }) {
+  const blank = { behavior: '', action: '' };
+  const [items, setItems] = useState(initial?.items?.length ? initial.items : [blank, blank]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const set = (i, k, v) => setItems(items.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const save = async () => {
+    setBusy(true); setMsg('');
+    const r = await call('f360.plan', { cycle_id: cycle.id, items });
+    setBusy(false);
+    setMsg(r.success ? 'حُفظت خطتك.' : r.message);
+  };
+  return (
+    <section className="card stack" aria-labelledby="f360-plan">
+      <h2 className="as-h3" id="f360-plan">خطتك</h2>
+      <p className="small muted">اختر سلوكين أو ثلاثة من التقرير تعمل عليها، وما ستفعله في كل منها حتى الموجة الثانية.</p>
+      {items.map((x, i) => (
+        <div key={i} className="grid2">
+          <label className="field"><span>السلوك {i + 1}</span><input className="input" maxLength={300} value={x.behavior} onChange={(e) => set(i, 'behavior', e.target.value)} /></label>
+          <label className="field"><span>ما سأفعله</span><input className="input" maxLength={500} value={x.action} onChange={(e) => set(i, 'action', e.target.value)} /></label>
+        </div>
+      ))}
+      <div className="row">
+        {items.length < 3 && <button className="link small" onClick={() => setItems([...items, blank])}>أضف سلوكًا ثالثًا</button>}
+        <button className="btn gold sm" disabled={busy || !items.some((x) => x.behavior.trim())} onClick={save}>احفظ خطتي</button>
+      </div>
+      {msg && <div className="alert" role="status">{msg}</div>}
+    </section>
+  );
+}
 
 // مدخل «ملفي»: يظهر حين يكون التقييم مفعّلًا أو للمشارك دورة، ولا يظهر غير ذلك
 export function Feedback360Entry({ onOpen }) {

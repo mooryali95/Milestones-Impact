@@ -3,10 +3,49 @@
 // ════════════════════════════════════════════════════════════════
 // (تصور 2026-11-11، قرار المالك: يعتمد القائمة مستشار الدفعة). اعتماده تأكيد لكل بريد فيها (D19)، فتُرسل الدعوات.
 // القسم لا يظهر إن لم يكن له شيء، ولا يُفشل اللوحة إن تعذّر.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { xpCall } from '../api.js';
 import { CYCLE_STATUS_AR } from '../../../supabase/functions/leaders-api/feedback360.js';
 import { FEEDBACK_GROUP_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { Report360Panel } from '../../../src/lib/Report360.jsx';
+import { useDialog } from '../../../src/lib/a11y.js';
+
+const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'short', day: 'numeric', month: 'short' }) : '');
+
+// التقرير قبل الجلسة، والتسليم فيها: المستشار وحده يتيحه للمشارك، ويربطه بجلسة الاستلام إن اختارها.
+// كل فتح في السجل باسمه (xp.f360-report). سلوك النافذة من useDialog
+function ReportDialog({ c, onClose, onReleased }) {
+  const box = useRef(null);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [session, setSession] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { xpCall('xp.f360-report', { cycle_id: c.id }).then((r) => (r.success ? setData(r) : setError(r.message))); }, [c.id]);
+  useDialog(box, onClose, { self: true });
+  const release = async () => {
+    setBusy(true); setError('');
+    const r = await xpCall('xp.f360-release', { cycle_id: c.id, ...(session ? { session_id: session } : {}) });
+    setBusy(false);
+    if (r.success) onReleased(); else setError(r.message);
+  };
+  return (
+    <Report360Panel boxRef={box} title={`تقرير 360 · ${c.participant}`} data={data} error={error} onClose={onClose}>
+      {c.status === 'closed' && data && (
+        <div className="stack" style={{ gap: 6, marginTop: 16 }}>
+          <p className="small muted">لا يرى المشارك تقريره حتى تسلّمه له في جلسة التوجيه. اقرأه معه، ثم ساعده على اختيار سلوكين أو ثلاثة لخطته.</p>
+          {c.sessions?.length > 0 && (
+            <label className="field"><span>جلسة الاستلام <em>(اختياري)</em></span>
+              <select className="input" value={session} onChange={(e) => setSession(e.target.value)}>
+                <option value="">بلا ربط بجلسة</option>
+                {c.sessions.map((x) => <option key={x.id} value={x.id}>{day(x.starts_at)}</option>)}
+              </select></label>
+          )}
+          <div className="row"><button className="btn gold sm" disabled={busy} onClick={release}>سلّمته في الجلسة: أتحه للمشارك</button></div>
+        </div>
+      )}
+    </Report360Panel>
+  );
+}
 
 const countsAr = (c) => Object.entries(c || {}).filter(([, x]) => x.invited).map(([g, x]) => `${FEEDBACK_GROUP_AR[g]} ${x.submitted}/${x.invited}`).join(' · ');
 
@@ -17,6 +56,7 @@ export default function Advisor360({ initial }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [view, setView] = useState(null);
   const load = useCallback(() => xpCall('xp.f360').then((r) => setD(r?.success ? r : null)), []);
   useEffect(() => { if (initial === undefined) load(); }, [initial, load]);
   const approvals = d?.approvals || [];
@@ -56,10 +96,12 @@ export default function Advisor360({ initial }) {
             <li key={c.id} className="xpp-person">
               <div className="row between"><b>{c.participant}</b><span className="chip">{CYCLE_STATUS_AR[c.status]}</span></div>
               <small className="muted">{countsAr(c.counts)}</small>
+              {['closed', 'released'].includes(c.status) && <div className="row"><button className="btn sm" onClick={() => setView(c)}>{c.status === 'closed' ? 'اقرأ التقرير قبل الجلسة' : 'اقرأ التقرير'}</button></div>}
             </li>
           ))}
         </ul>
       )}
+      {view && <ReportDialog c={view} onClose={() => setView(null)} onReleased={() => { setMsg(`سُلّم التقرير إلى ${view.participant}.`); setView(null); load(); }} />}
     </section>
   );
 }

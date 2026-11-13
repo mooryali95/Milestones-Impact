@@ -16,6 +16,7 @@ import { adminReport as impactReport, awaitingFor, confirmRater } from './impact
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
 import { coordTeam } from './team.ts';
+import { orgFeedback } from './feedback360.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -255,6 +256,8 @@ export async function dashboard(c: any) {
     audit('coordinator', c.email, 'coordinator.view', 'org_coordinators', c.id),
   ]);
   r.raters_pending = raters;
+  // تقييم 360: أعداد ونسبة استجابة، ومتوسط كل إطار فوق حد الجهة وحده (orgTotals)، لمن يرى الدرجات. لا صف فردي أبدًا
+  r.feedback360 = coordPermissions(c.permissions).scores ? await orgFeedback((r.participants || []).map((p: any) => p.id)).catch(() => null) : null;
   return r;
 }
 

@@ -78,3 +78,28 @@ Deno.test('360: القائمة لا تُرسل بلا تقدير ذاتي ولا
   });
   await assertRejects(() => FB.submitList(P, { cycle_id: CYCLE }), Fail, 'من غير مديرك');
 });
+
+Deno.test('360: المشارك لا يرى تقريره قبل التسليم، والإدارة بدور العرض لا تفتح تقرير فرد', async () => {
+  install({
+    app_settings: [{ key: 'feedback360', value: { enabled: true } }],
+    feedback_cycles: [{ id: CYCLE, participant_id: P.id, wave: 't1', instrument_id: 'i1', status: 'closed' }],
+    raters: [], questions: [], audit_log: [],
+  });
+  await assertRejects(() => FB.participantReport(P, { cycle_id: CYCLE }), Fail, 'جلسة التوجيه');
+  await assertRejects(() => FB.adminReport({ email: 'v@x.sa', role: 'viewer' }, { cycle_id: CYCLE }), Fail, 'للعرض فقط');
+});
+
+Deno.test('360: بعد التسليم يقرأ المشارك تقريره، والخطة تُقص إلى ثلاثة سلوكيات', async () => {
+  const opts = [0, 1, 2, 3, 4].map((score) => ({ score }));
+  const t = install({
+    app_settings: [{ key: 'feedback360', value: { enabled: true } }],
+    feedback_cycles: [{ id: CYCLE, participant_id: P.id, wave: 't1', instrument_id: 'i1', status: 'released', self_answers: { q1: 2 } }],
+    questions: [{ id: 'q1', instrument_id: 'i1', active: true, tier: 'behavior', dimension: 'impact', text_rater_ar: 'يسأل عن الأثر', options: opts }],
+    raters: [1, 2, 3].map((n) => ({ id: `r${n}`, cycle_id: CYCLE, relation: 'peer', status: 'submitted', answers: { q1: { now: 3 } } })),
+    audit_log: [],
+  });
+  const r: any = await FB.participantReport(P, { cycle_id: CYCLE });
+  assertEquals([r.report.releasable, r.report.dims[0].cells.all.avg, r.report.dims[0].self], [true, 4, 3]);
+  await FB.savePlan(P, { cycle_id: CYCLE, items: [1, 2, 3, 4].map((n) => ({ behavior: `سلوك ${n}`, action: 'أفعل' })) });
+  assertEquals((t.feedback_cycles as Row[])[0].plan.items.length, 3);
+});

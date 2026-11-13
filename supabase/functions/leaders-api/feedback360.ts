@@ -14,8 +14,9 @@ import { raterCheck, RELATION_AR } from './impact.ts';
 import { appSettings } from './settings.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR } from './domains.js';
 import { isEmail, normalizeEmail } from './logic.js';
+import { requireWrite, type Admin } from './admin.ts';
 import {
-  CYCLE_STATUS_AR, feedbackPromiseAr, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, raterItems, remindersDue,
+  CYCLE_STATUS_AR, feedbackPromiseAr, feedbackReport, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, orgTotals, raterItems, remindersDue, reportItems,
 } from './feedback360.js';
 import { FEEDBACK_GROUP_AR } from './labels.js';
 
@@ -209,7 +210,11 @@ export async function advisorList(e: any) {
       approvals.push({ ...base, submitted_at: c.submitted_at, self_done: !!c.self_submitted_at,
         nominees: raters.map((r) => ({ id: r.id, email: r.email, full_name: r.full_name, relation: r.relation, relation_ar: RELATION_AR[r.relation] || r.relation,
           flags_ar: (r.verification_flags || []).map((f: string) => (RATER_FLAG_AR as Record<string, string>)[f] || f) })) });
-    } else reports.push({ ...base, closes_at: c.closes_at, closed_at: c.closed_at, released_at: c.released_at, counts: groupCounts(raters) });
+    } else {
+      // جلسات المشارك مع هذا المستشار: يختار منها جلسة الاستلام عند التسليم
+      const { data: sessions } = await db.from('coaching_sessions').select('id, starts_at, status').eq('participant_id', c.participant_id).eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(10);
+      reports.push({ ...base, closes_at: c.closes_at, closed_at: c.closed_at, released_at: c.released_at, counts: groupCounts(raters), sessions: sessions || [] });
+    }
   }
   return { success: true, approvals, reports };
 }
@@ -313,3 +318,119 @@ export async function adminClose(a: { email: string }, b: Body) {
   return { success: true, ...(await sweep()) };
 }
 
+
+// ── المرحلة 3: التقرير والاستلام ──
+// التقرير من feedbackReport وحدها (feedback360.js)، لكل جمهور البيانات نفسها: المشارك بعد التسليم، والمستشار
+// الفعلي من الإغلاق، والإدارة للدعم الفني بسطر في السجل. للموجة الثانية تُضاف أرقام الأولى لكل إطار.
+async function buildReport(c: any, s: Settings) {
+  const [qs, raters] = await Promise.all([
+    db.from('questions').select('*').eq('instrument_id', c.instrument_id).eq('active', true).eq('tier', 'behavior').order('sort'),
+    cycleRaters(c.id),
+  ]);
+  const items = reportItems((must(qs) as any[]) ?? []);
+  let previous = null;
+  if (c.wave === 't2') {
+    const t1 = must(await db.from('feedback_cycles').select('*').eq('participant_id', c.participant_id).eq('wave', 't1').in('status', ['closed', 'released']).maybeSingle()) as any;
+    if (t1) previous = feedbackReport({ items, selfAnswers: t1.self_answers || {}, raters: await cycleRaters(t1.id), s, seed: t1.id });
+  }
+  return feedbackReport({ items, selfAnswers: c.self_answers || {}, raters, s, seed: c.id, previous });
+}
+const reportMeta = (c: any, who: string | null) => ({ cycle: { id: c.id, wave: c.wave, status: c.status, closed_at: c.closed_at, released_at: c.released_at, plan: c.plan || null }, participant: who });
+
+export async function participantReport(p: any, b: Body) {
+  const c = await ownCycle(p, b.cycle_id);
+  if (c.status !== 'released') throw new Fail('يسلّمك مستشارك تقريرك في جلسة التوجيه، فتقرؤه معه أول مرة', 403, 'not_released');
+  const s = (await appSettings()).feedback360;
+  return { success: true, ...reportMeta(c, p.full_name), report: await buildReport(c, s) };
+}
+
+// خطة التطوير بعد الاستلام: سلوكان أو ثلاثة وما سيفعله في كل منها
+export async function savePlan(p: any, b: Body) {
+  const c = await ownCycle(p, b.cycle_id);
+  if (c.status !== 'released') throw new Fail('الخطة بعد استلام التقرير', 409, 'not_released');
+  const items = (Array.isArray(b.items) ? b.items : []).slice(0, 3)
+    .map((x: any) => ({ behavior: String(x?.behavior || '').trim().slice(0, 300), action: String(x?.action || '').trim().slice(0, 500) }))
+    .filter((x: any) => x.behavior);
+  if (!items.length) throw new Fail('اكتب سلوكًا واحدًا على الأقل تعمل عليه');
+  must(await db.from('feedback_cycles').update({ plan: { items }, plan_at: new Date().toISOString() }).eq('id', c.id));
+  await audit('participant', p.id, 'f360.plan', 'feedback_cycles', c.id, null, { items: items.length });
+  return { success: true, plan: { items } };
+}
+
+async function cycleById(id: unknown) {
+  if (!isUuid(id)) throw new Fail('بيانات ناقصة');
+  const c = must(await db.from('feedback_cycles').select('*').eq('id', String(id)).maybeSingle()) as any;
+  if (!c) throw new Fail('لا دورة بهذا المعرّف', 404, 'not_found');
+  return c;
+}
+
+// المستشار يقرأ التقرير من الإغلاق، قبل المشارك، ليستعد لجلسة الاستلام. كل اطلاع في السجل باسمه
+export async function advisorReport(e: any, b: Body) {
+  const c = await cycleById(b.cycle_id);
+  const p = await requireEffectiveAdvisor(e, c.participant_id);
+  if (!['closed', 'released'].includes(c.status)) throw new Fail('يُتاح التقرير بعد إغلاق النافذة', 409, 'not_closed');
+  const s = (await appSettings()).feedback360;
+  await audit('system', `expert:${e.email}`, 'expert.f360-report-view', 'feedback_cycles', c.id, null, { participant_id: p.id });
+  return { success: true, ...reportMeta(c, p.full_name), report: await buildReport(c, s) };
+}
+
+// التسليم في جلسة التوجيه: المستشار وحده يتيح التقرير للمشارك، ويُربط بالجلسة إن اختارها
+export async function advisorRelease(e: any, b: Body) {
+  const c = await cycleById(b.cycle_id);
+  const p = await requireEffectiveAdvisor(e, c.participant_id);
+  if (c.status !== 'closed') throw new Fail(c.status === 'released' ? 'سُلّم التقرير من قبل' : 'يُسلَّم التقرير بعد إغلاق النافذة', 409, 'not_closed');
+  let session: string | null = null;
+  if (b.session_id) {
+    const { data } = await db.from('coaching_sessions').select('id').eq('id', String(b.session_id)).eq('participant_id', p.id).maybeSingle();
+    if (!data) throw new Fail('هذه الجلسة ليست للمشارك', 400, 'bad_session');
+    session = (data as any).id;
+  }
+  must(await db.from('feedback_cycles').update({ status: 'released', released_by: `expert:${e.email}`, released_at: new Date().toISOString(), debrief_session_id: session }).eq('id', c.id).eq('status', 'closed'));
+  await audit('system', `expert:${e.email}`, 'f360.release', 'feedback_cycles', c.id, null, { participant_id: p.id, session_id: session });
+  if (p.email) await sendMail(p.email, FEEDBACK_MAIL.released.subject(), feedbackMail('released', p.full_name, p.full_name, { url: CONFIG.appUrl }), [], { ref: `participant:${p.id}` }).catch((x) => console.error('f360 release mail', x));
+  return { success: true };
+}
+
+// الإدارة: تقرير فرد للدعم الفني، للمدير ذي الكتابة وحده، وكل فتح في السجل
+export async function adminReport(a: Admin, b: Body) {
+  requireWrite(a);
+  if (!isUuid(b.cycle_id)) throw new Fail('بيانات ناقصة');
+  const c = must(await db.from('feedback_cycles').select('*, participants(full_name)').eq('id', String(b.cycle_id)).maybeSingle()) as any;
+  if (!c) throw new Fail('لا دورة بهذا المعرّف', 404, 'not_found');
+  if (!['closed', 'released'].includes(c.status)) throw new Fail('يُتاح التقرير بعد إغلاق النافذة', 409, 'not_closed');
+  const s = (await appSettings()).feedback360;
+  await audit('admin', a.email, 'admin.f360-report-view', 'feedback_cycles', c.id, null, { participant_id: c.participant_id });
+  // معرّف المقيّم لحجب ملاحظة، بلا اسمه ولا بريده: الإدارة ترى نص الملاحظة كما يراه المشارك
+  const notes = (await cycleRaters(c.id)).filter((r) => r.status === 'submitted' && r.open_answers).map((r) => ({ rater_id: r.id, hidden: !!r.comment_hidden, open: r.open_answers }));
+  return { success: true, ...reportMeta(c, c.participants?.full_name || null), report: await buildReport(c, s), notes };
+}
+
+// حجب ملاحظة تكشف صاحبها أو تسيء، قبل التسليم وبعده، بسطر في السجل
+export async function adminHideComment(a: Admin, b: Body) {
+  requireWrite(a);
+  if (!isUuid(b.rater_id)) throw new Fail('بيانات ناقصة');
+  const hidden = b.hidden !== false;
+  const r = must(await db.from('raters').update({ comment_hidden: hidden }).eq('id', String(b.rater_id)).eq('phase', 'f360').select('id, cycle_id').maybeSingle()) as any;
+  if (!r) throw new Fail('لا مقيّم 360 بهذا المعرّف', 404, 'not_found');
+  await audit('admin', a.email, 'admin.f360-comment', 'raters', r.id, null, { cycle_id: r.cycle_id, hidden });
+  return { success: true, hidden };
+}
+
+// الجهة: أعداد ونسبة استجابة، ومتوسط كل إطار فوق org_min وحده (orgTotals). ids: مشاركو الجهة بقاعدة الإحصاء
+// نفسها (forStats في لوحة المنسق). null إن لم يُرحَّل الجدول
+export async function orgFeedback(ids: string[]) {
+  if (!ids.length) return null;
+  const s = (await appSettings()).feedback360;
+  const { data, error } = await db.from('feedback_cycles').select('*').in('participant_id', ids).in('status', ['open', 'closed', 'released']);
+  if (error) { if (missingTable(error)) return null; throw error; }
+  if (!data?.length) return null;
+  const reports = [];
+  for (const c of data) reports.push(c.status === 'released' ? await buildReport(c, s) : { releasable: false, ...(await responseOf(c.id)) });
+  return orgTotals(reports, s);
+}
+async function responseOf(cycleId: string) {
+  const counts = groupCounts(await cycleRaters(cycleId));
+  const invited = NOMINEE_GROUPS.reduce((n, g) => n + (counts as any)[g].invited, 0);
+  const submitted = NOMINEE_GROUPS.reduce((n, g) => n + (counts as any)[g].submitted, 0);
+  return { response: { invited, submitted } };
+}

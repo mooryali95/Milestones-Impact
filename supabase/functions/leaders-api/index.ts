@@ -207,6 +207,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'f360.nominate': (p, b) => FB.nominate(p, b),
   'f360.remove': (p, b) => FB.removeNominee(p, b),
   'f360.submit': (p, b) => FB.submitList(p, b),
+  'f360.report': (p, b) => FB.participantReport(p, b),
+  'f360.plan': (p, b) => FB.savePlan(p, b),
   'capstone.get': (p) => X.get(p),
   'capstone.summary': (p, b) => X.saveSummary(p, b),
   'capstone.submit': (p) => X.submit(p),
@@ -255,6 +257,9 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   // تقييم 360: المستشار الفعلي يعتمد قائمة المقيّمين أو يعيدها بملاحظة
   'xp.f360': (e) => FB.advisorList(e),
   'xp.f360-decide': (e, b) => FB.advisorDecide(e, b),
+  // التقرير للمستشار الفعلي من الإغلاق، والتسليم في جلسة التوجيه
+  'xp.f360-report': (e, b) => FB.advisorReport(e, b),
+  'xp.f360-release': (e, b) => FB.advisorRelease(e, b),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
   'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
   'xp.reviews': (e) => V2.reviews(e),
@@ -312,6 +317,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   // تقييم 360: حالة الدورات ونسب الاستجابة بلا نتيجة فرد، وإغلاق نافذة مبكرًا
   'admin.f360': (_a, b) => FB.adminList(b),
   'admin.f360-close': (a, b) => A.writer(a, FB.adminClose, b),
+  // تقرير فرد للدعم الفني: للمدير ذي الكتابة وحده ويُسجَّل كل فتح، وحجب ملاحظة تكشف صاحبها
+  'admin.f360-report': (a, b) => A.writer(a, FB.adminReport, b),
+  'admin.f360-comment': (a, b) => A.writer(a, FB.adminHideComment, b),
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   'admin.mail-send-test': S.mailSendTest,
   'admin.visits': (_a, b) => S.visits(b),

@@ -56,6 +56,7 @@ test('المشارك على الجوال: يبدأ 360 ويقدّر نفسه ب�
   await expect(page.getByRole('button', { name: 'بقي 1' })).toBeDisabled();
   await page.getByRole('radiogroup', { name: /أطلب رأي الفريق/ }).getByRole('radio', { name: 'في نحو نصف المرات' }).click();
   await page.getByRole('button', { name: 'احفظ تقديري' }).click();
+  await expect(page.getByRole('button', { name: 'حدّث تقديري' })).toBeVisible();
   expect(calls.find((c) => c.action === 'f360.self')).toMatchObject({ cycle_id: 'c1', answers: { q1: 3, q2: 2 } });
 
   // الترشيح: لا يُرسل بأقل من الحد من غير المدير
@@ -159,4 +160,89 @@ test('المستشار: يعتمد قائمة المقيّمين فتُرسل ا
   await box.getByRole('button', { name: 'اعتمد القائمة وأرسل الدعوات' }).click();
   await expect(page.getByText('اعتُمدت قائمة سارة الأحمد وأُرسلت 2 دعوات.')).toBeVisible();
   expect(sent.find((x) => x.action === 'xp.f360-decide')).toMatchObject({ cycle_id: 'c1', decision: 'approve' });
+});
+
+// تقرير جاهز بشكل feedbackReport: الذات مقابل المجموعات، والفجوات، والملاحظات بلا نسبة
+const REPORT = {
+  releasable: true, counts: counts(), response: { invited: 8, submitted: 7 }, scale: SETTINGS.scale_labels, gap_points: 0.5,
+  columns: [{ key: 'manager', label_ar: 'المدير المباشر', n: 1 }, { key: 'peer', label_ar: 'الزملاء', n: 4 }, { key: 'others', label_ar: 'آخرون', n: 3, merged: ['أصحاب المصلحة'] }, { key: 'all', label_ar: 'كل المقيّمين', n: 8 }],
+  dims: [
+    { dimension: 'milestone', self: 4.2, cells: { manager: { avg: 3.5, n: 1 }, peer: { avg: 3.6, n: 4 }, others: { avg: 3.7, n: 3 }, all: { avg: 3.6, n: 8 } }, prev: null },
+    { dimension: 'impact', self: 3.1, cells: { manager: { avg: 3.4, n: 1 }, peer: { avg: 3.8, n: 4 }, others: null, all: { avg: 3.6, n: 8 } }, prev: null },
+  ],
+  items: [{ id: 'i1', text: 'يشارك الفريق نتائج القياس ولو لم تكن في صالحه', dimension: 'impact', self: 2.8, cells: { manager: null, peer: { avg: 3.9, n: 4 }, others: null, all: { avg: 3.9, n: 7 } }, na: 1, spread: { range: 1, key: 'agree' } }],
+  strengths: [{ id: 'i1', text: 'يشارك الفريق نتائج القياس ولو لم تكن في صالحه', self: 2.8, others: 3.9, diff: 1.1, spread: { range: 1, key: 'agree' } }],
+  blind: [{ id: 'm2', text: 'يرفع المخاطر مبكرًا لا عند وقوعها', self: 4.5, others: 3.2, diff: -1.3, spread: null }],
+  top: [], bottom: [],
+  comments: { continue: ['يلخص المواقف حين يحتد النقاش'], start: [], stop: ['يقاطع قبل أن يكتمل العرض'] },
+};
+
+test('المشارك بعد التسليم: يقرأ تقريره على الجوال ويحفظ خطته', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const calls = [];
+  const cycle = { id: 'c1', wave: 't1', status: 'released', self_done: true, nominees: [], counts: counts(), released_at: '2026-11-20T10:00:00Z' };
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    calls.push(b);
+    const r = {
+      me, 'f360.mine': { success: true, enabled: true, ready: true, settings: SETTINGS, groups: GROUPS, next: { ok: false, reason: 'gap' }, cycles: [cycle], self_items: [], self_answers: {} },
+      'f360.report': { success: true, cycle: { id: 'c1', wave: 't1', status: 'released', plan: null }, participant: 'سارة الأحمد', report: REPORT },
+      'f360.plan': { success: true, plan: { items: [] } },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: true, sessions: [] } });
+  });
+  await page.goto(APP);
+  await page.evaluate(() => { localStorage.setItem('mi_leaders_session', 't'); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.reload();
+  await page.locator('.tabbar').getByRole('button', { name: 'ملفي' }).click();
+  await page.getByRole('region', { name: 'تقييم 360 للتطوير' }).getByRole('button', { name: 'افتح تقييم 360' }).click();
+  const rep = page.getByRole('region', { name: 'تقريرك' });
+  await expect(rep.getByRole('columnheader', { name: 'أنت' }).first()).toBeVisible();
+  await expect(rep.getByRole('columnheader', { name: 'المدير المباشر' }).first()).toBeVisible();
+  await expect(rep).toContainText('ضُمّ «أصحاب المصلحة» لأنه دون حد الإخفاء');
+  await expect(rep.getByRole('region', { name: 'قوة قد لا تراها' })).toContainText('يشارك الفريق نتائج القياس');
+  await expect(rep.getByRole('region', { name: 'نقطة عمياء محتملة' })).toContainText('يرفع المخاطر مبكرًا');
+  await expect(rep.getByRole('region', { name: 'ما قالوه' })).toContainText('«يلخص المواقف حين يحتد النقاش»');
+  // الجدول يمرّر داخل إطاره، والصفحة لا تمرّر أفقيًا
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.getByLabel('السلوك 1').fill('أشارك نتائج القياس مع الفريق شهريًا');
+  await page.getByRole('button', { name: 'احفظ خطتي' }).click();
+  await expect(page.getByText('حُفظت خطتك.')).toBeVisible();
+  expect(calls.find((c) => c.action === 'f360.plan').items[0]).toEqual({ behavior: 'أشارك نتائج القياس مع الفريق شهريًا', action: '' });
+});
+
+test('المستشار: يقرأ التقرير قبل الجلسة في نافذة بلوحة المفاتيح، ثم يسلّمه مربوطًا بالجلسة', async ({ page }) => {
+  const sent = [];
+  const st = { reports: [{ id: 'c1', wave: 't1', status: 'closed', participant: 'سارة الأحمد', participant_id: 'p1', counts: counts({ peer: { invited: 4, submitted: 4 } }), sessions: [{ id: 's1', starts_at: '2026-11-24T09:00:00Z', status: 'booked' }] }] };
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    sent.push(b);
+    if (b.action === 'xp.f360-release') st.reports[0].status = 'released';
+    const r = {
+      'xp.dashboard': expertDash,
+      'xp.participants': { success: true, items: [], cohorts: [], raters_pending: [] },
+      'xp.reviews': { success: true, advisor: true, items: [] },
+      'xp.peer-list': { success: true, advisor: false, cohorts: [], items: [], pending: 0 },
+      'xp.f360': { success: true, approvals: [], reports: st.reports },
+      'xp.f360-report': { success: true, cycle: { id: 'c1', wave: 't1', status: 'closed' }, participant: 'سارة الأحمد', report: REPORT },
+      'xp.f360-release': { success: true },
+    }[b.action];
+    await route.fulfill({ json: r ?? { success: true } });
+  });
+  await page.addInitScript((t) => localStorage.setItem('mi_leaders_expert_session', t), 'x'.repeat(40));
+  await page.goto(APP + 'x');
+  const open = page.getByRole('button', { name: 'اقرأ التقرير قبل الجلسة' });
+  await open.focus();
+  await page.keyboard.press('Enter');
+  const d = page.getByRole('dialog', { name: 'تقرير 360 · سارة الأحمد' });
+  await expect(d).toBeFocused();
+  await expect(d).toContainText('يرفع المخاطر مبكرًا');
+  await page.keyboard.press('Escape');
+  await expect(d).toHaveCount(0);
+  await expect(open).toBeFocused();
+  await open.click();
+  await d.getByLabel(/جلسة الاستلام/).selectOption('s1');
+  await d.getByRole('button', { name: 'سلّمته في الجلسة: أتحه للمشارك' }).click();
+  await expect(page.getByText('سُلّم التقرير إلى سارة الأحمد.')).toBeVisible();
+  expect(sent.find((x) => x.action === 'xp.f360-release')).toMatchObject({ cycle_id: 'c1', session_id: 's1' });
 });

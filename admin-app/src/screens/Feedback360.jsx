@@ -5,17 +5,51 @@
 // الأعداد من groupCounts نفسها التي يرى بها المشارك والمستشار (feedback360.js).
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Report360Panel } from '../../../src/lib/Report360.jsx';
 import { CYCLE_STATUS_AR } from '../../../supabase/functions/leaders-api/feedback360.js';
-import { FEEDBACK_GROUP_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { FEEDBACK_GROUP_AR, FEEDBACK_OPEN_AR } from '../../../supabase/functions/leaders-api/labels.js';
 
 const WAVE_AR = { t1: 'الأولى', t2: 'الثانية' };
 const countsAr = (c) => Object.entries(c || {}).filter(([, x]) => x.invited).map(([g, x]) => `${FEEDBACK_GROUP_AR[g]} ${x.submitted}/${x.invited}`).join(' · ') || '—';
+
+// تقرير فرد للدعم الفني: يُحمَّل عند الطلب فيُسجَّل كل فتح على الخادم (admin.f360-report)، ومعه الملاحظات
+// بمعرّف صاحبها لا اسمه لحجب ما يكشفه أو يسيء. التركيز وحبسه من useModalFocus (ui.jsx)، وEsc من useEscape
+function ReportDialog({ c, onClose }) {
+  const { toast } = useUI();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const load = useCallback(() => L('admin.f360-report', { cycle_id: c.id }).then((r) => (r.success ? setData(r) : setError(r.message))), [c.id]);
+  useEffect(() => { load(); }, [load]);
+  useEscape(onClose);
+  const hide = async (n) => {
+    const r = await L('admin.f360-comment', { rater_id: n.rater_id, hidden: !n.hidden });
+    toast(r.success ? (r.hidden ? 'حُجبت الملاحظة' : 'أُظهرت الملاحظة') : r.message);
+    if (r.success) load();
+  };
+  return (
+    <Report360Panel title={`تقرير 360 · ${c.participant}`} data={data} error={error} onClose={onClose}>
+      {data?.notes?.length > 0 && (
+        <section className="la-card" aria-label="مراجعة الملاحظات" style={{ marginTop: 16 }}>
+          <h3>مراجعة الملاحظات</h3>
+          <p className="la-muted">احجب ملاحظة تكشف صاحبها أو تسيء. الحجب يُسجَّل، ويسري على ما يراه المشارك والمستشار.</p>
+          {data.notes.map((n, i) => (
+            <div key={n.rater_id} className="la-row between">
+              <div>{Object.entries(n.open).map(([k, t]) => <p key={k}><small className="la-muted">{FEEDBACK_OPEN_AR[k]}</small> {t}</p>)}</div>
+              <button type="button" className="btn-sm ghost" aria-label={`${n.hidden ? 'أظهر' : 'احجب'} الملاحظة ${i + 1}`} onClick={() => hide(n)}>{n.hidden ? 'أظهر' : 'احجب'}</button>
+            </div>
+          ))}
+        </section>
+      )}
+    </Report360Panel>
+  );
+}
 
 export default function Feedback360({ canWrite, onPerson }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [status, setStatus] = useState('');
+  const [view, setView] = useState(null);
   const load = useCallback(() => L('admin.f360', status ? { status } : {}).then(setD), [status]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <Spinner />;
@@ -53,13 +87,15 @@ export default function Feedback360({ canWrite, onPerson }) {
                   <td>{c.status_ar}</td>
                   <td>{countsAr(c.counts)}</td>
                   <td>{date(c.closes_at)}</td>
-                  <td>{canWrite && c.status === 'open' && <button className="btn-sm ghost" onClick={() => close(c)}>أغلق الآن</button>}</td>
+                  <td className="la-row">{canWrite && c.status === 'open' && <button className="btn-sm ghost" onClick={() => close(c)}>أغلق الآن</button>}
+                    {canWrite && ['closed', 'released'].includes(c.status) && <button className="btn-sm ghost" onClick={() => setView(c)} aria-label={`تقرير ${c.participant}`}>التقرير</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {view && <ReportDialog c={view} onClose={() => setView(null)} />}
     </div>
   );
 }
