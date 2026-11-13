@@ -316,7 +316,7 @@ function Dashboard({ me, onLogout }) {
   const printImpact = async () => {
     const win = window.open('', '_blank');
     const [{ writeDocument }, { impactReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/reports.js')]);
-    const { meta, body } = impactReport(d.impact, { org: org.name, audience: 'coordinator', names: perms.scores });
+    const { meta, body } = impactReport(d.impact, { org: org.name, audience: 'coordinator', names: perms.scores, outcomes: d.outcomes || null });
     if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
   };
   return (

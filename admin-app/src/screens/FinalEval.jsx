@@ -66,6 +66,7 @@ export function FinalEvalCard({ participantId, canWrite }) {
           <b className="la-big">{live.score != null ? `${live.score}٪` : '—'}</b>
           {live.decision && <span className={`la-chip ${DEC_CHIP[live.decision]}`}>{FINAL_DECISION_AR[live.decision]}</span>}
           {live.large_adjust && <span className="la-chip warn" title="فرق الدرجة عن الآلية يتجاوز الحد؛ يحتاج توقيعين">تعديل كبير</span>}
+          {live.near_cut && <span className="la-chip warn" title={`الدرجة على بعد ${live.near_cut.gap} من حد «${FINAL_DECISION_AR[live.near_cut.key]}» (${live.near_cut.cut}). الفرق داخل هامش الخطأ، فراجع الأدلة قبل القرار`}>قريب من الحد</span>}
         </span>
       </div>
       <p className="la-muted">
@@ -73,7 +74,8 @@ export function FinalEvalCard({ participantId, canWrite }) {
         {live.missing?.length ? ` (لم يكتمل: ${live.missing.join('، ')})` : ''}
         {live.zeroed?.length ? ` (انتهت الدفعة فحُسب صفرًا: ${live.zeroed.join('، ')})` : ''}
         {live.score_adjusted && live.score != null ? `، وبعد تعديل الخبير ${live.score}٪` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>
-        {live.fail_blocked ? <>؛ «لم يجتز» يحتاج تغطية {live.config.fail_min_coverage}٪ ودليلًا حاضرًا من المشروع أو القياس النهائي، فاقتُرح التمديد</> : null}.
+        {live.fail_blocked ? <>؛ «لم يجتز» يحتاج تغطية {live.config.fail_min_coverage}٪ ودليلًا حاضرًا من المشروع أو القياس النهائي، فاقتُرح التمديد</> : null}
+        {live.floor_capped ? <>؛ المشروع دون أرضيته {live.config.project_floor}٪، فاقتُرح «{FINAL_DECISION_AR.pass_notes}»</> : null}.
         {d.frozen && <> <span className="la-chip">لقطة الرفع · إصدار المعادلة {live.config_version}{d.current_version !== live.config_version ? ` (الإعداد الحالي ${d.current_version})` : ''}</span></>}
       </p>
 
@@ -204,6 +206,8 @@ export function FinalConfig({ program, onClose }) {
           <label className="field"><span>أعضاء اللجنة بالبريد (فارغ = أي حساب إدارة)</span><textarea rows={2} value={Array.isArray(c.committee) ? c.committee.join(', ') : c.committee || ''} onChange={(e) => setC({ ...c, committee: e.target.value })} /></label>
         </>}
         <label className="field"><span>فرق تعديل الدرجة الذي يحتاج توقيعين</span><input type="number" min="1" max="100" value={c.large_adjust} onChange={(e) => setC({ ...c, large_adjust: e.target.value })} /></label>
+        <label className="field"><span>هامش «قريب من الحد» بالنقاط (معلومة للخبير؛ صفر يعطّله)</span><input type="number" min="0" max="20" value={c.near_cut} onChange={(e) => setC({ ...c, near_cut: e.target.value })} /></label>
+        <label className="field"><span>أرضية مكوّن المشروع (٪): دونها يُقترح «اجتاز بملاحظات» بدل «اجتاز». صفر يعطّلها، وتفعيلها قرار لجنة القياس</span><input type="number" min="0" max="100" value={c.project_floor} onChange={(e) => setC({ ...c, project_floor: e.target.value })} /></label>
         <div className="la-row"><button className="btn-sm primary" disabled={busy} onClick={save}>حفظ</button><button className="btn-sm ghost" onClick={close}>إلغاء</button></div>
       </div>
     </div>

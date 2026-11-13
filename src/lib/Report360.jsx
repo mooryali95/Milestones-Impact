@@ -71,8 +71,11 @@ export default function Report360({ data, audience = 'participant' }) {
         </div>
         <p className="r3-muted small">1 = {r.scale[0]} … 5 = {r.scale[4]}. لا ترتيب بينك وبين غيرك، والفرق بين المجموعات معلومة لا خطأ: كل مجموعة ترى جانبًا من عملك.</p>
       </section>
-      <Lines mark="◆" title="قوة قد لا تراها" hint={`الآخرون أعلى من تقديرك بـ${r.gap_points} فأكثر`} list={r.strengths} />
-      <Lines mark="▲" title="نقطة عمياء محتملة" hint={`تقديرك أعلى من الآخرين بـ${r.gap_points} فأكثر`} list={r.blind} />
+      {r.gap_firm === false && (r.strengths?.length > 0 || r.blind?.length > 0) && (
+        <p className="r3-muted small" role="note">عدد المقيّمين دون {r.gap_firm_min}، ففروق التقدير أدناه مادة للنقاش مع مستشارك لا نتيجة مؤكدة.</p>
+      )}
+      <Lines mark="◆" title={r.gap_firm === false ? 'فرق يستحق النقاش: الآخرون أعلى' : 'قوة قد لا تراها'} hint={`الآخرون أعلى من تقديرك بـ${r.gap_points} فأكثر`} list={r.strengths} />
+      <Lines mark="▲" title={r.gap_firm === false ? 'فرق يستحق النقاش: تقديرك أعلى' : 'نقطة عمياء محتملة'} hint={`تقديرك أعلى من الآخرين بـ${r.gap_points} فأكثر`} list={r.blind} />
       <div className="r3-two">
         <Lines mark="↑" title="الأعلى عند الآخرين" hint="أعلى ثلاث عبارات عند كل المقيّمين" list={r.top} />
         <Lines mark="↓" title="الأدنى عند الآخرين" hint="أدنى ثلاث عبارات عند كل المقيّمين" list={r.bottom} />

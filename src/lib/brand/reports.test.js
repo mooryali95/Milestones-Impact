@@ -72,10 +72,10 @@ it('اسم ملف Excel إنجليزي ثابت', () => {
   expect(fileNameFor({ file: 'Participants', code: 'رمز عربي' }, new Date('2026-10-23T10:00:00Z'))).toBe('Milestone-Impact_Participants_-_2026-10-23.xlsx');
 });
 
-it('analysisReport يعرض النمط والفجوات والتوصيات من نتيجة التحليل كما هي', () => {
+it('analysisReport يعرض شكل الخطة والفجوات والتوصيات من نتيجة التحليل كما هي', () => {
   const a = {
     pattern: { nameAr: 'تكاملي', desc: 'تفكير <منظومي>' }, totalBooked: 5, totalProcesses: 16,
-    trackCoverage: { covered: 3, total: 4 }, phaseCoverage: { covered: 2, total: 4 }, avgPhase: '1.8', readinessAr: 'متوسطة',
+    trackCoverage: { covered: 3, total: 4 }, phaseCoverage: { covered: 2, total: 4 }, furthestPhase: 2, readinessAr: 'متوسطة',
     weightBalance: { pct: 60 }, trackDist: [{ nameAr: 'التأسيس', count: 2 }],
     timeline: [{ step: 1, nameAr: 'التشخيص', trackNameAr: 'التأسيس', trackColor: '#123456', phaseNameAr: 'أ', date: '2026-01-01', isConfirmed: true }],
     depGaps: [{ process: 'التنفيذ', missing: 'التخطيط' }], recommendations: ['ابدأ بالتخطيط'],
@@ -86,6 +86,11 @@ it('analysisReport يعرض النمط والفجوات والتوصيات من 
   expect(body).toContain('2026');
   expect(body).toContain('التخطيط');
   expect(body).toContain('ابدأ بالتخطيط');
+  expect(body).toContain('شكل الخطة');
+  expect(body).toContain('أبعد مرحلة محجوزة');
+  expect(body).not.toContain('نمط');
+  expect(body).not.toContain('متوسط المرحلة');
+  expect(meta.rows.map((r) => r[0])).toContain('شكل الخطة');
 });
 
 it('decisionReport يعرض الفئات غير الفارغة فقط ويعدّ الكل في الملخص', () => {
@@ -121,6 +126,14 @@ describe('impactReport', () => {
   it('أسماء المشاركين للمنسق بإذن فقط', () => {
     expect(impactReport(r, { org: 'جهة', audience: 'coordinator' }).body).not.toContain('سارة');
     expect(impactReport(r, { org: 'جهة', audience: 'coordinator', names: true }).body).toContain('سارة');
+  });
+  it('ثلاث طبقات مسماة، والثالثة من منافع المبادرات، وحد القراءة مكتوب', () => {
+    const plain = impactReport(r).body;
+    for (const t of ['الطبقة الأولى: تعلم مُقاس', 'الطبقة الثالثة: نتائج عند الجهة', 'تغيّر مرصود لا أثر مُسند', 'لا مبادرات معتمدة تُتابَع بعد']) expect(plain).toContain(t);
+    const withOutcomes = impactReport(r, { outcomes: { approved: 4, reporting: 3, realization: 62, verified: 2 } }).body;
+    expect(withOutcomes).toContain('62%');
+    expect(withOutcomes).toContain('مبادرة معتمدة');
+    expect(withOutcomes).not.toContain('لا مبادرات معتمدة تُتابَع بعد');
   });
   it('بلا أزواج يشرح متى تظهر المقارنة', () => {
     expect(impactReport({ counts: { participants: 1, baseline: 1, post: 0, paired: 0 }, cohort: {} }).body).toContain('لا أحد لديه القياسان بعد');

@@ -110,12 +110,12 @@ export function planReport(user, rows) {
 // التقرير التحليلي للمصفوفة: يقرأ نتيجة analyzeBookings كما هي (مصدرها الوحيد)
 export function analysisReport(user, a) {
   const body = [
-    section('Pattern', 'نمط التخطيط', callout(`نمط ${a.pattern.nameAr}`, a.pattern.desc)),
+    section('Plan shape', 'شكل الخطة', callout(a.pattern.nameAr, a.pattern.desc)),
     section('Indicators', 'المؤشرات', kpis([
       { value: a.totalBooked, label: 'عملية محجوزة', hint: `من ${a.totalProcesses}` },
       { value: `${a.trackCoverage.covered}/${a.trackCoverage.total}`, label: 'مسارات مغطاة' },
       { value: `${a.phaseCoverage.covered}/${a.phaseCoverage.total}`, label: 'مراحل مغطاة' },
-      { value: a.avgPhase, label: 'متوسط المرحلة' },
+      { value: a.furthestPhase, label: 'أبعد مرحلة محجوزة' },
       { value: a.readinessAr, label: 'الجاهزية' },
     ])),
     section('Tracks', 'توزيع الاهتمام على المسارات', bars(a.trackDist.map((t) => ({ label: t.nameAr, value: t.count })), 4),
@@ -133,7 +133,7 @@ export function analysisReport(user, a) {
     meta: {
       kind: 'ANL', kindLabel: 'Analytical Report', eyebrow: 'Impact Matrix · Analytical Report',
       title: 'التقرير التحليلي', subtitle: `مصفوفة التأثير · ${user.name || ''}`,
-      rows: [['المشارك', user.name || '·'], ['العمليات المحجوزة', `${a.totalBooked} من ${a.totalProcesses}`], ['النمط', a.pattern.nameAr], ['تاريخ الإصدار', today()]],
+      rows: [['المشارك', user.name || '·'], ['العمليات المحجوزة', `${a.totalBooked} من ${a.totalProcesses}`], ['شكل الخطة', a.pattern.nameAr], ['تاريخ الإصدار', today()]],
       confidential: `سري: مخصص لـ ${user.name || 'المشارك'} ومستشاره فقط`,
       closing: 'أُعدّ هذا التقرير آليًا من حجوزات المشارك على مصفوفة التأثير لحظة إصداره، وهو قراءة أولية تُستكمل بالحوار مع المستشار.',
     },
@@ -169,7 +169,9 @@ export function decisionReport(project, buckets) {
 // audience: 'admin' أو 'coordinator'؛ أسماء المشاركين تظهر للمنسق فقط إن مُنح صلاحية المستويات.
 const VERDICT = { confirmed: 'تغير مؤكد', emerging: 'مؤشرات أولية', none: 'لا دليل كافٍ', decline: 'تراجع يحتاج مراجعة' };
 const signed = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
-export function impactReport(r, { org = null, audience = 'admin', names = audience === 'admin' } = {}) {
+// outcomes: مجاميع admin.outcomes (أثر المبادرات) إن توفرت، فتكتمل الطبقة الثالثة. التقرير ثلاث طبقات مسماة:
+// تعلم مُقاس، وسلوك في العمل، ونتائج عند الجهة، ولا يُسمّى فرق الاختبار وحده «أثرًا» (تحليل نماذج القياس §5.5)
+export function impactReport(r, { org = null, audience = 'admin', names = audience === 'admin', outcomes = null } = {}) {
   const c = r.counts || {};
   const dims = Object.keys(DIM_AR).filter((d) => r.cohort?.[d]);
   const cohortRows = dims.map((d) => {
@@ -197,14 +199,24 @@ export function impactReport(r, { org = null, audience = 'admin', names = audien
     ])),
     ...(r.caution ? [callout('تنبيه منهجي', r.caution)] : []),
     c.paired
-      ? section('Before and after', 'قبل وبعد لكل إطار', table(
+      ? section('Layer 1 · Learning', 'الطبقة الأولى: تعلم مُقاس، قبل وبعد لكل إطار', table(
         [{ label: 'الإطار' }, { label: 'العدد' }, { label: 'قبل' }, { label: 'بعد' }, { label: 'الفرق' }, { label: 'حجم الأثر dz' }, { label: 'تحسن موثوق' }, { label: 'ارتقى مستوى' }, { label: 'تقدير المدير' }],
         cohortRows), 'النسب المركبة من 100 على الجوانب المشتركة بين القياسين. التحسن الموثوق يتجاوز خطأ القياس (RCI ≥ 1.96).')
-      : section('Before and after', 'قبل وبعد لكل إطار', '<p class="muted">لا أحد لديه القياسان بعد، فتظهر المقارنة حين يُتم المشاركون القياس البعدي.</p>'),
+      : section('Layer 1 · Learning', 'الطبقة الأولى: تعلم مُقاس، قبل وبعد لكل إطار', '<p class="muted">لا أحد لديه القياسان بعد، فتظهر المقارنة حين يُتم المشاركون القياس البعدي.</p>'),
     ...(c.paired ? [section('Verdicts', 'الحكم بالتثليث', points(verdictLines), '«تغير مؤكد» يتطلب مصدرين على الأقل أحدهما غير ذاتي: الاختبار، أو تقدير المدير، أو دليل المشروع المعتمد.')] : []),
-    ...((r.transfer || []).length ? [section('Transfer', 'انتقال التعلم إلى العمل', table(
+    ...((r.transfer || []).length ? [section('Layer 2 · Behaviour', 'الطبقة الثانية: سلوك في العمل، انتقال التعلم', table(
       [{ label: 'البند' }, { label: 'العدد', width: '18mm' }, { label: 'موافقون', width: '22mm' }, { label: 'المتوسط من 4', width: '26mm' }],
-      r.transfer.map((t) => [t.text, t.n, `${t.agree_pct}%`, t.mean])), 'بيئة التطبيق: ضعف الدعم أو الفرص يفسّر غياب الأثر أحيانًا أكثر من جودة التدريب.')] : []),
+      r.transfer.map((t) => [t.text, t.n, `${t.agree_pct}%`, t.mean])), 'تقدير ذاتي لبيئة التطبيق، يُقرأ مع عمود «تقدير المدير» في الطبقة الأولى: ضعف الدعم أو الفرص يفسّر غياب الأثر أحيانًا أكثر من جودة التدريب.')] : []),
+    section('Layer 3 · Results', 'الطبقة الثالثة: نتائج عند الجهة، منافع المبادرات', outcomes?.approved
+      ? kpis([
+        { value: outcomes.approved, label: 'مبادرة معتمدة' },
+        { value: outcomes.reporting ?? 0, label: 'تتابع تنفيذها' },
+        { value: outcomes.realization == null ? '·' : `${outcomes.realization}%`, label: 'تحقق المنافع مقابل مستهدفها' },
+        { value: outcomes.verified ?? 0, label: 'مراجعة أكّدها الرعاة' },
+      ])
+      : '<p class="muted">لا مبادرات معتمدة تُتابَع بعد. تكتمل هذه الطبقة بمراجعتي اليوم 90 و180 بعد اعتماد المبادرات.</p>',
+    'المنافع من سجل منافع كل مبادرة: خط أساسها ومستهدفها من الوثيقة المعتمدة، والمتحقق من تحديثات القادة، ويؤكده الرعاة.'),
+    callout('حدود القراءة', 'هذا تقرير تغيّر مرصود لا أثر مُسند: لا مجموعة مقارنة، فالتغير قد يحمل معه أثر الخبرة والوقت. الطبقة الأولى تعلم على اختبار، والثانية سلوك بتقدير أصحابه ومدرائهم، والثالثة نتائج مشاريع حقيقية. قوة الدليل في اجتماع الطبقات لا في واحدة منها.'),
     ...(names && peopleRows.length ? [section('Participants', 'المشاركون', table([{ label: 'المشارك' }, ...dims.map((d) => ({ label: DIM_EN[d] }))], peopleRows), `${peopleRows.length} مشارك لديهم القياسان.`)] : []),
   ].join('');
 

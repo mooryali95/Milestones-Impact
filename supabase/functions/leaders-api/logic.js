@@ -180,7 +180,8 @@ export function approvalOf(placements) {
 // بوابة: لا يملك التقرير الذاتي حق النقض على اختبار موضوعي (سياسة المرحلة ب،
 // ملحق التدقيق 1). إن قلّت عن الأرضية والاختبار ناجح تُعلَّم للمستشار.
 // أرضية المتوسط 50 (D07، مؤقتة للدفعة الأولى) فوق نسبة التخمين في أسئلة الأربعة بدائل (25%) بهامش واضح،
-// وتسري على المعرفة والمواقف معًا لأنها حقل واحد. والهامش الحدّي 8 قريب من خطأ القياس المتوقع لستة أسئلة في الجانب.
+// وتسري على المعرفة والمواقف معًا لأنها حقل واحد. والهامش الحدّي 8 تقدير أولي قريب من خطأ القياس النظري للمؤشر (نحو 9 في baseline-v5)،
+// ويُضبط على الخطأ المحسوب من بيانات الدفعة (measurementEvidence) عند 30 مشاركًا.
 export const DEFAULT_MODEL = {
   w_knowledge: 35, w_skill: 50, w_behavior: 15,
   min_intermediate: 55, min_advanced: 80,
@@ -312,8 +313,10 @@ export function overrideNeedsReason(currentLevel, newLevel, note, min = OVERRIDE
 
 // ── مسافة الأسئلة عن المستوى التالي ──
 // كم سؤالًا يفصل المشارك عن المستوى التالي؟ رقم للمستشار يكمل رقاقة «حدّية».
-// الحساب: كل سؤال معرفة أو موقف درجته القصوى 4 من 24 في الجانب (6 أسئلة)،
-// وكل عبارة ممارسة 4 من 16 (4 عبارات)؛ فالنقطة الواحدة في الجانب تساوي
+// الحساب (بالثابت الاحتياطي TIER_MAX_POINTS، وهو بنية baseline-v4): كل سؤال معرفة أو موقف
+// درجته القصوى 4 من 24 في الجانب (6 أسئلة)، وكل عبارة ممارسة 4 من 16 (4 عبارات).
+// الأداة الفاعلة تمرر نقاطها الفعلية من tierMaxPointsOf (8 و8 و5 في baseline-v5)، فلا يُبالغ
+// في قيمة السؤال الواحد. فالنقطة الواحدة في الجانب تساوي
 // 100/24 أو 100/16 من مئته، وفي المؤشر المركّب 0.35·(100/24) = 1.46 للمعرفة
 // و0.50·(100/24) = 2.08 للمواقف و0.15·(100/16) = 0.94 للممارسة (بالأوزان
 // الافتراضية). السؤال الكامل (0 ← 4) أربع نقاط: 5.83 و8.33 و3.75 في المؤشر.
@@ -325,7 +328,20 @@ export function overrideNeedsReason(currentLevel, newLevel, note, min = OVERRIDE
 // evaluation: ناتج evaluatePlacement مع نسب الجوانب { knowledge, skill, behavior }.
 export const ITEM_POINTS = 4;
 export const TIER_MAX_POINTS = { knowledge: 24, skill: 24, behavior: 16 };
-export function itemsToFlip(evaluation, model = DEFAULT_MODEL) {
+// أقصى نقاط كل جانب في إطار واحد من أسئلة الأداة نفسها (بصيغة المشارك، دون فقرات المستوى
+// والتوائم التي لا تدخل نسب الجوانب). جانب بلا أسئلة يأخذ الثابت الاحتياطي.
+export function tierMaxPointsOf(questions, { dimension = null, form = null } = {}) {
+  const out = {};
+  for (const q of questions || []) {
+    if (q.active === false || !TIERS.includes(q.tier)) continue;
+    if (dimension && q.dimension !== dimension) continue;
+    if (q.form && form && q.form !== form) continue;
+    if (levelGated(q) || isTwin(q)) continue;
+    out[q.tier] = (out[q.tier] || 0) + maxScore(q) * Number(q.weight ?? 1);
+  }
+  return Object.fromEntries(TIERS.map((t) => [t, out[t] > 0 ? out[t] : TIER_MAX_POINTS[t]]));
+}
+export function itemsToFlip(evaluation, model = DEFAULT_MODEL, maxPoints = TIER_MAX_POINTS) {
   if (!evaluation || evaluation.level === 'advanced') return null;
   const m = { ...DEFAULT_MODEL, ...(model || {}) };
   const w = { knowledge: Number(m.w_knowledge), skill: Number(m.w_skill), behavior: Number(m.w_behavior) };
@@ -333,7 +349,7 @@ export function itemsToFlip(evaluation, model = DEFAULT_MODEL) {
   if (!tiers.length) return null;
   const rank = (l) => LEVELS.indexOf(l);
   const current = rank(evaluatePlacement(Object.fromEntries(tiers.map((t) => [t, evaluation[t]])), m).level);
-  const step = (t) => ITEM_POINTS * 100 / TIER_MAX_POINTS[t];
+  const step = (t) => ITEM_POINTS * 100 / (Number(maxPoints?.[t]) > 0 ? Number(maxPoints[t]) : TIER_MAX_POINTS[t]);
   const room = (t) => Math.ceil(Math.max(0, 100 - Number(evaluation[t])) / step(t) - 1e-9);
   const lifted = (counts) => {
     const pcts = {};
