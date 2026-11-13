@@ -19,6 +19,7 @@ import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
+import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
 import { FileExtras, FileFlags, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
@@ -374,7 +375,14 @@ function Person({ id, canWrite, onBack }) {
       suspended: ' يخرج من البرنامج ولا يستطيع الدخول إلى حسابه حتى تعيد حالته.',
     }[status] || '';
     if (!(await confirm(to + effect, { danger: !!effect, ok: 'تغيير الحالة' }))) return;
-    act('admin.status', { participant_id: p.id, status }, 'تم التحديث');
+    // الإيقاف والانسحاب بسبب مكتوب: يُحفظ في ملفه ويصله بالبريد (الخادم يرفض بدونه)
+    let reason;
+    if (statusNeedsReason(status)) {
+      reason = await prompt('سبب الإيقاف أو الانسحاب (يُحفظ في ملف المشارك ويُبلَّغ به بالبريد):');
+      if (reason === null) return;
+      if (String(reason).trim().length < STATUS_REASON_MIN) return toast('اكتب السبب بوضوح');
+    }
+    act('admin.status', { participant_id: p.id, status, ...(reason ? { reason } : {}) }, 'تم التحديث');
   };
   // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
   const enroll = async () => {

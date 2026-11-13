@@ -7,7 +7,8 @@ import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
-import { noticesFor } from './observations.ts';
+import { noticesFor, record as recordObservation } from './observations.ts';
+import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-rules.js';
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
@@ -1138,6 +1139,12 @@ export async function handbookComplete(p: any, b: Body) {
     const stamp = { content_release: (await releaseOf(p))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
       quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
     must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
+    // ثالث باب بدرجة دون النصف: ملاحظة واحدة في ملفه تُبلَّغ له (notice-rules.js)، لا عند كل باب
+    if (g.total > 0 && g.score / g.total < QUIZ_LOW_SHARE) {
+      const { data: all } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id);
+      const low = quizLowCount(all || []);
+      if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
+    }
   }
   const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
   const pts = await pointsOf(p.id);

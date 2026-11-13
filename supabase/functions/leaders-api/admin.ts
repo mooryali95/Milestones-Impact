@@ -5,7 +5,8 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
-import { mePayload, pointsOf } from './participant.ts';
+import { journeyFor, mePayload, pointsOf } from './participant.ts';
+import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
@@ -20,6 +21,8 @@ import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
+import * as OB from './observations.ts';
+import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from './notice-rules.js';
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
@@ -578,8 +581,12 @@ export async function setStatus(a: Admin, b: Body) {
   requireWrite(a);
   const allowed = ['registered', 'profiled', 'assessing', 'pending_approval', 'placed', 'enrolled', 'completed', 'withdrawn', 'suspended'];
   if (!allowed.includes(b.status)) throw new Fail('حالة غير صالحة');
+  // الإيقاف والانسحاب بسبب مكتوب: يُحفظ في السجل، ويُكتب في ملف المشارك ويُبلَّغ به بالبريد (notice-rules.js)
+  const reason = statusNeedsReason(b.status) ? cleanStatusReason(b.reason) : null;
+  if (statusNeedsReason(b.status) && !reason) throw new Fail('اكتب سبب الإيقاف أو الانسحاب: يُحفظ في ملف المشارك ويُبلَّغ به', 400, 'reason');
   must(await db.from('participants').update({ status: b.status }).eq('id', String(b.participant_id)));
-  await audit('admin', a.email, 'participant.status', 'participants', String(b.participant_id), null, { status: b.status });
+  await audit('admin', a.email, 'participant.status', 'participants', String(b.participant_id), null, { status: b.status, ...(reason ? { reason } : {}) });
+  if (reason) await OB.record(String(b.participant_id), { code: 'account_status', ref: `${b.status}:${new Date().toISOString().slice(0, 10)}`, ...RULES.account_status({ status: b.status, reason }) });
   // D20: من ينسحب قبل فتح أول باب يُرد مقعده إلى عقد جهته
   if (b.status === 'withdrawn') {
     const pid = String(b.participant_id);
@@ -965,6 +972,12 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
       { onConflict: 'participant_id,source,ref_id' });
   }
   await audit(actor, reviewer, 'submission.review', 'model_submissions', s.id, null, { status, rating, bonus, scale: RUBRIC_SCALE.version });
+  // الإعادة الثانية فما بعدها للنموذج نفسه: تُعدّ من سجل التدقيق (ملاحظة الإعادة تُكتب فوق سابقتها)، وتُكتب في الملف
+  if (status === 'returned') {
+    const { data: prior } = await db.from('audit_log').select('after').eq('entity_id', s.id).eq('action', 'submission.review').limit(50);
+    const times = (prior || []).filter((x: any) => x.after?.status === 'returned').length;
+    if (times >= MODEL_RETURN_COUNT) await OB.record(s.participant_id, { code: 'model_returned_again', ref: `${s.id}:${times}`, ...RULES.model_returned_again({ title: s.learning_models?.title_ar, times }) });
+  }
   const { data: who } = await db.from('participants').select('full_name, email').eq('id', s.participant_id).single();
   if (who?.email) {
     sendMail(who.email, status === 'returned' ? 'ملاحظة على نموذجك' : 'اعتُمد نموذجك',
@@ -1242,6 +1255,19 @@ export async function participantsImport(a: Admin, b: Body) {
 // ── تذكير أسبوعي (يُشغّله pg_cron بسرّ LEADERS_CRON_SECRET) ──
 // يُذكَّر من غاب 7 أيام وأمامه عمل: بنود أعادها المستشار، أو تسجيل لم يكتمل.
 // لا يُذكَّر أحد أكثر من مرة في الأسبوع، والحد 200 رسالة في التشغيلة.
+export async function lateMilestoneNotices(limit = 200) {
+  const { data: people } = await db.from('participants').select('*').in('status', ['placed', 'enrolled']).eq('is_demo', false).limit(limit);
+  let n = 0;
+  for (const p of people || []) {
+    const j: any = await journeyFor(p, { lite: true }).catch(() => null);
+    for (const m of (j?.milestones || []).filter((x: any) => x.status === 'late' && x.late_days > MILESTONE_GRACE_DAYS)) {
+      const saved = await OB.record(p.id, { code: 'milestone_late', ref: String(m.id || m.key), ...RULES.milestone_late({ title: m.title_ar || m.title, late_days: m.late_days }) });
+      if (saved) n += 1;
+    }
+  }
+  return n;
+}
+
 export async function reminders(b: Record<string, any>) {
   if (!CONFIG.cronSecret || b.secret !== CONFIG.cronSecret) throw new Fail('غير مصرّح', 403, 'forbidden');
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
@@ -1262,5 +1288,7 @@ export async function reminders(b: Record<string, any>) {
     await sendMail(p.email, 'رحلتك القيادية بانتظارك', reminderMail(p.full_name, open), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error(e));
     sent += 1;
   }
-  return { success: true, sent };
+  // المعالم المتأخرة: تُكتب في ملف صاحبها ويُبلَّغ بها مرة لكل معلم (كانت تظهر في الموقع وحده بلا بريد ولا أثر)
+  const late = await lateMilestoneNotices().catch((e) => { console.error('late milestones:', e); return 0; });
+  return { success: true, sent, late };
 }

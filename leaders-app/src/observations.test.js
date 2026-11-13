@@ -49,3 +49,35 @@ describe('ملف المشارك: الملاحظات والأعلام والخط 
     expect(read('supabase/functions/leaders-api/index.ts')).toContain("'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),");
   });
 });
+
+import { cleanStatusReason, quizLowCount, RULES, statusNeedsReason, QUIZ_LOW_COUNT } from '../../supabase/functions/leaders-api/notice-rules.js';
+
+describe('قواعد التنبيه الآلي', () => {
+  it('ست قواعد لا أكثر، وكل نص يصف الواقعة وما يُنتظر بعدها بلا اتهام', () => {
+    expect(Object.keys(RULES)).toEqual(['coaching_no_show', 'milestone_late', 'model_returned_again', 'peer_hidden', 'account_status', 'quiz_low']);
+    const all = [RULES.coaching_no_show({ starts_at: '2026-11-15T09:00:00Z' }), RULES.milestone_late({ title: 'خطة التطبيق', late_days: 6 }),
+      RULES.model_returned_again({ title: 'سجل المخاطر', times: 2 }), RULES.peer_hidden(), RULES.account_status({ status: 'suspended', reason: 'طلب الجهة الراعية' }), RULES.quiz_low({ count: 3 })];
+    for (const r of all) {
+      expect(r.title && r.body.length > 20 && r.visible === true).toBe(true);
+      expect(`${r.title} ${r.body}`).not.toMatch(/غش|إهمال|تقصير|اكتشف/);
+    }
+    expect(all[1].body).toContain('«خطة التطبيق» تجاوز موعده بـ6 يومًا');
+    expect(all[2].body).toContain('للمرة الثانية');
+    expect(all[4].body).toContain('السبب: طلب الجهة الراعية');
+  });
+  it('الأبواب المنخفضة: دون النصف، والتنبيه عند الثالث وحده', () => {
+    const rows = [{ quiz_score: 0, quiz_total: 2 }, { quiz_score: 1, quiz_total: 3 }, { quiz_score: 1, quiz_total: 2 }, { quiz_score: 0, quiz_total: 0 }];
+    expect(quizLowCount(rows)).toBe(2);
+    expect(quizLowCount([...rows, { quiz_score: 0, quiz_total: 3 }])).toBe(QUIZ_LOW_COUNT);
+  });
+  it('الإيقاف والانسحاب بسبب مكتوب، وغيرهما بلا سبب', () => {
+    expect(statusNeedsReason('suspended') && statusNeedsReason('withdrawn')).toBe(true);
+    expect(statusNeedsReason('placed')).toBe(false);
+    expect(cleanStatusReason('  x ')).toBeNull();
+    expect(cleanStatusReason('طلب   الجهة الراعية')).toBe('طلب الجهة الراعية');
+  });
+  it('كل قاعدة تُكتب عبر المدخل الواحد record() بمفتاحها ومرجع واقعتها', () => {
+    const src = ['activities.ts', 'admin.ts', 'peer.ts', 'participant.ts'].map((f) => read(`supabase/functions/leaders-api/${f}`)).join('\n');
+    for (const code of Object.keys(RULES)) expect(src, code).toMatch(new RegExp(`code: '${code}', ref: [^\\n]+?\\.\\.\\.RULES\\.${code}\\(`));
+  });
+});
