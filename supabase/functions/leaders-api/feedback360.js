@@ -104,6 +104,9 @@ export function feedbackPromiseAr(relation, s) {
 // للتطوير وحده، ولا ترتيب بين المشاركين. القيم القابلة للضبط (حد الإخفاء، وحد الإصدار، وفرق الفجوة، ومراسي السلم)
 // من الإعدادات العامة في s. المصدر الواحد للتقرير: يقرؤه المشارك والمستشار والإدارة من هذه الدالة نفسها.
 const OTHER_GROUPS = ['peer', 'report', 'stakeholder'];
+// دون هذا العدد من المقيّمين غير المدير، فرق الذات والآخرين (gap_points) داخل ضجيج العيّنة: يُعرض «للنقاش» لا نتيجة.
+// الأدبيات تطلب أكثر من ذلك لثبات 0.70 (Greguras و Robie 1998)، و5 حد عملي لما تبلغه الدورة غالبًا
+export const GAP_FIRM_MIN = 5;
 // عبارات التقرير: ما عُرض على مجموعة واحدة من المقيّمين على الأقل (المعكوسة للذات وحدها فلا تدخله)
 /** @param {any[]} questions @returns {any[]} */
 export const reportItems = (questions = []) => questions.filter((q) => NOMINEE_GROUPS.some((g) => raterItems([q], g).length));
@@ -157,7 +160,7 @@ export function feedbackReport({ items = [], selfAnswers = {}, raters = [], s, s
   const submitted = raters.filter((r) => r.status === 'submitted');
   const nonManager = submitted.filter((r) => r.relation !== 'manager').length;
   const invited = NOMINEE_GROUPS.reduce((n, g) => n + counts[g].invited, 0);
-  const base = { counts, response: { invited, submitted: submitted.length }, scale: s.scale_labels, gap_points: s.gap_points };
+  const base = { counts, response: { invited, submitted: submitted.length }, scale: s.scale_labels, gap_points: s.gap_points, gap_firm: nonManager >= GAP_FIRM_MIN, gap_firm_min: GAP_FIRM_MIN };
   if (nonManager < s.min_others) return { ...base, releasable: false, need: s.min_others - nonManager };
   const cols = reportColumns(submitted, s);
   const cell = (col, vals, raterCount) => (raterCount >= col.min && vals.length ? { avg: mean(vals), n: raterCount } : null);
@@ -185,7 +188,8 @@ export function feedbackReport({ items = [], selfAnswers = {}, raters = [], s, s
       let raterCount = 0;
       for (const r of col.members) {
         const mine = own.map((q) => scaleValue(q, r.answers?.[q.id]?.now)).filter((v) => v != null);
-        if (mine.length) { if (col.key !== 'all' || r.relation !== 'manager') raterCount += 1; vals.push(...mine); }
+        // متوسط الإطار متوسطُ متوسطات المقيّمين، فلا يزن من قدّر عبارات أكثر أكثر ممن قدّر أقل («لا أستطيع الحكم»)
+        if (mine.length) { if (col.key !== 'all' || r.relation !== 'manager') raterCount += 1; vals.push(mine.reduce((a, b) => a + b, 0) / mine.length); }
       }
       cells[col.key] = cell(col, vals, raterCount);
     }

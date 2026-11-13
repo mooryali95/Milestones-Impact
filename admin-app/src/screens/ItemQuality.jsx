@@ -15,6 +15,35 @@ const FLAG = {
 const alphaNote = (a) => (a == null ? ['لم يُحسب', ''] : a >= 0.7 ? ['جيد', 'ok'] : a >= 0.6 ? ['مقبول', 'warn'] : ['ضعيف', 'bad']);
 const pct = (x) => (x == null ? '·' : `${Math.round(x * 100)}%`);
 
+// أدلة القياس: خطأ القياس ودقة التصنيف، ومخالفة المستشار، وتوزيع المسارات، وعدالة الفقرات.
+// كلها استشارية، وما دون عتبته يُعرض «مؤشرًا أوليًا» أو لا يُعرض
+function Evidence({ e }) {
+  const early = !e.gates.first.met;
+  const o = e.overrides, t = e.tracks, f = e.fairness;
+  return (
+    <div className="iq-sep">
+      <h4>أدلة القياس {early && <span className="la-chip warn" title={`تستقر الأرقام من ${e.gates.first.need} قياسًا`}>مؤشر أولي</span>}</h4>
+      <table className="la-table" aria-label="خطأ القياس ودقة التصنيف">
+        <thead><tr><th>الإطار</th><th>الثبات</th><th>خطأ القياس (نقطة)</th><th>الهامش الحدّي: المضبوط / المقترح</th><th>دقة التصنيف المتوقعة</th></tr></thead>
+        <tbody>{e.dimensions.map((x) => (
+          <tr key={x.dimension}><td>{DIM_EN[x.dimension] || x.dimension}</td><td>{x.alpha ?? '·'}</td><td>{x.sem ?? '·'}</td>
+            <td>{x.borderline_now} / {x.borderline_suggested ?? '·'}</td>
+            <td>{x.accuracy == null ? '·' : <>{pct(x.accuracy)} {x.below_target && <span className="la-chip warn" title={`دون الهدف ${pct(e.accuracy_target)}: يُنظر في إطالة جانبي المعرفة والمواقف`}>دون الهدف</span>}</>}</td></tr>
+        ))}</tbody>
+      </table>
+      <p className="la-muted small">
+        دقة المسار كله (الأطر الثلاثة معًا): <b>{e.joint_accuracy == null ? 'لم تُحسب' : pct(e.joint_accuracy)}</b>.
+        {' '}اعتماد المستشار: {o.n ? <>خالف المستوى الآلي في {o.overridden} من {o.n} ({pct(o.rate)})، رفع {o.up} وخفض {o.down}</> : 'لا تسكينات معتمدة بعد'}.
+        {' '}المسارات: {t.total ? <>{t.used} مستعملة من {t.cells}، وأكثر ست خلايا تضم {pct(t.top6_share)} من {t.total} مشاركًا</> : 'لا مسارات معتمدة بعد'}.
+      </p>
+      <p className="la-muted small">
+        عدالة الفقرات ({f?.split_ar}): {!f ? 'لم تُحسب' : !f.ready ? `تُحسب من ${f.need} قياسًا (الآن ${f.n_ref + f.n_focal})` : f.items.length ? `فقرات تُراجع: ${f.items.map((x) => `${x.code} (${x.cls}، Δ ${x.delta})`).join('، ')}` : 'لا فقرة تميل لفئة'}.
+        {' '}تكافؤ الصيغتين يُحكم عليه من {e.gates.forms.need} قياسًا لكل صيغة. الأرقام استشارية ولا تدخل أي درجة.
+      </p>
+    </div>
+  );
+}
+
 export default function ItemQuality({ instrumentId }) {
   const [d, setD] = useState(null);
   const [only, setOnly] = useState(true);
@@ -52,6 +81,7 @@ export default function ItemQuality({ instrumentId }) {
           </table>
         </div>
       )}
+      {d.evidence && <Evidence e={d.evidence} />}
       {items.length ? (
         <table className="la-table" tabIndex={0} aria-label="جودة الأسئلة">
           <thead><tr><th>السؤال</th><th>المجيبون</th><th>الصعوبة</th><th>التمييز</th><th>ما يُراجع</th></tr></thead>

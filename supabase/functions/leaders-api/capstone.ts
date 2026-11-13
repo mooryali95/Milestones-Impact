@@ -334,7 +334,9 @@ export async function adminReview(a: Admin, b: Body) {
   must(await db.from('capstones').update({
     status: 'accepted', scores: rubric.scores, notes: rubric.notes, review_note: note, score, reviewed_by: a.email, reviewed_at: now, updated_at: now,
   }).eq('participant_id', p.id));
-  await audit('admin', a.email, 'capstone.accept', 'capstones', p.id, null, { score });
+  // المعيار المطبَّق يُحفظ مع الدرجة: مراسي كل بعد بمستوى المشارك في إطاره يوم التقييم، ووزن إطار الأولوية.
+  // فالدرجة تُقرأ لاحقًا بمعيارها ولو تغيّر مستواه بعدها (تحليل نماذج القياس §4.6)
+  await audit('admin', a.email, 'capstone.accept', 'capstones', p.id, null, { score, standard: { levels, weighted: rubricPriority(levels, priority) } });
   if (waive) await approve(p, a.email, waive);
   else {
     try { await inviteSponsor(p, c, charter); }

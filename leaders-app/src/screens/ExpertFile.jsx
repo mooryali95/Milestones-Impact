@@ -110,7 +110,8 @@ function FinalEval({ pid, f, advisor, reload }) {
         <span className="row"><span className={`chip ${status === 'approved' ? 'ok' : status === 'pending' ? 'warn' : status === 'returned' ? 'bad' : ''}`}>{FINAL_STATUS_AR[status]}</span>
           <b className="kt-big">{live.score != null ? `${live.score}٪` : '—'}</b>
           {live.decision && <span className={`chip ${DEC_CHIP[live.decision]}`}>{FINAL_DECISION_AR[live.decision]}</span>}
-          {live.large_adjust && <span className="chip warn">تعديل كبير: توقيعان</span>}</span>
+          {live.large_adjust && <span className="chip warn">تعديل كبير: توقيعان</span>}
+          {live.near_cut && <span className="chip warn" title={`الدرجة على بعد ${live.near_cut.gap} من حد «${FINAL_DECISION_AR[live.near_cut.key]}» (${live.near_cut.cut}). الفرق داخل هامش الخطأ، فراجع الأدلة قبل القرار`}>قريب من الحد</span>}</span>
       </div>
       <p className="small muted">الدرجة الآلية {live.auto_score != null ? `${live.auto_score}٪` : '—'} من مكوّنات تغطي {live.coverage}٪ من الأوزان{live.missing?.length ? ` (لم يكتمل: ${live.missing.join('، ')})` : ''}{live.score_adjusted && live.score != null ? `، وبعد تعديل الخبير ${live.score}٪` : ''}. القرار المقترح: <b>{live.suggested ? FINAL_DECISION_AR[live.suggested] : 'لا يُقترح قبل اكتمال التغطية'}</b>.{f.frozen ? ` لقطة الرفع بإصدار المعادلة ${live.config_version}.` : ''}</p>
       <ul className="ca-list">{live.components.map((c) => {

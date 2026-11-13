@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
-import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
+import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
@@ -342,7 +342,7 @@ export async function participant(b: Body) {
   const p = must(await db.from('participants').select('*').eq('id', String(b.id)).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
   const [results, reqs, views, audits] = await Promise.all([
-    db.from('assessments').select('id, status, started_at, submitted_at, instruments(key, kind), assessment_results(*)')
+    db.from('assessments').select('id, status, started_at, submitted_at, instrument_id, form, instruments(key, kind), assessment_results(*)')
       .eq('participant_id', p.id).order('started_at', { ascending: false }),
     db.from('participant_requirements').select('*, stage_requirements(code, title_ar, stage_key, kind)').eq('participant_id', p.id),
     db.from('handbook_views').select('viewed_at').eq('participant_id', p.id).order('viewed_at', { ascending: false }).limit(1),
@@ -366,14 +366,20 @@ export async function participant(b: Body) {
     const rows = (behaviorAnswers || []).filter((x: any) => x.assessment_id === id);
     return acquiescenceFor(rows.map((x: any) => x.questions), Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k])));
   };
+  // نقاط كل جانب من أسئلة أداة القياس نفسها، حتى يُحسب «كم سؤالًا يفصله» بعدد أسئلتها الفعلي
+  const instrumentIds = [...new Set((results.data || []).map((a: any) => a.instrument_id).filter(Boolean))];
+  const { data: flipQs } = instrumentIds.length
+    ? await db.from('questions').select('instrument_id, code, dimension, tier, options, weight, form, active, anchor_code, min_level').in('instrument_id', instrumentIds).eq('active', true)
+    : { data: [] };
   const assessments = (results.data || []).map((a: any) => {
     const acq: Record<string, boolean> = acqOf(a.id);
+    const ownQs = (flipQs || []).filter((q: any) => q.instrument_id === a.instrument_id);
     return {
       ...a,
       assessment_results: (a.assessment_results || []).map((r: any) => {
         const pcts = { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct };
         const evaluation = evaluatePlacement(pcts, model || DEFAULT_MODEL, { acquiescence: acq[r.dimension] });
-        return { ...r, evaluation: { ...evaluation, items_to_flip: itemsToFlip({ ...pcts, ...evaluation }, model || DEFAULT_MODEL) } };
+        return { ...r, evaluation: { ...evaluation, items_to_flip: itemsToFlip({ ...pcts, ...evaluation }, model || DEFAULT_MODEL, tierMaxPointsOf(ownQs, { dimension: r.dimension, form: a.form })) } };
       }),
     };
   });

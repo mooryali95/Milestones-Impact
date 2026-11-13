@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { LEVEL_AR, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
@@ -60,7 +60,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
       <fieldset disabled={!canWrite || !!busy}>
         {d.rubric.map((r) => (
           <div key={r.key} className="cps-crit">
-            <div className="la-row between"><b>{r.title}</b>{r.dimension === d.priority && <span className="la-chip warn">الوزن ×{PRIORITY_WEIGHT}</span>}</div>
+            <div className="la-row between"><b>{r.title}</b><span className="la-row">{r.level && <span className="la-chip" title="مراسي هذا البعد مكتوبة لمستوى المشارك في إطاره، فالدرجة تُقرأ نسبةً إلى مستواه">مراسي مستوى {LEVEL_AR[r.level]}</span>}{r.dimension === d.priority && <span className="la-chip warn">الوزن ×{PRIORITY_WEIGHT}</span>}</span></div>
             <div className="cps-anchors" role="radiogroup" aria-label={r.title}>
               {r.anchors.map((a, i) => (
                 <button key={i} type="button" role="radio" aria-checked={scores[r.key] === i + 1} className={scores[r.key] === i + 1 ? 'on' : ''}

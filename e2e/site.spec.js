@@ -108,8 +108,8 @@ for (const path of ['/', '/projects/']) {
 async function answerAssessment(page) {
   await page.goto(BASE + '/assessment/');
   await page.locator('#asStart').click();
-  for (let i = 1; i <= 12; i++) {
-    await expect(page.locator('#asCounter')).toHaveText(`${i} / 12`);
+  for (let i = 1; i <= 15; i++) {
+    await expect(page.locator('#asCounter')).toHaveText(`${i} / 15`);
     await page.locator('.as-option').nth(i % 4).click();
   }
   await expect(page.locator('#asGate')).toBeVisible();
@@ -136,7 +136,7 @@ test('بوابة المقياس: الطلب يمر بإجراء contact في ا�
     organization: 'جهة الاختبار',
     email: 'test@example.com',
   });
-  expect(sent[0].body.context).toMatch(/^الدرجة الكلية: \d+% .*؛ الإجابات: (\d,){11}\d$/);
+  expect(sent[0].body.context).toMatch(/^الدرجة الكلية: \d+% .*؛ الإجابات: (\d,){14}\d$/);
 });
 
 test('بوابة المقياس: يُعرض التحقق البشري حين يطلبه الخادم، ثم يُعاد الإرسال برمزه', async ({ page }) => {
