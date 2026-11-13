@@ -73,7 +73,9 @@ export async function checkout(p: any, b: Body) {
   const item: Item = b.item === 'program' ? 'program' : 'assessment';
   const a: any = await access(p);
   if (a[item]) return { success: true, entitled: true };
-  if (item === 'program' && !a.assessment) throw new Fail('ابدأ بالقياس المبدئي أولًا', 409);
+  // من اعتُمد مساره أجرى قياسه لا محالة: لا يُطلب منه حق القياس ليدفع البرنامج. كان من قاس والدفع مطفأ يُرد
+  // «ابدأ بالقياس أولًا» والواجهة لا تعرض القياس لأنه منجز، فلا طريق له إلى الدفع (مراجعة الدفع 2026-11-13)
+  if (item === 'program' && !a.assessment && !APPROVED.includes(p.status)) throw new Fail('ابدأ بالقياس المبدئي أولًا', 409);
   // D04: يُدفع رسم البرنامج بعد اعتماد المسار، فيدفع المشارك وهو يعرف مساره
   if (item === 'program' && !APPROVED.includes(p.status)) throw new Fail('يُفتح دفع البرنامج بعد اعتماد مسارك، خلال يومي عمل من إنهاء القياس', 409, 'pay_wait_approval');
   const s: any = await settings();
@@ -203,6 +205,11 @@ export async function webhook(raw: string, headers: Headers) {
         // D05 وسياسة الاسترداد: استرداد رسم البرنامج يلغي الشهادة
         if (pay.item === 'program' && pay.participant_id) await revokeForRefund(pay.participant_id);
         await audit('system', 'creem', 'payment.refunded', 'payments', pay.id);
+      } else {
+        // استرداد أو نزاع لم تُعرف دفعته: لا يمر صامتًا. يُنبَّه التشغيل ليسحب الحق يدويًا، ويُذكر في صف الحدث
+        await alertOps('payment_unmatched', { event: id, type, refs: paymentRefs(obj) }).catch((e) => console.error('alert:', e));
+        await db.from('payment_events').update({ processed_at: new Date().toISOString(), error: 'refund without a matching payment' }).eq('event_id', id);
+        return { success: true, unmatched: true };
       }
     }
     await db.from('payment_events').update({ processed_at: new Date().toISOString(), error: null }).eq('event_id', id);
@@ -213,13 +220,24 @@ export async function webhook(raw: string, headers: Headers) {
   return { success: true, ...(dup ? { retried: true } : {}) };
 }
 
+// مراجع الدفعة في حمولة الإشعار. checkout وorder يأتيان كائنين في checkout.completed، وقد يأتيان معرّفَين نصيين في
+// إشعارات الاسترداد والنزاع: كان النصي يُهمل فلا تُعرف الدفعة ولا يُسحب الحق (مراجعة الدفع 2026-11-13)
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function paymentRefs(obj: any) {
+  const o = obj || {};
+  const idOf = (v: any) => (typeof v === 'string' ? v : v?.id) || null;
+  const req = o.request_id || o.metadata?.payment_id || o.checkout?.request_id || o.checkout?.metadata?.payment_id || o.order?.metadata?.payment_id || null;
+  return {
+    request: req && UUID.test(String(req)) ? String(req) : null,
+    checkout: idOf(o.checkout) || o.checkout_id || (String(o.id || '').startsWith('ch_') ? o.id : null),
+    order: idOf(o.order) || o.order_id || null,
+  };
+}
 async function findPayment(obj: any) {
-  const req = obj.request_id || obj.metadata?.payment_id || obj.checkout?.request_id || obj.checkout?.metadata?.payment_id;
-  if (req) { const { data } = await db.from('payments').select('*').eq('id', req).maybeSingle(); if (data) return data; }
-  const cid = obj.checkout?.id || (String(obj.id || '').startsWith('ch_') ? obj.id : null);
-  if (cid) { const { data } = await db.from('payments').select('*').eq('checkout_id', cid).maybeSingle(); if (data) return data; }
-  const oid = obj.order?.id || obj.order_id;
-  if (oid) { const { data } = await db.from('payments').select('*').eq('order_id', oid).maybeSingle(); if (data) return data; }
+  const r = paymentRefs(obj);
+  if (r.request) { const { data } = await db.from('payments').select('*').eq('id', r.request).maybeSingle(); if (data) return data; }
+  if (r.checkout) { const { data } = await db.from('payments').select('*').eq('checkout_id', r.checkout).maybeSingle(); if (data) return data; }
+  if (r.order) { const { data } = await db.from('payments').select('*').eq('order_id', r.order).maybeSingle(); if (data) return data; }
   return null;
 }
 
@@ -336,7 +354,23 @@ export async function adminSettings(a: Admin, b: Body) {
   }
   const saved = must(await db.from('payment_settings').update(patch).eq('id', true).select('*').single());
   await audit('admin', a.email, 'payment.settings', 'payment_settings', 'true', s, saved);
-  return { success: true, settings: saved };
+  // لحظة التفعيل: المشاركون القائمون معفون من الاثنين كما تعد رسالة التأكيد في اللوحة. كان الإعفاء لمن وُجد عند
+  // الترحيل الأول وحده، فتفعيل الدفع بعده يقفل الرحلة على كل من سجّل بين التاريخين (مراجعة الدفع 2026-11-13)
+  const grandfathered = patch.enabled && !s.enabled ? await grandfatherAll(a.email) : 0;
+  return { success: true, settings: saved, grandfathered };
+}
+
+async function grandfatherAll(by: string) {
+  const [{ data: people }, { data: live }] = await Promise.all([
+    db.from('participants').select('id').eq('is_demo', false).limit(10000),
+    db.from('entitlements').select('participant_id, item').is('revoked_at', null).limit(50000),
+  ]);
+  const has = new Set((live || []).map((e: any) => `${e.participant_id}:${e.item}`));
+  const rows = (people || []).flatMap((p: any) => ITEMS.filter((item) => !has.has(`${p.id}:${item}`))
+    .map((item) => ({ participant_id: p.id, item, source: 'grandfathered', granted_by: by, note: 'مشارك قبل تفعيل الدفع' })));
+  for (let i = 0; i < rows.length; i += 500) must(await db.from('entitlements').insert(rows.slice(i, i + 500)));
+  if (rows.length) await audit('admin', by, 'entitlement.grandfather', 'payment_settings', 'true', null, { rows: rows.length });
+  return new Set(rows.map((r: any) => r.participant_id)).size;
 }
 
 // منح أو سحب حق يدويًا (منحة، تعويض، خطأ دفع)

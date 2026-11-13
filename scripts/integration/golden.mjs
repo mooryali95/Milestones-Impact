@@ -137,6 +137,28 @@ ok(first.success === true, 'creem-webhook يقبل التوقيع الصحيح �
 const again = await hook(raw, sig);
 ok(again.success === true && again.duplicate === true, 'الحدث نفسه لا يُعالَج مرتين', JSON.stringify(again));
 
+// 6ب) دورة دفع كاملة (مراجعة الدفع 2026-11-13): إشعار checkout.completed مطابق يسوّي الدفعة ويمنح الحق، ودفعة ناقصة
+// تُعلَّق بلا حق، واسترداد يحمل معرّف الطلب نصًا (لا كائنًا) يسحب الحق. الدفعة تُنشأ في القاعدة كما ينشئها checkout.
+const event = async (type, object) => {
+  const body = JSON.stringify({ id: `evt_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, eventType: type, object });
+  return hook(body, createHmac('sha256', CREEM).update(body).digest('hex'));
+};
+const newPayment = (pid, item, cents) => sql(`insert into leaders.payments (participant_id, email, item, product_id, mode, amount_cents, currency)
+  values (${q(pid)}, 'pay-golden@example.sa', ${q(item)}, 'prod_golden', 'test', ${cents}, 'USD') returning id`);
+const liveEnt = (pid, item) => sql(`select count(*) from leaders.entitlements where participant_id = ${q(pid)} and item = ${q(item)} and revoked_at is null`);
+sql(`update leaders.entitlements set revoked_at = now() where participant_id = ${q(b.pid)} and revoked_at is null`);
+const shortPay = newPayment(b.pid, 'assessment', 100);
+const short = await event('checkout.completed', { request_id: shortPay, mode: 'test', order: { id: `ord_short_${Date.now()}`, amount: 50, currency: 'USD', product: 'prod_golden' } });
+ok(short.success === true && liveEnt(b.pid, 'assessment') === '0', 'دفعة بمبلغ أقل من المطلوب تُعلَّق ولا تمنح حقًا', JSON.stringify(short));
+const goodPay = newPayment(b.pid, 'assessment', 100);
+const orderId = `ord_good_${Date.now()}`;
+const paidEv = await event('checkout.completed', { request_id: goodPay, mode: 'test', order: { id: orderId, amount: 100, currency: 'USD', product: 'prod_golden' } });
+ok(paidEv.success === true && liveEnt(b.pid, 'assessment') === '1', 'إشعار دفع مطابق يمنح حق القياس', JSON.stringify(paidEv));
+ok(sql(`select status from leaders.payments where id = ${q(goodPay)}`) === 'paid', 'الدفعة سُوّيت paid');
+const refundEv = await event('refund.created', { id: `ref_${Date.now()}`, order: orderId });
+ok(refundEv.success === true && liveEnt(b.pid, 'assessment') === '0', 'استرداد بمعرّف الطلب نصًا يسحب الحق', JSON.stringify(refundEv));
+ok(sql(`select status from leaders.payments where id = ${q(goodPay)}`) === 'refunded', 'الدفعة صارت refunded');
+
 // استبيان سهولة الاستخدام SUS: الاستحقاق بعد أسبوع، والتأجيل، والإجابة مرة واحدة، والدرجة المحسوبة على الخادم
 const susNew = await seed(`sus-new-${Date.now()}@example.sa`, 'مشارك جديد');
 const susOld = await seed(`sus-old-${Date.now()}@example.sa`, 'مشارك منذ أسبوع');
