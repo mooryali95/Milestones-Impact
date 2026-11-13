@@ -75,6 +75,7 @@ export function trackDistribution(levelsList) {
 
 // خلاصة الأدلة لأداة القياس المبدئي.
 // reliability: ناتج compositeReliability · composites: { dimension: [مؤشر كل مشارك] }
+/** @param {{ reliability?: any, composites?: Record<string, number[]>, model?: any, placements?: any[], computed?: Record<string, string>, levelsList?: any[], respondents?: number }} [d] */
 export function measurementEvidence({ reliability, composites = {}, model = DEFAULT_MODEL, placements = [], computed = {}, levelsList = [], respondents = 0 } = {}) {
   const m = { ...DEFAULT_MODEL, ...(model || {}) };
   const cuts = [Number(m.min_intermediate), Number(m.min_advanced)];

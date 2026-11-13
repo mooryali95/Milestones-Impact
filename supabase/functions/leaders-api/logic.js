@@ -330,6 +330,7 @@ export const ITEM_POINTS = 4;
 export const TIER_MAX_POINTS = { knowledge: 24, skill: 24, behavior: 16 };
 // أقصى نقاط كل جانب في إطار واحد من أسئلة الأداة نفسها (بصيغة المشارك، دون فقرات المستوى
 // والتوائم التي لا تدخل نسب الجوانب). جانب بلا أسئلة يأخذ الثابت الاحتياطي.
+/** @param {any[]} questions @param {{ dimension?: string | null, form?: string | null }} [o] */
 export function tierMaxPointsOf(questions, { dimension = null, form = null } = {}) {
   const out = {};
   for (const q of questions || []) {
@@ -339,7 +340,7 @@ export function tierMaxPointsOf(questions, { dimension = null, form = null } = {
     if (levelGated(q) || isTwin(q)) continue;
     out[q.tier] = (out[q.tier] || 0) + maxScore(q) * Number(q.weight ?? 1);
   }
-  return Object.fromEntries(TIERS.map((t) => [t, out[t] > 0 ? out[t] : TIER_MAX_POINTS[t]]));
+  return /** @type {{ knowledge: number, skill: number, behavior: number }} */ (Object.fromEntries(TIERS.map((t) => [t, out[t] > 0 ? out[t] : TIER_MAX_POINTS[t]])));
 }
 export function itemsToFlip(evaluation, model = DEFAULT_MODEL, maxPoints = TIER_MAX_POINTS) {
   if (!evaluation || evaluation.level === 'advanced') return null;
