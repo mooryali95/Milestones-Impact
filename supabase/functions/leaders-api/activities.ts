@@ -4,6 +4,8 @@
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import * as OB from './observations.ts';
+import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
@@ -429,6 +431,11 @@ export async function coachingMark(a: any, b: Body) {
     confirmed_by: status === 'booked' ? null : a.email, confirmed_at: status === 'booked' ? null : now,
   }).eq('id', String(b.id || '')));
   await audit('admin', a.email, `coaching.${status}`, 'coaching_sessions', String(b.id));
+  // الغياب يُكتب في ملف المشارك ويُبلَّغ به مرة واحدة للجلسة (notice-rules.js)
+  if (status === 'no_show') {
+    const { data: s } = await db.from('coaching_sessions').select('id, participant_id, starts_at').eq('id', String(b.id || '')).maybeSingle();
+    if (s?.participant_id) await OB.record(s.participant_id, { code: 'coaching_no_show', ref: s.id, ...RULES.coaching_no_show(s) });
+  }
   return { success: true };
 }
 

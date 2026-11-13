@@ -262,6 +262,11 @@ export function stuckMail(name: string, text: string) {
   return shell('journey', 'خطوة واحدة لتبدأ رحلتك', mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, 'أكمل الآن'), text);
 }
 
+// ملاحظة أو تنبيه أو إشادة مرئية للمشارك (observations.ts): النص نفسه الذي تعرضه بطاقته في الموقع
+export function observationMail(name: string, heading: string, body: string) {
+  return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(body)}`) + mailButton(CONFIG.appUrl, 'افتح رحلتي'), body.slice(0, 140));
+}
+
 // طلب إعادة القياس: النص نفسه الذي تعرضه بطاقة الموقع (retake.js retakeText)
 export function retakeMail(name: string, text: string) {
   return shell('journey', RETAKE_TITLE, mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, RETAKE_BUTTON), text);
@@ -568,6 +573,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
   { key: 'stuck', family: 'journey', label: 'تذكير من لم يكمل التسجيل (يدوي)', subject: STUCK_MAIL_SUBJECT, html: () => stuckMail('سارة', stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })!) },
   { key: 'retake', family: 'journey', label: 'طلب إعادة قياس تحديد المستوى', subject: RETAKE_MAIL_SUBJECT, html: () => retakeMail('سارة', retakeText('effort', 35)) },
+  { key: 'observation', family: 'journey', label: 'تنبيه أو ملاحظة مرئية للمشارك', subject: 'تنبيه في رحلتك: غياب عن جلسة توجيه', html: () => observationMail('سارة', 'غياب عن جلسة توجيه', 'سُجّل غيابك عن جلسة التوجيه يوم الأحد 15 نوفمبر. إن كان لديك عذر فأخبر مستشارك، واحجز موعدًا بديلًا من صفحة الأنشطة.') },
   { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },
   { key: 'final-extend', family: 'journey', label: 'قرار ختامي: يُمدَّد', subject: FINAL_MAIL_SUBJECT.extend, html: () => finalDecisionMail('سارة', 'extend', 'أكمل فصل المخاطر في وثيقة المبادرة.') },
   { key: 'final-fail', family: 'journey', label: 'قرار ختامي: لم يجتز', subject: FINAL_MAIL_SUBJECT.fail, html: () => finalDecisionMail('سارة', 'fail', null) },

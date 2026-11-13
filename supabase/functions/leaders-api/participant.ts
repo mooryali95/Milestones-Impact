@@ -7,6 +7,8 @@ import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
+import { noticesFor, record as recordObservation } from './observations.ts';
+import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-rules.js';
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
@@ -617,6 +619,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
     baseline_submitted_at: baselineAt,
     final_policy: { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
+    // تنبيهات وملاحظات مرئية لم يطّلع عليها بعد (participant_observations): بطاقة في رحلته حتى يضغط «اطّلعت»
+    notices: audience === 'participant' ? await noticesFor(p.id) : [],
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
   };
@@ -1135,6 +1139,12 @@ export async function handbookComplete(p: any, b: Body) {
     const stamp = { content_release: (await releaseOf(p))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
       quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
     must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
+    // ثالث باب بدرجة دون النصف: ملاحظة واحدة في ملفه تُبلَّغ له (notice-rules.js)، لا عند كل باب
+    if (g.total > 0 && g.score / g.total < QUIZ_LOW_SHARE) {
+      const { data: all } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id);
+      const low = quizLowCount(all || []);
+      if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
+    }
   }
   const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
   const pts = await pointsOf(p.id);

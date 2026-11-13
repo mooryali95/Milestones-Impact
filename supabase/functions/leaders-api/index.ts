@@ -48,6 +48,7 @@ import * as PV from './privacy.ts';
 import * as TM from './team.ts';
 import * as ST from './settings.ts';
 import * as FB from './feedback360.ts';
+import * as OB from './observations.ts';
 
 type Body = Record<string, any>;
 
@@ -94,7 +95,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
-  'me.privacy', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
+  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
@@ -129,6 +130,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'org.logo': (p) => P.orgLogo(p),
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'me.privacy': (p) => PV.state(p),
+  'me.notice-ack': (p, b) => OB.ack(p, b),
   'me.export': (p) => PV.exportData(p),
   'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
@@ -273,6 +275,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.participants': (e) => FL.participants(e),
   'xp.participant': (e, b) => FL.participant(e, b),
   'xp.assessment-answers': (e, b) => FL.assessmentAnswers(e, b),
+  'xp.observation-add': (e, b) => FL.observationAdd(e, b),
   'xp.final-eval': (e, b) => FL.finalGet(e, b),
   'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
   'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
@@ -342,6 +345,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participants-import': A.participantsImport,
   'admin.participant-save': A.participantSave,
   'admin.remind-stuck': A.remindStuck,
+  'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),
+  'admin.observation-remove': (a, b) => A.writer(a, OB.adminRemove, b),
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
   'admin.sus': () => SU.adminSummary(),

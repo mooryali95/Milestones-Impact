@@ -138,7 +138,12 @@ test('admin-core-9: تغيير حالة المشارك إلى منسحب بتأ�
   expect(calls.find((c) => c.action === 'admin.status')).toBeUndefined();
   await page.getByRole('button', { name: 'تغيير الحالة' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تغيير الحالة' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.status')).toMatchObject({ participant_id: 'p1', status: 'withdrawn' });
+  // الانسحاب والإيقاف بسبب مكتوب (تصور ملف المشارك 2026-11-13): يُسأل عنه بعد التأكيد، ويصل الخادم مع الحالة
+  const why = page.getByRole('dialog').filter({ hasText: 'سبب الإيقاف أو الانسحاب' });
+  await expect(why).toBeVisible();
+  await why.getByRole('textbox').fill('طلب الجهة الراعية');
+  await why.getByRole('button').filter({ hasNotText: 'إلغاء' }).last().click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.status')).toMatchObject({ participant_id: 'p1', status: 'withdrawn', reason: 'طلب الجهة الراعية' });
 });
 
 test('admin-core-9: ربط الاسم المكتوب لا يختار جهة من تلقائه، ويؤكد باسم الجهة وعدد المنقولين', async ({ page }) => {

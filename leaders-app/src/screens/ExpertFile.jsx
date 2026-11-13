@@ -7,6 +7,7 @@
 // المعالم ويؤكّد إجابات الأقران؛ المسند إليه بطلب خدمة يقرأ فقط.
 import React, { useCallback, useEffect, useState } from 'react';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
+import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
 import { xpCall } from '../api.js';
 import ExpertAnswers from './ExpertAnswers.jsx';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
@@ -45,6 +46,41 @@ function RubricForm({ m, onSave, onClose }) {
 }
 
 // التقييم الختامي من البوابة: تعديل بتعليل، رفع للاعتماد، واعتماد أو إعادة (الخادم يطبّق قواعد اللجنة والتوقيعين)
+function AdvisorNotes({ pid, flags, list, reload }) {
+  const [v, setV] = useState({ kind: 'note', body: '', visible: false });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const r = await xpCall('xp.observation-add', { participant_id: pid, ...v });
+    setBusy(false);
+    setMsg(r.success ? (v.visible ? 'حُفظت وأُبلغ المشارك.' : 'حُفظت في ملفه.') : r.message);
+    if (r.success) { setV({ kind: 'note', body: '', visible: false }); reload(); }
+  };
+  return (
+    <section className="card stack" aria-label="ملاحظات الملف">
+      <h3>ملاحظات الملف</h3>
+      {flags?.length > 0 && <p className="chips">{flags.map((f, i) => <span key={i} className={`chip ${f.tone === 'bad' || f.tone === 'warn' ? 'warn' : ''}`} title={f.detail || undefined}>{f.label}</span>)}</p>}
+      <form className="stack" onSubmit={save}>
+        <div className="row">
+          <select aria-label="النوع" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
+            {Object.entries(OBS_KIND_AR).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <label className="small"><input type="checkbox" checked={v.visible} onChange={(e) => setV({ ...v, visible: e.target.checked })} /> يراها المشارك</label>
+        </div>
+        <textarea aria-label="نص الملاحظة" rows={3} required minLength={3} maxLength={2000} placeholder="الواقعة وتاريخها وما يُنتظر بعدها" value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} />
+        <div className="row"><button className="btn sm" disabled={busy}>{busy ? 'لحظة…' : 'أضف إلى ملفه'}</button>{msg && <span className="small muted" role="status">{msg}</span>}</div>
+      </form>
+      {list?.length > 0 && (
+        <ul className="plain stack">{list.slice(0, 10).map((o) => (
+          <li key={o.id}><span className={`chip ${o.kind === 'warning' ? 'warn' : ''}`}>{OBS_KIND_AR[o.kind]}</span> {o.title && <b>{o.title}. </b>}{o.body} <span className="small muted">· {OBS_SOURCE_AR[o.source]}{o.visible ? '' : ' · داخلية'}</span></li>
+        ))}</ul>
+      )}
+    </section>
+  );
+}
+
 function FinalEval({ pid, f, advisor, reload }) {
   const [adj, setAdj] = useState(f?.record?.adjust || { components: {} });
   const [busy, setBusy] = useState(false);
@@ -192,6 +228,8 @@ export default function ExpertFile({ id, onBack }) {
       </section>
 
       <div className="xpp-cols">
+        {/* ملف المشارك لمستشار دفعته: أعلامه وملاحظاته من المصدر نفسه الذي تقرؤه الإدارة، وله أن يضيف ملاحظة */}
+        {advisor && <AdvisorNotes pid={id} flags={d.flags} list={d.observations} reload={load} />}
         <section className="card stack" aria-label="من هو">
           <h3>من هو</h3>
           {d.profile ? (
