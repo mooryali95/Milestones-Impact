@@ -49,8 +49,9 @@ const PRESETS = [
   { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!p.last_login_at || now - Date.parse(p.last_login_at) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
+  { key: 'out', label: 'موقوف أو منسحب', test: (p) => p.status === 'suspended' || p.status === 'withdrawn' },
 ];
-const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'track', 'joined', 'seen', 'sort'];
+const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'cohort', 'track', 'joined', 'seen', 'sort'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
   return (
@@ -93,12 +94,13 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   // القائمة كاملة مرة واحدة (حتى 500)، والفلترة كلها في المتصفح فتستجيب فورًا
   // capped: القائمة بلغت حد الخادم، فما بعده لا يُرى إلا ببحث على الخادم (search)
   const [cap, setCap] = useState(null);
+  const [listCohorts, setListCohorts] = useState([]);
   const [serverQ, setServerQ] = useState('');
   const load = useCallback(async (search = '') => {
     setList(null); setError('');
     const r = await L('admin.participants', search ? { search } : {});
     if (!r.success) { setList([]); return setError(r.message); }
-    setList(r.participants || []); setCap(r.capped ? r.limit : null); setServerQ(search);
+    setList(r.participants || []); setListCohorts(r.cohorts || []); setCap(r.capped ? r.limit : null); setServerQ(search);
   }, []);
   useEffect(() => { load(); }, [load]);
   // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
@@ -116,9 +118,11 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     // بعد الثلاثة الظاهرة (الباقي خلف «+ فلاتر»)، والعرض السريع «لم يكمل التسجيل» يغني عنه في الغالب
     { key: 'step', label: 'أين توقف', get: (p) => p.onboarding?.step, options: Object.entries(ONBOARDING_AR) },
     { key: 'effort', label: 'جدية الإجابة', get: (p) => p.effort?.level, options: Object.entries(EFFORT_AR) },
+    // دفعة المشارك من الخادم بقاعدة pickCohort نفسها التي تحكم رحلته
+    { key: 'cohort', label: 'الدفعات', get: (p) => p.cohort_id || 'none', options: [...listCohorts.map((c) => [c.id, c.name]), ['none', 'بلا دفعة']] },
     { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
     { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
-  ], [orgs, tracks]);
+  ], [orgs, tracks, listCohorts]);
   const spec = { fields, presets: PRESETS, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
   const SORTS = useMemo(() => ({
     name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => trackOfPlacements(p.placements),
@@ -194,6 +198,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'org', label: 'الجهة', width: 24, get: (p) => orgOf(p)?.name || p.organization_name },
     { key: 'years', label: 'سنوات الخبرة', width: 12, get: (p) => p.years_experience },
     ...DIMS.map((d) => ({ key: `lvl_${d}`, label: DIM_EN[d], width: 12, get: (p) => lv(p, d) })),
+    { key: 'cohort', label: 'الدفعة', width: 22, get: (p) => listCohorts.find((c) => c.id === p.cohort_id)?.name },
     { key: 'track', label: 'المسار', width: 10, get: (p) => trackOfPlacements(p.placements) },
     { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status },
     { key: 'step', label: 'أين توقف', width: 18, get: (p) => p.onboarding?.label }, { key: 'remaining', label: 'المتبقي', width: 40, get: (p) => p.onboarding?.remaining },

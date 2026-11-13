@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly as day, L } from '../leaders.js';
 import Form from '../Form.jsx';
-import { Spinner, useUI } from '../ui.jsx';
+import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
   MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDue,
@@ -85,6 +85,7 @@ export function CohortSchedule({ cohort, onClose }) {
   const [d, setD] = useState(null);
   const [sch, setSch] = useState(cohort.schedule || {});
   const [busy, setBusy] = useState(false);
+  useEscape(() => onClose());   // كبقية النوافذ: Esc يغلقها
   useEffect(() => {
     Promise.all([L('admin.program', { id: cohort.program_id }), L('admin.milestones', { program_id: cohort.program_id })])
       .then(([p, m]) => setD({ stages: (p.stages || []).filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort), ms: (m.milestones || []).filter((x) => x.active) }));

@@ -127,3 +127,23 @@ test('رؤية الدفعة: لكل مفتاح الإعداد العام واس�
   expect(calls.find((c) => c.action === 'admin.cohort-visibility-save')).toMatchObject({ cohort_id: 'c1', visibility: { adv_contact: false } });
   expect(calls.find((c) => c.action === 'admin.cohort-visibility-save').visibility).not.toHaveProperty('adv_answers');
 });
+
+test('صفحة الدفعة برابطها: جاهزيتها بندًا بندًا، والناقص يفتح نافذة ضبطه، والتحديث يبقيك فيها', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
+  await page.reload();
+  const card = page.locator('.cohort-page');
+  await expect(card.getByRole('heading', { name: 'سفراء 2026' })).toBeVisible();
+  // المدة مضبوطة، والمستشار والجدول ناقصان ولكل منهما زر يفتح نافذته
+  await expect(card.locator('.cohort-setup li.ok')).toContainText(['مدة الدفعة']);
+  const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار الأساسي' });
+  await expect(advisor.getByRole('button', { name: 'الفريق والمجموعات' })).toBeVisible();
+  await expect(card.getByRole('link', { name: /مشاركو الدفعة/ })).toHaveAttribute('href', '#/leaders/participants?cohort=c1');
+  await card.locator('.cohort-setup li.no', { hasText: 'جدول المراحل' }).getByRole('button', { name: 'الجدول' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs$/);
+  await expect(page.getByRole('heading', { name: 'الدفعات' })).toBeVisible();
+});

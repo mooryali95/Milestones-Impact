@@ -14,6 +14,7 @@ import { CohortSchedule } from './Milestones.jsx';
 import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
 import { FinalConfig } from './FinalEval.jsx';
+import { cohortSetup, setupMissing } from '../../../supabase/functions/leaders-api/cohort-setup.js';
 
 
 function DiffList({ diff }) {
@@ -26,7 +27,52 @@ function DiffList({ diff }) {
   );
 }
 
-export default function Programs({ canWrite, onEditJourney }) {
+// صفحة الدفعة برابطها (#/leaders/programs/<id>): ما هي، وجاهزيتها بندًا بندًا (cohort-setup.js نفسه الذي في صفحة الجهة)،
+// وأين يُضبط كل بند. النوافذ نفسها التي في الجدول، فلا مدخل ثانٍ لأي إعداد.
+function CohortPage({ c, canWrite, orgName, progName, version, onBack, on }) {
+  const setup = cohortSetup({ cohort: c, teamCount: (c.team_expert_ids || []).length, members: c.members || 0, upcomingSessions: c.upcoming_sessions ?? 0 }).filter((x) => x.key !== 'sessions' || c.upcoming_sessions != null);
+  const missing = setupMissing(setup);
+  const where = { team: ['الفريق والمجموعات', on.team], cohort: ['تحرير الدفعة', on.edit], schedule: ['الجدول', on.schedule] };
+  return (
+    <>
+      <button className="la-link" onClick={onBack}>→ كل البرامج والدفعات</button>
+      <section className="la-card cohort-page">
+        <div className="la-row between">
+          <div>
+            <h2>{c.name}{c.is_default && <> <small className="la-chip">المفتوحة</small></>}</h2>
+            <p className="la-muted">{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'} · {progName(c.program_id)} · {version ? `النسخة ${version.number}` : 'آخر تعديل'} · {COHORT_STATUS[c.status]}
+              {(c.starts_on || c.ends_on) && <> · {[dateOnly(c.starts_on), dateOnly(c.ends_on)].filter(Boolean).join(' إلى ')}</>}</p>
+          </div>
+          {canWrite && <div className="la-row">
+            <button className="btn-sm primary" onClick={on.edit}>تحرير</button>
+            <button className="btn-sm ghost" onClick={on.schedule}>الجدول</button>
+            <button className="btn-sm ghost" onClick={on.team}>الفريق والمجموعات</button>
+            <button className="btn-sm ghost" onClick={on.vis}>الرؤية</button>
+          </div>}
+        </div>
+        <div className="stats-grid">
+          <div className="stat-card"><div className="stat-label">الأعضاء</div><div className="stat-value">{c.members ?? 0}</div><div className="stat-sub">{c.enrolled ? `${c.enrolled} بتسجيل صريح` : 'من انضم بجهتها'}</div></div>
+          <div className="stat-card"><div className="stat-label">فريق الخبراء</div><div className="stat-value">{(c.team_expert_ids || []).length + (c.advisor_expert_id ? 1 : 0)}</div><div className="stat-sub">{c.advisor_expert_id ? 'بمستشار أساسي' : 'بلا مستشار أساسي'}</div></div>
+          <div className="stat-card"><div className="stat-label">جاهزية الإعداد</div><div className={`stat-value ${missing ? 's-new' : 's-replied'}`}>{setup.length - missing}<small> / {setup.length}</small></div><div className="stat-sub">{missing ? `${missing} بند ينتظر الضبط` : 'مكتمل'}</div></div>
+        </div>
+        <ul className="cohort-setup">
+          {setup.map((x) => (
+            <li key={x.key} className={x.ok ? 'ok' : 'no'}>
+              <b>{x.title}</b><span>{x.detail}</span>
+              {!x.ok && canWrite && where[x.where] && <button className="btn-sm ghost" onClick={where[x.where][1]}>{where[x.where][0]}</button>}
+            </li>
+          ))}
+        </ul>
+        <div className="la-row">
+          <a className="btn-sm ghost" href={`#/leaders/participants?cohort=${encodeURIComponent(c.id)}`}>مشاركو الدفعة ({c.members ?? 0})</a>
+          <a className="btn-sm ghost" href="#/leaders/insight">أين توقفوا (الرؤية الشاملة)</a>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export default function Programs({ canWrite, onEditJourney, cohortId = null, onCohort = () => {} }) {
   const { toast, confirm, prompt } = useUI();
   const [d, setD] = useState(null);
   const [form, setForm] = useState(null);
@@ -112,6 +158,26 @@ export default function Programs({ canWrite, onEditJourney }) {
     }));
   };
 
+  const shown = cohortId ? d.cohorts.find((c) => c.id === cohortId) : null;
+  // النوافذ واحدة للجدول ولصفحة الدفعة
+  const dialogs = (
+    <>
+      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
+      {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
+      {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
+      {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
+      {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
+    </>
+  );
+  if (cohortId && !shown) return <><button className="la-link" onClick={() => onCohort(null)}>→ كل البرامج والدفعات</button><Empty title="الدفعة غير موجودة" hint="ربما حُذفت أو تغيّر رابطها." /></>;
+  if (shown) return (
+    <>
+      <CohortPage c={shown} canWrite={canWrite} orgName={orgName} progName={progName} version={versionOf(shown)} onBack={() => onCohort(null)}
+        on={{ edit: () => editCohort(shown), schedule: () => setSchedule(shown), team: () => setGroups(shown), vis: () => setVis(shown) }} />
+      {dialogs}
+    </>
+  );
+
   return (
     <>
       <p className="la-muted">
@@ -171,7 +237,7 @@ export default function Programs({ canWrite, onEditJourney }) {
               const v = versionOf(c), latest = latestOf(c.program_id);
               return (
                 <tr key={c.id}>
-                  <td><b>{c.name}</b>{c.is_default && <> <small className="la-chip">المفتوحة</small></>}{c.level_mode === 'uniform' && <> <small className="la-chip">متجانس · {LVL[c.content_level]}</small></>}{c.project_mode === 'group' && <> <small className="la-chip">مشروع جماعي</small></>}</td>
+                  <td><button className="la-link" onClick={() => onCohort(c.id)}><b>{c.name}</b></button>{c.is_default && <> <small className="la-chip">المفتوحة</small></>}{c.level_mode === 'uniform' && <> <small className="la-chip">متجانس · {LVL[c.content_level]}</small></>}{c.project_mode === 'group' && <> <small className="la-chip">مشروع جماعي</small></>}</td>
                   <td>{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'}</td>
                   <td>{progName(c.program_id)}</td>
                   <td>{v ? `النسخة ${v.number}` : 'آخر تعديل'}{v && latest && latest.id !== v.id && canWrite && <> <button className="la-link" onClick={() => upgrade(c)}>رقِّ إلى {latest.number}</button></>}</td>
@@ -215,11 +281,7 @@ export default function Programs({ canWrite, onEditJourney }) {
           </div>
         </div>
       )}
-      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
-      {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
-      {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
-      {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
-      {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
+      {dialogs}
     </>
   );
 }

@@ -28,7 +28,7 @@ test('قيم طلب التواصل تُعرض نصًا ولا تُنفَّذ', a
     ? { success: true, contacts: [{ id: 'r1', name: evil, email: 'e@x.com', phone: evil, organization: evil, status: 'read', product: 'MI-HOME', created_at: new Date().toISOString() }] }
     : { success: true } }));
   await page.addInitScript(signedIn(), { email: 'a@example.com', name: 'A', role_id: 'admin' });
-  await page.goto(BASE);
+  await page.goto(`${BASE}#/contacts`);
   await expect(page.getByText(evil).first()).toBeVisible();
   await page.getByText(evil).first().click();
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
@@ -63,7 +63,7 @@ test('رد 503 المؤقت من بوابة الدوال يُعاد تلقائي
     await route.fulfill({ json: b.action === 'list-contacts' ? { success: true, contacts: [{ id: 'c1', name: 'طلب بعد الإقلاع', email: 'a@b.c', status: 'new', product: 'MI-HOME', created_at: '2026-10-01T00:00:00Z' }] } : { success: true } });
   });
   await page.addInitScript(signedIn(), { name: 'م', email: 'a@x', role_id: 'admin' });
-  await page.goto(BASE);
+  await page.goto(`${BASE}#/contacts`);
   await expect(page.getByText('طلب بعد الإقلاع')).toBeVisible();
   await expect(page.getByText('Service is temporarily unavailable')).toHaveCount(0);
   expect(n).toBe(2);

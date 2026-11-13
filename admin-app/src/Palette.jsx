@@ -24,7 +24,7 @@ async function loadIndex() {
     ...(p.participants || []).map((x) => ({ kind: 'participant', id: x.id, title: x.full_name, sub: x.organization_name || x.email, keys: [x.email, x.organization_name, x.job_title], to: at('participants', x.id) })),
     ...(o.orgs || []).map((x) => ({ kind: 'org', id: x.id, title: x.name, sub: x.short_name, keys: [x.short_name], to: at('orgs', x.id) })),
     ...(e.experts || []).map((x) => ({ kind: 'expert', id: x.id, title: x.full_name, sub: x.title || x.email, keys: [x.email, x.title, ...(x.sectors || [])], to: at('experts', x.id) })),
-    ...(g.cohorts || []).map((x) => ({ kind: 'cohort', id: x.id, title: x.name, sub: 'البرامج والدفعات', keys: [], to: at('programs') })),
+    ...(g.cohorts || []).map((x) => ({ kind: 'cohort', id: x.id, title: x.name, sub: 'البرامج والدفعات', keys: [], to: at('programs', x.id) })),
     ...(k.capstones || []).map((x) => ({ kind: 'capstone', id: x.participant_id, title: x.initiative || `مبادرة ${x.full_name || ''}`.trim(), sub: x.full_name || '', keys: [x.full_name, x.organization], to: at('capstones', x.participant_id) })),
     ...(c.tracks || []).map((x) => ({ kind: 'track', id: x.key, title: x.title_ar || x.key, sub: x.key, keys: [x.key], to: at('tracks', x.key) })),
     ...(c.handbook_modules || []).map((x) => ({ kind: 'chapter', id: x.id, title: x.title_ar, sub: x.dimension, to: at('handbook') })),

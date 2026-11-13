@@ -9,7 +9,7 @@ import {
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, Spinner, useUI } from '../ui.jsx';
+import { Empty, SectionIndex, Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -190,6 +190,8 @@ function Sources({ d, total }) {
   );
 }
 
+// فهرس صفحة الجهة: ما ليس للجهة (كصفحة «بدون جهة») يُخفى من الفهرس تلقائيًا
+const ORG_SECTIONS = [['org-journey', 'الرحلة والدفعة'], ['org-team', 'الفريق'], ['org-coordinator', 'منسق الجهة'], ['org-sources', 'مصادر الانتساب'], ['org-finance', 'الرعاية والتكلفة'], ['org-tracks', 'المسارات'], ['org-members', 'المشاركون']];
 const MEMBER_SORTS = { name: (p) => p.full_name, title: (p) => p.job_title, track: (p) => p.track, status: (p) => STATUS[p.status] || p.status, seen: (p) => p.last_login_at, joined: (p) => p.created_at };
 
 function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
@@ -283,14 +285,15 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
-      {!isNone && <OrgJourney key={`journey-${o.id}`} orgId={o.id} />}
-      {!isNone && <OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} />}
-      {!isNone && <CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
+      <SectionIndex label="أقسام صفحة الجهة" sections={ORG_SECTIONS} />
+      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} /></div>}
+      {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
+      {!isNone && <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>}
 
-      <Sources d={d} total={all.length} />
-      {!isNone && <OrgFinance id={o.id} onPerson={onPerson} />}
+      <div id="org-sources"><Sources d={d} total={all.length} /></div>
+      {!isNone && <div id="org-finance"><OrgFinance id={o.id} onPerson={onPerson} /></div>}
 
-      <section className="la-card">
+      <section className="la-card" id="org-tracks">
         <h3>توزيع المشاركين على المسارات</h3>
         {tracks.length ? <div className="la-pills">{tracks.map(([k, n]) => (
           <button key={k} className={`la-pill${f.track === k ? ' on' : ''}`} aria-pressed={f.track === k} title={titleOf(k)} onClick={() => setF({ track: f.track === k ? '' : k })}>
@@ -298,7 +301,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         ))}</div> : <p className="la-muted">لم يُسكَّن أحد من هذه الجهة بعد.</p>}
       </section>
 
-      <section className="la-card">
+      <section className="la-card" id="org-members">
         <FilterBar scope="org-members" state={f} set={setF} clear={clearF} replace={replaceF} fields={memberFields}
           shown={rows.length} total={all.length} noun="مشارك" placeholder="بحث بالاسم أو البريد أو المسمى…" />
         {canWrite && picked.size > 0 && (

@@ -76,6 +76,7 @@ test('نظرة عامة: المستوى العام والجهات والقياس
     if (b.action !== 'admin.overview') return route.fallback();
     return route.fulfill({ json: { ...base, ...more } });
   });
+  await page.reload();   // الدخول يفتح النظرة العامة أصلًا، فيُعاد تحميلها بالرد الجديد
   await tab(page, 'نظرة عامة');
   // البطاقة تعدّ من قائمة «ينتظر قرارك» نفسها (لا متطلبات مرسلة في البيانات) مع النماذج المنتظرة: 0 + 1
   await expect(page.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('1');
@@ -149,6 +150,7 @@ test('دخول برمز البريد وحده: تنبيه بأن الجلسة ل
     if (b.action !== 'admin.overview') return route.fallback();
     await route.fulfill({ json: { success: true, total: 0, by_status: {}, pending_reviews: 0, mfa_required: true, matrix: { milestone: { beginner: 0, intermediate: 0, advanced: 0 }, impact: { beginner: 0, intermediate: 0, advanced: 0 }, leadership: { beginner: 0, intermediate: 0, advanced: 0 } } } });
   });
+  await page.reload();   // الدخول يفتح النظرة العامة أصلًا، فيُعاد تحميلها بالرد الجديد
   await tab(page, 'نظرة عامة');
   await expect(page.getByRole('alert').filter({ hasText: 'للعرض فقط في هذه الجلسة' })).toBeVisible();
 });

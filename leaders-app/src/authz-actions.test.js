@@ -23,7 +23,7 @@ function bodyOf(impl) {
   return d ? src.slice(d.index + d[0].length, d.index + d[0].length + 1500) : null;
 }
 // أفعال الإدارة للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط»
-const ADMIN_READS = new Set(['health', 'inbox', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'peer', 'reviews', 'evidence-url',
+const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'peer', 'reviews', 'evidence-url',
   'participant-impact', 'sus', 'erasures', 'catalog', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'impact',
   'curriculum', 'programs', 'payments', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones',
