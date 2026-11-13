@@ -38,13 +38,26 @@ async function sha256hex(s: string) {
   return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// صف المدير الحي. تعذّر القراءة (لا غياب الصف) يُسقط الطلب: لا صلاحية بلا تحقق
+async function liveAdmin(subject: unknown): Promise<{ email: string; role_id: string; is_active: boolean; passkey_only: boolean } | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(String(subject || ''))) return null;
+  const { data, error } = await publicDb.from('admin_users').select('email, role_id, is_active, passkey_only').eq('id', String(subject)).limit(1);
+  if (error) throw new Fail('تعذّر التحقق من صلاحية الحساب، حاول بعد قليل', 503, 'db_error');
+  return (data?.[0] as any) || null;
+}
+
 export async function adminFromToken(token: unknown): Promise<Admin> {
   if (typeof token !== 'string' || token.length < 32) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  const { data } = await publicDb.from('api_sessions').select('meta, expires_at')
+  const { data } = await publicDb.from('api_sessions').select('subject, meta, expires_at')
     .eq('token_hash', await sha256hex(token)).eq('kind', 'admin').limit(1);
   const s = data?.[0];
   if (!s || new Date(s.expires_at).getTime() < Date.now()) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  return { email: String(s.meta?.email || ''), role: s.meta?.role, method: s.meta?.method };
+  // الدور والتفعيل من admin_users الآن لا من نسخة الجلسة (كما في admin-api): سحب الصلاحية أو إيقاف الحساب يسري فورًا،
+  // لا بعد انتهاء الجلسة (التدقيق الأمني 2026-11-04، M6). حساب «مفتاح المرور وحده» لا تُقبل له جلسة برمز البريد.
+  const live = await liveAdmin(s.subject);
+  if (!live || live.is_active === false) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
+  if (live.passkey_only && s.meta?.method === 'email') throw new Fail('جلسة الإدارة منتهية', 401, 'session');
+  return { email: String(live.email || s.meta?.email || ''), role: live.role_id as Admin['role'], method: s.meta?.method };
 }
 
 const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
