@@ -5,7 +5,7 @@
 // me.erase-request: طلب حذف يصل المالك وينفذه المدير العام بمسار الحذف القائم (admin.participant-delete)،
 // أو يسحبه المشارك قبل تنفيذه. الحذف نفسه لا ينفذه المشارك: فيه موانع (شهادة صادرة، دفعة جارية) يقرأها إنسان.
 import { alertOps, audit, db, ERASE_MAIL_SUBJECT, eraseRequestMail, Fail, must, sendMail } from './core.ts';
-import { cleanReason, ERASE_REPLY_DAYS, eraseView, EXPORT_PER_DAY, EXPORT_ROW_CAP, EXPORT_TABLES, scrubRow } from './privacy.js';
+import { cleanReason, ERASE_REPLY_DAYS, eraseView, EXPORT_FEEDBACK_COLUMNS, EXPORT_PER_DAY, EXPORT_ROW_CAP, EXPORT_TABLES, scrubRow } from './privacy.js';
 import { CONTACT_EMAIL, POLICY_VERSION } from './labels.js';
 
 type Body = Record<string, any>;
@@ -55,6 +55,9 @@ export async function exportData(p: any) {
   // إجابته عن استبيان سهولة الاستخدام: جدولها بمعرّف الدور لا بـparticipant_id، فتُقرأ هنا (وغياب الجدول لا يفشل النسخة)
   const sus = await db.from('sus_responses').select('answers, score, comment, answered_at').eq('role', 'participant').eq('subject_id', p.id).limit(1);
   if (sus.data?.length && sus.data[0].answers) data.sus_responses = sus.data;
+  // تقييم 360: دوراته وتقديره الذاتي وخطته (EXPORT_FEEDBACK_COLUMNS)، وغياب الجدول قبل ترحيله لا يفشل النسخة
+  const f360 = await db.from('feedback_cycles').select(EXPORT_FEEDBACK_COLUMNS).eq('participant_id', p.id).limit(EXPORT_ROW_CAP);
+  if (f360.data?.length) data.feedback_cycles = f360.data;
   await audit('participant', p.id, 'participant.export', 'participants', p.id, null, { tables: Object.keys(data).length, rows: Object.values(data).reduce((n, r) => n + r.length, 0) });
   return {
     success: true,

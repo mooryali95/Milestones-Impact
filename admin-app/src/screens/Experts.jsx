@@ -125,14 +125,16 @@ function Service({ s, rate }) {
   );
 }
 
-// تقييم المشاركين للخبير: للإدارة كاملًا، والخبير يرى المتوسط بعد MIN_RATINGS فقط
+// تقييم المشاركين للخبير: للإدارة كاملًا وحيًّا، والمشارك لا يراه، والخبير يرى ملخصه بعد MIN_RATINGS
+// بنافذة دورية (r.own، expertOwnRating)، وتنبيه حين يهبط متوسط آخر التقييمات (r.drop، ratingDrop)
 function Ratings({ r }) {
   if (!r) return null;
   const s = r.summary;
   return (
     <section className="la-card ex-ratings">
       <div className="la-row between"><h4>تقييم المشاركين</h4>
-        <small className="la-muted">{s.count} تقييم{s.visible ? ' · يراه الخبير' : ` · يُعرض للخبير بعد ${MIN_RATINGS}`}{r.given ? ` · قيّم هو ${r.given} مشارك` : ''}</small></div>
+        <small className="la-muted">{s.count} تقييم · لا يراه المشارك{r.own?.visible ? ` · يرى الخبير ملخص ${r.own.count} منها` : ` · يُعرض للخبير بعد ${MIN_RATINGS}`}{r.given ? ` · قيّم هو ${r.given} مشارك` : ''}</small></div>
+      {r.drop && <p className="la-err" role="status">هبط متوسط آخر {r.drop.last} تقييمات إلى {r.drop.avg} من 5. راجع ملاحظاتها مع الخبير.</p>}
       {!s.count ? <p className="la-muted">لا تقييمات بعد. يُطلب من المشارك تقييم كل جلسة منعقدة وكل خدمة مكتملة.</p> : <>
         <div className="ex-kpis">
           <span className="ex-cost"><b>{s.avg} / 5</b>المتوسط العام</span>

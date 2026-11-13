@@ -14,6 +14,7 @@
 
 import { DIMENSIONS, scoreFor, tierPercents } from './logic.js';
 import { TIER_AR } from './labels.js';
+import { DEFAULTS } from './settings.js';
 
 // ── ترتيب العرض: مصدر واحد لشاشة القياس (assessmentGet) وللمراجعة ──
 // الأبعاد بترتيبها، وفي كل بُعد الممارسة ثم المواقف ثم المعرفة: يقدّر المشارك ممارسته قبل أن
@@ -31,18 +32,20 @@ export function servedOrder(questions) {
 export const breakSection = (q) => (q?.tier === 'transfer' ? 'transfer' : q?.dimension);
 export const sectionKey = (q) => (q?.tier === 'transfer' ? 'transfer' : `${q?.dimension}:${q?.tier}`);
 
-// ── قرارات المالك (2026-11-11) ──
-export const IDLE_SECONDS = 300;                         // حد الانقطاع: 5 دقائق
-export const FAST_RATIO = 0.3;                           // «سريع»: أقل من 30٪ من وسيط القسم نفسه
-export const FAST_MIN_SAMPLE = 3;                        // ولا وسيط لقسم فيه أقل من 3 أزمنة صالحة
-export const FAST_FLOOR_SECONDS = { choice: 3, likert: 1.5 };   // أو أقل من حد أدنى معقول للقراءة
+// ── حدود الزمن: إعداد يضبطه المالك من اللوحة (settings.js، المجموعة answer_review) ──
+// القيم أدناه افتراضياتها من المصدر الواحد، والخادم يمرر المحرَّر منها في timing.
+// حد الانقطاع، و«سريع» أقل من نسبة من وسيط القسم نفسه، ولا وسيط لقسم فيه أقل من عدد أدنى من الأزمنة الصالحة،
+// أو أقل من حد أدنى معقول للقراءة
+export const TIMING_DEFAULTS = DEFAULTS.answer_review;
+export const IDLE_SECONDS = TIMING_DEFAULTS.idle_seconds;
+export const FAST_FLOOR_SECONDS = { choice: TIMING_DEFAULTS.fast_floor_choice, likert: TIMING_DEFAULTS.fast_floor_likert };
 
 export const REVIEW_TIER_AR = { ...TIER_AR, transfer: 'انتقال التعلم' };
 export const ANSWER_CLASS_AR = { full: 'كاملة', partial: 'جزئية', wrong: 'خاطئة', na: 'لا ينطبق', likert: 'تقدير ذاتي' };
 export const TIMING_NOTE_AR = {
   first: 'أول سؤال في القياس: يشمل قراءة المقدمة',
   break: 'أول سؤال في القسم: يشمل الاستراحة بين الأقسام',
-  gap: 'انقطاع أطول من 5 دقائق',
+  gap: 'انقطاع أطول من حد الانقطاع المضبوط في الإعدادات',
   edited: 'عُدّلت الإجابة بعد ما يليها، فوقت حفظها لا يدل على زمن النظر فيها',
   after_edit: 'السؤال الذي قبله عُدّل لاحقًا، فلا يُعرف متى بدأ هذا',
 };
@@ -69,7 +72,7 @@ export function answerClass(q, k) {
 
 // الزمن التقديري لكل سؤال بترتيب العرض. ordered: الأسئلة بترتيب servedOrder ومع كل منها at (مللي ثانية) أو null.
 // يعيد لكل سؤال { seconds, note, edited }.
-export function estimateTimes(ordered, startedAt = null) {
+export function estimateTimes(ordered, startedAt = null, timing = TIMING_DEFAULTS) {
   const n = ordered.length;
   const at = ordered.map((x) => (x.at == null || Number.isNaN(x.at) ? null : x.at));
   // معدّلة: حُفظت بعد سؤال يليها في العرض، أي عاد إليها المشارك بعده
@@ -89,7 +92,7 @@ export function estimateTimes(ordered, startedAt = null) {
     const prev = at[i - 1] ?? startedAt;
     if (prev == null) return { seconds: null, note: 'first', edited: false };
     const sec = (at[i] - prev) / 1000;
-    if (sec > IDLE_SECONDS) return { seconds: null, note: 'gap', edited: false };
+    if (sec > timing.idle_seconds) return { seconds: null, note: 'gap', edited: false };
     return { seconds: round1(Math.max(0, sec)), note: null, edited: false };
   });
 }
@@ -97,15 +100,17 @@ export function estimateTimes(ordered, startedAt = null) {
 // المراجعة كاملة لقياس واحد.
 // questions: أسئلة الأداة (بخياراتها ودرجاتها) · rows: assessment_answers { question_id, value, score, answered_at }
 // results: نسب الجوانب المخزّنة لكل بُعد { [dimension]: { knowledge, skill, behavior } } إن وُجدت، فتطابق assessment_results
-/** @param {{ questions: any[], rows: any[], startedAt?: string | null, submittedAt?: string | null, results?: Record<string, any> | null }} d */
-export function reviewAnswers({ questions, rows, startedAt = null, submittedAt = null, results = null }) {
+// timing: حدود الزمن من الإعدادات العامة (answer_review)، وافتراضياتها إن غابت
+/** @param {{ questions: any[], rows: any[], startedAt?: string | null, submittedAt?: string | null, results?: Record<string, any> | null, timing?: Record<string, number> | null }} d */
+export function reviewAnswers({ questions, rows, startedAt = null, submittedAt = null, results = null, timing = null }) {
+  const t = { ...TIMING_DEFAULTS, ...(timing || {}) };
   const byId = new Map((questions || []).map((q) => [q.id, q]));
   const answered = (rows || []).filter((r) => byId.has(r.question_id));
   const rowOf = new Map(answered.map((r) => [r.question_id, r]));
   // المعروض هو المجاب: الإرسال يشترط اكتمال ما عُرض (صيغته وفقرات البعدي)، فلا حاجة لإعادة اشتقاقه
   const ordered = servedOrder(answered.map((r) => byId.get(r.question_id)));
   const ms = (v) => (v ? Date.parse(v) : null);
-  const times = estimateTimes(ordered.map((q) => ({ ...q, at: ms(rowOf.get(q.id).answered_at) })), ms(startedAt));
+  const times = estimateTimes(ordered.map((q) => ({ ...q, at: ms(rowOf.get(q.id).answered_at) })), ms(startedAt), t);
   const ks = Object.fromEntries(answered.map((r) => [r.question_id, r.value?.k]));
   const pcts = results || tierPercents(ordered, ks);
 
@@ -140,12 +145,12 @@ export function reviewAnswers({ questions, rows, startedAt = null, submittedAt =
   for (const s of sections) {
     const own = items.filter((x) => x.section === s.key);
     const valid = own.map((x) => x.seconds).filter((x) => x != null);
-    s.median = valid.length >= FAST_MIN_SAMPLE ? round1(median(valid)) : null;
+    s.median = valid.length >= t.fast_min_sample ? round1(median(valid)) : null;
     s.seconds = round1(s.seconds);
     for (const it of own) {
       if (it.seconds == null) continue;
-      const floor = FAST_FLOOR_SECONDS[it.kind === 'likert' ? 'likert' : 'choice'];
-      it.fast = it.seconds < floor || (s.median != null && it.seconds < FAST_RATIO * s.median);
+      const floor = it.kind === 'likert' ? t.fast_floor_likert : t.fast_floor_choice;
+      it.fast = it.seconds < floor || (s.median != null && it.seconds < t.fast_ratio * s.median);
       if (it.fast) s.fast += 1;
     }
     s.pct = s.tier !== 'transfer' && s.dimension ? pcts?.[s.dimension]?.[s.tier] ?? null : null;

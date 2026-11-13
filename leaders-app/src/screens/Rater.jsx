@@ -4,16 +4,22 @@
 // صفحة مفتوحة بلا حساب، يصلها المدير أو الزميل من بريد الدعوة. لكل عبارة
 // تقديران: الآن وقبل البرنامج، و"لا أستطيع الحكم" إن لم يرَ الموقف.
 // دعوة ما قبل البرنامج (phase pre) تقدير واحد: الأشهر الثلاثة الأخيرة.
+// تقييم 360، المرحلة 1: دليل قصير قبل البدء، وسؤال الصلة أولًا، والعبارات التي تشهدها مجموعته وحدها
+// (الخادم يحجب المعكوسة)، وثلاثة أسئلة مفتوحة اختيارية بدل الملاحظة الواحدة.
+// تقييم 360، المرحلة 2 (phase f360): تقدير واحد لكل عبارة بمراسي السلم من الإعدادات، ووعد الإخفاء بحسب مجموعته
+// (promise من الخادم: المدير باسم دوره، وغيره مجمّعًا)، والغرض تقرير تطويري لا قياس الأثر.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf } from '../labels.js';
-import { LEGAL_PATH, POLICY_VERSION } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONTACT_FREQ_AR, FEEDBACK_OPEN_AR, FEEDBACK_OPEN_MAX, LEGAL_PATH, POLICY_VERSION } from '../../../supabase/functions/leaders-api/labels.js';
 
 export default function Rater() {
   const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
   const [data, setData] = useState(null);
+  const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState({});
-  const [comment, setComment] = useState('');
+  const [contact, setContact] = useState('');
+  const [open, setOpen] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -22,24 +28,47 @@ export default function Rater() {
 
   if (!data) return <div className="center-load"><div className="spinner" /></div>;
   if (!data.success) return <div className="page narrow"><div className="card stack"><h1 className="as-h2">الرابط غير متاح</h1><div className="alert err" role="alert">{data.message}</div></div></div>;
+  const f360 = data.phase === 'f360';
   if (done || data.done) {
     return (
       <div className="page narrow">
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
           <h1 className="as-h2">شكرًا لك</h1>
-          <p className="muted">وصل تقديرك، ويدخل مجمّعًا في تقرير أثر البرنامج.</p>
+          <p className="muted">{f360 ? 'وصل تقديرك، ويدخل مجمّعًا في تقرير تطويري يناقشه مع مستشاره في جلسة توجيه.' : 'وصل تقديرك، ويدخل مجمّعًا في تقرير أثر البرنامج.'}</p>
         </div>
       </div>
     );
   }
 
-  const pre = data.phase === 'pre';
+  // تقدير واحد قبل البرنامج وفي 360، وتقديران (الآن وقبل البرنامج) في تقدير الأثر البعدي وحده
+  const pre = data.phase === 'pre' || f360;
+  const eyebrow = f360 ? 'تقييم 360 للتطوير' : pre ? 'تقدير الممارسة قبل البرنامج' : 'تقدير تغير الممارسة';
+  // الدليل القصير قبل البدء (30 ثانية): ما يُقيَّم، و«لا أستطيع الحكم»، ومثال على ملاحظة محددة
+  if (!started) {
+    return (
+      <div className="page narrow stack">
+        <div className="card stack">
+          <p className="eyebrow">{eyebrow}</p>
+          <h1 style={{ fontSize: 22 }}>{data.rater ? `أهلًا ${data.rater}، ` : ''}قبل أن تبدأ</h1>
+          <p className="muted">بصفتك {data.relation || 'مقيّمًا'} لـ{data.participant}. يستغرق التقدير نحو {f360 ? 'عشر' : pre ? 'ثلاث' : 'خمس'} دقائق.</p>
+          <ul className="stack small">
+            <li>قدّر ما رأيته فعلًا في الأشهر الثلاثة الأخيرة{pre ? '' : '، ثم كما كان قبل البرنامج'}، لا انطباعك العام عنه.</li>
+            <li>اختر «لا أستطيع الحكم» إن لم تشهد الموقف، فهو أصدق من تقدير بالتخمين.</li>
+            <li>{data.promise || 'لا يظهر تقديرك له منفردًا.'}</li>
+          </ul>
+          <p className="small muted">وفي الأسئلة المكتوبة اذكر موقفًا محددًا: «في اجتماع المراجعة يوم الأحد لخّص المواقف فهدأ النقاش» أنفع له من «ممتاز».</p>
+          <div className="row"><button className="btn gold" onClick={() => setStarted(true)}>ابدأ</button></div>
+        </div>
+      </div>
+    );
+  }
+
   const set = (id, k, v) => setAnswers((a) => ({ ...a, [id]: { ...a[id], [k]: v } }));
-  const left = data.questions.filter((q) => answers[q.id]?.now == null || (!pre && answers[q.id]?.before == null)).length;
+  const left = data.questions.filter((q) => answers[q.id]?.now == null || (!pre && answers[q.id]?.before == null)).length + (contact ? 0 : 1);
   const submit = async () => {
     setBusy(true); setError('');
-    const res = await call('rater.submit', { t, answers, comment });
+    const res = await call('rater.submit', { t, answers, contact_freq: contact, open });
     setBusy(false);
     if (res.success) setDone(true); else setError(res.message);
   };
@@ -59,11 +88,22 @@ export default function Rater() {
   return (
     <div className="page narrow stack">
       <div className="card stack">
-        <p className="eyebrow">{pre ? 'تقدير الممارسة قبل البرنامج' : 'تقدير تغير الممارسة'}</p>
+        <p className="eyebrow">{eyebrow}</p>
         <h1 style={{ fontSize: 22 }}>{data.rater ? `أهلًا ${data.rater}، ` : ''}{pre ? `كيف يمارس ${data.participant} عمله اليوم؟` : `كيف تغيّرت ممارسة ${data.participant}؟`}</h1>
-        <p className="muted">{pre
+        <p className="muted">{f360
+          ? `بصفتك ${data.relation || 'مقيّمًا'}، قدّر كل عبارة كما رأيتها فعلًا. ${data.promise || ''}`
+          : pre
           ? `بصفتك ${data.relation || 'مقيّمًا'}، قدّر كل عبارة كما رأيتها فعلًا. سنطلب التقدير نفسه بعد البرنامج للمقارنة، ولا يظهر تقديرك له منفردًا.`
           : `بصفتك ${data.relation || 'مقيّمًا'}، قدّر لكل عبارة مرتين: كيف يمارسها الآن، وكيف كان يمارسها قبل البرنامج. اعتمد على ما رأيته فعلًا، ولا يظهر تقديرك له منفردًا.`}</p>
+      </div>
+      {/* سؤال الصلة: وزن لجودة التقدير لا للحساب */}
+      <div className="card stack">
+        <p className="q-text" id="rt-contact">كم مرة ترى عمله؟</p>
+        <div className="options" role="radiogroup" aria-labelledby="rt-contact" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {Object.entries(CONTACT_FREQ_AR).map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={contact === k} className={`opt${contact === k ? ' on' : ''}`} onClick={() => setContact(k)}><span>{l}</span></button>
+          ))}
+        </div>
       </div>
       {data.questions.map((q, i) => (
         <div key={q.id} className="card stack">
@@ -77,11 +117,14 @@ export default function Rater() {
         </div>
       ))}
       <div className="card stack">
-        <label className="field"><span>ملاحظة <em>(اختياري)</em>: مثال محدد على تغيير لاحظته</span>
-          <textarea className="input" rows={4} maxLength={2000} value={comment} onChange={(e) => setComment(e.target.value)} /></label>
+        <h2 style={{ fontSize: 18 }}>ثلاثة أسئلة قصيرة <em className="small muted">(اختيارية)</em></h2>
+        {Object.entries(FEEDBACK_OPEN_AR).map(([k, l]) => (
+          <label key={k} className="field"><span>{l}</span>
+            <textarea className="input" rows={3} maxLength={FEEDBACK_OPEN_MAX} value={open[k] || ''} onChange={(e) => setOpen({ ...open, [k]: e.target.value })} /></label>
+        ))}
         {error && <div className="alert err" role="alert">{error}</div>}
         {/* D18 وD19: إشعار خصوصية المقيّم وسطر موافقته، ويُسجَّل قبوله بإرسال التقدير */}
-        <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك لقياس أثر البرنامج وحده، ولا يظهر تقديرك للمشارك منفردًا. يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> (النسخة {POLICY_VERSION}).</p>
+        <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك {f360 ? 'لتقرير تطويري له يسلّمه مستشاره في جلسة توجيه، ولا يدخل أي تقييم أو شهادة' : 'لقياس أثر البرنامج وحده'}، {f360 ? '' : 'ولا يظهر تقديرك للمشارك منفردًا. '}يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> (النسخة {POLICY_VERSION}).</p>
         <div className="row">
           <button className="btn gold" disabled={busy || left > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : left ? `بقي ${left}` : 'أرسل التقدير'}</button>
         </div>

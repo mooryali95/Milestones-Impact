@@ -15,7 +15,10 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
       expect(dash, action).toContain(`settle('${action}', ${fn})`);
       expect(index, action).toContain(`'${action}': (e) => ${fn},`);
     }
-    expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus } };');
+    // تقييم 360 (feedback360.ts) في الرحلة نفسها
+    expect(dash).toContain("settle('xp.f360', FB.advisorList(e))");
+    expect(index).toContain("'xp.f360': (e) => FB.advisorList(e),");
+    expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus, f360 } };');
   });
   it('لا تجميع قبل الموافقة أو الاعتماد، ولا في إعادة التحميل الخفيفة', () => {
     // «تكليفاتي» (فريق الجهة والدفعة، المرحلة 2) تُضاف بعد الموافقة والاعتماد وقبل عودة الخفيفة، والتجميع بعدها كما كان

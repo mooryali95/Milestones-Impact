@@ -76,3 +76,17 @@ describe('الربط', () => {
     for (const a of ['me.privacy', 'me.export', 'me.erase-request']) expect(ui).toContain(`'${a}'`);
   });
 });
+
+describe('أعمدة ترحيلات لم تُطبَّق بعد (تقييم 360)', async () => {
+  const { EXPORT_HIDDEN_PENDING, EXPORT_FEEDBACK_COLUMNS } = await import('../../supabase/functions/leaders-api/privacy.js');
+  const migrations = ['20261111130000_leaders_feedback360_rater_form', '20261111130200_leaders_feedback_cycles'].map((n) => read(`supabase/migrations/${n}.sql`)).join('\n');
+  it('المحجوب المعلّق عمود حقيقي في ترحيله، ولا يخرج في النسخة', () => {
+    for (const [t, cols] of Object.entries(EXPORT_HIDDEN_PENDING)) for (const c of cols) expect(migrations, `${t}.${c}`).toMatch(new RegExp(`alter table leaders\\.${t} add column if not exists ${c} `));
+    const r = scrubRow('raters', { id: 1, open_answers: { continue: 'سري' }, contact_freq: 'weekly', comment_hidden: true, relation: 'peer' });
+    expect(r).toEqual({ id: 1, relation: 'peer' });
+  });
+  it('دورة 360 تخرج بأعمدتها المعلنة وحدها، بلا من اعتمد وسلّم', () => {
+    for (const c of EXPORT_FEEDBACK_COLUMNS.split(', ')) expect(migrations, c).toMatch(new RegExp(`\\n  ${c} `));
+    expect(EXPORT_FEEDBACK_COLUMNS).not.toMatch(/approved_by|released_by/);
+  });
+});

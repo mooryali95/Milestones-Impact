@@ -2,7 +2,8 @@
 // اطلب استشارة: متى احتاجها المشارك، خلال البرنامج أو أثناء بناء المبادرة أو تنفيذها
 // ════════════════════════════════════════════════════════════════
 // يختار نوع الدعم والإطار ويصف حاجته، فيرشّح محرك المطابقة ثلاثة خبراء.
-// يرى الاسم والنبذة والتقييم (إن بلغ حدّه) فقط؛ التكلفة والساعات للإدارة.
+// يرى الاسم والنبذة فقط. تقييم الخبير يعمل داخل الترتيب ولا يُعرض نجومًا (تصور 360، المرحلة 0ب)؛
+// التكلفة والساعات للإدارة.
 // الاختيار يُعرض على الخبير مع وصف الحاجة، فإن اعتذر انتقل للتالي آليًا.
 // الأدوار والمواضع والحالات كلها من الخادم (labels.js).
 import React, { useEffect, useState } from 'react';
@@ -73,6 +74,10 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
           ) : d.candidates.length ? (
             <>
               <p className="small muted">أنسب 3 خبراء لطلبك ومستواك.</p>
+              {/* كيف نرشّح: التقييم داخل الترتيب ولا يُعرض نجومًا (MATCH_WEIGHTS في logic.js) */}
+              <details className="small muted"><summary>كيف نرشّح؟</summary>
+                <p>نرتّب الخبراء بتخصصهم في الإطار ومستواك، ثم بوقتهم المتاح هذا الأسبوع، ثم بتقييم المشاركين لجلساتهم، ثم بخبرتهم في قطاعك وبخدمتهم لك من قبل، ونقدّم فريق دفعتك. لا نعرض تقييم الخبير لأنه أداة لجودة الترشيح لا سمعة عامة.</p>
+              </details>
               <div className="cx-grid">
                 {d.candidates.map((e) => (
                   <article key={e.id} className="cx-card stack">
@@ -80,7 +85,6 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
                     {e.team && <span className="chip ok cx-team">من فريق دفعتك</span>}
                     {e.title && <small className="muted">{e.title}{e.years ? ` · ${e.years} سنة خبرة` : ''}</small>}
                     {e.bio && <p className="small">{e.bio}</p>}
-                    <small>{e.rating ? `★ ${e.rating.avg} (${e.rating.count} تقييم)` : 'خبير جديد في البرنامج'}</small>
                     <button className="btn sm" disabled={!!busy || !form.note.trim()} onClick={() => choose(e)}>{busy === e.id ? 'لحظة…' : 'اختره'}</button>
                   </article>
                 ))}

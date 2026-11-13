@@ -20,10 +20,17 @@ export const EXPORT_TABLES = {
   final_evaluations: ['votes', 'submitted_by'],
   auth_sessions: [], passkeys: [],
 };
+// أعمدة ترحيلات لم تُطبَّق بعد فليست في المخطط المرجعي (baseline.sql): تُحجب من الآن، وتنتقل إلى EXPORT_TABLES
+// حين يلتقطها المخطط. تقييم 360 (20261111130000): الأسئلة المفتوحة وسؤال الصلة وحجب الإدارة سرية لأصحابها
+export const EXPORT_HIDDEN_PENDING = { raters: ['open_answers', 'contact_freq', 'comment_hidden'] };
+// تقييم 360 (20261111130200): دورة المشارك وتقديره الذاتي وخطته ملك له، تُقرأ في privacy.ts بأعمدتها هذه وحدها
+// (من اعتمد القائمة وسلّم التقرير لا يخرج)، وغياب الجدول قبل ترحيله لا يفشل النسخة
+export const EXPORT_FEEDBACK_COLUMNS = 'wave, status, self_answers, self_submitted_at, submitted_at, opens_at, closes_at, closed_at, released_at, plan, plan_at, created_at';
 // جداول فيها participant_id ولا تُصدَّر، وسبب كل منها
 export const EXPORT_SKIPPED = {
   webauthn_challenges: 'تحديات دخول مؤقتة تنتهي بدقائق ولا تحمل بيانات',
   erasure_requests: 'تُعرض حالته في me.privacy',
+  feedback_cycles: 'يُصدَّر بأعمدة EXPORT_FEEDBACK_COLUMNS وحدها في privacy.ts لا بالتصدير العام',
 };
 
 // حجب عام في كل جدول: الرموز وبصماتها ومفاتيح الدخول. لا تفيد صاحبها وتضر إن تسربت
@@ -31,7 +38,7 @@ const SECRET = /(token|_hash$|^signature$|^public_key$|^credential_id$|^sign_cou
 export const isSecretColumn = (name) => SECRET.test(String(name));
 
 export function scrubRow(table, row) {
-  const extra = new Set(EXPORT_TABLES[table] || []);
+  const extra = new Set([...(EXPORT_TABLES[table] || []), ...(EXPORT_HIDDEN_PENDING[table] || [])]);
   const out = {};
   for (const [k, v] of Object.entries(row || {})) if (!isSecretColumn(k) && !extra.has(k)) out[k] = v;
   return out;

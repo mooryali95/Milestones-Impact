@@ -18,7 +18,10 @@ async function admin(page) {
       'admin.participants': { success: true, participants: [] },
       'admin.experts': { success: true, experts },
       'admin.expert': { success: true, expert: experts.find((e) => e.id === b.id), activity: [{ action: 'expert.apply', actor: 'k@x.com', created_at: '2026-10-28' }],
-        service: { sessions: 4, attended: 3, no_show: 1, upcoming: 0, participants: 2, hours: 2.5, cost: 750, reviews: { requirements: 1, models: 3, capstones: 1 }, recent: [{ id: 'c1', status: 'attended', starts_at: '2026-10-20', participants: { full_name: 'سارة' } }] } },
+        service: { sessions: 4, attended: 3, no_show: 1, upcoming: 0, participants: 2, hours: 2.5, cost: 750, reviews: { requirements: 1, models: 3, capstones: 1 }, recent: [{ id: 'c1', status: 'attended', starts_at: '2026-10-20', participants: { full_name: 'سارة' } }] },
+        // تصور 360، المرحلة 0ب: الإدارة ترى التقييم حيًّا، وما يراه الخبير من ملخصه الدوري، وتنبيه الهبوط
+        ratings: { summary: { avg: 3.9, count: 11, visible: true }, criteria: { useful: 4, clear: 3.8, punctual: 4 }, comments: [], given: 0,
+          own: { visible: true, avg: 4.4, count: 5 }, drop: { avg: 3.2, last: 5 } } },
       'admin.expert-set-status': { success: true },
       'admin.expert-save': { success: true, expert: { ...experts[0], id: 'e3' }, invited: true },
       'admin.expert-requests': { success: true, requests: [
@@ -54,6 +57,9 @@ test('شبكة الخبراء: المؤشرات والفلترة ثم اعتما
   await expect(page.getByRole('heading', { name: 'خالد العتيبي' })).toBeVisible();
   await expect(page.locator('.ex-service')).toContainText('2.5');
   await expect(page.locator('.ex-service')).toContainText('750 ريال');
+  await expect(page.locator('.ex-ratings')).toContainText('لا يراه المشارك');
+  await expect(page.locator('.ex-ratings')).toContainText('يرى الخبير ملخص 5 منها');
+  await expect(page.locator('.ex-ratings').getByRole('status')).toContainText('هبط متوسط آخر 5 تقييمات إلى 3.2');
   if (SHOT) await page.locator('.ex-profile').screenshot({ path: `${SHOT}/expert.png` });
   await page.getByRole('button', { name: 'اعتماد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-set-status')).toMatchObject({ id: 'e2', status: 'active' });

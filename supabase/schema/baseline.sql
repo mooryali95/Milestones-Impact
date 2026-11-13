@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261111120300_leaders_lab_requirement
+-- as-of migration: 20261111130200_leaders_feedback_cycles
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -26,6 +26,17 @@ create sequence if not exists public.email_otps_id_seq as integer;
 create sequence if not exists public.process_details_id_seq as integer;
 
 create sequence if not exists public.reports_id_seq as integer;
+
+create table if not exists leaders.app_settings (
+  key text not null,
+  value jsonb default '{}'::jsonb not null,
+  updated_by text,
+  updated_at timestamp with time zone default now() not null,
+  constraint app_settings_key_check CHECK ((key ~ '^[a-z0-9_]{1,40}$'::text)),
+  constraint app_settings_updated_by_check CHECK (((updated_by IS NULL) OR (char_length(updated_by) <= 254))),
+  constraint app_settings_value_check CHECK (((jsonb_typeof(value) = 'object'::text) AND (char_length((value)::text) <= 8000))),
+  constraint app_settings_pkey PRIMARY KEY (key)
+);
 
 create table if not exists leaders.assessment_answers (
   assessment_id uuid not null,
@@ -631,6 +642,39 @@ create table if not exists leaders.experts (
   constraint experts_years_experience_check CHECK (((years_experience IS NULL) OR ((years_experience >= 0) AND (years_experience <= 60)))),
   constraint experts_pkey PRIMARY KEY (id),
   constraint experts_email_key UNIQUE (email)
+);
+
+create table if not exists leaders.feedback_cycles (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  wave text not null,
+  instrument_id uuid not null,
+  status text default 'nominating'::text not null,
+  self_answers jsonb,
+  self_submitted_at timestamp with time zone,
+  submitted_at timestamp with time zone,
+  return_note text,
+  approved_by text,
+  approved_at timestamp with time zone,
+  opens_at timestamp with time zone,
+  closes_at timestamp with time zone,
+  reminded_days integer[] default '{}'::integer[] not null,
+  closed_at timestamp with time zone,
+  released_by text,
+  released_at timestamp with time zone,
+  debrief_session_id uuid,
+  plan jsonb,
+  plan_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint feedback_cycles_approved_by_check CHECK (((approved_by IS NULL) OR (char_length(approved_by) <= 300))),
+  constraint feedback_cycles_plan_check CHECK (((plan IS NULL) OR ((jsonb_typeof(plan) = 'object'::text) AND (char_length((plan)::text) <= 4000)))),
+  constraint feedback_cycles_released_by_check CHECK (((released_by IS NULL) OR (char_length(released_by) <= 300))),
+  constraint feedback_cycles_return_note_check CHECK (((return_note IS NULL) OR (char_length(return_note) <= 500))),
+  constraint feedback_cycles_self_answers_check CHECK (((self_answers IS NULL) OR (jsonb_typeof(self_answers) = 'object'::text))),
+  constraint feedback_cycles_status_check CHECK ((status = ANY (ARRAY['nominating'::text, 'approval'::text, 'open'::text, 'closed'::text, 'released'::text, 'cancelled'::text]))),
+  constraint feedback_cycles_wave_check CHECK ((wave = ANY (ARRAY['t1'::text, 't2'::text]))),
+  constraint feedback_cycles_pkey PRIMARY KEY (id),
+  constraint feedback_cycles_participant_id_wave_key UNIQUE (participant_id, wave)
 );
 
 create table if not exists leaders.final_evaluations (
@@ -1414,9 +1458,11 @@ create table if not exists leaders.questions (
   min_level text,
   updated_at timestamp with time zone,
   updated_by text,
+  observable_by text[],
   constraint questions_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
   constraint questions_kind_check CHECK ((kind = ANY (ARRAY['likert'::text, 'choice'::text, 'text'::text]))),
   constraint questions_min_level_check CHECK ((min_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text]))),
+  constraint questions_observable_by_check CHECK (((observable_by IS NULL) OR (observable_by <@ ARRAY['self'::text, 'manager'::text, 'peer'::text, 'report'::text, 'stakeholder'::text]))),
   constraint questions_tier_check CHECK ((tier = ANY (ARRAY['knowledge'::text, 'skill'::text, 'behavior'::text, 'transfer'::text]))),
   constraint questions_pkey PRIMARY KEY (id),
   constraint questions_instrument_id_code_key UNIQUE (instrument_id, code)
@@ -1442,16 +1488,22 @@ create table if not exists leaders.raters (
   verification_flags text[] default '{}'::text[] not null,
   verified_by text,
   verified_at timestamp with time zone,
+  open_answers jsonb,
+  contact_freq text,
+  cycle_id uuid,
+  comment_hidden boolean default false not null,
   constraint raters_comment_check CHECK (((comment IS NULL) OR (char_length(comment) <= 2000))),
+  constraint raters_contact_freq_check CHECK (((contact_freq IS NULL) OR (contact_freq = ANY (ARRAY['weekly'::text, 'monthly'::text, 'less'::text])))),
+  constraint raters_cycle_phase_check CHECK (((phase = 'f360'::text) = (cycle_id IS NOT NULL))),
   constraint raters_email_check CHECK (((email = lower(email)) AND (char_length(email) <= 254))),
   constraint raters_full_name_check CHECK (((full_name IS NULL) OR (char_length(full_name) <= 120))),
-  constraint raters_phase_check CHECK ((phase = ANY (ARRAY['pre'::text, 'post'::text]))),
-  constraint raters_relation_check CHECK ((relation = ANY (ARRAY['manager'::text, 'peer'::text, 'report'::text]))),
-  constraint raters_status_check CHECK ((status = ANY (ARRAY['awaiting'::text, 'invited'::text, 'submitted'::text, 'revoked'::text]))),
+  constraint raters_open_answers_check CHECK (((open_answers IS NULL) OR ((jsonb_typeof(open_answers) = 'object'::text) AND (char_length((open_answers)::text) <= 2400)))),
+  constraint raters_phase_check CHECK ((phase = ANY (ARRAY['pre'::text, 'post'::text, 'f360'::text]))),
+  constraint raters_relation_check CHECK ((relation = ANY (ARRAY['manager'::text, 'peer'::text, 'report'::text, 'stakeholder'::text]))),
+  constraint raters_status_check CHECK ((status = ANY (ARRAY['nominated'::text, 'awaiting'::text, 'invited'::text, 'submitted'::text, 'revoked'::text]))),
   constraint raters_verification_check CHECK (((verification IS NULL) OR (verification = ANY (ARRAY['org_domain'::text, 'confirmed'::text, 'pending'::text, 'rejected'::text])))),
   constraint raters_verified_by_check CHECK (((verified_by IS NULL) OR (char_length(verified_by) <= 300))),
   constraint raters_pkey PRIMARY KEY (id),
-  constraint raters_participant_email_phase_key UNIQUE (participant_id, email, phase),
   constraint raters_token_hash_key UNIQUE (token_hash)
 );
 
@@ -2186,6 +2238,18 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.feedback_cycles add constraint feedback_cycles_debrief_session_id_fkey FOREIGN KEY (debrief_session_id) REFERENCES leaders.coaching_sessions(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.feedback_cycles add constraint feedback_cycles_instrument_id_fkey FOREIGN KEY (instrument_id) REFERENCES leaders.instruments(id);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.feedback_cycles add constraint feedback_cycles_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.final_evaluations add constraint final_evaluations_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2419,6 +2483,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.questions add constraint questions_instrument_id_fkey FOREIGN KEY (instrument_id) REFERENCES leaders.instruments(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.raters add constraint raters_cycle_id_fkey FOREIGN KEY (cycle_id) REFERENCES leaders.feedback_cycles(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -2689,6 +2757,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS expert_requests_token_idx ON leaders.expert_re
 
 CREATE INDEX IF NOT EXISTS experts_status_idx ON leaders.experts USING btree (status);
 
+CREATE INDEX IF NOT EXISTS feedback_cycles_status ON leaders.feedback_cycles USING btree (status, closes_at);
+
 CREATE INDEX IF NOT EXISTS final_evaluations_status_idx ON leaders.final_evaluations USING btree (status);
 
 CREATE INDEX IF NOT EXISTS hall_presence_last_seen_idx ON leaders.hall_presence USING btree (last_seen);
@@ -2777,6 +2847,12 @@ CREATE INDEX IF NOT EXISTS questions_instrument_idx ON leaders.questions USING b
 
 CREATE INDEX IF NOT EXISTS raters_awaiting ON leaders.raters USING btree (participant_id) WHERE (status = 'awaiting'::text);
 
+CREATE UNIQUE INDEX IF NOT EXISTS raters_cycle_email_key ON leaders.raters USING btree (cycle_id, email) WHERE (cycle_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS raters_cycle_idx ON leaders.raters USING btree (cycle_id) WHERE (cycle_id IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS raters_impact_email_phase_key ON leaders.raters USING btree (participant_id, email, phase) WHERE (cycle_id IS NULL);
+
 CREATE INDEX IF NOT EXISTS raters_participant_idx ON leaders.raters USING btree (participant_id);
 
 CREATE INDEX IF NOT EXISTS reports_organization_idx ON leaders.reports USING btree (organization_id);
@@ -2861,6 +2937,8 @@ CREATE INDEX IF NOT EXISTS user_passkeys_reg_idx ON public.user_passkeys USING b
 
 CREATE INDEX IF NOT EXISTS webauthn_challenges_created_idx ON public.webauthn_challenges USING btree (created_at);
 
+alter table leaders.app_settings enable row level security;
+
 alter table leaders.assessment_answers enable row level security;
 
 alter table leaders.assessment_results enable row level security;
@@ -2926,6 +3004,8 @@ alter table leaders.expert_requests enable row level security;
 alter table leaders.expert_sessions enable row level security;
 
 alter table leaders.experts enable row level security;
+
+alter table leaders.feedback_cycles enable row level security;
 
 alter table leaders.final_evaluations enable row level security;
 

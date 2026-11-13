@@ -19,6 +19,7 @@ import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
+import { appSettings } from './settings.ts';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -448,7 +449,9 @@ export async function answersReview(participantId: string, assessmentId: unknown
   ]);
   // نسب الأقسام من assessment_results نفسها، فتطابق ما في بطاقة المستوى
   const stored = Object.fromEntries((a.assessment_results || []).map((r: any) => [r.dimension, { knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct }]));
-  const review = reviewAnswers({ questions: must(qs) ?? [], rows: must(rows) ?? [], startedAt: a.started_at, submittedAt: a.submitted_at, results: Object.keys(stored).length ? stored : null });
+  // حدود الزمن من الإعدادات العامة (answer_review) يضبطها المالك من اللوحة
+  const timing = (await appSettings()).answer_review;
+  const review = reviewAnswers({ questions: must(qs) ?? [], rows: must(rows) ?? [], startedAt: a.started_at, submittedAt: a.submitted_at, results: Object.keys(stored).length ? stored : null, timing });
   await audit(viewer.type, viewer.email, viewer.action, 'participants', participantId, null, { assessment_id: a.id });
   return {
     success: true,
