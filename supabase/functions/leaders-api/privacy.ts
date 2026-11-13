@@ -58,6 +58,9 @@ export async function exportData(p: any) {
   // تقييم 360: دوراته وتقديره الذاتي وخطته (EXPORT_FEEDBACK_COLUMNS)، وغياب الجدول قبل ترحيله لا يفشل النسخة
   const f360 = await db.from('feedback_cycles').select(EXPORT_FEEDBACK_COLUMNS).eq('participant_id', p.id).limit(EXPORT_ROW_CAP);
   if (f360.data?.length) data.feedback_cycles = f360.data;
+  // ملاحظات ملفه: المرئية له وحدها، بلا كاتبها
+  const obs = await db.from('participant_observations').select('kind, title, body, created_at, acknowledged_at').eq('participant_id', p.id).eq('visible', true).limit(EXPORT_ROW_CAP);
+  if (obs.data?.length) data.participant_observations = obs.data;
   await audit('participant', p.id, 'participant.export', 'participants', p.id, null, { tables: Object.keys(data).length, rows: Object.values(data).reduce((n, r) => n + r.length, 0) });
   return {
     success: true,

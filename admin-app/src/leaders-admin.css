@@ -867,3 +867,25 @@
 /* مؤشر الجهد في بطاقة المستوى: تنبيه استشاري قبل الاعتماد */
 .lc-effort { margin: 8px 0; padding: 9px 12px; border-radius: 6px; font-size: .9rem; border-inline-start: 3px solid var(--st-warn-text); background: rgba(178,107,0,.08); }
 .lc-effort.low { border-inline-start-color: var(--st-bad); background: var(--st-bad-bg); }
+
+/* ملف المشارك الكامل (PersonFile.jsx): ملخص الأعلام، والملاحظات، والخط الزمني */
+.pf-flags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; }
+.pf-obs-form { display: grid; gap: 8px; margin: 8px 0 14px; padding: 12px; border-radius: 8px; background: var(--sand-light); }
+.pf-obs-form input:not([type="checkbox"]), .pf-obs-form textarea, .pf-obs-form select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--brand-white); }
+/* على الجوال: الصف يلتف، والحقول لا تتجاوز عرض النموذج (كان الصف يمد الصفحة أفقيًا عند 390) */
+.pf-obs-form { min-inline-size: 0; }
+.pf-obs-form .la-row { flex-wrap: wrap; min-inline-size: 0; }
+.pf-obs-form input:not([type="checkbox"]) { flex: 1 1 160px; min-inline-size: 0; }
+.pf-obs-form textarea { inline-size: 100%; min-inline-size: 0; box-sizing: border-box; }
+.pf-check { display: inline-flex; align-items: center; gap: 6px; font-size: .88rem; }
+.pf-obs-list, .pf-mini, .pf-time { list-style: none; margin: 0; padding: 0; }
+.pf-o { padding: 10px 12px; border-inline-start: 3px solid var(--line); margin-bottom: 8px; background: var(--brand-white); border-radius: 6px; }
+.pf-o.warning { border-inline-start-color: var(--st-warn-text); }
+.pf-o.commendation { border-inline-start-color: var(--st-ok); }
+.pf-o p { margin: 6px 0; white-space: pre-wrap; }
+.pf-mini li { margin-bottom: 4px; font-size: .9rem; }
+.pf-time li { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.pf-time li.warn b { color: var(--st-warn-text); }
+.pf-time li.ok b { color: var(--st-ok); }
+.pf-when { color: var(--ink-soft); }
+@media (max-width: 600px) { .pf-time li { grid-template-columns: 1fr; gap: 2px; } }

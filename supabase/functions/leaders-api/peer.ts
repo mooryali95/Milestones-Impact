@@ -5,6 +5,8 @@
 // يخفيها من بوابته. نمط الإشراف من الدفعة (cohorts.supervision). المنطق النقي في peer.js.
 // الخبير يُسجَّل في audit_log فاعلًا system ببريده (لا admin)، حفاظًا على فصل الأدوار.
 import { audit, db, Fail, must, sendMail } from './core.ts';
+import * as OB from './observations.ts';
+import { RULES } from './notice-rules.js';
 import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { answerBlock, authorNameFor, cleanPeerRequest, cleanPeerText, cleanSupervision, PEER_ANSWER_STATUS_AR, PEER_SOURCE_AR, PEER_STATUS_AR, requestStatusFor, SUPERVISION_AR } from './peer.js';
@@ -185,6 +187,8 @@ export async function expertReview(e: any, b: Body) {
   const all = await answersFor([r.id]);
   must(await db.from('peer_requests').update({ status: requestStatusFor(all, r.status), updated_at: now }).eq('id', r.id));
   await audit('system', e.email, `peer.${status}`, 'peer_answers', a.id, { status: a.status }, { status, note: note || null });
+  // إخفاء إجابة كان يمر بلا علم صاحبها: ملاحظة في ملفه تُبلَّغ له مرة واحدة للإجابة (notice-rules.js)
+  if (status === 'hidden' && a.author_id) await OB.record(a.author_id, { code: 'peer_hidden', ref: a.id, ...RULES.peer_hidden() });
   if (status !== 'hidden') await mailAsker(r.id, 'أكّد خبيرك إجابة عن طلب توجيهك', status === 'corrected' ? 'راجع خبيرك إجابة زميلك عن طلبك وصحّحها بملاحظة. تجدها في رحلتك تحت «طلبات التوجيه».' : 'أكّد خبيرك إجابة زميلك عن طلبك. تجدها في رحلتك تحت «طلبات التوجيه».');
   return expertList(e);
 }

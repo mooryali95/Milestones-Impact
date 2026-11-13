@@ -116,6 +116,7 @@ export const MIGRATIONS = [
   '20261111130200_leaders_feedback_cycles',
   '20261113100000_leaders_expert_committees',
   '20261113110000_leaders_assessment_effort_retake',
+  '20261113120000_leaders_participant_observations',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {

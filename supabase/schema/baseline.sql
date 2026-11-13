@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261113110000_leaders_assessment_effort_retake
+-- as-of migration: 20261113120000_leaders_participant_observations
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1129,6 +1129,25 @@ create table if not exists leaders.participant_milestones (
   scores jsonb default '{}'::jsonb not null,
   constraint participant_milestones_note_check CHECK ((char_length(note) <= 1000)),
   constraint participant_milestones_pkey PRIMARY KEY (participant_id, milestone_id)
+);
+
+create table if not exists leaders.participant_observations (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  kind text default 'note'::text not null,
+  source text not null,
+  code text,
+  ref text,
+  title text,
+  body text not null,
+  visible boolean default false not null,
+  author text,
+  created_at timestamp with time zone default now() not null,
+  acknowledged_at timestamp with time zone,
+  constraint participant_observations_body_check CHECK (((char_length(body) >= 3) AND (char_length(body) <= 2000))),
+  constraint participant_observations_kind_check CHECK ((kind = ANY (ARRAY['note'::text, 'warning'::text, 'commendation'::text]))),
+  constraint participant_observations_source_check CHECK ((source = ANY (ARRAY['admin'::text, 'advisor'::text, 'system'::text]))),
+  constraint participant_observations_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.participant_requirements (
@@ -2409,6 +2428,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.participant_observations add constraint participant_observations_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.participant_requirements add constraint participant_requirements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2812,6 +2835,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_invite_uniq ON leaders.organizat
 
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_uniq ON leaders.organizations USING btree (lower(name));
 
+CREATE UNIQUE INDEX IF NOT EXISTS participant_observations_once ON leaders.participant_observations USING btree (participant_id, code, ref) WHERE (code IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS participant_observations_person ON leaders.participant_observations USING btree (participant_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS participant_requirements_status_idx ON leaders.participant_requirements USING btree (status);
 
 CREATE UNIQUE INDEX IF NOT EXISTS participants_email_uniq ON leaders.participants USING btree (lower(email));
@@ -3061,6 +3088,8 @@ alter table leaders.org_coordinators enable row level security;
 alter table leaders.organizations enable row level security;
 
 alter table leaders.participant_milestones enable row level security;
+
+alter table leaders.participant_observations enable row level security;
 
 alter table leaders.participant_requirements enable row level security;
 
