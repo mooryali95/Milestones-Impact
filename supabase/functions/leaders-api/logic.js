@@ -731,8 +731,18 @@ export function gradeQuiz(quiz, answers) {
   return { score: results.filter((r) => r.correct).length, total: quiz.length, results };
 }
 
+// نص له معنى: طول أدنى وعدد كلمات أدنى مختلفة. يسد «حرف واحد» و«عشرون حرفًا عشوائيًا» دون أن يحكم على المضمون
+// (جودة المدخلات، تصور 2026-11-13). قاعدة واحدة للتأمل في الكتيب ولحقول النماذج النصية الطويلة.
+export const REFLECTION_MIN = { chars: 20, words: 4 };
+export const TEXTAREA_MIN = { chars: 15, words: 3 };
+export function meaningful(text, { chars, words }) {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length < chars) return false;
+  return new Set(t.split(' ').filter((w) => w.length > 1)).size >= words;
+}
+
 export function chapterPoints(score, reflection) {
-  return POINTS.chapter + score * POINTS.perCorrect + (String(reflection || '').trim().length >= 20 ? POINTS.reflection : 0);
+  return POINTS.chapter + score * POINTS.perCorrect + (meaningful(reflection, REFLECTION_MIN) ? POINTS.reflection : 0);
 }
 
 // ألقاب التقدم بحسب مجموع النقاط
@@ -775,14 +785,17 @@ export function fieldsFor(fields, level, scope = null, primary = false) {
 // اكتمال الحقل: قاعدة واحدة يقرؤها الخادم عند التسليم والواجهة في شريط التقدم
 export const tableRows = (v) => (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
 export function fieldFilled(f, v) {
-  return f.type === 'table' ? tableRows(v).length >= (f.min_rows || 1) : !!String(v ?? '').trim();
+  if (f.type === 'table') return tableRows(v).length >= (f.min_rows || 1);
+  // الحقل النصي الطويل يكتمل بجملة لها معنى، لا بحرف (TEXTAREA_MIN). القصير والاختيار كما كانا
+  return f.type === 'textarea' ? meaningful(v, TEXTAREA_MIN) : !!String(v ?? '').trim();
 }
 export function missingFields(fields, answers) {
   const a = answers && typeof answers === 'object' ? answers : {};
   const missing = [];
   for (const f of fields || []) {
     if (f.required === false || fieldFilled(f, a[f.key])) continue;
-    missing.push(f.type === 'table' ? `${f.label}: ${f.min_rows || 1} صفوف على الأقل` : f.label);
+    missing.push(f.type === 'table' ? `${f.label}: ${f.min_rows || 1} صفوف على الأقل`
+      : f.type === 'textarea' && String(a[f.key] ?? '').trim() ? `${f.label}: اكتب جملة كاملة على الأقل` : f.label);
   }
   return missing;
 }
