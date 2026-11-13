@@ -30,6 +30,7 @@ export const EXPORT_FEEDBACK_COLUMNS = 'wave, status, self_answers, self_submitt
 export const EXPORT_SKIPPED = {
   webauthn_challenges: 'تحديات دخول مؤقتة تنتهي بدقائق ولا تحمل بيانات',
   erasure_requests: 'تُعرض حالته في me.privacy',
+  feedback_cycles: 'يُصدَّر بأعمدة EXPORT_FEEDBACK_COLUMNS وحدها في privacy.ts لا بالتصدير العام',
 };
 
 // حجب عام في كل جدول: الرموز وبصماتها ومفاتيح الدخول. لا تفيد صاحبها وتضر إن تسربت
