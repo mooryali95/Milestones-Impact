@@ -19,7 +19,9 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 // إلزامي منذ المرحلة ل1: بلا المفتاحين يُرفض النموذج (والصفحة تعرض بديل البريد المباشر) بدل أن يُفتح للإغراق
 const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
 const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
-const ADMIN_EMAIL = "p.o.m2012@hotmail.com";
+// من يُخطَر بطلب تواصل جديد: من أسرار الدالة لا من الكود (المستودع عام، والبريد الشخصي لا يُكتب فيه).
+// CONTACT_NOTIFY_EMAIL إن ضُبط، وإلا بريد تنبيهات المنصة LEADERS_ALERT_EMAIL. بلا أيٍّ منهما يُحفظ الطلب ولا يُرسل الإشعار.
+const ADMIN_EMAIL = (Deno.env.get("CONTACT_NOTIFY_EMAIL") || Deno.env.get("LEADERS_ALERT_EMAIL") || "").trim();
 const FROM_EMAIL = MAIL_FROM_DEFAULT;
 const FRESH_MS = 10 * 60 * 1000;
 // حدود الإغراق: لكل بريد في الساعة، ولكل شبكة في الساعة، وللجميع في الساعة
@@ -110,6 +112,7 @@ ${mailRows([
   ["المصدر", pageLabel],
 ])}
 ${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admin", preheader: "طلب تواصل جديد من الموقع", footnote: "" });
+  if (!ADMIN_EMAIL) { console.error("contact notify skipped: CONTACT_NOTIFY_EMAIL and LEADERS_ALERT_EMAIL are unset"); return; }
   await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name as string)} — ${plain(pageLabel)}`, html);
 }
 

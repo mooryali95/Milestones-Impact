@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
 
     // ══ login-send: same reply whether or not the email is an admin ══
     // مطابقة البريد تامة (eq) لا ilike في الدخول والتحقق والاستعادة: البريد يقبل «_» و«%»، وهما في ilike حرفان
-    // شاملان، فكان صاحب بريد مثل omar_x@outlook.com يطابق حساب مدير omar.x@outlook.com ويتسلم رمزه على بريده هو
+    // شاملان، فكان صاحب بريد مثل a_b@example.com يطابق حساب مدير a.b@example.com ويتسلم رمزه على بريده هو
     // (التدقيق الشامل 2026-11-11، server-sec-1). البريد يُخزَّن بحروف صغيرة عند الإنشاء (newEmail) ويُطبَّع هنا كذلك.
     if (action === "login-send") {
       const email = String(body.email || "").trim().toLowerCase();
