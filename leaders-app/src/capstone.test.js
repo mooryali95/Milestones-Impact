@@ -45,6 +45,13 @@ describe('مصدر النماذج', () => {
 });
 
 describe('فحوص الاتساق', () => {
+  it('وثيقة لم تُملأ جداولها: تفصيل كل فحص فاشل جملة تامة، لا قائمة فارغة', () => {
+    const c = capstoneChecks(ctx({ ...good(), schedule: { activities: [] }, 'benefits-register': { benefits: [] } }));
+    const failed = c.filter((x) => !x.ok);
+    for (const x of failed) expect(x.detail, x.key).not.toMatch(/:\s*\.|:\s*$/);
+    const dates = byKey(c).dates; if (dates) { expect(dates.ok).toBe(false); expect(dates.detail).toBe('لم تُدخل أنشطة في الجدول الزمني بعد.'); }
+    const ben = byKey(c)['benefit-owner']; if (ben) { expect(ben.ok).toBe(false); expect(ben.detail).toBe('لم تُدخل منافع في سجل المنافع بعد.'); }
+  });
   it('وثيقة متسقة تجتاز كل الفحوص', () => {
     const c = capstoneChecks(ctx(good()));
     expect(c.filter((x) => !x.ok)).toEqual([]);

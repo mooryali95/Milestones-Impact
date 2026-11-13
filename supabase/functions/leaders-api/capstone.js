@@ -300,7 +300,9 @@ export function capstoneChecks(ctx) {
       const a = parseDate(t.cell(r, s)), b = parseDate(t.cell(r, e));
       return a == null || b == null || b < a;
     }).map((r) => t.cell(r, 0) || t.cell(r, 1)) : [];
-    add('dates', 'تواريخ الجدول واضحة والنهاية بعد البداية', t && t.rows.length && !bad.length, `صفوف بتاريخ غير واضح أو معكوس: ${bad.slice(0, 6).join('، ')}. اكتب التاريخ هكذا 2026-03-15.`);
+    // جدول بلا صفوف يفشل الفحص، وتفصيله يقول ذلك بدل قائمة فارغة («…معكوس: .»)
+    add('dates', 'تواريخ الجدول واضحة والنهاية بعد البداية', t && t.rows.length && !bad.length,
+      t && t.rows.length ? `صفوف بتاريخ غير واضح أو معكوس: ${bad.slice(0, 6).join('، ')}. اكتب التاريخ هكذا 2026-03-15.` : 'لم تُدخل أنشطة في الجدول الزمني بعد.');
     const orphan = t ? t.rows.flatMap((r) => listCodes(t.cell(r, dep))).filter((c) => !codes.includes(c) && !wbsCodes.includes(c)) : [];
     add('deps', 'الاعتماديات تشير إلى أنشطة موجودة', !orphan.length, `اعتماديات لا تجد نشاطها: ${[...new Set(orphan)].slice(0, 6).join('، ')}`);
     if (has(CHARTER_KEY) && t) {
@@ -328,7 +330,8 @@ export function capstoneChecks(ctx) {
     const t = benefits;
     const base = t.col('خط الاساس'), target = t.col('المستهدف'), owner = t.col('المالك');
     const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || !t.cell(r, owner)).map((r) => t.cell(r, 0));
-    add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك من الجهة', t.rows.length && !weak.length, `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}`);
+    add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك من الجهة', t.rows.length && !weak.length,
+      t.rows.length ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : 'لم تُدخل منافع في سجل المنافع بعد.');
     if (has('evidence-plan')) {
       const ev = table(M['evidence-plan'], A['evidence-plan'], 'plan');
       const ind = t.col('المؤشر');
