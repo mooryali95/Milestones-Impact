@@ -19,6 +19,7 @@ import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
+import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 
 type Body = Record<string, any>;
@@ -255,7 +256,7 @@ async function overviewMore(ids: string[] | null) {
 // ── المشاركون ──
 export async function participants(b: Body) {
   let q = db.from('participants')
-    .select('id, full_name, email, phone, job_title, organization_id, organization_name, status, created_at, last_login_at, is_test, placements(dimension, level, approved_at)')
+    .select('id, full_name, email, phone, job_title, organization_id, organization_name, years_experience, status, created_at, last_login_at, is_test, placements(dimension, level, approved_at)')
     .order('created_at', { ascending: false }).limit(500);
   q = listFilter(q, b.org);
   if (b.status) q = q.eq('status', String(b.status));
@@ -263,7 +264,33 @@ export async function participants(b: Body) {
     const s = String(b.search).replace(/[%,()]/g, ' ').trim();
     if (s) q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,organization_name.ilike.%${s}%`);
   }
-  return { success: true, participants: must(await q) };
+  const rows = (must(await q) ?? []) as any[];
+  const progress = await baselineProgress(rows.map((r) => r.id));
+  return { success: true, participants: rows.map((r) => ({ ...r, onboarding: onboardingOf(r, progress[r.id] || null) })) };
+}
+
+// القياس المبدئي الأحدث غير الملغى لكل مشارك: حالته وكم أجاب من كم (بصيغته)، وآخر حفظ لإجابة.
+// قراءتان ثابتتان مهما كثر المشاركون: القياسات بعدّ إجاباتها، وأسئلة الأدوات المعنية.
+export async function baselineProgress(ids: string[]) {
+  const out: Record<string, any> = {};
+  if (!ids.length) return out;
+  const { data: as } = await db.from('assessments')
+    .select('id, participant_id, instrument_id, status, started_at, submitted_at, form, instruments!inner(kind), assessment_answers(count)')
+    .in('participant_id', ids).neq('status', 'void').eq('instruments.kind', 'baseline').order('started_at', { ascending: false });
+  const latest = new Map<string, any>();
+  for (const a of as || []) if (!latest.has(a.participant_id)) latest.set(a.participant_id, a);
+  const instIds = [...new Set([...latest.values()].map((a) => a.instrument_id))];
+  const { data: qs } = instIds.length
+    ? await db.from('questions').select('instrument_id, form').in('instrument_id', instIds).eq('active', true).limit(5000)
+    : { data: [] };
+  for (const a of latest.values()) {
+    out[a.participant_id] = {
+      id: a.id, status: a.status, started_at: a.started_at, submitted_at: a.submitted_at,
+      answered: Number(a.assessment_answers?.[0]?.count) || 0,
+      total: servedTotal((qs || []).filter((x: any) => x.instrument_id === a.instrument_id), a.form),
+    };
+  }
+  return out;
 }
 
 export async function participant(b: Body) {
@@ -316,8 +343,13 @@ export async function participant(b: Body) {
   const labGroups: Record<string, any[]> = {};
   for (const a of labTries || []) (labGroups[a.item_id] ||= []).push(a);
   const labs = Object.entries(labGroups).map(([item_id, list]) => ({ item_id, title: list[0]?.lab_items?.title_ar || '', dimension: list[0]?.lab_items?.dimension || null, ...labSummary(list, list[0]?.lab_items?.spec) }));
+  // أين توقف قبل الاعتماد: الملف ثم القياس (كم أجاب من كم، وآخر حفظ)، من المصدر نفسه الذي تقرؤه القائمة
+  const prog = (await baselineProgress([p.id]))[p.id] || null;
+  const lastAnswer = prog && prog.status === 'in_progress' && prog.answered
+    ? (await db.from('assessment_answers').select('answered_at').eq('assessment_id', prog.id).order('answered_at', { ascending: false }).limit(1)).data?.[0]?.answered_at || null
+    : null;
   return {
-    success: true, participant: p, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
+    success: true, participant: p, onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     placement_model: model || DEFAULT_MODEL,   // حدود مقياس المؤشر في بطاقة المستوى (للعرض وحده)

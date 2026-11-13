@@ -5,6 +5,7 @@ import {
   all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
+import { profileComplete } from './onboarding.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -709,7 +710,7 @@ export async function profileSave(p: any, b: Body) {
     throw new Fail('رابط LinkedIn غير صحيح');
   }
   const merged = { ...p, ...patch };
-  const complete = merged.full_name && merged.phone && merged.job_title && merged.organization_name && merged.years_experience != null;
+  const complete = profileComplete(merged);
   if (complete && !p.profile_completed_at) {
     patch.profile_completed_at = new Date().toISOString();
     if (p.status === 'registered') patch.status = 'profiled';

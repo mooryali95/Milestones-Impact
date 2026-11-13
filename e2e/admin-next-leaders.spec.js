@@ -179,3 +179,26 @@ test('المراقب يرى دون أدوات التعديل', async ({ page }) 
   await expect(page.getByRole('button', { name: '+ مشارك' })).toHaveCount(0);
   await expect(page.getByLabel('تحديد الكل')).toHaveCount(0);
 });
+
+test('قائمة المشاركين: «أين توقف» للمتعثر قبل الاعتماد، وعرضه السريع بعدّاده', async ({ page }) => {
+  const doing = { step: 'assessment_doing', label: 'القياس جارٍ', answered: 42, total: 63, missing: [], remaining: 'أجاب 42 من 63، وبقي 21' };
+  const stuck = { id: 'p3', full_name: 'هند السالم', email: 'h@x.com', organization_id: 'o1', organization_name: 'وزارة التجربة', status: 'profiled', placements: [], created_at: '2026-11-11', onboarding: doing };
+  await setup(page, {
+    'admin.participants': { success: true, participants: [...people.map((p) => ({ ...p, onboarding: { step: 'done', label: 'معتمد', remaining: '' } })), stuck] },
+    'admin.participant': { ...person, participant: { ...stuck, last_login_at: '2026-11-12' }, assessments: [], onboarding: { ...doing, started_at: '2026-11-11', last_answer_at: '2026-11-12' } },
+  });
+  const rows = page.locator('.data-table tbody tr');
+  await expect(rows).toHaveCount(3);
+  const row = rows.filter({ hasText: 'هند السالم' });
+  await expect(row).toContainText('القياس جارٍ');
+  await expect(row).toContainText('أجاب 42 من 63، وبقي 21');
+  await expect(row.getByRole('progressbar', { name: 'أجاب 42 من 63' })).toBeVisible();
+  // من اعتُمد لا يحمل شارة توقف
+  await expect(rows.filter({ hasText: 'Omar Ali' })).not.toContainText('معتمد');
+  const chip = page.getByRole('button', { name: /لم يكمل التسجيل/ });
+  await expect(chip).toContainText('1');
+  await chip.click();
+  await expect(rows).toHaveCount(1);
+  await row.click();
+  await expect(page.locator('.la-where')).toContainText('أين توقف: القياس جارٍ. أجاب 42 من 63، وبقي 21.');
+});
