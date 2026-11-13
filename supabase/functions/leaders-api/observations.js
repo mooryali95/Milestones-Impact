@@ -61,7 +61,7 @@ export const AUDIT_AR = {
   'requirement.review': 'روجع متطلب في رحلته', 'milestone.participant': 'عُدّل معلم في رحلته', 'workshop.mark': 'سُجّل حضوره في ورشة', 'workshop.checkin': 'سجّل حضوره في ورشة',
   'cohort.enroll': 'سُجّل في دفعة', 'hall.assign': 'وُزّع على طاولة في القاعة', 'admin.file-open': 'فُتحت سيرته الذاتية', 'admin.answers-view': 'فُتحت إجابات قياسه',
   'capstone.submit': 'سلّم وثيقة المبادرة', 'capstone.return': 'أُعيدت وثيقة المبادرة للتعديل', 'capstone.accept': 'قُبلت وثيقة المبادرة',
-  'handbook.export': 'صدّر الكتيب', 'payment.checkout': 'فتح صفحة الدفع', 'payment.paid': 'دفع', 'payment.refunded': 'استُرد دفعه', 'payment.reminder': 'ذُكِّر بالدفع',
+  'handbook.export': 'صدّر الكتيب', 'handbook.quiz-retry': 'أعاد اختبار باب في الكتيب', 'payment.checkout': 'فتح صفحة الدفع', 'payment.paid': 'دفع', 'payment.refunded': 'استُرد دفعه', 'payment.reminder': 'ذُكِّر بالدفع',
   'entitlement.grant': 'مُنح حقًا', 'entitlement.revoke': 'سُحب منه حق', 'certificate.issue': 'صدرت شهادته', 'certificate.revoke': 'أُلغيت شهادته',
   'observation.add': 'أُضيفت ملاحظة إلى ملفه', 'observation.remove': 'حُذفت ملاحظة من ملفه', 'observation.ack': 'اطّلع على تنبيه',
   'expert.rated-participant': 'قيّمه خبير',

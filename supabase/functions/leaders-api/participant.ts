@@ -1131,7 +1131,11 @@ export async function handbookComplete(p: any, b: Body) {
   const reflection = String(b.reflection || '').trim().slice(0, 4000) || null;
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
-  if (prev) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
+  if (prev) {
+    await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
+    // إعادة الاختبار لا تغيّر الدرجة المحتسبة، لكنها تُسجَّل: كانت تمر بلا أثر، وهي دليل تعلّم يظهر في خط الملف الزمني
+    await audit('participant', p.id, 'handbook.quiz-retry', 'participants', p.id, null, { module_id: m.id, score: g.score, total: g.total });
+  }
   else {
     // D02: إصدار الدفعة وبصمة الاختبار والإجابات نصًا (السؤال والخيار المختار)، لتصويب عادل لا ينقص أحدًا.
     // الختم إلزامي: null لدفعة بلا إصدار وحدها، وخطأ القراءة أو الحفظ يرمي فلا تُحفظ نتيجة بلا ختمها

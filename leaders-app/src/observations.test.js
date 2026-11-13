@@ -81,3 +81,29 @@ describe('قواعد التنبيه الآلي', () => {
     for (const code of Object.keys(RULES)) expect(src, code).toMatch(new RegExp(`code: '${code}', ref: [^\\n]+?\\.\\.\\.RULES\\.${code}\\(`));
   });
 });
+
+import { chapterPoints, fieldFilled, meaningful, missingFields, POINTS, REFLECTION_MIN, TEXTAREA_MIN } from '../../supabase/functions/leaders-api/logic.js';
+
+describe('جودة المدخلات', () => {
+  it('النص ذو المعنى: طول أدنى وكلمات مختلفة، فلا يمر حرف مكرر ولا كلمة واحدة مكررة', () => {
+    expect(meaningful('ااااااااااااااااااااااا', REFLECTION_MIN)).toBe(false);
+    expect(meaningful('جيد جيد جيد جيد جيد جيد', REFLECTION_MIN)).toBe(false);
+    expect(meaningful('سأطبّق سجل المخاطر في مشروعي القادم', REFLECTION_MIN)).toBe(true);
+  });
+  it('نقاط التأمل لمن كتب تأملًا له معنى وحده، وباقي نقاط الباب كما هي', () => {
+    const base = POINTS.chapter + 2 * POINTS.perCorrect;
+    expect(chapterPoints(2, 'xxxxxxxxxxxxxxxxxxxxxxxx')).toBe(base);
+    expect(chapterPoints(2, 'سأطبّق سجل المخاطر في مشروعي القادم')).toBe(base + POINTS.reflection);
+  });
+  it('الحقل النصي الطويل في النموذج يكتمل بجملة، والقصير والجدول كما كانا', () => {
+    expect(fieldFilled({ type: 'textarea' }, 'ن')).toBe(false);
+    expect(fieldFilled({ type: 'textarea' }, 'نرفع رضا المستفيدين عن الخدمة')).toBe(true);
+    expect(fieldFilled({ type: 'text' }, 'منصة')).toBe(true);
+    expect(fieldFilled({ type: 'table', min_rows: 1 }, [['صف', 'قيمة']])).toBe(true);
+    expect(TEXTAREA_MIN.chars).toBeLessThan(REFLECTION_MIN.chars);
+  });
+  it('رسالة النقص تفرّق بين حقل فارغ وحقل كُتب فيه ما لا يكفي', () => {
+    const fields = [{ key: 'a', type: 'textarea', label: 'الهدف' }, { key: 'b', type: 'textarea', label: 'الأثر' }];
+    expect(missingFields(fields, { a: 'ن', b: '' })).toEqual(['الهدف: اكتب جملة كاملة على الأقل', 'الأثر']);
+  });
+});
