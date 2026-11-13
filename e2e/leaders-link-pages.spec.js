@@ -58,6 +58,9 @@ test('المقيّم: كل مجموعة تقدير مسمّاة بالعبارة
     'rater.submit': { success: false, message: 'انتهت صلاحية الرابط' },
   });
   await page.goto(`${BASE}/rate?t=${T}`);
+  // تقييم 360، المرحلة 1: دليل قصير قبل البدء، وسؤال الصلة أولًا
+  await page.getByRole('button', { name: 'ابدأ' }).click();
+  await page.getByRole('radiogroup', { name: 'كم مرة ترى عمله؟' }).getByRole('radio', { name: 'أسبوعيًا' }).click();
   await expect(page.getByRole('radiogroup', { name: 'يختم الاجتماع بقرار موثق. الآن' })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'يختم الاجتماع بقرار موثق. قبل البرنامج' })).toBeVisible();
   await page.getByRole('radiogroup', { name: /الآن$/ }).getByRole('radio', { name: 'غالبًا' }).click();
