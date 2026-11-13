@@ -62,7 +62,7 @@ import { MIN_COHORT } from '../../supabase/functions/leaders-api/logic.js';
 it('لوحة الجهة: المبادرات المعتمدة وحدها، ولا مقارنة أثر دون الحد الأدنى', () => {
   const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/coordinator.ts'), 'utf8');
   // الأجزاء متوازية (8.1): المبادرات تُجلب مع الملخص، والمعتمدة وحدها تُعرض
-  expect(src).toContain('Promise.all([dashboardFor(c), impactFor(c), initiativesFor(c.organization_id)])');
+  expect(src).toContain('Promise.all([dashboardFor(c), impactFor(c), vis.coord_initiatives ? initiativesFor(c.organization_id) : Promise.resolve([])])');
   expect(src).toMatch(/r\.initiatives = inits\.filter\(\(x: any\) => x\.status === 'approved'\)/);
   expect(src).toMatch(/paired \?\? 0\) < MIN_COHORT\) return \{[^}]*cohort: null/);
   expect(MIN_COHORT).toBeGreaterThanOrEqual(5);

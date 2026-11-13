@@ -28,6 +28,8 @@ import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor } from './entitlements.ts';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
+import { visibilityOfCohort } from './visibility.ts';
+import { resolveVisibility } from './visibility.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -568,6 +570,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   // «كيف تُقيَّم» (D06 وD07): معادلة برنامج المشارك كما تُطبَّق، بلا مفاتيح
   const finalEval = def.program_id ? (await db.from('programs').select('final_eval').eq('id', def.program_id).maybeSingle()).data?.final_eval ?? null : null;
   const fc: any = finalConfig(finalEval);
+  // ما يراه المشارك من دفعته (visibility.js): تعذّر القراءة يعيد الافتراضي ولا يُسقط الرحلة
+  const vis: Record<string, boolean> = await visibilityOfCohort(def.cohort?.id || null).catch(() => resolveVisibility(null, null));
   const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
@@ -605,7 +609,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     milestone_summary,
     // مجموعته في دفعته، ونمط المشروع
     group, project_mode: def.cohort?.project_mode || 'individual', final,
-    advisor: adv ? { full_name: (adv as any).full_name } : null,
+    advisor: adv && (audience === 'admin' || vis.par_advisor) ? { full_name: (adv as any).full_name } : null,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
       : continuous && { ...continuous, events: (continuous.events || []).map(({ comment: _c, ...e }: any) => e) },
@@ -618,7 +622,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     cohort: !def.cohort || def.cohort.is_default ? null : { name: def.cohort.name, starts_on: def.cohort.starts_on, ends_on: def.cohort.ends_on },
     ...(audience === 'admin' ? { program: { id: def.program_id, cohort: def.cohort, via: def.via, version: def.version } } : {}),
     baseline_submitted_at: baselineAt,
-    final_policy: { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
+    // مفتاح الرؤية par_final_policy: محجوب عن المشارك يعيد null، والإدارة تراه دائمًا
+    final_policy: audience !== 'admin' && !vis.par_final_policy ? null : { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
     // تنبيهات وملاحظات مرئية لم يطّلع عليها بعد (participant_observations): بطاقة في رحلته حتى يضغط «اطّلعت»
     notices: audience === 'participant' ? await noticesFor(p.id) : [],
     passkeys: passkeys.count ?? 0,

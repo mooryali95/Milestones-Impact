@@ -61,7 +61,7 @@ describe('ما يُعرض: أعداد لا أسماء، واسم المستشا�
   it('«مستشارك» من advisorOf (مصدر الصلاحية نفسه)، بالاسم وحده وللمشارك وحده', () => {
     const p = read('participant.ts');
     expect(p).toMatch(/audience === 'participant' \? advisorOf\(p\)\.catch\(\(\) => null\) : Promise\.resolve\(null\)/);
-    expect(p).toMatch(/advisor: adv \? \{ full_name: \(adv as any\)\.full_name \} : null,/);
+    expect(p).toMatch(/advisor: adv && \(audience === 'admin' \|\| vis\.par_advisor\) \? \{ full_name: \(adv as any\)\.full_name \} : null,/);
   });
   it('نطاق المستشار لم يتغير', () => {
     const adv = read('advisor.ts');

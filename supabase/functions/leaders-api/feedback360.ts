@@ -19,6 +19,7 @@ import {
   CYCLE_STATUS_AR, feedbackPromiseAr, feedbackReport, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, orgTotals, raterItems, remindersDue, reportItems,
 } from './feedback360.js';
 import { FEEDBACK_GROUP_AR } from './labels.js';
+import { requireVisible, visibilityOfParticipant } from './visibility.ts';
 
 type Body = Record<string, any>;
 type Settings = Awaited<ReturnType<typeof appSettings>>['feedback360'];
@@ -368,6 +369,7 @@ async function cycleById(id: unknown) {
 export async function advisorReport(e: any, b: Body) {
   const c = await cycleById(b.cycle_id);
   const p = await requireEffectiveAdvisor(e, c.participant_id);
+  requireVisible(await visibilityOfParticipant(c.participant_id), 'adv_f360');
   if (!['closed', 'released'].includes(c.status)) throw new Fail('يُتاح التقرير بعد إغلاق النافذة', 409, 'not_closed');
   const s = (await appSettings()).feedback360;
   await audit('system', `expert:${e.email}`, 'expert.f360-report-view', 'feedback_cycles', c.id, null, { participant_id: p.id });

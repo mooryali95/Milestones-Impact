@@ -43,7 +43,7 @@ describe('الخادم', () => {
     expect((h.match(/await requirePublished\(String\(b\.topic_id\)\)/g) || []).length).toBe(2);
   });
   it('سياسة التقييم في حمولة المشارك من إعداد برنامجه', () => {
-    expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/final_policy: \{ weights: fc\.weights, thresholds: fc\.thresholds, measure: \{ mode: fc\.measure\.mode, mastery_cut: fc\.measure\.mastery_cut \}, version: fc\.version, provisional: true \}/);
+    expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/final_policy: audience !== 'admin' && !vis\.par_final_policy \? null : \{ weights: fc\.weights, thresholds: fc\.thresholds, measure: \{ mode: fc\.measure\.mode, mastery_cut: fc\.measure\.mastery_cut \}, version: fc\.version, provisional: true \}/);
   });
 });
 
