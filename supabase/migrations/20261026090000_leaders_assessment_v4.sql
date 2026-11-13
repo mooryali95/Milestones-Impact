@@ -38,8 +38,7 @@ update leaders.placement_model set impact_min_n = 50 where id = 1 and impact_min
 alter table leaders.raters add column if not exists phase text not null default 'post' check (phase in ('pre', 'post'));
 alter table leaders.raters drop constraint if exists raters_participant_id_email_key;
 do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'raters_participant_email_phase_key')
-     and not exists (select 1 from pg_class where relname = 'raters_participant_email_phase_key') then
+  if not exists (select 1 from pg_constraint where conname = 'raters_participant_email_phase_key') then
     alter table leaders.raters add constraint raters_participant_email_phase_key unique (participant_id, email, phase);
   end if;
 end $$;
