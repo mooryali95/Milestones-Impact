@@ -23,6 +23,7 @@ import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { ONBOARDING_AR, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -34,12 +35,15 @@ const PRESETS = [
   { key: 'approval', label: 'بانتظار الاعتماد', test: (p) => p.status === 'pending_approval' },
   // متعثر قبل الاعتماد: لم يكمل ملفه، أو لم يبدأ القياس، أو بدأه ولم يسلّمه (onboarding من الخادم، onboarding.js)
   { key: 'stuck', label: 'لم يكمل التسجيل', test: (p) => STUCK.includes(p.onboarding?.step) },
+  // وسم المستعجل من مؤشر الجهد المحفوظ على القياس (assessments.effort)، وطلب الإعادة القائم من القياس الملغى نفسه
+  { key: 'rushed', label: 'أجابوا باستعجال', test: (p) => p.effort?.level === 'low' },
+  { key: 'retake', label: 'طُلبت منهم الإعادة', test: (p) => !!p.retake },
   { key: 'tentative', label: 'مستوى مبدئي', test: (p) => (p.placements || []).some((x) => !x.approved_at) },
   { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!p.last_login_at || now - Date.parse(p.last_login_at) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
 ];
-const KEYS = ['q', 'view', 'status', 'step', 'org', 'track', 'joined', 'seen'];
+const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'track', 'joined', 'seen'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
   return (
@@ -101,6 +105,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'track', label: 'المسارات', get: (p) => trackOfPlacements(p.placements) || p.track, options: tracks.map((k) => [k, k]) },
     // بعد الثلاثة الظاهرة (الباقي خلف «+ فلاتر»)، والعرض السريع «لم يكمل التسجيل» يغني عنه في الغالب
     { key: 'step', label: 'أين توقف', get: (p) => p.onboarding?.step, options: Object.entries(ONBOARDING_AR) },
+    { key: 'effort', label: 'جدية الإجابة', get: (p) => p.effort?.level, options: Object.entries(EFFORT_AR) },
     { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
     { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
   ], [orgs, tracks]);
@@ -130,15 +135,24 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(`أُرسل ${r.sent} تذكير${r.skipped?.recent ? `، وتُخطّي ${r.skipped.recent} ذُكِّروا خلال ${r.gap_days} أيام` : ''}`);
     setPicked(new Set());
   };
+  // طلب إعادة القياس للمحددين ممن سلّموا ولم يُعتمدوا (can_retake من الخادم): المدخل نفسه الذي في ملف المشارك
+  const pickedRetake = all.filter((p) => picked.has(p.id) && p.can_retake).length;
+  const askRetake = async () => {
+    if (!(await confirm(`طلب إعادة القياس من ${pickedRetake} مشارك؟ يُلغى قياسهم الحالي، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ.`, { danger: true }))) return;
+    const r = await L('admin.reset-assessment', { participant_ids: all.filter((p) => picked.has(p.id) && p.can_retake).map((p) => p.id) });
+    if (!r.success) return toast(r.message);
+    toast(`طُلبت الإعادة من ${r.done}${r.skipped ? `، وتُخطّي ${r.skipped}` : ''}`);
+    setPicked(new Set()); load();
+  };
   const exportCsv = async () => {
     const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['أين توقف', 18], ['المتبقي', 40], ['التسجيل', 16], ['آخر دخول', 16]];
+    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['أين توقف', 18], ['المتبقي', 40], ['جدية الإجابة', 16], ['طلب الإعادة', 16], ['التسجيل', 16], ['آخر دخول', 16]];
     const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
     await exportWorkbook(
       { kind: 'PPL', title: 'مشاركو برنامج القادة', subtitle: shown.length === all.length ? 'كل المشاركين' : `${shown.length} من ${all.length} حسب الفلاتر`, sheet: 'المشاركون', file: 'Participants' },
       head.map(([label, width]) => ({ label, width })),
       shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
-        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, p.onboarding?.label || '', p.onboarding?.remaining || '', date(p.created_at), date(p.last_login_at)]),
+        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, p.onboarding?.label || '', p.onboarding?.remaining || '', EFFORT_AR[p.effort?.level] || '', p.retake ? date(p.retake.requested_at) : '', date(p.created_at), date(p.last_login_at)]),
     );
     toast(`صُدّر ${shown.length} مشارك`);
   };
@@ -167,6 +181,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <span><b>{picked.size}</b> محدد</span>
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
+          {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
           {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
@@ -190,7 +205,10 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                       <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
-                      <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>
+                      <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span>
+                        {p.effort?.level === 'low' && <> <span className="la-chip bad" title={p.effort.note}>مستعجل</span></>}
+                        {p.effort?.level === 'watch' && <> <span className="la-chip warn" title={p.effort.note}>يُراجع</span></>}
+                        {p.retake && <> <span className="la-chip" title={`طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`}>طُلبت الإعادة</span></>}</td>
                       <td data-label="أين توقف"><Where o={p.onboarding} /></td>
                       <td data-label="التسجيل">{date(p.created_at)}</td>
                     </tr>
@@ -326,8 +344,8 @@ function Person({ id, canWrite, onBack }) {
     act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
   };
   const reset = async () => {
-    if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
-    act('admin.reset-assessment', { participant_id: p.id }, 'أُعيد فتح القياس');
+    if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية، وتظهر له بطاقة في الموقع ويصله بريد يطلب الإعادة. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
+    act('admin.reset-assessment', { participant_id: p.id }, 'طُلبت الإعادة وأُبلغ المشارك');
   };
   const review = async (req, st) => {
     let note = null;
@@ -405,6 +423,7 @@ function Person({ id, canWrite, onBack }) {
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
+          {r.retake && <p className="la-where" role="status"><b>طُلبت إعادة القياس</b> {date(r.retake.requested_at)} ({r.retake.reason === 'effort' ? 'لاستعجال في الإجابة' : 'بقرار إداري'})، ولم يسلّم قياسًا جديدًا بعد.</p>}
           {STUCK.includes(r.onboarding?.step) && (
             <p className="la-where" role="status">
               <b>أين توقف:</b> {r.onboarding.label}. {r.onboarding.remaining}.

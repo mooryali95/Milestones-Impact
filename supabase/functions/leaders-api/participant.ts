@@ -6,6 +6,8 @@ import {
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
+import { saveEffort } from './effort.ts';
+import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
@@ -772,6 +774,8 @@ export async function assessmentGet(p: any, b: Body = {}) {
   return {
     success: true,
     assessment: { id: a.id, kind, status: a.status, est_minutes: inst.est_minutes, intro: inst.intro_ar, title: inst.title_ar },
+    // طلب إعادة قائم من الإدارة (retake.js): بطاقة فوق مقدمة القياس بنص البريد نفسه، حتى يسلّم القياس الجديد
+    retake: kind === 'baseline' ? await retakeNotice(p.id, inst.est_minutes ?? null) : null,
     questions: qs.map((q: any) => {
       // na يميّز "لا ينطبق" في مقياس التكرار فقط، فلا يكشف إجابة صحيحة
       const opts = (q.options || []).map((o: any, k: number) => ({ k, label: o.label, ...(q.kind === 'likert' && Number(o.score) < 0 ? { na: true } : {}) }));
@@ -784,6 +788,15 @@ export async function assessmentGet(p: any, b: Body = {}) {
     answers: Object.fromEntries(answers.map((x: any) => [x.question_id, x.value?.k])),
     before: Object.fromEntries(answers.filter((x: any) => x.value?.before != null).map((x: any) => [x.question_id, x.value.before])),
   };
+}
+
+// طلب الإعادة القائم للمشارك بعنوانه ونصه، من قياساته المبدئية نفسها (لا جدول تنبيهات)
+export async function retakeNotice(participantId: string, minutes: number | null) {
+  const { data, error } = await db.from('assessments').select('status, submitted_at, retake_requested_at, retake_reason, instruments!inner(kind)')
+    .eq('participant_id', participantId).eq('instruments.kind', 'baseline');
+  if (error) return null;
+  const open = openRetake(data || []);
+  return open ? { title: RETAKE_TITLE, text: retakeText(open.reason, minutes), requested_at: open.requested_at } : null;
 }
 
 // ما يُقدَّم في القياس البعدي: فقرات المستوى حتى المستوى المعتمد في كل بُعد،
@@ -880,6 +893,8 @@ export async function assessmentSubmit(p: any, b: Body) {
     }))));
   }
   await db.from('assessments').update({ status: 'submitted', submitted_at: now }).eq('id', a.id);
+  // مؤشر الجهد يُحفظ على القياس بعد احتساب المستوى وحفظه (effort.ts): استشاري للمراجع، لا يدخل ما سبق، وتعذّره لا يُسقط الإرسال
+  await saveEffort({ id: a.id, instrument_id: a.instrument_id, started_at: a.started_at, submitted_at: now }).catch((e) => console.error('effort:', e));
   const updated = must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);

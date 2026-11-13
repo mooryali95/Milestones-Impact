@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
 import { cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { mePayload, pointsOf } from './participant.ts';
 import { DIM_AR, RUBRIC_SCALE } from './labels.js';
@@ -19,6 +19,8 @@ import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
+import { saveEffort } from './effort.ts';
+import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
 
@@ -266,18 +268,11 @@ export async function participants(b: Body) {
   }
   const rows = (must(await q) ?? []) as any[];
   const progress = await baselineProgress(rows.map((r) => r.id));
-  return { success: true, participants: rows.map((r) => ({ ...r, onboarding: onboardingOf(r, progress[r.id] || null) })) };
-}
-
-// مؤشر الجهد لقياس مُسلَّم: الأسئلة والإجابات نفسها التي تقرؤها مراجعة الإجابات، بلا تسجيل فتح (لا يعرض إجابة)
-async function effortFor(a: { id: string; instrument_id?: string; started_at?: string | null; submitted_at?: string | null }) {
-  const row = a.instrument_id ? a : must(await db.from('assessments').select('id, instrument_id, started_at, submitted_at').eq('id', a.id).maybeSingle()) as any;
-  if (!row) return null;
-  const [qs, rows] = await Promise.all([
-    db.from('questions').select('id, code, dimension, tier, kind, options, sort, retro, form').eq('instrument_id', row.instrument_id),
-    db.from('assessment_answers').select('question_id, value, score, answered_at').eq('assessment_id', row.id),
-  ]);
-  return reviewAnswers({ questions: qs.data || [], rows: rows.data || [], startedAt: row.started_at, submittedAt: row.submitted_at, timing: (await appSettings()).answer_review }).effort;
+  // effort وretake من سجل القياس نفسه (المصدر الواحد): وسم المستعجل وفلتره، وطلب الإعادة القائم
+  return { success: true, participants: rows.map((r) => {
+    const g = progress[r.id] || null;
+    return { ...r, onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
+  }) };
 }
 
 // تذكير يدوي لمن لم يكمل التسجيل: بريد يسمّي ما بقي على كل شخص (ملفه، أو القياس وكم أجاب منه).
@@ -309,19 +304,32 @@ export async function baselineProgress(ids: string[]) {
   const out: Record<string, any> = {};
   if (!ids.length) return out;
   const { data: as } = await db.from('assessments')
-    .select('id, participant_id, instrument_id, status, started_at, submitted_at, form, instruments!inner(kind), assessment_answers(count)')
-    .in('participant_id', ids).neq('status', 'void').eq('instruments.kind', 'baseline').order('started_at', { ascending: false });
+    .select('id, participant_id, instrument_id, status, started_at, submitted_at, form, effort, retake_requested_at, retake_reason, instruments!inner(kind), assessment_answers(count)')
+    .in('participant_id', ids).eq('instruments.kind', 'baseline').order('started_at', { ascending: false });
   const latest = new Map<string, any>();
-  for (const a of as || []) if (!latest.has(a.participant_id)) latest.set(a.participant_id, a);
+  const all = new Map<string, any[]>();
+  for (const a of as || []) {
+    if (!all.has(a.participant_id)) all.set(a.participant_id, []);
+    all.get(a.participant_id)!.push(a);
+    if (a.status !== 'void' && !latest.has(a.participant_id)) latest.set(a.participant_id, a);
+  }
   const instIds = [...new Set([...latest.values()].map((a) => a.instrument_id))];
   const { data: qs } = instIds.length
     ? await db.from('questions').select('instrument_id, form').in('instrument_id', instIds).eq('active', true).limit(5000)
     : { data: [] };
-  for (const a of latest.values()) {
-    out[a.participant_id] = {
-      id: a.id, status: a.status, started_at: a.started_at, submitted_at: a.submitted_at,
-      answered: Number(a.assessment_answers?.[0]?.count) || 0,
-      total: servedTotal((qs || []).filter((x: any) => x.instrument_id === a.instrument_id), a.form),
+  // ما سُلّم قبل عمود المؤشر يُحسب ويُحفظ عند أول قراءة، بحد لكل طلب حتى لا يثقل القائمة
+  let backfill = 25;
+  for (const [pid, list] of all) {
+    const a = latest.get(pid) || null;
+    let effort = a?.effort ?? null;
+    if (a && a.status === 'submitted' && !effort && backfill > 0) { backfill -= 1; effort = await saveEffort(a).catch(() => null); }
+    out[pid] = {
+      ...(a ? {
+        id: a.id, status: a.status, started_at: a.started_at, submitted_at: a.submitted_at,
+        answered: Number(a.assessment_answers?.[0]?.count) || 0,
+        total: servedTotal((qs || []).filter((x: any) => x.instrument_id === a.instrument_id), a.form),
+      } : {}),
+      effort, retake: openRetake(list),
     };
   }
   return out;
@@ -378,15 +386,15 @@ export async function participant(b: Body) {
   for (const a of labTries || []) (labGroups[a.item_id] ||= []).push(a);
   const labs = Object.entries(labGroups).map(([item_id, list]) => ({ item_id, title: list[0]?.lab_items?.title_ar || '', dimension: list[0]?.lab_items?.dimension || null, ...labSummary(list, list[0]?.lab_items?.spec) }));
   // مؤشر الجهد لآخر قياس مبدئي مُسلَّم: من مراجعة الإجابات نفسها (reviewAnswers)، يظهر في بطاقة المستوى قبل الاعتماد
-  const lastBase: any = (results.data || []).find((x: any) => x.status === 'submitted' && x.instruments?.kind === 'baseline');
-  const effort = lastBase ? await effortFor(lastBase) : null;
   // أين توقف قبل الاعتماد: الملف ثم القياس (كم أجاب من كم، وآخر حفظ)، من المصدر نفسه الذي تقرؤه القائمة
-  const prog = (await baselineProgress([p.id]))[p.id] || null;
+  const g = (await baselineProgress([p.id]))[p.id] || null;
+  const prog = g?.id ? g : null;
+  const effort = prog?.status === 'submitted' ? prog.effort || null : null;
   const lastAnswer = prog && prog.status === 'in_progress' && prog.answered
     ? (await db.from('assessment_answers').select('answered_at').eq('assessment_id', prog.id).order('answered_at', { ascending: false }).limit(1)).data?.[0]?.answered_at || null
     : null;
   return {
-    success: true, participant: p, effort, onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
+    success: true, participant: p, effort, retake: g?.retake || null, can_retake: canRequestRetake(p, prog), onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
     assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
     placement_model: model || DEFAULT_MODEL,   // حدود مقياس المؤشر في بطاقة المستوى (للعرض وحده)
@@ -586,14 +594,38 @@ export async function setStatus(a: Admin, b: Body) {
 }
 
 // إعادة القياس: يُلغى القياس الحالي ويُفتح جديد، والمستوى المعتمد يبقى حتى يُعتمد غيره
+// إعادة القياس، المدخل الواحد (لشخص من ملفه أو لمجموعة من القائمة): يلغي القياس القائم ويسجّل الطلب عليه (من ومتى ولماذا)،
+// فيرى المشارك بطاقة في الموقع حتى يسلّم قياسًا جديدًا، ويصله بريد بالنص نفسه (retake.js). السبب من مؤشر الجهد المحفوظ.
+// الطلب الجماعي لمن سلّم ولم يُعتمد مستواه وحده (canRequestRetake)، والفردي كما كان: لأي مشارك.
 export async function resetAssessment(a: Admin, b: Body) {
   requireWrite(a);
-  const id = String(b.participant_id);
-  await db.from('assessments').update({ status: 'void' }).eq('participant_id', id).neq('status', 'void');
-  await db.from('placements').delete().eq('participant_id', id).is('approved_at', null);
-  await db.from('participants').update({ status: 'profiled' }).eq('id', id);
-  await audit('admin', a.email, 'assessment.reset', 'participants', id);
-  return { success: true };
+  const bulk = Array.isArray(b.participant_ids);
+  const ids = [...new Set((bulk ? b.participant_ids : [b.participant_id]).map(String).filter(isUuid))].slice(0, 50) as string[];
+  if (!ids.length) throw new Fail('اختر من تُطلب منهم الإعادة');
+  const rows = (must(await db.from('participants').select('id, full_name, email, status, is_demo').in('id', ids)) ?? []) as any[];
+  const progress = await baselineProgress(ids);
+  const { data: inst } = await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle();
+  const now = new Date().toISOString();
+  let done = 0, skipped = 0;
+  for (const p of rows) {
+    const g = progress[p.id] || null;
+    const cur = g?.id ? g : null;
+    if (bulk && !canRequestRetake(p, cur)) { skipped += 1; continue; }
+    const reason = retakeReason(cur?.status === 'submitted' ? cur.effort : null);
+    if (cur) {
+      must(await db.from('assessments').update({ status: 'void', retake_requested_at: now, retake_requested_by: a.email, retake_reason: reason }).eq('id', cur.id));
+    }
+    await db.from('assessments').update({ status: 'void' }).eq('participant_id', p.id).neq('status', 'void');
+    await db.from('placements').delete().eq('participant_id', p.id).is('approved_at', null);
+    await db.from('participants').update({ status: 'profiled' }).eq('id', p.id);
+    await audit('admin', a.email, 'assessment.reset', 'participants', p.id, null, { reason, assessment_id: cur?.id || null });
+    // البريد من حصة الرسائل الجماعية (يُصفّ عند بلوغ الحد اليومي)، وتعذّره لا يُسقط الطلب المسجَّل: البطاقة في الموقع تكفي
+    if (cur && p.email && !p.is_demo) {
+      await sendMail(p.email, RETAKE_MAIL_SUBJECT, retakeMail(p.full_name, retakeText(reason, inst?.est_minutes ?? null)), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error('retake mail:', e));
+    }
+    done += 1;
+  }
+  return { success: true, done, skipped };
 }
 
 // مراجعة متطلب أرسله المشارك (سجل معالم، خطة تطوير…) أو تسجيل جلسة
