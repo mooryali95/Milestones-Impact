@@ -5,7 +5,7 @@
 // الدفعة والفريق، الجلسات والطلبات، طلبات الأقران، التقييم الختامي، وسطر «المطلوب منك الآن».
 // الخبير يرى مشاركي الدفعات التي هو مستشارها (كامل الصلاحية: الختامي والمعالم والقاعة)، ومن أُسند
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
-import { db, Fail } from './core.ts';
+import { audit, db, Fail } from './core.ts';
 import { awaitingFor, confirmRater } from './impact.ts';
 import { participant as adminParticipant, answersReview } from './admin.ts';
 import type { Actor } from './admin.ts';
@@ -19,6 +19,7 @@ import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { overallLevel } from './logic.js';
 import * as OB from './observations.ts';
+import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { flagsOf, timelineOf } from './observations.js';
 import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
 
@@ -57,9 +58,35 @@ async function moreFor(pid: string) {
   };
 }
 
+// «عاين بعين…»: ما يصل مستشار الدفعة أو الخبير المسند عن هذا المشارك بمفاتيح الرؤية النافذة الآن. لا حساب خبير
+// ولا جلسة: الحمولة تُبنى بالدالة نفسها (participantFile) ويُختصر منها ما يُرى وما حُجب، ويُسجَّل الفتح باسم المدير.
+export async function adminPreviewAs(a: { email: string }, b: Body) {
+  const id = String(b.participant_id || '');
+  if (!isUuid(id)) throw new Fail('بيانات ناقصة');
+  const advisor = b.as !== 'assigned';
+  const f: any = await participantFile(id, 'expert', { advisor });
+  await audit('admin', a.email, 'admin.preview-as', 'participants', id, null, { as: advisor ? 'advisor' : 'assigned' });
+  const has = (v: any) => (Array.isArray(v) ? v.length > 0 : v != null && v !== '');
+  return {
+    success: true, as: advisor ? 'advisor' : 'assigned', name: f.participant.full_name, can: f.can,
+    sees: [
+      { label: 'وسائل التواصل', visible: has(f.participant.email) || has(f.participant.phone), value: f.participant.email || null },
+      { label: 'المستويات ونتيجة القياس', visible: !!f.profile, value: null },
+      { label: 'تعليل الإدارة لتعديل المستوى', visible: !!(f.profile?.dimensions || []).some((d: any) => d.note), value: null },
+      { label: 'النماذج واختبارات الكتيب', visible: has(f.models) || has(f.book), value: null },
+      { label: 'التقييم المستمر', visible: !!f.continuous, value: null },
+      { label: 'التقييم الختامي', visible: !!f.final, value: f.final?.record && 'votes' in (f.final.record || {}) ? 'كاملًا' : f.final ? 'ملخصًا' : null },
+      { label: 'مؤشر الجهد', visible: !!f.effort, value: null },
+      { label: 'ملاحظات الملف', visible: has(f.observations), value: has(f.observations) ? `${f.observations.length}` : null },
+      { label: 'ملخص الأعلام', visible: has(f.flags), value: null },
+    ],
+  };
+}
+
 // ملاحظة المستشار على مشارك في دفعته (xp.observation-add)
 export async function observationAdd(e: any, b: Body) {
   await requireAdvisorOf(e, String(b.participant_id || ''));
+  requireVisible(await visibilityOfParticipant(String(b.participant_id || '')), 'adv_observations_write');
   return OB.advisorAdd({ email: e.email }, b);
 }
 
@@ -77,25 +104,39 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
     const file = { ...base, ...common, ...more, observations };
     return { ...file, flags: flagsOf(file), timeline: timelineOf({ history: base.history || [], observations }) };
   }
-  // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية؛ والختامي والمعالم بكامل الصلاحية لمستشار الدفعة وحده
+  // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية. ما يراه مستشار الدفعة والخبير المسند تحسمه مفاتيح
+  // الرؤية (visibility.js): الإعداد العام ثم استثناء الدفعة، لا شرط مكتوب هنا. تعليل الإدارة لتعديل المستوى لا يخرج للمسند أبدًا.
   const p = base.participant;
+  const adv = !!opts.advisor;
+  const vis = await visibilityOfCohort(cohort?.id || null);
+  const on = (k: string) => vis[k] !== false;
+  const contact = adv ? on('adv_contact') : on('asg_contact');
+  const levels = adv || on('asg_levels');
+  const withNotes = adv && on('adv_admin_notes');
+  const work = adv || on('asg_models');
+  const profile = !levels || !base.profile ? null
+    : { ...base.profile, dimensions: (base.profile.dimensions || []).map((d: any) => (withNotes ? d : { ...d, note: null })) };
+  const finalSummary = common.final ? { live: { score: common.final.live?.score ?? null, decision: common.final.live?.decision ?? null }, record: common.final.record ? { status: common.final.record.status } : null } : null;
+  const seen = adv && on('adv_observations_read') ? observations : [];
   return {
     success: true,
-    participant: { id: p.id, full_name: p.full_name, email: p.email, phone: p.phone, job_title: p.job_title, organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null, status: p.status, bio: p.bio || null, linkedin_url: p.linkedin_url || null },
-    profile: base.profile, journey: base.journey, progress: base.progress, milestones: base.milestones, milestone_summary: base.milestone_summary, group: base.group, continuous: base.continuous,
+    participant: { id: p.id, full_name: p.full_name, email: contact ? p.email : null, phone: contact ? p.phone : null, job_title: p.job_title, organization_name: p.organization_name, sector: p.sector, years_experience: p.years_experience, work_scope: p.work_scope || null, status: p.status, bio: p.bio || null, linkedin_url: p.linkedin_url || null },
+    profile, journey: base.journey, progress: base.progress, milestones: base.milestones, milestone_summary: base.milestone_summary, group: base.group,
+    continuous: adv || on('asg_continuous') ? base.continuous : null,
     program: base.program ? { id: base.program.id } : null,
-    // أين توقف قبل الاعتماد (الملف ثم القياس: كم أجاب من كم) لكل خبير مرتبط، ومؤشر الجهد لمستشار الدفعة وحده كإجابات القياس
-    onboarding: base.onboarding || null, effort: opts.advisor ? base.effort || null : null,
-    assessments: (base.assessments || []).filter((a: any) => a.status === 'submitted').map((a: any) => ({ id: a.id, kind: a.instruments?.kind, submitted_at: a.submitted_at,
+    // أين توقف قبل الاعتماد لكل خبير مرتبط، ومؤشر الجهد للمستشار بمفتاحه
+    onboarding: base.onboarding || null, effort: adv && on('adv_effort') ? base.effort || null : null,
+    assessments: !levels ? [] : (base.assessments || []).filter((a: any) => a.status === 'submitted').map((a: any) => ({ id: a.id, kind: a.instruments?.kind, submitted_at: a.submitted_at,
       results: (a.assessment_results || []).map((r: any) => ({ dimension: r.dimension, level: r.level, composite_pct: r.composite_pct })) })),
-    models: (base.models || []).map((m: any) => ({ id: m.id, status: m.status, status_ar: (SUBMISSION_STATUS_ADMIN as Record<string, string>)[m.status], rating: m.rating, submitted_at: m.submitted_at, title: m.learning_models?.title_ar || '' })),
-    points: base.points, book: (base.book || []).map((b: any) => ({ title: b.handbook_modules?.title_ar, quiz_score: b.quiz_score, quiz_total: b.quiz_total, completed_at: b.completed_at })),
+    models: !work ? [] : (base.models || []).map((m: any) => ({ id: m.id, status: m.status, status_ar: (SUBMISSION_STATUS_ADMIN as Record<string, string>)[m.status], rating: m.rating, submitted_at: m.submitted_at, title: m.learning_models?.title_ar || '' })),
+    points: base.points, book: !work ? [] : (base.book || []).map((b: any) => ({ title: b.handbook_modules?.title_ar, quiz_score: b.quiz_score, quiz_total: b.quiz_total, completed_at: b.completed_at })),
     ...common,
-    final: opts.advisor ? common.final : (common.final ? { live: { score: common.final.live?.score ?? null, decision: common.final.live?.decision ?? null }, record: common.final.record ? { status: common.final.record.status } : null } : null),
-    // ملاحظات الملف وأعلامه لمستشار الدفعة وحده؛ الخبير المسند بطلب خدمة لا يراها
-    observations: opts.advisor ? observations : [],
-    flags: opts.advisor ? flagsOf({ participant: p, effort: base.effort, retake: base.retake, onboarding: base.onboarding, milestone_summary: base.milestone_summary, sessions: extra.sessions, models: base.models, continuous: base.continuous, observations }) : [],
-    scope: opts.advisor ? 'advisor' : 'assigned',
+    final: adv ? (on('adv_final_edit') ? common.final : finalSummary) : (on('asg_final') ? finalSummary : null),
+    observations: seen,
+    flags: adv && on('adv_flags') ? flagsOf({ participant: p, effort: on('adv_effort') ? base.effort : null, retake: base.retake, onboarding: base.onboarding, milestone_summary: base.milestone_summary, sessions: extra.sessions, models: base.models, continuous: base.continuous, observations: seen }) : [],
+    // ما يحق له فعله بمفاتيحه: الواجهة تخفي الزر، والخادم يرفض الفعل نفسه (requireVisible)
+    can: { answers: adv && on('adv_answers'), observe: adv && on('adv_observations_write'), final_edit: adv && on('adv_final_edit'), hall: adv && on('adv_hall_control') },
+    scope: adv ? 'advisor' : 'assigned',
   };
 }
 
@@ -168,19 +209,21 @@ export async function participant(e: any, b: Body) {
 export async function assessmentAnswers(e: any, b: Body) {
   const pid = String(b.participant_id || '');
   await requireAdvisorOf(e, pid);
+  requireVisible(await visibilityOfParticipant(pid), 'adv_answers');
   return answersReview(pid, b.assessment_id, { type: 'system', email: e.email, action: 'expert.answers-view' });
 }
 
 // ── الختامي والمعالم من البوابة: لمستشار الدفعة ──
 export async function finalGet(e: any, b: Body) { await requireAdvisorOf(e, String(b.participant_id || '')); return F.get(b, { email: e.email }); }
-export async function finalSave(e: any, b: Body) { await requireAdvisorOf(e, String(b.participant_id || '')); return F.save(actorOf(e), b); }
-export async function finalVote(e: any, b: Body) { await requireAdvisorOf(e, String(b.participant_id || '')); return F.vote(actorOf(e), b); }
+async function requireFinalEdit(e: any, b: Body) { const pid = String(b.participant_id || ''); await requireAdvisorOf(e, pid); requireVisible(await visibilityOfParticipant(pid), 'adv_final_edit'); }
+export async function finalSave(e: any, b: Body) { await requireFinalEdit(e, b); return F.save(actorOf(e), b); }
+export async function finalVote(e: any, b: Body) { await requireFinalEdit(e, b); return F.vote(actorOf(e), b); }
 export async function milestone(e: any, b: Body) { await requireAdvisorOf(e, String(b.participant_id || '')); return participantMilestone(actorOf(e), b); }
 
 // ── القاعة من البوابة: دفعات المستشار وحدها ──
 export async function hall(e: any, b: Body) { await requireAdvisorCohort(e, b.cohort_id); return H.adminState(b); }
-export async function hallOpen(e: any, b: Body) { await requireAdvisorCohort(e, b.cohort_id); return H.open(actorOf(e), b); }
-async function hallSessionOf(e: any, b: Body) { const s = await H.adminSession(b); await requireAdvisorCohort(e, s.cohort_id); }
+export async function hallOpen(e: any, b: Body) { await requireAdvisorCohort(e, b.cohort_id); requireVisible(await visibilityOfCohort(String(b.cohort_id)), 'adv_hall_control'); return H.open(actorOf(e), b); }
+async function hallSessionOf(e: any, b: Body) { const s = await H.adminSession(b); await requireAdvisorCohort(e, s.cohort_id); requireVisible(await visibilityOfCohort(s.cohort_id), 'adv_hall_control'); }
 export async function hallStep(e: any, b: Body) { await hallSessionOf(e, b); return H.step(actorOf(e), b); }
 export async function hallSplit(e: any, b: Body) { await hallSessionOf(e, b); return H.split(actorOf(e), b); }
 export async function hallAssign(e: any, b: Body) { await hallSessionOf(e, b); return H.assign(actorOf(e), b); }

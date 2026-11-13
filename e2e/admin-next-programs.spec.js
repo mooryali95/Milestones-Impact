@@ -36,6 +36,12 @@ async function setup(page) {
       'admin.program-restore': { success: true, restored: 1, backup: { number: 3 } },
       'admin.program-save': { success: true, program: { id: 'pc' } },
       'admin.cohort-save': { success: true, cohort: { id: 'c2' } },
+      'admin.cohort-visibility': { success: true, ready: true, cohort: { id: 'c1', name: 'سفراء 2026' }, keys: [
+        { key: 'adv_contact', audience: 'advisor', audience_ar: 'مستشار الدفعة وخبير المجموعة', label: 'وسائل التواصل', hint: 'بريد المشارك وجواله.', general: true, override: null, effective: true },
+        { key: 'adv_answers', audience: 'advisor', audience_ar: 'مستشار الدفعة وخبير المجموعة', label: 'إجابات القياس', hint: 'ورقة الإجابات.', general: false, override: true, effective: true },
+        { key: 'asg_levels', audience: 'assigned', audience_ar: 'الخبير المسند بطلب خدمة', label: 'المستويات ونتيجة القياس', hint: 'مستوى المشارك.', general: true, override: null, effective: true },
+      ] },
+      'admin.cohort-visibility-save': { success: true, widened: [] },
       'admin.cohort-upgrade': b.confirm ? { success: true, to: { number: 2 }, diff: { added: [], removed: [], changed: [] } }
         : { success: true, preview: true, to: { number: 2, label: 'بعد مراجعة أكتوبر' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [] } },
     };
@@ -100,4 +106,24 @@ test('الدفعة المفتوحة لا ترتبط بجهة ولا تُغلق',
   const form = page.getByRole('dialog', { name: 'دفعة: الدفعة المفتوحة' });
   await expect(form.getByLabel('الجهة')).toHaveCount(0);
   await expect(form.getByLabel('الحالة').locator('option')).toHaveCount(2);
+});
+
+test('رؤية الدفعة: لكل مفتاح الإعداد العام واستثناء الدفعة، والحفظ يرسل الاستثناءات وحدها', async ({ page }) => {
+  const calls = await setup(page);
+  await page.locator('tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'الرؤية' }).click();
+  const dlg = page.getByRole('dialog', { name: 'رؤية دفعة سفراء 2026' });
+  await expect(dlg.getByRole('group', { name: 'مستشار الدفعة وخبير المجموعة' })).toBeVisible();
+  const contact = dlg.getByLabel('مستشار الدفعة وخبير المجموعة: وسائل التواصل');
+  await expect(contact).toHaveValue('');
+  await expect(contact.locator('option').first()).toHaveText('كالإعداد العام (مرئي)');
+  // استثناء قائم يظهر باختياره، والإعداد العام محجوب بجانبه
+  const answers = dlg.getByLabel('مستشار الدفعة وخبير المجموعة: إجابات القياس');
+  await expect(answers).toHaveValue('on');
+  await expect(answers.locator('option').first()).toHaveText('كالإعداد العام (محجوب)');
+  await contact.selectOption('off');
+  await answers.selectOption('');
+  await dlg.getByRole('button', { name: 'احفظ الاستثناءات' }).click();
+  await expect(page.getByText('حُفظت استثناءات الرؤية')).toBeVisible();
+  expect(calls.find((c) => c.action === 'admin.cohort-visibility-save')).toMatchObject({ cohort_id: 'c1', visibility: { adv_contact: false } });
+  expect(calls.find((c) => c.action === 'admin.cohort-visibility-save').visibility).not.toHaveProperty('adv_answers');
 });

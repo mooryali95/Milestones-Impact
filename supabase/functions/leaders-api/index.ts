@@ -49,6 +49,7 @@ import * as TM from './team.ts';
 import * as ST from './settings.ts';
 import * as FB from './feedback360.ts';
 import * as OB from './observations.ts';
+import * as VS from './visibility.ts';
 
 type Body = Record<string, any>;
 
@@ -452,6 +453,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.cohort-groups': (_a, b) => G.cohortGroups(b),
   // فريق الدفعة في نقطة واحدة، وملخصه لكل دفعة في صفحة الجهة (team.ts)
   'admin.cohort-team': (_a, b) => TM.cohortTeam(b),
+  'admin.cohort-visibility': (a, b) => VS.adminCohortGet(a, b),
+  'admin.cohort-visibility-save': (a, b) => A.writer(a, VS.adminCohortSave, b),
+  // معاينة ملف مشارك بعين المستشار أو الخبير المسند: الحمولة الحقيقية نفسها التي تصلهما (file.ts)، للمدير ذي الكتابة
+  'admin.preview-as': (a, b) => A.writer(a, FL.adminPreviewAs, b),
   'admin.org-team': (_a, b) => TM.orgTeam(b),
   'admin.team-add': (a, b) => A.writer(a, TM.teamAdd, b),
   'admin.team-remove': (a, b) => A.writer(a, TM.teamRemove, b),

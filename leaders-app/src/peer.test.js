@@ -83,7 +83,9 @@ describe('الحراس: المصدر الواحد لطلبات الأقران و
     expect(idx).toMatch(/'admin\.participant': \(_a, b\) => FL\.participantFile\(/);   // المصدر الواحد للملف: الإدارة والخبير
     const file = read('supabase/functions/leaders-api/file.ts');
     expect(file).toMatch(/actor: 'system'/);
-    expect(file).toMatch(/requireAdvisorOf\(e, String\(b\.participant_id \|\| ''\)\); return F\.vote/);
+    // التصويت لمستشار الدفعة وحده، وبمفتاح الرؤية adv_final_edit (visibility.js): الحارسان في requireFinalEdit
+    expect(file).toMatch(/async function requireFinalEdit\(e: any, b: Body\) \{[^\n]*await requireAdvisorOf\(e, pid\);[^\n]*'adv_final_edit'\)/);
+    expect(file).toMatch(/await requireFinalEdit\(e, b\); return F\.vote/);
     expect(read('supabase/functions/leaders-api/peer.ts')).toMatch(/audit\('system', e\.email, `peer\.\$\{status\}`/);
     // القاعة من مكوّن واحد في اللوحة والبوابة
     expect(read('admin-app/src/screens/Hall.jsx')).toContain("import HallControl from '../../../shared/hall/HallControl.jsx'");

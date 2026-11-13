@@ -12,6 +12,7 @@ import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
 import CohortTeam from './CohortTeam.jsx';
+import CohortVisibility from './CohortVisibility.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -35,6 +36,7 @@ export default function Programs({ canWrite, onEditJourney }) {
   const [cert, setCert] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [groups, setGroups] = useState(null);
+  const [vis, setVis] = useState(null);
   const [finalCfg, setFinalCfg] = useState(null);
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
@@ -177,7 +179,7 @@ export default function Programs({ canWrite, onEditJourney }) {
                   <td>{[date(c.starts_on), date(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
                   <td>{COHORT_STATUS[c.status]}</td>
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
-                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button></>}</td>
+                  <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>
                 </tr>
               );
             })}
@@ -217,6 +219,7 @@ export default function Programs({ canWrite, onEditJourney }) {
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
+      {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
       {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
     </>
   );

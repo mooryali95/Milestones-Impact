@@ -7,6 +7,8 @@
 // والوحدات المستهلكة (answer-review.js وfeedback360.js) تأخذ قيمها الافتراضية من DEFAULTS هنا.
 // كل مجموعة صف واحد في المخزن (key = اسم المجموعة، value = ما حُرِّر منها). ما لم يُحرَّر يبقى على افتراضيه.
 
+import { VISIBILITY, VISIBILITY_KEYS, visibilityLabel } from './visibility.js';
+
 const int = (d, min, max, label_ar, hint_ar = '') => ({ type: 'int', default: d, min, max, label_ar, hint_ar });
 const num = (d, min, max, step, label_ar, hint_ar = '') => ({ type: 'number', default: d, min, max, step, label_ar, hint_ar });
 
@@ -45,6 +47,12 @@ export const SETTINGS = {
       pace_streak: int(4, 2, 12, 'عدد الإجابات السريعة المتتالية قبل تنبيه المشارك', 'أثناء القياس: بعد هذا العدد من إجابات أسرع من حد القراءة يظهر للمشارك تنبيه لطيف «خذ وقتك»، مرتين على الأكثر.'),
       effort_low_share: num(0.25, 0.05, 0.9, 0.05, 'نسبة الإجابات دون زمن القراءة التي تعني جهدًا منخفضًا', 'عندها يُنبَّه المستشار إلى إعادة القياس قبل الاعتماد. نصفها يعني «يُراجع».'),
     },
+  },
+  // الرؤية (visibility.js): الحقول تُولَّد من المفاتيح نفسها، فلا يُكتب مفتاح مرتين
+  visibility: {
+    title_ar: 'الرؤية: ما يراه المستشار والخبير',
+    note_ar: 'الافتراضي لكل الدفعات. لكل دفعة أن تستثني مفتاحًا من نموذجها. موافقة المشارك على مشاركة مستواه مع جهته وسرية مقيّمي 360 ليست مفاتيح.',
+    fields: Object.fromEntries(VISIBILITY_KEYS.map((k) => [k, { type: 'bool', default: VISIBILITY[k].default, label_ar: visibilityLabel(k), hint_ar: VISIBILITY[k].hint_ar }])),
   },
 };
 
