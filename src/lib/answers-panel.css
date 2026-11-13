@@ -100,3 +100,7 @@
   .ap-sec { break-inside: auto; }
   .ap-item { break-inside: avoid; }
 }
+
+/* مؤشر الجهد: تنبيه استشاري فوق ملخص الأقسام حين يُراجع أو ينخفض */
+.ap-effort { margin: 8px 0 0; font-size: .85rem; padding: 8px 10px; border-radius: 6px; border-inline-start: 3px solid var(--st-warn-text, #8a5200); background: rgba(178,107,0,.08); }
+.ap-effort.low { border-inline-start-color: var(--st-bad, #a3261d); background: var(--st-bad-bg, rgba(163,38,29,.08)); }

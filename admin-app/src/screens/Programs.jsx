@@ -163,7 +163,7 @@ export default function Programs({ canWrite, onEditJourney }) {
       <div className="la-row between"><h3 className="la-phase">الدفعات</h3>{canWrite && <button className="btn-sm ghost" onClick={() => editCohort()}>+ دفعة جديدة</button>}</div>
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr><th>الدفعة</th><th>الجهة</th><th>البرنامج</th><th>النسخة</th><th>المدة</th><th>الحالة</th><th>المسجلون</th><th /></tr></thead>
+          <thead><tr><th>الدفعة</th><th>الجهة</th><th>البرنامج</th><th>النسخة</th><th>المدة</th><th>الحالة</th><th>الأعضاء</th><th /></tr></thead>
           <tbody>
             {!d.cohorts.length && <tr><td colSpan={8}><Empty compact title="لا دفعات بعد" hint="الدفعة تجمع مشاركي جهة في برنامج بمواعيده ومستشاره. بلا دفعة لا قاعة حية ولا جلسات.">{canWrite && <button className="btn-sm primary" type="button" onClick={() => editCohort()}>+ دفعة جديدة</button>}</Empty></td></tr>}
             {d.cohorts.map((c) => {
@@ -176,7 +176,7 @@ export default function Programs({ canWrite, onEditJourney }) {
                   <td>{v ? `النسخة ${v.number}` : 'آخر تعديل'}{v && latest && latest.id !== v.id && canWrite && <> <button className="la-link" onClick={() => upgrade(c)}>رقِّ إلى {latest.number}</button></>}</td>
                   <td>{[date(c.starts_on), date(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
                   <td>{COHORT_STATUS[c.status]}</td>
-                  <td>{c.enrolled || ''}</td>
+                  <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button></>}</td>
                 </tr>
               );

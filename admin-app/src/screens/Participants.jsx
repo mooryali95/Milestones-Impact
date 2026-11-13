@@ -23,6 +23,7 @@ import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
+import { ONBOARDING_AR, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
@@ -31,12 +32,14 @@ const ACTIVE = ['placed', 'enrolled'];
 // عروض سريعة: الحالات التي يتدخل فيها المدير عادة، وعدد كل منها ظاهر على رقاقتها
 const PRESETS = [
   { key: 'approval', label: 'بانتظار الاعتماد', test: (p) => p.status === 'pending_approval' },
+  // متعثر قبل الاعتماد: لم يكمل ملفه، أو لم يبدأ القياس، أو بدأه ولم يسلّمه (onboarding من الخادم، onboarding.js)
+  { key: 'stuck', label: 'لم يكمل التسجيل', test: (p) => STUCK.includes(p.onboarding?.step) },
   { key: 'tentative', label: 'مستوى مبدئي', test: (p) => (p.placements || []).some((x) => !x.approved_at) },
   { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!p.last_login_at || now - Date.parse(p.last_login_at) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
 ];
-const KEYS = ['q', 'view', 'status', 'org', 'track', 'joined', 'seen'];
+const KEYS = ['q', 'view', 'status', 'step', 'org', 'track', 'joined', 'seen'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
   return (
@@ -52,6 +55,18 @@ function Lvl({ p, d }) {
   const x = (p.placements || []).find((y) => y.dimension === d);
   if (!x) return <span className="la-muted">·</span>;
   return <span className={`la-lvl ${x.level}${x.approved_at ? '' : ' tentative'}`} title={x.approved_at ? 'معتمد' : 'مبدئي'}>{LVL[x.level]}</span>;
+}
+
+// أين توقف قبل الاعتماد وما بقي عليه: للمتعثرين فقط، ومن اعتُمد أو ينتظر الاعتماد تكفيه حالته
+export function Where({ o }) {
+  if (!o || !STUCK.includes(o.step)) return <span className="la-muted">·</span>;
+  return (
+    <>
+      <span className="la-chip warn">{o.label}</span>
+      {o.step === 'assessment_doing' && o.total > 0 && <progress className="la-mini" max={o.total} value={o.answered} aria-label={`أجاب ${o.answered} من ${o.total}`} />}
+      <br /><small className="la-muted">{o.remaining}</small>
+    </>
+  );
 }
 
 function List({ orgs, canWrite, onOpen, initialStatus }) {
@@ -84,6 +99,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'status', label: 'الحالات', get: (p) => p.status, options: Object.entries(STATUS) },
     { key: 'org', label: 'الجهات', get: (p) => p.organization_id || 'none', options: [...orgs.map((o) => [o.id, o.name]), ['none', 'بدون جهة']] },
     { key: 'track', label: 'المسارات', get: (p) => trackOfPlacements(p.placements) || p.track, options: tracks.map((k) => [k, k]) },
+    // بعد الثلاثة الظاهرة (الباقي خلف «+ فلاتر»)، والعرض السريع «لم يكمل التسجيل» يغني عنه في الغالب
+    { key: 'step', label: 'أين توقف', get: (p) => p.onboarding?.step, options: Object.entries(ONBOARDING_AR) },
     { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
     { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
   ], [orgs, tracks]);
@@ -104,15 +121,24 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
   };
+  // تذكير المتعثرين من المحددين: الخادم يتخطى من أكمل ومن ذُكِّر قريبًا، والرد يقول كم أُرسل وكم تُخطّي ولماذا
+  const pickedStuck = all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).length;
+  const remind = async () => {
+    if (!(await confirm(`إرسال بريد تذكير إلى ${pickedStuck} ممن لم يكملوا التسجيل؟ كل بريد يسمّي ما بقي على صاحبه.`))) return;
+    const r = await L('admin.remind-stuck', { participant_ids: all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).map((p) => p.id) });
+    if (!r.success) return toast(r.message);
+    toast(`أُرسل ${r.sent} تذكير${r.skipped?.recent ? `، وتُخطّي ${r.skipped.recent} ذُكِّروا خلال ${r.gap_days} أيام` : ''}`);
+    setPicked(new Set());
+  };
   const exportCsv = async () => {
     const { exportWorkbook } = await import('../../../src/lib/brand/xlsx.js');
-    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['التسجيل', 16]];
+    const head = [['الاسم', 26], ['البريد', 30], ['الجوال', 16], ['المسمى', 22], ['الجهة', 24], ...DIMS.map((d) => [DIM_EN[d], 12]), ['المسار', 10], ['الحالة', 18], ['أين توقف', 18], ['المتبقي', 40], ['التسجيل', 16], ['آخر دخول', 16]];
     const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
     await exportWorkbook(
       { kind: 'PPL', title: 'مشاركو برنامج القادة', subtitle: shown.length === all.length ? 'كل المشاركين' : `${shown.length} من ${all.length} حسب الفلاتر`, sheet: 'المشاركون', file: 'Participants' },
       head.map(([label, width]) => ({ label, width })),
       shown.map((p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name,
-        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, date(p.created_at)]),
+        ...DIMS.map((d) => lv(p, d)), trackOfPlacements(p.placements), STATUS[p.status] || p.status, p.onboarding?.label || '', p.onboarding?.remaining || '', date(p.created_at), date(p.last_login_at)]),
     );
     toast(`صُدّر ${shown.length} مشارك`);
   };
@@ -141,18 +167,19 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <span><b>{picked.size}</b> محدد</span>
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
+          {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
       <div className="table-wrap"><table className="data-table la-cards">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <th>الاسم</th><th>الجهة</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المسار</th><th>الحالة</th><th>التسجيل</th>
+          <th>الاسم</th><th>الجهة</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المسار</th><th>الحالة</th><th>أين توقف</th><th>التسجيل</th>
         </tr></thead>
         <tbody>
-          {!list ? <tr className="loading-row"><td colSpan={9}><Spinner /></td></tr>
-            : error ? <tr><td colSpan={9}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
-              : !shown.length ? <tr><td colSpan={9}>{all.length ? <Empty compact title="لا نتائج لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
+          {!list ? <tr className="loading-row"><td colSpan={10}><Spinner /></td></tr>
+            : error ? <tr><td colSpan={10}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
+              : !shown.length ? <tr><td colSpan={10}>{all.length ? <Empty compact title="لا نتائج لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
                 : shown.map((p) => {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);
@@ -164,6 +191,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
                       <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span></td>
+                      <td data-label="أين توقف"><Where o={p.onboarding} /></td>
                       <td data-label="التسجيل">{date(p.created_at)}</td>
                     </tr>
                   );
@@ -377,6 +405,14 @@ function Person({ id, canWrite, onBack }) {
             <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
           </dl>
           {p.bio && <p className="la-bio">{p.bio}</p>}
+          {STUCK.includes(r.onboarding?.step) && (
+            <p className="la-where" role="status">
+              <b>أين توقف:</b> {r.onboarding.label}. {r.onboarding.remaining}.
+              {r.onboarding.started_at && <> بدأ القياس {date(r.onboarding.started_at)}.</>}
+              {r.onboarding.last_answer_at && <> آخر إجابة {date(r.onboarding.last_answer_at)}.</>}
+              {!p.last_login_at ? ' لم يدخل بعد التسجيل.' : <> آخر دخول {date(p.last_login_at)}.</>}
+            </p>
+          )}
           {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
           {canWrite && (
             <div className="la-row">
@@ -400,7 +436,7 @@ function Person({ id, canWrite, onBack }) {
           )}
         </section>
 
-        <LevelCard prof={prof} latest={latest} model={r.placement_model} canWrite={canWrite} levels={levels} setLevels={setLevels}
+        <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
           notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} onAnswers={canWrite ? openAnswers : null} />
         {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       </div>

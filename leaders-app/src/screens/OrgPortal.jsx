@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import OtherDoors from '../Doors.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
-import JourneyMap from '../JourneyMap.jsx';
+import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 import { coordCall, coordSession, setCoordExpired } from '../api.js';
 import { askSignOut } from '../SignOutDialog.jsx';
 import { filterRows, sortRows, stageOf, stageOptions, isStale, NOT_STARTED, PRE_BASELINE, STALE, STALE_DAYS } from '../coord.js';

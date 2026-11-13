@@ -852,3 +852,18 @@
   .ot-dl { grid-template-columns: 1fr; }
   .ot-dl dd { margin-bottom: 6px; }
 }
+
+/* أين توقف المشارك قبل الاعتماد: شريط تقدم القياس في القائمة، وسطر في ملفه */
+.la-mini { inline-size: 64px; block-size: 6px; margin-inline-start: 6px; vertical-align: middle; accent-color: var(--brand-gold); }
+.la-where { margin: 10px 0; padding: 10px 12px; border-inline-start: 3px solid var(--st-warn-text); background: rgba(178,107,0,.07); border-radius: 6px; font-size: .9rem; }
+
+/* رحلة الجهة عند الإدارة (OrgJourney.jsx): قائمة جاهزية الدفعة فوق خريطة الرحلة المشتركة */
+.oj-setup { list-style: none; margin: 10px 0 4px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 16px; }
+.oj-setup li { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; }
+.oj-mark { flex: none; inline-size: 22px; block-size: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .8rem; }
+.oj-setup .ok .oj-mark { background: rgba(46,125,91,.14); color: var(--st-ok); }
+.oj-setup .todo .oj-mark { background: rgba(178,107,0,.14); color: var(--st-warn-text); }
+
+/* مؤشر الجهد في بطاقة المستوى: تنبيه استشاري قبل الاعتماد */
+.lc-effort { margin: 8px 0; padding: 9px 12px; border-radius: 6px; font-size: .9rem; border-inline-start: 3px solid var(--st-warn-text); background: rgba(178,107,0,.08); }
+.lc-effort.low { border-inline-start-color: var(--st-bad); background: var(--st-bad-bg); }

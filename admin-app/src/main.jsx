@@ -4,6 +4,7 @@ import App from './App.jsx';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
+import '../../shared/css/journey-map.css';
 import './admin.css';
 import './leaders-admin.css';
 

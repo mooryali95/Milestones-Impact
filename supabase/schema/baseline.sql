@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261111130200_leaders_feedback_cycles
+-- as-of migration: 20261113100000_leaders_expert_committees
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -624,8 +624,10 @@ create table if not exists leaders.experts (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   last_login_at timestamp with time zone,
+  committees text[] default '{}'::text[] not null,
   constraint experts_admin_note_check CHECK (((admin_note IS NULL) OR (char_length(admin_note) <= 2000))),
   constraint experts_bio_check CHECK (((bio IS NULL) OR (char_length(bio) <= 3000))),
+  constraint experts_committees_chk CHECK ((committees <@ ARRAY['content'::text, 'measurement'::text])),
   constraint experts_dimensions_check CHECK ((dimensions <@ ARRAY['milestone'::text, 'impact'::text, 'leadership'::text])),
   constraint experts_email_check CHECK (((email = lower(email)) AND (char_length(email) <= 254))),
   constraint experts_full_name_check CHECK (((char_length(full_name) >= 2) AND (char_length(full_name) <= 120))),

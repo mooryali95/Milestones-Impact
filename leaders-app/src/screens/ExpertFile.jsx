@@ -6,6 +6,7 @@
 // المصدر الواحد: xp.participant يبني من ملف الإدارة نفسه ويقصّه. مستشار الدفعة يعتمد الختامي ويقيّم
 // المعالم ويؤكّد إجابات الأقران؛ المسند إليه بطلب خدمة يقرأ فقط.
 import React, { useCallback, useEffect, useState } from 'react';
+import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { xpCall } from '../api.js';
 import ExpertAnswers from './ExpertAnswers.jsx';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
@@ -199,7 +200,8 @@ export default function ExpertFile({ id, onBack }) {
               ))}</ul>
               {d.profile.track?.title && <p className="small">المسار: <b>{d.profile.track.title}</b></p>}
             </>
-          ) : <p className="muted small">لم يُتم القياس المبدئي بعد.</p>}
+          ) : <p className="muted small">{d.onboarding?.remaining ? `${d.onboarding.label}: ${d.onboarding.remaining}.` : 'لم يُتم القياس المبدئي بعد.'}</p>}
+          {d.effort?.level && d.effort.level !== 'ok' && <p className="alert info small" role="note"><b>{EFFORT_AR[d.effort.level]}:</b> {d.effort.note}</p>}
           {/* إجابات القياس لمستشار الدفعة وحده (قرار المالك 2026-11-11)، ويُسجَّل كل اطلاع */}
           {advisor && d.assessments?.length > 0 && <button type="button" className="link small" onClick={() => setAnswers(true)}>إجابات القياس</button>}
           {p.bio && <p className="small muted">{p.bio}</p>}

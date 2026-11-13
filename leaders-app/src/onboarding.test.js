@@ -1,81 +1,117 @@
-// معالج البداية والفيديو التعريفي: اشتقاق الخطوة من حالة الخادم، وحراس الملفات والمواضع
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { onboardingStep, ONBOARDING_STEPS } from './Onboarding.jsx';
-import { PARTICIPANT_VIDEO, PROGRAM_PAGE_VIDEO, VIDEO } from '../../shared/video/scenes.js';
-import { TOUR_STEPS, spoken } from './tour-steps.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { onboardingOf, profileComplete, profileMissing, PROFILE_FIELDS, servedTotal } from '../../supabase/functions/leaders-api/onboarding.js';
 
-const root = join(__dirname, '../..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
+const full = { full_name: 'سارة', phone: '0500000000', job_title: 'مديرة مشروع', organization_name: 'جهة', years_experience: 0, status: 'profiled' };
 
-const me = ({ profile = false, assessment = false, approved = false } = {}) => ({
-  participant: { id: 'p1', full_name: 'سارة عبدالله الأحمد' },
-  profile: { approved },
-  journey: [
-    { key: 'profile', status: profile ? 'done' : 'active', items: [{ code: 'P-INFO', status: profile ? 'done' : 'pending' }] },
-    { key: 'assessment', status: assessment ? 'done' : 'locked', items: [{ code: 'A-DONE', status: assessment ? 'done' : 'pending' }] },
-    { key: 'approval', status: 'locked', items: [], duration_label: 'يوما عمل' },
-  ],
+describe('أين توقف المشارك قبل الاعتماد', () => {
+  it('الملف: يسمّي الناقص بترتيب النموذج، وصفر سنوات خبرة قيمة لا نقص', () => {
+    expect(profileComplete(full)).toBe(true);
+    expect(profileMissing({ full_name: 'سارة', phone: ' ', years_experience: null })).toEqual(['الجوال', 'المسمى الوظيفي', 'جهة العمل', 'سنوات الخبرة']);
+    const o = onboardingOf({ ...full, phone: null, status: 'registered' });
+    expect(o.step).toBe('profile');
+    expect(o.remaining).toBe('ينقص الملف: الجوال');
+  });
+  it('القياس: لم يفتحه، فتحه بلا إجابة، جارٍ بعدّه', () => {
+    expect(onboardingOf(full).remaining).toBe('لم يفتح القياس');
+    expect(onboardingOf(full, { status: 'in_progress', answered: 0, total: 63 })).toMatchObject({ step: 'assessment_todo', remaining: 'فتح القياس ولم يجب عن أي سؤال' });
+    expect(onboardingOf(full, { status: 'in_progress', answered: 42, total: 63 })).toMatchObject({ step: 'assessment_doing', remaining: 'أجاب 42 من 63، وبقي 21' });
+  });
+  it('من سلّم ينتظر الاعتماد، ومن اعتُمد انتهى', () => {
+    expect(onboardingOf({ ...full, status: 'pending_approval' }, { status: 'submitted', answered: 63, total: 63 }).step).toBe('approval');
+    expect(onboardingOf({ ...full, status: 'placed' }, { status: 'submitted', answered: 63, total: 63 }).step).toBe('done');
+    // مستورد اعتُمد مستواه بلا قياس وملفه ناقص: ليس متعثرًا
+    expect(onboardingOf({ status: 'placed' }).step).toBe('done');
+  });
+  it('عدد الأسئلة المعروضة: بصيغة المشارك، وبلا صيغة يُحسب بالأولى', () => {
+    const qs = [{ form: null }, { form: null }, { form: 'A' }, { form: 'B' }, { form: 'B' }];
+    expect(servedTotal(qs, 'B')).toBe(4);
+    expect(servedTotal(qs, null)).toBe(3);
+    expect(servedTotal([{}, {}], null)).toBe(2);
+  });
+  it('profileSave يحكم على الاكتمال من المصدر نفسه', () => {
+    const src = readFileSync(join(__dirname, '../..', 'supabase/functions/leaders-api/participant.ts'), 'utf8');
+    expect(src).toContain('const complete = profileComplete(merged);');
+    expect(PROFILE_FIELDS.map((f) => f.key)).toEqual(['full_name', 'phone', 'job_title', 'organization_name', 'years_experience']);
+  });
 });
 
-describe('اشتقاق خطوة المعالج', () => {
-  it('أربع خطوات ثابتة بالترتيب', () => {
-    expect(ONBOARDING_STEPS.map((s) => s.key)).toEqual(['welcome', 'profile', 'assessment', 'next']);
+import { effortOf } from '../../supabase/functions/leaders-api/answer-review.js';
+import { cohortSetup, setupMissing } from '../../supabase/functions/leaders-api/cohort-setup.js';
+
+describe('مؤشر الجهد (استشاري)', () => {
+  const mk = (n, seconds, kind = 'choice', k = 0) => Array.from({ length: n }, () => ({ seconds, kind, k }));
+  it('من استعجل في أغلب القياس «جهد منخفض» ولو كان وسيطه هو السريع', () => {
+    const e = effortOf([...mk(40, 2), ...mk(15, 20)]);
+    expect(e.level).toBe('low');
+    expect(e.note).toContain('40 من 55 إجابة أسرع من زمن القراءة');
+    expect(e.note).toContain('إعادة القياس');
   });
-  it('الترحيب أولًا ثم الملف بالعلم المحلي نفسه الذي تضبطه اختبارات المتصفح', () => {
-    expect(onboardingStep(me(), { welcomeSeen: false })).toMatchObject({ key: 'welcome', n: 1, total: 4 });
-    expect(onboardingStep(me(), { welcomeSeen: true })).toMatchObject({ key: 'profile', n: 2 });
+  it('إجابات بزمن قراءة طبيعي «جهد طبيعي»، والقليل السريع لا يُعلَّم', () => {
+    expect(effortOf([...mk(2, 3), ...mk(50, 30)]).level).toBe('ok');
+    expect(effortOf([...mk(8, 3), ...mk(42, 30)]).level).toBe('watch');
   });
-  it('القياس ثالثًا، وعنوانه «رسوم القياس» حين تسبقه بوابة الدفع', () => {
-    expect(onboardingStep(me({ profile: true }), { welcomeSeen: true })).toMatchObject({ key: 'assessment', n: 3, title: 'نقطة انطلاقك' });
-    expect(onboardingStep(me({ profile: true }), { welcomeSeen: true, assessmentPaywall: true })).toMatchObject({ key: 'assessment', title: 'رسوم القياس' });
+  it('النمط الواحد في عبارات الممارسة يرفع إلى «يُراجع»', () => {
+    const e = effortOf([...mk(30, 30), ...mk(14, 6, 'likert', 3), ...mk(1, 6, 'likert', 1)]);
+    expect(e.straight).toBe(true);
+    expect(e.level).toBe('watch');
   });
-  it('«ما بعد ذلك» بعد القياس وحتى الاعتماد، مرة واحدة', () => {
-    expect(onboardingStep(me({ profile: true, assessment: true }), { welcomeSeen: true, nextSeen: false })).toMatchObject({ key: 'next', n: 4 });
-    expect(onboardingStep(me({ profile: true, assessment: true }), { welcomeSeen: true, nextSeen: true })).toBeNull();
-    expect(onboardingStep(me({ profile: true, assessment: true, approved: true }), { welcomeSeen: true, nextSeen: false })).toBeNull();
+  it('أزمنة صالحة قليلة: لا حكم', () => {
+    expect(effortOf(mk(5, 1)).level).toBeNull();
   });
-  it('لا معالج لغير المشارك', () => {
-    expect(onboardingStep(null)).toBeNull();
-    expect(onboardingStep({ expert: {} })).toBeNull();
+  it('لا يدخل الدرجة: لا يستورده منطق التسكين ولا الإرسال', () => {
+    const logic = readFileSync(join(__dirname, '../..', 'supabase/functions/leaders-api/logic.js'), 'utf8');
+    expect(logic).not.toContain('effortOf');
+    expect(readFileSync(join(__dirname, '../..', 'supabase/functions/leaders-api/participant.ts'), 'utf8')).not.toContain('effortOf');
   });
 });
 
-describe('الفيديو التعريفي', () => {
-  it('الملفات الأربعة المسجَّلة من الواجهة موجودة وتحت سقف الحجم، والمدة تحت تسع دقائق', () => {
-    for (const ext of ['mp4', 'webm', 'vtt', 'jpg', 'json']) {
-      const p = join(root, `leaders-app/public/media/${VIDEO.file}.${ext}`);
-      expect(existsSync(p), p).toBe(true);
-      expect(statSync(p).size).toBeLessThanOrEqual(VIDEO.maxBytes);
-    }
-    const meta = JSON.parse(read(`leaders-app/public/media/${VIDEO.file}.json`));
-    expect(meta.seconds).toBeLessThanOrEqual(540);
-    expect(VIDEO.seconds).toBe(meta.seconds);
-    expect(meta.marks).toHaveLength(TOUR_STEPS.length);
+describe('جاهزية الدفعة', () => {
+  it('دفعة بأعضاء بلا مستشار ولا نهاية ولا جدول: أربعة بنود ناقصة بأسبابها', () => {
+    const s = cohortSetup({ cohort: { starts_on: '2026-11-10', ends_on: null, schedule: {}, advisor_expert_id: null }, members: 27 });
+    expect(setupMissing(s)).toBe(4);
+    expect(s.find((x) => x.key === 'members')).toMatchObject({ ok: true, detail: '27 في الدفعة (من سُجّل فيها ومن انضم بجهتها)' });
+    expect(s.find((x) => x.key === 'period').detail).toContain('بلا تاريخ نهاية');
+    expect(s.find((x) => x.key === 'advisor').where).toBe('team');
   });
-  it('الترجمة من نص الجولة كما سُجّل (spoken من المصدر الواحد)، ومتصلة بالترتيب', () => {
-    const vtt = read(`leaders-app/public/media/${VIDEO.file}.vtt`);
-    expect(vtt.startsWith('WEBVTT')).toBe(true);
-    for (const s of TOUR_STEPS) expect(vtt).toContain(spoken(s));
-    const times = [...vtt.matchAll(/(\d\d:\d\d:\d\d\.\d{3}) --> (\d\d:\d\d:\d\d\.\d{3})/g)].map((m) => m.slice(1, 3));
-    expect(times).toHaveLength(TOUR_STEPS.length);
-    for (let i = 1; i < times.length; i++) expect(times[i][0] >= times[i - 1][1]).toBe(true);
+  it('دفعة مكتملة: لا ناقص', () => {
+    const s = cohortSetup({ cohort: { starts_on: '2026-11-10', ends_on: '2027-02-10', schedule: { s1: {} }, advisor_expert_id: 'e1' }, advisorName: 'د. سلمان', teamCount: 2, members: 27, upcomingSessions: 3 });
+    expect(setupMissing(s)).toBe(0);
+    expect(s.find((x) => x.key === 'advisor').detail).toBe('د. سلمان، ومعه 2 في الفريق');
   });
-  it('المشغّل في شاشة الدخول وبطاقة الرحلة والترحيب، والصفحة الأم تحمّل الملف نفسه بسماح CSP', () => {
-    expect(read('leaders-app/src/screens/SignIn.jsx')).toMatch(/<IntroVideo \/>/);
-    expect(read('leaders-app/src/screens/Journey.jsx')).toMatch(/<IntroVideo className="link small" \/>[\s\S]*OnboardingNextCard/);
-    expect(read('leaders-app/src/Onboarding.jsx')).toMatch(/<IntroPlayer \/>/);
-    const home = read('home/leaders/index.html');
-    // الصفحة الأم على ملف منشور (PROGRAM_PAGE_VIDEO): الحالي، أو السابق أثناء الانتقال (scenes.js)
-    expect(home).toContain(`https://leaders.sunkvalue.com/media/${PROGRAM_PAGE_VIDEO.file}.mp4`);
-    expect(home).toContain(`https://leaders.sunkvalue.com/media/${PROGRAM_PAGE_VIDEO.file}.vtt`);
-    expect(read('home/_headers')).toMatch(/media-src 'self' https:\/\/leaders\.sunkvalue\.com/);
-    expect(read('leaders-app/public/_headers')).toMatch(/\/media\/\*\n\s+Cache-Control: public, max-age=31536000, immutable/);
+});
+
+import { cleanCommittees, committeeCoverage } from '../../supabase/functions/leaders-api/committees.js';
+import { stuckMailText, STUCK_STEPS } from '../../supabase/functions/leaders-api/onboarding.js';
+
+describe('لجنتا المحتوى والقياس من سجل الخبراء', () => {
+  const ex = (id, committees, dimensions, status = 'active') => ({ id, full_name: `خبير ${id}`, committees, dimensions, status });
+  it('لجنة المحتوى تكتمل بعضو لكل إطار، والقياس بثلاثة، وغير الفاعل لا يُعدّ', () => {
+    const [content, measurement] = committeeCoverage([
+      ex('1', ['content', 'measurement'], ['milestone', 'impact']), ex('2', ['content'], ['leadership']),
+      ex('3', ['measurement'], []), ex('4', ['measurement'], [], 'paused'),
+    ]);
+    expect(content).toMatchObject({ ready: true, gaps: [] });
+    expect(content.members.map((m) => m.id)).toEqual(['1', '2']);
+    expect(measurement).toMatchObject({ ready: false, gaps: ['2 من 3 مقاعد'] });
   });
-  it('بطاقات أول فتح في الكتيب والقاعة والمبادرة بمكوّن واحد', () => {
-    for (const [f, id] of [['Handbook', 'handbook'], ['Hall', 'hall'], ['Capstone', 'capstone']]) {
-      expect(read(`leaders-app/src/screens/${f}.jsx`)).toMatch(new RegExp(`<FirstOpen id="${id}"`));
-    }
+  it('إطار بلا عضو يُسمّى باسمه، واللجنة الفارغة تقول ذلك', () => {
+    const [content, measurement] = committeeCoverage([ex('1', ['content'], ['milestone'])]);
+    expect(content.gaps[0]).toMatch(/^لا عضو لإطار .+ ولا .+$/);
+    expect(measurement.gaps).toEqual(['لا أعضاء بعد']);
+  });
+  it('القيم خارج اللجنتين تُسقط', () => {
+    expect(cleanCommittees(['content', 'x', 'content', 'measurement'])).toEqual(['content', 'measurement']);
+    expect(cleanCommittees(null)).toEqual([]);
+  });
+});
+
+describe('بريد تذكير المتعثر يسمّي ما بقي عليه', () => {
+  it('لكل خطوة تعثر نصها، ولمن أكمل لا نص', () => {
+    expect(stuckMailText({ step: 'profile', missing: ['الجوال', 'سنوات الخبرة'] })).toContain('(الجوال، سنوات الخبرة)');
+    expect(stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })).toContain('أجبت 42 من 63');
+    for (const s of STUCK_STEPS) expect(stuckMailText({ step: s, missing: ['x'], answered: 1, total: 2 })).toBeTruthy();
+    expect(stuckMailText({ step: 'approval' })).toBeNull();
   });
 });

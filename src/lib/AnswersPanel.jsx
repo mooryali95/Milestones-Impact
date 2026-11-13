@@ -9,7 +9,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DIM_AR, DIM_SHORT } from '../../supabase/functions/leaders-api/labels.js';
-import { ANSWER_CLASS_AR, REVIEW_TIER_AR, secondsAr, sectionTitle, TIMING_DISCLAIMER_AR, TIMING_NOTE_AR } from '../../supabase/functions/leaders-api/answer-review.js';
+import { ANSWER_CLASS_AR, EFFORT_AR, REVIEW_TIER_AR, secondsAr, sectionTitle, TIMING_DISCLAIMER_AR, TIMING_NOTE_AR } from '../../supabase/functions/leaders-api/answer-review.js';
 import './answers-panel.css';
 
 const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -134,6 +134,9 @@ export default function AnswersPanel({ boxRef, who, data, error, onRetry, onClos
               {t.wall_seconds != null && <span className="ap-muted">من فتح القياس إلى إرساله {secondsAr(t.wall_seconds)}</span>}
             </div>
             <p className="ap-note">{TIMING_DISCLAIMER_AR}</p>
+            {data.effort?.level && data.effort.level !== 'ok' && (
+              <p className={`ap-effort ${data.effort.level}`} role="note"><b>{EFFORT_AR[data.effort.level]}:</b> {data.effort.note}</p>
+            )}
 
             <div className="ap-sum-wrap">
               <table className="ap-sum">

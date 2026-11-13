@@ -6,6 +6,7 @@
 // صغيرة للجوانب)، وتفاصيل مطوية تُفتح تلقائيًا للحدّي والمعلَّم والمخالف. المنطق كما هو: الاعتماد والتعليل
 // في Participants.jsx، والحالة من placement-card.js. (تصور بطاقة المستوى، المرحلة 1، قرار المالك 2026-11-11)
 import React, { useState } from 'react';
+import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { DIM, DIM_EN, DIMS, LVL, date } from '../leaders.js';
 import { compositeScale, rowState } from '../placement-card.js';
 
@@ -59,7 +60,7 @@ function LevelChip({ level, approved, attention }) {
   );
 }
 
-export default function LevelCard({ prof, latest, model, canWrite, levels, setLevels, notes, setNotes, currentLevel, blocker, onApprove, onAnswers }) {
+export default function LevelCard({ prof, latest, model, effort, canWrite, levels, setLevels, notes, setNotes, currentLevel, blocker, onApprove, onAnswers }) {
   const scale = compositeScale(model);
   const res = (d) => latest?.assessment_results?.find((x) => x.dimension === d);
   const stateOf = (d) => rowState({ ev: res(d)?.evaluation, current: currentLevel(d), chosen: levels[d], note: notes[d], canWrite });
@@ -76,6 +77,10 @@ export default function LevelCard({ prof, latest, model, canWrite, levels, setLe
         <h3 id="lc-title">المستوى في الأبعاد الثلاثة</h3>
         {prof && (prof.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي، بانتظارك</span>)}
       </div>
+      {/* مؤشر الجهد (answer-review.js، استشاري): يظهر قبل الاعتماد حين تدل الأزمنة على استعجال، ولا يغيّر الدرجة */}
+      {effort?.level && effort.level !== 'ok' && (
+        <p className={`lc-effort ${effort.level}`} role="note"><b>{EFFORT_AR[effort.level]}:</b> {effort.note}</p>
+      )}
       {!prof && !latest && <p className="la-muted">لم يُكمل القياس بعد. يمكنك تحديد مستواه يدويًا واعتماده.</p>}
       {prof?.track && (
         <div className="la-track-now lc-track">

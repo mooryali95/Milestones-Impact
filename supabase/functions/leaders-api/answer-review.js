@@ -97,6 +97,31 @@ export function estimateTimes(ordered, startedAt = null, timing = TIMING_DEFAULT
   });
 }
 
+// ── مؤشر الجهد: حكم إجمالي على جدية الإجابة، استشاري لا يدخل الدرجة ──
+// علامة «سريع» لكل سؤال نسبية إلى وسيط المشارك نفسه، فمن استعجل في كل شيء لا يُعلَّم بها. هنا حد قراءة مطلق:
+// نسبة الإجابات (ذات الزمن الصالح) الأسرع مما يُقرأ به السؤال، ومعها نمط الخيار الواحد في عبارات الممارسة.
+// المرجع: أدبيات الاستجابة المتعجلة (rapid guessing) وقلة الجهد (insufficient effort responding).
+export const EFFORT_MIN_TIMED = 10;       // أقل عدد أزمنة صالحة للحكم
+export const STRAIGHT_SHARE = 0.85;       // الخيار نفسه في هذه النسبة من عبارات الممارسة نمط واحد
+export const EFFORT_AR = { ok: 'جهد طبيعي', watch: 'يُراجع', low: 'جهد منخفض' };
+export function effortOf(items, timing = TIMING_DEFAULTS) {
+  const t = { ...TIMING_DEFAULTS, ...(timing || {}) };
+  const timed = (items || []).filter((x) => x.seconds != null);
+  const quick = timed.filter((x) => x.seconds < (x.kind === 'likert' ? t.effort_floor_likert : t.effort_floor_choice)).length;
+  const likert = (items || []).filter((x) => x.kind === 'likert' && x.k != null);
+  const counts = {};
+  for (const x of likert) counts[x.k] = (counts[x.k] || 0) + 1;
+  const same = likert.length ? Math.max(...Object.values(counts)) : 0;
+  const straight = likert.length >= 10 && same / likert.length >= STRAIGHT_SHARE;
+  if (timed.length < EFFORT_MIN_TIMED) return { level: null, timed: timed.length, quick, share: null, same_likert: same, likert: likert.length, straight, note: 'الأزمنة الصالحة أقل من أن يُحكم بها' };
+  const share = Math.round((quick / timed.length) * 100) / 100;
+  const level = share >= t.effort_low_share ? 'low' : share >= t.effort_low_share / 2 || straight ? 'watch' : 'ok';
+  const parts = [`${quick} من ${timed.length} إجابة أسرع من زمن القراءة`];
+  if (straight) parts.push(`والخيار نفسه في ${same} من ${likert.length} عبارة ممارسة`);
+  const advice = level === 'low' ? 'النتيجة قد تعكس الاستعجال لا المستوى: يُنظر في إعادة القياس قبل الاعتماد' : level === 'watch' ? 'تُقرأ النتيجة بحذر' : '';
+  return { level, timed: timed.length, quick, share, same_likert: same, likert: likert.length, straight, note: parts.join('، ') + (advice ? `. ${advice}.` : '.') };
+}
+
 // المراجعة كاملة لقياس واحد.
 // questions: أسئلة الأداة (بخياراتها ودرجاتها) · rows: assessment_answers { question_id, value, score, answered_at }
 // results: نسب الجوانب المخزّنة لكل بُعد { [dimension]: { knowledge, skill, behavior } } إن وُجدت، فتطابق assessment_results
@@ -164,7 +189,7 @@ export function reviewAnswers({ questions, rows, startedAt = null, submittedAt =
     gaps: items.filter((x) => x.timing_note === 'gap').length,
     wall_seconds: startMs != null && endMs != null && endMs >= startMs ? Math.round((endMs - startMs) / 1000) : null,
   };
-  return { items, sections, totals };
+  return { items, sections, totals, effort: effortOf(items, t) };
 }
 
 // ── تصدير CSV (للمدير وحده بقرار المالك) ──

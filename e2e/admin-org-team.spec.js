@@ -172,3 +172,31 @@ test('390px ولوحة المفاتيح: لا تمرير أفقي، والأسه
   await page.keyboard.press('Escape');
   await expect(dlg).toBeHidden();
 });
+
+test('صفحة الجهة عند الإدارة: جاهزية الدفعة بما ينقصها وأين يُضبط، وخريطة الرحلة نفسها التي يراها مسؤول الجهة', async ({ page }) => {
+  const st = (key, phase, title, here, done) => ({ key, phase, title, duration_days: 0, here, done, late: 0 });
+  await setup(page, {
+    'admin.org-journey': {
+      success: true, cohort: { id: 'c1', name: 'دفعة سفراء', status: 'open' }, setup_missing: 2,
+      setup: [
+        { key: 'members', title: 'الأعضاء', ok: true, detail: '27 في الدفعة (من سُجّل فيها ومن انضم بجهتها)', where: null },
+        { key: 'advisor', title: 'المستشار الأساسي', ok: false, detail: 'غير معيَّن: لا خبير يرى ملفات المشاركين ولا إجاباتهم', where: 'team' },
+        { key: 'schedule', title: 'جدول المراحل', ok: false, detail: 'فارغ: يرى المشارك «بلا موعد بعد» عند كل مرحلة', where: 'schedule' },
+      ],
+      journey_map: {
+        program: { name: 'برنامج القادة' }, cohort: { name: 'دفعة سفراء', starts_on: '2026-11-10' }, totals: { total: 27, finished: 0, late: 0, not_started: 0 }, bottleneck: { stage: 'assessment' },
+        stages: [st('profile', 'admission', 'الملف الشخصي', 4, 23), st('assessment', 'admission', 'تحديد المستوى', 15, 8), st('approval', 'admission', 'اعتماد المستوى', 8, 0), st('training', 'qualification', 'التدريب', 0, 0)],
+        milestones: [],
+      },
+    },
+  });
+  const card = page.locator('.oj');
+  await expect(card).toContainText('بقي بندان لتكتمل جاهزية الدفعة.');
+  await expect(card.locator('.oj-setup li.todo')).toHaveCount(2);
+  await expect(card).toContainText('يُضبط من: البرامج والدفعات ← الدفعة ← «الفريق والمجموعات»');
+  // الخريطة المشتركة بهويتها داخل اللوحة: العنوان والأعداد وأكبر تجمع
+  const map = card.locator('.jm');
+  await expect(map.getByRole('heading', { name: 'دفعة سفراء' })).toBeVisible();
+  await expect(map).toContainText('أكبر تجمع الآن 15 شخصًا عند «تحديد المستوى»');
+  expect(await map.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+});
