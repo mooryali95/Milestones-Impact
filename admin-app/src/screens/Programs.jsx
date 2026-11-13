@@ -5,7 +5,7 @@
 // الدفعة: الجهة والبرنامج ونسخته والتواريخ وطريقة تنفيذ كل نشاط.
 // المشارك يتبع دفعة جهته الجارية تلقائيًا، ومن ليس له جهة يتبع الدفعة المفتوحة.
 import React, { useCallback, useEffect, useState } from 'react';
-import { L, LVL } from '../leaders.js';
+import { date, dateOnly, L, LVL } from '../leaders.js';
 import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
 import Form from '../Form.jsx';
 import { CertOverride } from '../cert.jsx';
@@ -15,7 +15,6 @@ import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 
-const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 function DiffList({ diff }) {
   const rows = [['أُضيف', diff.added], ['حُذف', diff.removed], ['تغيّر', diff.changed]].filter(([, l]) => l.length);
@@ -176,7 +175,7 @@ export default function Programs({ canWrite, onEditJourney }) {
                   <td>{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'}</td>
                   <td>{progName(c.program_id)}</td>
                   <td>{v ? `النسخة ${v.number}` : 'آخر تعديل'}{v && latest && latest.id !== v.id && canWrite && <> <button className="la-link" onClick={() => upgrade(c)}>رقِّ إلى {latest.number}</button></>}</td>
-                  <td>{[date(c.starts_on), date(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
+                  <td>{[dateOnly(c.starts_on), dateOnly(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
                   <td>{COHORT_STATUS[c.status]}</td>
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{canWrite && <><button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>

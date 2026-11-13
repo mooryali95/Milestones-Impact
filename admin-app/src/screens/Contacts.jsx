@@ -4,7 +4,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Ico from '../../../shared/ui/Ico.jsx';
 import { call, fmtDate } from '../api.js';
-import { countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
+import { timeOnly } from '../dates.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { CONTACT_FIELDS, countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { announceContacts } from '../pending.js';
 
@@ -67,7 +69,7 @@ export default function Contacts() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState('');
   const [updated, setUpdated] = useState(null);
-  const [f, setF] = useState({ q: '', status: '', source: '' });
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'source', 'sort'], {}, { scope: 'contacts' });
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState(null);
 
@@ -89,7 +91,7 @@ export default function Contacts() {
   const cur = Math.min(page, pages);
   const shown = list.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE);
   const n = countBy(all);
-  const setFilter = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setPage(1); };
+  useEffect(() => { setPage(1); }, [f]);   // أي تغيير في الفلترة أو الفرز يعيد إلى الصفحة الأولى
 
   // تغيير الحالة: تحديث متفائل ثم تراجع إن فشل الخادم
   const setStatus = async (id, status, silent = false) => {
@@ -114,7 +116,7 @@ export default function Contacts() {
           <h1 className="page-title">طلبات التواصل</h1>
           <div className="page-title-ar">جميع الطلبات الواردة من المنظومة</div>
         </div>
-        <div className="last-updated">{updated ? `آخر تحديث: ${updated.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}` : '—'}</div>
+        <div className="last-updated">{updated ? `آخر تحديث: ${timeOnly(updated)}` : '—'}</div>
       </div>
 
       <div className="stats-grid">
@@ -124,24 +126,13 @@ export default function Contacts() {
         ))}
       </div>
 
-      <div className="toolbar">
-        <div className="search-wrap">
-          <input className="search-input" type="search" aria-label="بحث" placeholder="بحث بالاسم أو البريد أو الجهة..." value={f.q} onChange={setFilter('q')} />
-        </div>
-        <select className="filter-select" aria-label="الحالة" value={f.status} onChange={setFilter('status')}>
-          <option value="">كل الحالات</option>
-          {Object.entries(STATUS_AR).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <select className="filter-select" aria-label="المصدر" value={f.source} onChange={setFilter('source')}>
-          <option value="">كل المصادر</option>
-          {Object.entries(SOURCE_AR).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
-        <button className="refresh-btn" onClick={load}>↻ تحديث</button>
-      </div>
+      <FilterBar scope="contacts" state={f} set={setF} clear={clearF} replace={replaceF} fields={CONTACT_FIELDS}
+        shown={list.length} total={all.length} noun="طلب" placeholder="بحث بالاسم أو البريد أو الجهة..."
+        actions={<button className="refresh-btn" type="button" onClick={load}>↻ تحديث</button>} />
 
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr><th>الاسم</th><th>الجهة</th><th>البريد</th><th>نوع الطلب</th><th>المصدر</th><th>التاريخ</th><th>الحالة</th></tr></thead>
+          <thead><tr><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><th>البريد</th><th>نوع الطلب</th><th>المصدر</th><SortTh k="date" state={f} set={setF}>التاريخ</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
           <tbody>
             {!rows ? <tr className="loading-row"><td colSpan={7}><Spinner /></td></tr>
               : error ? (

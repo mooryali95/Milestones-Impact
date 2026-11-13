@@ -6,8 +6,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
-import FilterBar, { useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts } from '../filters.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { RequestsBoard } from './ExpertMatch.jsx';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
@@ -212,10 +212,13 @@ function Profile({ id, canWrite, onBack }) {
   );
 }
 
+// أعمدة الفرز: القيمة التي يُرتَّب بها كل عمود
+const SORTS = { name: (e) => e.full_name, hours: (e) => e.weekly_hours, given: (e) => e.stats?.hours || null, status: (e) => EXPERT_STATUS[e.status] };
+
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee']);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee', 'sort'], {}, { scope: 'experts' });
   const load = useCallback(async () => setD(await L('admin.experts')), []);
   useEffect(() => { if (!expertId) load(); }, [load, expertId]);
   const all = d?.experts || [];
@@ -226,7 +229,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
     { key: 'source', label: 'المصادر', get: (e) => e.source, options: [['application', 'طلب انضمام'], ['admin', 'أضافته الإدارة']] },
     { key: 'committee', label: 'اللجان', get: (e) => e.committees || [], options: Object.entries(COMMITTEE_AR) },
   ], []);
-  const rows = useMemo(() => applyFilters(all, { fields, presets: PRESETS, text: (e) => [e.full_name, e.email, e.title, ...(e.sectors || [])].join(' ') }, f), [all, f, fields]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields, presets: PRESETS, text: (e) => [e.full_name, e.email, e.title, ...(e.sectors || [])].join(' ') }, f), SORTS, f.sort), [all, f, fields]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
 
   if (expertId) return <Profile id={expertId} canWrite={canWrite} onBack={() => onOpen(null)} />;
@@ -257,10 +260,11 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
         <p className="la-muted">ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير»، ولا يُسند إليه شيء قبل اعتماده.</p>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
-            shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع" />
+            shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
+            capped={d.capped ? { limit: d.limit } : null} />
           {!all.length ? <p className="la-muted ce-empty">لا خبراء بعد. أضف أول خبير، أو شارك رابط «انضم كخبير».</p> : (
             <div className="table-wrap"><table className="data-table la-cards ex-table">
-              <thead><tr><th>الخبير</th><th>الأدوار</th><th>الأبعاد</th><th>الطاقة</th><th>ما قدّمه</th><th>الحالة</th></tr></thead>
+              <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>

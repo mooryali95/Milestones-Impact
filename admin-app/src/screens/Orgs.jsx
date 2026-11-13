@@ -6,8 +6,8 @@ import OrgFinance from './OrgFinance.jsx';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
-import FilterBar, { useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts } from '../filters.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
@@ -74,18 +74,21 @@ function AccessLine({ o, canWrite, onEdit, toast }) {
   );
 }
 
+// الجهات بطاقات لا جدول، فالترتيب من قائمة في الشريط
+const ORG_SORTS = { name: (o) => o.name, total: (o) => o.stats?.total || 0, pending: (o) => o.stats?.pending_approval || 0, active: (o) => o.stats?.active_week || 0 };
+
 function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const { toast, confirm } = useUI();
   const copy = useCopy();
   const list = data.orgs || [];
   const un = data.unassigned || {};
   const [typedTo, setTypedTo] = useState({});
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'sector', 'state']);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'sector', 'state', 'sort'], {}, { scope: 'orgs' });
   const fields = useMemo(() => [
     { key: 'sector', label: 'القطاعات', get: (o) => o.sector || '', options: [...new Set(list.map((o) => o.sector).filter(Boolean))].sort().map((x) => [x, x]) },
     { key: 'state', label: 'الحالات', get: (o) => (o.status === 'inactive' ? 'inactive' : 'active'), options: [['active', 'نشطة'], ['inactive', 'موقوفة']] },
   ], [list]);
-  const shown = useMemo(() => applyFilters(list, { fields, presets: ORG_PRESETS, text: (o) => [o.name, o.short_name, o.sector, o.contact_name, o.contact_email, ...domainsOf(o)].join(' ') }, f), [list, f, fields]);
+  const shown = useMemo(() => sortRows(applyFilters(list, { fields, presets: ORG_PRESETS, text: (o) => [o.name, o.short_name, o.sector, o.contact_name, o.contact_email, ...domainsOf(o)].join(' ') }, f), ORG_SORTS, f.sort), [list, f, fields]);
   const counts = useMemo(() => presetCounts(list, ORG_PRESETS), [list]);
   const total = list.reduce((a, o) => a + o.stats.total, 0) + (un.total || 0);
   const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
@@ -114,7 +117,8 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
         {canWrite && <button className="btn-sm primary" onClick={onAdd}>+ جهة جديدة</button>}
       </div>
       <FilterBar scope="orgs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={ORG_PRESETS} counts={counts}
-        shown={shown.length} total={list.length} noun="جهة" placeholder="ابحث باسم الجهة أو القطاع أو النطاق أو جهة التواصل" />
+        shown={shown.length} total={list.length} noun="جهة" placeholder="ابحث باسم الجهة أو القطاع أو النطاق أو جهة التواصل"
+        sorts={[['', 'الترتيب: الأحدث'], ['name', 'بالاسم'], ['-total', 'الأكثر مشاركين'], ['-pending', 'الأكثر انتظارًا لاعتمادك'], ['-active', 'الأنشط هذا الأسبوع']]} />
       {!shown.length && (list.length
         ? <Empty compact title="لا جهات لهذه الفلاتر" hint="جرّب مسحها أو تغيير البحث." />
         : <Empty title="لا جهات بعد" hint="الجهة ترعى مشاركيها: لها رابط دعوة ومقاعد ومنسق يتابعهم.">{canWrite && <button className="btn-sm primary" type="button" onClick={onAdd}>+ جهة جديدة</button>}</Empty>)}
@@ -185,11 +189,14 @@ function Sources({ d, total }) {
   );
 }
 
+const MEMBER_SORTS = { name: (p) => p.full_name, title: (p) => p.job_title, track: (p) => p.track, status: (p) => STATUS[p.status] || p.status, seen: (p) => p.last_login_at, joined: (p) => p.created_at };
+
 function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const { toast, confirm } = useUI();
   const copy = useCopy();
   const [d, setD] = useState(null);
-  const [f, setF] = useState({ q: '', status: '', track: '' });
+  // قائمة داخل صفحة الجهة ولها عنوانها، فلا يكتب شريطها في العنوان
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'track', 'sort'], {}, { scope: 'org-members', url: false });
   const [campaign, setCampaign] = useState('');
   const [picked, setPicked] = useState(() => new Set());
   const [moveTo, setMoveTo] = useState('');
@@ -198,8 +205,11 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   useEffect(() => { load(); }, [load]);
 
   const all = d?.participants || [];
-  const rows = useMemo(() => all.filter((p) => (!f.status || p.status === f.status) && (!f.track || p.track === f.track)
-    && (!f.q || `${p.full_name} ${p.email} ${p.job_title || ''}`.toLowerCase().includes(f.q.toLowerCase()))), [all, f]);
+  const memberFields = useMemo(() => [
+    { key: 'status', label: 'الحالات', aria: 'الحالة', get: (p) => p.status, options: Object.entries(STATUS) },
+    { key: 'track', label: 'المسارات', aria: 'المسار', get: (p) => p.track, options: [...new Set(all.map((p) => p.track).filter(Boolean))].sort().map((k) => [k, k]) },
+  ], [all]);
+  const rows = useMemo(() => sortRows(applyFilters(all, { fields: memberFields, text: (p) => [p.full_name, p.email, p.job_title].join(' ') }, f), MEMBER_SORTS, f.sort), [all, f, memberFields]);
 
   if (!d) return <div className="la-load"><Spinner /></div>;
   if (!d.success) return <><button className="la-link" onClick={onBack}>→ كل الجهات</button><div className="la-err">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></>;
@@ -284,22 +294,14 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       <section className="la-card">
         <h3>توزيع المشاركين على المسارات</h3>
         {tracks.length ? <div className="la-pills">{tracks.map(([k, n]) => (
-          <button key={k} className={`la-pill${f.track === k ? ' on' : ''}`} aria-pressed={f.track === k} title={titleOf(k)} onClick={() => setF({ ...f, track: f.track === k ? '' : k })}>
+          <button key={k} className={`la-pill${f.track === k ? ' on' : ''}`} aria-pressed={f.track === k} title={titleOf(k)} onClick={() => setF({ track: f.track === k ? '' : k })}>
             <code>{k}</code> {titleOf(k)} <b>{n}</b></button>
         ))}</div> : <p className="la-muted">لم يُسكَّن أحد من هذه الجهة بعد.</p>}
       </section>
 
       <section className="la-card">
-        <div className="toolbar">
-          <div className="search-wrap"><input className="search-input" aria-label="بحث" placeholder="بحث بالاسم أو البريد أو المسمى…" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></div>
-          <select className="filter-select" aria-label="الحالة" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
-            <option value="">كل الحالات</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-          <select className="filter-select" aria-label="المسار" value={f.track} onChange={(e) => setF({ ...f, track: e.target.value })}>
-            <option value="">كل المسارات</option>{tracks.map(([k]) => <option key={k} value={k}>{k}</option>)}
-          </select>
-          <span className="la-muted">{rows.length} من {all.length}</span>
-        </div>
+        <FilterBar scope="org-members" state={f} set={setF} clear={clearF} replace={replaceF} fields={memberFields}
+          shown={rows.length} total={all.length} noun="مشارك" placeholder="بحث بالاسم أو البريد أو المسمى…" />
         {canWrite && picked.size > 0 && (
           <div className="la-bulk"><span><b>{picked.size}</b> محدد</span>
             <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
@@ -308,7 +310,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         <div className="table-wrap"><table className="data-table">
           <thead><tr>
             {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={() => setPicked((s) => { const n = new Set(s); rows.forEach((p) => (allOn ? n.delete(p.id) : n.add(p.id))); return n; })} /></th>}
-            <th>الاسم</th><th>المسمى</th><th>المسار</th><th>الحالة</th><th>آخر دخول</th><th>التسجيل</th>
+            <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="title" state={f} set={setF}>المسمى</SortTh><SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="seen" state={f} set={setF}>آخر دخول</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
           </tr></thead>
           <tbody>{rows.length ? rows.map((p) => (
             <tr key={p.id}>

@@ -6,11 +6,11 @@ import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
 import {
-  date, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, dayMonth, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Spinner, useUI, Empty } from '../ui.jsx';
-import FilterBar, { useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts } from '../filters.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
@@ -27,7 +27,7 @@ import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
-import { ONBOARDING_AR, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
+import { ONBOARDING_AR, ONBOARDING_STEPS, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
 
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 
@@ -46,7 +46,7 @@ const PRESETS = [
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
 ];
-const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'track', 'joined', 'seen'];
+const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'track', 'joined', 'seen', 'sort'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
   return (
@@ -78,7 +78,7 @@ export function Where({ o }) {
 
 function List({ orgs, canWrite, onOpen, initialStatus }) {
   const { toast, confirm } = useUI();
-  const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {});
+  const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {}, { scope: 'participants' });
   const [list, setList] = useState(null);
   const [error, setError] = useState('');
   const [picked, setPicked] = useState(() => new Set());
@@ -87,11 +87,14 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const [importing, setImporting] = useState(false);
 
   // القائمة كاملة مرة واحدة (حتى 500)، والفلترة كلها في المتصفح فتستجيب فورًا
-  const load = useCallback(async () => {
+  // capped: القائمة بلغت حد الخادم، فما بعده لا يُرى إلا ببحث على الخادم (search)
+  const [cap, setCap] = useState(null);
+  const [serverQ, setServerQ] = useState('');
+  const load = useCallback(async (search = '') => {
     setList(null); setError('');
-    const r = await L('admin.participants', {});
+    const r = await L('admin.participants', search ? { search } : {});
     if (!r.success) { setList([]); return setError(r.message); }
-    setList(r.participants || []);
+    setList(r.participants || []); setCap(r.capped ? r.limit : null); setServerQ(search);
   }, []);
   useEffect(() => { load(); }, [load]);
   // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
@@ -113,7 +116,11 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
   ], [orgs, tracks]);
   const spec = { fields, presets: PRESETS, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
-  const shown = useMemo(() => applyFilters(all, spec, f), [all, f, fields]);
+  const SORTS = useMemo(() => ({
+    name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => trackOfPlacements(p.placements),
+    status: (p) => STATUS[p.status] || p.status, step: (p) => ONBOARDING_STEPS.indexOf(p.onboarding?.step), joined: (p) => p.created_at,
+  }), [orgs]); // eslint-disable-line
+  const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -164,17 +171,19 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     <>
       <FilterBar scope="participants" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
         shown={shown.length} total={all.length} noun="مشارك" placeholder="ابحث بالاسم أو البريد أو الجوال أو الجهة"
+        capped={cap ? { limit: cap, onSearch: (q) => load(q) } : null}
         actions={<>
           <button className="refresh-btn" type="button" onClick={exportCsv} disabled={!shown.length}>تصدير Excel{shown.length !== all.length ? ` (${shown.length})` : ''}</button>
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
+      {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
       {erasures.length > 0 && (
         <div className="la-bulk" role="status">
           <span><b>{erasures.length}</b> طلب حذف بيانات قائم، ومهلة كل طلب 30 يومًا:</span>
           {erasures.map((e) => (
             <button key={e.id} className="btn-sm ghost" type="button" onClick={() => onOpen(e.participant_id)}>
-              {e.name || e.email} · قبل {new Date(e.due_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' })}
+              {e.name || e.email} · قبل {dayMonth(e.due_at)}
             </button>
           ))}
         </div>
@@ -192,7 +201,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
       <div className="table-wrap"><table className="data-table la-cards">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <th>الاسم</th><th>الجهة</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المسار</th><th>الحالة</th><th>أين توقف</th><th>التسجيل</th>
+          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
         </tr></thead>
         <tbody>
           {!list ? <tr className="loading-row"><td colSpan={10}><Spinner /></td></tr>

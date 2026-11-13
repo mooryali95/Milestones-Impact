@@ -78,7 +78,7 @@ export async function adminList() {
   const by: Record<string, any[]> = {};
   for (const x of sessions || []) (by[x.expert_id] ||= []).push(x);
   // تغطية لجنتي المحتوى والقياس من السجل نفسه (committees.js): من فيهما، وما ينقص كل لجنة
-  return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })), committees: committeeCoverage(rows) };
+  return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })), committees: committeeCoverage(rows), ...(rows.length >= 500 ? { capped: true, limit: 500 } : {}) };
 }
 
 export async function adminGet(_a: Admin, b: Body) {
@@ -318,7 +318,7 @@ export async function adminRequests(b: Body = {}) {
   let q = db.from('expert_requests').select('*, participants(full_name, email), experts(full_name)');
   if (b.participant_id) q = q.eq('participant_id', String(b.participant_id));
   const { data } = await q.order('created_at', { ascending: false }).limit(300);
-  return { success: true, requests: data || [] };
+  return { success: true, requests: data || [], ...((data || []).length >= 300 ? { capped: true, limit: 300 } : {}) };
 }
 
 export async function adminCancelRequest(a: Admin, b: Body) {

@@ -53,7 +53,45 @@ export function activeChips(state, fields) {
   });
 }
 
-export const isFiltered = (state) => Object.entries(state).some(([, v]) => v !== '' && v != null);
+// الفرز ليس فلترة: لا يُظهر «مسح الكل» ولا يغيّر العدّ
+export const isFiltered = (state) => Object.entries(state).some(([k, v]) => k !== 'sort' && v !== '' && v != null);
+
+// ── الفرز بالأعمدة: sort = 'name' تصاعدي، و'-name' تنازلي، وفارغ = ترتيب الخادم ──
+// النقرة الأولى تصاعدي، والثانية تنازلي، والثالثة تعيد ترتيب الخادم
+export const nextSort = (sort, key) => (sort === key ? `-${key}` : sort === `-${key}` ? '' : key);
+const blank = (v) => v == null || v === '';
+// cols: { مفتاح: (عنصر) => قيمة }. الأرقام تُقارن أرقامًا، والنصوص بترتيب العربية، والفارغ آخرًا في الاتجاهين
+export function sortRows(list, cols, sort) {
+  if (!sort) return list;
+  const desc = sort[0] === '-';
+  const get = cols[desc ? sort.slice(1) : sort];
+  if (!get) return list;
+  const coll = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
+  return list.map((x, i) => [x, i, get(x)]).sort((a, b) => {
+    if (blank(a[2]) || blank(b[2])) return blank(a[2]) && blank(b[2]) ? a[1] - b[1] : blank(a[2]) ? 1 : -1;
+    const c = typeof a[2] === 'number' && typeof b[2] === 'number' ? a[2] - b[2] : coll.compare(String(a[2]), String(b[2]));
+    return (desc ? -c : c) || a[1] - b[1];
+  }).map((r) => r[0]);
+}
+
+// ── بقاء الفلاتر عند العودة للشاشة (في هذه الجلسة من المتصفح) ──
+const keptKey = (scope) => `mi_admin_flt_${scope}`;
+export function recallState(scope) {
+  try { return JSON.parse(sessionStorage.getItem(keptKey(scope))); } catch { return null; }
+}
+export function rememberState(scope, state) {
+  try { sessionStorage.setItem(keptKey(scope), JSON.stringify(state)); } catch { /* التخزين محجوب: تبقى للشاشة المفتوحة فقط */ }
+}
+// ما تبدأ به الشاشة، بالأولوية: العنوان (رابط مشارَك)، ثم ما جاء به التنقل (initial)، ثم ما تُرك آخر مرة، ثم الافتراضي
+export function startState(keys, { fromUrl = '', initial = {}, kept = null, defaults = {} } = {}) {
+  const empty = decodeState('', keys);
+  const any = (o) => Object.values(o || {}).some((v) => v !== '' && v != null);
+  const url = decodeState(fromUrl, keys);
+  if (any(url)) return url;
+  if (any(initial)) return { ...empty, ...initial };
+  if (kept) return { ...empty, ...Object.fromEntries(keys.filter((k) => kept[k] != null).map((k) => [k, String(kept[k])])) };
+  return { ...empty, ...defaults };
+}
 
 // ── الحفظ في عنوان الصفحة: #/leaders/participants?status=placed&view=idle ──
 export function encodeState(state) {

@@ -5,10 +5,11 @@
 // الواحد (src/lib/procs.js) وتحليل الحجوزات من src/lib/analysis.js، فلا نسخة ثانية لأي منطق.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
+import { date } from '../dates.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
-import FilterBar, { useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts } from '../filters.js';
+import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { buildProcs, PROC_COUNT } from '../../../src/lib/procs.js';
 import { analyzeBookings } from '../../../src/lib/analysis.js';
 import { publicRead } from '../../../src/lib/api.js';
@@ -17,7 +18,7 @@ import { DEMO_KEY } from '../../../src/hooks/useDemographics.js';
 
 const TABS = [['overview', 'نظرة عامة'], ['regs', 'التسجيلات'], ['reports', 'التقارير'], ['content', 'المحتوى'], ['stats', 'الإحصاءات']];
 const DAY = 864e5;
-const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '·');
+const fmt = (d) => date(d) || '·';
 const booked = (r) => Object.keys(r.dates || {}).length;
 const confirmedOf = (r) => Object.values(r.confirmed || {}).filter(Boolean).length;
 const people = (r) => (r[DEMO_KEY] || []).filter((x) => x.name?.trim());
@@ -76,10 +77,12 @@ function Overview({ regs, procs, onOpen, onTab }) {
   );
 }
 
+const REG_SORTS = { name: (r) => r.name, booked: (r) => booked(r), confirmed: (r) => confirmedOf(r), network: (r) => people(r).length, joined: (r) => r.registeredAt, status: (r) => STATUS_AR[statusOf(r)][0] };
+
 function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'joined']);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'joined', 'sort'], {}, { scope: 'matrix' });
   const fields = useMemo(() => [{ key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (r) => r.registeredAt }], []);
-  const rows = useMemo(() => applyFilters(regs, { fields, presets: PRESETS, text: (r) => [r.name, r.email, r.phone, r.org].join(' ') }, f), [regs, f, fields]);
+  const rows = useMemo(() => sortRows(applyFilters(regs, { fields, presets: PRESETS, text: (r) => [r.name, r.email, r.phone, r.org].join(' ') }, f), REG_SORTS, f.sort), [regs, f, fields]);
   const counts = useMemo(() => presetCounts(regs, PRESETS), [regs]);
   const reg = regs.find((r) => String(r.id) === String(id));
   if (reg) return <RegDetail r={reg} procs={procs} canWrite={canWrite} onBack={() => onOpen(null)} reload={reload} />;
@@ -94,7 +97,7 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
             rows.map((r) => [r.name, r.email, r.phone, booked(r), confirmedOf(r), people(r).length, STATUS_AR[statusOf(r)][0], fmt(r.registeredAt), r.submittedAt ? fmt(r.submittedAt) : '']));
         }}>تصدير Excel{rows.length !== regs.length ? ` (${rows.length})` : ''}</button>} />
       <div className="table-wrap"><table className="data-table la-cards mx-table">
-        <thead><tr><th>المسجّل</th><th>الإنجاز</th><th>التأكيد</th><th>الشبكة</th><th>التسجيل</th><th>الحالة</th></tr></thead>
+        <thead><tr><SortTh k="name" state={f} set={setF}>المسجّل</SortTh><SortTh k="booked" state={f} set={setF}>الإنجاز</SortTh><SortTh k="confirmed" state={f} set={setF}>التأكيد</SortTh><SortTh k="network" state={f} set={setF}>الشبكة</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
         <tbody>{rows.length ? rows.map((r) => {
           const [l, t] = STATUS_AR[statusOf(r)];
           const pct = Math.round((booked(r) / PROC_COUNT) * 100);

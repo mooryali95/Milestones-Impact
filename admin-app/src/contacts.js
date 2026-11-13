@@ -1,4 +1,5 @@
 // منطق طلبات التواصل بلا واجهة، ليُختبر وحده
+import { applyFilters, sortRows } from './filters.js';
 export const STATUS_AR = { new: 'جديد', read: 'مقروء', replied: 'تم الرد', archived: 'مؤرشف' };
 export const INTEREST_AR = {
   leaders: 'برنامج القادة', matrix: 'مصفوفة التأثير', partnership: 'شراكة استراتيجية', general: 'استشارة عامة',
@@ -10,11 +11,14 @@ export const SOURCE_AR = { 'MI-HOME': 'الرئيسية', 'MI-LEADERS': 'الق�
 export const sourceTone = (product) => (product === 'MI-LEADERS' ? 'leaders' : 'home');
 export const PAGE_SIZE = 20;
 
-export function filterContacts(rows, { q = '', status = '', source = '' }) {
-  const s = q.trim().toLowerCase();
-  return rows.filter((r) => (!s || [r.name, r.email, r.organization, r.phone].some((v) => v && String(v).toLowerCase().includes(s)))
-    && (!status || r.status === status) && (!source || r.product === source));
-}
+// حقول الفلترة وأعمدة الفرز لشريط الفلترة الموحد (FilterBar): تعريف واحد للشاشة وللاختبار
+export const CONTACT_FIELDS = [
+  { key: 'status', label: 'الحالات', aria: 'الحالة', get: (r) => r.status, options: Object.entries(STATUS_AR) },
+  { key: 'source', label: 'المصادر', aria: 'المصدر', get: (r) => r.product, options: Object.entries(SOURCE_AR) },
+];
+export const contactText = (r) => [r.name, r.email, r.organization, r.phone].filter(Boolean).join(' ');
+export const CONTACT_SORTS = { name: (r) => r.name, org: (r) => r.organization, date: (r) => r.created_at, status: (r) => STATUS_AR[r.status] || r.status };
+export const filterContacts = (rows, state) => sortRows(applyFilters(rows, { fields: CONTACT_FIELDS, text: contactText }, { q: '', status: '', source: '', ...state }), CONTACT_SORTS, state.sort);
 
 export const countBy = (rows) => rows.reduce((m, r) => ({ ...m, [r.status]: (m[r.status] || 0) + 1 }), {});
 

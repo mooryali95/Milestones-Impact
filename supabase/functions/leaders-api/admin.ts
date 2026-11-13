@@ -260,10 +260,13 @@ async function overviewMore(ids: string[] | null) {
 }
 
 // ── المشاركون ──
+// حد القوائم واحد، والرد يقول صراحةً إن بُلغ (capped) فتنبّه اللوحة أن ما بعده لا يُرى إلا ببحث على الخادم
+export const LIST_LIMIT = 500;
+export const capInfo = (rows: any[], limit = LIST_LIMIT) => (rows.length >= limit ? { capped: true, limit } : {});
 export async function participants(b: Body) {
   let q = db.from('participants')
     .select('id, full_name, email, phone, job_title, organization_id, organization_name, years_experience, status, created_at, last_login_at, is_test, placements(dimension, level, approved_at)')
-    .order('created_at', { ascending: false }).limit(500);
+    .order('created_at', { ascending: false }).limit(LIST_LIMIT);
   q = listFilter(q, b.org);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.search) {
@@ -276,7 +279,7 @@ export async function participants(b: Body) {
   return { success: true, participants: rows.map((r) => {
     const g = progress[r.id] || null;
     return { ...r, onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
-  }) };
+  }), ...capInfo(rows) };
 }
 
 // تذكير يدوي لمن لم يكمل التسجيل: بريد يسمّي ما بقي على كل شخص (ملفه، أو القياس وكم أجاب منه).
@@ -980,10 +983,11 @@ export async function bookPreview(b: Body) {
 export async function submissions(b: Body) {
   let q = db.from('model_submissions')
     .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants!inner(full_name, email, organization_name, is_demo), learning_models(title_ar, dimension, points)')
-    .neq('status', 'draft').eq('participants.is_demo', false).order('submitted_at', { ascending: false }).limit(500);
+    .neq('status', 'draft').eq('participants.is_demo', false).order('submitted_at', { ascending: false }).limit(LIST_LIMIT);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.model_id) q = q.eq('model_id', String(b.model_id));
-  return { success: true, submissions: must(await q) ?? [] };
+  const rows = (must(await q) ?? []) as any[];
+  return { success: true, submissions: rows, ...capInfo(rows) };
 }
 
 export async function submission(b: Body) {

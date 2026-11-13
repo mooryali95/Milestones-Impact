@@ -5,7 +5,7 @@
 // • CohortSchedule: تواريخ كل مرحلة في دفعة، يدويًا أو بتوزيع آلي على مدتها
 // • ParticipantMilestones: موقع مشارك من المعالم، مع اعتماد الإنجاز والتمديد له وحده
 import React, { useCallback, useEffect, useState } from 'react';
-import { L } from '../leaders.js';
+import { date, dateOnly as day, L } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -14,7 +14,6 @@ import {
 } from '../../../supabase/functions/leaders-api/logic.js';
 
 const STATUS_CHIP = { done: 'ok', late: 'bad', due_soon: 'warn', on_time: '', unscheduled: '' };
-const day = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('ar', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 
 const fields = (stages) => [
   { name: 'title_ar', label: 'اسم المعلم (مثل: نهاية التدريب، تسليم هيكل المشروع)' },
@@ -229,7 +228,7 @@ export function ContinuousCard({ c }) {
       {c.events.length > 0 && (
         <details><summary>آخر التقييمات ({c.count})</summary>
           <ul className="la-reqs">{c.events.map((e, i) => (
-            <li key={i}><span>{e.label} <small className="la-muted">{e.at ? new Date(e.at).toLocaleDateString('ar') : ''}</small>{e.comment && <><br /><small className="la-muted">«{e.comment}»</small></>}</span><b>{e.pct}٪</b></li>
+            <li key={i}><span>{e.label} <small className="la-muted">{date(e.at)}</small>{e.comment && <><br /><small className="la-muted">«{e.comment}»</small></>}</span><b>{e.pct}٪</b></li>
           ))}</ul></details>
       )}
     </section>
