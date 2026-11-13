@@ -5,7 +5,7 @@
 // الجديدة، ومعاينتها، وإلغاء شهادة، أو إعادة إصدارها لتصحيح الاسم.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CertPreview, openCertificate, SignatoryChoice } from '../cert.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -169,11 +169,11 @@ export default function Certificates({ canWrite, onPerson, orgs = [] }) {
       <SettingsCard canWrite={canWrite} onPerson={onPerson} />
       <section className="la-card">
         <h3>سجل الشهادات</h3>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <p className="la-muted ce-empty">لا شهادات بعد. تصدر تلقائيًا باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه، وتظهر هنا مع رابط تحقق لكل منها.</p> : <>
+        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : !all.length ? <Empty title="لا شهادات بعد" hint="تصدر تلقائيًا باعتماد التقييم الختامي بنجاح وتأكيد المشارك اسمه، وتظهر هنا مع رابط تحقق لكل منها." /> : <>
         <FilterBar scope="certs" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={presets} counts={counts}
           shown={rows.length} total={all.length} noun="شهادة" placeholder="ابحث بالاسم أو الرقم أو الجهة"
           actions={<ExportButton scope="certs" meta={{ kind: 'CRT', title: 'سجل الشهادات', sheet: 'الشهادات', file: 'Certificates' }} columns={CERT_COLS} all={all} filtered={rows} noun="شهادة" />} />
-        {!rows.length ? <p className="la-muted">لا نتائج لهذه الفلاتر.</p> : (
+        {!rows.length ? <NoMatch what="شهادات" /> : (
           <div className="table-wrap"><table className="data-table">
             <thead><tr><SortTh k="serial" state={f} set={setF}>الرقم</SortTh><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="issued" state={f} set={setF}>الإصدار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>
             <tbody>{rows.map((c) => {

@@ -104,7 +104,7 @@ test('admin-core-7: إعادة الإرسال تعرض رد الخادم الم�
 
 test('admin-core-7: حالة التطبيق المفعّل في الإعدادات', async ({ page }) => {
   await setup(page, '', { user: { totp_enabled: true } });
-  await page.getByRole('button', { name: 'الإعدادات' }).click();
+  await page.getByRole('button', { name: 'الإعدادات', exact: true }).click();
   await expect(page.getByText('يقبل رمز التطبيق وحده عند الدخول، ولا يُرسل لك رمز بريد')).toBeVisible();
   await expect(page.getByText(/رمز التطبيق \+ رمز البريد/)).toHaveCount(0);
 });
@@ -167,7 +167,7 @@ test('admin-core-10: الدور المرفوض لا يبقى ظاهرًا، وا
       'update-user': { success: false, message: 'منح دور المدير العام يتطلب مفتاح مرور' },
     },
   });
-  await page.getByRole('button', { name: 'الإعدادات' }).click();
+  await page.getByRole('button', { name: 'الإعدادات', exact: true }).click();
   const role = page.getByLabel('دور مدير');
   await role.selectOption('super_admin');
   const dlg = page.getByRole('alertdialog');

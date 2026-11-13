@@ -2,13 +2,12 @@
 // طلبات التواصل: إحصاءات، بحث وفلاتر، جدول بصفحات، ودرج التفاصيل
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Ico from '../../../shared/ui/Ico.jsx';
 import { call, fmtDate } from '../api.js';
 import { timeOnly } from '../dates.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { CONTACT_FIELDS, countBy, filterContacts, INTEREST_AR, mailto, PAGE_SIZE, pageList, SOURCE_AR, sourceTone, STATUS_AR } from '../contacts.js';
-import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useEscape, useUI } from '../ui.jsx';
 import { announceContacts } from '../pending.js';
 
 function Copy({ text }) {
@@ -122,7 +121,7 @@ export default function Contacts() {
     <div className="dash-body">
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-eyebrow">Contact Requests</div>
+          <div className="page-eyebrow">الوارد من الموقع</div>
           <h1 className="page-title">طلبات التواصل</h1>
           <div className="page-title-ar">جميع الطلبات الواردة من المنظومة</div>
         </div>
@@ -153,8 +152,7 @@ export default function Contacts() {
                   خطأ في تحميل البيانات: {error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button>
                 </td></tr>
               ) : !list.length ? (
-                <tr><td colSpan={7}><div className="empty-state"><div className="empty-state-icon"><Ico name="inbox" size="34" /></div>
-                  <p>{all.length ? 'لا توجد طلبات مطابقة' : 'لا توجد طلبات بعد'}</p></div></td></tr>
+                <tr><td colSpan={7}>{all.length ? <NoMatch what="طلبات" /> : <Empty compact title="لا طلبات تواصل بعد" hint="يظهر هنا كل طلب يصل من الموقع أو صفحة القادة أو مقياس الجاهزية." />}</td></tr>
               ) : shown.map((r) => (
                 <tr key={r.id} tabIndex={0} onClick={() => open(r)} onKeyDown={(e) => { if (e.key === 'Enter') open(r); }} style={{ cursor: 'pointer' }}>
                   <td><strong>{r.name}</strong></td>

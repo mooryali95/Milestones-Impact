@@ -185,6 +185,9 @@ export const Spinner = () => <div className="spinner" aria-label="جارٍ ال�
 
 // حالة فارغة واحدة لكل الشاشات: ماذا يظهر هنا، ولماذا هو فارغ، وما الخطوة التالية.
 // كانت كل شاشة تكتب سطرها («لا نتائج») أو تترك جدولًا برؤوسه وحدها أو مساحة بيضاء.
+// القائمة فيها بيانات والفلاتر لم تُبقِ منها شيئًا: رسالة واحدة في كل اللوحة
+export const NoMatch = ({ what = 'نتائج' }) => <Empty compact title={`لا ${what} لهذه الفلاتر`} hint="جرّب مسحها أو تغيير البحث." />;
+
 export function Empty({ title, hint, children, compact = false }) {
   return (
     <div className={`la-blank${compact ? ' compact' : ''}`}>

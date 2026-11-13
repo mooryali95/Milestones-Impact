@@ -105,7 +105,7 @@ test('خطأ التحميل يعرض زر إعادة المحاولة', async ({
 test('الإعدادات: الملف والجلسات والمستخدمون، وتأكيد بنافذة الهوية', async ({ page }) => {
   const calls = await mock(page, { 'sessions-revoke-others': { success: true, message: 'أُنهيت الجلسات' } });
   await signIn(page);
-  await page.getByRole('button', { name: 'الإعدادات' }).click();
+  await page.getByRole('button', { name: 'الإعدادات', exact: true }).click();
   const dlg = page.getByRole('dialog', { name: 'الإعدادات' });
   await expect(dlg.getByText('a@mi.test')).toBeVisible();
   await expect(dlg.getByText('● هذه الجلسة')).toBeVisible();

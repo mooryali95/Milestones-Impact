@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { date } from '../dates.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -113,7 +113,7 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
               <td data-label="الحالة"><span className={`la-chip ${t}`}>{l}</span></td>
             </tr>
           );
-        }) : <tr><td colSpan={6} className="la-empty">{regs.length ? 'لا نتائج لهذه الفلاتر.' : 'لا تسجيلات بعد.'}</td></tr>}</tbody>
+        }) : <tr><td colSpan={6}>{regs.length ? <NoMatch what="تسجيلات" /> : <Empty compact title="لا تسجيلات بعد" hint="يظهر هنا كل من يسجّل في مصفوفة التأثير بمواعيده وشبكته." />}</td></tr>}</tbody>
       </table></div>
     </section>
   );
@@ -339,7 +339,7 @@ export default function Matrix({ canWrite, tab, id }) {
     <div className="dash-body">
       <div className="page-header">
         <div className="page-header-left">
-          <div className="page-eyebrow">Impact Matrix</div>
+          <div className="page-eyebrow">المنتج الثاني</div>
           <h1 className="page-title">مصفوفة التأثير</h1>
           <div className="page-title-ar">matrix.sunkvalue.com · التسجيلات وخطط الجهات وتقاريرها</div>
         </div>
