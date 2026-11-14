@@ -4,14 +4,13 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
-import { journeyDefinition, memberCounts } from './programs.ts';
-import { cohortSetup, setupMissing } from './cohort-setup.js';
+import { journeyDefinition, orgCohortSetups } from './programs.ts';
 import { journeyMap } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
-import { pickCohort, coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
+import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
@@ -428,31 +427,16 @@ export async function adminPreview(_a: Admin, b: Body) {
 // والجاهزية (cohortSetup) من حقول الدفعة نفسها: المستشار، والمدة، والجدول، والجلسات.
 export async function adminJourney(a: Admin, b: Body) {
   const orgId = String(b.organization_id || '');
-  const [d, cohorts, enr, people] = await Promise.all([
+  const [d, setups] = await Promise.all([
     dashboardFor({ id: null, organization_id: orgId, permissions: { list: true, activity: true, export: false, team: false }, template: null }) as Promise<any>,
-    db.from('cohorts').select('*'),
-    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
-    db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
+    // جاهزية دفعة الجهة من المصدر الواحد نفسه الذي تقرؤه قائمة الجهات (orgCohortSetups)
+    orgCohortSetups([orgId]),
   ]);
-  const cohort: any = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: orgId }).cohort;
-  const own = cohort && cohort.organization_id === orgId ? cohort : null;
-  let setup: any[] = [];
-  if (own) {
-    const [adv, team, sessions] = await Promise.all([
-      own.advisor_expert_id ? db.from('experts').select('full_name').eq('id', own.advisor_expert_id).maybeSingle() : Promise.resolve({ data: null }),
-      db.from('cohort_experts').select('expert_id', { count: 'exact', head: true }).eq('cohort_id', own.id),
-      db.from('workshop_sessions').select('id', { count: 'exact', head: true }).eq('cohort_id', own.id).gte('starts_at', new Date().toISOString()),
-    ]);
-    setup = cohortSetup({
-      cohort: own, advisorName: (adv as any).data?.full_name || null, teamCount: (team as any).count || 0,
-      members: memberCounts(people.data || [], enr.data || [], cohorts.data || [])[own.id] || 0, upcomingSessions: (sessions as any).count || 0,
-    });
-  }
+  const own = setups[orgId];
   await audit('admin', a.email, 'admin.org-journey', 'organizations', orgId);
   return {
     success: true, journey_map: d.journey_map || null,
-    cohort: own ? { id: own.id, name: own.name, status: own.status } : null,
-    setup, setup_missing: setupMissing(setup),
+    cohort: own?.cohort || null, setup: own?.setup || [], setup_missing: own?.setup_missing || 0,
   };
 }
 

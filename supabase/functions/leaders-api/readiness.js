@@ -8,6 +8,8 @@
 
 // أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه لا إنذار بغير البريد.
 // البقية لها افتراضي آمن في docs/SECRETS.md. البوابة تشترطها بأسمائها، وحالة النظام تفحص قيمها
+import { sessionsFor, usesHandbook } from './cohort-setup.js';
+
 export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'];
 
 // ── الترحيلات ──
@@ -61,12 +63,12 @@ export function setupReadiness({ instruments = [], certificate = null, defaultPr
 
 // ── الإطلاق التجريبي (م2): الجهات ودفعاتها ──
 // موعد قادم أو حديث (آخر 14 يومًا)، والجلسة بلا دفعة تعمّ الدفعات
-const SESSION_WINDOW_MS = 14 * 864e5;
 const missingIn = (rows) => rows.filter((r) => !r.has).map((r) => r.name);
 // ما ينقص بمعرّفه ونوعه (جهة أو دفعة): تفتح اللوحة ملف كلٍّ منها مباشرة. لا يدخل الحكم ولا النص، فالبوابات لا تتأثر
 const refsIn = (rows) => rows.filter((r) => !r.has && r.id).map((r) => ({ kind: r.kind, id: r.id, name: r.name }));
 // jsonb يصل كائنًا من العميل، وقد يصل نصًا من الاستعلام المباشر للبوابات
 const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
+// «هل للدفعة جلسات؟» من cohort-setup.js وحده: الحكم نفسه في ملف الدفعة وصفحة الجهة وهنا
 
 /** بنود م2 الآلية من صفوف القاعدة. check معرّف نقطة البوابة، وwhere تبويب ضبطه في اللوحة (null: يُضبط خارجها)
  * @param {{ organizations?: any[], cohorts?: any[], sessions?: any[], finalEval?: unknown }} rows
@@ -77,11 +79,7 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
   const perOrg = organizations.filter((o) => o.status === 'active')
     .map((o) => ({ kind: 'org', id: o.id, name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.includes(c.status)) }));
   const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id }));
-  const recent = sessions.filter((w) => w.active && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS);
-  const dated = orgCohorts.map((c) => ({
-    kind: 'cohort', id: c.id, name: c.name,
-    has: recent.some((w) => !w.cohort_id || w.cohort_id === c.id) || Object.values(asJson(c.delivery) || {}).some((d) => d?.format === 'handbook'),
-  }));
+  const dated = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: sessionsFor(c, sessions, now) > 0 || usesHandbook(c) }));
   const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   const fe = asJson(finalEval);
   const finalSaved = fe != null && JSON.stringify(fe) !== '{}';
