@@ -29,7 +29,7 @@ async function setup(page) {
     const replies = {
       'admin.orgs': { success: true, orgs: [{ id: 'o1', name: 'جمعية سفراء', stats: {} }], unassigned: {} },
       'admin.participants': { success: true, participants: [] },
-      'admin.programs': { success: true, programs, cohorts, organizations: [{ id: 'o1', name: 'جمعية سفراء' }, { id: 'o2', name: 'منظومة' }] },
+      'admin.programs': { success: true, programs, cohorts, organizations: [{ id: 'o1', name: 'جمعية سفراء', status: 'active', invite_code: 'sufara' }, { id: 'o2', name: 'منظومة', status: 'active' }] },
       'admin.program': { success: true, program: programs[0], stages: [], requirements: reqs },
       'admin.program-version': { success: true, version: { id: 'v3', number: 3 } },
       'admin.program-compare': { success: true, version: { number: 1, label: 'الإطلاق' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [{ code: 'T-ATTEND', title: 'حضور الأيام التدريبية' }] } },
@@ -136,14 +136,73 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   const card = page.locator('.cohort-page');
   await expect(card.getByRole('heading', { name: 'سفراء 2026' })).toBeVisible();
   // المدة مضبوطة، والمستشار والجدول ناقصان ولكل منهما زر يفتح نافذته
-  await expect(card.locator('.cohort-setup li.ok')).toContainText(['مدة الدفعة']);
-  const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار الأساسي' });
+  await expect(card.locator('.cohort-setup li.ok', { hasText: 'مدة الدفعة' })).toHaveCount(1);
+  const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار والفريق' });
   await expect(advisor.getByRole('button', { name: 'الفريق والمجموعات' })).toBeVisible();
-  await expect(card.getByRole('link', { name: /مشاركو الدفعة/ })).toHaveAttribute('href', '#/leaders/participants?cohort=c1');
+  await expect(card.getByRole('link', { name: /المشاركون/ })).toHaveAttribute('href', '#/leaders/participants?cohort=c1');
+  // نوعها بجملة، والالتحاق تلقائي برابط الجهة، والإعدادات كلها في لوحة واحدة
+  await expect(card.locator('.cohort-kind')).toContainText('يدخلها تلقائيًا كل من يسجّل برابط الجهة');
+  await expect(card.locator('.cohort-setup li', { hasText: 'الالتحاق' })).toContainText('دون أي إلحاق يدوي');
+  for (const t of ['الأساسيات', 'الجدول', 'الرؤية', 'رحلة البرنامج', 'الشهادة', 'التقييم الختامي', 'الجهة']) await expect(card.locator('.cohort-tile', { hasText: t }).first()).toBeVisible();
   await card.locator('.cohort-setup li.no', { hasText: 'جدول المراحل' }).getByRole('button', { name: 'الجدول' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs$/);
   await expect(page.getByRole('heading', { name: 'الدفعات' })).toBeVisible();
+});
+
+test('ملف الدفعة: رابط التسجيل ظاهر، والدفعة «مخطط لها» تُنبَّه بأنها لا تستقبل منضمي الجهة', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  const card = page.locator('.cohort-page');
+  await expect(card.locator('.cohort-link code')).toHaveText('https://leaders.sunkvalue.com/j/sufara');
+  await expect(page.locator('.data-table')).toHaveCount(0);
+  // من الجدول: عمود الجاهزية لكل دفعة
+  await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
+  await expect(page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).locator('.la-chip', { hasText: /بقي|مكتملة/ })).toBeVisible();
+});
+
+test('برنامج بلا دفعة: الرسالة تخص البرنامج بوضوح، وزرها يفتح المعالج عليه', async ({ page }) => {
+  await setup(page);
+  const card = page.locator('.la-card', { hasText: 'برنامج سفراء' });
+  await expect(card.locator('.la-reach.none')).toContainText('لا توجد دفعة على هذا البرنامج بعد');
+  await card.getByRole('button', { name: 'أنشئ له دفعة' }).click();
+  const wiz = page.getByRole('dialog', { name: 'دفعة جديدة' });
+  await wiz.getByRole('combobox', { name: 'الجهة' }).selectOption('o2');
+  await wiz.getByRole('button', { name: 'التالي' }).click();
+  await expect(wiz.getByRole('combobox', { name: 'البرنامج' })).toHaveValue('pb');
+});
+
+test('معالج الدفعة الجديدة: أربع خطوات، ثم ملف الدفعة ونافذة فريقها', async ({ page }) => {
+  const calls = await setup(page);
+  await page.getByRole('button', { name: '+ دفعة جديدة' }).click();
+  const wiz = page.getByRole('dialog', { name: 'دفعة جديدة' });
+  await expect(wiz.locator('.wiz-steps li')).toHaveCount(4);
+  // لا انتقال بلا جهة
+  await wiz.getByRole('button', { name: 'التالي' }).click();
+  await expect(page.getByRole('status').getByText('اختر الجهة')).toBeVisible();
+  await wiz.getByRole('combobox', { name: 'الجهة' }).selectOption('o1');
+  await wiz.getByRole('button', { name: 'التالي' }).click();
+  // دفعة الجهة القائمة يُنبَّه إليها
+  await expect(wiz.locator('.wiz-notes')).toContainText('سفراء 2026');
+  await wiz.getByRole('combobox', { name: 'البرنامج' }).selectOption('pa');
+  await wiz.getByRole('button', { name: 'التالي' }).click();
+  await expect(wiz.getByLabel('اسم الدفعة')).toHaveValue('دفعة جمعية سفراء');
+  await wiz.getByLabel('تبدأ').fill('2027-03-01');
+  await wiz.getByLabel('تنتهي').fill('2027-06-01');
+  await wiz.getByRole('button', { name: 'التالي' }).click();
+  await expect(wiz).toContainText('ويدخلها منضموها تلقائيًا');
+  await wiz.getByRole('button', { name: 'أنشئ الدفعة' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({
+    name: 'دفعة جمعية سفراء', organization_id: 'o1', program_id: 'pa', program_version_id: 'latest', status: 'open', starts_on: '2027-03-01', ends_on: '2027-06-01',
+  });
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c2$/);
+});
+
+test('من صفحة الجهة: «دفعة جديدة لهذه الجهة» يفتح المعالج على الجهة', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => { window.location.hash = '#/leaders/programs?new=o1'; });
+  const wiz = page.getByRole('dialog', { name: 'دفعة جديدة' });
+  await expect(wiz.getByRole('combobox', { name: 'الجهة' })).toHaveValue('o1');
 });

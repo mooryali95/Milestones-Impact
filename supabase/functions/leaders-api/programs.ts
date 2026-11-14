@@ -105,11 +105,13 @@ export async function requirementIdByCode(p: any, code: string) {
 }
 
 // عدد أعضاء كل دفعة فعلًا، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة
-export function memberCounts(participants: any[], enrollments: any[], cohorts: any[]) {
+// keep: يُعدّ من الأعضاء من يحقق الشرط فقط (مثل بانتظار الاعتماد)، بالقاعدة نفسها فلا عدّ ثانٍ
+export function memberCounts(participants: any[], enrollments: any[], cohorts: any[], keep: (p: any) => boolean = () => true) {
   const byP = new Map<string, any[]>();
   for (const e of enrollments) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const out: Record<string, number> = {};
   for (const p of participants || []) {
+    if (!keep(p)) continue;
     const id = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id;
     if (id) out[id] = (out[id] || 0) + 1;
   }
@@ -135,7 +137,18 @@ export async function list() {
   for (const e of enr.data || []) if (e.status !== 'withdrawn') enrolled[e.cohort_id] = (enrolled[e.cohort_id] || 0) + 1;
   // الأعضاء الفعليون بالقاعدة نفسها التي تعمل بها المجموعات والقاعة والفريق (pickCohort): المسجّل صراحة،
   // ومن يتبع الدفعة بجهته. عمود الجدول كان يعدّ التسجيل الصريح وحده فيُظهر صفرًا لدفعة فيها أعضاء.
-  const members = memberCounts(must(await db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000)) as any[], enr.data || [], cohorts.data || []);
+  const people = must(await db.from('participants').select('id, organization_id, status').eq('is_demo', false).limit(5000)) as any[];
+  const members = memberCounts(people, enr.data || [], cohorts.data || []);
+  // لملف الدفعة: من ينتظر الاعتماد فيها، وجلساتها القادمة، واسم مستشارها، من قراءة واحدة لكل مصدر
+  const pending = memberCounts(people, enr.data || [], cohorts.data || [], (p) => p.status === 'pending_approval');
+  const advIds = [...new Set((cohorts.data || []).map((c: any) => c.advisor_expert_id).filter(Boolean))] as string[];
+  const [sess, advs] = await Promise.all([
+    db.from('workshop_sessions').select('cohort_id').gte('starts_at', new Date().toISOString()).not('cohort_id', 'is', null).limit(5000),
+    advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const upcoming: Record<string, number> = {};
+  for (const r of sess.data || []) upcoming[r.cohort_id] = (upcoming[r.cohort_id] || 0) + 1;
+  const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
   return {
     success: true,
     programs: (programs.data || []).map((pr: any) => ({
@@ -143,7 +156,12 @@ export async function list() {
       requirements: count(reqs.data || [], (r) => r.program_id === pr.id && r.active !== false),
       versions: (versions.data || []).filter((v: any) => v.program_id === pr.id),
     })),
-    cohorts: (cohorts.data || []).map((c: any) => ({ ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true })),
+    cohorts: (cohorts.data || []).map((c: any) => ({
+      ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true,
+      // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
+      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : (upcoming[c.id] || 0),
+      advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
+    })),
     organizations: orgs.data || [],
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
     // team_ready باقٍ للوحة المنشورة التي تُظهر حقل الفريق به؛ الجدول مطبّق فهو صحيح دائمًا
