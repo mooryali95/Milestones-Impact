@@ -6,7 +6,8 @@
 // الحساب أولًا ثم الدفع: صفحة الدفع تُنشأ من الخادم باسم المشارك ومعرّفه، والحق لا يُكتب إلا من إشعار Creem
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
-import { alertOps, audit, CONFIG, db, Fail, must, payReminderMail, sendMail } from './core.ts';
+import { alertOps, audit, CONFIG, db, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
+import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, REMIND_GAP_HOURS, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, settings, type Item } from './entitlements.ts';
@@ -153,12 +154,59 @@ async function settle(pay: any, obj: any) {
     status: 'paid', paid_at: now, order_id: obj?.order?.id || pay.order_id || null, customer_id: obj?.customer?.id || null,
     amount_cents: obj?.order?.amount ?? pay.amount_cents, currency: obj?.order?.currency || pay.currency,
   }).eq('id', pay.id);
+  await saveLedger(pay.id, ledgerFields(obj));
   if (pay.participant_id) {
     const { error } = await db.from('entitlements').insert({ participant_id: pay.participant_id, item: pay.item, source: 'paid', payment_id: pay.id, granted_by: 'creem' });
     if (error && error.code !== '23505') throw error;
     await audit('system', 'creem', 'payment.paid', 'payments', pay.id, null, { item: pay.item });
   }
   return true;
+}
+
+// ── سجل المدفوعات (payments-ledger.js): تفاصيل العملية في أعمدتها. تحديث منفصل يتحمل غياب الأعمدة قبل ترحيلها،
+// فلا يُسقط تعذّره تسوية دفع مؤكد ──
+async function saveLedger(payId: string, fields: Record<string, unknown>) {
+  const patch = Object.fromEntries(Object.entries(fields).filter(([, v]) => v != null));
+  if (!Object.keys(patch).length) return;
+  const { error } = await db.from('payments').update(patch).eq('id', payId);
+  if (error) console.error('payment ledger:', error.message);
+}
+const linkEvent = async (eventId: string, payId: string) => {
+  const { error } = await db.from('payment_events').update({ payment_id: payId }).eq('event_id', eventId);
+  if (error) console.error('payment event link:', error.message);
+};
+// بريد الدفع: كل واحد خلف مفتاحه في payment_settings.notify (مغلق حتى يفتحه المدير). تعذّر الإرسال لا يُسقط المعالجة
+const notifyOn = async () => cleanNotify(((await settings()) as any).notify);
+async function payerOf(pay: any) {
+  if (!pay.participant_id) return { name: '', email: pay.email };
+  const { data } = await db.from('participants').select('full_name, email').eq('id', pay.participant_id).maybeSingle();
+  return { name: (data as any)?.full_name || '', email: (data as any)?.email || pay.email };
+}
+async function notifyPaid(payId: string) {
+  const on = await notifyOn();
+  if (!on.receipt && !on.owner) return;
+  const { data: pay } = await db.from('payments').select('*').eq('id', payId).maybeSingle();
+  if (!pay || pay.status !== 'paid') return;
+  const who = await payerOf(pay);
+  const amount = money(pay.amount_cents, pay.currency);
+  if (on.receipt && who.email && !pay.receipt_sent_at) {
+    const next = pay.item === 'program' ? 'رحلتك في البرنامج مفتوحة الآن.' : 'قياس تحديد المستوى مفتوح لك الآن، وتقدمك فيه يُحفظ سؤالًا سؤالًا.';
+    const sent = await sendMail(who.email, 'وصلنا دفعك', paymentReceiptMail(who.name, ITEM_AR[pay.item as Item], amount, pay.order_id, next), [], { ref: `participant:${pay.participant_id}` })
+      .then(() => true).catch((e) => { console.error('pay receipt', e); return false; });
+    if (sent) await saveLedger(pay.id, { receipt_sent_at: new Date().toISOString() });
+  }
+  if (on.owner && CONFIG.alertEmail) {
+    await sendMail(CONFIG.alertEmail, 'دفعة جديدة', paymentOwnerMail('دفعة جديدة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ['رقم الطلب', pay.order_id || '']]), [], { ref: `payment:${pay.id}` })
+      .catch((e) => console.error('pay owner', e));
+  }
+}
+async function notifyRefunded(pay: any, cents: number | null) {
+  const on = await notifyOn();
+  if (!on.refund && !on.owner) return;
+  const who = await payerOf(pay);
+  const amount = money(cents ?? pay.amount_cents, pay.currency);
+  if (on.refund && who.email) await sendMail(who.email, 'استُردّت دفعتك', paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount), [], { ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
+  if (on.owner && CONFIG.alertEmail) await sendMail(CONFIG.alertEmail, 'دفعة مستردة', paymentOwnerMail('دفعة مستردة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount]]), [], { ref: `payment:${pay.id}` }).catch((e) => console.error('pay owner', e));
 }
 
 async function revokeFor(pay: any, by: string) {
@@ -196,11 +244,18 @@ export async function webhook(raw: string, headers: Headers) {
     if (type === 'checkout.completed') {
       const pay = await findPayment(obj);
       if (!pay) throw new Error('payment not found');
-      await settle(pay, obj);
+      await linkEvent(id, pay.id);
+      if (await settle(pay, obj)) await notifyPaid(pay.id).catch((e) => console.error('pay notify', e));
     } else if (type.startsWith('refund.') || type === 'dispute.created') {
       const pay = await findPayment(obj);
       if (pay) {
+        await linkEvent(id, pay.id);
+        const already = pay.status === 'refunded';
         await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: type }).eq('id', pay.id);
+        const rf = refundFields(obj, type);
+        await saveLedger(pay.id, rf);
+        // إشعار ثانٍ للدفعة نفسها (استرداد ثم نزاع مثلًا) لا يكرر البريد
+        if (!already) await notifyRefunded(pay, rf.refund_cents).catch((e) => console.error('refund notify', e));
         await revokeFor(pay, 'creem');
         // D05 وسياسة الاسترداد: استرداد رسم البرنامج يلغي الشهادة
         if (pay.item === 'program' && pay.participant_id) await revokeForRefund(pay.participant_id);
@@ -275,7 +330,8 @@ type Admin = import('./admin.ts').Admin;
 export async function adminOverview() {
   const s = await settings();
   const [{ data: pays }, { data: ents }, { data: evs }, { count: participants }] = await Promise.all([
-    db.from('payments').select('id, participant_id, email, item, amount_cents, currency, status, mode, created_at, paid_at, refunded_at, checkout_id, order_id, note, participants(full_name, organization_id)')
+    // بـ* لتحمل أعمدة السجل بعد ترحيلها (الضريبة والبلد وملاحظة الإدارة) وتعمل قبله
+    db.from('payments').select('*, participants(full_name, organization_id, phone)')
       .order('created_at', { ascending: false }).limit(2000),
     db.from('entitlements').select('id, participant_id, item, source, organization_id, value_cents, created_at, revoked_at, granted_by, note, participants(full_name, email)').order('created_at', { ascending: false }).limit(5000),
     db.from('payment_events').select('type, received_at, processed_at, error').order('received_at', { ascending: false }).limit(20),
@@ -352,7 +408,13 @@ export async function adminSettings(a: Admin, b: Body) {
   if (patch.enabled && (!apiKey() || !hookSecret() || !patch.assessment_product || !patch.program_product)) {
     throw new Fail('لا يُفعَّل الدفع قبل اكتمال المفتاح وسرّ الإشعارات ومعرّفي المنتجين', 409);
   }
-  const saved = must(await db.from('payment_settings').update(patch).eq('id', true).select('*').single());
+  let saved = must(await db.from('payment_settings').update(patch).eq('id', true).select('*').single()) as any;
+  // مفاتيح بريد الدفع (payments-ledger.js NOTIFY): تُحفظ حين تُرسل، في تحديث منفصل يتحمل غياب العمود قبل ترحيله
+  if (b.notify && typeof b.notify === 'object') {
+    const up = await db.from('payment_settings').update({ notify: cleanNotify(b.notify) }).eq('id', true).select('*').single();
+    if (up.error) throw new Fail('مفاتيح بريد الدفع تُحفظ بعد تطبيق ترحيلها', 503, 'not_ready');
+    saved = up.data;
+  }
   await audit('admin', a.email, 'payment.settings', 'payment_settings', 'true', s, saved);
   // لحظة التفعيل: المشاركون القائمون معفون من الاثنين كما تعد رسالة التأكيد في اللوحة. كان الإعفاء لمن وُجد عند
   // الترحيل الأول وحده، فتفعيل الدفع بعده يقفل الرحلة على كل من سجّل بين التاريخين (مراجعة الدفع 2026-11-13)
@@ -447,3 +509,70 @@ export async function adminOrgFinance(_a: Admin, b: Body) {
     rows,
   };
 }
+
+
+// ════════════════════════════════════════════════════════════════
+// سجل المدفوعات: صفحة العملية، وملاحظتها، وتذكير من لم يكمل، وانتهاء المتروك
+// ════════════════════════════════════════════════════════════════
+const isId = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
+
+// عملية واحدة بكل ما يخصها: صفها، وعميلها من ملفه، وإشعاراتها، وما مُنح بها، وخطها الزمني
+export async function adminPayment(_a: Admin, b: Body) {
+  if (!isId(b.id)) throw new Fail('بيانات ناقصة');
+  const pay = must(await db.from('payments').select('*').eq('id', String(b.id)).maybeSingle()) as any;
+  if (!pay) throw new Fail('العملية غير موجودة', 404);
+  const [person, evs, ents, log] = await Promise.all([
+    pay.participant_id
+      ? db.from('participants').select('id, full_name, email, phone, job_title, organization_name, organization_id, status, created_at').eq('id', pay.participant_id).maybeSingle().then((r: any) => r.data)
+      : null,
+    // قبل ترحيل payment_id يُعثر على الإشعار بمعرّف العملية في حمولته
+    db.from('payment_events').select('event_id, type, received_at, processed_at, error').or(`payment_id.eq.${pay.id},payload->object->>request_id.eq.${pay.id}`).order('received_at')
+      .then((r: any) => (r.error ? db.from('payment_events').select('event_id, type, received_at, processed_at, error').eq('payload->object->>request_id', pay.id).order('received_at').then((x: any) => x.data || []) : r.data || [])),
+    db.from('entitlements').select('item, source, created_at, revoked_at, revoked_by').eq('payment_id', pay.id).then((r: any) => r.data || []),
+    db.from('audit_log').select('actor, action, after, created_at').eq('entity', 'payments').eq('entity_id', pay.id).order('created_at').limit(100).then((r: any) => r.data || []),
+  ]);
+  return {
+    success: true, payment: pay, item_ar: ITEM_AR[pay.item as Item], participant: person,
+    whatsapp: whatsappUrl(person?.phone), creem_url: creemOrderUrl(pay), abandoned: isAbandoned(pay),
+    events: evs, entitlements: ents, timeline: paymentTimeline(pay, evs, ents, log),
+  };
+}
+
+export async function adminPaymentNote(a: Admin, b: Body) {
+  requireWrite(a);
+  if (!isId(b.id)) throw new Fail('بيانات ناقصة');
+  const note = String(b.note ?? '').trim().slice(0, 1000) || null;
+  const { error } = await db.from('payments').update({ admin_note: note }).eq('id', String(b.id));
+  if (error) throw new Fail('الملاحظات تُحفظ بعد تطبيق ترحيل سجل المدفوعات', 503, 'not_ready');
+  await audit('admin', a.email, 'payment.note', 'payments', String(b.id), null, { note });
+  return { success: true };
+}
+
+// تذكير من فتح صفحة الدفع ولم يكمل: فعل صريح من المدير (لا إرسال آلي)، ومرة كل REMIND_GAP_HOURS للعملية
+export async function adminPaymentRemind(a: Admin, b: Body) {
+  requireWrite(a);
+  if (!isId(b.id)) throw new Fail('بيانات ناقصة');
+  const pay = must(await db.from('payments').select('*').eq('id', String(b.id)).maybeSingle()) as any;
+  if (!pay) throw new Fail('العملية غير موجودة', 404);
+  if (pay.status !== 'pending') throw new Fail('التذكير لعملية لم تكتمل وحدها');
+  if (pay.reminded_at && Date.now() - Date.parse(pay.reminded_at) < REMIND_GAP_HOURS * 36e5) throw new Fail(`ذُكِّر خلال آخر ${REMIND_GAP_HOURS} ساعة`, 409, 'recent');
+  const who = await payerOf(pay);
+  if (!who.email) throw new Fail('لا بريد لهذا العميل');
+  await sendMail(who.email, 'دفعك لم يكتمل', paymentAbandonMail(who.name, ITEM_AR[pay.item as Item]), [], { ref: `participant:${pay.participant_id}` });
+  await saveLedger(pay.id, { reminded_at: new Date().toISOString() });
+  await audit('admin', a.email, 'payment.remind', 'payments', pay.id);
+  return { success: true };
+}
+
+// صفحات الدفع المتروكة لا تبقى «معلّقة» إلى الأبد: بعد EXPIRE_AFTER_DAYS تُعلَّم «انتهت» (من المهمة الساعية).
+// إن دفع صاحبها بعد ذلك فإشعار Creem يسوّيها كما هي (settleable يقبل expired).
+export async function expireAbandoned(now = Date.now()) {
+  const { data } = await db.from('payments').select('id, status, created_at').eq('status', 'pending').order('created_at').limit(500);
+  const due = (data || []).filter((p: any) => isExpirable(p, now));
+  for (const p of due) {
+    await db.from('payments').update({ status: 'expired' }).eq('id', p.id).eq('status', 'pending');
+    await audit('system', 'payments', 'payment.expired', 'payments', p.id);
+  }
+  return { expired: due.length };
+}
+export { NOTIFY, NOTIFY_KEYS };

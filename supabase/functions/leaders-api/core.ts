@@ -315,6 +315,32 @@ export function payReminderMail(name: string, days: number) {
     'خطوة واحدة تفتح رحلتك');
 }
 
+// ── بريد الدفع (payments-ledger.js NOTIFY): كل واحد خلف مفتاح في اللوحة، مغلق حتى يفتحه المدير ──
+export function paymentReceiptMail(name: string, item: string, amount: string, order: string | null, next: string) {
+  return shell('journey', 'وصلنا دفعك',
+    mailText(`${hello(name)} تأكد دفعك، وهذا ملخصه لسجلك.`)
+    + mailRows([['البند', item], ['المبلغ', amount], ...(order ? [['رقم الطلب', order] as [string, string]] : [])])
+    + mailText(esc(next))
+    + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
+    'تأكيد الدفع', 'إيصال الدفع الرسمي يصلك من مزوّد الدفع Creem على البريد نفسه.');
+}
+export function paymentRefundMail(name: string, item: string, amount: string) {
+  return shell('journey', 'استُردّت دفعتك',
+    mailText(`${hello(name)} استُردّت دفعتك، ويعود المبلغ إلى وسيلة الدفع نفسها خلال أيام بحسب مصرفك.`)
+    + mailRows([['البند', item], ['المبلغ', amount]])
+    + mailText('أُقفل ما فتحه هذا الدفع في حسابك. إن كان الاسترداد خطأ أو لديك سؤال فردّ على هذه الرسالة.'),
+    'استرداد دفعة');
+}
+export function paymentAbandonMail(name: string, item: string) {
+  return shell('journey', 'دفعك لم يكتمل',
+    mailText(`${hello(name)} فتحت صفحة الدفع لـ«${esc(item)}» ولم تكتمل العملية، ولم يُخصم منك شيء. إن واجهت مشكلة في الدفع فردّ على هذه الرسالة ونساعدك.`)
+    + mailButton(CONFIG.appUrl, 'أكمل الدفع'),
+    'خطوة واحدة باقية');
+}
+export function paymentOwnerMail(what: string, rows: [string, string][]) {
+  return shell('admin', what, mailRows(rows) + mailButton(`${SITES.admin}/#/leaders/payments`, 'افتح المدفوعات'), what);
+}
+
 // إخطار النسخة الجوهرية (D18): ما تغيّر بنصه من POLICY_CHANGES، ورابط السجل والسياسة، وأن الموافقة تُطلب عند الدخول
 export function policyChangeMail(name: string, version: string, items: readonly string[]) {
   return shell('journey', 'حدّثنا سياسة الخصوصية وشروط البرنامج',
@@ -567,6 +593,10 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'coord-signin', family: 'access', label: 'رمز دخول لوحة الجهة', subject: 'رمز الدخول إلى لوحة الجهة', html: () => coordinatorSignInMail('خالد', '820417', `${CONFIG.appUrl}/org`) },
   { key: 'approved', family: 'journey', label: 'اعتماد المستوى', subject: 'اعتُمد مستواك في برنامج القادة', html: () => approvedMail('سارة') },
   { key: 'approved-pay', family: 'journey', label: 'اعتماد المسار مع رابط الدفع', subject: 'اعتُمد مسارك في برنامج القادة', html: () => approvedMail('سارة', true) },
+  { key: 'pay-receipt', family: 'journey', label: 'تأكيد الدفع للعميل (بمفتاح)', subject: 'وصلنا دفعك', html: () => paymentReceiptMail('سارة', 'القياس المبدئي', '1.99 USD', 'ord_123', 'القياس مفتوح لك الآن.') },
+  { key: 'pay-refund', family: 'journey', label: 'إشعار الاسترداد للعميل (بمفتاح)', subject: 'استُردّت دفعتك', html: () => paymentRefundMail('سارة', 'القياس المبدئي', '1.99 USD') },
+  { key: 'pay-abandon', family: 'journey', label: 'تذكير من لم يكمل الدفع (يدوي)', subject: 'دفعك لم يكتمل', html: () => paymentAbandonMail('سارة', 'القياس المبدئي') },
+  { key: 'pay-owner', family: 'admin', label: 'تنبيه الإدارة بدفعة (بمفتاح)', subject: 'دفعة جديدة', html: () => paymentOwnerMail('دفعة جديدة', [['المشارك', 'سارة الأحمد'], ['البند', 'القياس المبدئي'], ['المبلغ', '1.99 USD']]) },
   { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },

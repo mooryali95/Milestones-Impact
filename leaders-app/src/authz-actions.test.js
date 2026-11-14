@@ -26,7 +26,7 @@ function bodyOf(impl) {
 const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'peer', 'reviews', 'evidence-url',
   'participant-impact', 'sus', 'erasures', 'catalog', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'impact',
-  'curriculum', 'programs', 'payments', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones',
+  'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones',
   'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
   // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
   'assessment-answers',

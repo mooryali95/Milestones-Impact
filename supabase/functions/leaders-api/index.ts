@@ -86,6 +86,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
   'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
     pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+    pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
     policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
     // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
@@ -413,6 +414,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.payments': (_a, b) => (b.participant_id ? Y.participantEntitlements(String(b.participant_id)) : Y.adminOverview()),
   'admin.sponsor-requests': () => R.adminList(),
   'admin.sponsor-decide': R.adminDecide,
+  'admin.payment': Y.adminPayment,
+  'admin.payment-note': Y.adminPaymentNote,
+  'admin.payment-remind': Y.adminPaymentRemind,
   'admin.payment-settings': (a, b) => A.superWriter(a, Y.adminSettings, b),
   'admin.payment-grant': Y.adminGrant,
   'admin.payment-reconcile': Y.adminReconcile,
