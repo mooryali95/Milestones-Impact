@@ -269,7 +269,10 @@ for (let r = 0; r < ROUNDS; r++) {
 }
 
 // 4) الإغلاق: يُكتب حضور من شارك في حضور الورشة، والأجهزة تعود إلى «لا قاعة مفتوحة»
-const closed = await admin('admin.hall-close', { session_id: sessionId });
+// الإغلاق كتابة كغيرها: 503 عابر من البوابة تحت الحمل (أصابه في التشغيلة 43570948143 حين أنهت البوابة نسخة الدالة عند حد المعالج)
+// يُعاد مرة كما يعيده المدير من زره. يبقى مسجّلًا في إخفاقات البوابة أدناه، والحكم أن الإغلاق نجح وكتب الحضور (upsert فإعادته آمنة)
+let closed = await admin('admin.hall-close', { session_id: sessionId });
+if (transient(closed)) { retried += 1; await sleep(1500); closed = await admin('admin.hall-close', { session_id: sessionId }); }
 ok(closed.success === true, 'الخبير يغلق القاعة', JSON.stringify(closed).slice(0, 160));
 ok(closed.attendance?.written === N && closed.attendance?.rounds === ROUNDS, `الحضور: الإغلاق يبلّغ بكتابة ${N} حاضرًا عن ${ROUNDS} جولات`, JSON.stringify(closed.attendance || null));
 ok(Number(sql(`select count(*) from leaders.workshop_attendance where session_id = ${q(workshopId)} and method = 'hall'`)) === N, `الحضور: ${N} صفًّا بطريقة hall في حضور الورشة`);
