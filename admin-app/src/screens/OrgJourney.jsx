@@ -8,15 +8,7 @@ import { L } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 
-// أين يُضبط كل بند، بالمسار الذي يسلكه المدير في اللوحة
-const WHERE = {
-  team: 'البرامج والدفعات ← الدفعة ← «الفريق والمجموعات»',
-  cohort: 'البرامج والدفعات ← الدفعة ← «تحرير»',
-  schedule: 'البرامج والدفعات ← الدفعة ← «الجدول»، وفيه «وزّع على مدة الدفعة»',
-  activities: 'الأنشطة ← جلسة جديدة لهذه الدفعة',
-};
-
-export default function OrgJourney({ orgId }) {
+export default function OrgJourney({ orgId, canWrite = false }) {
   const [d, setD] = useState(null);
   useEffect(() => { setD(null); L('admin.org-journey', { organization_id: orgId }).then(setD); }, [orgId]);
   if (!d) return <section className="la-card"><h3>رحلة الجهة</h3><Spinner /></section>;
@@ -24,14 +16,25 @@ export default function OrgJourney({ orgId }) {
   return (
     <section className="la-card oj" aria-labelledby="oj-h">
       <h3 id="oj-h">رحلة الجهة{d.cohort && <> <small className="la-muted">· {d.cohort.name}</small></>}</h3>
-      {!d.cohort ? <p className="la-muted">لا دفعة مفتوحة أو جارية لهذه الجهة: مشاركوها يتبعون الدفعة المفتوحة العامة. أنشئ دفعتها من «البرامج والدفعات».</p> : (
+      {!d.cohort ? (
+        <div className="la-row between">
+          <p className="la-muted">لا دفعة مفتوحة أو جارية لهذه الجهة: مشاركوها يتبعون الدفعة المفتوحة العامة.</p>
+          {canWrite && <a className="btn-sm primary" href={`#/leaders/programs?new=${encodeURIComponent(orgId)}`}>أنشئ دفعة لهذه الجهة</a>}
+        </div>
+      ) : (
         <>
-          <p className="la-muted">{d.setup_missing ? `بقي ${d.setup_missing === 1 ? 'بند واحد' : d.setup_missing === 2 ? 'بندان' : `${d.setup_missing} بنود`} لتكتمل جاهزية الدفعة.` : 'الدفعة مكتملة الإعداد.'}</p>
+          <div className="la-row between">
+            <p className="la-muted">{d.setup_missing ? `بقي ${d.setup_missing === 1 ? 'بند واحد' : d.setup_missing === 2 ? 'بندان' : `${d.setup_missing} بنود`} لتكتمل جاهزية الدفعة.` : 'الدفعة مكتملة الإعداد.'} كل إعداداتها في ملفها.</p>
+            <span className="la-row">
+              <a className="btn-sm primary" href={`#/leaders/programs/${encodeURIComponent(d.cohort.id)}`}>افتح ملف الدفعة</a>
+              {canWrite && <a className="btn-sm ghost" href={`#/leaders/programs?new=${encodeURIComponent(orgId)}`}>دفعة جديدة لهذه الجهة</a>}
+            </span>
+          </div>
           <ul className="oj-setup">
             {d.setup.map((s) => (
               <li key={s.key} className={s.ok ? 'ok' : 'todo'}>
                 <span className="oj-mark" aria-hidden="true">{s.ok ? '✓' : '!'}</span>
-                <span><b>{s.title}:</b> {s.detail}{!s.ok && WHERE[s.where] && <><br /><small className="la-muted">يُضبط من: {WHERE[s.where]}</small></>}</span>
+                <span><b>{s.title}:</b> {s.detail}</span>
               </li>
             ))}
           </ul>

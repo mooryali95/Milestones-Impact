@@ -226,3 +226,11 @@ export class ScreenBoundary extends React.Component {
     );
   }
 }
+
+// نسخ رابط إلى الحافظة، وإن منعها المتصفح يُعرض الرابط لينسخه المدير بنفسه (صفحة الجهة وملف الدفعة)
+export function useCopy() {
+  const { toast, prompt } = useUI();
+  return async (text, ok) => {
+    try { await navigator.clipboard.writeText(text); toast(ok); } catch { await prompt('انسخ الرابط:', text); }
+  };
+}

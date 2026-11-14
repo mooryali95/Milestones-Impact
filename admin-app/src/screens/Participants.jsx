@@ -51,6 +51,8 @@ const PRESETS = [
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
   { key: 'out', label: 'موقوف أو منسحب', test: (p) => p.status === 'suspended' || p.status === 'withdrawn' },
 ];
+// كيف وصل المشارك إلى دفعته (pickCohort): تلقائيًا بجهته، أو بنقل يدوي، أو الدفعة المفتوحة لمن لا جهة له
+const VIA_COHORT = { organization: 'تلقائيًا برابط جهته', enrollment: 'بنقل يدوي', default: 'تلقائيًا: بلا جهة' };
 const KEYS = ['q', 'view', 'status', 'step', 'effort', 'org', 'cohort', 'track', 'joined', 'seen', 'sort'];
 
 export function OrgSelect({ orgs, value, onChange, all = 'كل الجهات', label = 'الجهة' }) {
@@ -187,9 +189,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const bulkEnroll = async () => {
     const c = cohorts.find((x) => x.id === cohortTo);
     if (!c) return toast('اختر الدفعة');
-    if (!(await confirm(`إلحاق ${picked.size} مشارك بدفعة «${c.name}»؟ من كان مسجّلًا صراحةً في دفعة أخرى يُسحب منها.`))) return;
+    if (!(await confirm(`نقل ${picked.size} مشارك إلى دفعة «${c.name}»؟ لا حاجة لهذا لمن انضم برابط جهة الدفعة: يدخلها تلقائيًا. من كان ملحقًا يدويًا بدفعة أخرى يُسحب منها.`))) return;
     const r = await L('admin.cohort-enroll', { cohort_id: c.id, participant_ids: [...picked] });
-    toast(r.success ? `أُلحق ${r.enrolled} مشارك بدفعة «${c.name}»` : r.message);
+    toast(r.success ? `نُقل ${r.enrolled} مشارك إلى دفعة «${c.name}»` : r.message);
     if (r.success) { setPicked(new Set()); setCohortTo(''); }
   };
   const exportCols = [
@@ -239,10 +241,10 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           </select>
           <button className="btn-sm ghost" onClick={bulkStatus} disabled={!statusTo}>غيّر الحالة</button>
           {cohorts.length > 0 && <>
-            <select className="filter-select" aria-label="إلحاق المحددين بدفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
-              <option value="">إلحاق بدفعة…</option>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <select className="filter-select" aria-label="نقل المحددين إلى دفعة أخرى (استثناء)" title="المشارك يدخل دفعة جهته تلقائيًا. هذا للاستثناء: فرد في دفعة جهة، أو نقل بين دفعتين" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
+              <option value="">نقل إلى دفعة أخرى (استثناء)…</option>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo}>ألحقهم</button>
+            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo}>انقلهم</button>
           </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
           {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
@@ -449,8 +451,8 @@ function Person({ id, canWrite, onBack }) {
   // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
   const enroll = async () => {
     const c = (cohorts || []).find((x) => x.id === cohortTo);
-    if (!(await confirm(`تسجيل ${p.full_name} صراحةً في دفعة «${c?.name}»؟ يُسحب من أي دفعة أخرى سُجّل فيها صراحةً.`))) return;
-    const d = await act('admin.cohort-enroll', { cohort_id: cohortTo, participant_ids: [p.id] }, 'سُجّل في الدفعة');
+    if (!(await confirm(`نقل ${p.full_name} إلى دفعة «${c?.name}»؟ يبقى فيها مهما كانت جهته، ويُسحب من أي دفعة أخرى أُلحق بها يدويًا.`))) return;
+    const d = await act('admin.cohort-enroll', { cohort_id: cohortTo, participant_ids: [p.id] }, 'نُقل إلى الدفعة');
     if (d.success) setCohortTo('');
   };
 
@@ -478,14 +480,15 @@ function Person({ id, canWrite, onBack }) {
               : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
             <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
             <dt>الدفعة</dt><dd>
-              {r.program?.cohort && !r.program.cohort.is_default ? r.program.cohort.name : 'الدفعة المفتوحة'}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}
+              {r.program?.cohort?.id ? <a href={`#/leaders/programs/${encodeURIComponent(r.program.cohort.id)}`}>{r.program.cohort.is_default ? 'الدفعة المفتوحة' : r.program.cohort.name}</a> : 'بلا دفعة'}
+              {VIA_COHORT[r.program?.via] && <small className="la-muted"> ({VIA_COHORT[r.program.via]})</small>}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}
               {canWrite && cohorts?.length > 0 && (
                 <span className="la-row">
-                  <select aria-label="تسجيل صريح في دفعة" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
-                    <option value="">تسجيل صريح في دفعة…</option>
+                  <select aria-label="نقل إلى دفعة أخرى (استثناء)" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
+                    <option value="">نقل إلى دفعة أخرى (استثناء)…</option>
                     {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  <button className="btn-sm ghost" disabled={!cohortTo} onClick={enroll}>سجّله</button>
+                  <button className="btn-sm ghost" disabled={!cohortTo} onClick={enroll}>انقله</button>
                 </span>
               )}
             </dd>

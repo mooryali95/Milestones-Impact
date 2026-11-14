@@ -193,7 +193,8 @@ test('صفحة الجهة عند الإدارة: جاهزية الدفعة بم�
   const card = page.locator('.oj');
   await expect(card).toContainText('بقي بندان لتكتمل جاهزية الدفعة.');
   await expect(card.locator('.oj-setup li.todo')).toHaveCount(2);
-  await expect(card).toContainText('يُضبط من: البرامج والدفعات ← الدفعة ← «الفريق والمجموعات»');
+  // كل إعدادات الدفعة في ملفها: رابط واحد بدل وصف الطريق إلى كل بند
+  await expect(card.getByRole('link', { name: 'افتح ملف الدفعة' })).toHaveAttribute('href', '#/leaders/programs/c1');
   // الخريطة المشتركة بهويتها داخل اللوحة: العنوان والأعداد وأكبر تجمع
   const map = card.locator('.jm');
   await expect(map.getByRole('heading', { name: 'دفعة سفراء' })).toBeVisible();

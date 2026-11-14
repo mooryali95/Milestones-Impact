@@ -941,6 +941,45 @@
 .cohort-setup li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-warn); }
 .cohort-setup li.ok { border-inline-start-color: var(--st-ok); }
 .cohort-setup li span { flex: 1; min-inline-size: 180px; color: var(--ink-mid); font-size: .88rem; }
+/* ملف الدفعة: رقم كل بند أو علامته، ونوع الدفعة بجملة، ورابط التسجيل، ولوحة كل الإعدادات */
+.cohort-setup li .cs-n { flex: none; min-inline-size: 0; inline-size: 24px; block-size: 24px; display: inline-grid; place-items: center; border-radius: 50%; font-size: .78rem; font-weight: 700; background: color-mix(in srgb, var(--st-warn) 18%, transparent); color: var(--st-warn-text); }
+.cohort-setup li.ok .cs-n { background: color-mix(in srgb, var(--st-ok) 14%, transparent); color: var(--st-ok); }
+.cohort-setup li b { min-inline-size: 130px; }
+.cohort-kind { margin: 6px 0 0; font-size: .88rem; color: var(--petrol); font-weight: 600; }
+.cohort-link { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-gold); background: color-mix(in srgb, var(--brand-gold) 7%, transparent); }
+.cohort-link > div { display: grid; gap: 2px; flex: 1 1 220px; }
+.cohort-link > div span { font-size: .82rem; color: var(--ink-mid); }
+.cohort-link code { font-size: .85rem; overflow-wrap: anywhere; padding: 4px 8px; border-radius: 6px; background: var(--off-white); border: 1px solid var(--line); }
+.cohort-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 10px; }
+.cohort-tile { display: grid; gap: 4px; align-content: start; text-align: start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: transparent; color: inherit; font: inherit; cursor: pointer; text-decoration: none; transition: border-color .15s var(--ease), background .15s var(--ease); }
+.cohort-tile:hover, .cohort-tile:focus-visible { border-color: var(--gold); background: color-mix(in srgb, var(--brand-gold) 6%, transparent); }
+.cohort-tile b { font-size: .95rem; }
+.cohort-tile span { font-size: .8rem; color: var(--ink-mid); line-height: 1.6; }
+.la-reach.none { color: var(--ink-light); }
+
+/* كيف تعمل المنظومة: ثلاث خطوات في رأس «البرامج والدفعات» */
+.how-it-works ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: how; }
+.how-it-works li { counter-increment: how; display: grid; gap: 4px; padding-inline-start: 36px; position: relative; }
+.how-it-works li::before { content: counter(how); position: absolute; inset-inline-start: 0; top: 0; inline-size: 26px; block-size: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--petrol); color: var(--off-white); font-weight: 700; font-size: .85rem; }
+.how-it-works li span { font-size: .84rem; color: var(--ink-mid); line-height: 1.7; }
+
+/* معالج الدفعة الجديدة */
+.cohort-wizard { max-inline-size: 620px; }
+.wiz-steps { list-style: none; margin: 4px 0 16px; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.wiz-steps li { flex: 1 1 110px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; font-size: .8rem; color: var(--ink-light); border-block-end: 3px solid var(--line-strong); }
+.wiz-steps li span { inline-size: 22px; block-size: 22px; display: inline-grid; place-items: center; border-radius: 50%; border: 1px solid currentColor; font-size: .75rem; flex: none; }
+.wiz-steps li.on { color: var(--petrol); font-weight: 700; border-color: var(--gold); }
+.wiz-steps li.done { color: var(--st-ok); border-color: var(--st-ok); }
+.wiz-body { border: 0; margin: 0; padding: 0; display: grid; gap: 12px; }
+.wiz-body legend { font-weight: 700; margin-bottom: 8px; }
+.wiz-choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); cursor: pointer; }
+.wiz-choice:has(input:checked) { border-color: var(--gold); background: color-mix(in srgb, var(--brand-gold) 6%, transparent); }
+.wiz-choice span { display: grid; gap: 2px; }
+.wiz-choice small { color: var(--ink-mid); }
+.wiz-field { display: grid; gap: 4px; font-size: .85rem; flex: 1 1 160px; }
+.wiz-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.wiz-check { display: flex; gap: 8px; align-items: flex-start; font-size: .88rem; }
+.wiz-notes { margin: 12px 0; padding: 10px 14px 10px 10px; padding-inline-start: 28px; border-radius: 10px; background: color-mix(in srgb, var(--st-warn) 10%, transparent); font-size: .84rem; line-height: 1.7; }
 
 /* ── صفحة العملية في سجل المدفوعات (PaymentFile.jsx) ── */
 .payf { display: grid; gap: 14px; }
@@ -998,3 +1037,4 @@
 .mc-q { display: inline-block; margin-inline-start: 8px; font-family: var(--font-en); }
 @media (max-width: 760px) { .mc .pay-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mc-split li { grid-template-columns: 96px 1fr 28px; } }
 .sr-only { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.data-table .la-chip.warn, .data-table .la-chip.ok { white-space: nowrap; }

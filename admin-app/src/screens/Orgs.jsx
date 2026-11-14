@@ -9,7 +9,7 @@ import {
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, NoMatch, SectionIndex, Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, SectionIndex, Spinner, useCopy, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -32,13 +32,6 @@ function Seats({ n, seats }) {
       {seats ? <span className="la-fn-bar"><i style={{ width: `${Math.min(100, (n / seats) * 100).toFixed(1)}%` }} /></span> : null}
     </div>
   );
-}
-
-function useCopy() {
-  const { toast, prompt } = useUI();
-  return async (text, ok) => {
-    try { await navigator.clipboard.writeText(text); toast(ok); } catch { await prompt('انسخ الرابط:', text); }
-  };
 }
 
 const ORG_PRESETS = [
@@ -286,7 +279,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       </section>
 
       <SectionIndex label="أقسام صفحة الجهة" sections={ORG_SECTIONS} />
-      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} /></div>}
+      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
       {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
       {!isNone && <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>}
 

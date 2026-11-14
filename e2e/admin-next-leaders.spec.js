@@ -329,8 +329,8 @@ test('الإجراءات الجماعية: تغيير الحالة بسبب مك
   await expect(page.getByLabel('تحديد Omar Ali')).not.toBeChecked();
   // الإلحاق بدفعة
   await page.getByLabel('تحديد Omar Ali').check();
-  await page.getByLabel('إلحاق المحددين بدفعة').selectOption('c1');
-  await page.getByRole('button', { name: 'ألحقهم' }).click();
+  await page.getByLabel('نقل المحددين إلى دفعة أخرى (استثناء)').selectOption('c1');
+  await page.getByRole('button', { name: 'انقلهم' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-enroll')).toMatchObject({ cohort_id: 'c1', participant_ids: ['p2'] });
   // التصدير يعرض «المحدد» أولًا حين يُحدَّد شيء
