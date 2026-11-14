@@ -15,6 +15,8 @@ import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 import OrgTeam from './OrgTeam.jsx';
 import OrgJourney from './OrgJourney.jsx';
+import { orgReadiness, readinessSummary } from '../org-hub.js';
+import { navigate } from '../route.js';
 
 
 export function Funnel({ f, big }) {
@@ -183,6 +185,38 @@ function Sources({ d, total }) {
   );
 }
 
+// جاهزية الجهة في رأس صفحتها: سبعة بنود، لكل ناقص زر ضبطه (org-hub.js). الدفعة بند واحد يقود إلى ملفها
+const ORG_ACTION = { edit: 'تحرير الجهة', cohort: 'افتح ملف الدفعة', 'new-cohort': 'أنشئ دفعة لها', coordinator: 'قسم المنسق', approve: 'اعتمدهم' };
+const WRITE_ONLY = new Set(['edit', 'new-cohort']);
+function OrgReadiness({ org, access, journey, members, pending, canWrite, onEdit }) {
+  const r = orgReadiness({ org, access, journey, members, pending });
+  const run = (x) => {
+    if (x.action === 'edit') return onEdit();
+    if (x.action === 'cohort') return navigate({ ctx: 'leaders', tab: 'programs', id: x.other });
+    if (x.action === 'new-cohort') { window.location.hash = `#/leaders/programs?new=${encodeURIComponent(org.id)}`; return undefined; }
+    if (x.action === 'coordinator') return document.getElementById('org-coordinator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (x.action === 'approve') { window.location.hash = `#/leaders/participants?org=${encodeURIComponent(org.id)}&status=pending_approval`; }
+    return undefined;
+  };
+  return (
+    <section className="la-card org-ready" aria-labelledby="org-ready-h">
+      <div className="la-row between">
+        <h3 id="org-ready-h">جاهزية الجهة</h3>
+        <span className={`la-chip ${r.missing ? 'warn' : 'ok'}`}>{readinessSummary(r)}</span>
+      </div>
+      <ol className="cohort-setup">
+        {r.items.map((x, i) => (
+          <li key={x.key} className={x.ok ? 'ok' : 'no'}>
+            <span className="cs-n" aria-hidden="true">{x.ok ? '✓' : i + 1}</span>
+            <b>{x.title}</b><span>{x.detail}</span>
+            {x.action && (canWrite || !WRITE_ONLY.has(x.action)) && <button className={`btn-sm ${x.ok ? 'ghost' : 'primary'}`} onClick={() => run(x)}>{ORG_ACTION[x.action]}</button>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 // فهرس صفحة الجهة: ما ليس للجهة (كصفحة «بدون جهة») يُخفى من الفهرس تلقائيًا
 const ORG_SECTIONS = [['org-journey', 'الرحلة والدفعة'], ['org-team', 'الفريق'], ['org-coordinator', 'منسق الجهة'], ['org-sources', 'مصادر الانتساب'], ['org-finance', 'الرعاية والتكلفة'], ['org-tracks', 'المسارات'], ['org-members', 'المشاركون']];
 const MEMBER_SORTS = { name: (p) => p.full_name, title: (p) => p.job_title, track: (p) => p.track, status: (p) => STATUS[p.status] || p.status, seen: (p) => p.last_login_at, joined: (p) => p.created_at };
@@ -199,6 +233,9 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
 
   const load = useCallback(async () => { setD(null); setD(await L('admin.org', { id })); }, [id]);
   useEffect(() => { load(); }, [load]);
+  // رحلة الجهة تُقرأ مرة لقسمها ولجاهزية الجهة معًا (الدفعة وما بقي فيها)
+  const [journey, setJourney] = useState(null);
+  useEffect(() => { setJourney(null); if (id !== 'none') L('admin.org-journey', { organization_id: id }).then(setJourney); }, [id]);
 
   const all = d?.participants || [];
   const memberFields = useMemo(() => [
@@ -278,8 +315,10 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
+      {!isNone && <OrgReadiness org={o} access={orgs.find((x) => x.id === o.id)?.access || null} journey={journey?.success ? journey : null}
+        members={all.length} pending={fn.pending_approval || 0} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
       <SectionIndex label="أقسام صفحة الجهة" sections={ORG_SECTIONS} />
-      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
+      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} data={journey} /></div>}
       {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
       {!isNone && <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>}
 

@@ -201,3 +201,20 @@ test('صفحة الجهة عند الإدارة: جاهزية الدفعة بم�
   await expect(map).toContainText('أكبر تجمع الآن 15 شخصًا عند «تحديد المستوى»');
   expect(await map.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
 });
+
+test('جاهزية الجهة في رأس صفحتها: ما ينقص بجملة، ولكل ناقص زر ضبطه، والدفعة بند يقود إلى ملفها', async ({ page }) => {
+  const calls = await setup(page, {
+    'admin.orgs': { success: true, orgs: [{ ...org, access: { state: 'invited', n: 1, email: 'k@x.sa' } }], unassigned: { total: 0, typed: [] } },
+    'admin.org-journey': { success: true, cohort: { id: 'c1', name: 'دفعة سفراء', status: 'open' }, setup_missing: 2, setup: [], journey_map: null },
+  });
+  const card = page.locator('.org-ready');
+  await expect(card.getByRole('heading', { name: 'جاهزية الجهة' })).toBeVisible();
+  // بلا مقاعد ولا عقد ولا شعار في بيانات الجهة، والمنسق مدعو لم يدخل، والدفعة بقي فيها بندان
+  await expect(card.locator('li.no', { hasText: 'منسق الجهة' })).toContainText('دُعي (k@x.sa) ولم يدخل بعد');
+  await expect(card.locator('li.no', { hasText: 'العقد والمقاعد' })).toContainText('عدد المقاعد');
+  await expect(card.locator('li.ok', { hasText: 'رابط التسجيل' })).toHaveCount(1);
+  // الرحلة تُقرأ مرة واحدة لقسمها وللجاهزية معًا
+  expect(calls.filter((c) => c.action === 'admin.org-journey')).toHaveLength(1);
+  await card.locator('li', { hasText: 'الدفعة' }).getByRole('button', { name: 'افتح ملف الدفعة' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
+});
