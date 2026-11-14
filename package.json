@@ -36,10 +36,10 @@
     "video:excerpt": "node shared/video/excerpt-audio.mjs"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "^7.29.7",
+    "@babel/eslint-parser": "^7.29.13",
     "@babel/plugin-syntax-jsx": "^7.29.7",
-    "@electric-sql/pglite": "^0.2.17",
-    "@playwright/test": "1.56.1",
+    "@electric-sql/pglite": "^0.5.15",
+    "@playwright/test": "1.65.0",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
