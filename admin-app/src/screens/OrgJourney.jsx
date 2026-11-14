@@ -8,9 +8,11 @@ import { L } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 
-export default function OrgJourney({ orgId, canWrite = false }) {
-  const [d, setD] = useState(null);
-  useEffect(() => { setD(null); L('admin.org-journey', { organization_id: orgId }).then(setD); }, [orgId]);
+// data: إن قرأتها صفحة الجهة (لجاهزيتها) تُمرَّر هنا فلا تُقرأ مرتين
+export default function OrgJourney({ orgId, canWrite = false, data = undefined }) {
+  const [own, setD] = useState(null);
+  useEffect(() => { if (data !== undefined) return; setD(null); L('admin.org-journey', { organization_id: orgId }).then(setD); }, [orgId, data]);
+  const d = data !== undefined ? data : own;
   if (!d) return <section className="la-card"><h3>رحلة الجهة</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card"><h3>رحلة الجهة</h3><p className="la-err">{d.message}</p></section>;
   return (
