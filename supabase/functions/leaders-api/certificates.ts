@@ -194,11 +194,11 @@ async function insertCertificate(p: any, by: string | null, final: FinalRef | nu
 }
 
 // ── دورة الشهادة من التقييم الختامي (D05) ──
-// يُستدعى عند اعتماد التقييم الختامي. اجتاز أو اجتاز بملاحظات: تصدر، أو تُعاد المعلّقة إن طابق قرارها،
-// وإلا تُستبدل بجديدة. يُمدَّد أو لم يجتز: لا يصدر شيء، وتُلغى المعلّقة.
+// يُستدعى عند اعتماد التقييم الختامي. اجتاز أو اجتاز بملاحظات: تصدر، أو تُعاد المعلّقة لإعادة الفتح إن طابق قرارها،
+// وإلا تُستبدل بجديدة. المعلّقة يدويًا لا يعيدها اعتماد. يُمدَّد أو لم يجتز: لا يصدر شيء، وتُلغى المعلّقة.
 export async function onFinalApproved(participantId: string, final: FinalRef, by: string | null) {
   const cfg = await settings();
-  const { data: certs } = await db.from('certificates').select('id, status, snapshot').eq('participant_id', participantId).in('status', ['valid', 'suspended']);
+  const { data: certs } = await db.from('certificates').select('id, status, snapshot, revoke_reason').eq('participant_id', participantId).in('status', ['valid', 'suspended']);
   const valid = (certs || []).find((c: any) => c.status === 'valid');
   const suspended = (certs || []).find((c: any) => c.status === 'suspended');
   if (!PASSING.includes(final.decision)) {
@@ -206,7 +206,7 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
     return null;
   }
   if (valid) return null;
-  if (suspended && suspended.snapshot?.decision === final.decision) {
+  if (suspended && forReopen(suspended) && suspended.snapshot?.decision === final.decision) {
     await setStatus(suspended.id, 'valid', by || 'system', null);
     await audit('system', by, 'certificate.restore', 'certificates', suspended.id, null, { decision: final.decision });
     return { id: suspended.id, serial: suspended.snapshot?.serial };
@@ -238,20 +238,31 @@ export function certificateNotice(c: any) {
   return 'اعتُمد التقييم';
 }
 
-// بعد تأكيد الاسم: إن كان التقييم الختامي معتمدًا بقرار ناجح ولا شهادة سارية، تصدر الآن بقرار التقييم نفسه
+// بعد تأكيد الاسم: إن كان التقييم الختامي معتمدًا بقرار ناجح ولا شهادة سارية، تصدر الآن بقرار التقييم نفسه.
+// ما أُلغي أو عُلّق بعد آخر اعتماد (استرداد، أو إجراء يدوي، أو إعادة فتح جارية) يبقى كما هو: التأكيد لا يعيده ولا يصدر بدلًا منه
 export async function issueAfterNameConfirm(participantId: string) {
-  const { data: rec } = await db.from('final_evaluations').select('program_id, decision, snapshot, status')
+  const { data: rec } = await db.from('final_evaluations').select('program_id, decision, snapshot, status, decided_at')
     .eq('participant_id', participantId).eq('status', 'approved').order('decided_at', { ascending: false }).limit(1).maybeSingle();
   if (!rec) return null;
   const decision = String(rec.decision || rec.snapshot?.decision || '');
   if (!PASSING.includes(decision)) return null;
+  const { data: stopped, error } = await db.from('certificates').select('status, revoked_at').eq('participant_id', participantId).in('status', ['suspended', 'revoked']);
+  if (error) throw new Fail('تعذّر التحقق من حال الشهادة', 500, 'db_error');
+  const last = Date.parse(rec.decided_at) || -Infinity;
+  if ((stopped || []).some((c: any) => standsAfter(c, last))) return null;
   return onFinalApproved(participantId, { decision, formula_version: rec.snapshot?.config_version ?? null, program_id: rec.program_id }, null);
 }
+
+// سبب تعليق إعادة الفتح كما يُخزَّن في revoke_reason: به يُفرَّق عن التعليق اليدوي، فلا يعيد الاعتماد غيره
+const REOPEN_REASON = 'إعادة فتح التقييم الختامي: ';
+const forReopen = (c: any) => String(c?.revoke_reason || '').startsWith(REOPEN_REASON);
+// قاعدة heldCertificates نفسها: الإلغاء أو التعليق قائم بعد الاعتماد ما لم يثبت أنه قبله، فلا يُتجاوز عند الشك
+const standsAfter = (c: any, last: number) => !(Date.parse(c.revoked_at) < last);
 
 // إعادة فتح التقييم الختامي تعلّق الشهادة السارية حتى يُعتمد من جديد
 export async function suspendForReopen(participantId: string, by: string, note: string) {
   const { data: c } = await db.from('certificates').select('id').eq('participant_id', participantId).eq('status', 'valid').maybeSingle();
-  if (c) await setStatus(c.id, 'suspended', by, `إعادة فتح التقييم الختامي: ${note}`.slice(0, 500));
+  if (c) await setStatus(c.id, 'suspended', by, `${REOPEN_REASON}${note}`.slice(0, 500));
 }
 
 // الاسترداد يلغي الشهادة السارية أو المعلّقة (سياسة الاسترداد)
