@@ -161,21 +161,37 @@ const COUNTER_ALERT_MS = 10 * 60e3;
 let counterAlertAt = 0;
 
 // sourceShare: نصيب مصدر واحد من السقف (مصفوفة التأثير مثلًا)، فلا تستنزف بوابة عامة رموز دخول غيرها
+// بصمة العنوان في سجل البريد: يُبحث بها عن بريد يكتبه المدير («لماذا لم يصل؟») ولا يُستخرج منها عنوان.
+// مملّحة بسر المنصة نفسه في كل الدوال، فالبصمة واحدة أيًّا كانت الدالة المرسلة
+export async function addressHash(email: string) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`mail:${Deno.env.get('LEADERS_TOKEN_PEPPER') || ''}:${String(email || '').trim().toLowerCase()}`));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+// صف السجل بأعمدة مركز البريد، ويُعاد بدونها إن رُفض (قبل ترحيل 20261114110000): العداد لا يتعطل بعمود ناقص
+// deno-lint-ignore no-explicit-any
+async function logEvent(client: Client, row: Record<string, any>, extra: Record<string, any>) {
+  let { error } = await eventsOf(client).insert({ ...row, ...extra });
+  if (error) ({ error } = await eventsOf(client).insert(row));
+  if (error) console.error('mail_events insert:', error);
+}
+
+// force: قرار صريح من المدير بإرسال رسالة من صندوق «لم يُرسل»: يتجاوز حصة غير الرموز ويبقى تحت السقف الكلي
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
-  { kind, source, ref = null, cap, sourceShare, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number }): Promise<SendOutcome> {
+  { kind, source, ref = null, cap, sourceShare, force = false, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean }): Promise<SendOutcome> {
   const counts = await mailCounts(client);
+  // عنوان رسالة الرمز لا يُحفظ: بعض الدوال تكتب الرمز في عنوانها، والسجل لا يحمل رمزًا أبدًا (D15)
+  const extra = { to_hash: await addressHash(to), subject: kind === 'code' ? null : String(subject || '').slice(0, 300) };
   if (counts && sourceShare != null) {
     const { count, error } = await eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').eq('source', source)
       .gte('created_at', new Date(Date.now() - 864e5).toISOString());
     if (!error && (count ?? 0) >= Math.floor(cap * sourceShare)) {
-      await eventsOf(client).insert({ kind, source, ref, status: 'blocked', to_domain: domainOf(to) });
+      await logEvent(client, { kind, source, ref, status: 'blocked', to_domain: domainOf(to) }, extra);
       return { ok: false, reason: 'mail_share' };
     }
   }
-  const log = (status: string, resend_id: string | null = null) =>
-    eventsOf(client).insert({ kind, source, ref, status, resend_id, to_domain: domainOf(to) }).then(({ error }: { error: unknown }) => { if (error) console.error('mail_events insert:', error); });
+  const log = (status: string, resend_id: string | null = null) => logEvent(client, { kind, source, ref, status, resend_id, to_domain: domainOf(to) }, extra);
   if (counts) {
-    const d = mailDecision(kind, counts, cap);
+    const d = mailDecision(force ? 'alert' : kind, counts, cap);
     if (!d.ok) { await log('blocked'); return { ok: false, reason: d.reason as SendOutcome['reason'] }; }
   } else {
     // تعذّر العداد (D15): لا رسالة بلا قرار سقف إلا الرموز والتنبيه. ما سواها يُحجب بسبب السقف، والجماعي يدخل

@@ -51,6 +51,7 @@ import * as FB from './feedback360.ts';
 import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
+import * as MC from './mail-center.ts';
 
 type Body = Record<string, any>;
 
@@ -331,6 +332,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.f360-report': (a, b) => A.writer(a, FB.adminReport, b),
   'admin.f360-comment': (a, b) => A.writer(a, FB.adminHideComment, b),
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
+  // مركز البريد: الحصة للجميع. تشخيص عنوان ونص رسالة منتظرة (قد يحمل رابط دخول) لمن يكتب وحده، ورابط الدخول اليدوي للمدير الأعلى
+  'admin.mail-center': (a) => MC.center(a),
+  'admin.mail-trace': (a, b) => A.writer(a, MC.trace, b),
+  'admin.mail-queue-body': (a, b) => A.writer(a, MC.queueBody, b),
+  'admin.mail-queue-send': (a, b) => A.writer(a, MC.queueSend, b),
+  'admin.mail-queue-cancel': (a, b) => A.writer(a, MC.queueCancel, b),
+  'admin.mail-login-link': (a, b) => A.superWriter(a, MC.loginLink, b),
   'admin.mail-send-test': S.mailSendTest,
   'admin.visits': (_a, b) => S.visits(b),
   'admin.trends': () => S.trends(),

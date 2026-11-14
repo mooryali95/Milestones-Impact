@@ -53,8 +53,10 @@ jobs:
         run: bash scripts/ops/backup.sh
       # الطبقة الثانية تُحفظ ولو فشل الرفع إلى R2 (ops-2: فشل 409 فضاعت معه)، والمشفّر والبيان وحدهما: تفريغ قطعه
       # خطأ قبل تشفيره يبقى صريحًا في المجلد ولا يُرفع
+      # في مستودع عام أدوات السير يحمّلها أي حساب GitHub: النسخة المشفّرة لا تُنشر هناك، والطبقة الباقية R2 وحده.
+      # تعود هذه الطبقة تلقائيًا حين يعود المستودع خاصًا
       - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() && steps.gate.outputs.skip != 'true' }}
+        if: ${{ !cancelled() && steps.gate.outputs.skip != 'true' && github.repository_visibility != 'public' }}
         with:
           name: backup-${{ github.run_id }}
           path: |

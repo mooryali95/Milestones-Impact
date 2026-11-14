@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261114100000_leaders_payment_ledger
+-- as-of migration: 20261114110000_leaders_mail_center
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1008,12 +1008,16 @@ create table if not exists leaders.mail_events (
   resend_id text,
   to_domain text,
   ref text,
+  to_hash text,
+  subject text,
   constraint mail_events_kind_check CHECK ((kind = ANY (ARRAY['code'::text, 'alert'::text, 'notify'::text, 'bulk'::text, 'contact'::text]))),
   constraint mail_events_ref_check CHECK ((char_length(ref) <= 100)),
   constraint mail_events_resend_id_check CHECK ((char_length(resend_id) <= 100)),
   constraint mail_events_source_check CHECK ((char_length(source) <= 40)),
   constraint mail_events_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'failed'::text, 'blocked'::text]))),
+  constraint mail_events_subject_check CHECK ((char_length(subject) <= 300)),
   constraint mail_events_to_domain_check CHECK ((char_length(to_domain) <= 255)),
+  constraint mail_events_to_hash_check CHECK ((char_length(to_hash) <= 64)),
   constraint mail_events_pkey PRIMARY KEY (id)
 );
 
@@ -1029,7 +1033,11 @@ create table if not exists leaders.mail_queue (
   last_error text,
   sent_at timestamp with time zone,
   gave_up_at timestamp with time zone,
+  reason text,
+  cancelled_by text,
+  constraint mail_queue_cancelled_by_check CHECK ((char_length(cancelled_by) <= 254)),
   constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
+  constraint mail_queue_reason_check CHECK ((char_length(reason) <= 40)),
   constraint mail_queue_ref_check CHECK ((char_length(ref) <= 100)),
   constraint mail_queue_subject_check CHECK ((char_length(subject) <= 300)),
   constraint mail_queue_to_email_check CHECK ((char_length(to_email) <= 254)),
@@ -2835,9 +2843,13 @@ CREATE INDEX IF NOT EXISTS learning_models_capstone_idx ON leaders.learning_mode
 
 CREATE INDEX IF NOT EXISTS mail_events_ref ON leaders.mail_events USING btree (ref) WHERE (ref IS NOT NULL);
 
+CREATE INDEX IF NOT EXISTS mail_events_to_hash_idx ON leaders.mail_events USING btree (to_hash, created_at DESC) WHERE (to_hash IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS mail_events_window ON leaders.mail_events USING btree (created_at DESC, status, kind);
 
 CREATE INDEX IF NOT EXISTS mail_queue_pending ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
+
+CREATE INDEX IF NOT EXISTS mail_queue_pending_idx ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
 

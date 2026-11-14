@@ -118,7 +118,7 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
   it('النسخة المشفرة تُحفظ في أدوات السير ولو فشل الرفع إلى R2، ولا يُرفع منها غير المشفر والبيان', () => {
     const b = read('.github/workflows/backup.yml');
     const step = b.slice(b.indexOf('- uses: actions/upload-artifact'));
-    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && steps\.gate\.outputs\.skip != 'true' \}\}/);
+    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && steps\.gate\.outputs\.skip != 'true' && github\.repository_visibility != 'public' \}\}/);
     expect(step).toContain('backup-out/*.gpg');
     expect(step).toContain('backup-out/manifest-*.json');
     expect(step).not.toMatch(/path: backup-out\/\s*$/m);
@@ -175,5 +175,15 @@ describe('تجميد SSPDF (D13)', () => {
     expect(read('RUNBOOK.md')).toContain('**المنصات الأربع**');
     const f = read('SSPDF/FROZEN.md');
     for (const s of ['sspdf-inventory.mjs', 'BACKUP_PREFIX=archive', 'Exposed schemas', '20261107110000_sspdf_freeze']) expect(f).toContain(s);
+  });
+});
+
+// تدقيق 2026-11-14 (F1): في مستودع عام أدوات السير يحمّلها أي حساب، فالنسخة لا تُنشر هناك
+describe('النسخة لا تُنشر أداةَ سير في مستودع عام', () => {
+  it('خطوة الرفع وتمرين الاستعادة منها مشروطان بأن المستودع ليس عامًّا', () => {
+    const b = read('.github/workflows/backup.yml');
+    const step = b.slice(b.indexOf('actions/upload-artifact'));
+    expect(step.slice(0, 300)).toContain("github.repository_visibility != 'public'");
+    expect(read('.github/workflows/restore-drill.yml')).toMatch(/schedule == '17 3 2 \* \*'\) && github\.repository_visibility != 'public'/);
   });
 });

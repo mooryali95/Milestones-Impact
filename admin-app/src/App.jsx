@@ -66,7 +66,7 @@ function Dashboard({ user, onUser, onLogout }) {
       {/* حد التعليق هنا لا في main.jsx وحده: الإطار (الترويسة والسياقات والبحث الشامل) يظهر فورًا
           ويستقبل Ctrl+K، وتنتظر منطقة الشاشة وحدها قطعتها الكسولة */}
       <Suspense fallback={<div className="la-loading">جارٍ التحميل…</div>}>
-        {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+        {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
       </Suspense>
 
       <Palette />

@@ -90,3 +90,41 @@ describe('أعمدة ترحيلات لم تُطبَّق بعد (تقييم 360)'
     expect(EXPORT_FEEDBACK_COLUMNS).not.toMatch(/approved_by|released_by/);
   });
 });
+
+// تدقيق 2026-11-14 (N3 وN4): النسخة لا تكشف مفتاح الإجابة ولا ما يُحجب عن المشارك في بقية التطبيق
+describe('نسخة البيانات لا تسرّب ما يُحجب', () => {
+  const src = (f) => read(`supabase/functions/leaders-api/${f}`);
+  it('إجابات القياس للمُرسَل وحده وبلا درجة السؤال', async () => {
+    const { answersExportable, EXPORT_ANSWER_COLUMNS } = await import('../../supabase/functions/leaders-api/privacy.js');
+    expect(answersExportable({ status: 'in_progress' })).toBe(false);
+    expect(answersExportable({ status: 'void' })).toBe(false);
+    expect(answersExportable({ status: 'submitted' })).toBe(true);
+    expect(EXPORT_ANSWER_COLUMNS.split(', ')).not.toContain('score');
+    const ts = src('privacy.ts');
+    expect(ts).toContain(".filter(answersExportable).map((a) => a.id)");
+    expect(ts).toContain("from('assessment_answers').select(EXPORT_ANSWER_COLUMNS)");
+    expect(ts).not.toMatch(/from\('assessment_answers'\)\.select\('\*'\)/);
+  });
+  it('تقييم الخبير للمشارك والتقييم الختامي غير المعتمد لا يخرجان', async () => {
+    const { exportable, scrubRow } = await import('../../supabase/functions/leaders-api/privacy.js');
+    expect(exportable('expert_ratings', { direction: 'to_participant' })).toBe(false);
+    expect(exportable('expert_ratings', { direction: 'to_expert' })).toBe(true);
+    expect(exportable('final_evaluations', { status: 'draft' })).toBe(false);
+    expect(exportable('final_evaluations', { status: 'pending' })).toBe(false);
+    expect(exportable('final_evaluations', { status: 'approved' })).toBe(true);
+    expect(exportable('enrollments', {})).toBe(true);
+    expect(scrubRow('final_evaluations', { score: 80, decision: 'pass', adjust: { by: 'x' }, snapshot: {} })).toEqual({ score: 80, decision: 'pass' });
+  });
+  it('مقيّمو 360: يخرج من سُمّي، لا من استجاب ومتى. ومقيّمو الأثر تبقى حالتهم', async () => {
+    const { scrubRow } = await import('../../supabase/functions/leaders-api/privacy.js');
+    const r = { full_name: 'زميل', phase: 'f360', status: 'submitted', opened_at: 'x', submitted_at: 'y', invited_at: 'z' };
+    expect(scrubRow('raters', r)).toEqual({ full_name: 'زميل', phase: 'f360', invited_at: 'z' });
+    expect(scrubRow('raters', { ...r, phase: 'post' }).status).toBe('submitted');
+  });
+  it('ملاحظات الإدارة الداخلية لا تخرج', async () => {
+    const { scrubRow } = await import('../../supabase/functions/leaders-api/privacy.js');
+    expect(scrubRow('payments', { amount_cents: 199, admin_note: 'داخلي', customer_id: 'c' })).toEqual({ amount_cents: 199 });
+    expect(scrubRow('placements', { level: 'beginner', admin_note: 'داخلي' })).toEqual({ level: 'beginner' });
+    expect(scrubRow('expert_requests', { role: 'coach', tried: ['e1'] })).toEqual({ role: 'coach' });
+  });
+});
