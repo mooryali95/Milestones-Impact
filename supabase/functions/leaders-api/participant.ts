@@ -1244,7 +1244,8 @@ export async function modelGet(p: any, b: Body) {
   ]);
   const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
   return {
-    success: true, model: m, submission, initiative,
+    // sector: قطاع المشارك من ملفه، يختار به التطبيق المثال المحلول الأقرب (leaders-app/src/guide.js)
+    success: true, model: m, submission, initiative, sector: p.sector || null,
     imports: await importsFor(p, m.fields),
     capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
   };

@@ -16,6 +16,7 @@ import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
+import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
@@ -212,6 +213,16 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
             </ul>
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}
+          </section>
+
+          <section className="card cp-example" aria-labelledby="cp-ex-h">
+            <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
+            <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع جهتك.</p>
+            <div className="row">
+              {examplesFor(me?.sector).map((ex, i) => (
+                <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
+              ))}
+            </div>
           </section>
 
           <section className="card cp-case" aria-labelledby="cp-case-h">
