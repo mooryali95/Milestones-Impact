@@ -941,3 +941,19 @@
 .cohort-setup li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-warn); }
 .cohort-setup li.ok { border-inline-start-color: var(--st-ok); }
 .cohort-setup li span { flex: 1; min-inline-size: 180px; color: var(--ink-mid); font-size: .88rem; }
+
+/* ── صفحة العملية في سجل المدفوعات (PaymentFile.jsx) ── */
+.payf { display: grid; gap: 14px; }
+.payf .pf-kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.payf .pf-kv span { color: var(--ink-mid); }
+.payf .pf-kv b { overflow-wrap: anywhere; text-align: end; }
+.payf-contact { margin-top: 12px; flex-wrap: wrap; }
+.payf-line { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.payf-line li { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 8px 10px; border-inline-start: 3px solid var(--line); font-size: .9rem; }
+.payf-line li.ok { border-inline-start-color: var(--st-ok); }
+.payf-line li.warn { border-inline-start-color: var(--st-warn); }
+.payf-line li.bad { border-inline-start-color: var(--st-bad); }
+.payf-line time { color: var(--ink-light); font-size: .82rem; }
+.payf textarea { inline-size: 100%; box-sizing: border-box; }
+.pay-notify { display: grid; gap: 8px; margin: 8px 0 14px; }
+@media (max-width: 640px) { .payf-line li { grid-template-columns: 1fr; gap: 2px; } }

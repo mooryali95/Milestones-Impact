@@ -58,6 +58,7 @@ export default function Leaders({ canWrite, pending }) {
   const capId = tab === 'capstones' ? route.id : null;
   const expertId = tab === 'experts' ? route.id : null;
   const cohortId = tab === 'programs' ? route.id : null;
+  const payId = tab === 'payments' ? route.id : null;
   const [orgData, setOrgData] = useState(null);
   // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
   useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
@@ -98,7 +99,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
-  else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} />;
+  else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} payId={payId} onOpen={(id) => { at('payments', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;

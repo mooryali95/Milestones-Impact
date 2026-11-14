@@ -7,12 +7,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { date, dateTime, L } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
+import PaymentFile, { PAY_ST } from './PaymentFile.jsx';
+import { isAbandoned, NOTIFY } from '../../../supabase/functions/leaders-api/payments-ledger.js';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
-import { applyFilters, sortRows } from '../filters.js';
+import { applyFilters, presetCounts, sortRows } from '../filters.js';
 
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 const ITEM = { assessment: 'القياس المبدئي', program: 'إكمال البرنامج' };
-const PAY_ST = { paid: ['مدفوع', 'ok'], pending: ['معلّق', 'warn'], refunded: ['مسترد', 'bad'], failed: ['تعذّر', 'bad'], expired: ['انتهى', ''] };
 const SRC = { paid: 'دفع', admin: 'منحة إدارية', grandfathered: 'إعفاء سابق', sponsor: 'رعاية جهة' };
 const when = (d) => dateTime(d) || '·';
 
@@ -29,12 +30,13 @@ function SettingsCard({ d, canWrite, reload }) {
   const { toast, confirm } = useUI();
   const s = d.settings;
   const [v, setV] = useState({ assessment_product: s.assessment_product || '', program_product: s.program_product || '', assessment: (s.assessment_cents / 100).toString(), program: (s.program_cents / 100).toString() });
+  const [notify, setNotify] = useState(() => ({ ...(s.notify || {}) }));
   const [busy, setBusy] = useState(false);
   const save = async (enabled) => {
     if (enabled && !s.enabled && !(await confirm('تفعيل الدفع يجعل القياس والبرنامج مدفوعين لكل مشارك جديد غير مرعي من جهة. المشاركون الحاليون معفون. تفعّل؟'))) return;
     setBusy(true);
     const r = await L('admin.payment-settings', { enabled, assessment_product: v.assessment_product, program_product: v.program_product,
-      assessment_cents: Math.round(Number(v.assessment) * 100), program_cents: Math.round(Number(v.program) * 100) });
+      assessment_cents: Math.round(Number(v.assessment) * 100), program_cents: Math.round(Number(v.program) * 100), notify });
     setBusy(false);
     toast(r.success ? (enabled ? (r.grandfathered ? `الدفع مفعّل، وأُعفي ${r.grandfathered} مشاركًا قائمًا` : 'الدفع مفعّل') : 'حُفظت الإعدادات') : r.message);
     if (r.success) reload();
@@ -59,6 +61,13 @@ function SettingsCard({ d, canWrite, reload }) {
         <label>سعر البرنامج (USD)<input dir="ltr" inputMode="decimal" value={v.program} disabled={!canWrite} onChange={(e) => setV({ ...v, program: e.target.value })} /></label>
       </div>
       <p className="la-muted small">المبلغ الفعلي يأخذه Creem من المنتج نفسه، والسعر هنا حد أدنى: دفعة أقل منه أو بعملة غير الدولار تُعلَّق ولا تمنح وصولًا. اجعلهما متطابقين.</p>
+      <h3>بريد الدفع</h3>
+      <p className="la-muted small">كل بريد مغلق حتى تفتحه. المفتوح يُرسل آليًّا ويُحسب من سقف البريد اليومي. تذكير من لم يكمل الدفع فعل يدوي من صفحة العملية ولا مفتاح له.</p>
+      <div className="pay-notify">
+        {Object.entries(NOTIFY).map(([k, n]) => (
+          <label key={k} className="la-check"><input type="checkbox" checked={!!notify[k]} disabled={!canWrite} onChange={(e) => setNotify({ ...notify, [k]: e.target.checked })} /> <span><b>{n.label}</b><br /><small className="la-muted">{n.hint}</small></span></label>
+        ))}
+      </div>
       {canWrite && (
         <div className="la-row">
           <button className="btn-sm ghost" disabled={busy} onClick={() => save(s.enabled)}>احفظ</button>
@@ -77,6 +86,12 @@ const PAY_FIELDS = [
   { key: 'mode', label: 'الأوضاع', aria: 'الوضع', all: 'الإنتاج والاختبار', get: (p) => p.mode, options: [['live', 'الإنتاج'], ['test', 'الاختبار']] },
   { key: 'item', label: 'البنود', aria: 'البند', get: (p) => p.item, options: Object.entries(ITEM) },
 ];
+// عروض سريعة: من فتح صفحة الدفع ولم يكمل (isAbandoned من payments-ledger.js)، وما عُلّق للمراجعة
+const PAY_PRESETS = [
+  { key: 'abandoned', label: 'لم يكملوا الدفع', test: (p, now) => isAbandoned(p, now) },
+  { key: 'held', label: 'معلّقة للمراجعة', test: (p) => p.status === 'pending' && String(p.note || '').startsWith('held') },
+  { key: 'refunded', label: 'مستردة', test: (p) => p.status === 'refunded' },
+];
 const PAY_SORTS = { at: (p) => p.paid_at || p.created_at, who: (p) => p.participants?.full_name || p.email, item: (p) => ITEM[p.item], amount: (p) => p.amount_cents || 0, status: (p) => PAY_ST[p.status]?.[0] || p.status };
 const ENT_FIELDS = [
   { key: 'item', label: 'البنود', aria: 'البند', get: (e) => e.item, options: Object.entries(ITEM) },
@@ -89,6 +104,10 @@ const PAY_COLS = [
   { key: 'email', label: 'البريد', width: 30, get: (p) => p.email }, { key: 'item', label: 'البند', width: 18, get: (p) => ITEM[p.item] },
   { key: 'amount', label: 'المبلغ', width: 12, get: (p) => (p.amount_cents || 0) / 100 }, { key: 'currency', label: 'العملة', width: 10, get: (p) => p.currency },
   { key: 'status', label: 'الحالة', width: 12, get: (p) => PAY_ST[p.status]?.[0] || p.status }, { key: 'mode', label: 'الوضع', width: 10, get: (p) => (p.mode === 'test' ? 'اختبار' : 'إنتاج') },
+  { key: 'subtotal', label: 'قبل الضريبة', width: 12, get: (p) => (p.subtotal_cents == null ? '' : p.subtotal_cents / 100) }, { key: 'tax', label: 'الضريبة', width: 10, get: (p) => (p.tax_cents == null ? '' : p.tax_cents / 100) },
+  { key: 'refund', label: 'المسترد', width: 10, get: (p) => (p.refund_cents == null ? '' : p.refund_cents / 100) }, { key: 'country', label: 'بلد الدفع', width: 10, get: (p) => p.country },
+  { key: 'customer', label: 'الاسم كما دفع', width: 24, get: (p) => p.customer_name }, { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.participants?.phone },
+  { key: 'txn', label: 'رقم المعاملة', width: 24, get: (p) => p.transaction_id }, { key: 'admin_note', label: 'ملاحظة الإدارة', width: 40, get: (p) => p.admin_note },
   { key: 'order', label: 'رقم الطلب', width: 24, get: (p) => p.order_id }, { key: 'checkout', label: 'صفحة الدفع', width: 24, get: (p) => p.checkout_id },
 ];
 const ENT_COLS = [
@@ -98,21 +117,22 @@ const ENT_COLS = [
   { key: 'state', label: 'الحالة', width: 10, get: (e) => (e.revoked_at ? 'مسحوب' : 'ساري') },
 ];
 
-export default function Payments({ canWrite, onPerson }) {
+export default function Payments({ canWrite, onPerson, payId = null, onOpen = () => {} }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [tab, setTab] = useState('payments');
   // شريطان (العمليات والاستحقاقات) داخل تبويبات الشاشة، فلا يكتبان في العنوان. العمليات تبدأ بالإنتاج
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'mode', 'item', 'sort'], {}, { scope: 'payments', defaults: { mode: 'live' }, url: false });
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'status', 'mode', 'item', 'sort'], {}, { scope: 'payments', defaults: { mode: 'live' }, url: false });
   const [ef, setEf, clearEf, replaceEf] = useFilters(['q', 'item', 'source', 'state', 'sort'], {}, { scope: 'entitlements', url: false });
   const load = useCallback(async () => setD(await L('admin.payments')), []);
   useEffect(() => { load(); }, [load]);
 
   const allPay = (d?.success && d.payments) || [];
   const allEnt = (d?.success && d.entitlements) || [];
-  const rows = useMemo(() => sortRows(applyFilters(allPay, { fields: PAY_FIELDS, text: (p) => [p.email, p.participants?.full_name, p.order_id, p.checkout_id].join(' ') }, f), PAY_SORTS, f.sort), [allPay, f]);
+  const rows = useMemo(() => sortRows(applyFilters(allPay, { fields: PAY_FIELDS, presets: PAY_PRESETS, text: (p) => [p.email, p.participants?.full_name, p.order_id, p.checkout_id].join(' ') }, f), PAY_SORTS, f.sort), [allPay, f]);
   const ents = useMemo(() => sortRows(applyFilters(allEnt, { fields: ENT_FIELDS, text: (e) => [e.participants?.full_name, e.participants?.email].join(' ') }, ef), ENT_SORTS, ef.sort), [allEnt, ef]);
 
+  if (payId) return <PaymentFile id={payId} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} />;
   if (!d) return <Spinner />;
   if (!d.success) return <p className="la-err">{d.message}</p>;
   const k = d.kpis;
@@ -152,7 +172,7 @@ export default function Payments({ canWrite, onPerson }) {
       </div>
 
       {tab === 'payments' && (
-        <FilterBar scope="payments" state={f} set={setF} clear={clearF} replace={replaceF} fields={PAY_FIELDS}
+        <FilterBar scope="payments" state={f} set={setF} clear={clearF} replace={replaceF} fields={PAY_FIELDS} presets={PAY_PRESETS} counts={presetCounts(allPay, PAY_PRESETS)}
           shown={rows.length} total={allPay.length} noun="عملية" placeholder="بحث بالاسم أو البريد أو رقم الطلب"
           actions={<ExportButton scope="payments" meta={{ kind: 'PAY', title: 'عمليات الدفع', sheet: 'العمليات', file: 'Payments' }} columns={PAY_COLS} all={allPay} filtered={rows} noun="عملية" />} />
       )}
@@ -169,7 +189,7 @@ export default function Payments({ canWrite, onPerson }) {
               <thead><tr><SortTh k="at" state={f} set={setF}>التاريخ</SortTh><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="item" state={f} set={setF}>البند</SortTh><SortTh k="amount" state={f} set={setF}>المبلغ</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th>المرجع</th><th /></tr></thead>
               <tbody>{rows.map((p) => (
                 <tr key={p.id}>
-                  <td>{when(p.paid_at || p.created_at)}</td>
+                  <td><button className="la-link" onClick={() => onOpen(p.id)} title="افتح العملية">{when(p.paid_at || p.created_at)}</button></td>
                   <td>{p.participant_id ? <button className="la-link" onClick={() => onPerson?.(p.participant_id)}>{p.participants?.full_name || p.email}</button> : p.email}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                   <td>{ITEM[p.item]}{p.mode === 'test' && <small className="la-chip">اختبار</small>}</td>
                   <td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td>
