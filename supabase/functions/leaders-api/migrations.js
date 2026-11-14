@@ -121,6 +121,7 @@ export const MIGRATIONS = [
   '20261114100000_leaders_payment_ledger',
   '20261114110000_leaders_mail_center',
   '20261114120000_public_lockdown',
+  '20261114140000_leaders_initiative_business_case',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -160,4 +161,5 @@ export const MIGRATION_GATES = {
   '20261114100000_leaders_payment_ledger': ["tolerant", "الدالة تكتب هذه الأعمدة بتحديث منفصل يتحمل غيابها (payments.ts saveLedger)، وتقرأ العملية بـ* فتعمل قبل الترحيل وبعده"],
   '20261114110000_leaders_mail_center': ["tolerant", ""],
   '20261114120000_public_lockdown': ["tolerant", ""],
+  '20261114140000_leaders_initiative_business_case': ["tolerant", "محتوى نماذج فقط: الدوال تقرأ النماذج كما هي في القاعدة، وفحص فصل الشراء يُطبَّق متى وُجد الفصل"],
 };
