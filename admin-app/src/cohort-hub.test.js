@@ -89,5 +89,7 @@ describe('معالج الدفعة الجديدة', () => {
   it('جسم الحفظ: دفعة الأفراد بلا جهة، والتثبيت على أحدث نسخة', () => {
     expect(wizardBody({ kind: 'individuals', organization_id: 'o1', name: ' أ ', program_id: 'p1', pin: true })).toMatchObject({ organization_id: null, name: 'أ', program_version_id: 'latest', status: 'open' });
     expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1' }).program_version_id).toBe('');
+    // برنامج بلا نسخة محفوظة (كل برنامج جديد): لا يُرسل 'latest' فيرفضه الخادم، بل يتبع آخر تعديل
+    expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1', pin: true }, { canPin: false }).program_version_id).toBe('');
   });
 });

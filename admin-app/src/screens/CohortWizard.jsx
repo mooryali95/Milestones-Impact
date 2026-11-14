@@ -48,7 +48,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
     if (block) return toast(block);
     if (!last) return setStep(step + 1);
     setBusy(true);
-    const r = await L('admin.cohort-save', wizardBody(v));
+    const r = await L('admin.cohort-save', wizardBody(v, { canPin: !!prog?.versions?.length }));
     setBusy(false);
     if (!r.success) return toast(r.message);
     toast('أُنشئت الدفعة. أكمل فريقها وجدولها من ملفها.');

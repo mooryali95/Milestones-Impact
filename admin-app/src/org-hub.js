@@ -24,8 +24,8 @@ export function orgReadiness({ org: o, access = null, journey = null, members = 
       detail: active ? 'فعّالة: رابطها يعمل ولوحة منسقها مفتوحة' : 'غير فعّالة: رابط تسجيلها متوقف حتى تُفعَّل',
     },
     {
-      key: 'link', title: 'رابط التسجيل', ok: !!o.invite_code, action: o.invite_code ? null : 'edit',
-      detail: o.invite_code ? 'من يسجّل به يُربط بالجهة ويدخل دفعتها تلقائيًا' : 'بلا رمز دعوة: لا رابط يُشارَك',
+      key: 'link', title: 'رابط التسجيل', ok: !!o.invite_code && active, action: o.invite_code && active ? null : 'edit',
+      detail: !o.invite_code ? 'بلا رمز دعوة: لا رابط يُشارَك' : active ? 'من يسجّل به يُربط بالجهة ويدخل دفعتها تلقائيًا' : 'متوقف ما دامت الجهة غير فعّالة: من يفتحه لا يُربط بها',
     },
     !journey ? null : !cohort
       ? { key: 'cohort', title: 'الدفعة', ok: false, action: 'new-cohort', detail: 'لا دفعة مفتوحة أو جارية: مشاركوها يدخلون الدفعة المفتوحة العامة، بلا جدول ولا مستشار خاص بهم' }
