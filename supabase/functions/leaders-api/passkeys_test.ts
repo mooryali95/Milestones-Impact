@@ -57,3 +57,15 @@ Deno.test('سقف الجلسة: 30 يومًا من الدخول، و8 ساعات
   assertEquals(CONFIG.sessionMaxDays, 30);
   assert(CONFIG.demoSessionHours <= 8);
 });
+
+Deno.test('مقارنة السر بزمن ثابت: تطابق تام وحده', async () => {
+  const { secretEquals } = await import('./core.ts');
+  assert(secretEquals('s3cret-value', 's3cret-value'));
+  assert(!secretEquals('s3cret-valuX', 's3cret-value'));
+  assert(!secretEquals('s3cret', 's3cret-value'), 'أقصر');
+  assert(!secretEquals('s3cret-value-more', 's3cret-value'), 'أطول');
+  assert(!secretEquals('', 's3cret-value'));
+  assert(!secretEquals('x', ''), 'بلا سر مضبوط لا يمر أحد');
+  assert(!secretEquals(undefined, 's3cret-value'));
+  assert(!secretEquals(null, 's3cret-value'));
+});

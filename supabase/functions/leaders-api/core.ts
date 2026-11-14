@@ -99,6 +99,16 @@ export async function sha256Hex(value: string) {
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// مقارنة سر بزمن ثابت: لا يتسرب من زمن الرد كم حرفًا طابق (تدقيق 2026-11-14، N17)
+export function secretEquals(given: unknown, expected: string) {
+  if (typeof given !== 'string' || !expected) return false;
+  const a = enc.encode(given);
+  const b = enc.encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i += 1) diff |= (a[i % (a.length || 1)] ?? 0) ^ b[i];
+  return diff === 0;
+}
+
 export async function hash(value: string) {
   const buf = await crypto.subtle.digest('SHA-256', enc.encode(CONFIG.pepper + ':' + value));
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
