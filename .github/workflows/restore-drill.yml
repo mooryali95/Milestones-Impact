@@ -43,7 +43,8 @@ jobs:
         run: node scripts/ops/backup-check.mjs --max-hours=36
 
   legacy:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 2 * *'
+    # يستعيد من أدوات سير النسخ، وهي لا تُنشر في مستودع عام (backup.yml): يعمل حين يكون المستودع خاصًا
+    if: (github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 2 * *') && github.repository_visibility != 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

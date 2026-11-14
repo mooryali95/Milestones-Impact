@@ -6,18 +6,19 @@
 
 // الجداول التي تُصدَّر بعمود المشارك فيها. القيمة: الأعمدة المحجوبة من ذلك الجدول فوق الحجب العام.
 export const EXPORT_TABLES = {
-  enrollments: [], placements: [], assessments: ['retake_requested_by'], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id'],
+  enrollments: [], placements: ['admin_note'], assessments: ['retake_requested_by'], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id', 'admin_note'],
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],
   capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], certificates: ['issued_by', 'revoked_by'], reports: [],
-  coaching_sessions: ['confirmed_by'], expert_requests: ['created_by'], expert_ratings: [], peer_requests: ['closed_by'],
+  coaching_sessions: ['confirmed_by'], expert_requests: ['created_by', 'tried'], expert_ratings: [], peer_requests: ['closed_by'],
   cohort_group_members: [], cohort_roles: [], hall_presence: [], workshop_attendance: [],
   sponsor_requests: ['decided_by'],
   // المقيّمون: ما أدخله المشارك عنهم وحالة الدعوة. إجاباتهم وتعليقاتهم سرية لأصحابها فلا تخرج
   raters: ['answers', 'comment', 'verification', 'verification_flags', 'verified_by'],
   // التقييم الختامي: القرار والدرجة. أصوات المقيّمين وأسماؤهم لا تخرج
-  final_evaluations: ['votes', 'submitted_by'],
+  // والمسودة وتعديلات المقيّمين ولقطة الحساب داخلية: يخرج المعتمد وحده بقراره ودرجته (exportable)
+  final_evaluations: ['votes', 'submitted_by', 'adjust', 'snapshot'],
   auth_sessions: [], passkeys: [],
 };
 // أعمدة ترحيلات لم تُطبَّق بعد فليست في المخطط المرجعي (baseline.sql): تُحجب من الآن، وتنتقل إلى EXPORT_TABLES
@@ -38,9 +39,24 @@ export const EXPORT_SKIPPED = {
 const SECRET = /(token|_hash$|^signature$|^public_key$|^credential_id$|^sign_count$|^aaguid$)/;
 export const isSecretColumn = (name) => SECRET.test(String(name));
 
+// صفوف لا تخرج أصلًا، وأعمدة تُحجب بحسب الصف، فوق حجب الأعمدة:
+// - تقييم الخبير للمشارك (to_participant) لا يُعرض له في أي موضع، فلا يخرج في نسخته. تقييمه هو للخبير ملكه فيخرج.
+// - التقييم الختامي قبل اعتماده مسودة داخلية.
+// - مقيّمو 360: يخرج من سمّاهم، ولا يخرج من استجاب منهم ومتى (الوعد: أعداد لا أسماء).
+export function exportable(table, row) {
+  if (table === 'expert_ratings') return row?.direction === 'to_expert';
+  if (table === 'final_evaluations') return row?.status === 'approved';
+  return true;
+}
+const F360_RATER_HIDDEN = ['status', 'opened_at', 'submitted_at', 'verified_at'];
+// إجابات القياس: للقياس المُرسَل وحده، وبلا درجة السؤال. الدرجة أثناء القياس تكشف مفتاح الإجابة سؤالًا سؤالًا
+export const EXPORT_ANSWER_COLUMNS = 'assessment_id, question_id, value, answered_at';
+export const answersExportable = (assessment) => assessment?.status === 'submitted';
+
 export function scrubRow(table, row) {
   const extra = new Set([...(EXPORT_TABLES[table] || []), ...(EXPORT_HIDDEN_PENDING[table] || [])]);
   const out = {};
+  if (table === 'raters' && row?.phase === 'f360') for (const k of F360_RATER_HIDDEN) extra.add(k);
   for (const [k, v] of Object.entries(row || {})) if (!isSecretColumn(k) && !extra.has(k)) out[k] = v;
   return out;
 }

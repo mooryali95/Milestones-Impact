@@ -5,7 +5,7 @@
 // me.erase-request: طلب حذف يصل المالك وينفذه المدير العام بمسار الحذف القائم (admin.participant-delete)،
 // أو يسحبه المشارك قبل تنفيذه. الحذف نفسه لا ينفذه المشارك: فيه موانع (شهادة صادرة، دفعة جارية) يقرأها إنسان.
 import { alertOps, audit, db, ERASE_MAIL_SUBJECT, eraseRequestMail, Fail, must, sendMail } from './core.ts';
-import { cleanReason, ERASE_REPLY_DAYS, eraseView, EXPORT_FEEDBACK_COLUMNS, EXPORT_PER_DAY, EXPORT_ROW_CAP, EXPORT_TABLES, scrubRow } from './privacy.js';
+import { answersExportable, cleanReason, ERASE_REPLY_DAYS, eraseView, EXPORT_ANSWER_COLUMNS, EXPORT_FEEDBACK_COLUMNS, EXPORT_PER_DAY, EXPORT_ROW_CAP, EXPORT_TABLES, exportable, scrubRow } from './privacy.js';
 import { CONTACT_EMAIL, POLICY_VERSION } from './labels.js';
 
 type Body = Record<string, any>;
@@ -38,13 +38,15 @@ export async function exportData(p: any) {
     const { data: rows, error } = await db.from(t).select('*').eq('participant_id', p.id).limit(EXPORT_ROW_CAP);
     // جدول لم يُطبَّق ترحيله بعد لا يفشل النسخة، ويُذكر في بيانها
     if (error) { skipped.push(t); return; }
-    if (rows?.length) data[t] = rows.map((r: any) => scrubRow(t, r));
+    const keep = (rows || []).filter((r: any) => exportable(t, r));
+    if (keep.length) data[t] = keep.map((r: any) => scrubRow(t, r));
   }));
   // الإجابات والنتائج تتبع القياس لا المشارك مباشرة
-  const ids = ((data.assessments as any[]) || []).map((a) => a.id);
+  // للقياس المُرسَل وحده وبلا درجة السؤال: نسخة تُطلب أثناء القياس لا تكشف مفتاح الإجابة (answersExportable)
+  const ids = ((data.assessments as any[]) || []).filter(answersExportable).map((a) => a.id);
   if (ids.length) {
     const [ans, res] = await Promise.all([
-      db.from('assessment_answers').select('*').in('assessment_id', ids).limit(EXPORT_ROW_CAP),
+      db.from('assessment_answers').select(EXPORT_ANSWER_COLUMNS).in('assessment_id', ids).limit(EXPORT_ROW_CAP),
       db.from('assessment_results').select('*').in('assessment_id', ids).limit(EXPORT_ROW_CAP),
     ]);
     if (ans.data?.length) data.assessment_answers = ans.data;
