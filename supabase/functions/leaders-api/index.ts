@@ -126,8 +126,8 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
   'consent.accept', 'org.share-consent', 'org.visibility', 'me.switch', 'pay.access', 'sponsor.cancel', 'sus.state', 'sus.submit']);
 // داخل البرنامج قبل الاعتماد وبعده: الملف والقياس المبدئي والدفع والرعاية، ودعوة المدير للتقدير القبلي (impact)،
 // ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)،
-// ورابط الجلسة عن بعد وغرفة الموجّه: حكمهما حال مرحلة متطلبهما في رحلته (stageOpen في activities.ts)، لا الاعتماد، فما
-// تعرضه الرحلة مفتوحًا بقاعدة الفتح أو بفتح الأدمن لا يُرد، والمقفل يُرد
+// ورابط الجلسة عن بعد وغرفة الموجّه: للمعتمد كما كان، ولغيره حين تفتح مرحلتهما في رحلته بقاعدة الفتح أو بفتح الأدمن
+// (sessionOpen في activities.ts)
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
   'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
@@ -141,7 +141,7 @@ const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine',
 // خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
 // GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
 const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
-const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. يبقى لك ملفك وبياناتك وشهادتك، وللاستفسار: ${CONTACT_EMAIL}`;
+const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. تبقى لك بياناتك وشهادتك ومخرجاتك للاطلاع والتنزيل، وللاستفسار: ${CONTACT_EMAIL}`;
 const approvedSeen = new Set<string>();
 async function programGate(action: string, p: any) {
   if (GATE_ACCOUNT.has(action)) return;

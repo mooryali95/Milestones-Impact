@@ -135,12 +135,20 @@ async function myRequirement(p: any, id: unknown, kind: string, session?: { coho
 }
 
 // متطلب الجلسة عن بعد والتوجيه يُستعمل ما دامت مرحلته في رحلة المشارك نفسها غير مقفلة (P1-04)، كما يقفل requirement.update
-// مرحلته وكما تعرضه الرحلة: ما فتحته قاعدة الفتح أو الأدمن قبل الاعتماد مفتوح، والمقفل مقفل ولو اعتُمد مساره
+// مرحلته وكما تعرضه الرحلة: ما فتحته قاعدة الفتح أو الأدمن قبل الاعتماد مفتوح
 const STAGE_LOCKED = 'هذه المرحلة لم تُفتح بعد';
 async function stageOpen(p: any, requirementId: string) {
   const { journey } = await journeyFor(p, { lite: true });
   const st = journey.find((s: any) => s.items.some((i: any) => i.id === requirementId));
   return !!st && st.status !== 'locked';
+}
+// رابط الجلسة وغرفة الموجّه والحجز: المعتمد مساره داخل البرنامج يصلها كما كان قبل P1-04 ولو قفل مرحلتها متطلب سابق ناقص،
+// فلا يُحجب مشارك دفع أو رعته جهته عن جلسة حية. وغير المعتمد حين تفتح مرحلتها في رحلته بقاعدة الفتح أو بفتح الأدمن،
+// والمنسحب والموقوف لا
+async function sessionOpen(p: any, requirementId: string) {
+  if (!inProgram(p.status)) return false;
+  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
+  return approvalOf(pl).approved || stageOpen(p, requirementId);
 }
 
 async function levelsOf(participantId: string, approvedOnly = false) {
@@ -245,7 +253,7 @@ export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
   if (!s || s.mode !== 'online' || !s.join_url) throw new Fail('الجلسة غير موجودة', 404);
   if (!checkinOpen(s)) throw new Fail('رابط الجلسة يُفتح قبل موعدها بساعة', 400, 'closed');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
-  if (!(await stageOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
+  if (!(await sessionOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
   if (r.config?.verify === 'join') {
     must(await db.from('workshop_attendance').upsert(
       { session_id: s.id, participant_id: p.id, method: 'join', ip: ctx.ip, user_agent: ctx.ua },
@@ -260,7 +268,7 @@ export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
 // متاح حين يعلن الموجّه توفره. يُسجَّل الطلب ويُبلَّغ الموجّه، ويدخل المشارك الغرفة مباشرة.
 export async function coachingInstant(p: any, b: Body) {
   const r = await myRequirement(p, b.requirement_id, 'coaching');
-  if (!(await stageOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
+  if (!(await sessionOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
   const c = r.config || {};
   if (!instantAvailable(c)) throw new Fail('الموجّه غير متاح للاتصال الفوري الآن، احجز موعدًا', 400, 'unavailable');
   const since = new Date(Date.now() - 2 * 36e5).toISOString();
@@ -326,7 +334,7 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
     await db.from('coaching_sessions').update({ status: 'cancelled', updated_at: now }).eq('external_id', e.previous_id).eq('status', 'booked');
   }
   // رابط الحجز بقاعدة coaching.instant نفسها (P1-04): رابط التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه
-  const why = !inProgram(p.status) ? 'out_of_program' : !(await stageOpen(p, r.id)) ? 'stage_locked' : null;
+  const why = !inProgram(p.status) ? 'out_of_program' : !(await sessionOpen(p, r.id)) ? 'stage_locked' : null;
   if (why) {
     await bookingIgnored(provider, e, r.id, p.id, why);
     return { success: true, ignored: 'not_eligible' };
@@ -539,17 +547,15 @@ async function workshopRecipients(s: any) {
   // المنسحب والموقوف خارج البرنامج (inProgram مصدر واحد): لا دعوة ولا تذكير (كان الموقوف يُدعى)
   return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && inProgram(m.status));
 }
-// رابط الجلسة عن بعد لمن تفتح له مرحلة متطلبها في رحلته، بقاعدة workshop.join نفسها (stageOpen): الرحلة والخادم والبريد
-// مصدر واحد. كان البريد يحكم بالاعتماد، فمن فتح الأدمن مرحلته قبل اعتماده يدخل من رحلته ولا رابط في بريده، والمعتمد
-// ومرحلته مقفلة (متطلب سابق ناقص) يأخذ الرابط من البريد ويرده الانضمام فلا يُسجَّل حضوره. تعذّر الحساب لأحدهم يحجب الرابط
-// عنه وحده، ويبقى زر الانضمام في رحلته حكمه
+// رابط الجلسة عن بعد في البريد بقاعدة workshop.join نفسها (sessionOpen): البريد والخادم مصدر واحد. فمن فتح الأدمن مرحلته
+// قبل اعتماده يأخذه، والمعتمد يأخذه كما كان. تعذّر الحساب لأحدهم يحجب الرابط عنه وحده، ويبقى زر الانضمام في رحلته حكمه
 async function openStageFor(ids: string[], requirementId: string) {
   const open = new Set<string>();
   if (!ids.length) return open;
   const rows = (must(await db.from('participants').select('*').in('id', ids)) ?? []) as any[];
   for (let i = 0; i < rows.length; i += 5) {
     await Promise.all(rows.slice(i, i + 5).map(async (p) => {
-      try { if (await stageOpen(p, requirementId)) open.add(p.id); } catch (e) { console.error('workshop stage', p.id, (e as Error).message); }
+      try { if (await sessionOpen(p, requirementId)) open.add(p.id); } catch (e) { console.error('workshop stage', p.id, (e as Error).message); }
     }));
   }
   return open;

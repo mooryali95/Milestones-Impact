@@ -400,18 +400,18 @@ Deno.test('دعوة الجلسة عن بعد: الرابط لمن تفتح له 
   } finally { w.restore(); }
 });
 
-// البريد والرحلة والانضمام قاعدة واحدة: من فتح الأدمن مرحلته قبل اعتماده يأخذ الرابط، والمعتمد ومرحلته مقفلة لا يأخذه
-// (كان يأخذه من البريد ويرده الانضمام فلا يُسجَّل حضوره)
-Deno.test('رابط الجلسة في البريد بحال مرحلتها في رحلة كل مدعو: فتح الأدمن يعطيه، ومتطلب سابق ناقص يحجبه كالانضمام', async () => {
+// البريد والانضمام قاعدة واحدة: من فتح الأدمن مرحلته قبل اعتماده يأخذ الرابط وينضم، والمعتمد ومرحلته مقفلة بمتطلب سابق
+// ناقص يأخذه وينضم كما كان قبل P1-04، فلا يُحجب مشارك دفع عن جلسة حية
+Deno.test('رابط الجلسة في البريد وفي الانضمام: فتح الأدمن يعطيه غير المعتمد، والمعتمد يبقى له ولو قفل مرحلته متطلب سابق', async () => {
   const w = await world();
   try {
     w.tables.participant_stage_overrides.push({ participant_id: w.ps.pending.id, program_id: 'prog', stage_key: 'training', action: 'open' });
     w.tables.stage_requirements.push({ id: U(990007), program_id: 'prog', stage_key: 'approval', code: 'P-CV', kind: 'auto', dimension: null, level: null, sort: 2, required: true, title_ar: 'السيرة الذاتية', config: {} });
     for (const who of ['paid', 'grand'] as const) w.tables.participants.find((x) => x.id === w.ps[who].id)!.cv_path = 'cv/x.pdf';
     const { link } = await invite(w);
-    assertEquals([link('pending'), link('approved'), link('paid'), link('grand')], [true, false, true, true]);
+    assertEquals([link('pending'), link('approved'), link('paid'), link('grand')], [true, true, true, true]);
     const j = await w.call('approved', 'workshop.join', { session_id: WS });
-    assertEquals([j.status, j.code], [403, 'locked']);
+    assertEquals([j.status, j.join_url], [200, 'https://meet.example.sa/day1']);
     const k = await w.call('pending', 'workshop.join', { session_id: WS });
     assertEquals([k.status, k.join_url], [200, 'https://meet.example.sa/day1']);
   } finally { w.restore(); }
