@@ -235,6 +235,23 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
     for (const n of ['backup-43382482794', 'leaders-2026-11-01.dump.gpg']) expect(re.test(n), n).toBe(true);
     for (const n of ['playwright-traces', 'ci-pass-1d462b38', 'integration-pass-abc', 'backup-', 'backup-12x', 'leaders-2026-11-01.dump']) expect(re.test(n), n).toBe(false);
   });
+  it('backup.yml: بيئة backup لمفتاح الخدمة، وغيابه يُحمِّر التشغيل بعد رفع نسخة القاعدة لا قبله، والطبقة الثانية تشمل .age', () => {
+    const b = read('.github/workflows/backup.yml');
+    expect(b).toMatch(/backup:\n\s+runs-on: ubuntu-latest\n\s+timeout-minutes: 30\n(\s+#.*\n)*\s+environment: backup\n/);
+    const dump = b.indexOf('run: bash scripts/ops/backup.sh');
+    const files = b.indexOf('name: The private files bucket was included');
+    expect(files).toBeGreaterThan(dump);
+    expect(b.slice(files, files + 400)).toMatch(/-z "\$SUPABASE_SERVICE_ROLE_KEY"[\s\S]*exit 1/);
+    const step = b.slice(b.indexOf('- uses: actions/upload-artifact'));
+    expect(step).toContain('backup-out/*.age');
+    expect(read('RUNBOOK.md')).toContain('بيئة `backup`');
+  });
+  it('صفحة حقائق الجهات لا تعرض ما لم يكتمل في النسخ بصيغة المنجز، وتسمي موقع الدلو', () => {
+    const f = read('docs/ops/صفحة-حقائق-الجهات-v1.md');
+    expect(f).toContain('شرق أمريكا الشمالية (ENAM)');
+    expect(f).toContain('قيد الإكمال (14 نوفمبر)');
+    expect(f).not.toContain('نسخة يومية مشفّرة خارج GitHub بقفل احتفاظ يمنع الحذف والكتابة فوقها، وتمرين استعادة شهري يفشل عند أي خطأ.');
+  });
   it('backup.yml يثبّت age قبل النسخ', () => {
     const b = read('.github/workflows/backup.yml');
     expect(b.indexOf('name: Install age')).toBeGreaterThan(-1);

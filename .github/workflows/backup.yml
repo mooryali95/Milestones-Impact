@@ -23,6 +23,9 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # بيئة backup: يضع المالك فيها SUPABASE_SERVICE_ROLE_KEY ويحصرها في فرع main بلا مراجعين (RUNBOOK.md §4)، فلا يقرأ
+    # مفتاح الخدمة سيرٌ من فرع آخر، ولا تنتظر النسخة الليلية موافقة أحد
+    environment: backup
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
@@ -56,6 +59,14 @@ jobs:
         run: command -v age >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq age; }
       - name: Dump, encrypt at the source, and upload to R2
         run: bash scripts/ops/backup.sh
+      # نسخة القاعدة رُفعت قبل هذه الخطوة. بلا مفتاح الخدمة لا يُنسخ دلو leaders-private (السير والأدلة)، فيحمرّ التشغيل
+      # ليُرى النقص، ولا يُطمس بتحذير في سجل لا يقرؤه أحد
+      - name: The private files bucket was included
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY is not set (environment backup): the database copy is in R2, but the leaders-private bucket (CVs and evidence) was not backed up."
+            exit 1
+          fi
       # الطبقة الثانية تُحفظ ولو فشل الرفع إلى R2 (ops-2: فشل 409 فضاعت معه)، والمشفّر والبيان وحدهما: تفريغ قطعه
       # خطأ قبل تشفيره يبقى صريحًا في المجلد ولا يُرفع
       # في مستودع عام أدوات السير يحمّلها أي حساب GitHub: النسخة المشفّرة لا تُنشر هناك، والطبقة الباقية R2 وحده.
@@ -65,6 +76,7 @@ jobs:
         with:
           name: backup-${{ github.run_id }}
           path: |
+            backup-out/*.age
             backup-out/*.gpg
             backup-out/manifest-*.json
           retention-days: 30
