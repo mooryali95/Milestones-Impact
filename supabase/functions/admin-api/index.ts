@@ -453,12 +453,47 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       return json({ success: false, message: "صلاحية المراقب للقراءة فقط" }, 403);
     }
 
+    // ══ حراس أمان الحساب: حداثة الدخول، ومفتاح المرور ══
+    const fresh = Date.now() - session.authAt < FRESH_MS;
+    const STALE = { success: false, code: "reauth", message: "لحمايتك، سجّل خروجك وادخل مجددًا ثم أعد المحاولة خلال 10 دقائق" };
+    const NEED_PASSKEY = { success: false, code: "reauth_passkey", message: "هذه العملية تتطلب دخولًا بمفتاح مرور مسجّل، سجّل خروجك وادخل به" };
+    const myPasskeys = async () => {
+      const { data } = await sb.from("admin_passkeys")
+        .select("id, credential_id, transports, device_label, backed_up, created_at, last_used_at")
+        .eq("admin_id", session.userId).order("created_at", { ascending: true });
+      return data || [];
+    };
+
+    // تسجيل TOTP (إعداد أو إعادة ربط أو تأكيد) يجعل جلسات الحساب التالية «عاملًا ثانيًا» تمر بحارس الكتابة في
+    // leaders-api. فبلا هذا الحارس يصير بريد مدير مخترق، أو رمز بريد مخمَّن، مديرًا أعلى بكامل الصلاحية في دقيقتين
+    // (sec-authn-v-totp-enroll، تدقيق الجاهزية 14 نوفمبر). لذلك: الجلسة حديثة (10 دقائق) دائمًا، ومن له مفتاح مرور لا
+    // يسجّل TOTP إلا بجلسة مفتاح، إلا في نافذة 24 ساعة بعد «إعادة الوصول» من المالك (فقد المفتاح). ويُبلَّغ صاحب الحساب
+    // والمالكون بكل تفعيل وتعطيل.
+    const ownerResetWindow = async () => {
+      const dayAgo = new Date(Date.now() - 864e5).toISOString();
+      const { count } = await sb.from("admin_audit_log").select("id", { count: "exact", head: true })
+        .eq("action", "reset-access").eq("meta->>targetId", String(session.userId)).gte("created_at", dayAgo);
+      return (count ?? 0) > 0;
+    };
+    const totpEnrollBlocked = async () => {
+      if (!fresh) return json(STALE, 403);
+      if (session.method !== "passkey" && (await myPasskeys()).length && !(await ownerResetWindow())) return json(NEED_PASSKEY, 403);
+      return null;
+    };
+    const notifyTotp = async (title: string) => {
+      const rows: [string, string][] = [["الحساب", adminEmail], ["طريقة دخول الجلسة", METHOD_LABELS[session.method] || session.method], ["عنوان IP", clientCtx(req).ip || "غير معروف"]];
+      await securityMail(adminEmail, title, rows);
+      const { data: owners } = await sb.from("admin_users").select("email").eq("is_owner", true).eq("is_active", true);
+      for (const o of owners || []) if (String(o.email).toLowerCase() !== adminEmail.toLowerCase()) await securityMail(String(o.email), title, rows);
+    };
+
     // ══ TOTP self-management — always operates on the session's OWN user ══
     // تغيير TOTP المفعّل أو تعطيله يتطلب رمزه الحالي، فلا تكفي جلسة مسروقة لإزالته.
     if (action === "setup-totp" || action === "reset-totp" || action === "disable-totp") {
       const { data: us } = await sb.from("admin_users").select("totp_enabled, totp_secret").eq("id", session.userId).limit(1);
       const enabled = !!us?.[0]?.totp_enabled;
       if (action === "setup-totp" && enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });
+      if (action !== "disable-totp") { const blocked = await totpEnrollBlocked(); if (blocked) return blocked; }
       if (enabled && action !== "setup-totp") {
         if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
         const ok = await verifyTotp(String(us?.[0]?.totp_secret || ""), String(body.code || ""));
@@ -468,6 +503,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (action === "disable-totp") {
         await sb.from("admin_users").update({ totp_secret: null, totp_enabled: false }).eq("id", session.userId);
         await audit("disable-totp");
+        await notifyTotp("عُطّل تطبيق المصادقة على حساب إدارة");
         return json({ success: true, message: "تم تعطيل TOTP" });
       }
       const secret = genSecret();
@@ -476,6 +512,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       return json({ success: true, secret, uri: totpUri(secret, adminEmail) });
     }
     if (action === "confirm-totp") {
+      { const blocked = await totpEnrollBlocked(); if (blocked) return blocked; }
       const code = String(body.code || "");
       if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
       const { data: us } = await sb.from("admin_users").select("totp_secret").eq("id", session.userId).limit(1);
@@ -486,19 +523,11 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (!ok) return json({ success: false, message: "الرمز غير صحيح، تأكد من الوقت وأعد المحاولة" });
       await sb.from("admin_users").update({ totp_enabled: true }).eq("id", session.userId);
       await audit("confirm-totp");
+      await notifyTotp("فُعّل تطبيق المصادقة على حساب إدارة");
       return json({ success: true, message: "تم تفعيل TOTP" });
     }
 
-    // ══ مفاتيح المرور وأمان الحساب — دائمًا على حساب الجلسة نفسها ══
-    const fresh = Date.now() - session.authAt < FRESH_MS;
-    const STALE = { success: false, code: "reauth", message: "لحمايتك، سجّل خروجك وادخل مجددًا ثم أعد المحاولة خلال 10 دقائق" };
-    const NEED_PASSKEY = { success: false, code: "reauth_passkey", message: "هذه العملية تتطلب دخولًا بمفتاح مرور مسجّل، سجّل خروجك وادخل به" };
-    const myPasskeys = async () => {
-      const { data } = await sb.from("admin_passkeys")
-        .select("id, credential_id, transports, device_label, backed_up, created_at, last_used_at")
-        .eq("admin_id", session.userId).order("created_at", { ascending: true });
-      return data || [];
-    };
+    // ══ مفاتيح المرور وأمان الحساب: دائمًا على حساب الجلسة نفسها (الحراس معرّفة قبل TOTP لأنه يستعملها) ══
 
     if (action === "security-status") {
       const pks = await myPasskeys();

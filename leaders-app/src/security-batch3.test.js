@@ -130,3 +130,34 @@ describe('N8: قفل دخول الإدارة لكل شبكة، وسقف يومي
     expect(b).toMatch(/>= OTP_PER_EMAIL_DAY\) return json\(\{ success: true, message: SENT_MSG \}\)/);
   });
 });
+
+// تدقيق الجاهزية 14 نوفمبر (sec-authn-v-totp-enroll): تسجيل TOTP من جلسة رمز البريد كان يجعل الجلسات التالية «عاملًا ثانيًا»
+// يمر بحارس الكتابة في leaders-api، فيصير بريد مدير مخترق مديرًا أعلى. الآن: جلسة حديثة دائمًا، ومن له مفتاح مرور لا
+// يسجّل TOTP إلا بجلسة مفتاح (إلا بعد «إعادة الوصول» من المالك بيوم)، وبلاغ أمني لصاحب الحساب وللمالكين
+describe('P1-02: تسجيل تطبيق المصادقة لا يرفع جلسة رمز البريد إلى عامل ثانٍ', () => {
+  const a = read('supabase/functions/admin-api/index.ts');
+  const totp = a.indexOf('TOTP self-management');
+  it('الحراس معرّفة قبل كتلة TOTP، وتشترط الحداثة ومفتاح المرور لمن له مفتاح، ونافذة إعادة الوصول من سجل المالك', () => {
+    expect(a.indexOf('const fresh = ')).toBeLessThan(totp);
+    expect(a.indexOf('const myPasskeys = ')).toBeLessThan(totp);
+    const gate = a.slice(a.indexOf('const totpEnrollBlocked = '), a.indexOf('const notifyTotp = '));
+    expect(gate).toMatch(/if \(!fresh\) return json\(STALE, 403\);/);
+    expect(gate).toMatch(/session\.method !== "passkey" && \(await myPasskeys\(\)\)\.length && !\(await ownerResetWindow\(\)\)\) return json\(NEED_PASSKEY, 403\)/);
+    expect(a).toMatch(/\.eq\("action", "reset-access"\)\.eq\("meta->>targetId", String\(session\.userId\)\)\.gte\("created_at", dayAgo\)/);
+  });
+  it('setup وreset يُحجزان قبل توليد السر، وconfirm قبل التحقق من الرمز؛ وdisable لا يُحجز (يطلب الرمز الحالي)', () => {
+    const block = a.slice(totp, a.indexOf('if (action === "confirm-totp")'));
+    expect(block.indexOf('totpEnrollBlocked()')).toBeGreaterThan(-1);
+    expect(block.indexOf('totpEnrollBlocked()')).toBeLessThan(block.indexOf('const secret = genSecret()'));
+    expect(block).toMatch(/if \(action !== "disable-totp"\) \{ const blocked = await totpEnrollBlocked\(\); if \(blocked\) return blocked; \}/);
+    const confirm = a.slice(a.indexOf('if (action === "confirm-totp")'), a.indexOf('await audit("confirm-totp")'));
+    expect(confirm.indexOf('totpEnrollBlocked()')).toBeLessThan(confirm.indexOf('verifyTotp('));
+  });
+  it('التفعيل والتعطيل يبلغان صاحب الحساب وكل مالك نشط ببريد أمني', () => {
+    expect(a).toMatch(/await audit\("confirm-totp"\);\n\s+await notifyTotp\("فُعّل تطبيق المصادقة على حساب إدارة"\);/);
+    expect(a).toMatch(/await audit\("disable-totp"\);\n\s+await notifyTotp\("عُطّل تطبيق المصادقة على حساب إدارة"\);/);
+    const notify = a.slice(a.indexOf('const notifyTotp = '), totp);
+    expect(notify).toContain('await securityMail(adminEmail, title, rows)');
+    expect(notify).toMatch(/\.eq\("is_owner", true\)\.eq\("is_active", true\)/);
+  });
+});
