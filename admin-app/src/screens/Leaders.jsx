@@ -26,6 +26,7 @@ const HallScreen = lazy(() => import('./Hall.jsx'));
 const ContentBank = lazy(() => import('./ContentBank.jsx'));
 const Experts = lazy(() => import('./Experts.jsx'));
 const MailGallery = lazy(() => import('./MailGallery.jsx'));
+const MailCenter = lazy(() => import('./MailCenter.jsx'));
 const AppSettings = lazy(() => import('./AppSettings.jsx'));
 const Feedback360 = lazy(() => import('./Feedback360.jsx'));
 const Insight = lazy(() => import('./Insight.jsx'));
@@ -43,13 +44,13 @@ const TAB_GROUPS = [
   ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings']],
-  ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mail']],
+  ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
-export default function Leaders({ canWrite, pending }) {
+export default function Leaders({ canWrite, pending, isSuper = false }) {
   const route = useRoute();
   const tab = TAB_KEYS.has(route.tab) ? route.tab : 'overview';
   const person = tab === 'participants' ? route.id : null;
@@ -96,6 +97,7 @@ export default function Leaders({ canWrite, pending }) {
   else if (tab === 'insight') body = <Insight onPerson={openPerson} onExpert={(id) => navigate({ ctx: 'leaders', tab: 'experts', id })} />;
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
+  else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;

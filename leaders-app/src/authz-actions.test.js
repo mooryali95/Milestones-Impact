@@ -30,6 +30,8 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
   // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
   'assessment-answers',
+  // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter
+  'mail-center',
   // تقييم 360: حالة الدورات وأعدادها بلا نتيجة فرد
   'f360']);
 

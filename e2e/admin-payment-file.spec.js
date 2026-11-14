@@ -49,7 +49,7 @@ test('العملية المدفوعة: تفاصيلها وعميلها وأزر�
   await expect(page.getByText('Sara A')).toBeVisible();
   await expect(page.getByRole('link', { name: 'واتساب' })).toHaveAttribute('href', 'https://wa.me/966501234567');
   await expect(page.getByRole('link', { name: 'راسله بالبريد' })).toHaveAttribute('href', 'mailto:s@x.com');
-  await expect(page.getByRole('link', { name: 'افتحها في Creem' })).toHaveAttribute('rel', /noopener/);
+  await expect(page.getByRole('link', { name: /استردّها من Creem/ })).toHaveAttribute('rel', /noopener/);
   await expect(page.locator('.payf-line li')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'ذكّره بإكمال الدفع' })).toHaveCount(0);
 });

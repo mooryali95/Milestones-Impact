@@ -8,7 +8,7 @@ import { date, dateTime, L } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import PaymentFile, { PAY_ST } from './PaymentFile.jsx';
-import { isAbandoned, NOTIFY } from '../../../supabase/functions/leaders-api/payments-ledger.js';
+import { creemOrderUrl, isAbandoned, NOTIFY } from '../../../supabase/functions/leaders-api/payments-ledger.js';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 
@@ -195,7 +195,8 @@ export default function Payments({ canWrite, onPerson, payId = null, onOpen = ()
                   <td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td>
                   <td><span className={`la-chip ${PAY_ST[p.status]?.[1] || ''}`}>{PAY_ST[p.status]?.[0] || p.status}</span>{p.note && <small className="la-muted"> {p.note}</small>}</td>
                   <td><small className="la-muted" dir="ltr">{p.order_id || p.checkout_id || '·'}</small></td>
-                  <td>{p.status === 'pending' && canWrite && <button className="btn-sm ghost" onClick={() => reconcile(p)}>تحقق من Creem</button>}</td>
+                  <td className="la-row">{p.status === 'pending' && canWrite && <button className="btn-sm ghost" onClick={() => reconcile(p)}>تحقق من Creem</button>}
+                    {creemOrderUrl(p) && <a className="btn-sm ghost" href={creemOrderUrl(p)} target="_blank" rel="noopener noreferrer" title={p.status === 'paid' ? 'الاسترداد والإيصال من لوحة Creem' : 'افتح الطلب في Creem'}>Creem ↗</a>}</td>
                 </tr>
               ))}</tbody>
             </table>

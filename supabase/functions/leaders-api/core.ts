@@ -206,27 +206,37 @@ export async function sendMail(to: string, subject: string, html: string, attach
   const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
-    if (kind === 'bulk' && !attachments.length && await enqueueMail(to, subject, html, ref)) return;
+    // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
+    // الرمز لا يُؤجَّل (ينتهي في دقائق)، والمرفقات لا تُخزَّن
+    if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(to, subject, html, ref, kind, r.reason)) return;
     throw new Fail('بلغت الرسائل حدها اليومي، وتصل بعد ساعات', 429, 'mail_cap');
   }
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
-async function enqueueMail(to: string, subject: string, html: string, ref: string | null) {
-  const { error } = await db.from('mail_queue').insert({ to_email: to, subject, html, ref, kind: 'bulk' });
+async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
+  const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
+  let { error } = await db.from('mail_queue').insert({ ...row, reason });
+  if (error) ({ error } = await db.from('mail_queue').insert(row));   // قبل ترحيل مركز البريد: بلا عمود السبب
   if (error) { console.error('mail_queue insert:', error); return false; }
   return true;
 }
 
 // من المهمة الساعية: يرسل المعلّق بالترتيب ما دامت الحصة تسمح، ويكتب العلامة بعد نجاح الإرسال وحده
 export const QUEUE_MAX_ATTEMPTS = 5;
+// إشعار انتظر أكثر من يومين فات أوانه (تذكير بموعد مضى): يُترك ولا يُرسل متأخرًا، ويبقى في الصندوق للمدير
+export const QUEUE_STALE_HOURS = 48;
 export async function drainMailQueue(limit = 40) {
-  const { data, error } = await db.from('mail_queue').select('id, to_email, subject, html, ref, attempts')
+  const { data, error } = await db.from('mail_queue').select('id, kind, created_at, to_email, subject, html, ref, attempts')
     .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit);
   if (error) return { sent: 0, pending: null };
   let sent = 0;
   for (const m of data || []) {
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom });
+    if (m.kind === 'notify' && Date.now() - Date.parse(m.created_at) > QUEUE_STALE_HOURS * 36e5) {
+      await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
+      continue;
+    }
+    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;

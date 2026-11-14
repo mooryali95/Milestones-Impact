@@ -74,7 +74,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
     expect(core).toMatch(/alertMail\(kind, detail\), \[\], \{ kind: 'alert' \}/);
-    expect(core).toMatch(/if \(kind === 'bulk' && !attachments\.length && await enqueueMail\(/);
+    expect(core).toContain("if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
     expect(read('supabase/functions/leaders-api/admin.ts')).toMatch(/reminderMail\(p\.full_name, open\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/tracking.ts')).toMatch(/\{ kind: 'bulk', ref: `participant:/);

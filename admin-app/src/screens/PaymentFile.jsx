@@ -53,7 +53,8 @@ export default function PaymentFile({ id, canWrite, onBack, onPerson }) {
             <small className="la-muted">{who?.full_name || p.customer_name || p.email} · {dateTime(p.paid_at || p.created_at)}</small>
           </div>
           <div className="la-row">
-            {d.creem_url && <a className="btn-sm ghost" href={d.creem_url} target="_blank" rel="noopener noreferrer">افتحها في Creem</a>}
+            {d.creem_url && <a className="btn-sm ghost" href={d.creem_url} target="_blank" rel="noopener noreferrer">{p.status === 'paid' ? 'استردّها من Creem ↗' : 'افتحها في Creem ↗'}</a>}
+            {p.order_id && <button className="btn-sm ghost" onClick={() => navigator.clipboard?.writeText(p.order_id).then(() => toast('نُسخ رقم الطلب'), () => toast('تعذّر النسخ'))}>انسخ رقم الطلب</button>}
             {canWrite && p.status === 'pending' && <button className="btn-sm ghost" disabled={busy} onClick={reconcile}>تحقق من Creem</button>}
             {canWrite && p.status === 'pending' && <button className="btn-sm primary" disabled={busy} onClick={remind}>ذكّره بإكمال الدفع</button>}
           </div>
