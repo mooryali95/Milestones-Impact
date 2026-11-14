@@ -43,14 +43,16 @@ export const deviceOf = (ua: string | null) => {
   return br ? `${os} · ${br}` : os;
 };
 
-export async function issueSession(participantId: string, method: string, ctx: Ctx) {
+// bornAt: لحظة الدخول الأصلية حين تُصدر الجلسة بتبديل من بوابة أخرى (switch.ts)، فيبقى السقف المطلق محسوبًا منها
+export async function issueSession(participantId: string, method: string, ctx: Ctx, bornAt: string | null = null) {
   // جهاز جديد: لصاحب الحساب دخول سابق، وليس بينها جلسة من المتصفح نفسه
   const { data: prev } = await db.from('auth_sessions').select('user_agent').eq('participant_id', participantId).order('created_at', { ascending: false }).limit(20);
   const isNew = (prev || []).length > 0 && ctx.ua && !(prev || []).some((x: any) => x.user_agent === ctx.ua);
   const token = randomToken();
-  const expires = new Date(Date.now() + CONFIG.sessionDays * 864e5).toISOString();
+  const hardEnd = bornAt ? Date.parse(bornAt) + CONFIG.sessionMaxDays * 864e5 : Infinity;
+  const expires = new Date(Math.min(Date.now() + CONFIG.sessionDays * 864e5, hardEnd)).toISOString();
   must(await db.from('auth_sessions').insert({
-    participant_id: participantId, token_hash: await hash(token), method, ip: ctx.ip, user_agent: ctx.ua, expires_at: expires,
+    participant_id: participantId, token_hash: await hash(token), method, ip: ctx.ip, user_agent: ctx.ua, expires_at: expires, ...(bornAt ? { created_at: bornAt } : {}),
   }));
   await db.from('participants').update({ last_login_at: new Date().toISOString() }).eq('id', participantId);
   if (isNew) {

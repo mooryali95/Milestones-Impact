@@ -84,3 +84,49 @@ describe('N15: تقييم 360 لا يقبل تقديرًا بعد إغلاق د�
     expect(b.indexOf("cyc.status !== 'open'")).toBeLessThan(b.indexOf('raterQuestions('));
   });
 });
+
+describe('N11: تبديل الدور لا يمدّد السقف المطلق', () => {
+  const sw = read('supabase/functions/leaders-api/switch.ts');
+  it('الجلسة الجديدة ترث لحظة الدخول، وتنتهي عند سقفها، وجلسة تجاوزته لا تُبدَّل', () => {
+    expect(sw).toContain("select('created_at').eq('id', sessionId)");
+    expect(sw).toContain("issueSession(p.id, 'switch', { ip: ctx.ip, ua: ctx.ua ?? null } as any, bornAt)");
+    expect(sw.match(/created_at: bornAt/g)?.length).toBe(2);
+    expect(sw).toContain('expires_at: until(14)');
+    expect(sw).toContain('if (hardEnd <= Date.now()) throw new Fail(');
+    const p = read('supabase/functions/leaders-api/participant.ts');
+    expect(p).toContain("...(bornAt ? { created_at: bornAt } : {})");
+    expect(p).toContain('Math.min(Date.now() + CONFIG.sessionDays * 864e5, hardEnd)');
+  });
+  it('الأبواب الثلاثة تمرر جلستها وعنوان الشبكة', () => {
+    const i = read('supabase/functions/leaders-api/index.ts');
+    expect(i).toContain("'me.switch': (p, b, sid, ctx) => switchTo(p.email, 'participant', b.to, ctx, sid)");
+    expect(i).toMatch(/'xp\.switch': \(e, b, sid, ctx\) => switchTo\(e\.email, 'expert', b\.to, \{ ip: ctx\?\.ip \?\? null, ua: ctx\?\.ua \?\? null \}, sid\)/);
+    expect(i).toMatch(/'coord\.switch': \(c, b, sid, ctx\) => switchTo\(c\.email, 'org', b\.to, \{ ip: ctx\?\.ip \?\? null, ua: ctx\?\.ua \?\? null \}, sid\)/);
+  });
+});
+
+describe('N17: سر المهمة الدورية يُقارن بزمن ثابت', () => {
+  it('لا مقارنة مباشرة للسر في أي دالة', () => {
+    for (const f of ['admin.ts', 'experts.ts', 'index.ts', 'system.ts', 'payments.ts']) {
+      expect(read(`supabase/functions/leaders-api/${f}`), f).not.toMatch(/secret\s*!==\s*CONFIG\.cronSecret|CONFIG\.cronSecret\s*!==/);
+    }
+    expect(read('supabase/functions/leaders-api/admin.ts')).toContain('if (!secretEquals(b.secret, CONFIG.cronSecret))');
+  });
+});
+
+describe('N8: قفل دخول الإدارة لكل شبكة، وسقف يومي لرموز البريد', () => {
+  const a = read('supabase/functions/admin-api/index.ts');
+  it('المحاولات الخاطئة تُسجَّل بعنوان شبكتها وتُحسب لها، وللبريد كله سقف أعلى', () => {
+    expect(a).toContain('const MAX_FAILS_ALL = 20;');
+    expect(a).toContain('fails().eq("ip", ip)');
+    expect(a.match(/tooManyFails\(sb, \w+\)/g) || []).toEqual([]);
+    expect(a.match(/from\("totp_attempts"\)\.insert\(\{[^}]*\}\)/g).every((x) => x.includes('ip:'))).toBe(true);
+  });
+  it('رمز الدخول ببريد واحد محدود في اليوم، والرد لا يكشف شيئًا', () => {
+    const i = a.indexOf('if (action === "login-send")');
+    const b = a.slice(i, a.indexOf('recovery-request', i));
+    expect(b).toContain('OTP_PER_EMAIL_DAY');
+    expect(b.indexOf('OTP_PER_EMAIL_DAY')).toBeLessThan(b.indexOf('await sendEmail('));
+    expect(b).toMatch(/>= OTP_PER_EMAIL_DAY\) return json\(\{ success: true, message: SENT_MSG \}\)/);
+  });
+});

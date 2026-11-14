@@ -143,7 +143,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'pay.checkout': (p, b) => Y.checkout(p, b),
   'sponsor.request': (p, b) => R.request(p, b),
   'sponsor.cancel': (p) => R.cancel(p),
-  'me.switch': (p, b, _s, ctx) => switchTo(p.email, 'participant', b.to, ctx),
+  'me.switch': (p, b, sid, ctx) => switchTo(p.email, 'participant', b.to, ctx, sid),
   'org.visibility': (p) => P.orgVisibilityFor(p),
   'consent.accept': (p) => P.consentAccept(p),
   'org.share-consent': (p, b) => P.orgShareConsent(p, b),
@@ -245,7 +245,7 @@ function logRefusal(action: string, status: number, code?: string) {
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
 // لوحة الخبير: الجلسة من expert_sessions، والخبير يُشتق منها على الخادم
-const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unknown>> = {
+const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // لوحة الخبير في رحلة واحدة (البند 6.2 من تدقيق الإنتاج): كانت اللوحة تطلب الملخص ثم أربعة طلبات بعده، فتُدفع
   // المسافة إلى الخادم مرتين. هنا تُجمع الأربعة مع الملخص، ولكلٍّ نتيجته كما لو طُلب وحده (خطأ أحدها لا يُسقط اللوحة)،
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
@@ -271,7 +271,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.f360-report': (e, b) => FB.advisorReport(e, b),
   'xp.f360-release': (e, b) => FB.advisorRelease(e, b),
   'xp.profile-save': (e, b) => E.portalProfileSave(e, b),
-  'xp.switch': (e, b) => switchTo(e.email, 'expert', b.to, { ip: null }),
+  'xp.switch': (e, b, sid, ctx) => switchTo(e.email, 'expert', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'xp.reviews': (e) => V2.reviews(e),
   'xp.review': (e, b) => V2.review(e, b),
   'xp.respond': (e, b) => E.portalRespond(e, b),
@@ -301,7 +301,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string) => Promise<unk
   'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 
-const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promise<unknown>> = {
+const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة
   // طلبات متتالية. لا لوحة قبل الموافقة، ولكل جزء نتيجته كما لو طُلب وحده
   'coord.me': async (c, b) => {
@@ -312,7 +312,7 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
   },
   'coord.consent': (c) => C.consent(c),
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
-  'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
+  'coord.switch': (c, b, sid, ctx) => switchTo(c.email, 'org', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'coord.dashboard': (c) => C.dashboard(c),
   // مفتاح الرؤية coord_initiatives يحجب المبادرات عن لوحة الجهة، فيحجب وثيقتها بالمعرّف أيضًا (N6)
   'coord.capstone': async (c, b) => { VS.requireVisible(await VS.visibilityOfOrg(c.organization_id), 'coord_initiatives'); return X.orgDoc(c.organization_id, b, c.permissions); },
@@ -520,13 +520,13 @@ Deno.serve(async (req) => {
     }
     if (coordinator[action]) {
       const { coordinator: c, sessionId } = await C.fromToken(b.token);
-      return reply(req, await coordinator[action](c, b, sessionId));
+      return reply(req, await coordinator[action](c, b, sessionId, ctx));
     }
     if (expert[action]) {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
       // قبل الاعتماد: الملف والخروج فقط
       if (!E.portalWorking(e) && !['xp.dashboard', 'xp.consent', 'xp.profile-save', 'xp.logout', 'xp.switch'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
-      return reply(req, await expert[action](e, b, sessionId));
+      return reply(req, await expert[action](e, b, sessionId, ctx));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);
