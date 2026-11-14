@@ -7,6 +7,7 @@ import { esc, mailButton, mailCode, mailNote, mailShell, mailText } from '../_sh
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard } from './core.ts';
+import { visibilityOfParticipant } from './visibility.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
@@ -585,14 +586,18 @@ export async function portalDashboard(e: any) {
   ]);
   const done = new Set((rated || []).flatMap((x: any) => [x.session_id, x.request_id]).filter(Boolean));
   const now = Date.now();
-  // قبل القبول: الاسم الأول والبُعد والمستوى؛ بعده: التواصل لأداء الخدمة
+  // قبل القبول: الاسم الأول والبُعد والمستوى؛ بعده: التواصل لأداء الخدمة. المستوى ووسائل التواصل بمفتاحَي الرؤية
+  // asg_levels وasg_contact (الإعداد العام ثم استثناء دفعة المشارك)، كما في ملف المشارك (N6)
+  const pids = [...new Set((reqs || []).map((x: any) => x.participant_id).filter(Boolean))].slice(0, 60) as string[];
+  const visOf = Object.fromEntries(await Promise.all(pids.map(async (id) => [id, await visibilityOfParticipant(id)])));
   const req = (x: any) => {
-    const lvl = x.dimension ? (x.participants?.placements || []).find((y: any) => y.dimension === x.dimension)?.level : null;
+    const vis = visOf[x.participant_id] || {};
+    const lvl = x.dimension && vis.asg_levels !== false ? (x.participants?.placements || []).find((y: any) => y.dimension === x.dimension)?.level : null;
     const open = x.status !== 'offered';
     return {
       id: x.id, status: x.status, role: x.role, role_ar: roleAr(x.role), dimension_ar: x.dimension ? (DIM_AR as Record<string, string>)[x.dimension] : null,
       level_ar: lvl ? (LEVEL_AR as Record<string, string>)[lvl] : null, expires_at: x.expires_at, accepted_at: x.accepted_at,
-      participant: open ? { name: x.participants?.full_name, email: x.participants?.email, phone: x.participants?.phone, job_title: x.participants?.job_title, org: x.participants?.organization_name }
+      participant: open ? { name: x.participants?.full_name, email: vis.asg_contact === false ? null : x.participants?.email, phone: vis.asg_contact === false ? null : x.participants?.phone, job_title: x.participants?.job_title, org: x.participants?.organization_name }
         : { name: firstName(x.participants?.full_name) },
       to_rate: x.status === 'completed' && !done.has(x.id),
     };

@@ -271,7 +271,8 @@ describe('الوثيقة الاحترافية', () => {
     expect(src).toMatch(/doc: docLevelsFor\(await recordFor\(c\.participants, 'sponsor'\), !!c\.participants\?\.org_share_consented_at\)/);
     expect(src).toMatch(/export async function orgDoc\(orgId: string, b: Body, permissions: unknown = null\)/);
     const index = readFileSync(resolve(process.cwd(), 'supabase/functions/leaders-api/index.ts'), 'utf8');
-    expect(index).toMatch(/'coord\.capstone': \(c, b\) => X\.orgDoc\(c\.organization_id, b, c\.permissions\)/);
+    // بعد فحص مفتاح الرؤية coord_initiatives (تدقيق 2026-11-14، N6) تُسلَّم الوثيقة بصلاحيات المنسق كما كانت
+    expect(index).toMatch(/'coord\.capstone': async \(c, b\) => \{[^\n]*return X\.orgDoc\(c\.organization_id, b, c\.permissions\); \}/);
   });
 });
 

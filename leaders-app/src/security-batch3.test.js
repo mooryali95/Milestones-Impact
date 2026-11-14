@@ -52,3 +52,35 @@ describe('حراس الخادم', () => {
     expect(admin).toContain("live.passkey_only && s.meta?.method !== 'passkey'");
   });
 });
+
+describe('N6: مفاتيح الرؤية تُطبَّق في الأفعال المجاورة أيضًا', () => {
+  const fn = (f) => read(`supabase/functions/leaders-api/${f}`);
+  it('وثيقة المبادرة عند مسؤول الجهة خلف مفتاح coord_initiatives', () => {
+    expect(fn('index.ts')).toMatch(/'coord\.capstone': async \(c, b\) => \{ VS\.requireVisible\(await VS\.visibilityOfOrg\(c\.organization_id\), 'coord_initiatives'\);/);
+  });
+  it('التقييم الختامي عند المستشار بلا مفتاح التحرير: الدرجة والقرار وحدهما', () => {
+    const f = fn('file.ts');
+    const b = f.slice(f.indexOf('export async function finalGet'), f.indexOf('\n}\n', f.indexOf('export async function finalGet')));
+    expect(b).toContain('adv_final_edit !== false');
+    expect(b).toContain('approval: null, vote_block: null, can_withdraw: false');
+    expect(b).not.toMatch(/votes: r\.record|adjust: r\.record/);
+  });
+  it('قائمة مشاركي الخبير المسند ولوحته: المستوى والمؤشر ووسائل التواصل بمفاتيحها', () => {
+    const f = fn('file.ts');
+    expect(f).toContain('vis && vis.asg_levels === false ? null : overallLevel(');
+    expect(f).toContain('vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null');
+    const e = fn('experts.ts');
+    expect(e).toContain("vis.asg_contact === false ? null : x.participants?.email");
+    expect(e).toContain("vis.asg_contact === false ? null : x.participants?.phone");
+    expect(e).toContain("x.dimension && vis.asg_levels !== false");
+  });
+});
+
+describe('N15: تقييم 360 لا يقبل تقديرًا بعد إغلاق دورته', () => {
+  it('الإرسال يتحقق من أن الدورة مفتوحة قبل قراءة الإجابات', () => {
+    const s = read('supabase/functions/leaders-api/impact.ts');
+    const b = s.slice(s.indexOf('export async function raterSubmit'), s.indexOf('\n}\n', s.indexOf('export async function raterSubmit')));
+    expect(b).toContain("cyc.status !== 'open'");
+    expect(b.indexOf("cyc.status !== 'open'")).toBeLessThan(b.indexOf('raterQuestions('));
+  });
+});
