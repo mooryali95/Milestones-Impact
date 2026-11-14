@@ -15,7 +15,7 @@ import { trackProject } from './capstone.js';
 import { labSummary } from './lab.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
-import { defaultProgramId, journeyDefinition, runningCohort } from './programs.ts';
+import { defaultProgramId, journeyDefinition, orgCohortSetups, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
@@ -113,10 +113,14 @@ export async function orgs() {
   // ما كتبه غير المربوطين في خانة الجهة، لربطهم بجهة بنقرة
   const typed: Record<string, number> = {};
   for (const p of unassigned) { const n = String(p.organization_name || '').trim(); if (n) typed[n] = (typed[n] || 0) + 1; }
+  // حال دفعة كل جهة فعّالة بجاهزيتها (orgCohortSetups، المصدر نفسه لصفحة الجهة)، لسطرها في النظرة العامة.
+  // تعذّر قراءتها لا يُفشل القائمة: يُترك الحقل فلا يظهر بند الدفعة ناقصًا بلا سبب
+  const setups = await orgCohortSetups((list || []).filter((o: any) => o.status === 'active').map((o: any) => o.id)).catch(() => null);
   return {
     success: true,
     orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)),
-      access: orgAccessState(o, (coords || []).filter((c: any) => c.organization_id === o.id)) })),
+      access: orgAccessState(o, (coords || []).filter((c: any) => c.organization_id === o.id)),
+      ...(setups && o.id in setups ? { cohort_setup: setups[o.id] || { cohort: null, setup: [], setup_missing: 0 } } : {}) })),
     unassigned: { ...stats(unassigned), typed: Object.entries(typed).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, n]) => ({ name, n })) },
   };
 }

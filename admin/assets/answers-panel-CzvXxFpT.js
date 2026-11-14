@@ -1,1 +1,0 @@
-import"./index-Dv8kCCM8.js";import{a as e}from"./react-DnxA9v5e.js";const r={nominating:"الترشيح",approval:"بانتظار اعتماد المستشار",open:"مفتوح للمقيّمين",closed:"أُغلق، بانتظار جلسة الاستلام",released:"سُلّم لك",cancelled:"أُلغي"},s={agree:"متفقون",mixed:"متباينون قليلًا",split:"مختلفون"};var t=e();export{r as C,s as S,t as r};

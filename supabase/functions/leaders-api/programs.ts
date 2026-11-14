@@ -7,6 +7,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
+import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 
@@ -118,6 +119,43 @@ export function memberCounts(participants: any[], enrollments: any[], cohorts: a
   return out;
 }
 
+// جاهزية الدفعة الفعلية لكل جهة (pickCohort ثم cohortSetup)، من قراءة واحدة لكل مصدر. المصدر الواحد لصفحة
+// الجهة (adminJourney) وقائمة الجهات (admin.orgs ← سطر الجهة في النظرة العامة)، فلا تختلفان في حال الدفعة.
+// orgIds: الجهات المطلوبة. يُرجع لكل جهة دفعتها بجاهزيتها، أو null إن لم تكن لها دفعة مفتوحة أو جارية.
+export async function orgCohortSetups(orgIds: string[]) {
+  const out: Record<string, any> = {};
+  if (!orgIds.length) return out;
+  const [cohorts, enr, people, team, sess] = await Promise.all([
+    db.from('cohorts').select(COHORT_COLS),
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+    db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
+    db.from('cohort_experts').select('cohort_id, expert_id'),
+    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
+  ]);
+  for (const r of [cohorts, enr, people, team, sess]) if (r.error) throw r.error;
+  const all = cohorts.data || [];
+  const members = memberCounts(people.data || [], enr.data || [], all);
+  const own: Record<string, any> = {};
+  for (const id of orgIds) {
+    const c: any = pickCohort({ enrollments: [], cohorts: all, organizationId: id }).cohort;
+    own[id] = c && c.organization_id === id ? c : null;
+  }
+  const advIds = [...new Set(Object.values(own).map((c: any) => c?.advisor_expert_id).filter(Boolean))] as string[];
+  const advs = advIds.length ? must(await db.from('experts').select('id, full_name').in('id', advIds)) as any[] : [];
+  const advName = new Map(advs.map((x: any) => [x.id, x.full_name]));
+  for (const id of orgIds) {
+    const c = own[id];
+    if (!c) { out[id] = null; continue; }
+    const setup = cohortSetup({
+      cohort: c, advisorName: advName.get(c.advisor_expert_id) || null,
+      teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
+      members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
+    });
+    out[id] = { cohort: { id: c.id, name: c.name, status: c.status }, setup, setup_missing: setupMissing(setup) };
+  }
+  return out;
+}
+
 // ── للإدارة ──
 export async function list() {
   const [programs, versions, cohorts, enr, orgs, reqs] = await Promise.all([
@@ -137,17 +175,17 @@ export async function list() {
   for (const e of enr.data || []) if (e.status !== 'withdrawn') enrolled[e.cohort_id] = (enrolled[e.cohort_id] || 0) + 1;
   // الأعضاء الفعليون بالقاعدة نفسها التي تعمل بها المجموعات والقاعة والفريق (pickCohort): المسجّل صراحة،
   // ومن يتبع الدفعة بجهته. عمود الجدول كان يعدّ التسجيل الصريح وحده فيُظهر صفرًا لدفعة فيها أعضاء.
-  const people = must(await db.from('participants').select('id, organization_id, status').eq('is_demo', false).limit(5000)) as any[];
+  const people = must(await db.from('participants').select('id, organization_id, status, is_test').eq('is_demo', false).limit(5000)) as any[];
   const members = memberCounts(people, enr.data || [], cohorts.data || []);
   // لملف الدفعة: من ينتظر الاعتماد فيها، وجلساتها القادمة، واسم مستشارها، من قراءة واحدة لكل مصدر
-  const pending = memberCounts(people, enr.data || [], cohorts.data || [], (p) => p.status === 'pending_approval');
+  // العدد يستبعد حساب الاختبار كما في صفحة الجهة والنظرة العامة (forStats)، والقائمة تعرضه بشارته
+  const pending = memberCounts(people, enr.data || [], cohorts.data || [], (p) => p.status === 'pending_approval' && !p.is_test);
   const advIds = [...new Set((cohorts.data || []).map((c: any) => c.advisor_expert_id).filter(Boolean))] as string[];
   const [sess, advs] = await Promise.all([
-    db.from('workshop_sessions').select('cohort_id').gte('starts_at', new Date().toISOString()).not('cohort_id', 'is', null).limit(5000),
+    // الجلسات الفعّالة الحديثة والقادمة، وبلا دفعة كذلك (تعمّ الدفعات)، ثم sessionsFor لكل دفعة: القاعدة الواحدة
+    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
     advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
-  const upcoming: Record<string, number> = {};
-  for (const r of sess.data || []) upcoming[r.cohort_id] = (upcoming[r.cohort_id] || 0) + 1;
   const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
   return {
     success: true,
@@ -159,7 +197,7 @@ export async function list() {
     cohorts: (cohorts.data || []).map((c: any) => ({
       ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true,
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
-      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : (upcoming[c.id] || 0),
+      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
     })),
     organizations: orgs.data || [],

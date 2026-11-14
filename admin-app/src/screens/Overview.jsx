@@ -116,10 +116,11 @@ function Readiness({ items, onTab }) {
 }
 
 // جاهزية الجهات: سطر لكل جهة فعّالة بما بقي فيها (org-hub.js نفسه الذي في رأس صفحتها)، ويفتح صفحتها.
-// المستوى الأوسط بين جاهزية الإطلاق (المنظومة) وملف الدفعة. بند الدفعة في صفحة الجهة لأنه يحتاج قراءة رحلتها
+// المستوى الأوسط بين جاهزية الإطلاق (المنظومة) وملف الدفعة. حال الدفعة من admin.orgs (orgCohortSetups)، المصدر
+// نفسه لصفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها تقول غير ذلك
 function OrgsReadiness({ orgs, onOrg }) {
   const rows = (orgs || []).filter((o) => o.status === 'active')
-    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, members: o.stats?.total || 0, pending: o.stats?.pending_approval || 0 }) }))
+    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, journey: o.cohort_setup || null, members: o.stats?.total || 0, pending: o.stats?.pending_approval || 0 }) }))
     .sort((a, b) => b.r.missing - a.r.missing);
   if (!rows.length) return null;
   const ready = rows.filter((x) => !x.r.missing).length;

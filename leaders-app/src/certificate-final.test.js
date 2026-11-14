@@ -18,7 +18,7 @@ describe('دورة الشهادة من التقييم الختامي', () => {
     const on = cert.slice(cert.indexOf('export async function onFinalApproved('), cert.indexOf('export async function suspendForReopen('));
     expect(on).toMatch(/if \(!PASSING\.includes\(final\.decision\)\) \{[\s\S]*'revoked'[\s\S]*return null;/);
     expect(on).toMatch(/suspended\.snapshot\?\.decision === final\.decision[\s\S]*setStatus\(suspended\.id, 'valid'/);
-    expect(cert).toMatch(/export const PASSING = \['pass', 'pass_notes'\];/);
+    expect(cert).toMatch(/export { PASSING } from '.\/final.js';/);
   });
   it('التعليق يبقى تعليقًا: تعذّره يفشل ولا يصير إلغاءً', () => {
     const set = cert.slice(cert.indexOf('async function setStatus('), cert.indexOf('// ── التحقق العام ──'));
