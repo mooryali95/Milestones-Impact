@@ -9,6 +9,7 @@ import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js'
 import { parseDate, parseNumber, PRIORITY_WEIGHT, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 
 import { DIMENSIONS, DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { businessCase, charterData } from '../../../supabase/functions/leaders-api/business-case.js';
 
 const DIM_EN = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.en]));
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
@@ -50,6 +51,12 @@ const STYLE = `<style>
 .cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
 .cp-score b { font: 200 30pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
+.cp-charter { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
+.cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.8mm 0; border-bottom: 1px solid #EEF1F0; }
+.cp-charter td { padding: 1.8mm 0 1.8mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.8; color: #2C4148; white-space: pre-line; }
+.cp-case { margin: 0 0 5mm; break-inside: avoid; }
+.cp-case h3 { margin: 0 0 1mm; } .cp-case > small { display: block; color: #5F7176; font-size: 8pt; margin-bottom: 2mm; }
+.cp-case .cp-miss { color: #5F7176; font-size: 8.6pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
 </style>`;
 
 // شجرة هيكل التجزئة من الترميز الهرمي (1، 1.1، 1.1.2)
@@ -183,6 +190,24 @@ function trackingBlock(t) {
     'الخطة من الوثيقة المعتمدة، والفعلي من تحديثات القائد الشهرية. نسبة التحقق هي ما تحرك من خط الأساس نحو المستهدف، ويؤكد الراعي أرقام نقطتي المراجعة.');
 }
 
+// ── ميثاق المبادرة وحالة العمل: عرضان مولّدان من الفصول (business-case.js) ──
+function charterBlock(doc) {
+  const c = charterData(doc);
+  if (!c || !c.rows.length) return '';
+  return section('Initiative charter', 'ميثاق المبادرة', `
+    <table class="cp-charter"><tbody>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
+    ${c.deliverables ? `<div class="cp-f" style="margin-top:4mm"><b>المخرجات الرئيسة</b>${table(c.deliverables.columns.map((x) => ({ label: x })), c.deliverables.rows)}</div>` : ''}`,
+  'صفحة واحدة تُولَّد من البطاقة والتكلفة والمنافع والمخاطر، فلا تُكتب مرتين.');
+}
+
+function caseBlock(doc) {
+  const cases = businessCase(doc);
+  if (!cases.length) return '';
+  return section('Business case', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
+    ${c.missing ? `<p class="cp-miss">${esc(c.missing)}</p>` : `${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? `<div class="cp-f"><b>${esc(c.table.label)}</b>${table(c.table.columns.map((x) => ({ label: x })), c.table.rows)}</div>` : ''}`}</div>`).join(''),
+  'خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصول الوثيقة نفسها.');
+}
+
 // ── الوثيقة ──
 // doc: { meta, summary, sections, cost, checks, review, sponsor, rubric, tracking? }
 export function capstoneReport(doc) {
@@ -211,6 +236,9 @@ export function capstoneReport(doc) {
       doc.cost && raw(`<b>التكلفة:</b> ${esc(money(doc.cost.withContingency))} مع احتياطي ${esc(doc.cost.contingency || 0)}%`),
     ].filter(Boolean), '')}
     ${approved ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+
+  body += charterBlock(doc);
+  body += caseBlock(doc);
 
   body += section('Contents', 'فهرس الوثيقة', `<ol class="cp-toc">${secs.map((s, i) => `<li><span>${String(i + 1).padStart(2, '0')}</span>${esc(s.title)}<small>${esc(DIM_AR[s.dimension] || '')}</small></li>`).join('')}</ol>`);
 
