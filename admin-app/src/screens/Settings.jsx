@@ -285,7 +285,7 @@ function Users({ me }) {
                       </select>
                     </td>
                     <td><span style={{ fontSize: '.7rem', padding: '2px 7px', borderRadius: 99, background: u.totp_enabled ? 'rgba(74,122,58,.1)' : 'var(--sand-light)', color: u.totp_enabled ? 'var(--st-ok)' : 'var(--ink-faint)' }}>{u.totp_enabled ? '✓ نشط' : u.passkey_only ? 'مفتاح فقط' : '—'}</span>
-                      {me.is_owner && !u.is_owner && (u.totp_enabled || u.passkey_only) && (
+                      {me.is_owner && !u.is_owner && (u.totp_enabled || u.passkey_only || u.passkeys > 0) && (
                         <button className="btn-ghost-small" style={{ marginInlineStart: 6 }} title="يدخل برمز البريد ثم يضبط وسيلته من جديد"
                           onClick={() => resetAccess(u)}>إعادة الوصول</button>
                       )}</td>

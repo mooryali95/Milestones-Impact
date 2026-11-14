@@ -1,1 +1,0 @@
-import"./index-BH4tfWKR.js";const o=["profile","assessment_todo","assessment_doing","approval","done"],e={profile:"لم يكمل الملف",assessment_todo:"لم يبدأ القياس",assessment_doing:"القياس جارٍ",approval:"بانتظار الاعتماد",done:"معتمد"},a=["profile","assessment_todo","assessment_doing"];export{e as O,a as S,o as a};
