@@ -9,7 +9,7 @@
 //   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
-//             requirement.update · passkey.register-options · passkey.register-verify · passkey.dismiss
+//             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
@@ -98,10 +98,12 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
-  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
+  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
-const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout']);
+// ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
+const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
+  'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request']);
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
   if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
@@ -177,8 +179,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'assessment.answer': P.assessmentAnswer,
   'assessment.submit': P.assessmentSubmit,
   'requirement.update': P.requirementUpdate,
-  'passkey.register-options': (p) => K.registerOptions(p),
-  'passkey.register-verify': K.registerVerify,
+  'passkey.register-options': (p, _b, sid) => K.registerOptions(p, sid),
+  'passkey.register-verify': (p, b, sid, ctx) => K.registerVerify(p, b, sid, ctx),
+  'passkey.list': (p) => K.list(p),
+  'passkey.remove': (p, b, sid) => K.remove(p, b, sid),
   'passkey.dismiss': (p) => P.passkeyDismiss(p),
   'handbook.toc': (p) => P.handbookToc(p),
   'handbook.chapter': (p, b, _s, ctx) => P.handbookChapter(p, b, ctx),

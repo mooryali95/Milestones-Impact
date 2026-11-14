@@ -28,6 +28,8 @@ async function demoRow() {
 // يفتح تطبيق المشارك بحساب العرض: رابط بجلسة جاهزة في جزء الرابط (لا يصل إلى أي خادم)
 export async function open(a: Admin, _b: Body, ctx: Ctx) {
   const p = await demoRow();
+  // رابط عرض جديد يُبطل ما قبله: رمز ظهر على شاشة سابقة لا يبقى صالحًا (M5)
+  await db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null);
   const token = await issueSession(p.id, 'demo', ctx);
   await audit('admin', a.email, 'demo.open', 'participants', p.id);
   return { success: true, url: `${CONFIG.appUrl.replace(/\/$/, '')}/#demo=${token}`, status: p.status };

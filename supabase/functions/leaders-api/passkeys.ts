@@ -5,8 +5,8 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse, type WebAuthnCredential,
 } from 'npm:@simplewebauthn/server@13.3.3';
-import { audit, CONFIG, db, Fail, fromBytea, must, toBytea } from './core.ts';
-import { issueSession, mePayload } from './participant.ts';
+import { audit, CONFIG, db, Fail, fromBytea, must, passkeyAddedMail, sendMail, toBytea } from './core.ts';
+import { deviceOf, issueSession, mePayload } from './participant.ts';
 
 type Body = Record<string, any>;
 const CHALLENGE_MINUTES = 5;
@@ -69,14 +69,25 @@ export async function verifyAuthentication(response: any, expectedChallenge: str
   }
 }
 
-export async function registerOptions(p: any) {
+// إضافة مفتاح تحتاج دخولًا حديثًا بوسيلة تثبت صاحب الحساب (M3): لا جلسة عرض ولا تبديل دور ولا جلسة قديمة
+const STEP_UP_OK = ['passkey', 'email_link', 'email_code', 'google'];
+export const stepUpOk = (s: { method?: string; created_at?: string } | null, now = Date.now()) =>
+  !!s && STEP_UP_OK.includes(String(s.method)) && now - Date.parse(String(s.created_at)) <= CONFIG.passkeyStepUpMinutes * 6e4;
+async function requireStepUp(sessionId: string) {
+  const { data: s } = await db.from('auth_sessions').select('method, created_at').eq('id', sessionId).maybeSingle();
+  if (!stepUpOk(s as any)) throw new Fail(`للأمان، يُضاف مفتاح المرور خلال ${CONFIG.passkeyStepUpMinutes} دقيقة من تسجيل الدخول. اخرج وادخل من جديد ثم أضفه.`, 403, 'stepup');
+}
+
+export async function registerOptions(p: any, sessionId: string) {
+  await requireStepUp(sessionId);
   const existing = must(await db.from('passkeys').select('credential_id, transports').eq('participant_id', p.id)) ?? [];
   const options = await registrationOptionsFor(p, existing as any[]);
   await saveChallenge(options.challenge, 'register', p.id);
   return { success: true, options };
 }
 
-export async function registerVerify(p: any, b: Body) {
+export async function registerVerify(p: any, b: Body, sessionId: string, ctx: { ua: string | null }) {
+  await requireStepUp(sessionId);
   const ch = await takeChallenge(challengeOf(b.response), 'register');
   if (ch.participant_id !== p.id) throw new Fail('تحدٍّ غير مطابق');
   const v = await verifyRegistration(b.response, ch.challenge);
@@ -93,7 +104,27 @@ export async function registerVerify(p: any, b: Body) {
     device_label: String(b.label || '').slice(0, 80) || null,
   }));
   await audit('participant', p.id, 'passkey.register', 'passkeys', info.credential.id);
+  // إشعار أمني لصاحب الحساب: مفتاح أضيف دون علمه يراه فيحذفه
+  if (p.email && !p.is_demo) {
+    const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
+    sendMail(p.email, 'أُضيف مفتاح مرور إلى حسابك', passkeyAddedMail(p.full_name, deviceOf(ctx?.ua || ''), when)).catch((e) => console.error('passkey mail', e));
+  }
   return { success: true };
+}
+
+// مفاتيح المشارك: يراها ويحذف ما لا يعرفه. الحذف يُنهي كل جلسة أخرى، فمن دخل بالمفتاح المحذوف يخرج
+export async function list(p: any) {
+  const { data } = await db.from('passkeys').select('id, device_label, created_at, last_used_at, backed_up').eq('participant_id', p.id).order('created_at');
+  return { success: true, passkeys: data || [] };
+}
+export async function remove(p: any, b: Body, sessionId: string) {
+  const id = String(b.id || '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Fail('بيانات ناقصة');
+  const { data: gone } = await db.from('passkeys').delete().eq('id', id).eq('participant_id', p.id).select('credential_id');
+  if (!gone?.length) throw new Fail('المفتاح غير موجود', 404);
+  await db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null).neq('id', sessionId);
+  await audit('participant', p.id, 'passkey.remove', 'passkeys', gone[0].credential_id);
+  return list(p);
 }
 
 // الدخول بمفتاح المرور: بلا بريد، المتصفح يعرض المفاتيح المحفوظة للنطاق

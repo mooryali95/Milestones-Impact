@@ -36,7 +36,7 @@ type Body = Record<string, any>;
 
 // ── الجلسة ──
 // وصف مختصر للجهاز من المتصفح، لرسالة الدخول الجديد
-const deviceOf = (ua: string | null) => {
+export const deviceOf = (ua: string | null) => {
   const s = String(ua || '');
   const os = /iPhone|iPad/.test(s) ? 'iPhone/iPad' : /Android/.test(s) ? 'Android' : /Mac OS X/.test(s) ? 'Mac' : /Windows/.test(s) ? 'Windows' : /Linux/.test(s) ? 'Linux' : 'جهاز';
   const br = /Edg\//.test(s) ? 'Edge' : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : /Firefox\//.test(s) ? 'Firefox' : '';
@@ -62,17 +62,23 @@ export async function issueSession(participantId: string, method: string, ctx: C
   return token;
 }
 
+/** آخر لحظة تصلح فيها الجلسة مهما تجددت: 30 يومًا من الدخول، و8 ساعات لجلسة العرض */
+export const sessionHardEnd = (s: { created_at?: string; method?: string } | null) =>
+  !s?.created_at ? Infinity : Date.parse(s.created_at) + (s.method === 'demo' ? CONFIG.demoSessionHours * 36e5 : CONFIG.sessionMaxDays * 864e5);
+
 export async function participantFromToken(token: unknown) {
   if (typeof token !== 'string' || token.length < 20) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const { data: s } = await db.from('auth_sessions')
-    .select('id, participant_id, expires_at, revoked_at').eq('token_hash', await hash(token)).maybeSingle();
-  if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
+    .select('id, participant_id, expires_at, revoked_at, created_at, method').eq('token_hash', await hash(token)).maybeSingle();
+  // السقف المطلق من لحظة الدخول (M9): التجديد بالاستعمال لا يتجاوزه
+  const hardEnd = sessionHardEnd(s);
+  if (!s || s.revoked_at || new Date(s.expires_at) < new Date() || hardEnd < Date.now()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const p = must(await db.from('participants').select('*').eq('id', s.participant_id).single());
   if (p.status === 'suspended') throw new Fail(`الحساب موقوف. تواصل مع ${CONTACT_EMAIL}.`, 403, 'suspended');
   // الاستعمال يجدد المدة: تنتهي الجلسة بعد sessionDays من آخر نشاط لا من الدخول
   const now = Date.now();
   const touch: Record<string, string> = { last_seen_at: new Date(now).toISOString() };
-  if (new Date(s.expires_at).getTime() - now < (CONFIG.sessionDays - 1) * 864e5) touch.expires_at = new Date(now + CONFIG.sessionDays * 864e5).toISOString();
+  if (new Date(s.expires_at).getTime() - now < (CONFIG.sessionDays - 1) * 864e5) touch.expires_at = new Date(Math.min(now + CONFIG.sessionDays * 864e5, hardEnd)).toISOString();
   db.from('auth_sessions').update(touch).eq('id', s.id).then(() => {});
   return { participant: p, sessionId: s.id as string };
 }

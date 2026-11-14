@@ -101,6 +101,38 @@ function Devices() {
   );
 }
 
+// مفاتيح المرور: يراها صاحب الحساب ويحذف ما لا يعرفه. الحذف يُنهي الجلسات الأخرى (M3)
+function Passkeys({ onCount, bump }) {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { call('passkey.list').then((r) => setList(r.success ? r.passkeys : [])); }, [bump]);
+  const remove = async (k) => {
+    if (!window.confirm(`حذف مفتاح «${k.device_label || 'بلا اسم'}»؟ لن يُدخل به بعد الآن، وتنتهي جلساتك على الأجهزة الأخرى.`)) return;
+    setBusy(true); setError('');
+    const r = await call('passkey.remove', { id: k.id });
+    setBusy(false);
+    if (r.success) { setList(r.passkeys); onCount(r.passkeys.length); } else setError(r.message);
+  };
+  if (!list || list.length === 0) return null;
+  return (
+    <section className="card stack devices">
+      <h2>مفاتيح المرور</h2>
+      <p className="small muted">كل مفتاح يدخل صاحبه إلى رحلتك ببصمته أو وجهه. إن رأيت مفتاحًا لا تعرفه فاحذفه.</p>
+      <ul className="device-list">
+        {list.map((k) => (
+          <li key={k.id}>
+            <div><b>{k.device_label || 'مفتاح بلا اسم'}</b>
+              <br /><small className="muted">أُضيف {when(k.created_at)}{k.last_used_at ? ` · آخر دخول به ${when(k.last_used_at)}` : ' · لم يُستعمل بعد'}</small></div>
+            <button type="button" className="link small" disabled={busy} onClick={() => remove(k)}>حذف</button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
 // اسم يصلح للشهادة: كلمتان على الأقل، كل منهما حرفان فأكثر، بحروف عربية أو لاتينية
 // الفحص نفسه في الخادم (profile.save): مصدره logic.js
 export const certName = certNameOk;
@@ -271,6 +303,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
       )}
       {!onboarding && me.participant.status !== 'completed' && <PreManager inSettings />}
       {!onboarding && <OrgVisibility />}
+      {!onboarding && <Passkeys bump={pk} onCount={setPk} />}
       {!onboarding && <Devices />}
     </div>
   );

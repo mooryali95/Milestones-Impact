@@ -42,6 +42,11 @@ export const CONFIG = {
   registerPerIpDay: Number(env('LEADERS_REGISTER_PER_IP_DAY', '60')) || 60,
   // الجلسة تتجدد بالاستعمال، وتنتهي بعد أسبوعين من آخر نشاط
   sessionDays: 14,
+  // سقف مطلق من لحظة الدخول مهما تجدد الاستعمال (M9): بعده دخول جديد. وجلسة العرض قصيرة لأن رابطها يُعرض على شاشة
+  sessionMaxDays: 30,
+  demoSessionHours: 8,
+  // إضافة مفتاح مرور تحتاج دخولًا حديثًا (M3): رمز مسروق قديم لا يتحول إلى مفتاح دائم
+  passkeyStepUpMinutes: 60,
   codeMinutes: 15,
 };
 
@@ -465,6 +470,14 @@ export function eraseRequestMail(name: string, days: number) {
 }
 
 // دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
+export function passkeyAddedMail(name: string, device: string, when: string) {
+  return shell('access', 'أُضيف مفتاح مرور إلى حسابك',
+    mailText(`${hello(name)} أُضيف مفتاح مرور جديد يدخل به صاحبه إلى رحلتك بلا رمز بريد.`)
+    + mailRows([['الجهاز', device], ['الوقت', when]])
+    + mailNote('إن كان أنت فلا شيء عليك. وإن لم يكن: افتح ملفك › «مفاتيح المرور» واحذفه، فتنتهي معه الجلسات الأخرى.')
+    + mailButton(`${CONFIG.appUrl}/?tab=profile`, 'مفاتيح المرور'),
+    `${device} · ${when}`, '');
+}
 export function newDeviceMail(name: string, device: string, when: string) {
   return shell('access', 'دخول جديد إلى حسابك',
     mailText(`${hello(name)} سُجّل دخول إلى رحلتك من جهاز لم تستعمله من قبل.`)
@@ -619,6 +632,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'erase-request', family: 'access', label: 'تأكيد طلب حذف البيانات', subject: ERASE_MAIL_SUBJECT, html: () => eraseRequestMail('سارة', 30) },
+  { key: 'passkey-added', family: 'access', label: 'إضافة مفتاح مرور', subject: 'أُضيف مفتاح مرور إلى حسابك', html: () => passkeyAddedMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
