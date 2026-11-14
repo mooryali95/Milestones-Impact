@@ -1,6 +1,8 @@
 // حراس الحزمة 3 (D09 وD13): النسخ خارج GitHub بالتشفير عند المصدر، وفحصها ومراقب حداثتها وتمرينها،
 // وتجميد SSPDF بسحب صلاحياته. التمرين الكامل جُرّب على قاعدة Postgres محلية (الإيداع وتقرير الحزمة).
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { promisify } from 'node:util';
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +13,7 @@ import { checkManifest, parseRecipients } from '../../scripts/ops/backup-check.m
 import { evaluate, MAX_HOURS } from '../../workers/backup-monitor/index.js';
 import { PII, QUERIES, render } from '../../scripts/db/sspdf-inventory.mjs';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
+import { authHeaders } from '../../scripts/db/backup-storage.mjs';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -296,6 +299,44 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
     expect(rb).toContain('npx wrangler r2 bucket lock add mi-backups --name daily-30d --prefix daily/ --retention-days 30');
     expect(rb).toContain('لا تُستقبل بيانات دفعة قبل تمرين ناجح.');
     expect(read('docs/SECRETS.md')).toContain('`BACKUP_PUBLIC_KEY`');
+  });
+});
+
+describe('نسخ الدلو الخاص بمفتاح Supabase السري الجديد أو القديم', () => {
+  // المفاتيح القديمة تتقاعد أوائل 2027 (إشعار لوحة Supabase، 14 نوفمبر)، والسري الجديد ليس JWT فيُرسل في apikey وحده
+  it('sb_secret_ في apikey وحده، وservice_role القديم في الاثنين، والمفتاح العام مرفوض', () => {
+    expect(authHeaders('sb_secret_abc')).toEqual({ apikey: 'sb_secret_abc', 'Content-Type': 'application/json' });
+    expect(authHeaders('eyJhbGciOi.x.y')).toEqual({ apikey: 'eyJhbGciOi.x.y', Authorization: 'Bearer eyJhbGciOi.x.y', 'Content-Type': 'application/json' });
+    expect(() => authHeaders('sb_publishable_abc')).toThrow(/publishable/);
+    expect(() => authHeaders('')).toThrow(/required/);
+  });
+  it('السكربت الحقيقي يرسل الترويسة الصحيحة لخادم تخزين محلي، ويعمل من مسار فيه مسافة وحروف عربية', async () => {
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push({ url: req.url, apikey: req.headers.apikey, authorization: req.headers.authorization });
+      res.setHeader('Content-Type', 'application/json');
+      if (req.url.startsWith('/storage/v1/object/list/')) return res.end(req.headers.apikey ? '[{"id":"1","name":"cv.pdf","metadata":{"size":3}}]' : '[]');
+      res.setHeader('Content-Type', 'application/pdf');
+      return res.end('pdf');
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const base = mkdtempSync(join(tmpdir(), 'mi-storage-'));
+    const dir = join(base, 'مسار فيه مسافة');
+    spawnSync('mkdir', ['-p', dir]);
+    writeFileSync(join(dir, 'bs.mjs'), read('scripts/db/backup-storage.mjs'));
+    try {
+      const run = (k) => promisify(execFile)('node', [join(dir, 'bs.mjs'), join(base, 'out'), 'leaders-private'], { env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${server.address().port}`, SUPABASE_SERVICE_ROLE_KEY: k } });
+      const r = await run('sb_secret_test');
+      expect(r.stdout).toContain('1 files');
+      expect(readFileSync(join(base, 'out', 'cv.pdf'), 'utf8')).toBe('pdf');
+      expect(seen.every((x) => x.apikey === 'sb_secret_test' && x.authorization === undefined)).toBe(true);
+      seen.length = 0;
+      await run('eyJlegacy.jwt.sig');
+      expect(seen.every((x) => x.authorization === 'Bearer eyJlegacy.jwt.sig')).toBe(true);
+    } finally {
+      server.close();
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 

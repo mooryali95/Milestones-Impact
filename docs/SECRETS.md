@@ -45,7 +45,7 @@
 | `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
 | `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` | `backup.yml`، `restore-drill.yml`، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
 | `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
-| `SUPABASE_SERVICE_ROLE_KEY` (اختياري) | `backup.yml` | نسخ دلو الملفات `leaders-private` |
+| `SUPABASE_SERVICE_ROLE_KEY` (في بيئة `backup`، إلزامي منذ #323) | `backup.yml` | نسخ دلو الملفات `leaders-private`: مفتاح سري باسم مستقل (`sb_secret_`) يُرسل في `apikey` وحده، أو service_role القديم حتى تقاعده أوائل 2027 |
 
 ## ليست أسرارًا (في المستودع عمدًا)
 
