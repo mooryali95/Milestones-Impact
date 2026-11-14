@@ -7,11 +7,12 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
+import { linkToken } from '../link-token.js';
 
 const pct = (r) => (r == null ? '·' : `${Math.round(r * 100)}%`);
 
 export default function Outcome() {
-  const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
+  const [t] = useState(() => linkToken());
   const [data, setData] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);

@@ -8,9 +8,10 @@ import { call } from '../api.js';
 import { openCapstoneDoc } from './Capstone.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
+import { linkToken } from '../link-token.js';
 
 export default function Sponsor() {
-  const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
+  const [t] = useState(() => linkToken());
   const [data, setData] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);

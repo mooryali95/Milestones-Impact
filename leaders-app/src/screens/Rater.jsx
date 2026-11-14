@@ -12,9 +12,10 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf } from '../labels.js';
 import { CONTACT_FREQ_AR, FEEDBACK_OPEN_AR, FEEDBACK_OPEN_MAX, LEGAL_PATH, POLICY_VERSION } from '../../../supabase/functions/leaders-api/labels.js';
+import { linkToken } from '../link-token.js';
 
 export default function Rater() {
-  const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
+  const [t] = useState(() => linkToken());
   const [data, setData] = useState(null);
   const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState({});

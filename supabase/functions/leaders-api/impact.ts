@@ -21,6 +21,8 @@ import { FEEDBACK_OPEN_AR } from './labels.js';
 type Body = Record<string, any>;
 
 const RATER_LIMIT = 3;
+// دعوات اليوم الواحد لكل مشارك، ومنها ما أُلغي وأُعيد (مدير ومقيّمون ثلاثة وبعض التصحيح)
+const RATER_INVITES_PER_DAY = 8;
 export const RELATION_AR: Record<string, string> = { manager: 'المدير المباشر', peer: 'زميل', report: 'أحد أعضاء الفريق', stakeholder: 'أحد أصحاب المصلحة' };
 // مقيّمو قياس الأثر بمرحلتيهم وحدهما: مقيّم تقييم 360 (phase f360) للتطوير، لا يدخل الأثر ولا قائمة الأثر ولا عدّاده
 export const IMPACT_PHASES = ['pre', 'post'];
@@ -305,6 +307,10 @@ export async function invite(p: any, b: Body) {
     await requirePostOpen(p);
     instrumentId = (await postInstrument(p)).id;
   }
+  // سقف يومي للدعوات يشمل الملغاة: حلقة «ادعُ ثم ألغِ» كانت ترسل بريدًا بلا حد وتستنزف حصة الإشعارات (N5)
+  const { count: invitedToday } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('actor_type', 'participant').eq('actor', p.id).eq('action', 'rater.invite').gte('created_at', new Date(Date.now() - 864e5).toISOString());
+  if ((invitedToday ?? 0) >= RATER_INVITES_PER_DAY) throw new Fail('بلغت حد دعوات اليوم. أعد المحاولة غدًا.', 429, 'rate');
   const limit = phase === 'pre' ? 1 : RATER_LIMIT;
   const existing = must(await db.from('raters').select('id, email, status').eq('participant_id', p.id).eq('phase', phase).neq('status', 'revoked')) as any[] ?? [];
   if (!existing.some((r: any) => r.email === email) && existing.length >= limit) throw new Fail(limit === 1 ? 'دعوت مديرك من قبل' : `الحد ${limit} مقيّمين`);

@@ -120,6 +120,7 @@ export const MIGRATIONS = [
   '20261113130000_leaders_cohort_visibility',
   '20261114100000_leaders_payment_ledger',
   '20261114110000_leaders_mail_center',
+  '20261114120000_public_lockdown',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -158,4 +159,5 @@ export const MIGRATION_GATES = {
   '20261113130000_leaders_cohort_visibility': ["tolerant", "الدالة تقرأ العمود إن وُجد وتعمل بالافتراضي العام إن غاب (visibility.ts visibilityOf)، والحفظ قبل الترحيل يقول ذلك بدل أن يفشل"],
   '20261114100000_leaders_payment_ledger': ["tolerant", "الدالة تكتب هذه الأعمدة بتحديث منفصل يتحمل غيابها (payments.ts saveLedger)، وتقرأ العملية بـ* فتعمل قبل الترحيل وبعده"],
   '20261114110000_leaders_mail_center': ["tolerant", ""],
+  '20261114120000_public_lockdown': ["tolerant", ""],
 };
