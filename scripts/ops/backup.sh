@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # النسخ الاحتياطي خارج GitHub بأمر واحد (D09): يشغله backup.yml ليليًا، ويشغله المالك من جهازه أثناء حجب Actions.
-#   SUPABASE_DB_URL=... BACKUP_PUBLIC_KEY_FILE=backup-public.asc R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
+#   SUPABASE_DB_URL=... BACKUP_PUBLIC_KEY=age1... R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
 #   R2_SECRET_ACCESS_KEY=... R2_BUCKET=mi-backups scripts/ops/backup.sh
 # يفرّغ مخططات leaders وpublic وauth (ومعها دلو leaders-private إن وُجد SUPABASE_SERVICE_ROLE_KEY)،
 # ويشفّر عند المصدر بالمفتاح العام (لمستلم أو أكثر) فلا يحمل المشغّل ما يفك التشفير، ويرفع إلى R2 مع بيان بالبصمات
@@ -8,7 +8,7 @@
 # خيارات البيئة: BACKUP_SCHEMAS (افتراضيًا leaders,public,auth)، وBACKUP_PREFIX (daily، أو archive لتفريغ مرة واحدة
 # مثل مخطط sspdf في D13)، وBACKUP_OUT (مجلد تبقى فيه النسخ المشفرة، افتراضيًا مجلد مؤقت يُحذف).
 # بلا مفتاح عام وبـ BACKUP_PASSPHRASE وحده يعمل بالتشفير المتماثل القديم مع تحذير، حتى يضبط المالك المفتاح.
-# المتطلبات: bash وgpg وnode 20، وpg_dump من إصدار الخادم (BACKUP_PG_MAJOR، افتراضيًا 17) أو docker.
+# المتطلبات: bash وage (أو gpg) وnode 20، وpg_dump من إصدار الخادم (BACKUP_PG_MAJOR، افتراضيًا 17) أو docker.
 set -euo pipefail
 
 : "${SUPABASE_DB_URL:?SUPABASE_DB_URL مطلوب (Session pooler)}"
@@ -32,17 +32,42 @@ pgtool() {   # pg_dump/psql من الإصدار 17 محليًا، وإلا من 
   else docker run --rm -i -e PGCONNECT_TIMEOUT=30 postgres:17 "$tool" "$@"; fi
 }
 
-# المستلمون: كتلة مفتاح عام أو أكثر في BACKUP_PUBLIC_KEY (أو BACKUP_PUBLIC_KEY_FILE): مفتاح المالك، ومفتاح احتياطي
-# اختياري عند شخص ثانٍ أو مختوم، فلا يضيع كل شيء بضياع مفتاح واحد. gpg بـ --recipient-file يشفّر لأول مفتاح في الملف
-# وحده بصمت (جُرّب على gpg 2.4)، سواء كان الملف كتلتين أو كتلة فيها مفتاحان، فتُفصل الكتل، ويُشترط في كل كتلة مفتاح
-# واحد بالضبط (التصدير بالبصمة: gpg --armor --export <البصمة>)، ويُمرَّر كلٌّ بـ --recipient-file، والبصمات في البيان.
-# الملف نصي مدرّع وحده. كتلة لا تُقرأ، أو فيها أكثر من مفتاح، أو مفتاح مكرر، أو بلا قدرة تشفير، يُفشل النسخ قبل التفريغ.
+# المستلمون بأداة من اثنتين (RUNBOOK.md §4)، وكلاهما مستلم أو أكثر: مفتاح المالك، ومفتاح احتياطي اختياري عند شخص
+# ثانٍ أو مختوم، فلا يضيع كل شيء بضياع مفتاح واحد. والبصمات أو المفاتيح العامة في البيان (recipients).
+# * age (المعتمد): سطر لكل مستلم يبدأ بـ age1، والأسطر الفارغة وما يبدأ بـ # تُهمل. age يشفّر لكل سطر أصلًا، ولا مفاتيح
+#   فرعية ولا حلقات مفاتيح ولا تصدير، فلا يسقط مستلم بصمت. السطر يُفحص بصيغته وبـ age نفسه قبل التفريغ.
+# * GnuPG (مقبول): gpg بـ --recipient-file يشفّر لأول مفتاح في الملف وحده بصمت (جُرّب على gpg 2.4)، سواء كان الملف كتلتين
+#   أو كتلة فيها مفتاحان، فتُفصل الكتل، ويُشترط في كل كتلة مفتاح واحد بالضبط (التصدير بالبصمة)، ويُمرَّر كلٌّ بـ --recipient-file.
+#   الملف نصي مدرّع وحده. كتلة لا تُقرأ، أو فيها أكثر من مفتاح، أو مفتاح مكرر، أو بلا قدرة تشفير، يُفشل النسخ قبل التفريغ.
 RCPT=()
+TOOL=""
 RECIPIENTS="[]"
+src=""
 if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
-  command -v gpg >/dev/null || { echo "gpg غير مثبت" >&2; exit 1; }
   src="${BACKUP_PUBLIC_KEY_FILE:-$WORK/public.asc}"
   [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || printf '%s\n' "$BACKUP_PUBLIC_KEY" > "$src"
+fi
+if [ -n "${src:-}" ] && ! grep -q -- '-----BEGIN PGP PUBLIC KEY BLOCK-----' "$src"; then
+  TOOL=age
+  command -v age >/dev/null || { echo "age غير مثبت (apt-get install age، أو brew install age)" >&2; exit 1; }
+  : > "$WORK/recipients.txt"
+  rcp=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(printf '%s' "$line" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    line="${line#Public key: }"
+    case "$line" in ''|'#'*) continue ;; esac
+    printf '%s' "$line" | grep -Eq '^age1[02-9ac-hj-np-z]{58}$' || { echo "سطر في BACKUP_PUBLIC_KEY ليس مفتاح age عامًا (age1 ثم 58 حرفًا): $(printf '%s' "$line" | cut -c1-24)" >&2; exit 1; }
+    case ",$rcp," in *"\"$line\""*) echo "المفتاح $line مكرر في BACKUP_PUBLIC_KEY" >&2; exit 1 ;; esac
+    printf '%s\n' "$line" >> "$WORK/recipients.txt"
+    rcp="$rcp${rcp:+,}\"$line\""
+  done < "$src"
+  [ -n "$rcp" ] || { echo "BACKUP_PUBLIC_KEY بلا مفتاح: الصق سطر age1 أو كتلة GnuPG" >&2; exit 1; }
+  age -R "$WORK/recipients.txt" -o /dev/null < /dev/null 2>"$WORK/age-keys.err" || { echo "age يرفض مفاتيح BACKUP_PUBLIC_KEY: $(head -c 300 "$WORK/age-keys.err")" >&2; exit 1; }
+  RCPT=(-R "$WORK/recipients.txt")
+  RECIPIENTS="[$rcp]"
+elif [ -n "${src:-}" ]; then
+  TOOL=gpg
+  command -v gpg >/dev/null || { echo "gpg غير مثبت" >&2; exit 1; }
   mkdir -p "$WORK/keys"
   awk -v d="$WORK/keys" '/-----BEGIN PGP PUBLIC KEY BLOCK-----/ { n++; f = sprintf("%s/k%02d.asc", d, n) } n { print > f }' "$src"
   fprs=""
@@ -64,14 +89,17 @@ if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
   RECIPIENTS="[$fprs]"
 fi
 
-encrypt() {   # $1 الملف الصريح ← $1.gpg
-  if [ "${#RCPT[@]}" -gt 0 ]; then
+encrypt() {   # $1 الملف الصريح ← $1.age أو $1.gpg (EXT)
+  if [ "$TOOL" = age ]; then
+    age "${RCPT[@]}" -o "$1.age" "$1"
+    MODE=public-key; EXT=age
+  elif [ "$TOOL" = gpg ]; then
     gpg --batch --yes --quiet --trust-model always "${RCPT[@]}" --encrypt -o "$1.gpg" "$1"
-    MODE=public-key
+    MODE=public-key; EXT=gpg
   elif [ -n "${BACKUP_PASSPHRASE:-}" ]; then
     echo "::warning::لا مفتاح عام (BACKUP_PUBLIC_KEY)، فالتشفير متماثل بعبارة مرور تحملها بيئة التشغيل. اضبط المفتاح العام (D09)." >&2
     gpg --batch --yes --quiet --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" --symmetric --cipher-algo AES256 -o "$1.gpg" "$1"
-    MODE=symmetric
+    MODE=symmetric; EXT=gpg; TOOL=gpg
   else
     echo "لا مفتاح عام ولا عبارة مرور: لا تُحفظ نسخة غير مشفرة" >&2; exit 1
   fi
@@ -100,7 +128,7 @@ if [ "$PREFIX" = daily ]; then
     'auth.users', (select count(*) from auth.users))")"
 fi
 encrypt "$dump"
-files=("$dump.gpg")
+files=("$dump.$EXT")
 
 # ── الملفات الخاصة (السير الذاتية والأدلة) ──
 if [ "$PREFIX" = daily ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
@@ -109,7 +137,7 @@ if [ "$PREFIX" = daily ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   cp "$WORK/storage-files.tsv" "$WORK/storage/.files.tsv"
   tar czf "$OUT/storage-$STAMP.tar.gz" -C "$WORK" storage
   encrypt "$OUT/storage-$STAMP.tar.gz"
-  files+=("$OUT/storage-$STAMP.tar.gz.gpg")
+  files+=("$OUT/storage-$STAMP.tar.gz.$EXT")
 elif [ "$PREFIX" = daily ]; then
   echo "::warning::SUPABASE_SERVICE_ROLE_KEY غير مضبوط: دلو leaders-private (السير الذاتية والأدلة) لم يُنسخ." >&2
 fi
@@ -117,7 +145,7 @@ fi
 # ── البيان ──
 manifest="$OUT/manifest-$TAG-$STAMP.json"
 {
-  printf '{"at":"%s","day":"%s","prefix":"%s","schemas":"%s","encryption":"%s","recipients":%s,"rows":%s,"files":[' "$(date -u +%FT%TZ)" "$DAY" "$PREFIX" "$SCHEMAS" "$MODE" "$RECIPIENTS" "$ROWS"
+  printf '{"at":"%s","day":"%s","prefix":"%s","schemas":"%s","encryption":"%s","tool":"%s","recipients":%s,"rows":%s,"files":[' "$(date -u +%FT%TZ)" "$DAY" "$PREFIX" "$SCHEMAS" "$MODE" "$TOOL" "$RECIPIENTS" "$ROWS"
   sep=""
   for f in "${files[@]}"; do printf '%s{"key":"%s/%s","sha256":"%s","bytes":%s}' "$sep" "$PREFIX" "$(basename "$f")" "$(sha "$f")" "$(bytes "$f")"; sep=","; done
   printf ']}\n'

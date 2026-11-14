@@ -179,6 +179,53 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
       rmSync(base, { recursive: true, force: true });
     }
   }, 30_000);
+  // age الأداة المعتمدة (2026-11-14): سطر لكل مستلم، يشفّر لكلٍّ أصلًا، والتمرين يفك بملف المفتاح الخاص
+  const hasAge = spawnSync('age', ['--version']).status === 0 && spawnSync('age-keygen', ['--version']).status === 0;
+  it.skipIf(process.platform !== 'linux' || !hasAge)('age: سطر لكل مستلم بتعليق وCRLF، فيفك كلٌّ وحده، والتمرين يستعيد بملف المفتاح، والسطر الخاطئ يُرفض قبل التفريغ', () => {
+    const base = mkdtempSync(join(tmpdir(), 'mi-age-'));
+    const bin = join(base, 'bin'); const out = join(base, 'out');
+    for (const d of [bin, out]) spawnSync('mkdir', ['-p', d]);
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    try {
+      const ids = ['owner', 'escrow'].map((n) => {
+        const file = join(base, `${n}.key`);
+        expect(spawnSync('age-keygen', ['-o', file]).status).toBe(0);
+        return { file, pub: readFileSync(file, 'utf8').match(/age1[0-9a-z]{58}/)[0] };
+      });
+      tool('pg_dump', '[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; echo "dump-payload"');
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      const run = (key) => spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: base, SUPABASE_DB_URL: 'postgres://fake', BACKUP_PUBLIC_KEY: key, BACKUP_PASSPHRASE: 'must-not-be-used', BACKUP_OUT: out },
+      });
+      // كما يلصقه المالك: سطر «Public key:» من age-keygen، وتعليق، وسطر فارغ، ونهايات Windows
+      const r = run(`# owner\r\nPublic key: ${ids[0].pub}\r\n\r\n# escrow\r\n${ids[1].pub}\r\n`);
+      expect(r.status, r.stderr).toBe(0);
+      const m = JSON.parse(r.stdout.trim().split('\n').pop());
+      expect(m).toMatchObject({ encryption: 'public-key', tool: 'age', recipients: ids.map((x) => x.pub) });
+      const file = join(out, m.files[0].key.split('/').pop());
+      expect(file.endsWith('.dump.age')).toBe(true);
+      for (const id of ids) expect(spawnSync('age', ['-d', '-i', id.file, file], { encoding: 'utf8' }).stdout.trim(), id.file).toBe('dump-payload');
+      // سطر ليس مفتاح age، أو مفتاح مكرر، يُفشل النسخ قبل التفريغ ولا يسقط إلى العبارة
+      const bad = run(`${ids[0].pub}\nage1notakey\n`);
+      expect(bad.status).not.toBe(0);
+      expect(bad.stderr).toContain('ليس مفتاح age عامًا');
+      const dup = run(`${ids[0].pub}\n${ids[0].pub}\n`);
+      expect(dup.status).not.toBe(0);
+      expect(dup.stderr).toContain('مكرر');
+      // التمرين يطلب ملف المفتاح لنسخ age، ويذكر المتغير إن غاب
+      const d = read('scripts/ops/restore-drill.sh');
+      expect(d).toContain('age -d -i "$DRILL_AGE_IDENTITY" -o "${f%.age}" "$f"');
+      expect(d).toContain('اضبط DRILL_AGE_IDENTITY');
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 30_000);
+  it('backup.yml يثبّت age قبل النسخ', () => {
+    const b = read('.github/workflows/backup.yml');
+    expect(b.indexOf('name: Install age')).toBeGreaterThan(-1);
+    expect(b.indexOf('name: Install age')).toBeLessThan(b.indexOf('run: bash scripts/ops/backup.sh'));
+  });
   it('backup.yml يفشل بسرّ ناقص ولا يمر أخضر بلا نسخة', () => {
     const b = read('.github/workflows/backup.yml');
     expect(b).not.toMatch(/skip=true/);

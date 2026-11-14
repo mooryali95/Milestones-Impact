@@ -5,7 +5,7 @@ name: Nightly database backup
 # مع بيان بالبصمات وعدد الصفوف. نسخة أدوات السير (طبقة ثانية 30 يومًا) لا تُرفع ما دام المستودع عامًا.
 # الأسرار:
 #   SUPABASE_DB_URL         سلسلة الاتصال (Session pooler)
-#   BACKUP_PUBLIC_KEY       كتلة لكل مفتاح عام (gpg --armor --export <البصمة>). المفتاح الخاص عند المالك خارج GitHub وCloudflare
+#   BACKUP_PUBLIC_KEY       سطر age1 لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح. المفتاح الخاص عند المالك خارج GitHub وCloudflare
 #   BACKUP_PASSPHRASE       التشفير المتماثل القديم، يُحذف بعد أول نسخة بالمفتاح العام (RUNBOOK.md §4)
 #   SUPABASE_SERVICE_ROLE_KEY  نسخ دلو الملفات الخاصة
 #   R2_ACCOUNT_ID وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET  رمز مقصور على الدلو، وقفل احتفاظ في الدلو
@@ -51,6 +51,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
+      # age أداة التشفير المعتمدة بالمفتاح العام (RUNBOOK.md §4)، وليست في صورة المشغّل
+      - name: Install age
+        run: command -v age >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq age; }
       - name: Dump, encrypt at the source, and upload to R2
         run: bash scripts/ops/backup.sh
       # الطبقة الثانية تُحفظ ولو فشل الرفع إلى R2 (ops-2: فشل 409 فضاعت معه)، والمشفّر والبيان وحدهما: تفريغ قطعه
