@@ -8,6 +8,7 @@
 import { alertOps, audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
+import { inProgram } from './logic.js';
 
 export type Item = 'assessment' | 'program';
 export const ITEMS: Item[] = ['assessment', 'program'];
@@ -23,11 +24,28 @@ export async function settings() {
 // القيمة التعاقدية تُثبَّت على بند البرنامج (والقياس صفر)، فمجموع ما للمشارك = سعر جهته لحظة ربطه، بعملة الإعداد يومذاك.
 // D20: التثبيت يستهلك مقعدًا من عقد الجهة بفحص ذري في القاعدة (leaders.pin_sponsor_seat): قفل صف الجهة، ومدة العقد،
 // والمقاعد، ثم البندان في المعاملة نفسها. تعذّر الفحص لا يمنح شيئًا: ينبّه المالك ويرمي 503، ويُعاد التثبيت لاحقًا.
-export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'inactive';
+export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'inactive' | 'out' | 'cancelled' | 'rejected';
 export const SEAT_BLOCKED: PinResult[] = ['full', 'before', 'after'];
 export const SEAT_ALERTS = [0.8, 1];
+// P1-06: ما يوقف التثبيت الآلي ولا يمنح شيئًا. كان رد المقعد عند الانسحاب وسحب الإعفاء يُنقضان في أول قراءة للملف.
+// out: خارج البرنامج (inProgram)؛ cancelled: إعفاء لهذه الجهة رُدّ مقعده أو سُحب؛ rejected: رُفض طلب مقعده أو عقده فيها.
+// القاعدة نفسها في leaders.pin_sponsor_seat (ترحيل 20261114130000)، وهنا قبل الاستدعاء فتصح قبل تطبيقه.
+// إعادة الرعاية بعدها فعل صريح من الإدارة، لا قراءة ملف
+export const SEAT_STOPPED: PinResult[] = ['out', 'cancelled', 'rejected'];
+async function seatStopped(p: { id: string; status?: string | null }, orgId: string): Promise<PinResult | null> {
+  if (!inProgram(p.status)) return 'out';
+  const [gone, refused] = await Promise.all([
+    db.from('entitlements').select('id').eq('participant_id', p.id).eq('organization_id', orgId).eq('source', 'sponsor').not('revoked_at', 'is', null).limit(1),
+    db.from('sponsor_requests').select('id').eq('participant_id', p.id).eq('organization_id', orgId).eq('status', 'rejected').in('kind', ['seats', 'contract']).limit(1),
+  ]);
+  if (must(gone)?.length) return 'cancelled';
+  if (must(refused)?.length) return 'rejected';
+  return null;
+}
 
-export async function pinSponsor(p: { id: string }, org: { id: string; name: string; contract_cents?: number | null }): Promise<PinResult> {
+export async function pinSponsor(p: { id: string; status?: string | null }, org: { id: string; name: string; contract_cents?: number | null }): Promise<PinResult> {
+  const stop = await seatStopped(p, org.id);
+  if (stop) return stop;
   const s: any = await settings();
   const value = org.contract_cents ?? (s.assessment_cents + s.program_cents);
   const currency = s.currency || 'USD';
@@ -94,11 +112,12 @@ async function notifyOrg(org: { id: string; name: string }, subject: string, tex
 // يثبّت لمشارك بمعرّفه إن كانت جهته نشطة؛ يُستدعى من مسارات الربط كلها. لا يرمي: الربط نفسه نجح، والتثبيت له احتياط في access()
 export async function pinSponsorFor(participantId: string) {
   try {
-    const { data: p } = await db.from('participants').select('id, organization_id, is_demo').eq('id', participantId).maybeSingle();
+    const { data: p } = await db.from('participants').select('id, organization_id, is_demo, status').eq('id', participantId).maybeSingle();
     if (!p || p.is_demo || !p.organization_id) return false;
     const { data: org } = await db.from('organizations').select('id, name, status, contract_cents').eq('id', p.organization_id).maybeSingle();
     if (!org || org.status !== 'active') return false;
-    return !SEAT_BLOCKED.includes(await pinSponsor(p, org));
+    const r = await pinSponsor(p, org);
+    return !SEAT_BLOCKED.includes(r) && !SEAT_STOPPED.includes(r);
   } catch (e) { console.error('pinSponsorFor:', e); return false; }
 }
 
