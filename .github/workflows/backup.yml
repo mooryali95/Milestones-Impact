@@ -5,7 +5,7 @@ name: Nightly database backup
 # مع بيان بالبصمات وعدد الصفوف. نسخة أدوات السير (طبقة ثانية 30 يومًا) لا تُرفع ما دام المستودع عامًا.
 # الأسرار:
 #   SUPABASE_DB_URL         سلسلة الاتصال (Session pooler)
-#   BACKUP_PUBLIC_KEY       كتلة مفتاح عام أو أكثر (gpg --armor --export). المفتاح الخاص عند المالك خارج GitHub وCloudflare
+#   BACKUP_PUBLIC_KEY       كتلة لكل مفتاح عام (gpg --armor --export <البصمة>). المفتاح الخاص عند المالك خارج GitHub وCloudflare
 #   BACKUP_PASSPHRASE       التشفير المتماثل القديم، يُحذف بعد أول نسخة بالمفتاح العام (RUNBOOK.md §4)
 #   SUPABASE_SERVICE_ROLE_KEY  نسخ دلو الملفات الخاصة
 #   R2_ACCOUNT_ID وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET  رمز مقصور على الدلو، وقفل احتفاظ في الدلو
@@ -36,11 +36,15 @@ jobs:
       BACKUP_OUT: backup-out
     steps:
       # سرّ ناقص يُفشل التشغيل فيصل بريد الفشل، ولا يمر أخضر بلا نسخة: بعد حذف BACKUP_PASSPHRASE يصير ضياع
-      # BACKUP_PUBLIC_KEY ليلة حمراء لا تخطيًا صامتًا
+      # BACKUP_PUBLIC_KEY ليلة حمراء لا تخطيًا صامتًا. وR2 إلزامي: بلا أدوات سير في المستودع العام هو المكان الوحيد للنسخة
       - name: Required secrets are set
         run: |
           if [ -z "$SUPABASE_DB_URL" ] || { [ -z "$BACKUP_PUBLIC_KEY" ] && [ -z "$BACKUP_PASSPHRASE" ]; }; then
             echo "::error::SUPABASE_DB_URL or an encryption key (BACKUP_PUBLIC_KEY) is not set; no backup taken."
+            exit 1
+          fi
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "::error::An R2 secret (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET) is not set; the backup would be stored nowhere."
             exit 1
           fi
       - uses: actions/checkout@v7

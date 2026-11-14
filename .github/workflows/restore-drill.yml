@@ -27,6 +27,8 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      # بصمات المستلمين المعتمدة، مفصولة بفاصلة (متغير مستودع، علني بطبيعته): كل منها يجب أن يكون في بيان آخر نسخة
+      BACKUP_RECIPIENTS: ${{ vars.BACKUP_RECIPIENTS }}
     steps:
       - name: Skip without R2
         id: gate

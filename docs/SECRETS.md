@@ -41,8 +41,8 @@
 |---|---|---|
 | `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال الست، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
 | `SUPABASE_DB_URL` | `backup.yml`، `restore-drill.yml` | النسخ الليلي وتمرين الاستعادة |
-| `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم. يُحذف من GitHub بعد أول نسخة بالمفتاح العام، وتبقى قيمته عند المالك لفك النسخ القديمة حتى ينقضي احتفاظها (`RUNBOOK.md` §4) |
-| `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`) | كتلة مفتاح عام أو أكثر للتشفير عند المصدر (المالك، ومستلم ثانٍ اختياري)، وبصماتها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
+| `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم. يُحذف من GitHub بعد أول نسخة بالمفتاح العام، وتبقى قيمته عند المالك دائمًا لفك النسخ القديمة (`RUNBOOK.md` §4) |
+| `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | كتلة لكل مفتاح عام، مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، وبصماتها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
 | `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` | `backup.yml`، `restore-drill.yml`، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
 | `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
 | `SUPABASE_SERVICE_ROLE_KEY` (اختياري) | `backup.yml` | نسخ دلو الملفات `leaders-private` |

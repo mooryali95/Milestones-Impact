@@ -49,7 +49,8 @@ for key in $(j "$M" "m.files.map((f) => f.key).join(' ')"); do
   want=$(j "$M" "m.files.find((f) => f.key === '$key').sha256")
   [ "$(sha "$f")" = "$want" ] || fail "بصمة $key لا تطابق البيان"
   if [ -n "${DRILL_PASSPHRASE:-}" ]; then dec=(--pinentry-mode loopback --passphrase "$DRILL_PASSPHRASE"); else dec=(); fi
-  gpg --batch --yes --quiet "${dec[@]}" -d -o "${f%.gpg}" "$f" 2>"$WORK/gpg.err" || fail "تعذّر فك تشفير $key: $(cat "$WORK/gpg.err")"
+  # ${dec[@]+...}: مصفوفة فارغة تحت set -u خطأ في bash 3.2 (bash الافتراضي على macOS)، وهي فارغة دائمًا بالمفتاح العام
+  gpg --batch --yes --quiet ${dec[@]+"${dec[@]}"} -d -o "${f%.gpg}" "$f" 2>"$WORK/gpg.err" || fail "تعذّر فك تشفير $key: $(cat "$WORK/gpg.err")"
 done
 echo "✓ البصمات تطابق البيان، وفُك التشفير بالمفتاح الخاص"
 

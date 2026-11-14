@@ -33,12 +33,14 @@ pgtool() {   # pg_dump/psql من الإصدار 17 محليًا، وإلا من 
 }
 
 # المستلمون: كتلة مفتاح عام أو أكثر في BACKUP_PUBLIC_KEY (أو BACKUP_PUBLIC_KEY_FILE): مفتاح المالك، ومفتاح احتياطي
-# اختياري عند شخص ثانٍ أو مختوم، فلا يضيع كل شيء بضياع مفتاح واحد. ملف واحد فيه كتلتان يشفّر به gpg للأولى وحدها
-# بصمت (جُرّب على gpg 2.4)، فتُفصل الكتل ويُمرَّر كلٌّ بـ --recipient-file، وتُكتب بصماتها في البيان (recipients).
-# كتلة لا تُقرأ مفتاحًا، أو مفتاح بلا قدرة تشفير، يُفشل النسخ قبل التفريغ.
+# اختياري عند شخص ثانٍ أو مختوم، فلا يضيع كل شيء بضياع مفتاح واحد. gpg بـ --recipient-file يشفّر لأول مفتاح في الملف
+# وحده بصمت (جُرّب على gpg 2.4)، سواء كان الملف كتلتين أو كتلة فيها مفتاحان، فتُفصل الكتل، ويُشترط في كل كتلة مفتاح
+# واحد بالضبط (التصدير بالبصمة: gpg --armor --export <البصمة>)، ويُمرَّر كلٌّ بـ --recipient-file، والبصمات في البيان.
+# الملف نصي مدرّع وحده. كتلة لا تُقرأ، أو فيها أكثر من مفتاح، أو مفتاح مكرر، أو بلا قدرة تشفير، يُفشل النسخ قبل التفريغ.
 RCPT=()
 RECIPIENTS="[]"
 if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
+  command -v gpg >/dev/null || { echo "gpg غير مثبت" >&2; exit 1; }
   src="${BACKUP_PUBLIC_KEY_FILE:-$WORK/public.asc}"
   [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || printf '%s\n' "$BACKUP_PUBLIC_KEY" > "$src"
   mkdir -p "$WORK/keys"
@@ -46,11 +48,15 @@ if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
   fprs=""
   for k in "$WORK"/keys/k*.asc; do
     [ -f "$k" ] || continue
-    info="$(gpg --batch --with-colons --show-keys "$k" 2>/dev/null || true)"
+    name="$(basename "$k")"
+    info="$(gpg --batch --with-colons --show-keys "$k" 2>"$WORK/gpg-keys.err" || true)"
     fpr="$(printf '%s\n' "$info" | awk -F: '$1 == "fpr" { print $10; exit }')"
     caps="$(printf '%s\n' "$info" | awk -F: '$1 == "pub" { print $12; exit }')"
-    [ -n "$fpr" ] || { echo "كتلة في BACKUP_PUBLIC_KEY لا تُقرأ مفتاحًا عامًا ($(basename "$k")): الصق ناتج gpg --armor --export كاملًا" >&2; exit 1; }
+    npub="$(printf '%s\n' "$info" | grep -c '^pub:' || true)"
+    [ -n "$fpr" ] || { echo "كتلة في BACKUP_PUBLIC_KEY لا تُقرأ مفتاحًا عامًا ($name): الصق ناتج gpg --armor --export <البصمة> كاملًا. gpg: $(head -c 300 "$WORK/gpg-keys.err")" >&2; exit 1; }
+    [ "$npub" = 1 ] || { echo "الكتلة $name فيها $npub مفاتيح، وgpg يشفّر لأولها وحده: صدّر كل مفتاح وحده (gpg --armor --export <البصمة>)" >&2; exit 1; }
     case "$caps" in *E*) ;; *) echo "المفتاح $fpr بلا مفتاح فرعي صالح للتشفير (منتهٍ أو مبطَل أو للتوقيع وحده)" >&2; exit 1 ;; esac
+    case ",$fprs," in *"\"$fpr\""*) echo "المفتاح $fpr مكرر في BACKUP_PUBLIC_KEY" >&2; exit 1 ;; esac
     RCPT+=(--recipient-file "$k")
     fprs="$fprs${fprs:+,}\"$fpr\""
   done
