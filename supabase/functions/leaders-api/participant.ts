@@ -161,6 +161,24 @@ async function sponsorFor(b: Body, key: string, email = '') {
 // أدوار البريد الأخرى، تُكشف لصاحبه فقط بعد إثبات ملكيته (رمز أو رابط أو Google)، فلا يُنشأ له حساب مشارك خطأً
 const otherRoles = async (email: string) => (await rolesOf(email)).filter((d) => d !== 'participant');
 
+// صاحب حساب قائم يدخل برابط جهة: يُربط بها إن لم يكن مرتبطًا بجهة، بحكم رمز الراعي في ملفه نفسه (sponsorCode).
+// كان الرابط يعرض له «الرسوم مغطاة» ثم لا يربطه. المرتبط بجهة لا يتغير (التغيير من الإدارة)، وتعثّر الربط لا يمنع الدخول
+async function linkOrgOnLogin(p: any, code: unknown, key: string) {
+  if (!p || p.organization_id || !String(code || '').trim()) return p;
+  try {
+    const r = await resolveOrg({ org: code }, key);
+    if (!r) return p;
+    const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
+    if (!data) return p;
+    await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id, null, { via: 'login_link' });
+    await pinSponsorFor(p.id);
+    return data;
+  } catch (e) {
+    console.error('link org on login:', e);
+    return p;
+  }
+}
+
 // المشارك المسجل يضيف رمز جهته الراعية لاحقًا (مرة واحدة: الربط بعدها من الإدارة)
 export async function sponsorCode(p: any, b: Body) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
@@ -246,7 +264,9 @@ export async function authStart(b: Body, ctx: Ctx) {
 
   const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
   // التسجيل الجديد: آثار الوصول وحدها الآن، والملف بعد التحقق. اسم يرسله عميل قديم (قبل هذا التغيير) يُحفظ كما كان
-  const pending: Body | null = existing ? null : {
+  // الحساب القائم: رمز رابط الجهة وحده، يُربط به عند الدخول إن لم يكن مرتبطًا بجهة (linkOrgOnLogin)
+  const orgCode = String(b.org || '').trim() ? { org: String(b.org).trim().slice(0, 60) } : null;
+  const pending: Body | null = existing ? orgCode : {
     campaign: campaignOf(b.campaign), referrer_host: hostOf(b.ref),
     ...(String(b.org || '').trim() ? { org: String(b.org).trim().slice(0, 60) } : {}),
     ...(String(b.full_name || '').trim().length >= 3 ? { full_name: String(b.full_name).trim().slice(0, 120) } : {}),
@@ -342,8 +362,9 @@ export async function authVerify(b: Body, ctx: Ctx) {
     // أكمل التسجيل بعد إشعار الخصوصية والشروط. تعذّر تسجيلها لا يفشل الحساب المنشأ: تبقى غير مسجلة، فتطلبها شاشة الموافقة
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
-  } else if (!p.email_verified_at) {
-    await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+  } else {
+    if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+    p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
   }
   const token = await issueSession(p.id, b.link ? 'email_link' : 'email_code', ctx);
   return { success: true, token, ...(await mePayload(p)) };
@@ -372,8 +393,9 @@ export async function authGoogle(b: Body, ctx: Ctx) {
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));   // كما في التسجيل بالبريد
     if (p.organization_id) await pinSponsorFor(p.id);
-  } else if (!p.email_verified_at) {
-    await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+  } else {
+    if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+    if (p.status !== 'suspended') p = await linkOrgOnLogin(p, b.org, ctx.ip || id.email);
   }
   if (p.status === 'suspended') throw new Fail(`الحساب موقوف. تواصل مع ${CONTACT_EMAIL}.`, 403, 'suspended');
   const token = await issueSession(p.id, 'google', ctx);
