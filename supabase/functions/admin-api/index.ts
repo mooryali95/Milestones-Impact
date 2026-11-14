@@ -348,7 +348,12 @@ Deno.serve(async (req: Request) => {
       const reply = json({ success: true, message: "إن كان البريد لحساب إدارة يدخل بمفتاح مرور أو تطبيق مصادقة، أُبلغ المالك ليعيد وصولك، ويصلك بريد بذلك." });
       const { data: u } = await sb.from("admin_users").select("id, name, email, is_active, totp_enabled, passkey_only, is_owner").eq("email", email).limit(1);
       const user = u?.[0];
-      if (!user?.is_active || user.is_owner || !(user.totp_enabled || user.passkey_only)) return reply;
+      let hasKey = false;
+      if (user && !(user.totp_enabled || user.passkey_only)) {
+        const { count } = await sb.from("admin_passkeys").select("id", { count: "exact", head: true }).eq("admin_id", user.id);
+        hasKey = (count ?? 0) > 0;
+      }
+      if (!user?.is_active || user.is_owner || !(user.totp_enabled || user.passkey_only || hasKey)) return reply;
       const hourAgo = new Date(Date.now() - 36e5).toISOString();
       const { count } = await sb.from("admin_audit_log").select("id", { count: "exact", head: true }).eq("action", "recovery-request").eq("user_id", user.id).gte("created_at", hourAgo);
       if ((count ?? 0) >= 1) return reply;
@@ -356,7 +361,7 @@ Deno.serve(async (req: Request) => {
       const { data: owners } = await sb.from("admin_users").select("email").eq("is_owner", true).eq("is_active", true);
       for (const o of owners || []) {
         await sendEmail(o.email, `طلب استعادة وصول: ${user.name} — ${APP}`, mailShell("طلب استعادة وصول", `
-${mailText(`طلب <b>${esc(user.name)}</b> (<span dir="ltr">${esc(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
+${mailText(`طلب <b>${esc(user.name)}</b> (<span dir="ltr">${esc(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only || hasKey ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
 ${mailNote("إن عرفت أنه طلبه: من «المستخدمون» اضغط «إعادة الوصول» لحسابه، فيدخل برمز البريد ثم يضبط وسيلته من جديد. وإن لم تعرف، تجاهل الطلب.")}
 ${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }));
       }
@@ -452,6 +457,10 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     if (WRITE_ACTIONS.includes(action) && role !== "admin" && role !== "super_admin") {
       return json({ success: false, message: "صلاحية المراقب للقراءة فقط" }, 403);
     }
+    // كتابات هذه الدالة بعامل ثانٍ، كحارس الكتابة في leaders-api (requireWrite): جلسة رمز البريد للقراءة
+    if (WRITE_ACTIONS.includes(action) && session.method !== "passkey" && session.method !== "totp") {
+      return json({ success: false, code: "reauth_second_factor", message: "هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما" }, 403);
+    }
 
     // ══ حراس أمان الحساب: حداثة الدخول، ومفتاح المرور ══
     const fresh = Date.now() - session.authAt < FRESH_MS;
@@ -464,28 +473,26 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       return data || [];
     };
 
-    // تسجيل TOTP (إعداد أو إعادة ربط أو تأكيد) يجعل جلسات الحساب التالية «عاملًا ثانيًا» تمر بحارس الكتابة في
-    // leaders-api. فبلا هذا الحارس يصير بريد مدير مخترق، أو رمز بريد مخمَّن، مديرًا أعلى بكامل الصلاحية في دقيقتين
-    // (sec-authn-v-totp-enroll، تدقيق الجاهزية 14 نوفمبر). لذلك: الجلسة حديثة (10 دقائق) دائمًا، ومن له مفتاح مرور لا
-    // يسجّل TOTP إلا بجلسة مفتاح، إلا في نافذة 24 ساعة بعد «إعادة الوصول» من المالك (فقد المفتاح). ويُبلَّغ صاحب الحساب
-    // والمالكون بكل تفعيل وتعطيل.
-    const ownerResetWindow = async () => {
-      const dayAgo = new Date(Date.now() - 864e5).toISOString();
-      const { count } = await sb.from("admin_audit_log").select("id", { count: "exact", head: true })
-        .eq("action", "reset-access").eq("meta->>targetId", String(session.userId)).gte("created_at", dayAgo);
-      return (count ?? 0) > 0;
-    };
+    // جلسة رمز البريد عامل واحد. تسجيل عامل ثانٍ (TOTP أو مفتاح مرور) يجعل جلسات الحساب التالية «عاملًا ثانيًا» تمر
+    // بحارس الكتابة في leaders-api، فبلا حارس يصير بريد مدير مخترق، أو رمز بريد مخمَّن، مديرًا بكامل الصلاحية
+    // (sec-authn-v-totp-enroll، تدقيق الجاهزية 14 نوفمبر). القاعدة: الجلسة حديثة دائمًا، ومن له عامل ثانٍ لا يسجّل غيره
+    // إلا بجلسة عامل ثانٍ (مفتاح أو TOTP)، وحساب بلا عامل ثانٍ (جديد، أو أعاد المالك وصوله) يسجّل أول عامل برمز البريد
+    // ويُبلَّغ المالكون بذلك. وكل تفعيل أو تعطيل أو أول مفتاح يصل صاحب الحساب والمالكين ببريد أمني.
+    const SECOND_FACTOR = session.method === "passkey" || session.method === "totp";
     const totpEnrollBlocked = async () => {
       if (!fresh) return json(STALE, 403);
-      if (session.method !== "passkey" && (await myPasskeys()).length && !(await ownerResetWindow())) return json(NEED_PASSKEY, 403);
+      if (!SECOND_FACTOR && (await myPasskeys()).length) return json(NEED_PASSKEY, 403);
       return null;
     };
-    const notifyTotp = async (title: string) => {
-      const rows: [string, string][] = [["الحساب", adminEmail], ["طريقة دخول الجلسة", METHOD_LABELS[session.method] || session.method], ["عنوان IP", clientCtx(req).ip || "غير معروف"]];
+    const notifyAccountAndOwners = async (title: string, extra: [string, string][] = []) => {
+      const rows: [string, string][] = [["الحساب", adminEmail], ...extra, ["طريقة دخول الجلسة", METHOD_LABELS[session.method] || session.method], ["عنوان IP", clientCtx(req).ip || "غير معروف"]];
       await securityMail(adminEmail, title, rows);
       const { data: owners } = await sb.from("admin_users").select("email").eq("is_owner", true).eq("is_active", true);
       for (const o of owners || []) if (String(o.email).toLowerCase() !== adminEmail.toLowerCase()) await securityMail(String(o.email), title, rows);
     };
+    // تعديل المستخدمين وكتابات هذه الدالة بعامل ثانٍ وجلسة حديثة، كحارس الكتابة في leaders-api: جلسة رمز بريد مسروق لا
+    // تضيف حسابًا جديدًا تدخل به، ولا ترفع دورًا، ولا تعيد وصول أحد
+    const NEED_SECOND = { success: false, code: "reauth_second_factor", message: "هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما" };
 
     // ══ TOTP self-management — always operates on the session's OWN user ══
     // تغيير TOTP المفعّل أو تعطيله يتطلب رمزه الحالي، فلا تكفي جلسة مسروقة لإزالته.
@@ -493,6 +500,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       const { data: us } = await sb.from("admin_users").select("totp_enabled, totp_secret").eq("id", session.userId).limit(1);
       const enabled = !!us?.[0]?.totp_enabled;
       if (action === "setup-totp" && enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });
+      if (action !== "setup-totp" && !enabled) return json({ success: false, message: "TOTP غير مفعّل" });
       if (action !== "disable-totp") { const blocked = await totpEnrollBlocked(); if (blocked) return blocked; }
       if (enabled && action !== "setup-totp") {
         if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
@@ -503,7 +511,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (action === "disable-totp") {
         await sb.from("admin_users").update({ totp_secret: null, totp_enabled: false }).eq("id", session.userId);
         await audit("disable-totp");
-        await notifyTotp("عُطّل تطبيق المصادقة على حساب إدارة");
+        await notifyAccountAndOwners("عُطّل تطبيق المصادقة على حساب إدارة");
         return json({ success: true, message: "تم تعطيل TOTP" });
       }
       const secret = genSecret();
@@ -512,10 +520,19 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       return json({ success: true, secret, uri: totpUri(secret, adminEmail) });
     }
     if (action === "confirm-totp") {
-      { const blocked = await totpEnrollBlocked(); if (blocked) return blocked; }
+      // الحداثة تُقاس عند الإعداد؛ والتأكيد يُقبل خلال 15 دقيقة من إعداد هذا الحساب نفسه، فلا يفشل لأن الدخول تجاوز 10 دقائق
+      // بين المسح والكتابة
+      if (!fresh) {
+        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        const { count } = await sb.from("admin_audit_log").select("id", { count: "exact", head: true })
+          .eq("user_id", session.userId).in("action", ["setup-totp", "reset-totp"]).gte("created_at", since);
+        if (!count) return json(STALE, 403);
+      }
+      if (!SECOND_FACTOR && (await myPasskeys()).length) return json(NEED_PASSKEY, 403);
       const code = String(body.code || "");
       if (await tooManyFails(sb, adminEmail, clientCtx(req).ip)) return json({ success: false, message: "تجاوزت عدد المحاولات، انتظر 15 دقيقة" }, 429);
-      const { data: us } = await sb.from("admin_users").select("totp_secret").eq("id", session.userId).limit(1);
+      const { data: us } = await sb.from("admin_users").select("totp_secret, totp_enabled").eq("id", session.userId).limit(1);
+      if (us?.[0]?.totp_enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });
       const secret = us?.[0]?.totp_secret as string | undefined;
       if (!secret) return json({ success: false, message: "ابدأ الإعداد أولاً" });
       const ok = await verifyTotp(secret, code);
@@ -523,7 +540,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (!ok) return json({ success: false, message: "الرمز غير صحيح، تأكد من الوقت وأعد المحاولة" });
       await sb.from("admin_users").update({ totp_enabled: true }).eq("id", session.userId);
       await audit("confirm-totp");
-      await notifyTotp("فُعّل تطبيق المصادقة على حساب إدارة");
+      await notifyAccountAndOwners("فُعّل تطبيق المصادقة على حساب إدارة");
       return json({ success: true, message: "تم تفعيل TOTP" });
     }
 
@@ -540,8 +557,12 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     if (action === "passkey-register-options" || action === "passkey-register-verify") {
       if (!fresh) return json(STALE, 403);
       const existing = await myPasskeys();
-      // من لديه مفتاح يضيف غيره بجلسة مفتاح فقط، فلا يكفي رمز بريد مسروق لزرع مفتاح.
+      // من لديه مفتاح يضيف غيره بجلسة مفتاح فقط، فلا يكفي رمز بريد مسروق لزرع مفتاح. ومن له TOTP يضيف أول مفتاح بجلسة TOTP.
       if (existing.length && session.method !== "passkey") return json(NEED_PASSKEY, 403);
+      if (!existing.length && session.method === "email") {
+        const { data: me } = await sb.from("admin_users").select("totp_enabled").eq("id", session.userId).limit(1);
+        if (me?.[0]?.totp_enabled) return json(NEED_SECOND, 403);
+      }
       if (existing.length >= 10) return json({ success: false, message: "الحد الأقصى 10 مفاتيح" }, 400);
 
       if (action === "passkey-register-options") {
@@ -587,9 +608,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       if (error) throw error;
       await audit("passkey-register", { label });
       const ctx = clientCtx(req);
-      await securityMail(adminEmail, "أُضيف مفتاح مرور إلى حسابك", [
-        ["الجهاز", label || "بلا اسم"], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
-      ]);
+      if (session.method === "passkey") {
+        await securityMail(adminEmail, "أُضيف مفتاح مرور إلى حسابك", [
+          ["الجهاز", label || "بلا اسم"], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
+        ]);
+      } else {
+        // أول مفتاح من جلسة رمز بريد أو TOTP: يُبلَّغ المالكون أيضًا، فصندوق البريد المخترق وحده لا يخفيه
+        await notifyAccountAndOwners("أُضيف مفتاح مرور إلى حساب إدارة", [["الجهاز", label || "بلا اسم"], ["المتصفح", ctx.ua || "غير معروف"]]);
+      }
       return json({ success: true, message: "تم حفظ مفتاح المرور" });
     }
 
@@ -754,8 +780,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         const { data } = await sb.from("admin_users")
           .select("id, name, email, role_id, is_active, totp_enabled, is_owner, passkey_only, created_at")
           .order("created_at", { ascending: true });
-        return json({ success: true, users: data || [] });
+        // عدد مفاتيح كل حساب، فيظهر «إعادة الوصول» لمن فقد مفتاحه ولو لم يكن في وضع المفتاح وحده
+        const { data: pk } = await sb.from("admin_passkeys").select("admin_id");
+        const keys: Record<string, number> = {};
+        for (const r of pk || []) keys[String(r.admin_id)] = (keys[String(r.admin_id)] || 0) + 1;
+        return json({ success: true, users: (data || []).map((u: Record<string, unknown>) => ({ ...u, passkeys: keys[String(u.id)] || 0 })) });
       }
+      if (!SECOND_FACTOR) return json(NEED_SECOND, 403);
+      if (!fresh) return json(STALE, 403);
       if (action === "add-user") {
         const newName = String(body.newName || "").trim();
         const newEmail = String(body.newEmail || "").trim().toLowerCase();
@@ -776,6 +808,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
           return json({ success: false, message: "تعذّرت الإضافة، ربما البريد مسجّل مسبقًا" }, 400);
         }
         await audit("add-user", { newEmail, newRole });
+        await notifyAccountAndOwners("أُضيف حساب إلى لوحة الإدارة", [["الحساب الجديد", newEmail], ["الدور", newRole]]);
         return json({ success: true, message: "تم إضافة المستخدم" });
       }
       // update-user
@@ -787,9 +820,13 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         if (!session.isOwner) return json({ success: false, message: "إعادة الوصول للمالك وحده" }, 403);
         const { data: t } = await sb.from("admin_users").select("id, name, email, is_owner").eq("id", targetId).limit(1);
         if (!t?.length || t[0].is_owner) return json({ success: false, message: "المستخدم غير موجود أو محمي" }, 404);
-        await sb.from("admin_users").update({ passkey_only: false, totp_enabled: false, totp_secret: null }).eq("id", targetId);
-        await revokeSessions(sb, targetId);
-        await audit("reset-access", { targetId });
+        const tid = String(t[0].id);
+        // يُحذف معه كل مفتاح مرور قديم (الجهاز المفقود)، فيصير الحساب بلا عامل ثانٍ ويسجّل صاحبه أول عامل برمز البريد،
+        // ويُبلَّغ المالكون بتسجيله
+        await sb.from("admin_users").update({ passkey_only: false, totp_enabled: false, totp_secret: null }).eq("id", tid);
+        await sb.from("admin_passkeys").delete().eq("admin_id", tid);
+        await revokeSessions(sb, tid);
+        await audit("reset-access", { targetId: tid });
         await sendEmail(t[0].email, `أُعيد وصولك إلى لوحة الإدارة — ${APP}`, mailShell("أُعيد وصولك إلى لوحة الإدارة", `
 ${mailText(`أهلًا ${esc(t[0].name)}، أعاد مالك اللوحة وصولك. ادخل الآن برمز يصل إلى بريدك، ثم اضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
 ${mailButton(SITES.admin, "الدخول إلى اللوحة")}`, { family: "access", preheader: "ادخل برمز البريد ثم اضبط وسيلتك الجديدة" }));
@@ -821,6 +858,7 @@ ${mailButton(SITES.admin, "الدخول إلى اللوحة")}`, { family: "acce
       // الدور القديم محفوظ في meta الجلسات المفتوحة؛ إنهاؤها يفرض الدخول بالصلاحية الجديدة.
       await revokeSessions(sb, targetId);
       await audit("update-user", { targetId, field, value });
+      if (field === "role_id") await notifyAccountAndOwners("تغيّر دور حساب إدارة", [["الحساب المعدَّل", targetId], ["الدور الجديد", String(value)]]);
       return json({ success: true });
     }
 

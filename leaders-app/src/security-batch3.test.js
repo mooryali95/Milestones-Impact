@@ -131,33 +131,53 @@ describe('N8: قفل دخول الإدارة لكل شبكة، وسقف يومي
   });
 });
 
-// تدقيق الجاهزية 14 نوفمبر (sec-authn-v-totp-enroll): تسجيل TOTP من جلسة رمز البريد كان يجعل الجلسات التالية «عاملًا ثانيًا»
-// يمر بحارس الكتابة في leaders-api، فيصير بريد مدير مخترق مديرًا أعلى. الآن: جلسة حديثة دائمًا، ومن له مفتاح مرور لا
-// يسجّل TOTP إلا بجلسة مفتاح (إلا بعد «إعادة الوصول» من المالك بيوم)، وبلاغ أمني لصاحب الحساب وللمالكين
-describe('P1-02: تسجيل تطبيق المصادقة لا يرفع جلسة رمز البريد إلى عامل ثانٍ', () => {
+// تدقيق الجاهزية 14 نوفمبر (sec-authn-v-totp-enroll) ومراجعته المستقلة: جلسة رمز البريد عامل واحد، فلا تسجّل عاملًا ثانيًا لحساب
+// له عامل، ولا تكتب ولا تدير المستخدمين؛ والحساب بلا عامل يسجّل أوله ويُبلَّغ المالكون؛ والتعطيل لا يُستعمل لإغراق البريد
+describe('P1-02: جلسة رمز البريد لا ترتقي إلى عامل ثانٍ', () => {
   const a = read('supabase/functions/admin-api/index.ts');
   const totp = a.indexOf('TOTP self-management');
-  it('الحراس معرّفة قبل كتلة TOTP، وتشترط الحداثة ومفتاح المرور لمن له مفتاح، ونافذة إعادة الوصول من سجل المالك', () => {
+  const block = (from, to) => a.slice(a.indexOf(from), a.indexOf(to, a.indexOf(from)));
+  it('الحراس قبل كتلة TOTP: حداثة دائمًا، ومن له مفتاح لا يسجّل TOTP إلا بجلسة مفتاح أو TOTP', () => {
     expect(a.indexOf('const fresh = ')).toBeLessThan(totp);
     expect(a.indexOf('const myPasskeys = ')).toBeLessThan(totp);
-    const gate = a.slice(a.indexOf('const totpEnrollBlocked = '), a.indexOf('const notifyTotp = '));
+    expect(a).toContain('const SECOND_FACTOR = session.method === "passkey" || session.method === "totp";');
+    const gate = block('const totpEnrollBlocked = ', 'const notifyAccountAndOwners = ');
     expect(gate).toMatch(/if \(!fresh\) return json\(STALE, 403\);/);
-    expect(gate).toMatch(/session\.method !== "passkey" && \(await myPasskeys\(\)\)\.length && !\(await ownerResetWindow\(\)\)\) return json\(NEED_PASSKEY, 403\)/);
-    expect(a).toMatch(/\.eq\("action", "reset-access"\)\.eq\("meta->>targetId", String\(session\.userId\)\)\.gte\("created_at", dayAgo\)/);
+    expect(gate).toMatch(/if \(!SECOND_FACTOR && \(await myPasskeys\(\)\)\.length\) return json\(NEED_PASSKEY, 403\);/);
+    expect(a).not.toContain('ownerResetWindow');
   });
-  it('setup وreset يُحجزان قبل توليد السر، وconfirm قبل التحقق من الرمز؛ وdisable لا يُحجز (يطلب الرمز الحالي)', () => {
-    const block = a.slice(totp, a.indexOf('if (action === "confirm-totp")'));
-    expect(block.indexOf('totpEnrollBlocked()')).toBeGreaterThan(-1);
-    expect(block.indexOf('totpEnrollBlocked()')).toBeLessThan(block.indexOf('const secret = genSecret()'));
-    expect(block).toMatch(/if \(action !== "disable-totp"\) \{ const blocked = await totpEnrollBlocked\(\); if \(blocked\) return blocked; \}/);
-    const confirm = a.slice(a.indexOf('if (action === "confirm-totp")'), a.indexOf('await audit("confirm-totp")'));
-    expect(confirm.indexOf('totpEnrollBlocked()')).toBeLessThan(confirm.indexOf('verifyTotp('));
+  it('setup وreset يُحجزان قبل توليد السر، والتعطيل والإعادة على حساب بلا TOTP مرفوضان بلا بريد، والتأكيد مرة واحدة', () => {
+    const b = a.slice(totp, a.indexOf('if (action === "confirm-totp")'));
+    expect(b).toMatch(/if \(action !== "setup-totp" && !enabled\) return json\(\{ success: false, message: "TOTP غير مفعّل" \}\);/);
+    expect(b.indexOf('totpEnrollBlocked()')).toBeLessThan(b.indexOf('const secret = genSecret()'));
+    expect(b.indexOf('"TOTP غير مفعّل"')).toBeLessThan(b.indexOf('notifyAccountAndOwners('));
+    const c = block('if (action === "confirm-totp")', 'await audit("confirm-totp")');
+    expect(c).toContain('if (us?.[0]?.totp_enabled) return json({ success: false, message: "TOTP مفعّل بالفعل" });');
+    expect(c.indexOf('NEED_PASSKEY')).toBeLessThan(c.indexOf('verifyTotp('));
+    expect(c).toMatch(/\.in\("action", \["setup-totp", "reset-totp"\]\)/);
   });
-  it('التفعيل والتعطيل يبلغان صاحب الحساب وكل مالك نشط ببريد أمني', () => {
-    expect(a).toMatch(/await audit\("confirm-totp"\);\n\s+await notifyTotp\("فُعّل تطبيق المصادقة على حساب إدارة"\);/);
-    expect(a).toMatch(/await audit\("disable-totp"\);\n\s+await notifyTotp\("عُطّل تطبيق المصادقة على حساب إدارة"\);/);
-    const notify = a.slice(a.indexOf('const notifyTotp = '), totp);
-    expect(notify).toContain('await securityMail(adminEmail, title, rows)');
-    expect(notify).toMatch(/\.eq\("is_owner", true\)\.eq\("is_active", true\)/);
+  it('مفتاح المرور: من له مفتاح يضيف بجلسة مفتاح، ومن له TOTP يضيف أول مفتاح بجلسة TOTP، وأول مفتاح من غير جلسة مفتاح يبلغ المالكين', () => {
+    const r = block('if (action === "passkey-register-options" || action === "passkey-register-verify")', 'if (action === "passkey-delete")');
+    expect(r).toContain('if (existing.length && session.method !== "passkey") return json(NEED_PASSKEY, 403);');
+    expect(r).toMatch(/if \(me\?\.\[0\]\?\.totp_enabled\) return json\(NEED_SECOND, 403\);/);
+    expect(r).toMatch(/notifyAccountAndOwners\("أُضيف مفتاح مرور إلى حساب إدارة"/);
+  });
+  it('إدارة المستخدمين وكتابات admin-api بعامل ثانٍ وجلسة حديثة، والمالكون يُبلَّغون بالإضافة وتغيير الدور', () => {
+    const u = block('if (action === "list-users" || action === "add-user" || action === "update-user")', 'if (action === "logout")');
+    expect(u.indexOf('if (!SECOND_FACTOR) return json(NEED_SECOND, 403);')).toBeGreaterThan(u.indexOf('if (action === "list-users")'));
+    expect(u.indexOf('if (!SECOND_FACTOR) return json(NEED_SECOND, 403);')).toBeLessThan(u.indexOf('if (action === "add-user")'));
+    expect(u).toContain('if (!fresh) return json(STALE, 403);');
+    expect(u).toMatch(/notifyAccountAndOwners\("أُضيف حساب إلى لوحة الإدارة"/);
+    expect(u).toMatch(/if \(field === "role_id"\) await notifyAccountAndOwners\("تغيّر دور حساب إدارة"/);
+    expect(a).toMatch(/WRITE_ACTIONS\.includes\(action\) && session\.method !== "passkey" && session\.method !== "totp"/);
+  });
+  it('إعادة الوصول تحذف مفاتيح الحساب القديمة بمعرّفه القانوني، وطلب الاستعادة يقبل صاحب المفتاح، والزر يظهر له', () => {
+    const r = block('if (field === "reset_access")', 'return json({ success: true });');
+    expect(r).toContain('const tid = String(t[0].id);');
+    expect(r).toContain('await sb.from("admin_passkeys").delete().eq("admin_id", tid);');
+    expect(r).toContain('await revokeSessions(sb, tid);');
+    expect(r).toContain('await audit("reset-access", { targetId: tid });');
+    expect(a).toMatch(/!\(user\.totp_enabled \|\| user\.passkey_only \|\| hasKey\)\) return reply;/);
+    expect(read('admin-app/src/screens/Settings.jsx')).toContain('(u.totp_enabled || u.passkey_only || u.passkeys > 0)');
   });
 });
