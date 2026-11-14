@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261113130000_leaders_cohort_visibility
+-- as-of migration: 20261114100000_leaders_payment_ledger
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1260,6 +1260,7 @@ create table if not exists leaders.payment_events (
   received_at timestamp with time zone default now() not null,
   processed_at timestamp with time zone,
   error text,
+  payment_id uuid,
   constraint payment_events_pkey PRIMARY KEY (id),
   constraint payment_events_event_id_key UNIQUE (event_id)
 );
@@ -1274,6 +1275,7 @@ create table if not exists leaders.payment_settings (
   program_cents integer default 9900 not null,
   updated_by text,
   updated_at timestamp with time zone default now() not null,
+  notify jsonb default '{}'::jsonb not null,
   constraint payment_settings_assessment_cents_check CHECK ((assessment_cents >= 0)),
   constraint payment_settings_id_check CHECK (id),
   constraint payment_settings_program_cents_check CHECK ((program_cents >= 0)),
@@ -1297,6 +1299,16 @@ create table if not exists leaders.payments (
   paid_at timestamp with time zone,
   refunded_at timestamp with time zone,
   note text,
+  subtotal_cents integer,
+  tax_cents integer,
+  country text,
+  customer_name text,
+  transaction_id text,
+  refund_cents integer,
+  refund_reason text,
+  admin_note text,
+  receipt_sent_at timestamp with time zone,
+  reminded_at timestamp with time zone,
   constraint payments_item_check CHECK ((item = ANY (ARRAY['assessment'::text, 'program'::text]))),
   constraint payments_mode_check CHECK ((mode = ANY (ARRAY['test'::text, 'live'::text]))),
   constraint payments_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'refunded'::text, 'failed'::text, 'expired'::text]))),
@@ -2458,6 +2470,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.payment_events add constraint payment_events_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES leaders.payments(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.payments add constraint payments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
@@ -2854,6 +2870,8 @@ CREATE INDEX IF NOT EXISTS participants_person_idx ON leaders.participants USING
 CREATE INDEX IF NOT EXISTS participants_status_idx ON leaders.participants USING btree (status);
 
 CREATE INDEX IF NOT EXISTS passkeys_participant_idx ON leaders.passkeys USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS payment_events_payment ON leaders.payment_events USING btree (payment_id);
 
 CREATE INDEX IF NOT EXISTS payment_events_time ON leaders.payment_events USING btree (received_at DESC);
 
