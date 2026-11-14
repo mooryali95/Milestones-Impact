@@ -5,6 +5,7 @@
 // والخدمة والبُعد والمستوى فقط؛ وبعده يُبلَّغ المشارك باسم خبيره.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { linkToken } from '../link-token.js';
 
 const left = (iso) => {
   const h = Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 36e5));
@@ -12,7 +13,7 @@ const left = (iso) => {
 };
 
 export default function ExpertOffer() {
-  const [t] = useState(() => new URLSearchParams(location.search).get('t') || '');
+  const [t] = useState(() => linkToken());
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);

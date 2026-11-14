@@ -56,7 +56,8 @@ export async function adminFromToken(token: unknown): Promise<Admin> {
   // لا بعد انتهاء الجلسة (التدقيق الأمني 2026-11-04، M6). حساب «مفتاح المرور وحده» لا تُقبل له جلسة برمز البريد.
   const live = await liveAdmin(s.subject);
   if (!live || live.is_active === false) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  if (live.passkey_only && s.meta?.method === 'email') throw new Fail('جلسة الإدارة منتهية', 401, 'session');
+  // كما في admin-api: حساب «مفتاح المرور وحده» لا تُقبل له إلا جلسة مفتاح مرور (لا رمز بريد ولا TOTP)
+  if (live.passkey_only && s.meta?.method !== 'passkey') throw new Fail('جلسة الإدارة منتهية', 401, 'session');
   return { email: String(live.email || s.meta?.email || ''), role: live.role_id as Admin['role'], method: s.meta?.method };
 }
 
@@ -565,6 +566,7 @@ export async function inbox(_b: Body = {}) {
 // المشارك المطلوب نفسه (guards.js)، وكل فتح يُسجَّل قبل أن يُسلَّم الرابط المؤقت (الملحق 4، R7)
 export async function evidenceUrl(a: Admin, b: Body) {
   if (!canWrite(a)) throw new Fail('فتح الملفات الخاصة للمدير وحده، لا للمراقب', 403, 'forbidden');
+  requireWrite(a);   // والعامل الثاني كأي كتابة: السير الذاتية والأدلة لا تُفتح بجلسة رمز بريد وحده (N10)
   const pid = String(b.participant_id || '');
   const file = privateFile(b.path, pid);
   if (!file) throw new Fail('مسار الملف لا يخص هذا المشارك', 400, 'bad_path');
@@ -609,6 +611,7 @@ export async function answersReview(participantId: string, assessmentId: unknown
 }
 export async function assessmentAnswers(a: Admin, b: Body) {
   if (!canWrite(a)) throw new Fail('إجابات القياس للمدير وحده، لا لدور العرض', 403, 'forbidden');
+  requireWrite(a);   // والعامل الثاني: مفتاح الإجابات سر من أسرار البنك (N10)
   return answersReview(String(b.participant_id || ''), b.assessment_id, { type: 'admin', email: a.email, action: 'admin.answers-view' });
 }
 

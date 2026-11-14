@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261114110000_leaders_mail_center
+-- as-of migration: 20261114120000_public_lockdown
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1881,6 +1881,7 @@ create table if not exists public.page_views (
   device text,
   lang text,
   created_at timestamp with time zone default now() not null,
+  constraint page_views_len_chk CHECK (((COALESCE(char_length(device), 0) <= 20) AND (COALESCE(char_length(lang), 0) <= 35))),
   constraint page_views_pkey PRIMARY KEY (id)
 );
 
@@ -3235,6 +3236,30 @@ alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
 
+CREATE OR REPLACE FUNCTION leaders.audit_append_only()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if coalesce(current_setting('leaders.audit_maintenance', true), '') = 'on' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  raise exception 'سجل التدقيق لا يُعدَّل ولا يُحذف' using errcode = '42501';
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.audit_no_truncate()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  raise exception 'سجل التدقيق لا يُعدَّل ولا يُحذف' using errcode = '42501';
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.cohort_release_pinned()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3570,6 +3595,20 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.page_views_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if (select count(*) from public.page_views where created_at > now() - interval '1 minute') >= 600 then
+    return null;
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.planner_can_read_project(pid text, uid uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -3834,43 +3873,7 @@ end $function$
 ;
 
 do $$ begin
-  create policy admin_insert_audit on public.admin_audit_log as PERMISSIVE for INSERT to authenticated with check ((get_my_admin_role() IS NOT NULL));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_read_audit on public.admin_audit_log as PERMISSIVE for SELECT to authenticated using ((get_my_admin_role() = 'super_admin'::text));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_read_permissions on public.admin_role_permissions as PERMISSIVE for SELECT to authenticated using ((get_my_admin_role() IS NOT NULL));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_read_roles on public.admin_roles as PERMISSIVE for SELECT to authenticated using ((get_my_admin_role() IS NOT NULL));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_read_users on public.admin_users as PERMISSIVE for SELECT to authenticated using (((id = auth.uid()) OR (get_my_admin_role() = 'super_admin'::text)));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy super_admin_manage_users on public.admin_users as PERMISSIVE for ALL to authenticated using ((get_my_admin_role() = 'super_admin'::text)) with check ((get_my_admin_role() = 'super_admin'::text));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   create policy "Allow read all" on public.app_content as PERMISSIVE for SELECT to public using (true);
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_read_contact_requests on public.contact_requests as PERMISSIVE for SELECT to authenticated using (has_permission('MI'::text, 'read'::text));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy admin_update_contact_requests on public.contact_requests as PERMISSIVE for UPDATE to authenticated using (has_permission('MI'::text, 'write'::text)) with check (has_permission('MI'::text, 'write'::text));
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  create policy anon_insert_contact_requests on public.contact_requests as PERMISSIVE for INSERT to anon with check (true);
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -4004,6 +4007,10 @@ do $$ begin
   create policy service_only on public.totp_attempts as PERMISSIVE for ALL to public using (false);
 exception when duplicate_object then null; end $$;
 
+CREATE OR REPLACE TRIGGER audit_log_frozen BEFORE DELETE OR UPDATE ON leaders.audit_log FOR EACH ROW EXECUTE FUNCTION leaders.audit_append_only();
+
+CREATE OR REPLACE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON leaders.audit_log FOR EACH STATEMENT EXECUTE FUNCTION leaders.audit_no_truncate();
+
 CREATE OR REPLACE TRIGGER cohort_release_pinned BEFORE UPDATE OF content_release ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.cohort_release_pinned();
 
 CREATE OR REPLACE TRIGGER cohorts_touch BEFORE UPDATE ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
@@ -4060,9 +4067,15 @@ CREATE OR REPLACE TRIGGER tracks_provenance BEFORE INSERT OR UPDATE ON leaders.t
 
 CREATE OR REPLACE TRIGGER tracks_touch BEFORE UPDATE ON leaders.tracks FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
+CREATE OR REPLACE TRIGGER admin_audit_log_frozen BEFORE DELETE OR UPDATE ON public.admin_audit_log FOR EACH ROW EXECUTE FUNCTION leaders.audit_append_only();
+
+CREATE OR REPLACE TRIGGER admin_audit_log_no_truncate BEFORE TRUNCATE ON public.admin_audit_log FOR EACH STATEMENT EXECUTE FUNCTION leaders.audit_no_truncate();
+
 CREATE OR REPLACE TRIGGER admin_owner_guard BEFORE INSERT OR DELETE OR UPDATE ON public.admin_users FOR EACH ROW EXECUTE FUNCTION admin_owner_guard();
 
 CREATE OR REPLACE TRIGGER contact_requests_guard BEFORE INSERT ON public.contact_requests FOR EACH ROW EXECUTE FUNCTION contact_requests_guard();
+
+CREATE OR REPLACE TRIGGER page_views_guard BEFORE INSERT ON public.page_views FOR EACH ROW EXECUTE FUNCTION page_views_guard();
 
 CREATE OR REPLACE TRIGGER planner_summaries_notify_wb AFTER INSERT OR UPDATE ON public.planner_plan_summaries FOR EACH ROW EXECUTE FUNCTION planner_notify_workbench();
 
