@@ -273,6 +273,7 @@ function sponsorEmailOf(charter: any): string | null {
   const email = normalizeEmail(charter?.sponsor_email);
   return isEmail(email) ? email : null;
 }
+const NO_SPONSOR_WAIVER_AR = 'لا راعٍ فعلي للمبادرة: الراعي موضّح دوره في بطاقتها، فاعتمدها قبول المستشار';
 const NO_SPONSOR_EMAIL_AR = 'لا بريد صحيح للراعي في بطاقة المبادرة. اعتمد دون تأييد بسبب مكتوب، أو أعدها للمشارك ليصحح البريد';
 
 async function inviteSponsor(p: any, c: any, charter: any = null) {
@@ -322,10 +323,12 @@ export async function adminReview(a: Admin, b: Body) {
   try { rubric = cleanRubric(b.scores, b.notes); } catch (e) { throw new Fail((e as Error).message); }
   // ما يمنع إتمام القبول يُفحص قبل أي كتابة. كان بريد الراعي يُفحص بعد حفظ القبول والدرجة، فتبقى الشاشة
   // على «بانتظار مراجعتك» والوثيقة مقبولة، ولا تصح «الإعادة للتحسين» التي تنصح بها الرسالة (التدقيق 2026-11-11)
-  const waive = String(b.waive_sponsor || '').trim().slice(0, 500);
+  let waive = String(b.waive_sponsor || '').trim().slice(0, 500);
   if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي');
   const charter = waive ? null : (await build(p)).charter;
-  if (!waive && !sponsorEmailOf(charter)) throw new Fail(NO_SPONSOR_EMAIL_AR, 400, 'sponsor_email');
+  // المبادرة قد تكون افتراضية والراعي توضيح لا شرط (قرار المالك 2026-11-14): بلا بريد راعٍ فعلي يعتمدها قبول المستشار
+  // وحده، بسبب ثابت يُسجَّل، ولا يُطلب منه أن يكتب سببًا لكل وثيقة
+  if (!waive && !sponsorEmailOf(charter)) waive = NO_SPONSOR_WAIVER_AR;
   const { levels } = await levelsOf(p.id);
   const key = trackKey(levels);
   const { data: t } = key ? await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle() : { data: null };
