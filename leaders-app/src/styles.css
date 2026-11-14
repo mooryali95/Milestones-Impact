@@ -718,6 +718,15 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mf-n { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(169,122,46,.5); color: var(--gold); font-family: "Cormorant Garamond", Georgia, serif; font-size: 16px; font-weight: 600; }
 .mf.ok .mf-n { background: var(--ok); border-color: var(--ok); color: #fff; font-family: inherit; font-size: 14px; }
 .mf-opt { color: var(--muted); font-weight: 400; }
+/* دليل الحقل (guide.js): مفتوح للتأسيسي، ومطوي للمتوسط والمتقدم */
+.mf-guide { border-inline-start: 3px solid var(--gold); background: var(--sand); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; line-height: 1.8; color: var(--slate); }
+.mf-guide p { margin: 0; }
+.mf-guide p + p { margin-top: 4px; }
+.mf-guide b { font-weight: 600; color: var(--ink); }
+.mf-guide .mf-avoid b { color: color-mix(in srgb, var(--copper) 62%, #000); }
+.mf-guide summary { cursor: pointer; color: var(--gold-text); font-weight: 600; }
+.mf-guide[open] summary { margin-bottom: 6px; }
+details.mf-guide:not([open]) { background: transparent; border-inline-start-color: transparent; padding: 2px 0; }
 .wsheet .mf > :not(label) { margin-inline-start: 40px; width: calc(100% - 40px); }
 .wsheet .input, .wsheet .mtable textarea { background: #fff; }
 .wsheet > .alert { margin: 14px 22px 0; }

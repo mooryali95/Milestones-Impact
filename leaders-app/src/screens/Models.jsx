@@ -7,6 +7,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
 import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
+import { guideFor } from '../guide.js';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -96,10 +97,31 @@ const codeOf = (m) => `${(DIMENSIONS.find((x) => x.key === m.dimension)?.short |
 const RUBRIC = [
   ['الاكتمال', 'كل حقل مملوء بما يكفي ليُفهم دون شرح شفهي.'],
   ['التحديد', 'أرقام وتواريخ وأسماء أدوار، لا عبارات عامة.'],
-  ['الارتباط بمشروعك', 'مبني على مشروع تقوده فعلًا، لا على مثال افتراضي.'],
+  ['الارتباط بمبادرتك', 'مبني على مبادرة من واقع عملك تستطيع تنفيذها، حقيقية كانت أو افتراضية واقعية.'],
   ['جودة القرار', 'يظهر فيه منطقك: لماذا هذا الترتيب، وما الذي ستفعله بالنتيجة.'],
 ];
 const STEPS = ['افهم النموذج', 'طبّقه على مشروعك', 'سلّمه للمستشار', 'التقييم والملاحظات'];
+
+// دليل الحقل بمستوى المشارك: مفتوح للتأسيسي، ومطوي للمتوسط، وسؤال تحدٍّ للمتقدم (guide.js)
+function FieldGuide({ g }) {
+  if (!g) return null;
+  if (g.mode === 'open') {
+    return (
+      <div className="mf-guide open" role="note">
+        <p><b>المطلوب:</b> {g.meaning}</p>
+        <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
+      </div>
+    );
+  }
+  return (
+    <details className="mf-guide">
+      <summary>{g.mode === 'expert' ? 'سؤال الخبير' : 'كيف أكتبه؟'}</summary>
+      {g.mode === 'collapsed' && <p><b>المطلوب:</b> {g.meaning}</p>}
+      <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
+      <p className="mf-q"><b>{g.mode === 'expert' ? 'اختبر جوابك:' : 'ارفع جودته:'}</b> {g.challenge}</p>
+    </details>
+  );
+}
 
 export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج' }) {
   const [d, setD] = useState(null);
@@ -220,6 +242,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
+                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level)} />}
                 <Field f={f} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
                 {f.key === 'sponsor_email' && String(answers[f.key] || '').trim() && !isEmail(String(answers[f.key]).trim()) && <p className="alert err small" role="alert">هذا البريد غير مكتمل، فلن يصل الراعي طلب التأييد. صحّحه أو اتركه فارغًا.</p>}

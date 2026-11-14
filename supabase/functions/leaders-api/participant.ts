@@ -1175,7 +1175,8 @@ async function myModel(p: any, id: unknown) {
   if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
   const priority = await participantPriority(p.id, levels);
-  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
+  // level: مستوى المشارك في بُعد النموذج، يحدد صورة دليل الحقل في الواجهة (leaders-app/src/guide.js)
+  return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
 }
 
 // اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
