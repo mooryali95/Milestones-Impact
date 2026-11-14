@@ -920,7 +920,10 @@ export async function assessmentSubmit(p: any, b: Body) {
   await db.from('assessments').update({ status: 'submitted', submitted_at: now }).eq('id', a.id);
   // مؤشر الجهد يُحفظ على القياس بعد احتساب المستوى وحفظه (effort.ts): استشاري للمراجع، لا يدخل ما سبق، وتعذّره لا يُسقط الإرسال
   await saveEffort({ id: a.id, instrument_id: a.instrument_id, started_at: a.started_at, submitted_at: now }).catch((e) => console.error('effort:', e));
-  const updated = must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
+  // الحالة تتقدم بالقياس قبل القرار وحده (P1-04): كان يكتب «بانتظار الاعتماد» فوق أي حالة، فيعيد المنسحب إلى البرنامج
+  // بلا قرار، وينزل من «في البرنامج» أو «أنهى البرنامج» إلى «معتمد المستوى» بقياس جديد. ما سواها يبقى كما هو وتُحفظ النتيجة
+  const advance = ['registered', 'profiled', 'assessing'].includes(p.status);
+  const updated = !advance ? p : must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(updated)) };
