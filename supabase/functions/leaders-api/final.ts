@@ -4,7 +4,7 @@
 import { alertOps, audit, db, Fail, finalDecisionMail, FINAL_MAIL_SUBJECT, must, sendMail } from './core.ts';
 import { certificateNotice, onFinalApproved, suspendForReopen } from './certificates.ts';
 import { runningCohort } from './programs.ts';
-import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, finalEditors, voteBlock } from './final.js';
+import { approvalState, cleanAdjust, cleanFinalConfig, computeFinal, finalComponents, finalConfig, finalEditors, statusAfterFinal, statusAfterReopen, voteBlock } from './final.js';
 import { DEFAULT_MODEL } from './logic.js';
 import { mePayload } from './participant.ts';
 import { compareFor } from './impact.ts';
@@ -120,6 +120,8 @@ export async function vote(a: Actor, b: Body) {
   // D05: الاعتماد وحده يصدر الشهادة (اجتاز أو اجتاز بملاحظات)، أو يلغي المعلّقة، ثم بريد القرار بخطوته التالية
   if (patch.status === 'approved') {
     const decision = String(record.decision || record.snapshot?.decision || '');
+    // الاجتياز يجعل المشارك «أنهى البرنامج»: يتبع القرار لا الشهادة، فالشهادة قد تُحجب حتى يؤكد اسمه
+    await setStatusAfter(p, statusAfterFinal(p.status, decision), a.email, `final.${decision}`);
     const certificate: any = await onFinalApproved(pid, { decision, formula_version: record.snapshot?.config_version ?? null, program_id: program.id }, a.email)
       .catch(async (e) => { await alertOps('certificate_issue', { participant: pid, message: String((e as Error)?.message || e).slice(0, 200) }); return { failed: true }; });
     // البريد لا يَعِد بشهادة لم تصدر: حُجبت لتوقف الإصدار التلقائي، أو تعذّر إصدارها
@@ -132,6 +134,13 @@ export async function vote(a: Actor, b: Body) {
   return { success: true, status: patch.status || 'pending', approval: st };
 }
 
+// حالة المشارك بعد قرار التقييم الختامي أو إعادة فتحه، بسجل تدقيق كتغيير الحالة اليدوي
+async function setStatusAfter(p: any, to: string | null, by: string, why: string) {
+  if (!to || to === p.status) return;
+  must(await db.from('participants').update({ status: to, updated_at: new Date().toISOString() }).eq('id', p.id));
+  await audit('admin', by, 'participant.status', 'participants', p.id, { status: p.status }, { status: to, reason: why });
+}
+
 // إعادة فتح تقييم معتمد للتعديل (بسبب مكتوب)
 export async function reopen(a: Actor, b: Body) {
   const pid = String(b.participant_id || '');
@@ -142,6 +151,7 @@ export async function reopen(a: Actor, b: Body) {
   if (!record) throw new Fail('لا تقييم', 404);
   must(await db.from('final_evaluations').update({ status: 'draft', votes: [], decided_at: null, updated_at: new Date().toISOString() }).eq('participant_id', pid).eq('program_id', program.id));
   await audit(a.actor || 'admin', a.email, 'final.reopen', 'participants', pid, null, { note });
+  await setStatusAfter(p, statusAfterReopen(p.status), a.email, 'final.reopen');
   // D05: الشهادة السارية تُعلَّق حتى يُعتمد التقييم من جديد
   await suspendForReopen(pid, a.email, note);
   return { success: true };

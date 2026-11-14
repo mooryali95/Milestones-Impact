@@ -165,7 +165,9 @@ async function buildSnapshot(p: any, serial: string, issuedAt: string, final: Fi
 }
 
 export type FinalRef = { decision: string; formula_version?: number | null; program_id: string };
-export const PASSING = ['pass', 'pass_notes'];
+// قائمة قراري الاجتياز من final.js وحده، فلا تختلف بين إصدار الشهادة وحالة المشارك
+export { PASSING } from './final.js';
+import { PASSING } from './final.js';
 
 async function insertCertificate(p: any, by: string | null, final: FinalRef | null = null) {
   if (!String(p.full_name || '').trim()) throw new Fail('اسم المشارك مطلوب قبل إصدار الشهادة');

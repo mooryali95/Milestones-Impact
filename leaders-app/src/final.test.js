@@ -181,3 +181,33 @@ describe('التقييم الختامي', () => {
     expect(r.failed).toEqual(['القياس النهائي']);
   });
 });
+
+import { PASSING, statusAfterFinal, statusAfterReopen } from '../../supabase/functions/leaders-api/final.js';
+import { readFileSync as readSrc } from 'node:fs';
+import { join as joinPath } from 'node:path';
+const apiSrc = (f) => readSrc(joinPath(__dirname, '../../supabase/functions/leaders-api', f), 'utf8');
+describe('حالة المشارك تتبع قرار التقييم الختامي (تدقيق الرحلة 2026-11-14)', () => {
+  it('الاجتياز يجعله «أنهى البرنامج»، وغيره لا يغيّر الحالة', () => {
+    expect(statusAfterFinal('enrolled', 'pass')).toBe('completed');
+    expect(statusAfterFinal('placed', 'pass_notes')).toBe('completed');
+    expect(statusAfterFinal('enrolled', 'extend')).toBeNull();
+    expect(statusAfterFinal('enrolled', 'fail')).toBeNull();
+  });
+  it('الموقوف والمنسحب لا تُغيَّر حالتهما بقرار، ومن أنهى لا يُعاد ضبطه', () => {
+    expect(statusAfterFinal('suspended', 'pass')).toBeNull();
+    expect(statusAfterFinal('withdrawn', 'pass')).toBeNull();
+    expect(statusAfterFinal('completed', 'pass')).toBeNull();
+  });
+  it('إعادة الفتح تعيد من أنهى إلى «في البرنامج» حتى يُعتمد من جديد', () => {
+    expect(statusAfterReopen('completed')).toBe('enrolled');
+    expect(statusAfterReopen('suspended')).toBeNull();
+  });
+  it('قائمة الاجتياز واحدة: الشهادة والحالة تقرآنها من final.js', () => {
+    expect(PASSING).toEqual(['pass', 'pass_notes']);
+    const cert = apiSrc('certificates.ts');
+    expect(cert).not.toMatch(/PASSING = \[/);
+    const fin = apiSrc('final.ts');
+    expect(fin).toMatch(/statusAfterFinal\(p\.status, decision\)/);
+    expect(fin).toMatch(/statusAfterReopen\(p\.status\)/);
+  });
+});

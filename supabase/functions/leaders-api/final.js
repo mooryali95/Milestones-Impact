@@ -29,6 +29,17 @@ export const FINAL_MEASURE_AR = {
 };
 // القرارات التي تلزمها ملاحظات تصل المشارك
 export const NOTES_REQUIRED = ['pass_notes', 'extend', 'fail'];
+// قرارا الاجتياز: يصدران الشهادة (certificates.ts) وينقلان المشارك إلى «أنهى البرنامج». المصدر الواحد للقائمة
+export const PASSING = ['pass', 'pass_notes'];
+
+// حالة المشارك بعد اعتماد تقييمه الختامي: الاجتياز يجعله «أنهى البرنامج»، وغيره لا يغيّرها.
+// الموقوف والمنسحب لا تُغيَّر حالتهما بقرار، فقرار إيقافه أو انسحابه يُراجَع بنفسه. null: لا تغيير
+export function statusAfterFinal(current, decision) {
+  if (!PASSING.includes(decision) || ['withdrawn', 'suspended', 'completed'].includes(current)) return null;
+  return 'completed';
+}
+// إعادة فتح تقييم معتمد: من صار «أنهى البرنامج» به يعود «في البرنامج» حتى يُعتمد من جديد. null: لا تغيير
+export const statusAfterReopen = (current) => (current === 'completed' ? 'enrolled' : null);
 
 export const FINAL_DEFAULTS = {
   weights: { continuous: 30, milestones: 20, project: 30, post: 20 },

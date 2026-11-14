@@ -51,7 +51,8 @@ describe('جاهزية الجهة', () => {
   it('الجهة غير الفعّالة والاعتماد المنتظر نقصان بزر', () => {
     const x = r({ org: { ...org, status: 'paused' }, pending: 12 });
     expect(item(x, 'status')).toMatchObject({ ok: false, action: 'edit' });
+    expect(item(x, 'link')).toMatchObject({ ok: false, action: 'edit' });
     expect(item(x, 'approval')).toMatchObject({ ok: false, action: 'approve' });
-    expect(readinessSummary(x)).toBe('بقي بندان من 7');
+    expect(readinessSummary(x)).toBe('بقي 3 بنود من 7');
   });
 });

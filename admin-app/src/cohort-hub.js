@@ -122,11 +122,12 @@ export function wizardNotes({ v, cohorts = [], orgs = [], programs = [] }) {
   return out;
 }
 
-// جسم الحفظ: النسخة «أحدث نسخة محفوظة» تثبّت الدفعة عليها، وإلا تتبع آخر تعديل
-export function wizardBody(v) {
+// جسم الحفظ: النسخة «أحدث نسخة محفوظة» تثبّت الدفعة عليها، وإلا تتبع آخر تعديل.
+// canPin: للبرنامج نسخة محفوظة. بلاها يرفض الخادم 'latest'، والمعالج يعرض «تتبع آخر تعديل» بلا خيار
+export function wizardBody(v, { canPin = true } = {}) {
   return {
     name: String(v.name || '').trim(), organization_id: v.kind === 'org' ? v.organization_id : null, program_id: v.program_id,
-    program_version_id: v.pin ? 'latest' : '', status: v.status || 'open',
+    program_version_id: v.pin && canPin ? 'latest' : '', status: v.status || 'open',
     ...(v.starts_on ? { starts_on: v.starts_on } : {}), ...(v.ends_on ? { ends_on: v.ends_on } : {}),
     ...(v.capacity ? { capacity: Number(v.capacity) } : {}),
   };

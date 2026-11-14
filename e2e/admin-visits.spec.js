@@ -137,7 +137,8 @@ test('من المنظومة إلى الجهة إلى الدفعة: الناقص 
   await setup(page, {
     'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
     'admin.orgs': { success: true, unassigned: { total: 0, typed: [] }, orgs: [
-      { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara', seats: 40, contract_ends: '2099-01-01', logo: 'x', stats: { total: 29, pending_approval: 12 }, access: { state: 'none' } },
+      { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara', seats: 40, contract_ends: '2099-01-01', logo: 'x', stats: { total: 29, pending_approval: 12 }, access: { state: 'none' },
+        cohort_setup: { cohort: { id: 'c1', name: 'دفعة سفراء', status: 'open' }, setup_missing: 1, setup: [{ title: 'المستشار الأساسي', ok: false }] } },
       { id: 'o2', name: 'منظومة', status: 'active', invite_code: 'mnz', seats: 20, contract_ends: '2099-01-01', logo: 'x', stats: { total: 5, pending_approval: 0 }, access: { state: 'active', n: 1 } },
       { id: 'o3', name: 'جهة موقوفة', status: 'paused', stats: { total: 0 } },
     ] },
@@ -158,7 +159,8 @@ test('من المنظومة إلى الجهة إلى الدفعة: الناقص 
   await expect(orgs).toContainText('1 من 2 جاهزة');
   await expect(orgs.locator('li')).toHaveCount(2);
   await expect(orgs.locator('li').first()).toContainText('سفراء');
-  await expect(orgs.locator('li').first()).toContainText('منسق الجهة، الاعتماد');
+  // بند الدفعة من الخادم (orgCohortSetups) كما في صفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها غير ذلك
+  await expect(orgs.locator('li').first()).toContainText('الدفعة، منسق الجهة، الاعتماد');
   await expect(orgs).not.toContainText('جهة موقوفة');
   await orgs.getByRole('button', { name: 'سفراء' }).click();
   await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);

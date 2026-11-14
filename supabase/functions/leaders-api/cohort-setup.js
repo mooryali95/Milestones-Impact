@@ -4,7 +4,22 @@
 // قائمة واحدة تقرؤها لوحة الإدارة في صفحة الجهة: لكل بند حاله بجملة تُقرأ، وأين يُضبط.
 // لا تخزّن شيئًا: كل بند مشتق من حقل الدفعة نفسه (المستشار من cohorts.advisor_expert_id، والجدول من schedule).
 
-/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number }} d */
+// ── هل للدفعة جلسات؟ قاعدة واحدة يقرؤها ملف الدفعة وصفحة الجهة وجاهزية الإطلاق وبوابات المراحل ──
+// الجلسة الفعّالة بموعد قادم أو حديث (آخر 14 يومًا)، والجلسة بلا دفعة تعمّ الدفعات كلها (كما في القاعة).
+// والدفعة بصيغة الكتيب لا تلزمها جلسات: يكتمل تدريبها بقراءة الأبواب واجتياز أسئلتها.
+export const SESSION_WINDOW_MS = 14 * 864e5;
+// jsonb يصل كائنًا من العميل، وقد يصل نصًا من الاستعلام المباشر للبوابات
+const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
+export const usesHandbook = (cohort) => Object.values(asJson(cohort?.delivery) || {}).some((d) => d?.format === 'handbook');
+/** عدد جلسات الدفعة بالقاعدة الواحدة
+ * @param {{ id?: string }} cohort @param {{ cohort_id?: string|null, active?: boolean, starts_at?: string, ends_at?: string|null }[]} sessions */
+export function sessionsFor(cohort, sessions = [], now = Date.now()) {
+  return (sessions || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id)
+    && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS).length;
+}
+
+/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number }} d
+ *  upcomingSessions: عدد sessionsFor للدفعة */
 export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members = 0, upcomingSessions = 0 }) {
   if (!cohort) return [];
   const stages = Object.keys(cohort.schedule || {}).length;
@@ -30,8 +45,9 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
       where: 'schedule',
     },
     {
-      key: 'sessions', title: 'الجلسات القادمة', ok: upcomingSessions > 0,
-      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة مجدولة` : 'لا جلسة مجدولة: تُضاف من «الأنشطة»',
+      key: 'sessions', title: 'الجلسات', ok: upcomingSessions > 0 || usesHandbook(cohort),
+      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتيب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
+        : 'لا جلسة قادمة ولا حديثة: تُضاف من «الحضور والجلسات»',
       where: 'activities',
     },
   ];
