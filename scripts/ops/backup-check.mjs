@@ -5,13 +5,21 @@
 //   R2_...=... node scripts/ops/backup-check.mjs [--max-hours=36]
 import { client } from './r2.mjs';
 
-export function checkManifest(m, heads, now = Date.now(), maxHours = 36) {
+// expected: بصمات المستلمين المعتمدة (متغير المستودع BACKUP_RECIPIENTS)؛ كل بصمة منها يجب أن تكون في البيان،
+// فيُكشف يوميًا مستلم سقط من السر بدل أن يُكتشف يوم الاستعادة
+export const parseRecipients = (s) => String(s || '').split(/[\s,]+/).map((x) => x.replace(/\s/g, '').toUpperCase()).filter(Boolean);
+
+export function checkManifest(m, heads, now = Date.now(), maxHours = 36, expected = []) {
   const issues = [];
   const age = (now - Date.parse(m?.at)) / 36e5;
   if (!Number.isFinite(age)) issues.push('البيان بلا وقت صالح');
   else if (age > maxHours) issues.push(`آخر نسخة عمرها ${Math.floor(age)} ساعة، فوق ${maxHours}`);
   if (!m?.rows || !Object.keys(m.rows).length) issues.push('البيان بلا عدد صفوف');
   if (m?.encryption !== 'public-key') issues.push(`التشفير ${m?.encryption || 'غير معروف'}، والمعتمد public-key (D09)`);
+  if (expected.length) {
+    const got = new Set((m?.recipients || []).map((x) => String(x).toUpperCase()));
+    for (const f of expected) if (!got.has(f)) issues.push(`المستلم ${f} غائب من البيان (BACKUP_RECIPIENTS)`);
+  }
   if (!m?.files?.length) issues.push('البيان بلا ملفات');
   for (const f of m?.files || []) {
     const h = heads[f.key];
@@ -26,8 +34,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const r2 = client();
   const m = JSON.parse((await r2.get('latest.json')).toString('utf8'));
   const heads = Object.fromEntries(await Promise.all((m.files || []).map(async (f) => [f.key, await r2.head(f.key)])));
-  const { age_hours, issues } = checkManifest(m, heads, Date.now(), max);
+  const { age_hours, issues } = checkManifest(m, heads, Date.now(), max, parseRecipients(process.env.BACKUP_RECIPIENTS));
   issues.forEach((x) => console.error(`✗ ${x}`));
   if (issues.length) process.exit(1);
-  console.log(`✓ نسخة ${m.at} (عمرها ${age_hours} ساعة)، و${m.files.length} ملفًا بأحجام البيان`);
+  console.log(`✓ نسخة ${m.at} (عمرها ${age_hours} ساعة)، و${m.files.length} ملفًا بأحجام البيان، والمستلمون: ${(m.recipients || []).join('، ') || 'غير مسجلين'}`);
 }

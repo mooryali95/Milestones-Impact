@@ -4,8 +4,8 @@
 #   scripts/ops/restore-drill.sh <مجلد>          آخر بيان في مجلد محلي (BACKUP_OUT من backup.sh)
 # يفشل عند: نسخة أقدم من DRILL_MAX_AGE_HOURS (36)، أو بصمة لا تطابق البيان، أو تعذّر فك التشفير، أو خطأ استعادة
 # غير متوقع، أو عدد صفوف لا يطابق لحظة النسخ (ومنها auth.users)، أو ملف من عينة الدلو الخاص مفقود أو بحجم آخر.
-# القاعدة المؤقتة: DRILL_DB_URL إن ضُبط، وإلا حاوية postgres:17 تُحذف بعد التمرين. المفتاح الخاص في حلقة gpg المحلية،
-# أو DRILL_PASSPHRASE للنسخ المتماثلة القديمة (قبل ضبط المفتاح العام).
+# القاعدة المؤقتة: DRILL_DB_URL إن ضُبط، وإلا حاوية postgres:17 تُحذف بعد التمرين. المفتاح الخاص: لنسخ age ملفه في
+# DRILL_AGE_IDENTITY (يطلب age عبارته)، ولنسخ GnuPG حلقة gpg المحلية، وDRILL_PASSPHRASE للنسخ المتماثلة القديمة.
 # يطبع RPO (عمر النسخة) وزمن الاستعادة (مقياس RTO)، ويُسجَّل الناتج في HANDOFF.
 set -euo pipefail
 
@@ -48,8 +48,17 @@ for key in $(j "$M" "m.files.map((f) => f.key).join(' ')"); do
   f="$WORK/$(basename "$key")"
   want=$(j "$M" "m.files.find((f) => f.key === '$key').sha256")
   [ "$(sha "$f")" = "$want" ] || fail "بصمة $key لا تطابق البيان"
-  if [ -n "${DRILL_PASSPHRASE:-}" ]; then dec=(--pinentry-mode loopback --passphrase "$DRILL_PASSPHRASE"); else dec=(); fi
-  gpg --batch --yes --quiet "${dec[@]}" -d -o "${f%.gpg}" "$f" 2>"$WORK/gpg.err" || fail "تعذّر فك تشفير $key: $(cat "$WORK/gpg.err")"
+  case "$f" in
+    *.age)
+      # age يطلب عبارة المفتاح الخاص من الطرفية نفسها، فلا يُحوَّل خطؤه إلى ملف
+      command -v age >/dev/null || fail "age غير مثبت (brew install age)"
+      [ -n "${DRILL_AGE_IDENTITY:-}" ] && [ -f "$DRILL_AGE_IDENTITY" ] || fail "النسخة مشفرة بـ age: اضبط DRILL_AGE_IDENTITY على مسار ملف المفتاح الخاص (RUNBOOK.md §4)"
+      age -d -i "$DRILL_AGE_IDENTITY" -o "${f%.age}" "$f" || fail "تعذّر فك تشفير $key بالمفتاح $DRILL_AGE_IDENTITY" ;;
+    *)
+      if [ -n "${DRILL_PASSPHRASE:-}" ]; then dec=(--pinentry-mode loopback --passphrase "$DRILL_PASSPHRASE"); else dec=(); fi
+      # ${dec[@]+...}: مصفوفة فارغة تحت set -u خطأ في bash 3.2 (bash الافتراضي على macOS)، وهي فارغة دائمًا بالمفتاح العام
+      gpg --batch --yes --quiet ${dec[@]+"${dec[@]}"} -d -o "${f%.gpg}" "$f" 2>"$WORK/gpg.err" || fail "تعذّر فك تشفير $key: $(cat "$WORK/gpg.err")" ;;
+  esac
 done
 echo "✓ البصمات تطابق البيان، وفُك التشفير بالمفتاح الخاص"
 

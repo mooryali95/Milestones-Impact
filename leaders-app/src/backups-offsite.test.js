@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { encodePath, sign } from '../../scripts/ops/r2.mjs';
-import { checkManifest } from '../../scripts/ops/backup-check.mjs';
+import { checkManifest, parseRecipients } from '../../scripts/ops/backup-check.mjs';
 import { evaluate, MAX_HOURS } from '../../workers/backup-monitor/index.js';
 import { PII, QUERIES, render } from '../../scripts/db/sspdf-inventory.mjs';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
@@ -42,6 +42,15 @@ describe('فحص النسخة في R2 بلا فك تشفير', () => {
     expect(checkManifest({ ...m, rows: {} }, { 'daily/db.dump.gpg': { bytes: 10 } }, now).issues).toEqual(['البيان بلا عدد صفوف']);
     expect(checkManifest({ ...m, encryption: 'symmetric' }, { 'daily/db.dump.gpg': { bytes: 10 } }, now).issues[0]).toContain('public-key');
   });
+  it('مستلم معتمد في BACKUP_RECIPIENTS غائب من البيان يُفشل الفحص اليومي، وبلا متغير لا يُشترط', () => {
+    const heads = { 'daily/db.dump.gpg': { bytes: 10 } };
+    const exp = parseRecipients(' aaaa1111, BBBB2222 ');
+    expect(exp).toEqual(['AAAA1111', 'BBBB2222']);
+    expect(checkManifest({ ...m, recipients: ['AAAA1111', 'bbbb2222'] }, heads, now, 36, exp).issues).toEqual([]);
+    expect(checkManifest({ ...m, recipients: ['AAAA1111'] }, heads, now, 36, exp).issues).toEqual(['المستلم BBBB2222 غائب من البيان (BACKUP_RECIPIENTS)']);
+    expect(checkManifest(m, heads, now, 36, parseRecipients('')).issues).toEqual([]);
+    expect(read('.github/workflows/restore-drill.yml')).toContain('BACKUP_RECIPIENTS: ${{ vars.BACKUP_RECIPIENTS }}');
+  });
 });
 
 describe('مراقب الحداثة (Worker)', () => {
@@ -72,7 +81,8 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
   it('السكربتان سليمان نحويًا، ويشفّران بالمفتاح العام، ويرفضان حفظ نسخة غير مشفرة', () => {
     for (const f of ['scripts/ops/backup.sh', 'scripts/ops/restore-drill.sh']) expect(bash(f).status, f).toBe(0);
     const b = read('scripts/ops/backup.sh');
-    expect(b).toMatch(/--trust-model always --recipient-file "\$key" --encrypt/);
+    expect(b).toMatch(/--trust-model always "\$\{RCPT\[@\]\}" --encrypt/);
+    expect(b).toMatch(/RCPT\+=\(--recipient-file "\$k"\)/);
     expect(b).toContain('لا مفتاح عام ولا عبارة مرور: لا تُحفظ نسخة غير مشفرة');
     expect(b).toMatch(/BACKUP_SCHEMAS:-leaders,public,auth/);
     expect(b).toMatch(/'auth\.users', \(select count\(\*\) from auth\.users\)/);
@@ -115,10 +125,137 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
       rmSync(out, { recursive: true, force: true });
     }
   });
+  // نقل التشفير إلى المفتاح العام (2026-11-14): gpg بملف فيه كتلتان يشفّر للأولى وحدها بصمت، فمفتاح احتياطي يُلصق
+  // مع مفتاح المالك في السر كان سيُهمل. السكربت الحقيقي وgpg الحقيقي بمفتاحين مولّدين للاختبار، بلا قاعدة ولا R2
+  const hasGpg = spawnSync('gpg', ['--version']).status === 0;
+  it.skipIf(process.platform !== 'linux' || !hasGpg)('يشفّر لكل مفتاح في BACKUP_PUBLIC_KEY ويكتب بصماتها، فيفك كل مستلم وحده', () => {
+    const base = mkdtempSync(join(tmpdir(), 'mi-gpg-'));
+    const bin = join(base, 'bin'); const out = join(base, 'out');
+    const homes = ['a', 'b'].map((n) => join(base, n));
+    for (const d of [bin, out, ...homes]) spawnSync('mkdir', ['-m', '700', '-p', d]);
+    const gpg = (home, args, input) => spawnSync('gpg', ['--batch', '--pinentry-mode', 'loopback', '--passphrase', '', ...args], { env: { ...process.env, GNUPGHOME: home }, encoding: 'utf8', input });
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    try {
+      const fprs = homes.map((h, i) => {
+        expect(gpg(h, ['--quick-gen-key', `MI Backups TEST ${i}`, 'future-default', 'default', 'never']).status).toBe(0);
+        return gpg(h, ['--with-colons', '--list-keys']).stdout.split('\n').find((l) => l.startsWith('fpr')).split(':')[9];
+      });
+      const bundle = homes.map((h) => gpg(h, ['--armor', '--export']).stdout).join('');
+      expect(bundle.match(/BEGIN PGP PUBLIC KEY BLOCK/g)).toHaveLength(2);
+      tool('pg_dump', '[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; echo "dump-payload"');
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      const run = (key) => spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: base, GNUPGHOME: join(base, 'ci'), SUPABASE_DB_URL: 'postgres://fake', BACKUP_PUBLIC_KEY: key, BACKUP_PASSPHRASE: 'must-not-be-used', BACKUP_OUT: out },
+      });
+      spawnSync('mkdir', ['-m', '700', '-p', join(base, 'ci')]);
+      const r = run(bundle);
+      expect(r.status, r.stderr).toBe(0);
+      const m = JSON.parse(r.stdout.trim().split('\n').pop());
+      expect(m.encryption).toBe('public-key');
+      expect(m.recipients).toEqual(fprs);
+      const file = join(out, m.files[0].key.split('/').pop());
+      for (const h of homes) expect(gpg(h, ['-d', file]).stdout.trim(), h).toBe('dump-payload');
+      // كتلة تالفة تُفشل النسخ قبل التفريغ، ولا يسقط إلى العبارة
+      const bad = run('-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nnot a key\n-----END PGP PUBLIC KEY BLOCK-----\n');
+      expect(bad.status).not.toBe(0);
+      expect(bad.stderr).toContain('لا تُقرأ مفتاحًا عامًا');
+      // كتلة واحدة فيها المفتاحان (تصدير بلا بصمة) يشفّر بها gpg لأولهما وحده: تُرفض ولا تمر بمستلم ناقص
+      const both = join(base, 'both');
+      spawnSync('mkdir', ['-m', '700', '-p', both]);
+      expect(gpg(both, ['--import'], bundle).status).toBe(0);
+      const merged = gpg(both, ['--armor', '--export']).stdout;
+      expect(merged.match(/BEGIN PGP PUBLIC KEY BLOCK/g)).toHaveLength(1);
+      const one = run(merged);
+      expect(one.status).not.toBe(0);
+      expect(one.stderr).toContain('فيها 2 مفاتيح');
+      spawnSync('gpgconf', ['--kill', 'all'], { env: { ...process.env, GNUPGHOME: both } });
+      // المفتاح نفسه مرتين يبدو مستلمين في البيان وهو واحد في الملف: يُرفض
+      const dup = run(bundle.split(/(?=-----BEGIN PGP PUBLIC KEY BLOCK-----)/)[0].repeat(2));
+      expect(dup.status).not.toBe(0);
+      expect(dup.stderr).toContain('مكرر');
+    } finally {
+      for (const h of [...homes, join(base, 'ci')]) spawnSync('gpgconf', ['--kill', 'all'], { env: { ...process.env, GNUPGHOME: h } });
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 30_000);
+  // age الأداة المعتمدة (2026-11-14): سطر لكل مستلم، يشفّر لكلٍّ أصلًا، والتمرين يفك بملف المفتاح الخاص
+  const hasAge = spawnSync('age', ['--version']).status === 0 && spawnSync('age-keygen', ['--version']).status === 0;
+  it.skipIf(process.platform !== 'linux' || !hasAge)('age: سطر لكل مستلم بتعليق وCRLF، فيفك كلٌّ وحده، والتمرين يستعيد بملف المفتاح، والسطر الخاطئ يُرفض قبل التفريغ', () => {
+    const base = mkdtempSync(join(tmpdir(), 'mi-age-'));
+    const bin = join(base, 'bin'); const out = join(base, 'out');
+    for (const d of [bin, out]) spawnSync('mkdir', ['-p', d]);
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    try {
+      const ids = ['owner', 'escrow'].map((n) => {
+        const file = join(base, `${n}.key`);
+        expect(spawnSync('age-keygen', ['-o', file]).status).toBe(0);
+        return { file, pub: readFileSync(file, 'utf8').match(/age1[0-9a-z]{58}/)[0] };
+      });
+      tool('pg_dump', '[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; echo "dump-payload"');
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      const run = (key) => spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: base, SUPABASE_DB_URL: 'postgres://fake', BACKUP_PUBLIC_KEY: key, BACKUP_PASSPHRASE: 'must-not-be-used', BACKUP_OUT: out },
+      });
+      // كما يلصقه المالك: سطر «Public key:» من age-keygen، وتعليق، وسطر فارغ، ونهايات Windows
+      const r = run(`# owner\r\nPublic key: ${ids[0].pub}\r\n\r\n# escrow\r\n${ids[1].pub}\r\n`);
+      expect(r.status, r.stderr).toBe(0);
+      const m = JSON.parse(r.stdout.trim().split('\n').pop());
+      expect(m).toMatchObject({ encryption: 'public-key', tool: 'age', recipients: ids.map((x) => x.pub) });
+      const file = join(out, m.files[0].key.split('/').pop());
+      expect(file.endsWith('.dump.age')).toBe(true);
+      for (const id of ids) expect(spawnSync('age', ['-d', '-i', id.file, file], { encoding: 'utf8' }).stdout.trim(), id.file).toBe('dump-payload');
+      // سطر ليس مفتاح age، أو مفتاح مكرر، يُفشل النسخ قبل التفريغ ولا يسقط إلى العبارة
+      const bad = run(`${ids[0].pub}\nage1notakey\n`);
+      expect(bad.status).not.toBe(0);
+      expect(bad.stderr).toContain('ليس مفتاح age عامًا');
+      const dup = run(`${ids[0].pub}\n${ids[0].pub}\n`);
+      expect(dup.status).not.toBe(0);
+      expect(dup.stderr).toContain('مكرر');
+      // التمرين يطلب ملف المفتاح لنسخ age، ويذكر المتغير إن غاب
+      const d = read('scripts/ops/restore-drill.sh');
+      expect(d).toContain('age -d -i "$DRILL_AGE_IDENTITY" -o "${f%.age}" "$f"');
+      expect(d).toContain('اضبط DRILL_AGE_IDENTITY');
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 30_000);
+  it('سير حذف أدوات النسخ: يدوي، ولا يحذف بلا confirm=DELETE، ولا يمس إلا أسماء نسخ القاعدة، ويفشل إن بقي شيء', () => {
+    const p = read('.github/workflows/purge-backup-artifacts.yml');
+    expect(p).toMatch(/on:\n\s+workflow_dispatch:/);
+    expect(p).not.toMatch(/\n\s+(schedule|push|pull_request):/);
+    expect(p).toMatch(/permissions:\n\s+actions: write\n/);
+    expect(p).toContain("default: 'dry-run'");
+    expect(p).toContain('if [ "$CONFIRM" != "DELETE" ]');
+    expect(p).toContain('CONFIRM: ${{ inputs.confirm }}');          // المدخل في البيئة لا في نص الأمر
+    expect(p).not.toMatch(/run: \|[\s\S]*\$\{\{ inputs\./);
+    expect(p).toContain('[ "$left" = 0 ]');
+    const re = new RegExp(p.match(/MATCH: '([^']+)'/)[1]);
+    for (const n of ['backup-43382482794', 'leaders-2026-11-01.dump.gpg']) expect(re.test(n), n).toBe(true);
+    for (const n of ['playwright-traces', 'ci-pass-1d462b38', 'integration-pass-abc', 'backup-', 'backup-12x', 'leaders-2026-11-01.dump']) expect(re.test(n), n).toBe(false);
+  });
+  it('backup.yml يثبّت age قبل النسخ', () => {
+    const b = read('.github/workflows/backup.yml');
+    expect(b.indexOf('name: Install age')).toBeGreaterThan(-1);
+    expect(b.indexOf('name: Install age')).toBeLessThan(b.indexOf('run: bash scripts/ops/backup.sh'));
+  });
+  it('backup.yml يفشل بسرّ ناقص ولا يمر أخضر بلا نسخة', () => {
+    const b = read('.github/workflows/backup.yml');
+    expect(b).not.toMatch(/skip=true/);
+    expect(b).toMatch(/::error::SUPABASE_DB_URL or an encryption key[^\n]*\n\s*exit 1/);
+    // بلا أدوات سير في المستودع العام R2 هو المكان الوحيد للنسخة، فغياب سرّه ليلة حمراء
+    expect(b).toMatch(/-z "\$R2_BUCKET" \][\s\S]*?::error::An R2 secret[^\n]*\n\s*exit 1/);
+  });
+  it('التمرين يفك بالمفتاح العام على bash 3.2 (macOS): لا توسيع لمصفوفة فارغة تحت set -u', () => {
+    const d = read('scripts/ops/restore-drill.sh');
+    expect(d).toContain('${dec[@]+"${dec[@]}"}');
+    expect(d).not.toMatch(/--quiet "\$\{dec\[@\]\}"/);
+  });
   it('النسخة المشفرة تُحفظ في أدوات السير ولو فشل الرفع إلى R2، ولا يُرفع منها غير المشفر والبيان', () => {
     const b = read('.github/workflows/backup.yml');
     const step = b.slice(b.indexOf('- uses: actions/upload-artifact'));
-    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && steps\.gate\.outputs\.skip != 'true' && github\.repository_visibility != 'public' \}\}/);
+    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && github\.repository_visibility != 'public' \}\}/);
     expect(step).toContain('backup-out/*.gpg');
     expect(step).toContain('backup-out/manifest-*.json');
     expect(step).not.toMatch(/path: backup-out\/\s*$/m);
