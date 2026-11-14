@@ -7,6 +7,7 @@ import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessi
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
+import { journeyFor } from './participant.ts';
 import { esc, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -104,11 +105,13 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
 
 // ما يراه المشارك من إعداد النشاط: بلا بريد الموجّه، ورابط الاتصال الفوري
 // فقط حين يكون متاحًا، ورابط الحجز معبأ باسمه ومرجعه.
-export function participantItem(it: any, p: any) {
+// open: مرحلة البند غير مقفلة. الحجز والاتصال الفوري لمن تفتح له مرحلته داخل البرنامج وحده، بقاعدة coaching.instant (P1-04)
+export function participantItem(it: any, p: any, open = true) {
   if (!VERIFIED_KINDS.includes(it.kind)) return it;
   const c = it.config || {};
   const act = it.activity ? { ...it.activity } : null;
   if (act && it.kind === 'coaching') {
+    act.can_book = !!act.can_book && open && inProgram(p.status);
     act.book_url = c.booking_url && act.can_book
       ? bookingUrl(c, { name: p.full_name, email: p.email, ref: `${p.id}.${it.id}` }) : null;
     act.provider = c.booking_url ? c.provider || null : null;
@@ -129,6 +132,15 @@ async function myRequirement(p: any, id: unknown, kind: string, session?: { coho
   if (!requirementApplies(r, levels)) throw new Fail('هذا النشاط لا يخص مسارك', 403);
   if (session?.cohort_id && session.cohort_id !== def.cohort?.id) throw new Fail('هذه الجلسة لدفعة أخرى', 403, 'cohort');
   return r;
+}
+
+// متطلب الجلسة عن بعد والتوجيه يُستعمل ما دامت مرحلته في رحلة المشارك نفسها غير مقفلة (P1-04)، كما يقفل requirement.update
+// مرحلته وكما تعرضه الرحلة: ما فتحته قاعدة الفتح أو الأدمن قبل الاعتماد مفتوح، والمقفل مقفل ولو اعتُمد مساره
+const STAGE_LOCKED = 'هذه المرحلة لم تُفتح بعد';
+async function stageOpen(p: any, requirementId: string) {
+  const { journey } = await journeyFor(p, { lite: true });
+  const st = journey.find((s: any) => s.items.some((i: any) => i.id === requirementId));
+  return !!st && st.status !== 'locked';
 }
 
 async function levelsOf(participantId: string, approvedOnly = false) {
@@ -233,6 +245,7 @@ export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
   if (!s || s.mode !== 'online' || !s.join_url) throw new Fail('الجلسة غير موجودة', 404);
   if (!checkinOpen(s)) throw new Fail('رابط الجلسة يُفتح قبل موعدها بساعة', 400, 'closed');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
+  if (!(await stageOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
   if (r.config?.verify === 'join') {
     must(await db.from('workshop_attendance').upsert(
       { session_id: s.id, participant_id: p.id, method: 'join', ip: ctx.ip, user_agent: ctx.ua },
@@ -247,6 +260,7 @@ export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
 // متاح حين يعلن الموجّه توفره. يُسجَّل الطلب ويُبلَّغ الموجّه، ويدخل المشارك الغرفة مباشرة.
 export async function coachingInstant(p: any, b: Body) {
   const r = await myRequirement(p, b.requirement_id, 'coaching');
+  if (!(await stageOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
   const c = r.config || {};
   if (!instantAvailable(c)) throw new Fail('الموجّه غير متاح للاتصال الفوري الآن، احجز موعدًا', 400, 'unavailable');
   const since = new Date(Date.now() - 2 * 36e5).toISOString();
@@ -288,8 +302,13 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
   const target = ref || known;
   if (!target) return { success: true, ignored: 'no_ref' };
   const { data: r } = await db.from('stage_requirements').select('id, kind').eq('id', target.requirement_id).maybeSingle();
-  const { data: p } = await db.from('participants').select('id').eq('id', target.participant_id).maybeSingle();
+  const { data: p } = await db.from('participants').select('*').eq('id', target.participant_id).maybeSingle();
   if (!r || r.kind !== 'coaching' || !p) return { success: true, ignored: 'unknown_ref' };
+  // رابط الحجز بقاعدة coaching.instant نفسها (P1-04): رابط التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه
+  if (!inProgram(p.status) || !(await stageOpen(p, r.id))) {
+    console.error('booking not eligible', p.id, r.id);
+    return { success: true, ignored: 'not_eligible' };
+  }
 
   if (e.previous_id) {
     await db.from('coaching_sessions').update({ status: 'cancelled', updated_at: now }).eq('external_id', e.previous_id).eq('status', 'booked');
@@ -505,10 +524,14 @@ async function workshopRecipients(s: any) {
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   const people = await workshopRecipients(s);
   const when = workshopWhen(s.starts_at);
-  const ics = kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url: s.join_url || '' })] : [];
+  // رابط الجلسة (في الرسالة وملف التقويم) لمن اعتُمد مساره وحده، كأعضاء القاعة (P1-04). ومن لم يُعتمد يُدعى بموعدها،
+  // وزر الانضمام في رحلته حين تُفتح له مرحلتها (workshop.join)
+  const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
+  const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
   for (const m of people) {
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, s.mode === 'online' ? s.join_url || null : null), ics, { kind: 'bulk', ref: s.id }); sent += 1; }
+    const link = m.approved ? s.join_url || null : null;
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, s.mode === 'online' ? link : null), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };

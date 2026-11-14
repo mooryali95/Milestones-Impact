@@ -161,5 +161,5 @@ export const MIGRATION_GATES = {
   '20261114100000_leaders_payment_ledger': ["tolerant", "الدالة تكتب هذه الأعمدة بتحديث منفصل يتحمل غيابها (payments.ts saveLedger)، وتقرأ العملية بـ* فتعمل قبل الترحيل وبعده"],
   '20261114110000_leaders_mail_center': ["tolerant", ""],
   '20261114120000_public_lockdown': ["tolerant", ""],
-  '20261114130000_leaders_pin_sponsor_seat_guard': ["tolerant", "الدالة تفحص الشروط نفسها قبل استدعاء الدالة (entitlements.ts seatStopped)، فتعمل قبله وبعده"],
+  '20261114130000_leaders_pin_sponsor_seat_guard': ["tolerant", "الدالة تفحص الشرط نفسه قبل استدعاء الدالة (entitlements.ts seatStopped)، فتعمل قبله وبعده"],
 };

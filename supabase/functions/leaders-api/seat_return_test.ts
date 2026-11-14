@@ -3,9 +3,10 @@
 // (admin.final-eval) تقرأ كلها mePayload ثم access، فيُستهلك المقعد المردود في النقرة نفسها. دالة المقاعد هنا بسلوكها
 // قبل الحارس (بلا نظر في الإلغاء ولا الحالة)، فما يمنع التثبيت هو فحص الخادم وحده، ويبقى الحارس في القاعدة طبقة ثانية.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db } = await import('./core.ts');
-const { setStatus } = await import('./admin.ts');
+const { assignOrg, setStatus } = await import('./admin.ts');
+const { adminDecide } = await import('./sponsor.ts');
 const { participantFile, participants: expertParticipants } = await import('./file.ts');
 const F = await import('./final.ts');
 const { access, adminGrant } = await import('./payments.ts');
@@ -92,7 +93,7 @@ function install(tables: Record<string, Row[]>) {
 }
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const ORG = U(900), EXPERT = U(800);
+const ORG = U(900), ORG2 = U(901), EXPERT = U(800);
 const ADMIN = { email: 'admin@example.sa', role: 'admin' as const, method: 'passkey' };
 const person = (n: number, extra: Row = {}) => ({
   id: U(n), full_name: `مشارك ${n}`, email: `p${n}@example.sa`, status: 'enrolled', organization_id: ORG, organization_name: 'جهة',
@@ -153,14 +154,113 @@ Deno.test('الانسحاب قبل أول باب يرد المقعد، وملف 
   } finally { f.restore(); }
 });
 
-Deno.test('عودته إلى البرنامج بعد رد مقعده لا تعيد الرعاية تلقائيًا، ولا مسار الربط', async () => {
+// رد المقعد ليس قرارًا بسحب الرعاية: يحرسه الانسحاب نفسه، فالعودة إلى البرنامج تعيد التثبيت بفحص المقاعد لحظتها.
+// كانت تُبقي المرعي المعاد على بوابة الدفع، ولا فعل للإدارة يعيد مقعده إلا منحًا خارج العقد
+Deno.test('عودته إلى البرنامج بعد رد مقعده تعيد رعاية جهته بفحص المقاعد لحظتها، ثم لا تثبيت مكرر', async () => {
   const f = install(world([person(2)], sponsorRows(2)));
   try {
     await setStatus(ADMIN, { participant_id: U(2), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
-    await setStatus(ADMIN, { participant_id: U(2), status: 'enrolled' });
-    await openViews(2);
-    assertEquals(await pinSponsorFor(U(2)), false);
     assertEquals([liveSponsor(f.tables, 2), f.pins], [[], []]);
+    await setStatus(ADMIN, { participant_id: U(2), status: 'enrolled' });
+    assertEquals(f.pins.length, 1);
+    assertEquals(liveSponsor(f.tables, 2).map((e) => [e.item, e.organization_id]), [['assessment', ORG], ['program', ORG]]);
+    await openViews(2);
+    const a: any = await access(f.tables.participants[0]);
+    assertEquals([a.assessment, a.program, a.sponsor?.name], ['sponsor', 'sponsor', 'جهة']);
+    assertEquals(f.pins.length, 1);
+  } finally { f.restore(); }
+});
+
+Deno.test('العودة إلى البرنامج وعقد الجهة ممتلئ: لا مقعد فوق العقد، وطلب مقعد بانتظار القرار كالمعتاد', async () => {
+  const f = install(world([person(20), person(21)], sponsorRows(20)));
+  f.tables.organizations[0].seats = 1;
+  try {
+    await setStatus(ADMIN, { participant_id: U(20), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    // المقعد المردود يأخذه غيره
+    assertEquals(await pinSponsorFor(U(21)), true);
+    await setStatus(ADMIN, { participant_id: U(20), status: 'enrolled' });
+    assertEquals(liveSponsor(f.tables, 20), []);
+    assertEquals(f.tables.sponsor_requests.map((r) => [r.participant_id, r.kind, r.status]), [[U(20), 'seats', 'pending']]);
+  } finally { f.restore(); }
+});
+
+// النقل والعودة فعل صريح من الإدارة: يعيد رعاية الجهة الأولى، ولا يحجب سحبُ النقلِ الأولِ التثبيتَ بعده
+Deno.test('نقله إلى جهة أخرى ثم إعادته إلى جهته يعيد رعايتها، ويبقى ما بعدها (الانسحاب ثم العودة) كما هو', async () => {
+  const f = install(world([person(8)], sponsorRows(8)));
+  f.tables.organizations.push({ id: ORG2, name: 'جهة ثانية', short_name: null, status: 'active', seats: 10, contract_cents: 5000, show_value: true, contract_starts: null, contract_ends: null });
+  try {
+    const toB: any = await assignOrg(ADMIN, { participant_ids: [U(8)], organization_id: ORG2 });
+    assertEquals([toB.revoked_sponsor, toB.pinned], [2, 1]);
+    const back: any = await assignOrg(ADMIN, { participant_ids: [U(8)], organization_id: ORG });
+    assertEquals([back.revoked_sponsor, back.pinned], [2, 1]);
+    assertEquals(liveSponsor(f.tables, 8).map((e) => [e.item, e.organization_id, e.value_cents]), [['assessment', ORG, 0], ['program', ORG, 10000]]);
+    const a: any = await access(f.tables.participants[0]);
+    assertEquals([a.assessment, a.program, a.sponsor?.name], ['sponsor', 'sponsor', 'جهة']);
+    await setStatus(ADMIN, { participant_id: U(8), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    await setStatus(ADMIN, { participant_id: U(8), status: 'enrolled' });
+    assertEquals(liveSponsor(f.tables, 8).map((e) => e.organization_id), [ORG, ORG]);
+  } finally { f.restore(); }
+});
+
+// الربط الآلي (النطاق أو الرمز) بعد فك الإدارة لا يعيد الرعاية، والنقل الصريح إلى الجهة نفسها يعيدها
+Deno.test('بعد فك الإدارة: الربط الآلي لا يعيد الرعاية، ونقل الإدارة إلى الجهة يعيدها بفحص المقاعد', async () => {
+  const f = install(world([person(10)], sponsorRows(10)));
+  try {
+    await assignOrg(ADMIN, { participant_ids: [U(10)] });
+    assertEquals(liveSponsor(f.tables, 10), []);
+    f.tables.participants[0].organization_id = ORG;
+    assertEquals(await pinSponsorFor(U(10), { auto: true }), false);
+    await openViews(10);
+    assertEquals([liveSponsor(f.tables, 10), f.pins], [[], []]);
+    const r: any = await assignOrg(ADMIN, { participant_ids: [U(10)], organization_id: ORG });
+    assertEquals([r.pinned, liveSponsor(f.tables, 10).length, f.pins.length], [1, 2, 1]);
+  } finally { f.restore(); }
+});
+
+const claim = (id: string, n: number, extra: Row = {}) => {
+  const p = person(n, extra);
+  return { id, participant_id: p.id, organization_id: p.organization_id, typed_name: 'جهة', status: 'pending', created_at: '2026-11-10T08:00:00Z',
+    participants: { id: p.id, full_name: p.full_name, email: p.email, organization_id: p.organization_id, status: p.status }, ...(extra.request || {}) };
+};
+
+Deno.test('قبول طلب رعاية بعد فك الإدارة فعل صريح: يثبّت الرعاية ويُعتمد الطلب', async () => {
+  const f = install(world([person(11)], sponsorRows(11)));
+  try {
+    await assignOrg(ADMIN, { participant_ids: [U(11)] });
+    f.tables.sponsor_requests.push(claim('sr-claim', 11, { organization_id: null, request: { kind: 'claim' } }));
+    const r: any = await adminDecide(ADMIN, { id: 'sr-claim', approve: true, organization_id: ORG });
+    assertEquals(r.success, true);
+    assertEquals(liveSponsor(f.tables, 11).length, 2);
+    assertEquals(f.tables.sponsor_requests.find((x) => x.id === 'sr-claim')!.status, 'approved');
+  } finally { f.restore(); }
+});
+
+Deno.test('قبول طلب مقعد لمن سُحب إعفاؤه من جهته: مقعد واحد يُضاف ويُستهلك، والطلب يُعتمد', async () => {
+  const gone = sponsorRows(13).map((e) => ({ ...e, revoked_at: '2026-11-02T08:00:00Z', revoked_by: 'admin@example.sa' }));
+  const f = install(world([person(13), person(14)], [...gone, ...sponsorRows(14)]));
+  f.tables.organizations[0].seats = 1;
+  try {
+    f.tables.sponsor_requests.push(claim('sr-seats', 13, { request: { kind: 'seats' } }));
+    const r: any = await adminDecide(ADMIN, { id: 'sr-seats', approve: true, reason: 'مقعد إضافي بقرار الجهة' });
+    assertEquals(r.success, true);
+    assertEquals([f.tables.organizations[0].seats, liveSponsor(f.tables, 13).length], [2, 2]);
+    assertEquals(f.tables.sponsor_requests.find((x) => x.id === 'sr-seats')!.status, 'approved');
+  } finally { f.restore(); }
+});
+
+// كان القبول يضيف المقعد إلى العقد ثم يفشل التثبيت (خارج البرنامج)، فيزيد العقد مقعدًا مع كل نقرة والطلب معلّق
+Deno.test('قبول طلب مقعد لمنسحب يُرد قبل أي كتابة: لا مقعد يُضاف مع كل محاولة، والطلب كما هو', async () => {
+  const f = install(world([person(12, { status: 'withdrawn' })]));
+  try {
+    f.tables.sponsor_requests.push(claim('sr-out', 12, { status: 'withdrawn', request: { kind: 'seats' } }));
+    for (let i = 0; i < 2; i++) {
+      const e: any = await assertRejects(() => adminDecide(ADMIN, { id: 'sr-out', approve: true, reason: 'مقعد إضافي بقرار الجهة' }));
+      assertEquals([e.status, e.code], [409, 'out_of_program']);
+    }
+    assertEquals(f.tables.organizations[0].seats, 10);
+    assertEquals(f.tables.sponsor_requests[0].status, 'pending');
+    assertEquals((f.tables.audit_log || []).filter((x) => x.action === 'sponsor.seat-added'), []);
+    assertEquals([liveSponsor(f.tables, 12), f.pins], [[], []]);
   } finally { f.restore(); }
 });
 

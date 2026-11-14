@@ -40,8 +40,9 @@ export async function access(p: any) {
   const read = () => db.from('entitlements').select('item, source, organization_id, value_cents').eq('participant_id', p.id).is('revoked_at', null);
   let { data } = await read();
   // التثبيت مرة واحدة: حين يرتبط بجهة نشطة وينقصه أحد البندين. تعذّر فحص المقعد (D20) لا يمنح شيئًا:
-  // يبقى بلا تثبيت (نبّه pinSponsor المالك)، ويُعاد في القراءة التالية. ولا تثبيت لمن خرج من البرنامج أو رُدّ مقعده
-  // أو سُحب إعفاؤه أو رُفض طلب مقعده في هذه الجهة (SEAT_STOPPED، P1-06): ملف الإدارة والخبير والتقييم الختامي يقرأ هنا
+  // يبقى بلا تثبيت (نبّه pinSponsor المالك)، ويُعاد في القراءة التالية. ولا تثبيت لمن خرج من البرنامج (ومنه من رُدّ مقعده
+  // بانسحابه)، ولا لمن سُحب إعفاؤه أو رُفض طلب مقعده في هذه الجهة بلا فعل صريح بعده (SEAT_STOPPED، P1-06): ملف الإدارة
+  // والخبير والتقييم الختامي يقرأ هنا
   let seat: string | null = null;
   if (org && ITEMS.some((i) => !(data || []).some((x: any) => x.item === i))) {
     seat = await pinSponsor(p, org).catch((e) => { console.error('access pin:', e); return null; });

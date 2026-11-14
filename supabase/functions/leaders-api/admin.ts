@@ -177,7 +177,8 @@ export async function assignOrg(a: Admin, b: Body) {
     if (target) rv = rv.neq('organization_id', target.id);
     revoked += (must(await rv.select('id')) ?? []).length;
   }
-  // الجهة الجديدة تثبّت إعفاءها لحظة الربط (لا عند أول دخول للمشارك)
+  // الجهة الجديدة تثبّت إعفاءها لحظة الربط (لا عند أول دخول للمشارك). والنقل إليها فعل صريح يعيد رعايتها بعد سحب سابق
+  // أو رفض طلب مقعد فيها، بفحص المقاعد والعقد (P1-06)، ومنه العودة إلى جهة نُقل منها
   let pinned = 0;
   if (target) for (const id of moved) if (await pinSponsorFor(id)) pinned += 1;
   await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null, revoked_sponsor: revoked, pinned });
@@ -663,6 +664,7 @@ export async function setStatus(a: Admin, b: Body) {
   // من هو على الحالة المطلوبة أصلًا يُتخطى: لا سجل ولا بريد مكرر
   const current = (must(await db.from('participants').select('id, status').in('id', ids)) ?? []) as any[];
   const todo = current.filter((p) => p.status !== b.status).map((p) => p.id as string);
+  const was = new Map(current.map((p) => [p.id as string, p.status as string]));
   for (const pid of todo) {
     must(await db.from('participants').update({ status: b.status }).eq('id', pid));
     await audit('admin', a.email, 'participant.status', 'participants', pid, null, { status: b.status, ...(reason ? { reason } : {}), ...(bulk ? { bulk: ids.length } : {}) });
@@ -676,6 +678,8 @@ export async function setStatus(a: Admin, b: Body) {
         if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
       }
     }
+    // العودة إلى البرنامج تعيد تثبيت رعاية جهته بفحص المقاعد (المقعد المردود ليس قرارًا بسحبها، P1-06)
+    if (!inProgram(was.get(pid)) && inProgram(b.status)) await pinSponsorFor(pid, { auto: true });
   }
   // D05: الحالة لا تُصدر شهادة؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات (final.ts)
   return { success: true, certificate: null, done: todo.length, skipped: ids.length - todo.length };

@@ -15,7 +15,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -168,7 +168,8 @@ export async function sponsorCode(p: any, b: Body) {
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
-  await pinSponsorFor(p.id);
+  // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
+  await pinSponsorFor(p.id, { auto: true });
   return { success: true, ...(await mePayload(saved)) };
 }
 
@@ -610,7 +611,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       })),
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
-      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
+      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p, st.status !== 'locked')) })),
     progress,
     // معالم الرحلة وموقع المشارك منها (المتأخر بعدد أيامه)
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
@@ -645,7 +646,7 @@ export async function me(p: any) {
     const r = await orgByEmail(p.email);
     if (r) {
       const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
-      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id); p = data; }
+      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id, { auto: true }); p = data; }
     }
   }
   return { success: true, ...(await mePayload(p)) };
@@ -920,10 +921,13 @@ export async function assessmentSubmit(p: any, b: Body) {
   await db.from('assessments').update({ status: 'submitted', submitted_at: now }).eq('id', a.id);
   // مؤشر الجهد يُحفظ على القياس بعد احتساب المستوى وحفظه (effort.ts): استشاري للمراجع، لا يدخل ما سبق، وتعذّره لا يُسقط الإرسال
   await saveEffort({ id: a.id, instrument_id: a.instrument_id, started_at: a.started_at, submitted_at: now }).catch((e) => console.error('effort:', e));
-  // الحالة تتقدم بالقياس قبل القرار وحده (P1-04): كان يكتب «بانتظار الاعتماد» فوق أي حالة، فيعيد المنسحب إلى البرنامج
-  // بلا قرار، وينزل من «في البرنامج» أو «أنهى البرنامج» إلى «معتمد المستوى» بقياس جديد. ما سواها يبقى كما هو وتُحفظ النتيجة
-  const advance = ['registered', 'profiled', 'assessing'].includes(p.status);
-  const updated = !advance ? p : must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
+  // الحالة من القياس (P1-04): كان يكتب حالة فوق أي حالة، فيعيد المنسحب إلى البرنامج بلا قرار، وينزل من «في البرنامج»
+  // أو «أنهى البرنامج» إلى «معتمد المستوى» بقياس جديد. الآن: المنسحب والموقوف كما هما، ومن مساره معتمد (المستويات الثلاثة)
+  // يبقى على حالته إن كان معتمدًا أو بعده وإلا «معتمد المستوى»، ومن لم يُعتمد مساره «بانتظار الاعتماد» من أي حالة داخل
+  // البرنامج، فيظهر في قوائم الاعتماد (ومنه من وُضع على «في البرنامج» قبل قياسه)
+  const ready = locked.size === 3 || p.is_demo;
+  const next = !inProgram(p.status) ? p.status : !ready ? 'pending_approval' : ['placed', 'enrolled', 'completed'].includes(p.status) ? p.status : 'placed';
+  const updated = next === p.status ? p : must(await db.from('participants').update({ status: next })
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(updated)) };

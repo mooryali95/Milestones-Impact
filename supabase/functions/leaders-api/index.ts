@@ -125,14 +125,16 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
   'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
   'consent.accept', 'org.share-consent', 'org.visibility', 'me.switch', 'pay.access', 'sponsor.cancel', 'sus.state', 'sus.submit']);
 // داخل البرنامج قبل الاعتماد وبعده: الملف والقياس المبدئي والدفع والرعاية، ودعوة المدير للتقدير القبلي (impact)،
-// ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)
+// ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)،
+// ورابط الجلسة عن بعد وغرفة الموجّه: حكمهما حال مرحلة متطلبهما في رحلته (stageOpen في activities.ts)، لا الاعتماد، فما
+// تعرضه الرحلة مفتوحًا بقاعدة الفتح أو بفتح الأدمن لا يُرد، والمقفل يُرد
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
   'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
-  'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit']);
-// البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا أو يفتح رابط جلسة أو غرفة موجّه
+  'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
+// البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
 const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
-  'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open', 'workshop.join', 'coaching.instant',
+  'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
   'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
 const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. يبقى لك ملفك وبياناتك وشهادتك، وللاستفسار: ${CONTACT_EMAIL}`;

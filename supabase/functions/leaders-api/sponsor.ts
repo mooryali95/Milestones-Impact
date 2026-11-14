@@ -8,7 +8,7 @@ import { SITES } from '../_shared/sites.js';
 import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
 import { pinSponsorFor } from './entitlements.ts';
-import { isEmail, normalizeEmail } from './logic.js';
+import { inProgram, isEmail, normalizeEmail } from './logic.js';
 import { suggestOrgs } from './sponsor-match.js';
 import { firstName } from './hall.js';
 
@@ -64,7 +64,7 @@ export async function adminList() {
 
 export async function adminDecide(a: Admin, b: Body) {
   requireWrite(a);
-  const r = must(await db.from('sponsor_requests').select('*, participants(id, full_name, email, organization_id)').eq('id', String(b.id || '')).maybeSingle()) as any;
+  const r = must(await db.from('sponsor_requests').select('*, participants(id, full_name, email, organization_id, status)').eq('id', String(b.id || '')).maybeSingle()) as any;
   if (!r || r.status !== 'pending') throw new Fail('لم يعد الطلب قيد المراجعة', 409);
   const now = new Date().toISOString();
   const p = r.participants;
@@ -72,6 +72,8 @@ export async function adminDecide(a: Admin, b: Body) {
     const org = must(await db.from('organizations').select('id, name, status, seats').eq('id', String(b.organization_id || r.organization_id || '')).maybeSingle()) as any;
     if (!org || org.status !== 'active') throw new Fail('اختر جهة نشطة');
     if (p.organization_id && p.organization_id !== org.id) throw new Fail('المشارك مرتبط بجهة أخرى؛ غيّرها من ملفه', 409);
+    // خارج البرنامج (inProgram) لا تُثبَّت رعايته: يُرد قبل أي كتابة، فلا مقعد يُضاف ولا ربط (P1-06)
+    if (!inProgram(p.status)) throw new Fail('المشارك خارج البرنامج (منسحب أو موقوف)، فلا تُثبَّت رعايته. أعده إلى البرنامج من ملفه ثم اعتمد الطلب', 409, 'out_of_program');
     // D20: رعاية بانتظار الاعتماد لامتلاء المقاعد: القبول مقعد يُضاف إلى العقد بتعليل مكتوب وتدقيق
     if (r.kind === 'seats') {
       const why = String(b.reason || '').trim();
@@ -81,6 +83,7 @@ export async function adminDecide(a: Admin, b: Body) {
       await audit('admin', a.email, 'sponsor.seat-added', 'organizations', org.id, { seats: org.seats }, { seats: bumped[0].seats, participant: p.id, reason: why.slice(0, 300) });
     }
     must(await db.from('participants').update({ organization_id: org.id, org_via: p.organization_id ? undefined : 'admin' }).eq('id', p.id));
+    // القبول فعل صريح: يتخطى سحبًا سابقًا أو رفضًا لهذه الجهة إلى فحص المقاعد والعقد (P1-06)
     if (!(await pinSponsorFor(p.id))) {
       throw new Fail(r.kind === 'contract' ? 'مدة العقد لا تشمل اليوم. عدّل تاريخي العقد في ملف الجهة ثم اعتمد' : 'تعذّر تثبيت الرعاية، راجع مقاعد الجهة وحالتها', 409, 'seat_blocked');
     }   // الإعفاء يُثبَّت لحظة القبول

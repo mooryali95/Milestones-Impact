@@ -27,24 +27,31 @@ export async function settings() {
 export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'inactive' | 'out' | 'cancelled' | 'rejected';
 export const SEAT_BLOCKED: PinResult[] = ['full', 'before', 'after'];
 export const SEAT_ALERTS = [0.8, 1];
-// P1-06: ما يوقف التثبيت الآلي ولا يمنح شيئًا. كان رد المقعد عند الانسحاب وسحب الإعفاء يُنقضان في أول قراءة للملف.
-// out: خارج البرنامج (inProgram)؛ cancelled: إعفاء لهذه الجهة رُدّ مقعده أو سُحب؛ rejected: رُفض طلب مقعده أو عقده فيها.
-// القاعدة نفسها في leaders.pin_sponsor_seat (ترحيل 20261114130000)، وهنا قبل الاستدعاء فتصح قبل تطبيقه.
-// إعادة الرعاية بعدها فعل صريح من الإدارة، لا قراءة ملف
+// P1-06: ما يوقف التثبيت ولا يمنح شيئًا. كان رد المقعد عند الانسحاب وسحب الإعفاء يُنقضان في أول قراءة للملف.
+// out: خارج البرنامج (inProgram)، لكل تثبيت، وهو وحده في leaders.pin_sponsor_seat (ترحيل 20261114130000).
+// cancelled: إعفاء لهذه الجهة سُحب أو نُقل منها؛ rejected: رُفض طلب مقعده أو عقده فيها. كلاهما قرار يسري ما لم يُثبَّت
+// بعده إعفاء من الجهة نفسها، وللتثبيت الآلي وحده (auto: access()، والربط بالنطاق، ورمز يكتبه المشارك، وعودة الحالة).
+// والفعل الصريح من الإدارة (نقله إلى الجهة، قبول طلب رعايته) يتخطاهما إلى فحص المقاعد والعقد. ورد المقعد عند الانسحاب
+// (seat-return) ليس قرارًا: يحرسه out ما دام منسحبًا، ويعود التثبيت بعودته إلى البرنامج
 export const SEAT_STOPPED: PinResult[] = ['out', 'cancelled', 'rejected'];
-async function seatStopped(p: { id: string; status?: string | null }, orgId: string): Promise<PinResult | null> {
+export type PinOpts = { auto?: boolean };
+async function seatStopped(p: { id: string; status?: string | null }, orgId: string, auto: boolean): Promise<PinResult | null> {
   if (!inProgram(p.status)) return 'out';
-  const [gone, refused] = await Promise.all([
-    db.from('entitlements').select('id').eq('participant_id', p.id).eq('organization_id', orgId).eq('source', 'sponsor').not('revoked_at', 'is', null).limit(1),
-    db.from('sponsor_requests').select('id').eq('participant_id', p.id).eq('organization_id', orgId).eq('status', 'rejected').in('kind', ['seats', 'contract']).limit(1),
+  if (!auto) return null;
+  const [rows, refused] = await Promise.all([
+    db.from('entitlements').select('created_at, revoked_at, revoked_by').eq('participant_id', p.id).eq('organization_id', orgId).eq('source', 'sponsor').limit(200),
+    db.from('sponsor_requests').select('created_at, decided_at').eq('participant_id', p.id).eq('organization_id', orgId).eq('status', 'rejected').in('kind', ['seats', 'contract']).limit(50),
   ]);
-  if (must(gone)?.length) return 'cancelled';
-  if (must(refused)?.length) return 'rejected';
+  const t = (x: unknown) => Date.parse(String(x || '')) || 0;
+  // آخر تثبيت من الجهة: ما قبله من قرار نقضه فعل صريح بعده
+  const since = Math.max(0, ...(must(rows) ?? []).map((e: any) => t(e.created_at)));
+  if ((must(rows) ?? []).some((e: any) => e.revoked_at && e.revoked_by !== 'seat-return' && t(e.revoked_at) > since)) return 'cancelled';
+  if ((must(refused) ?? []).some((r: any) => t(r.decided_at || r.created_at) > since)) return 'rejected';
   return null;
 }
 
-export async function pinSponsor(p: { id: string; status?: string | null }, org: { id: string; name: string; contract_cents?: number | null }): Promise<PinResult> {
-  const stop = await seatStopped(p, org.id);
+export async function pinSponsor(p: { id: string; status?: string | null }, org: { id: string; name: string; contract_cents?: number | null }, { auto = true }: PinOpts = {}): Promise<PinResult> {
+  const stop = await seatStopped(p, org.id, auto);
   if (stop) return stop;
   const s: any = await settings();
   const value = org.contract_cents ?? (s.assessment_cents + s.program_cents);
@@ -110,13 +117,14 @@ async function notifyOrg(org: { id: string; name: string }, subject: string, tex
 }
 
 // يثبّت لمشارك بمعرّفه إن كانت جهته نشطة؛ يُستدعى من مسارات الربط كلها. لا يرمي: الربط نفسه نجح، والتثبيت له احتياط في access()
-export async function pinSponsorFor(participantId: string) {
+// صريح افتراضًا (نقل الإدارة، قبول طلب رعاية، والتسجيل والاستيراد بلا سابقة)، وما ليس فعلًا من الإدارة يمرر auto (انظر SEAT_STOPPED)
+export async function pinSponsorFor(participantId: string, { auto = false }: PinOpts = {}) {
   try {
     const { data: p } = await db.from('participants').select('id, organization_id, is_demo, status').eq('id', participantId).maybeSingle();
     if (!p || p.is_demo || !p.organization_id) return false;
     const { data: org } = await db.from('organizations').select('id, name, status, contract_cents').eq('id', p.organization_id).maybeSingle();
     if (!org || org.status !== 'active') return false;
-    const r = await pinSponsor(p, org);
+    const r = await pinSponsor(p, org, { auto });
     return !SEAT_BLOCKED.includes(r) && !SEAT_STOPPED.includes(r);
   } catch (e) { console.error('pinSponsorFor:', e); return false; }
 }

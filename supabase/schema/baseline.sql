@@ -3393,8 +3393,6 @@ begin
   select id, seats, contract_starts, contract_ends, status into o from leaders.organizations where id = p_org for update;
   if not found or o.status <> 'active' then return 'inactive'; end if;
   if exists (select 1 from leaders.participants where id = p_participant and status in ('withdrawn', 'suspended')) then return 'out'; end if;
-  if exists (select 1 from leaders.entitlements where participant_id = p_participant and organization_id = p_org and source = 'sponsor' and revoked_at is not null) then return 'cancelled'; end if;
-  if exists (select 1 from leaders.sponsor_requests where participant_id = p_participant and organization_id = p_org and status = 'rejected' and kind in ('seats', 'contract')) then return 'rejected'; end if;
   if exists (select 1 from leaders.entitlements where participant_id = p_participant and organization_id = p_org and source = 'sponsor' and revoked_at is null) then
     insert into leaders.entitlements (participant_id, item, source, organization_id, granted_by, note, value_cents, currency)
       select p_participant, i, 'sponsor', p_org, 'sponsor', p_note, case when i = 'program' then p_program_value else 0 end, p_currency

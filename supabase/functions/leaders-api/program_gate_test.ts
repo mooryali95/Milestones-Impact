@@ -7,9 +7,10 @@ import { assert, assertEquals } from 'jsr:@std/assert@1';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };
-const { db, hash } = await import('./core.ts');
+const { db, hash, CONFIG } = await import('./core.ts');
 const { ACTION_GATES } = (await import('./index.ts')) as any;
 const P = await import('./participant.ts');
+const V = await import('./activities.ts');
 
 type Row = Record<string, any>;
 const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v == null ? v : v[k]), r);
@@ -65,13 +66,13 @@ function install(tables: Record<string, Row[]>) {
     });
     return q;
   };
-  const prev = { from: (db as any).from, rpc: (db as any).rpc };
-  Object.assign(db as any, { from, rpc: () => Promise.resolve({ data: null, error: null }) });
+  const prev = { from: (db as any).from, rpc: (db as any).rpc, schema: (db as any).schema };
+  Object.assign(db as any, { from, rpc: () => Promise.resolve({ data: null, error: null }), schema: () => ({ from }) });
   return { tables, restore: () => Object.assign(db as any, prev) };
 }
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const ORG = U(990001), COHORT = U(990002), WS = U(990003), REQ_W = U(990004);
+const ORG = U(990001), COHORT = U(990002), WS = U(990003), REQ_W = U(990004), REQ_C = U(990005), REQ_A = U(990006);
 const NOW = Date.now();
 // كل اختبار بمعرّفات جديدة: الاعتماد يُحفظ في العامل (index.ts)، فلا يرث اختبار اعتماد غيره
 let base = 0;
@@ -128,13 +129,20 @@ async function world() {
     programs: [{ id: 'prog', is_default: true, name: 'البرنامج', katon_points: null, final_eval: null }],
     cohorts: [{ id: COHORT, name: 'دفعة الجهة', is_default: false, organization_id: ORG, status: 'running', program_id: 'prog', supervision: 'peers_expert', starts_on: '2026-11-01', advisor_expert_id: null }],
     enrollments: [ps.paid, ps.grand].map((p) => ({ participant_id: p.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-06T08:00:00Z' })),
-    journey_stages: [{ program_id: 'prog', key: 'training', sort: 4, title_ar: 'التدريب', active: true }],
-    stage_requirements: [{ id: REQ_W, program_id: 'prog', stage_key: 'training', code: 'T-ATTEND', kind: 'workshop', dimension: null, level: null, sort: 1, required: true, title_ar: 'الأيام التدريبية', config: { verify: 'join' } }],
+    // مرحلة الاعتماد قبل التدريب كما في البرنامج: التدريب يُفتح باكتمالها (اعتماد المسار) أو بفتح الأدمن
+    journey_stages: [{ program_id: 'prog', key: 'approval', sort: 3, title_ar: 'اعتماد المسار', active: true }, { program_id: 'prog', key: 'training', sort: 4, title_ar: 'التدريب', active: true }],
+    stage_requirements: [
+      { id: REQ_A, program_id: 'prog', stage_key: 'approval', code: 'AP-OK', kind: 'auto', dimension: null, level: null, sort: 1, required: true, title_ar: 'اعتماد المسار', config: {} },
+      { id: REQ_W, program_id: 'prog', stage_key: 'training', code: 'T-ATTEND', kind: 'workshop', dimension: null, level: null, sort: 1, required: true, title_ar: 'الأيام التدريبية', config: { verify: 'join' } },
+      { id: REQ_C, program_id: 'prog', stage_key: 'training', code: 'T-COACH', kind: 'coaching', dimension: null, level: null, sort: 2, required: true, title_ar: 'جلسة توجيه',
+        config: { mode: 'online', booking_url: 'https://cal.com/coach/session', instant_url: 'https://meet.example.sa/coach', instant_until: new Date(NOW + 36e5).toISOString() } },
+    ],
     workshop_sessions: [{ id: WS, requirement_id: REQ_W, title_ar: 'اليوم الأول', mode: 'online', join_url: 'https://meet.example.sa/day1', active: true, cohort_id: COHORT,
       starts_at: new Date(NOW - 6e5).toISOString(), ends_at: new Date(NOW + 72e5).toISOString() }],
     hall_sessions: [{ id: 'hs', cohort_id: COHORT, stage: 'enter', version: 1, mode: 'live', topic_id: null, sentence_id: null, revealed: [] }],
     hall_presence: [], cohort_roles: [], peer_requests: [], peer_answers: [], audit_log: [], experts: [], expert_requests: [],
     assessments: [], instruments: [], questions: [], assessment_answers: [], certificates: [], workshop_attendance: [],
+    coaching_sessions: [], participant_stage_overrides: [],
   };
   const f = install(tables);
   const call = async (who: keyof typeof ps, action: string, body: Row = {}) => {
@@ -147,12 +155,12 @@ async function world() {
   return { ps, tables, call, restore: f.restore };
 }
 
-// ما ذكره التدقيق: الأقران والقاعة وطلب الخبير ورابط الجلسة وغرفة الموجّه
+// ما ذكره التدقيق: الأقران والقاعة وطلب الخبير، ورابط الجلسة وغرفة الموجّه (هذان بحال مرحلة متطلبهما في رحلته)
 const EXPOSED: [string, Row][] = [
   ['peer.list', {}], ['peer.ask', { text: 'كيف أبني سجل المعالم لمشروعي الحالي؟', source: 'free' }],
   ['hall.state', {}], ['hall.join', {}], ['experts.suggest', {}], ['experts.choose', { expert_id: U(1) }],
-  ['workshop.join', { session_id: WS }], ['coaching.instant', { requirement_id: REQ_W }],
 ];
+const STAGED: [string, Row][] = [['workshop.join', { session_id: WS }], ['coaching.instant', { requirement_id: REQ_C }]];
 
 Deno.test('من لم يُعتمد مساره يُرد 403 عن الأقران والقاعة وطلب الخبير ورابط الجلسة، ورحلة ما قبل الاعتماد كما هي', async () => {
   const w = await world();
@@ -162,6 +170,12 @@ Deno.test('من لم يُعتمد مساره يُرد 403 عن الأقران و
       assertEquals([action, r.status, r.code], [action, 403, 'locked']);
       assertEquals(r.message, 'يُفتح هذا بعد اعتماد مسارك');
     }
+    // مرحلة التدريب مقفلة عليه حتى الاعتماد: الرابط والغرفة يُردان بحالها
+    for (const [action, body] of STAGED) {
+      const r = await w.call('pending', action, body);
+      assertEquals([action, r.status, r.code, r.message], [action, 403, 'locked', 'هذه المرحلة لم تُفتح بعد']);
+    }
+    assertEquals(w.tables.coaching_sessions.length, 0);
     assertEquals(w.tables.peer_requests.length, 0);
     assertEquals(w.tables.hall_presence.length, 0);
     assertEquals(w.tables.workshop_attendance.length, 0);
@@ -179,7 +193,7 @@ Deno.test('من لم يُعتمد مساره يُرد 403 عن الأقران و
 Deno.test('المنسحب يُرد 403 عن البرنامج وما قبله، ويبقى له حسابه وملفه وبياناته وشهادته', async () => {
   const w = await world();
   try {
-    for (const [action, body] of [...EXPOSED, ['assessment.get', {}], ['pay.checkout', { item: 'program' }], ['lab.list', {}], ['rater.invite', { email: 'm@example.sa', phase: 'pre' }]] as [string, Row][]) {
+    for (const [action, body] of [...EXPOSED, ...STAGED, ['assessment.get', {}], ['pay.checkout', { item: 'program' }], ['lab.list', {}], ['rater.invite', { email: 'm@example.sa', phase: 'pre' }]] as [string, Row][]) {
       const r = await w.call('withdrawn', action, body);
       assertEquals([action, r.status, r.code], [action, 403, 'out_of_program']);
     }
@@ -205,6 +219,8 @@ Deno.test('المعتمد داخل البرنامج: المرعي والدافع
       }
       const j = await w.call(who, 'workshop.join', { session_id: WS });
       assertEquals([who, j.status, j.join_url], [who, 200, 'https://meet.example.sa/day1']);
+      const c = await w.call(who, 'coaching.instant', { requirement_id: REQ_C });
+      assertEquals([who, c.status, c.join_url], [who, 200, 'https://meet.example.sa/coach']);
       const h = await w.call(who, 'hall.join');
       assertEquals([who, h.status, h.success], [who, 200, true]);
       // طلب الخبير يصل دالته: يرد باختيار من المقترحين لا ببوابة البرنامج
@@ -227,6 +243,90 @@ Deno.test('أعضاء القاعة من cohortMembers ومنهم من تفتح �
   } finally { w.restore(); }
 });
 
+const coachItem = (me: Row) => me.journey.flatMap((st: any) => st.items.map((it: any) => ({ ...it, stage: st.status }))).find((it: any) => it.id === REQ_C);
+
+// الرحلة والخادم مصدر واحد: ما تعرضه الرحلة مفتوحًا (فتح الأدمن للمرحلة قبل الاعتماد) لا يرده الخادم، والمقفل يُرد
+Deno.test('مرحلة فتحها الأدمن قبل الاعتماد: رابط الجلسة وغرفة الموجّه ورابط الحجز متاحة كما تعرضها الرحلة', async () => {
+  const w = await world();
+  try {
+    const before = await w.call('pending', 'me');
+    assertEquals([coachItem(before).stage, coachItem(before).activity.book_url, coachItem(before).activity.can_book], ['locked', null, false]);
+    w.tables.participant_stage_overrides.push({ participant_id: w.ps.pending.id, program_id: 'prog', stage_key: 'training', action: 'open' });
+    const me = await w.call('pending', 'me');
+    const it = coachItem(me);
+    assertEquals([it.stage === 'locked', it.activity.can_book, it.activity.instant], [false, true, true]);
+    assert(String(it.activity.book_url).startsWith('https://cal.com/coach/session'));
+    const j = await w.call('pending', 'workshop.join', { session_id: WS });
+    assertEquals([j.status, j.join_url], [200, 'https://meet.example.sa/day1']);
+    const c = await w.call('pending', 'coaching.instant', { requirement_id: REQ_C });
+    assertEquals([c.status, c.join_url], [200, 'https://meet.example.sa/coach']);
+    // والقاعة والأقران يبقيان على الاعتماد
+    const h = await w.call('pending', 'hall.state');
+    assertEquals([h.status, h.code], [403, 'locked']);
+  } finally { w.restore(); }
+});
+
+Deno.test('رابط الحجز في الرحلة لمن تفتح له مرحلته داخل البرنامج وحده: لا للمنسحب ولا لمرحلة مقفلة', async () => {
+  const w = await world();
+  try {
+    const ok = coachItem(await w.call('approved', 'me'));
+    assertEquals([ok.stage, ok.activity.can_book], ['active', true]);
+    assert(String(ok.activity.book_url).includes(encodeURIComponent(`${w.ps.approved.id}.${REQ_C}`)));
+    const out = coachItem(await w.call('withdrawn', 'me'));
+    assertEquals([out.stage, out.activity.book_url, out.activity.can_book, out.activity.instant], ['active', null, false, false]);
+  } finally { w.restore(); }
+});
+
+// رابط حجز التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه بإشعار منصة الحجز
+Deno.test('إشعار الحجز: يُسجَّل لمن تفتح له مرحلته داخل البرنامج، ويُتجاهل للمنسحب ولمن مرحلته مقفلة', async () => {
+  const w = await world();
+  const saved = CONFIG.calcomSecret;
+  Object.assign(CONFIG, { calcomSecret: 'cal-secret' });
+  const sign = async (raw: string) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('cal-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const book = async (who: 'approved' | 'pending' | 'withdrawn') => {
+    const p = w.ps[who];
+    const raw = JSON.stringify({ triggerEvent: 'BOOKING_CREATED', payload: { uid: `b-${who}`, metadata: { ref: `${p.id}.${REQ_C}` }, startTime: new Date(NOW + 864e5).toISOString(),
+      endTime: new Date(NOW + 864e5 + 18e5).toISOString(), videoCallData: { url: `https://meet.example.sa/${who}` }, organizer: { email: 'coach@example.sa' }, attendees: [{ email: p.email }] } });
+    return await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': await sign(raw) })) as Row;
+  };
+  try {
+    assertEquals(await book('pending'), { success: true, ignored: 'not_eligible' });
+    assertEquals(await book('withdrawn'), { success: true, ignored: 'not_eligible' });
+    assertEquals(w.tables.coaching_sessions.length, 0);
+    assertEquals(await book('approved'), { success: true });
+    assertEquals(w.tables.coaching_sessions.map((x) => [x.participant_id, x.status, x.join_url]), [[w.ps.approved.id, 'booked', 'https://meet.example.sa/approved']]);
+  } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
+});
+
+// رابط الجلسة عن بعد في بريد الدعوة وملف تقويمها لمن اعتُمد مساره وحده، كأعضاء القاعة؛ ومن لم يُعتمد يُدعى بموعدها
+Deno.test('دعوة الجلسة عن بعد: الرابط لمن اعتُمد مساره، ومن ينتظر الاعتماد يُدعى بلا رابط، والمنسحب لا يُدعى', async () => {
+  const w = await world();
+  const real = globalThis.fetch;
+  const saved = CONFIG.resendKey;
+  const mail: Row[] = [];
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    if (String(url).includes('resend.com')) { mail.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify({ id: `re_${mail.length}` })); }
+    return new Response('ok');
+  }) as typeof fetch;
+  Object.assign(CONFIG, { resendKey: 're_test' });
+  try {
+    const r: any = await V.workshopInvite({ email: 'admin@example.sa' }, { id: WS });
+    assertEquals([r.total, r.sent], [4, 4]);
+    const ics = (m: Row) => new TextDecoder().decode(Uint8Array.from(atob(m.attachments[0].content), (c) => c.charCodeAt(0)));
+    const of = (who: keyof typeof w.ps) => mail.find((m) => m.to[0] === w.ps[who].email)!;
+    for (const who of ['approved', 'paid', 'grand'] as const) {
+      assert(of(who).html.includes('https://meet.example.sa/day1'), who);
+      assert(ics(of(who)).includes('https://meet.example.sa/day1'), who);
+    }
+    assert(!of('pending').html.includes('meet.example.sa'));
+    assert(!ics(of('pending')).includes('meet.example.sa'));
+    assertEquals(of('withdrawn'), undefined);
+  } finally { globalThis.fetch = real; Object.assign(CONFIG, { resendKey: saved }); w.restore(); }
+});
+
 Deno.test('حساب العرض: رابط الجلسة ورمز الجهة وبدء 360 مغلقة عليه', async () => {
   const w = await world();
   try {
@@ -237,18 +337,20 @@ Deno.test('حساب العرض: رابط الجلسة ورمز الجهة وبد
   } finally { w.restore(); }
 });
 
-Deno.test('إرسال القياس يغيّر الحالة ممن لم يبلغ القرار وحده: لا يعيد المنسحب ولا ينزل الملتحق', async () => {
+Deno.test('إرسال القياس: لا يعيد المنسحب ولا ينزل المعتمد، ومن لم يُعتمد مساره بانتظار الاعتماد من أي حالة داخل البرنامج', async () => {
   const w = await world();
   try {
-    const cases: [string, string, string][] = [['withdrawn', 'withdrawn', 'withdrawn'], ['approved', 'enrolled', 'enrolled'], ['grand', 'completed', 'completed'], ['pending', 'profiled', 'pending_approval']];
+    // ومنه من وضعته الإدارة على «في البرنامج» أو «معتمد المستوى» قبل قياسه: كان يبقى عليها خارج قوائم الاعتماد
+    const cases: [string, string, string][] = [['withdrawn', 'withdrawn', 'withdrawn'], ['approved', 'enrolled', 'enrolled'], ['grand', 'completed', 'completed'], ['pending', 'profiled', 'pending_approval'],
+      ['pending', 'enrolled', 'pending_approval'], ['pending', 'placed', 'pending_approval'], ['paid', 'pending_approval', 'placed']];
     w.tables.instruments.push({ id: 'inst', kind: 'baseline', active: true });
-    for (const [who, from, to] of cases) {
+    for (const [i, [who, from, to]] of cases.entries()) {
       const p = (w.ps as any)[who];
       p.status = from;
-      w.tables.assessments.push({ id: `as-${p.id}`, participant_id: p.id, instrument_id: 'inst', status: 'in_progress', form: null, started_at: '2026-11-01T08:00:00Z' });
-      const r: any = await P.assessmentSubmit({ ...p }, { assessment_id: `as-${p.id}` });
+      w.tables.assessments.push({ id: `as-${i}`, participant_id: p.id, instrument_id: 'inst', status: 'in_progress', form: null, started_at: '2026-11-01T08:00:00Z' });
+      const r: any = await P.assessmentSubmit({ ...p }, { assessment_id: `as-${i}` });
       assertEquals(r.success, true);
-      assertEquals([who, w.tables.participants.find((x) => x.id === p.id)!.status], [who, to]);
+      assertEquals([who, from, w.tables.participants.find((x) => x.id === p.id)!.status], [who, from, to]);
     }
     // والمنسحب لا يبلغ الإرسال من الموجّه أصلًا
     const p = w.ps.withdrawn;
@@ -268,7 +370,9 @@ Deno.test('كل فعل في خريطة المشارك مصنّف مرة: بوا�
   const known = new Set(actions);
   assertEquals([...account, ...pre, ...program, ...demoBlocked, ...demoOpen].filter((a) => !known.has(a)), []);
   // ما سمّاه التدقيق في مكانه
-  for (const a of ['peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick', 'experts.suggest', 'experts.choose', 'workshop.join', 'coaching.instant']) assert(program.has(a), a);
+  for (const a of ['peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick', 'experts.suggest', 'experts.choose']) assert(program.has(a), a);
+  // رابط الجلسة وغرفة الموجّه داخل البرنامج، وحكمهما مرحلة متطلبهما في activities.ts (stageOpen)
+  for (const a of ['workshop.join', 'coaching.instant']) assert(pre.has(a), a);
   for (const a of ['me', 'profile.save', 'me.export', 'me.erase-request', 'certificate', 'profile.confirm-name', 'me.switch', 'logout']) assert(account.has(a), a);
   for (const a of ['assessment.get', 'assessment.answer', 'assessment.submit', 'pay.checkout', 'sponsor.request', 'profile.save']) assert(!program.has(a), a);
   for (const a of ['workshop.join', 'me.sponsor-code', 'f360.start']) assert(demoBlocked.has(a), a);
