@@ -12,6 +12,7 @@ import ReqQueue from './ReqQueue.jsx';
 import SusPanel from './SusPanel.jsx';
 import { OrgSelect } from './Participants.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { orgReadiness, readinessSummary } from '../org-hub.js';
 
 const VIA_ALL = { ...VIA, unassigned: 'بلا جهة' };
 const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
@@ -100,8 +101,38 @@ function Readiness({ items, onTab }) {
         {items.map((x) => (
           <li key={x.key} className={x.ok ? 'ok' : ''}>
             <span aria-hidden="true">{x.ok ? '✓' : '○'}</span>
-            <span>{x.label}</span>
-            {!x.ok && onTab && x.where && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
+            <span>{x.label}
+              {/* الناقص بأسمائه: كل اسم يفتح ملف الجهة أو الدفعة نفسها، لا التبويب العام */}
+              {!x.ok && x.refs?.length > 0 && <span className="la-ready-refs">{x.refs.map((r) => (
+                <a key={r.id} className="la-chip warn" href={r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(r.id)}` : `#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a>
+              ))}</span>}
+            </span>
+            {!x.ok && onTab && x.where && !x.refs?.length && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// جاهزية الجهات: سطر لكل جهة فعّالة بما بقي فيها (org-hub.js نفسه الذي في رأس صفحتها)، ويفتح صفحتها.
+// المستوى الأوسط بين جاهزية الإطلاق (المنظومة) وملف الدفعة. بند الدفعة في صفحة الجهة لأنه يحتاج قراءة رحلتها
+function OrgsReadiness({ orgs, onOrg }) {
+  const rows = (orgs || []).filter((o) => o.status === 'active')
+    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, members: o.stats?.total || 0, pending: o.stats?.pending_approval || 0 }) }))
+    .sort((a, b) => b.r.missing - a.r.missing);
+  if (!rows.length) return null;
+  const ready = rows.filter((x) => !x.r.missing).length;
+  return (
+    <section className="la-card la-ready" aria-label="جاهزية الجهات">
+      <div className="la-row between"><h3>جاهزية الجهات</h3><span className="la-muted">{ready} من {rows.length} جاهزة</span></div>
+      <ul>
+        {rows.map(({ o, r }) => (
+          <li key={o.id} className={r.missing ? '' : 'ok'}>
+            <span aria-hidden="true">{r.missing ? '○' : '✓'}</span>
+            <span><button className="la-link" onClick={() => onOrg(o.id)}><b>{o.name}</b></button>
+              {r.missing > 0 && <small className="la-muted"> · {r.items.filter((x) => !x.ok).map((x) => x.title).join('، ')}</small>}</span>
+            <span className={`la-chip ${r.missing ? 'warn' : 'ok'}`}>{readinessSummary(r)}</span>
           </li>
         ))}
       </ul>
@@ -177,6 +208,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       <Health h={h} />
       {canWrite !== false && <DemoCard />}
       {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
+      {canWrite !== false && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
       {o.mfa_required && (
         <div className="la-note" role="alert">
           دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.

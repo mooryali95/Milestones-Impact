@@ -75,6 +75,20 @@ describe('بنود الإطلاق: حكم واحد للوحة والبوابات
   });
 });
 
+describe('ما ينقص بمعرّفه: اللوحة تفتح ملف الجهة أو الدفعة مباشرة', () => {
+  it('الناقص وحده يحمل refs بنوعه، والحكم والنص كما هما', () => {
+    const items = launchReadiness({
+      organizations: [{ id: 'o1', name: 'سفراء', status: 'active' }, { id: 'o2', name: 'منظومة', status: 'active' }],
+      cohorts: [{ id: 'c1', name: 'دفعة سفراء', organization_id: 'o1', status: 'open', advisor_expert_id: null, delivery: {} }],
+      sessions: [], finalEval: null,
+    }, Date.parse('2026-11-14'));
+    const by = Object.fromEntries(items.map((x) => [x.key, x]));
+    expect(by['cohort-per-org']).toMatchObject({ ok: false, label: 'جهات فعّالة بلا دفعة مفتوحة أو جارية: منظومة', refs: [{ kind: 'org', id: 'o2', name: 'منظومة' }] });
+    expect(by.advisor.refs).toEqual([{ kind: 'cohort', id: 'c1', name: 'دفعة سفراء' }]);
+    expect(by['final-eval']).not.toHaveProperty('refs');
+  });
+});
+
 describe('المصدر: اللوحة والبوابات تقرآن الوحدة نفسها', () => {
   it('الأسرار التي تشترطها البوابة تفحصها حالة النظام، والبوابة تأخذ القائمة من الوحدة', () => {
     expect(gates.REQUIRED_SECRETS).toBe(REQUIRED_SECRETS);
