@@ -26,7 +26,7 @@ import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
-import { pinSponsorFor } from './entitlements.ts';
+import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort } from './visibility.ts';
 import { resolveVisibility } from './visibility.js';
@@ -166,6 +166,14 @@ export async function sponsorCode(p: any, b: Body) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
   const r = await sponsorByCode(b.sponsor_code, `p:${p.id}`);
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
+  // قرار سارٍ للإدارة في رعاية هذه الجهة له (سحب أو فك أو رفض طلب مقعده، P1-06) لا يرده رمز يكتبه: يُرد قبل الربط بسببه،
+  // فيبقى له الدفع وطلب الرعاية من الإدارة. كان يُربط بلا رعاية، فيختفي نموذج الرمز ولا يعرف لماذا بقي الدفع عليه
+  const stop = await sponsorDecision(p.id, r.org.id);
+  if (stop) {
+    throw new Fail(stop === 'rejected'
+      ? `قررت الإدارة من قبل أن تتابع البرنامج بدفع فردي لا برعاية هذه الجهة، فلا يغيّر الرمز ذلك. لمراجعة القرار راسل ${CONTACT_EMAIL}`
+      : `أنهت الإدارة من قبل رعاية هذه الجهة لك، فلا يعيدها الرمز. لمراجعة القرار راسل ${CONTACT_EMAIL}`, 409, 'sponsor_decided');
+  }
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
   // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
@@ -644,7 +652,9 @@ export async function me(p: any) {
   // المسجل قبل تسجيل نطاق جهته: يُربط بها عند دخوله التالي، مرة واحدة ويُسجَّل
   if (!p.organization_id && !p.is_demo && p.email_verified_at) {
     const r = await orgByEmail(p.email);
-    if (r) {
+    // ولا ربط آلي بجهة أنهت الإدارة رعايتها له أو فكّته عنها أو رُفض طلب مقعده فيها (sponsorDecision، P1-06): يبقى بلا جهة
+    // فيرى طلب الرعاية ورمزها ويعرف بالرمز سبب بقاء الدفع. وتعذّر القراءة يؤجل الربط إلى الدخول التالي
+    if (r && !(await sponsorDecision(p.id, r.org.id).catch((e) => { console.error('me sponsor decision:', e); return 'error'; }))) {
       const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
       if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id, { auto: true }); p = data; }
     }

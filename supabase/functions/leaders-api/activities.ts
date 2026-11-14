@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
-import { audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { alertOps, audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
@@ -281,6 +281,22 @@ export async function coachingInstant(p: any, b: Body) {
   return { success: true, join_url: c.instant_url };
 }
 
+// موعد لا يُسجَّل باقٍ على تقويم الموجّه ومنصة الحجز: تنبيه للتشغيل ليُلغى منها، بمعرّف الحجز ومتطلبه وسببه ومعرّف المشارك
+// وحده. والأثر لكل حجز (coaching.ignored)، فإعادة جدولة حجز نُبّه عنه لا تنبّه ثانية، وتنبيه كل حجز مستقل عن غيره
+async function bookingIgnored(provider: string, e: any, requirementId: string, participantId: string, why: string) {
+  console.error('booking not eligible', participantId, requirementId, why);
+  const seen = e.previous_id
+    ? (await db.from('audit_log').select('id', { count: 'exact', head: true }).eq('action', 'coaching.ignored').eq('entity_id', String(e.previous_id))).count
+    : 0;
+  await audit('system', provider, 'coaching.ignored', 'coaching_sessions', String(e.external_id), null, { previous: e.previous_id || null, requirement: requirementId, participant: participantId, reason: why })
+    .catch((x) => console.error('booking ignored audit:', x));
+  if (seen) return;
+  await alertOps(`booking_not_eligible:${e.external_id}`, {
+    provider, event: e.event, booking: e.external_id, previous: e.previous_id || null, starts_at: e.starts_at || null, requirement: requirementId, participant: participantId, reason: why,
+    action: 'ألغِ هذا الموعد من منصة الحجز وتقويم الموجّه: لم يُسجَّل في البرنامج',
+  });
+}
+
 // ── webhook منصة الحجز ──
 // يُستدعى من دالة leaders-hooks (بلا JWT، والتوقيع هو الحماية).
 export async function bookingWebhook(provider: string, raw: string, headers: Headers) {
@@ -304,14 +320,16 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
   const { data: r } = await db.from('stage_requirements').select('id, kind').eq('id', target.requirement_id).maybeSingle();
   const { data: p } = await db.from('participants').select('*').eq('id', target.participant_id).maybeSingle();
   if (!r || r.kind !== 'coaching' || !p) return { success: true, ignored: 'unknown_ref' };
-  // رابط الحجز بقاعدة coaching.instant نفسها (P1-04): رابط التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه
-  if (!inProgram(p.status) || !(await stageOpen(p, r.id))) {
-    console.error('booking not eligible', p.id, r.id);
-    return { success: true, ignored: 'not_eligible' };
-  }
-
+  // إعادة الجدولة تلغي الموعد القديم أولًا أيًّا كانت أهلية الجديد: كان التجاهل قبلها يبقي القديم «محجوزًا» بموعده ورابطه،
+  // فيصل تذكيره («جلستك غدًا») بموعد لم يعد قائمًا ولا يُسجَّل الحضور إلا عليه
   if (e.previous_id) {
     await db.from('coaching_sessions').update({ status: 'cancelled', updated_at: now }).eq('external_id', e.previous_id).eq('status', 'booked');
+  }
+  // رابط الحجز بقاعدة coaching.instant نفسها (P1-04): رابط التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه
+  const why = !inProgram(p.status) ? 'out_of_program' : !(await stageOpen(p, r.id)) ? 'stage_locked' : null;
+  if (why) {
+    await bookingIgnored(provider, e, r.id, p.id, why);
+    return { success: true, ignored: 'not_eligible' };
   }
   must(await db.from('coaching_sessions').upsert({
     participant_id: p.id, requirement_id: r.id, kind: 'booked', provider, external_id: e.external_id,
@@ -521,17 +539,33 @@ async function workshopRecipients(s: any) {
   // المنسحب والموقوف خارج البرنامج (inProgram مصدر واحد): لا دعوة ولا تذكير (كان الموقوف يُدعى)
   return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && inProgram(m.status));
 }
+// رابط الجلسة عن بعد لمن تفتح له مرحلة متطلبها في رحلته، بقاعدة workshop.join نفسها (stageOpen): الرحلة والخادم والبريد
+// مصدر واحد. كان البريد يحكم بالاعتماد، فمن فتح الأدمن مرحلته قبل اعتماده يدخل من رحلته ولا رابط في بريده، والمعتمد
+// ومرحلته مقفلة (متطلب سابق ناقص) يأخذ الرابط من البريد ويرده الانضمام فلا يُسجَّل حضوره. تعذّر الحساب لأحدهم يحجب الرابط
+// عنه وحده، ويبقى زر الانضمام في رحلته حكمه
+async function openStageFor(ids: string[], requirementId: string) {
+  const open = new Set<string>();
+  if (!ids.length) return open;
+  const rows = (must(await db.from('participants').select('*').in('id', ids)) ?? []) as any[];
+  for (let i = 0; i < rows.length; i += 5) {
+    await Promise.all(rows.slice(i, i + 5).map(async (p) => {
+      try { if (await stageOpen(p, requirementId)) open.add(p.id); } catch (e) { console.error('workshop stage', p.id, (e as Error).message); }
+    }));
+  }
+  return open;
+}
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   const people = await workshopRecipients(s);
   const when = workshopWhen(s.starts_at);
-  // رابط الجلسة (في الرسالة وملف التقويم) لمن اعتُمد مساره وحده، كأعضاء القاعة (P1-04). ومن لم يُعتمد يُدعى بموعدها،
-  // وزر الانضمام في رحلته حين تُفتح له مرحلتها (workshop.join)
+  // ومن لا تفتح له مرحلتها يُدعى بموعدها، ونص البريد له أن الرابط في رحلته حين تُفتح، لا تعليمات القاعة
+  const online = s.mode === 'online' && !!s.join_url;
+  const open = online ? await openStageFor(people.map((m: any) => m.id), s.requirement_id) : new Set<string>();
   const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
   for (const m of people) {
-    const link = m.approved ? s.join_url || null : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, s.mode === 'online' ? link : null), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
+    const link = online && open.has(m.id) ? s.join_url : null;
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };

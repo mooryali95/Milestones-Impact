@@ -137,11 +137,15 @@ const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
   'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
+// وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتيبه، وتقدير أثره) وتقييم
+// خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
+// GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
+const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
 const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. يبقى لك ملفك وبياناتك وشهادتك، وللاستفسار: ${CONTACT_EMAIL}`;
 const approvedSeen = new Set<string>();
 async function programGate(action: string, p: any) {
   if (GATE_ACCOUNT.has(action)) return;
-  if (!inProgram(p.status)) throw new Fail(OUT_OF_PROGRAM_AR, 403, 'out_of_program');
+  if (!inProgram(p.status) && !GATE_KEPT.has(action)) throw new Fail(OUT_OF_PROGRAM_AR, 403, 'out_of_program');
   if (GATE_PRE.has(action)) return;
   // فعل البرنامج، وما لم يُصنَّف يُعامل معاملته فلا يُفتح بلا اعتماد. تعذّر القراءة يرمي ولا يفتح شيئًا
   if (approvedSeen.has(p.id)) return;
@@ -277,7 +281,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'tracking.save': (p, b) => T.save(p, b),
 };
 // تصنيف أفعال المشارك كما يقرؤه program_gate_test.ts
-export const ACTION_GATES = { actions: Object.keys(participant), account: GATE_ACCOUNT, pre: GATE_PRE, program: GATE_PROGRAM, demoBlocked: DEMO_BLOCKED, demoOpen: DEMO_OPEN };
+export const ACTION_GATES = { actions: Object.keys(participant), account: GATE_ACCOUNT, pre: GATE_PRE, program: GATE_PROGRAM, kept: GATE_KEPT, demoBlocked: DEMO_BLOCKED, demoOpen: DEMO_OPEN };
 
 // نتيجة فعل داخل طلب مجمّع بالشكل نفسه الذي يرده الفعل وحده، فخطؤه يبقى له ولا يُفشل الطلب كله
 async function settle(action: string, p: Promise<unknown>) {

@@ -10,12 +10,13 @@ const { adminDecide } = await import('./sponsor.ts');
 const { participantFile, participants: expertParticipants } = await import('./file.ts');
 const F = await import('./final.ts');
 const { access, adminGrant } = await import('./payments.ts');
-const { pinSponsorFor } = await import('./entitlements.ts');
+const { pinSponsorFor, programPaymentDue } = await import('./entitlements.ts');
+const P = await import('./participant.ts');
 
 type Row = Record<string, any>;
 const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v == null ? v : v[k]), r);
 
-// جداول في الذاكرة: eq وneq وin وis وnot(is null) وlimit وrange وmaybeSingle وsingle والعدّ، والإدراج والتحديث والحذف.
+// جداول في الذاكرة: eq وneq وin وis وnot(is null) وorder (الأول) وlimit وrange وmaybeSingle وsingle والعدّ، والإدراج والتحديث والحذف.
 // مرشحات الجداول المضمّنة والنص (or وilike) لا تغيّر النتيجة هنا. والدالة pin_sponsor_seat كما في 20261107130000
 function install(tables: Record<string, Row[]>) {
   let seq = 0;
@@ -26,6 +27,7 @@ function install(tables: Record<string, Row[]>) {
     let payload: any = null;
     let head = false, single = false, limit = Infinity;
     let range: [number, number] | null = null;
+    let order: [string, boolean] | null = null;
     const plain = (c: string) => !/[.>]/.test(c);
     const run = () => {
       const rows = tables[table] ||= [];
@@ -44,6 +46,7 @@ function install(tables: Record<string, Row[]>) {
         return { data: out, error: null };
       }
       if (head) return { data: null, count: out.length, error: null };
+      if (order) { const [c, asc] = order; out = [...out].sort((a, b) => (String(a[c] ?? '') < String(b[c] ?? '') ? -1 : String(a[c] ?? '') > String(b[c] ?? '') ? 1 : 0) * (asc ? 1 : -1)); }
       if (range) out = out.slice(range[0], range[1] + 1);
       out = out.slice(0, limit);
       return { data: single ? out[0] ?? null : out, error: null };
@@ -61,6 +64,7 @@ function install(tables: Record<string, Row[]>) {
         if (k === 'not') return (c: string, op: string, v: unknown) => { if (plain(c) && op === 'is' && v === null) filters.push((r) => get(r, c) != null); return q; };
         if (k === 'limit') return (n: number) => { limit = n; return q; };
         if (k === 'range') return (a: number, b: number) => { range = [a, b]; return q; };
+        if (k === 'order') return (c: string, o?: any) => { if (plain(c) && !order) order = [c, o?.ascending !== false]; return q; };
         if (k === 'maybeSingle' || k === 'single') return () => { single = true; return q; };
         return () => q;
       },
@@ -307,5 +311,177 @@ Deno.test('الموقوف لا يُثبَّت له، ورفع الإيقاف ب�
     await access(f.tables.participants[0]);
     assertEquals(f.pins.length, 1);
     assertEquals(liveSponsor(f.tables, 6).length, 2);
+  } finally { f.restore(); }
+});
+
+// ── قرار الإدارة الصريح يبقى أثره في سجل المشارك (participant.org)، ولو لم يُثبَّت به شيء لحظتها ──
+const second = (t: Record<string, Row[]>) => t.organizations.push({ id: ORG2, name: 'جهة ثانية', short_name: null, status: 'active', seats: 10, contract_cents: 5000, show_value: true, contract_starts: null, contract_ends: null });
+const progress = (n: number) => ({ participant_id: U(n), module_id: 'm1', created_at: '2026-10-20T08:00:00Z' });
+
+// كان النقل الصريح لمنسحب لا يترك أثرًا (التثبيت out)، فعودته تقرأ سحب النقل الأول إلغاءً فيبقى المرعي بلا رعاية ولا طلب
+Deno.test('نقله إلى جهة ثم انسحابه ثم إعادته إلى جهته وهو منسحب ثم عودته إلى البرنامج: تعود رعاية جهته', async () => {
+  const f = install(world([person(30)], sponsorRows(30)));
+  second(f.tables);
+  try {
+    await assignOrg(ADMIN, { participant_ids: [U(30)], organization_id: ORG2 });
+    await setStatus(ADMIN, { participant_id: U(30), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    const back: any = await assignOrg(ADMIN, { participant_ids: [U(30)], organization_id: ORG });
+    assertEquals([back.revoked_sponsor, back.pinned, liveSponsor(f.tables, 30)], [0, 0, []]);
+    // أثر القرار في سجله بجهته قبله وبعده
+    assertEquals((f.tables.audit_log || []).filter((x) => x.action === 'participant.org' && x.entity === 'participants').map((x) => [x.before.org, x.after.org]), [[ORG, ORG2], [ORG2, ORG]]);
+    await setStatus(ADMIN, { participant_id: U(30), status: 'enrolled' });
+    assertEquals(liveSponsor(f.tables, 30).map((e) => e.organization_id), [ORG, ORG]);
+    const a: any = await access(f.tables.participants[0]);
+    assertEquals([a.assessment, a.program, a.sponsor?.name], ['sponsor', 'sponsor', 'جهة']);
+  } finally { f.restore(); }
+});
+
+Deno.test('انسحابه بعد تقدّم (المقعد باقٍ) ثم فكّه ثم ربطه بجهته وهو منسحب ثم عودته: تعود رعاية جهته', async () => {
+  const f = install(world([person(31)], sponsorRows(31), { handbook_progress: [progress(31)] }));
+  try {
+    await setStatus(ADMIN, { participant_id: U(31), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    assertEquals(liveSponsor(f.tables, 31).length, 2);
+    const off: any = await assignOrg(ADMIN, { participant_ids: [U(31)] });
+    assertEquals(off.revoked_sponsor, 2);
+    await assignOrg(ADMIN, { participant_ids: [U(31)], organization_id: ORG });
+    assertEquals(liveSponsor(f.tables, 31), []);
+    await setStatus(ADMIN, { participant_id: U(31), status: 'enrolled' });
+    assertEquals(liveSponsor(f.tables, 31).map((e) => e.organization_id), [ORG, ORG]);
+    assertEquals((await access(f.tables.participants[0]) as any).program, 'sponsor');
+  } finally { f.restore(); }
+});
+
+// كان فك الإدارة لمنسحب رُد مقعده لا يُكتب (لا إعفاء حي يُسحب)، فالربط بالنطاق ثم العودة يأخذ مقعدًا من الجهة خلاف قرارها
+Deno.test('فكّه وهو منسحب رُد مقعده: لا يربطه النطاق بجهته، ولا تعيد العودة مقعدها ولو رُبط بها آليًا', async () => {
+  const f = install(world([person(32)], sponsorRows(32)));
+  Object.assign(f.tables.organizations[0], { domains: ['example.sa'], invite_code: 'jiha-2026' });
+  try {
+    await setStatus(ADMIN, { participant_id: U(32), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    const off: any = await assignOrg(ADMIN, { participant_ids: [U(32)] });
+    assertEquals(off.revoked_sponsor, 0);
+    // الدخول التالي لا يربطه بنطاق بريده
+    const me: any = await P.me({ ...f.tables.participants[0] });
+    assertEquals([me.success, f.tables.participants[0].organization_id], [true, null]);
+    // ولو رُبط آليًا (كما كان)، فالعودة لا تثبّت
+    f.tables.participants[0].organization_id = ORG;
+    await setStatus(ADMIN, { participant_id: U(32), status: 'enrolled' });
+    assertEquals([liveSponsor(f.tables, 32), f.pins], [[], []]);
+  } finally { f.restore(); }
+});
+
+// رمز الجهة بعد قرار الإدارة: كان يربطه بلا رعاية فيختفي النموذج ولا سبب. الآن يُرد بسببه قبل الربط
+Deno.test('رمز الجهة بعد سحب الإدارة رعايتها أو رفض طلب مقعده: يُرد 409 بسببه ولا ربط، وبلا قرار يربط ويثبّت', async () => {
+  const gone = sponsorRows(33).map((e) => ({ ...e, revoked_at: '2026-11-02T08:00:00Z', revoked_by: 'admin@example.sa' }));
+  const f = install(world([person(33, { organization_id: null }), person(34, { organization_id: null }), person(35, { organization_id: null })], gone, {
+    sponsor_requests: [{ id: 'sr-r', participant_id: U(34), organization_id: ORG, typed_name: 'جهة', kind: 'seats', status: 'rejected', reason: 'اكتمل العقد', created_at: '2026-11-01T08:00:00Z', decided_at: '2026-11-01T09:00:00Z' }],
+  }));
+  f.tables.organizations[0].invite_code = 'jiha-2026';
+  try {
+    for (const [n, word] of [[33, 'أنهت الإدارة'], [34, 'دفع فردي']] as [number, string][]) {
+      const e: any = await assertRejects(() => P.sponsorCode({ ...f.tables.participants.find((x) => x.id === U(n)) }, { sponsor_code: 'jiha-2026' }));
+      assertEquals([e.status, e.code, String(e.message).includes(word)], [409, 'sponsor_decided', true]);
+      assertEquals(f.tables.participants.find((x) => x.id === U(n))!.organization_id, null);
+    }
+    const ok: any = await P.sponsorCode({ ...f.tables.participants.find((x) => x.id === U(35)) }, { sponsor_code: 'jiha-2026' });
+    assertEquals([ok.success, liveSponsor(f.tables, 35).length], [true, 2]);
+    assertEquals(f.pins.map((x) => x.p_participant), [U(35)]);
+  } finally { f.restore(); }
+});
+
+// رفض قديم نقضه فعل صريح بعده: كان يمنع طلب المقعد الجديد، فيبقى المرعي المعاد على بوابة الدفع وأمامه الرفض القديم
+Deno.test('رفض قديم ثم رعاية صريحة ثم انسحاب ثم عقد ممتلئ عند العودة: طلب مقعد جديد بانتظار القرار', async () => {
+  const f = install(world([person(36), person(37)], [], {
+    sponsor_requests: [{ id: 'sr-old', participant_id: U(36), organization_id: ORG, typed_name: 'جهة', kind: 'seats', status: 'rejected', reason: 'اكتمل العقد', created_at: '2026-11-01T08:00:00Z', decided_at: '2026-11-01T09:00:00Z' }],
+  }));
+  f.tables.organizations[0].seats = 1;
+  try {
+    const r: any = await assignOrg(ADMIN, { participant_ids: [U(36)], organization_id: ORG });
+    assertEquals([r.pinned, liveSponsor(f.tables, 36).length], [1, 2]);
+    await setStatus(ADMIN, { participant_id: U(36), status: 'withdrawn', reason: 'انسحب لظرف عمل' });
+    assertEquals(await pinSponsorFor(U(37)), true);
+    await setStatus(ADMIN, { participant_id: U(36), status: 'enrolled' });
+    assertEquals(liveSponsor(f.tables, 36), []);
+    assertEquals(f.tables.sponsor_requests.filter((x) => x.participant_id === U(36)).map((x) => [x.kind, x.status]), [['seats', 'rejected'], ['seats', 'pending']]);
+    const a: any = await access(f.tables.participants[0]);
+    assertEquals([a.program, a.request?.status, a.request?.kind], [null, 'pending', 'seats']);
+  } finally { f.restore(); }
+});
+
+// قبول طلب مقعد: ما يرده التثبيت يُرد قبل إضافة المقعد، والمقعد المضاف يُرد إن لم يُستهلك (كان يزيد مع كل محاولة)
+Deno.test('قبول طلب مقعد وعقد الجهة انتهت مدته أو تعذّر الفحص: لا مقعد يُضاف مع أي محاولة، والطلب كما هو', async () => {
+  const f = install(world([person(38), person(39)], sponsorRows(39)));
+  Object.assign(f.tables.organizations[0], { seats: 1, contract_ends: '2026-11-01' });
+  try {
+    f.tables.sponsor_requests.push(claim('sr-late', 38, { request: { kind: 'seats', created_at: '2026-10-20T08:00:00Z' } }));
+    for (let i = 0; i < 3; i++) {
+      const e: any = await assertRejects(() => adminDecide(ADMIN, { id: 'sr-late', approve: true, reason: 'مقعد إضافي بقرار الجهة' }));
+      assertEquals([e.status, e.code, String(e.message).includes('مدة العقد')], [409, 'seat_blocked', true]);
+    }
+    assertEquals(f.tables.organizations[0].seats, 1);
+    // العقد يُمدد، والفحص يتعذّر لحظة القبول: المقعد المضاف يُرد
+    f.tables.organizations[0].contract_ends = null;
+    const rpc = (db as any).rpc;
+    (db as any).rpc = () => Promise.resolve({ data: null, error: { code: 'XX000', message: 'boom' } });
+    for (let i = 0; i < 2; i++) {
+      const e: any = await assertRejects(() => adminDecide(ADMIN, { id: 'sr-late', approve: true, reason: 'مقعد إضافي بقرار الجهة' }));
+      assertEquals([e.status, e.code], [409, 'seat_blocked']);
+    }
+    (db as any).rpc = rpc;
+    assertEquals(f.tables.organizations[0].seats, 1);
+    assertEquals((f.tables.audit_log || []).filter((x) => x.action === 'sponsor.seat-added'), []);
+    assertEquals(f.tables.sponsor_requests.find((x) => x.id === 'sr-late')!.status, 'pending');
+    // ثم يُقبل: مقعد واحد يُضاف ويُستهلك
+    const ok: any = await adminDecide(ADMIN, { id: 'sr-late', approve: true, reason: 'مقعد إضافي بقرار الجهة' });
+    assertEquals([ok.success, f.tables.organizations[0].seats, liveSponsor(f.tables, 38).length], [true, 2, 2]);
+    assertEquals((f.tables.audit_log || []).filter((x) => x.action === 'sponsor.seat-added').map((x) => [x.before.seats, x.after.seats]), [[1, 2]]);
+  } finally { f.restore(); }
+});
+
+Deno.test('قبول طلب مقعد وقد تحرر مقعد: يأخذه بلا إضافة إلى العقد', async () => {
+  const f = install(world([person(40)]));
+  f.tables.organizations[0].seats = 1;
+  try {
+    f.tables.sponsor_requests.push(claim('sr-free', 40, { request: { kind: 'seats' } }));
+    const ok: any = await adminDecide(ADMIN, { id: 'sr-free', approve: true, reason: 'مقعد إضافي بقرار الجهة' });
+    assertEquals([ok.success, f.tables.organizations[0].seats, liveSponsor(f.tables, 40).length], [true, 1, 2]);
+    assertEquals((f.tables.audit_log || []).filter((x) => x.action === 'sponsor.seat-added'), []);
+  } finally { f.restore(); }
+});
+
+// الدافع والمعفى المرتبطان بجهة عقدها ممتلئ: لا طلب مقعد عند عودتهما، ولا مقعد يُضاف بقبول طلب قديم
+const paidRows = (n: number, source = 'paid') => ['assessment', 'program'].map((item, i) => ({
+  id: `ent-${source}-${n}-${i}`, participant_id: U(n), item, source, organization_id: null, granted_by: source, note: null, value_cents: 0, currency: 'USD', revoked_at: null, created_at: '2026-10-01T08:00:00Z',
+}));
+Deno.test('رفع إيقاف دافع أو معفى وعقد جهته ممتلئ: لا تثبيت ولا طلب مقعد ولا بريد انتظار، وقبول طلب قديم لا يضيف مقعدًا', async () => {
+  const f = install(world([person(41, { status: 'suspended' }), person(42, { status: 'suspended' }), person(43)], [...paidRows(41), ...paidRows(42, 'grandfathered'), ...sponsorRows(43)]));
+  f.tables.organizations[0].seats = 1;
+  try {
+    await setStatus(ADMIN, { participant_ids: [U(41), U(42)], status: 'enrolled' });
+    assertEquals([f.pins, f.tables.sponsor_requests], [[], []]);
+    // ونقل الإدارة لهما إلى الجهة لا يعدّهما تثبيتًا ولا يفتح طلبًا
+    const r: any = await assignOrg(ADMIN, { participant_ids: [U(41), U(42)], organization_id: ORG });
+    assertEquals([r.pinned, f.pins, f.tables.sponsor_requests], [0, [], []]);
+    f.tables.sponsor_requests.push(claim('sr-paid', 41, { request: { kind: 'seats' } }));
+    const ok: any = await adminDecide(ADMIN, { id: 'sr-paid', approve: true, reason: 'مقعد إضافي بقرار الجهة' });
+    assertEquals([ok.success, f.tables.organizations[0].seats, liveSponsor(f.tables, 41)], [true, 1, []]);
+  } finally { f.restore(); }
+});
+
+// رسم البرنامج مستحق بالقاعدة التي يحكم بها access(): من سُحب إعفاؤه أو رُفض طلبه يُطالب بالدفع، ومن ينتظر قراره لا
+Deno.test('استحقاق رسم البرنامج كما يحكم access(): المسحوب والمرفوض عليهما الرسم، والمرعي والمنتظر لا', async () => {
+  const f = install(world([person(44), person(45), person(46), person(47)], [...sponsorRows(44), ...sponsorRows(47)], {
+    sponsor_requests: [
+      { id: 'sr-rej', participant_id: U(45), organization_id: ORG, typed_name: 'جهة', kind: 'seats', status: 'rejected', reason: 'اكتمل العقد', created_at: '2026-11-01T08:00:00Z', decided_at: '2026-11-01T09:00:00Z' },
+      { id: 'sr-wait', participant_id: U(46), organization_id: ORG, typed_name: 'جهة', kind: 'seats', status: 'pending', created_at: '2026-11-10T08:00:00Z' },
+    ],
+  }));
+  f.tables.organizations[0].seats = 1;
+  try {
+    await adminGrant(ADMIN, { participant_id: U(44), item: 'program', revoke: true });
+    const due = async (n: number) => [await programPaymentDue(U(n)), (await access(f.tables.participants.find((x) => x.id === U(n))) as any).program];
+    assertEquals(await due(44), [true, null]);
+    assertEquals(await due(45), [true, null]);
+    assertEquals(await due(46), [false, null]);
+    assertEquals(await due(47), [false, 'sponsor']);
   } finally { f.restore(); }
 });

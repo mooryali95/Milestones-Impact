@@ -7,7 +7,7 @@ import { assert, assertEquals } from 'jsr:@std/assert@1';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };
-const { db, hash, CONFIG } = await import('./core.ts');
+const { db, hash, CONFIG, WORKSHOP_STAGED_NOTE } = await import('./core.ts');
 const { ACTION_GATES } = (await import('./index.ts')) as any;
 const P = await import('./participant.ts');
 const V = await import('./activities.ts');
@@ -203,9 +203,34 @@ Deno.test('المنسحب يُرد 403 عن البرنامج وما قبله، �
       const r = await w.call('withdrawn', a, body);
       assertEquals([a, r.status, r.success], [a, 200, true]);
     }
-    // الرئيسية المجمّعة لا تسقط: ما خرج منه يعود برده، والاستبيان من الحساب
+    // الرئيسية المجمّعة لا تسقط: ما خرج منه يعود برده، وتقييم خدمة انعقدت والاستبيان باقيان
     const me = await w.call('withdrawn', 'me', { with_home: true });
-    assertEquals([me.status, me.preload.lab.code, me.preload.ratings.code, me.preload.sus.success], [200, 'out_of_program', 'out_of_program', true]);
+    assertEquals([me.status, me.preload.lab.code, me.preload.ratings.success, me.preload.sus.success], [200, 'out_of_program', true, true]);
+  } finally { w.restore(); }
+});
+
+// C: يبقى للمنسحب الاطلاع على مخرجاته وتقييم خدمة خبير انعقدت (GATE_KEPT)، وكل ما سواها من الفئتين مغلق عليه
+Deno.test('المنسحب: مخرجاته وتقييم خدمة انعقدت تمر ببوابة البرنامج، وكل فعل آخر قبل الاعتماد أو بعده يُرد', async () => {
+  const w = await world();
+  const { pre, program, kept } = ACTION_GATES;
+  try {
+    assertEquals([...kept].sort(), ['capstone.doc', 'capstone.get', 'f360.report', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
+    for (const a of kept) assert(pre.has(a) || program.has(a), a);
+    for (const a of kept) {
+      const r = await w.call('withdrawn', a, { kind: 'session', id: U(1), scores: {} });
+      assert(r.code !== 'out_of_program', `${a}: ${r.code}`);
+    }
+    assertEquals((await w.call('withdrawn', 'ratings.pending')).success, true);
+    // وتبقى لها بوابتها بعدها: ما في البرنامج نفسه بالاعتماد
+    w.tables.participants.find((x) => x.id === w.ps.pending.id)!.status = 'withdrawn';
+    for (const a of ['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export']) {
+      const r = await w.call('pending', a);
+      assertEquals([a, r.status, r.code], [a, 403, 'locked']);
+    }
+    for (const a of [...pre, ...program].filter((x: string) => !kept.has(x))) {
+      const r = await w.call('withdrawn', a, {});
+      assertEquals([a, r.status, r.code], [a, 403, 'out_of_program']);
+    }
   } finally { w.restore(); }
 });
 
@@ -301,9 +326,45 @@ Deno.test('إشعار الحجز: يُسجَّل لمن تفتح له مرحلت
   } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
 });
 
-// رابط الجلسة عن بعد في بريد الدعوة وملف تقويمها لمن اعتُمد مساره وحده، كأعضاء القاعة؛ ومن لم يُعتمد يُدعى بموعدها
-Deno.test('دعوة الجلسة عن بعد: الرابط لمن اعتُمد مساره، ومن ينتظر الاعتماد يُدعى بلا رابط، والمنسحب لا يُدعى', async () => {
+// إعادة جدولة موعد من خرج من البرنامج: كان التجاهل قبل إلغاء القديم فيبقى «محجوزًا» ويصله تذكيره، ولا يعرف أحد أن يلغيه
+Deno.test('إعادة جدولة لمن لم يعد أهلًا: القديم يُلغى، وتنبيه واحد للتشغيل بمعرّف الحجز بلا بيانات شخصية، وإعادتها ثانية لا تنبّه', async () => {
   const w = await world();
+  const saved = CONFIG.calcomSecret;
+  Object.assign(CONFIG, { calcomSecret: 'cal-secret' });
+  const sign = async (raw: string) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('cal-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const p = w.ps.approved;
+  const send = async (trigger: string, uid: string, prev: string | null, day: number) => {
+    const raw = JSON.stringify({ triggerEvent: trigger, payload: { uid, ...(prev ? { rescheduleUid: prev } : {}), metadata: { ref: `${p.id}.${REQ_C}` }, startTime: new Date(NOW + day * 864e5).toISOString(),
+      endTime: new Date(NOW + day * 864e5 + 18e5).toISOString(), videoCallData: { url: `https://meet.example.sa/${uid}` }, organizer: { email: 'coach@example.sa' }, attendees: [{ email: p.email }] } });
+    return await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': await sign(raw) })) as Row;
+  };
+  const alerts = () => w.tables.audit_log.filter((x) => x.action === 'system.alert' && String(x.entity_id).startsWith('booking_not_eligible:'));
+  try {
+    assertEquals(await send('BOOKING_CREATED', 'r1', null, 1), { success: true });
+    w.tables.participants.find((x) => x.id === p.id)!.status = 'withdrawn';
+    assertEquals(await send('BOOKING_RESCHEDULED', 'r2', 'r1', 2), { success: true, ignored: 'not_eligible' });
+    assertEquals(w.tables.coaching_sessions.map((x) => [x.external_id, x.status]), [['calcom:r1', 'cancelled']]);
+    assertEquals(alerts().map((x) => [x.entity_id, x.after.booking, x.after.previous, x.after.requirement, x.after.participant, x.after.reason]),
+      [['booking_not_eligible:calcom:r2', 'calcom:r2', 'calcom:r1', REQ_C, p.id, 'out_of_program']]);
+    // بلا اسم ولا بريد، لا للمشارك ولا للموجّه
+    assert(!JSON.stringify(alerts()[0].after).includes('@'));
+    assert(!JSON.stringify(alerts()[0].after).includes(p.full_name));
+    assertEquals(await send('BOOKING_RESCHEDULED', 'r3', 'r2', 3), { success: true, ignored: 'not_eligible' });
+    assertEquals(alerts().length, 1);
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.ignored').map((x) => x.entity_id), ['calcom:r2', 'calcom:r3']);
+    // وحجز جديد مستقل لمن مرحلته مقفلة ينبّه بنفسه
+    const q = w.ps.pending;
+    const raw = JSON.stringify({ triggerEvent: 'BOOKING_CREATED', payload: { uid: 'n1', metadata: { ref: `${q.id}.${REQ_C}` }, startTime: new Date(NOW + 864e5).toISOString(), endTime: new Date(NOW + 864e5 + 18e5).toISOString() } });
+    assertEquals(await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': await sign(raw) })), { success: true, ignored: 'not_eligible' });
+    assertEquals(alerts().map((x) => [x.entity_id, x.after.reason]), [['booking_not_eligible:calcom:r2', 'out_of_program'], ['booking_not_eligible:calcom:n1', 'stage_locked']]);
+  } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
+});
+
+// رابط الجلسة عن بعد في بريد الدعوة وملف تقويمها لمن تفتح له مرحلتها في رحلته، بقاعدة workshop.join؛ ومن لا يُدعى بموعدها
+async function invite(w: Awaited<ReturnType<typeof world>>) {
   const real = globalThis.fetch;
   const saved = CONFIG.resendKey;
   const mail: Row[] = [];
@@ -313,18 +374,47 @@ Deno.test('دعوة الجلسة عن بعد: الرابط لمن اعتُمد �
   }) as typeof fetch;
   Object.assign(CONFIG, { resendKey: 're_test' });
   try {
-    const r: any = await V.workshopInvite({ email: 'admin@example.sa' }, { id: WS });
-    assertEquals([r.total, r.sent], [4, 4]);
+    const r: any = await V.workshopInvite({ email: 'admin@example.sa' }, { id: WS, again: true });
     const ics = (m: Row) => new TextDecoder().decode(Uint8Array.from(atob(m.attachments[0].content), (c) => c.charCodeAt(0)));
-    const of = (who: keyof typeof w.ps) => mail.find((m) => m.to[0] === w.ps[who].email)!;
-    for (const who of ['approved', 'paid', 'grand'] as const) {
-      assert(of(who).html.includes('https://meet.example.sa/day1'), who);
-      assert(ics(of(who)).includes('https://meet.example.sa/day1'), who);
-    }
-    assert(!of('pending').html.includes('meet.example.sa'));
-    assert(!ics(of('pending')).includes('meet.example.sa'));
+    const of = (who: keyof typeof w.ps) => mail.find((m) => m.to[0] === w.ps[who].email);
+    const link = (who: keyof typeof w.ps) => {
+      const m = of(who)!;
+      const [inMail, inIcs] = [m.html.includes('https://meet.example.sa/day1'), ics(m).includes('https://meet.example.sa/day1')];
+      assertEquals(inMail, inIcs, who);
+      // ومن لا رابط له يُقال له إن الرابط في رحلته حين تُفتح مرحلتها، لا تعليمات القاعة
+      assertEquals(m.html.includes(WORKSHOP_STAGED_NOTE), !inMail, who);
+      return inMail;
+    };
+    return { r, of, link };
+  } finally { globalThis.fetch = real; Object.assign(CONFIG, { resendKey: saved }); }
+}
+
+Deno.test('دعوة الجلسة عن بعد: الرابط لمن تفتح له مرحلتها، ومن ينتظر الاعتماد ومرحلته مقفلة يُدعى بلا رابط، والمنسحب لا يُدعى', async () => {
+  const w = await world();
+  try {
+    const { r, of, link } = await invite(w);
+    assertEquals([r.total, r.sent], [4, 4]);
+    for (const who of ['approved', 'paid', 'grand'] as const) assertEquals([who, link(who)], [who, true]);
+    assertEquals(link('pending'), false);
     assertEquals(of('withdrawn'), undefined);
-  } finally { globalThis.fetch = real; Object.assign(CONFIG, { resendKey: saved }); w.restore(); }
+  } finally { w.restore(); }
+});
+
+// البريد والرحلة والانضمام قاعدة واحدة: من فتح الأدمن مرحلته قبل اعتماده يأخذ الرابط، والمعتمد ومرحلته مقفلة لا يأخذه
+// (كان يأخذه من البريد ويرده الانضمام فلا يُسجَّل حضوره)
+Deno.test('رابط الجلسة في البريد بحال مرحلتها في رحلة كل مدعو: فتح الأدمن يعطيه، ومتطلب سابق ناقص يحجبه كالانضمام', async () => {
+  const w = await world();
+  try {
+    w.tables.participant_stage_overrides.push({ participant_id: w.ps.pending.id, program_id: 'prog', stage_key: 'training', action: 'open' });
+    w.tables.stage_requirements.push({ id: U(990007), program_id: 'prog', stage_key: 'approval', code: 'P-CV', kind: 'auto', dimension: null, level: null, sort: 2, required: true, title_ar: 'السيرة الذاتية', config: {} });
+    for (const who of ['paid', 'grand'] as const) w.tables.participants.find((x) => x.id === w.ps[who].id)!.cv_path = 'cv/x.pdf';
+    const { link } = await invite(w);
+    assertEquals([link('pending'), link('approved'), link('paid'), link('grand')], [true, false, true, true]);
+    const j = await w.call('approved', 'workshop.join', { session_id: WS });
+    assertEquals([j.status, j.code], [403, 'locked']);
+    const k = await w.call('pending', 'workshop.join', { session_id: WS });
+    assertEquals([k.status, k.join_url], [200, 'https://meet.example.sa/day1']);
+  } finally { w.restore(); }
 });
 
 Deno.test('حساب العرض: رابط الجلسة ورمز الجهة وبدء 360 مغلقة عليه', async () => {

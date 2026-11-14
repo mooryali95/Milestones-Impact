@@ -9,7 +9,7 @@ import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, orgDomainIssue } from './domains.js';
-import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
+import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
 import { trackProject } from './capstone.js';
 import { labSummary } from './lab.js';
@@ -163,9 +163,15 @@ export async function assignOrg(a: Admin, b: Body) {
   }
   // ربط كل من كتب اسمًا معينًا في خانة الجهة دفعة واحدة
   let q = db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null });   // جهة العمل يكتبها المشارك ولا تُستبدل
+  // جهة كل منهم قبل الفعل: يُسجَّل معها القرار في سجله (recordOrgDecisions)، ومن كتب اسمًا بلا جهة قبله
+  const before = new Map<string, string | null>();
   if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
-  else if (ids.length) q = q.in('id', ids);
-  else throw new Fail('لم يُحدَّد مشاركون');
+  else if (ids.length) {
+    for (let i = 0; i < ids.length; i += 150) {
+      for (const r of (must(await db.from('participants').select('id, organization_id').in('id', ids.slice(i, i + 150))) ?? []) as any[]) before.set(String(r.id), r.organization_id ?? null);
+    }
+    q = q.in('id', ids);
+  } else throw new Fail('لم يُحدَّد مشاركون');
   const done = must(await q.select('id')) ?? [];
   // النقل أو الفك يُلغي إعفاء الراعي السابق: ما ثُبّت لجهة لا يبقى بعد مغادرتها
   // (الجهة الجديدة تثبّت إعفاءها عند أول دخول للمشارك، كالمعتاد في access())
@@ -177,8 +183,11 @@ export async function assignOrg(a: Admin, b: Body) {
     if (target) rv = rv.neq('organization_id', target.id);
     revoked += (must(await rv.select('id')) ?? []).length;
   }
+  // القرار في سجل كل مشارك قبل التثبيت (P1-06): الربط إليها يبقى فعلًا صريحًا ولو كان خارج البرنامج فلم يُثبَّت به شيء، فعودته
+  // تثبّت رعايتها؛ والفك أو النقل منها سحب لها ولو رُد مقعده بانسحابه، فلا يعيدها ربط آلي (النطاق أو الرمز) ولا عودته
+  await recordOrgDecisions(a.email, moved, before, target?.id || null);
   // الجهة الجديدة تثبّت إعفاءها لحظة الربط (لا عند أول دخول للمشارك). والنقل إليها فعل صريح يعيد رعايتها بعد سحب سابق
-  // أو رفض طلب مقعد فيها، بفحص المقاعد والعقد (P1-06)، ومنه العودة إلى جهة نُقل منها
+  // أو رفض طلب مقعد فيها، بفحص المقاعد والعقد (P1-06)، ومنه العودة إلى جهة نُقل منها. والعدّ لما أخذ مقعدًا وحده (SEATED)
   let pinned = 0;
   if (target) for (const id of moved) if (await pinSponsorFor(id)) pinned += 1;
   await audit('admin', a.email, 'participant.org', 'organizations', target?.id || 'none', null, { count: done.length, typed_name: b.typed_name || null, revoked_sponsor: revoked, pinned });
@@ -678,8 +687,12 @@ export async function setStatus(a: Admin, b: Body) {
         if (back?.length) await audit('admin', a.email, 'sponsor.seat-returned', 'organizations', back[0].organization_id, null, { participant: pid });
       }
     }
-    // العودة إلى البرنامج تعيد تثبيت رعاية جهته بفحص المقاعد (المقعد المردود ليس قرارًا بسحبها، P1-06)
-    if (!inProgram(was.get(pid)) && inProgram(b.status)) await pinSponsorFor(pid, { auto: true });
+    // العودة إلى البرنامج تعيد تثبيت رعاية جهته بفحص المقاعد (المقعد المردود ليس قرارًا بسحبها، P1-06)، لمن ينقصه بند
+    // وحده كما في access(): الدافع والمعفى لا يأخذان مقعدًا ولا يُفتح لهما طلب مقعد
+    if (!inProgram(was.get(pid)) && inProgram(b.status)) {
+      const { data: live } = await db.from('entitlements').select('item').eq('participant_id', pid).is('revoked_at', null);
+      if (ITEMS.some((i) => !(live || []).some((x: any) => x.item === i))) await pinSponsorFor(pid, { auto: true });
+    }
   }
   // D05: الحالة لا تُصدر شهادة؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات (final.ts)
   return { success: true, certificate: null, done: todo.length, skipped: ids.length - todo.length };
