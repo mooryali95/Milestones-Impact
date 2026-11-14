@@ -2,11 +2,11 @@ name: Nightly database backup
 
 # النسخ الاحتياطي خارج GitHub (D09): scripts/ops/backup.sh نفسه الذي يشغله المالك من جهازه أثناء حجب Actions.
 # يفرّغ مخططات leaders وpublic وauth ودلو leaders-private، ويشفّر عند المصدر بالمفتاح العام، ويرفع إلى R2
-# مع بيان بالبصمات وعدد الصفوف، ويبقي نسخة مشفرة في أدوات السير 30 يومًا طبقة ثانية.
+# مع بيان بالبصمات وعدد الصفوف. نسخة أدوات السير (طبقة ثانية 30 يومًا) لا تُرفع ما دام المستودع عامًا.
 # الأسرار:
 #   SUPABASE_DB_URL         سلسلة الاتصال (Session pooler)
-#   BACKUP_PUBLIC_KEY       المفتاح العام (gpg --armor --export). المفتاح الخاص عند المالك خارج GitHub وCloudflare
-#   BACKUP_PASSPHRASE       التشفير المتماثل القديم، حتى يُضبط المفتاح العام فقط
+#   BACKUP_PUBLIC_KEY       كتلة مفتاح عام أو أكثر (gpg --armor --export). المفتاح الخاص عند المالك خارج GitHub وCloudflare
+#   BACKUP_PASSPHRASE       التشفير المتماثل القديم، يُحذف بعد أول نسخة بالمفتاح العام (RUNBOOK.md §4)
 #   SUPABASE_SERVICE_ROLE_KEY  نسخ دلو الملفات الخاصة
 #   R2_ACCOUNT_ID وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET  رمز مقصور على الدلو، وقفل احتفاظ في الدلو
 # الاستعادة والتمرين: RUNBOOK.md §4 وscripts/ops/restore-drill.sh.
@@ -35,28 +35,26 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       BACKUP_OUT: backup-out
     steps:
-      - name: Skip without secrets
-        id: gate
+      # سرّ ناقص يُفشل التشغيل فيصل بريد الفشل، ولا يمر أخضر بلا نسخة: بعد حذف BACKUP_PASSPHRASE يصير ضياع
+      # BACKUP_PUBLIC_KEY ليلة حمراء لا تخطيًا صامتًا
+      - name: Required secrets are set
         run: |
           if [ -z "$SUPABASE_DB_URL" ] || { [ -z "$BACKUP_PUBLIC_KEY" ] && [ -z "$BACKUP_PASSPHRASE" ]; }; then
-            echo "::notice::SUPABASE_DB_URL or an encryption key (BACKUP_PUBLIC_KEY, or BACKUP_PASSPHRASE) is not set; no backup taken."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::error::SUPABASE_DB_URL or an encryption key (BACKUP_PUBLIC_KEY) is not set; no backup taken."
+            exit 1
           fi
       - uses: actions/checkout@v7
-        if: steps.gate.outputs.skip != 'true'
       - uses: actions/setup-node@v7
-        if: steps.gate.outputs.skip != 'true'
         with:
           node-version: '20'
       - name: Dump, encrypt at the source, and upload to R2
-        if: steps.gate.outputs.skip != 'true'
         run: bash scripts/ops/backup.sh
       # الطبقة الثانية تُحفظ ولو فشل الرفع إلى R2 (ops-2: فشل 409 فضاعت معه)، والمشفّر والبيان وحدهما: تفريغ قطعه
       # خطأ قبل تشفيره يبقى صريحًا في المجلد ولا يُرفع
       # في مستودع عام أدوات السير يحمّلها أي حساب GitHub: النسخة المشفّرة لا تُنشر هناك، والطبقة الباقية R2 وحده.
       # تعود هذه الطبقة تلقائيًا حين يعود المستودع خاصًا
       - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() && steps.gate.outputs.skip != 'true' && github.repository_visibility != 'public' }}
+        if: ${{ !cancelled() && github.repository_visibility != 'public' }}
         with:
           name: backup-${{ github.run_id }}
           path: |

@@ -72,7 +72,8 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
   it('السكربتان سليمان نحويًا، ويشفّران بالمفتاح العام، ويرفضان حفظ نسخة غير مشفرة', () => {
     for (const f of ['scripts/ops/backup.sh', 'scripts/ops/restore-drill.sh']) expect(bash(f).status, f).toBe(0);
     const b = read('scripts/ops/backup.sh');
-    expect(b).toMatch(/--trust-model always --recipient-file "\$key" --encrypt/);
+    expect(b).toMatch(/--trust-model always "\$\{RCPT\[@\]\}" --encrypt/);
+    expect(b).toMatch(/RCPT\+=\(--recipient-file "\$k"\)/);
     expect(b).toContain('لا مفتاح عام ولا عبارة مرور: لا تُحفظ نسخة غير مشفرة');
     expect(b).toMatch(/BACKUP_SCHEMAS:-leaders,public,auth/);
     expect(b).toMatch(/'auth\.users', \(select count\(\*\) from auth\.users\)/);
@@ -115,10 +116,55 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
       rmSync(out, { recursive: true, force: true });
     }
   });
+  // نقل التشفير إلى المفتاح العام (2026-11-14): gpg بملف فيه كتلتان يشفّر للأولى وحدها بصمت، فمفتاح احتياطي يُلصق
+  // مع مفتاح المالك في السر كان سيُهمل. السكربت الحقيقي وgpg الحقيقي بمفتاحين مولّدين للاختبار، بلا قاعدة ولا R2
+  const hasGpg = spawnSync('gpg', ['--version']).status === 0;
+  it.skipIf(process.platform !== 'linux' || !hasGpg)('يشفّر لكل مفتاح في BACKUP_PUBLIC_KEY ويكتب بصماتها، فيفك كل مستلم وحده', () => {
+    const base = mkdtempSync(join(tmpdir(), 'mi-gpg-'));
+    const bin = join(base, 'bin'); const out = join(base, 'out');
+    const homes = ['a', 'b'].map((n) => join(base, n));
+    for (const d of [bin, out, ...homes]) spawnSync('mkdir', ['-m', '700', '-p', d]);
+    const gpg = (home, args, input) => spawnSync('gpg', ['--batch', '--pinentry-mode', 'loopback', '--passphrase', '', ...args], { env: { ...process.env, GNUPGHOME: home }, encoding: 'utf8', input });
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    try {
+      const fprs = homes.map((h, i) => {
+        expect(gpg(h, ['--quick-gen-key', `MI Backups TEST ${i}`, 'future-default', 'default', 'never']).status).toBe(0);
+        return gpg(h, ['--with-colons', '--list-keys']).stdout.split('\n').find((l) => l.startsWith('fpr')).split(':')[9];
+      });
+      const bundle = homes.map((h) => gpg(h, ['--armor', '--export']).stdout).join('');
+      expect(bundle.match(/BEGIN PGP PUBLIC KEY BLOCK/g)).toHaveLength(2);
+      tool('pg_dump', '[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; echo "dump-payload"');
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      const run = (key) => spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: base, GNUPGHOME: join(base, 'ci'), SUPABASE_DB_URL: 'postgres://fake', BACKUP_PUBLIC_KEY: key, BACKUP_PASSPHRASE: 'must-not-be-used', BACKUP_OUT: out },
+      });
+      spawnSync('mkdir', ['-m', '700', '-p', join(base, 'ci')]);
+      const r = run(bundle);
+      expect(r.status, r.stderr).toBe(0);
+      const m = JSON.parse(r.stdout.trim().split('\n').pop());
+      expect(m.encryption).toBe('public-key');
+      expect(m.recipients).toEqual(fprs);
+      const file = join(out, m.files[0].key.split('/').pop());
+      for (const h of homes) expect(gpg(h, ['-d', file]).stdout.trim(), h).toBe('dump-payload');
+      // كتلة تالفة تُفشل النسخ قبل التفريغ، ولا يسقط إلى العبارة
+      const bad = run('-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nnot a key\n-----END PGP PUBLIC KEY BLOCK-----\n');
+      expect(bad.status).not.toBe(0);
+      expect(bad.stderr).toContain('لا تُقرأ مفتاحًا عامًا');
+    } finally {
+      for (const h of [...homes, join(base, 'ci')]) spawnSync('gpgconf', ['--kill', 'all'], { env: { ...process.env, GNUPGHOME: h } });
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 30_000);
+  it('backup.yml يفشل بسرّ ناقص ولا يمر أخضر بلا نسخة', () => {
+    const b = read('.github/workflows/backup.yml');
+    expect(b).not.toMatch(/skip=true/);
+    expect(b).toMatch(/::error::SUPABASE_DB_URL or an encryption key[^\n]*\n\s*exit 1/);
+  });
   it('النسخة المشفرة تُحفظ في أدوات السير ولو فشل الرفع إلى R2، ولا يُرفع منها غير المشفر والبيان', () => {
     const b = read('.github/workflows/backup.yml');
     const step = b.slice(b.indexOf('- uses: actions/upload-artifact'));
-    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && steps\.gate\.outputs\.skip != 'true' && github\.repository_visibility != 'public' \}\}/);
+    expect(step).toMatch(/if: \$\{\{ !cancelled\(\) && github\.repository_visibility != 'public' \}\}/);
     expect(step).toContain('backup-out/*.gpg');
     expect(step).toContain('backup-out/manifest-*.json');
     expect(step).not.toMatch(/path: backup-out\/\s*$/m);

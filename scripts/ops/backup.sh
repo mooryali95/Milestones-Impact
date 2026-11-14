@@ -3,7 +3,7 @@
 #   SUPABASE_DB_URL=... BACKUP_PUBLIC_KEY_FILE=backup-public.asc R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... \
 #   R2_SECRET_ACCESS_KEY=... R2_BUCKET=mi-backups scripts/ops/backup.sh
 # يفرّغ مخططات leaders وpublic وauth (ومعها دلو leaders-private إن وُجد SUPABASE_SERVICE_ROLE_KEY)،
-# ويشفّر عند المصدر بالمفتاح العام فلا يحمل المشغّل ما يفك التشفير، ويرفع إلى R2 مع بيان بالبصمات
+# ويشفّر عند المصدر بالمفتاح العام (لمستلم أو أكثر) فلا يحمل المشغّل ما يفك التشفير، ويرفع إلى R2 مع بيان بالبصمات
 # وعدد الصفوف يقارنه تمرين الاستعادة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare.
 # خيارات البيئة: BACKUP_SCHEMAS (افتراضيًا leaders,public,auth)، وBACKUP_PREFIX (daily، أو archive لتفريغ مرة واحدة
 # مثل مخطط sspdf في D13)، وBACKUP_OUT (مجلد تبقى فيه النسخ المشفرة، افتراضيًا مجلد مؤقت يُحذف).
@@ -32,11 +32,35 @@ pgtool() {   # pg_dump/psql من الإصدار 17 محليًا، وإلا من 
   else docker run --rm -i -e PGCONNECT_TIMEOUT=30 postgres:17 "$tool" "$@"; fi
 }
 
+# المستلمون: كتلة مفتاح عام أو أكثر في BACKUP_PUBLIC_KEY (أو BACKUP_PUBLIC_KEY_FILE): مفتاح المالك، ومفتاح احتياطي
+# اختياري عند شخص ثانٍ أو مختوم، فلا يضيع كل شيء بضياع مفتاح واحد. ملف واحد فيه كتلتان يشفّر به gpg للأولى وحدها
+# بصمت (جُرّب على gpg 2.4)، فتُفصل الكتل ويُمرَّر كلٌّ بـ --recipient-file، وتُكتب بصماتها في البيان (recipients).
+# كتلة لا تُقرأ مفتاحًا، أو مفتاح بلا قدرة تشفير، يُفشل النسخ قبل التفريغ.
+RCPT=()
+RECIPIENTS="[]"
+if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
+  src="${BACKUP_PUBLIC_KEY_FILE:-$WORK/public.asc}"
+  [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || printf '%s\n' "$BACKUP_PUBLIC_KEY" > "$src"
+  mkdir -p "$WORK/keys"
+  awk -v d="$WORK/keys" '/-----BEGIN PGP PUBLIC KEY BLOCK-----/ { n++; f = sprintf("%s/k%02d.asc", d, n) } n { print > f }' "$src"
+  fprs=""
+  for k in "$WORK"/keys/k*.asc; do
+    [ -f "$k" ] || continue
+    info="$(gpg --batch --with-colons --show-keys "$k" 2>/dev/null || true)"
+    fpr="$(printf '%s\n' "$info" | awk -F: '$1 == "fpr" { print $10; exit }')"
+    caps="$(printf '%s\n' "$info" | awk -F: '$1 == "pub" { print $12; exit }')"
+    [ -n "$fpr" ] || { echo "كتلة في BACKUP_PUBLIC_KEY لا تُقرأ مفتاحًا عامًا ($(basename "$k")): الصق ناتج gpg --armor --export كاملًا" >&2; exit 1; }
+    case "$caps" in *E*) ;; *) echo "المفتاح $fpr بلا مفتاح فرعي صالح للتشفير (منتهٍ أو مبطَل أو للتوقيع وحده)" >&2; exit 1 ;; esac
+    RCPT+=(--recipient-file "$k")
+    fprs="$fprs${fprs:+,}\"$fpr\""
+  done
+  [ "${#RCPT[@]}" -gt 0 ] || { echo "BACKUP_PUBLIC_KEY بلا كتلة BEGIN PGP PUBLIC KEY BLOCK" >&2; exit 1; }
+  RECIPIENTS="[$fprs]"
+fi
+
 encrypt() {   # $1 الملف الصريح ← $1.gpg
-  if [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || [ -n "${BACKUP_PUBLIC_KEY:-}" ]; then
-    local key="${BACKUP_PUBLIC_KEY_FILE:-$WORK/public.asc}"
-    [ -n "${BACKUP_PUBLIC_KEY_FILE:-}" ] || printf '%s\n' "$BACKUP_PUBLIC_KEY" > "$key"
-    gpg --batch --yes --quiet --trust-model always --recipient-file "$key" --encrypt -o "$1.gpg" "$1"
+  if [ "${#RCPT[@]}" -gt 0 ]; then
+    gpg --batch --yes --quiet --trust-model always "${RCPT[@]}" --encrypt -o "$1.gpg" "$1"
     MODE=public-key
   elif [ -n "${BACKUP_PASSPHRASE:-}" ]; then
     echo "::warning::لا مفتاح عام (BACKUP_PUBLIC_KEY)، فالتشفير متماثل بعبارة مرور تحملها بيئة التشغيل. اضبط المفتاح العام (D09)." >&2
@@ -87,7 +111,7 @@ fi
 # ── البيان ──
 manifest="$OUT/manifest-$TAG-$STAMP.json"
 {
-  printf '{"at":"%s","day":"%s","prefix":"%s","schemas":"%s","encryption":"%s","rows":%s,"files":[' "$(date -u +%FT%TZ)" "$DAY" "$PREFIX" "$SCHEMAS" "$MODE" "$ROWS"
+  printf '{"at":"%s","day":"%s","prefix":"%s","schemas":"%s","encryption":"%s","recipients":%s,"rows":%s,"files":[' "$(date -u +%FT%TZ)" "$DAY" "$PREFIX" "$SCHEMAS" "$MODE" "$RECIPIENTS" "$ROWS"
   sep=""
   for f in "${files[@]}"; do printf '%s{"key":"%s/%s","sha256":"%s","bytes":%s}' "$sep" "$PREFIX" "$(basename "$f")" "$(sha "$f")" "$(bytes "$f")"; sep=","; done
   printf ']}\n'
