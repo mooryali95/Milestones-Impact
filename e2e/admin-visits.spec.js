@@ -132,3 +132,34 @@ test('جاهزية الإطلاق: البنود الناقصة تنقل إلى �
   await card.getByRole('button', { name: 'اضبطه' }).click();
   await expect(page).toHaveURL(/#\/leaders\/certs/);
 });
+
+test('من المنظومة إلى الجهة إلى الدفعة: الناقص بأسمائه يفتح ملف كلٍّ منها، وجاهزية الجهات سطر لكل جهة', async ({ page }) => {
+  await setup(page, {
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
+    'admin.orgs': { success: true, unassigned: { total: 0, typed: [] }, orgs: [
+      { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara', seats: 40, contract_ends: '2099-01-01', logo: 'x', stats: { total: 29, pending_approval: 12 }, access: { state: 'none' } },
+      { id: 'o2', name: 'منظومة', status: 'active', invite_code: 'mnz', seats: 20, contract_ends: '2099-01-01', logo: 'x', stats: { total: 5, pending_approval: 0 }, access: { state: 'active', n: 1 } },
+      { id: 'o3', name: 'جهة موقوفة', status: 'paused', stats: { total: 0 } },
+    ] },
+    'admin.health': { success: true, missing_migrations: [], missing_secrets: [], mail: { today: 0, cap: 80 }, readiness: [
+      { key: 'cohort-per-org', ok: false, where: 'programs', label: 'جهات فعّالة بلا دفعة مفتوحة أو جارية: منظومة', refs: [{ kind: 'org', id: 'o2', name: 'منظومة' }] },
+      { key: 'advisor', ok: false, where: 'programs', label: 'دفعات جهات بلا مستشار أساسي: دفعة سفراء', refs: [{ kind: 'cohort', id: 'c1', name: 'دفعة سفراء' }] },
+    ] },
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  const launch = page.getByRole('region', { name: 'جاهزية الإطلاق' });
+  // ما يسمّي جهة أو دفعة يفتح ملفها مباشرة بدل التبويب العام
+  await expect(launch.getByRole('button', { name: 'اضبطه' })).toHaveCount(0);
+  await expect(launch.getByRole('link', { name: 'دفعة سفراء' })).toHaveAttribute('href', '#/leaders/programs/c1');
+  await expect(launch.getByRole('link', { name: 'منظومة' })).toHaveAttribute('href', '#/leaders/orgs/o2');
+  // الجهات الفعّالة وحدها، والأكثر نقصًا أولًا
+  const orgs = page.getByRole('region', { name: 'جاهزية الجهات' });
+  await expect(orgs).toContainText('1 من 2 جاهزة');
+  await expect(orgs.locator('li')).toHaveCount(2);
+  await expect(orgs.locator('li').first()).toContainText('سفراء');
+  await expect(orgs.locator('li').first()).toContainText('منسق الجهة، الاعتماد');
+  await expect(orgs).not.toContainText('جهة موقوفة');
+  await orgs.getByRole('button', { name: 'سفراء' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);
+});

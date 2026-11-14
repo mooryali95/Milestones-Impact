@@ -63,6 +63,8 @@ export function setupReadiness({ instruments = [], certificate = null, defaultPr
 // موعد قادم أو حديث (آخر 14 يومًا)، والجلسة بلا دفعة تعمّ الدفعات
 const SESSION_WINDOW_MS = 14 * 864e5;
 const missingIn = (rows) => rows.filter((r) => !r.has).map((r) => r.name);
+// ما ينقص بمعرّفه ونوعه (جهة أو دفعة): تفتح اللوحة ملف كلٍّ منها مباشرة. لا يدخل الحكم ولا النص، فالبوابات لا تتأثر
+const refsIn = (rows) => rows.filter((r) => !r.has && r.id).map((r) => ({ kind: r.kind, id: r.id, name: r.name }));
 // jsonb يصل كائنًا من العميل، وقد يصل نصًا من الاستعلام المباشر للبوابات
 const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
 
@@ -73,21 +75,21 @@ const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.p
 export function launchReadiness({ organizations = [], cohorts = [], sessions = [], finalEval = null } = {}, now = Date.now()) {
   const orgCohorts = cohorts.filter((c) => c.organization_id && LIVE.includes(c.status));
   const perOrg = organizations.filter((o) => o.status === 'active')
-    .map((o) => ({ name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.includes(c.status)) }));
-  const advisor = orgCohorts.map((c) => ({ name: c.name, has: !!c.advisor_expert_id }));
+    .map((o) => ({ kind: 'org', id: o.id, name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.includes(c.status)) }));
+  const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id }));
   const recent = sessions.filter((w) => w.active && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS);
   const dated = orgCohorts.map((c) => ({
-    name: c.name,
+    kind: 'cohort', id: c.id, name: c.name,
     has: recent.some((w) => !w.cohort_id || w.cohort_id === c.id) || Object.values(asJson(c.delivery) || {}).some((d) => d?.format === 'handbook'),
   }));
-  const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ name: c.name, has: !!c.content_release }));
+  const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   const fe = asJson(finalEval);
   const finalSaved = fe != null && JSON.stringify(fe) !== '{}';
   const noOrgCohort = 'لا دفعة جهة مفتوحة أو جارية بعد';
   const judge = (rows, empty, bad, good) => {
     if (!rows.length) return { ok: false, label: empty };
     const miss = missingIn(rows);
-    return { ok: !miss.length, label: miss.length ? `${bad}: ${miss.join('، ')}` : good(rows.length) };
+    return { ok: !miss.length, label: miss.length ? `${bad}: ${miss.join('، ')}` : good(rows.length), ...(miss.length ? { refs: refsIn(rows) } : {}) };
   };
   return [
     { key: 'cohort-per-org', check: 'm2.cohort-per-org', where: 'programs',
