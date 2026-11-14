@@ -5,6 +5,10 @@
 // لكل معلومة مصدر واحد: الموازنة من «الموارد والتكلفة»، والمنافع من «سجل المنافع»، والمخاطر من «سجل المخاطر».
 // يعمل على الوثيقة كما يبنيها الخادم (docFor) وعلى لقطة الوثيقة المعتمدة معًا، فلا يمس الخادم ولا القاعدة.
 import { norm, parseNumber } from './capstone.js';
+import { countAr } from './labels.js';
+
+// التاريخ بصيغة 2026-03-15 داخل جملة عربية: يُعزل اتجاهه (LRI…PDI) فلا تنقلب أجزاؤه
+const ltr = (v) => (v ? `\u2066${v}\u2069` : '·');
 
 // الأبعاد الخمسة لحالة العمل، والفصول التي يُبنى منها كل بعد
 // المرجع: Five Case Model (HM Treasury Green Book)
@@ -85,7 +89,7 @@ export function charterData(doc) {
     ['المشكلة أو الفرصة', c('problem')],
     ['داخل النطاق', c('in_scope')],
     ['خارج النطاق', c('out_scope')],
-    ['المدة', c('start') || c('end') ? `${c('start') || '·'} إلى ${c('end') || '·'}` : null],
+    ['المدة', c('start') || c('end') ? `${ltr(c('start'))} إلى ${ltr(c('end'))}` : null],
     ['الموازنة', budget],
     ['مصدر التمويل', text(doc, 'cost-plan', 'funding')],
     ['أهم المنافع', benefits.length ? benefits.map((x) => `${x.title}${x.baseline || x.target ? ` (من ${x.baseline || '·'} إلى ${x.target || '·'})` : ''}`).join('؛ ') : null],
@@ -149,10 +153,10 @@ export function businessCase(doc) {
   const plan = tableOf(doc, 'evidence-plan', 'plan');
   add(M, [
     ['من يقرر', text(doc, 'governance', 'structure')],
-    ['المدة', text(doc, 'initiative-charter', 'start') ? `${text(doc, 'initiative-charter', 'start')} إلى ${text(doc, 'initiative-charter', 'end') || '·'}` : null],
-    ['الخطة', [milestones?.rows.length ? `${milestones.rows.length} معلمًا` : null, activities?.rows.length ? `${activities.rows.length} نشاطًا في الجدول` : null].filter(Boolean).join(' و') || null],
+    ['المدة', text(doc, 'initiative-charter', 'start') ? `${ltr(text(doc, 'initiative-charter', 'start'))} إلى ${ltr(text(doc, 'initiative-charter', 'end'))}` : null],
+    ['الخطة', [milestones?.rows.length ? countAr(milestones.rows.length, 'معلم واحد', 'معلمان', 'معالم', 'معلمًا') : null, activities?.rows.length ? `${countAr(activities.rows.length, 'نشاط واحد', 'نشاطان', 'أنشطة', 'نشاطًا')} في الجدول` : null].filter(Boolean).join('، و') || null],
     ['المخاطر العالية', risks.length ? risks.map((x) => `${x.title}${x.owner ? ` (المالك: ${x.owner})` : ''}`).join('؛ ') : null],
-    ['القياس', plan?.rows.length ? `${plan.rows.length} مؤشرًا بخطة قياس` : null],
+    ['القياس', plan?.rows.length ? `${countAr(plan.rows.length, 'مؤشر واحد', 'مؤشران', 'مؤشرات', 'مؤشرًا')} بخطة قياس` : null],
   ]);
   return out;
 }

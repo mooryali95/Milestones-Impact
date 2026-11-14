@@ -214,6 +214,8 @@ export function capstoneReport(doc) {
   const m = doc.meta || {};
   const secs = doc.sections || [];
   const approved = m.status === 'approved';
+  // مثال محلول (guide.js): وثيقة تعليمية كاملة، بلا تنبيه المسودة ولا فحوص ولا اعتماد
+  const example = !!m.example;
   const count = (key, field) => ((secs.find((s) => s.key === key)?.fields || []).find((f) => f.key === field)?.value || []).filter(filled).length;
   const charter = Object.fromEntries((secs.find((s) => s.key === 'initiative-charter')?.fields || []).map((f) => [f.key, f.value]));
 
@@ -227,15 +229,15 @@ export function capstoneReport(doc) {
   ]));
 
   body += section('Executive summary', 'الملخص التنفيذي', `
-    ${doc.summary ? callout('رسالة القائد', doc.summary) : ''}
+    ${doc.summary ? callout(example ? 'عن المثال' : 'رسالة القائد', doc.summary) : ''}
     ${points([
       charter.objective && raw(`<b>الهدف الاستراتيجي:</b> ${esc(charter.objective)}`),
       charter.problem && raw(`<b>المشكلة أو الفرصة:</b> ${esc(charter.problem)}`),
-      (m.start || m.end) && raw(`<b>المدة:</b> ${esc(m.start || '·')} إلى ${esc(m.end || '·')}`),
+      (m.start || m.end) && raw(`<b>المدة:</b> <bdi dir="ltr">${esc(m.start || '·')}</bdi> إلى <bdi dir="ltr">${esc(m.end || '·')}</bdi>`),
       m.sponsor && raw(`<b>الراعي:</b> ${esc(m.sponsor)}`),
       doc.cost && raw(`<b>التكلفة:</b> ${esc(money(doc.cost.withContingency))} مع احتياطي ${esc(doc.cost.contingency || 0)}%`),
     ].filter(Boolean), '')}
-    ${approved ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+    ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
 
   body += charterBlock(doc);
   body += caseBlock(doc);
@@ -247,7 +249,7 @@ export function capstoneReport(doc) {
     if (s.key === 'cost-plan') body += section('Cost summary', 'ملخص التكلفة', costBlock(doc.cost));
   });
 
-  if (!approved && (doc.checks || []).length) {
+  if (!approved && !example && (doc.checks || []).length) {
     body += section('Coherence', 'فحوص الاتساق بين الفصول', `<ul class="cp-check">${doc.checks.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${esc(c.title)}${c.detail ? `<small>${esc(c.detail)}</small>` : ''}</li>`).join('')}</ul>`,
       'يفحصها النظام آليًا: كل حزمة لها مالك وتكلفة، وكل منفعة لها خط أساس وخطة قياس، والجدول داخل مدة المبادرة.');
   }
@@ -280,11 +282,13 @@ export function capstoneReport(doc) {
   return {
     meta: {
       id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document',
-      eyebrow: 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
-      subtitle: `وثيقة ${m.scope_title ? `${m.scope_title} ` : ''}مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
+      eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
+      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة ${m.scope_title ? `${m.scope_title} ` : ''}مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['القائد', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
-      confidential: 'سري: مخصص للقائد وجهته ومستشاره',
-      closing: approved
+      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'سري: مخصص للقائد وجهته ومستشاره',
+      closing: example
+        ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع جهتك، وقارن بنيتها بهذا المثال.'
+        : approved
         ? 'وثيقة معتمدة. تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.'
         : 'نسخة عمل تُبنى آليًا من فصول المبادرة لحظة إصدارها.',
     },
