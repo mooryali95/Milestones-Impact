@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
@@ -1350,7 +1350,7 @@ export async function lateMilestoneNotices(limit = 200) {
 }
 
 export async function reminders(b: Record<string, any>) {
-  if (!CONFIG.cronSecret || b.secret !== CONFIG.cronSecret) throw new Fail('غير مصرّح', 403, 'forbidden');
+  if (!secretEquals(b.secret, CONFIG.cronSecret)) throw new Fail('غير مصرّح', 403, 'forbidden');
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const { data: people } = await db.from('participants')
     .select('id, full_name, email, status')
