@@ -221,6 +221,20 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
       rmSync(base, { recursive: true, force: true });
     }
   }, 30_000);
+  it('سير حذف أدوات النسخ: يدوي، ولا يحذف بلا confirm=DELETE، ولا يمس إلا أسماء نسخ القاعدة، ويفشل إن بقي شيء', () => {
+    const p = read('.github/workflows/purge-backup-artifacts.yml');
+    expect(p).toMatch(/on:\n\s+workflow_dispatch:/);
+    expect(p).not.toMatch(/\n\s+(schedule|push|pull_request):/);
+    expect(p).toMatch(/permissions:\n\s+actions: write\n/);
+    expect(p).toContain("default: 'dry-run'");
+    expect(p).toContain('if [ "$CONFIRM" != "DELETE" ]');
+    expect(p).toContain('CONFIRM: ${{ inputs.confirm }}');          // المدخل في البيئة لا في نص الأمر
+    expect(p).not.toMatch(/run: \|[\s\S]*\$\{\{ inputs\./);
+    expect(p).toContain('[ "$left" = 0 ]');
+    const re = new RegExp(p.match(/MATCH: '([^']+)'/)[1]);
+    for (const n of ['backup-43382482794', 'leaders-2026-11-01.dump.gpg']) expect(re.test(n), n).toBe(true);
+    for (const n of ['playwright-traces', 'ci-pass-1d462b38', 'integration-pass-abc', 'backup-', 'backup-12x', 'leaders-2026-11-01.dump']) expect(re.test(n), n).toBe(false);
+  });
   it('backup.yml يثبّت age قبل النسخ', () => {
     const b = read('.github/workflows/backup.yml');
     expect(b.indexOf('name: Install age')).toBeGreaterThan(-1);

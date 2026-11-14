@@ -1,0 +1,40 @@
+name: Delete database backup artifacts
+
+# في مستودع عام أدوات السير يحمّلها أي حساب GitHub. نسخ القاعدة المشفّرة التي رُفعت أدواتٍ قبل #316 (1 إلى 13 نوفمبر)
+# تُحذف هنا، ونسخ كل يوم منذ 10 نوفمبر محفوظة في R2 (RUNBOOK.md §4). يحذف ما يطابق اسم نسخة القاعدة وحده:
+# backup-<رقم التشغيل> وleaders-<التاريخ>.dump.gpg، ويطبع ما يطابق قبل الحذف وما بقي بعده، ويفشل إن بقي شيء.
+# بلا confirm=DELETE يطبع القائمة ولا يحذف شيئًا. ويصلح بعدها كلما رُفعت نسخة أداةً خطأً.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'DELETE to delete; anything else lists the matching artifacts only'
+        required: true
+        default: 'dry-run'
+
+permissions:
+  actions: write
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      CONFIRM: ${{ inputs.confirm }}
+      MATCH: '^(backup-[0-9]+|leaders-[0-9]{4}-[0-9]{2}-[0-9]{2}\.dump\.gpg)$'
+    steps:
+      - name: List, then delete, database backup artifacts
+        run: |
+          list() { gh api --paginate "repos/$REPO/actions/artifacts?per_page=100" --jq ".artifacts[] | select(.name | test(env.MATCH)) | [.id, .name, .size_in_bytes, .created_at] | @tsv"; }
+          list > targets.tsv
+          echo "Matching artifacts: $(wc -l < targets.tsv)"
+          cat targets.tsv
+          if [ "$CONFIRM" != "DELETE" ]; then echo "::notice::Dry run: nothing deleted. Run again with confirm=DELETE."; exit 0; fi
+          while IFS=$'\t' read -r id name size created; do
+            gh api -X DELETE "repos/$REPO/actions/artifacts/$id" && echo "deleted $id $name ($size bytes, $created)"
+          done < targets.tsv
+          left="$(list | wc -l | tr -d ' ')"
+          echo "Remaining matching artifacts: $left"
+          [ "$left" = 0 ] || { echo "::error::$left matching artifacts remain"; exit 1; }
