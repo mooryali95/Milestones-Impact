@@ -170,19 +170,22 @@ export async function participants(e: any) {
     const chunk = (ps || []).slice(i, i + 5);
     const got = await Promise.all(chunk.map(async (p: any) => {
       const st: any = await mePayload(p, 'admin');
+      // الخبير المسند (غير مستشار الدفعة) يرى المستوى والمؤشر المستمر بمفتاحيهما، كما في ملف المشارك (N6)
+      const isAdv = scope.advisor.has(p.id);
+      const vis = isAdv ? null : await visibilityOfParticipant(p.id);
       const [subs, fe, peer] = await Promise.all([
         db.from('model_submissions').select('id', { count: 'exact', head: true }).eq('participant_id', p.id).eq('status', 'submitted'),
         db.from('final_evaluations').select('status').eq('participant_id', p.id).eq('program_id', st.program?.id || '').maybeSingle(),
         db.from('peer_requests').select('id').eq('participant_id', p.id).eq('status', 'answered'),
       ]);
       const current = st.journey.find((s: any) => s.status === 'active');
-      const level = overallLevel(Object.fromEntries((st.profile?.dimensions || []).map((d: any) => [d.dimension, d.level])));
+      const level = vis && vis.asg_levels === false ? null : overallLevel(Object.fromEntries((st.profile?.dimensions || []).map((d: any) => [d.dimension, d.level])));
       const needs = needsFor({ submissions: Array.from({ length: subs.count || 0 }, () => ({ status: 'submitted' })), milestones: st.milestones, final: fe.data, peerAnswers: (peer.data || []).map(() => ({ status: 'pending' })) });
       return {
         id: p.id, name: p.full_name, first: firstName(p.full_name), title: p.job_title || null, org: p.organization_name || null, status: p.status,
         cohort: st.program?.cohort?.name || null, advisor: scope.advisor.has(p.id), role_ar: scope.assigned.has(p.id) ? roleAr(scope.assigned.get(p.id)!) : null,
         level, level_ar: level ? (LEVEL_AR as Record<string, string>)[level] : null, approved: !!st.profile?.approved,
-        stage: current?.title_ar || null, progress: st.progress, late: st.milestone_summary?.late || 0, continuous: st.continuous?.index ?? null,
+        stage: current?.title_ar || null, progress: st.progress, late: st.milestone_summary?.late || 0, continuous: vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null,
         needs: needs.reduce((n: number, x: any) => n + x.n, 0),
       };
     }));
@@ -214,7 +217,15 @@ export async function assessmentAnswers(e: any, b: Body) {
 }
 
 // ── الختامي والمعالم من البوابة: لمستشار الدفعة ──
-export async function finalGet(e: any, b: Body) { await requireAdvisorOf(e, String(b.participant_id || '')); return F.get(b, { email: e.email }); }
+// بلا مفتاح adv_final_edit يرى المستشار الدرجة والقرار وحدهما: الأصوات والتعديلات وأسماء أصحابها لا تخرج (N6)
+export async function finalGet(e: any, b: Body) {
+  const pid = String(b.participant_id || '');
+  await requireAdvisorOf(e, pid);
+  const r: any = await F.get(b, { email: e.email });
+  if ((await visibilityOfParticipant(pid)).adv_final_edit !== false) return r;
+  const rec = r.record ? { status: r.record.status, score: r.record.score, decision: r.record.decision, decided_at: r.record.decided_at } : null;
+  return { ...r, record: rec, approval: null, vote_block: null, can_withdraw: false, read_only: true };
+}
 async function requireFinalEdit(e: any, b: Body) { const pid = String(b.participant_id || ''); await requireAdvisorOf(e, pid); requireVisible(await visibilityOfParticipant(pid), 'adv_final_edit'); }
 export async function finalSave(e: any, b: Body) { await requireFinalEdit(e, b); return F.save(actorOf(e), b); }
 export async function finalVote(e: any, b: Body) { await requireFinalEdit(e, b); return F.vote(actorOf(e), b); }

@@ -426,6 +426,11 @@ export async function raterGet(b: Body) {
 export async function raterSubmit(b: Body) {
   const r = await raterFrom(b.t);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
+  // تقييم 360: بعد إغلاق الدورة (ولو مبكرًا من الإدارة) لا يُقبل تقدير يغيّر تقريرًا سُلِّم (N15)
+  if (r.cycle_id) {
+    const { data: cyc } = await db.from('feedback_cycles').select('status, closes_at').eq('id', r.cycle_id).maybeSingle();
+    if (!cyc || cyc.status !== 'open' || (cyc.closes_at && Date.parse(cyc.closes_at) <= Date.now())) throw new Fail('أُغلقت دورة التقييم. شكرًا لاستعدادك.', 409, 'closed');
+  }
   const qs = await raterQuestions(r.instrument_id, r.relation);
   const input = b.answers || {};
   // سؤال الصلة في أول النموذج: إلزامي بنقرة واحدة

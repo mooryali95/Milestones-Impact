@@ -314,7 +314,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string) => Promis
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b) => switchTo(c.email, 'org', b.to, { ip: null }),
   'coord.dashboard': (c) => C.dashboard(c),
-  'coord.capstone': (c, b) => X.orgDoc(c.organization_id, b, c.permissions),
+  // مفتاح الرؤية coord_initiatives يحجب المبادرات عن لوحة الجهة، فيحجب وثيقتها بالمعرّف أيضًا (N6)
+  'coord.capstone': async (c, b) => { VS.requireVisible(await VS.visibilityOfOrg(c.organization_id), 'coord_initiatives'); return X.orgDoc(c.organization_id, b, c.permissions); },
   'coord.sus-state': (c) => SU.state('coordinator', c),
   'coord.sus-submit': (c, b) => SU.submit('coordinator', c, b),
   'coord.logout': (_c, _b, sid) => C.logout(sid),
