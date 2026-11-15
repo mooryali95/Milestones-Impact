@@ -244,11 +244,32 @@ export function hiddenHelp(v, reqs = []) {
   return [HIDE_HELP, broken.length ? `لن يُحفظ: ${hideBreaksMessage(broken)}` : '', ...notes].filter(Boolean).join(' ');
 }
 
+// سطر عقد الجهة في نموذج دفعتها: المقاعد معلومة الجهة كلها من عقدها (seats_used من entitlements.ts)، لا من الدفعة.
+// ومعه الدفعة التي يدخلها أعضاء الجهة الجدد الآن تلقائيًا (pickCohort)، فلا يُفهم أن الدفعات تتقاسم المقاعد
+export function contractLine(org) {
+  if (!org) return '';
+  const used = org.seats_used == null ? '' : `، المستهلك ${org.seats_used} من العقد كله`;
+  const seats = org.seats == null ? 'بلا حد في العقد' : `${org.seats} مقعدًا`;
+  // التاريخ معزول باتجاه لاتيني فلا تنقلب أجزاؤه داخل السطر العربي
+  const ends = org.contract_ends ? `، ينتهي \u2066${String(org.contract_ends).slice(0, 10)}\u2069` : '';
+  const auto = org.auto_cohort?.via === 'organization' ? ` أعضاء الجهة الجدد يدخلون الآن تلقائيًا دفعة «${org.auto_cohort.name}».`
+    : org.auto_cohort ? ' لا دفعة مفتوحة أو جارية للجهة الآن، فيدخل أعضاؤها الجدد الدفعة المفتوحة العامة.' : '';
+  return `عقد الجهة: ${seats}${used}${ends}.${auto}`;
+}
+// السعة التشغيلية تنبيهية، والعقد هو الحد الملزم: تجاوزه يُحذَّر منه ولا يُعدَّل آليًا
+export function capacityWarning(org, capacity) {
+  const n = Number(capacity);
+  if (!org || org.seats == null || capacity === '' || capacity == null || !(n > org.seats)) return '';
+  return `تنبيه: السعة ${n} تتجاوز مقاعد عقد الجهة (${org.seats}). العقد هو الحد الملزم على الجهة كلها، فلن يُعفى أكثر منه.`;
+}
+
 export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
+  const orgOf = (v) => orgs.find((o) => o.id === v.organization_id);
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
     { name: 'name', label: 'اسم الدفعة' },
-    ...(isDefault ? [] : [{ name: 'organization_id', label: 'الجهة', type: 'select', empty: 'بلا جهة (أفراد)', options: Object.fromEntries(orgs.map((o) => [o.id, o.name])) }]),
+    ...(isDefault ? [] : [{ name: 'organization_id', label: 'الجهة', type: 'select', empty: 'بلا جهة (أفراد)', options: Object.fromEntries(orgs.map((o) => [o.id, o.name])),
+      help: (v) => contractLine(orgOf(v)) }]),
     { name: 'program_id', label: 'البرنامج', type: 'select', options: Object.fromEntries(programs.filter((p) => !p.archived_at).map((p) => [p.id, p.name])) },
     {
       name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: 'تتبع آخر تعديل على البرنامج', options: verN,
@@ -257,7 +278,11 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'starts_on', label: 'تبدأ', type: 'date' },
     { name: 'ends_on', label: 'تنتهي', type: 'date' },
     { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
-    { name: 'capacity', label: 'المقاعد', type: 'number' },
+    // دفعة الجهة: المقاعد من العقد في سطر الجهة، والسعة التشغيلية مطوية خلف اختيار. دفعة الأفراد والمفتوحة: الحقل هو المصدر الوحيد
+    { name: 'capacity_on', label: 'حدد سعة تشغيلية لهذه الدفعة (اختياري)', type: 'check', show: (v) => !!v.organization_id },
+    { name: 'capacity', label: 'سعة تشغيلية (اختياري)', type: 'number', show: (v) => !!v.organization_id && !!v.capacity_on,
+      help: (v) => capacityWarning(orgOf(v), v.capacity) || 'تنبيهية لتنظيم الدفعة. الحد الملزم هو مقاعد عقد الجهة.' },
+    { name: 'capacity', label: 'المقاعد', type: 'number', show: (v) => !v.organization_id },
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
       help: (v) => hiddenHelp(v, reqs) },
@@ -294,6 +319,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
+    capacity_on: c.capacity != null && c.capacity !== '',
     level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
   // الفريق والمستشار لا يُرسَلان من نموذج الدفعة: حفظه كان يستبدل الفريق بنسخة قديمة لو تغيّر من «الفريق والمجموعات» بعد فتحه
   delete v.schedule; delete v.stage_modes; delete v.advisor_expert_id; delete v.team_expert_ids; delete v.team_ready;
@@ -308,6 +334,8 @@ export function formToCohort(v) {
     const m = k.match(/^d:(.+):([a-z_]+)$/);
     if (m) { if (x != null && x !== '') (delivery[m[1]] ||= {})[m[2]] = x; } else out[k] = x;
   }
+  // إلغاء اختيار السعة التشغيلية في دفعة الجهة يمحوها، فلا تبقى قيمة مخفية تحذّر بلا سبب
+  if ('capacity_on' in out) { if (!out.capacity_on) out.capacity = null; delete out.capacity_on; }
   return { ...out, delivery };
 }
 

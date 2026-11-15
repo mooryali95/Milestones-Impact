@@ -82,3 +82,39 @@ describe('نموذج الدفعة: أسماء البنود كما يقرؤها �
     expect(hiddenHelp({ hidden_requirements: ['E-MGR'] }, reqs)).toContain('تنبيه: «إفادة المدير (التطبيق)» يكتمل بتقدير المدير المباشر');
   });
 });
+
+// P3: المقاعد من العقد مصدرًا واحدًا في العرض، والسعة التشغيلية مطوية لدفعة الجهة وظاهرة لغيرها
+describe('نموذج الدفعة: مقاعد العقد والسعة التشغيلية', async () => {
+  const { capacityWarning, cohortFields, cohortToForm, contractLine, formToCohort } = await import('./methodology.js');
+  const org = { id: 'o1', name: 'جمعية سفراء', seats: 50, seats_used: 31, contract_ends: '2027-06-30', auto_cohort: { id: 'c1', name: 'سفراء 2026', via: 'organization' } };
+  const open = { id: 'o2', name: 'منظومة', seats: null, seats_used: 4, auto_cohort: { id: 'c0', name: 'الدفعة المفتوحة', via: 'default' } };
+  const fields = cohortFields({ orgs: [org, open] });
+  const shown = (v) => fields.filter((f) => !f.show || f.show(v));
+  it('سطر العقد: المقاعد والمستهلك من العقد كله ونهايته، والدفعة التي يدخلها الجدد', () => {
+    expect(contractLine(org)).toBe('عقد الجهة: 50 مقعدًا، المستهلك 31 من العقد كله، ينتهي \u20662027-06-30\u2069. أعضاء الجهة الجدد يدخلون الآن تلقائيًا دفعة «سفراء 2026».');
+    expect(contractLine(open)).toContain('عقد الجهة: بلا حد في العقد، المستهلك 4 من العقد كله.');
+    expect(contractLine(open)).toContain('الدفعة المفتوحة العامة');
+    expect(contractLine({ ...org, seats_used: null })).not.toContain('المستهلك');
+    expect(fields.find((f) => f.name === 'organization_id').help({ organization_id: 'o1' })).toBe(contractLine(org));
+    expect(fields.find((f) => f.name === 'organization_id').help({ organization_id: '' })).toBe('');
+  });
+  it('عقد 50 وسعة 60 يحذّر، وبلا حد في العقد لا تحذير', () => {
+    expect(capacityWarning(org, 60)).toContain('تتجاوز مقاعد عقد الجهة (50)');
+    expect(capacityWarning(org, 40)).toBe('');
+    expect(capacityWarning(open, 600)).toBe('');
+    const cap = shown({ organization_id: 'o1', capacity_on: true }).find((f) => f.name === 'capacity');
+    expect(cap.label).toBe('سعة تشغيلية (اختياري)');
+    expect(cap.help({ organization_id: 'o1', capacity: '60' })).toContain('تتجاوز');
+  });
+  it('دفعة الجهة: السعة مطوية خلف اختيار، وإلغاؤه يمحوها. دفعة الأفراد: الحقل العادي ظاهر', () => {
+    expect(shown({ organization_id: 'o1', capacity_on: false }).map((f) => f.name)).not.toContain('capacity');
+    expect(shown({ organization_id: 'o1', capacity_on: false }).map((f) => f.name)).toContain('capacity_on');
+    const indiv = shown({ organization_id: '' }).filter((f) => f.name.startsWith('capacity'));
+    expect(indiv.map((f) => [f.name, f.label])).toEqual([['capacity', 'المقاعد']]);
+    expect(cohortToForm({ capacity: 20 }).capacity_on).toBe(true);
+    expect(cohortToForm({ capacity: null }).capacity_on).toBe(false);
+    expect(formToCohort({ organization_id: 'o1', capacity_on: false })).toMatchObject({ capacity: null });
+    expect(formToCohort({ organization_id: 'o1', capacity_on: true, capacity: 20 })).toEqual({ organization_id: 'o1', capacity: 20, delivery: {} });
+    expect(formToCohort({ organization_id: null, capacity: 20 })).toEqual({ organization_id: null, capacity: 20, delivery: {} });
+  });
+});

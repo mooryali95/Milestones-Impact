@@ -83,10 +83,21 @@ async function seatStopped(p: { id: string; status?: string | null }, orgId: str
   return auto ? await sponsorDecision(p.id, orgId) : null;
 }
 
-// المقاعد المستهلكة من عقد الجهة: من له إعفاء حي منها (كما تعدّها leaders.pin_sponsor_seat)
+// المقاعد المستهلكة من عقد الجهة: من له إعفاء حي منها (كما تعدّها leaders.pin_sponsor_seat)، مشاركون مميزون لكل جهة.
+// قاعدة العد الواحدة: تعدّ بها الجهة الواحدة (seatsUsed) والجهات كلها بقراءة واحدة (seatsUsedByOrg)
+export function countSeats(ents: { participant_id: string; organization_id: string | null }[]) {
+  const by: Record<string, Set<string>> = {};
+  for (const e of ents || []) if (e.organization_id) (by[e.organization_id] ||= new Set()).add(e.participant_id);
+  return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v.size])) as Record<string, number>;
+}
+const liveSponsor = () => db.from('entitlements').select('participant_id, organization_id').eq('source', 'sponsor').is('revoked_at', null);
 export async function seatsUsed(orgId: string) {
-  const ents = must(await db.from('entitlements').select('participant_id').eq('organization_id', orgId).eq('source', 'sponsor').is('revoked_at', null)) ?? [];
-  return new Set((ents as any[]).map((e) => e.participant_id)).size;
+  const ents = must(await liveSponsor().eq('organization_id', orgId)) ?? [];
+  return countSeats(ents as any[])[orgId] || 0;
+}
+// لكل الجهات دفعة واحدة؛ الجهة بلا إعفاء حي غائبة فتُقرأ صفرًا
+export async function seatsUsedByOrg() {
+  return countSeats((must(await liveSponsor().limit(20000)) ?? []) as any[]);
 }
 // هل يحتاج تثبيته مقعدًا؟ لا لمن له إعفاء حي منها (exists) ولا لمن حقه في البندين حي من غيرها (covered)
 async function heldItems(participantId: string, orgId: string): Promise<PinResult | null> {

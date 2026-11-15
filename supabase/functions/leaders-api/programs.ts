@@ -10,6 +10,7 @@ import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
+import { seatsUsedByOrg } from './entitlements.ts';
 
 type Body = Record<string, any>;
 
@@ -163,7 +164,7 @@ export async function list() {
     db.from('program_versions').select('id, program_id, number, label, created_by, created_at').order('number', { ascending: false }),
     db.from('cohorts').select(COHORT_COLS).order('created_at', { ascending: false }),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
-    db.from('organizations').select('id, name, short_name, delivery_default, invite_code, status').order('name'),
+    db.from('organizations').select('id, name, short_name, delivery_default, invite_code, status, seats, contract_starts, contract_ends').order('name'),
     db.from('stage_requirements').select('program_id, kind, active'),
   ]);
   // فريق خبراء كل دفعة (الترحيل 20261110190000 مطبّق على الإنتاج منذ 2026-11-10)
@@ -187,6 +188,7 @@ export async function list() {
     advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
   const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
+  const seated = await seatsUsedByOrg().catch(() => null);
   return {
     success: true,
     programs: (programs.data || []).map((pr: any) => ({
@@ -200,7 +202,12 @@ export async function list() {
       pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
     })),
-    organizations: orgs.data || [],
+    // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
+    // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ
+    organizations: (orgs.data || []).map((o: any) => {
+      const auto = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: o.id });
+      return { ...o, seats_used: seated ? seated[o.id] || 0 : null, auto_cohort: auto.cohort ? { id: auto.cohort.id, name: auto.cohort.name, via: auto.via } : null };
+    }),
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
     // team_ready باقٍ للوحة المنشورة التي تُظهر حقل الفريق به؛ الجدول مطبّق فهو صحيح دائمًا
     team_ready: true,
