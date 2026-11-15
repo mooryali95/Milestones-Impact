@@ -3,9 +3,11 @@
 // ويُولَّد منه مرجع الخبير (scripts/content/anatomy-doc.mjs). ترتيب الفصول داخل المرحلة ترتيب الخادم (capstone_sort) لا هذا الملف.
 import A from './anatomy.json';
 import { RISK_HIGH } from '../../../functions/leaders-api/capstone.js';
+import { handbookRef } from '../../../functions/leaders-api/section-refs.js';
 
 export const ANATOMY = A;
-export const MEANING = A.meaning;
+// الإحالة إلى الكتيب بهوية القسم (section_id)، والباب والعنوان يُقرآن منها الآن (section-refs.js)
+export const MEANING = Object.freeze({ ...A.meaning, handbook: handbookRef(A.meaning.handbook) });
 export const PHASES = Object.freeze(A.phases);
 export const FEEDS = Object.freeze(A.feeds);
 
@@ -14,7 +16,8 @@ const fill = (t) => String(t || '').replaceAll('{RISK_HIGH}', String(RISK_HIGH))
 export const GLOSSARY = Object.freeze(A.glossary.map((g) => Object.freeze({ term: g.term, aka: g.aka || [], def: fill(g.def) })));
 
 /** دليل الفصل: لماذا هو، وما يغذيه، وإحالته في الكتيب. null لفصل لا دليل له */
-export const chapterInfo = (key) => A.chapters[key] || null;
+const CHAPTERS = Object.fromEntries(Object.entries(A.chapters).map(([k, c]) => [k, { ...c, handbook: c.handbook ? handbookRef(c.handbook) : c.handbook }]));
+export const chapterInfo = (key) => CHAPTERS[key] || null;
 
 /** مرحلة الفصل، أو null لفصل لم يُصنَّف بعد */
 export const phaseOf = (key) => PHASES.find((p) => p.chapters.includes(key)) || null;

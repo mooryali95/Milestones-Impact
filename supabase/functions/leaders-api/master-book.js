@@ -123,9 +123,35 @@ export function bookSections(md) {
   }
   flush();
   if (cur.title || cur.parts.length) out.push(cur);
+  // مفتاح القسم من headingsOf نفسها (سجل هويات الأقسام يقرأ المفاتيح منها)، فلا تختلف المرساة بين التعليق والسجل
+  const keys = headingsOf(md).filter((x) => x.level === 2).map((x) => x.key);
+  let k = 0;
+  return out.map((x) => ({ key: x.title ? keys[k++] : '', title: x.title, tier: x.tier || null, parts: x.parts }));
+}
+
+/** عناوين الباب كلها (## و###) بمستوى كتلتها ومفتاح فريد في الباب: العنوان، والمكرر يتميز بمستوى كتلته،
+ *  وما بقي مكررًا بعدها برقم ظهوره. المفتاح هو ما يقابله سجل هويات الأقسام (supabase/content/handbook/sections.json)
+ * @returns {{ level: 2|3, title: string, tier: string|null, key: string }[]} */
+export function headingsOf(md) {
+  const list = [];
+  let tier = null;
+  for (const line of String(md || '').split('\n')) {
+    const open = line.match(/^:::\s*((?:min|only|scope)=\S+(?:\s+(?:min|only|scope)=\S+)*)\s*$/);
+    if (open) { tier = open[1]; continue; }
+    if (/^:::\s*$/.test(line)) { tier = null; continue; }
+    const h = line.match(/^(#{2,3})\s+(.+?)\s*$/);
+    if (h) list.push({ level: h[1].length, title: h[2].replace(/\*\*/g, '').trim(), tier });
+  }
+  const count = {};
+  for (const x of list) count[x.title] = (count[x.title] || 0) + 1;
+  const withTier = list.map((x) => (count[x.title] > 1 && x.tier ? `${x.title} · ${tierAr(x.tier)}` : x.title));
   const seen = {};
-  for (const x of out) seen[x.title] = (seen[x.title] || 0) + 1;
-  return out.map((x) => ({ key: seen[x.title] > 1 && x.tier ? `${x.title} · ${tierAr(x.tier)}` : x.title, title: x.title, tier: x.tier || null, parts: x.parts }));
+  return list.map((x, i) => {
+    const base = withTier[i];
+    seen[base] = (seen[base] || 0) + 1;
+    const dup = withTier.filter((b) => b === base).length > 1;
+    return { level: x.level, title: x.title, tier: x.tier || null, key: dup ? `${base} (${seen[base]})` : base };
+  });
 }
 
 // نسخة المراجعة المطبوعة: الفقرة المعلّمة تبدأ بسطر يسمي مستواها وتنتهي بسطر يعلن نهايتها، فيرى الخبير على الورق لمن تظهر

@@ -131,6 +131,7 @@ export const MIGRATIONS = [
   '20261115160000_leaders_book_comments',
   '20261115170000_leaders_agent_conversations',
   '20261115190000_leaders_book_draft_comments',
+  '20261115200000_leaders_book_comment_section_ids',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -180,4 +181,5 @@ export const MIGRATION_GATES = {
   '20261115160000_leaders_book_comments': ["tolerant", "القارئ يعرض الكتاب بلا تعليقات إن غاب الجدول (master-book.ts: commentRows يرجع null فتُعرض قائمة فارغة)، والتعليق يُرفض برسالة"],
   '20261115170000_leaders_agent_conversations': ["tolerant", "الدالة agent-chat ترد agent_unavailable (503) بلا الجداول فتعرض النافذة «اترك رسالتك» عبر النموذج، وsend-otp لا تقرؤها"],
   '20261115190000_leaders_book_draft_comments': ["tolerant", "قبله تُقرأ المسودة في الكتاب الأم ويُرفض التعليق عليها برسالة (master-book.ts)، وتعليقات الأبواب كما هي"],
+  '20261115200000_leaders_book_comment_section_ids': ["tolerant", "الدالة تكتب section_id إن وُجد العمود، وتقرأ التعليق بعنوانه المحفوظ إن غاب (master-book.ts)"],
 };
