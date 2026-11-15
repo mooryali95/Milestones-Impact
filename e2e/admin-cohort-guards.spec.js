@@ -12,6 +12,8 @@ const cohorts = [
   { id: 'c0', name: 'الدفعة المفتوحة', is_default: true, program_id: 'pa', status: 'running', delivery: {}, enrolled: 0 },
   { id: 'c1', name: 'سفراء 2026', organization_id: 'o1', program_id: 'pa', status: 'running', starts_on: '2026-09-01', delivery: {}, capacity: null, enrolled: 0, members: 31 },
   { id: 'c2', name: 'أفراد الربيع', organization_id: null, program_id: 'pa', status: 'planned', delivery: {}, capacity: 25, enrolled: 3 },
+  // دفعة قديمة حُفظ إخفاؤها الكاسر قبل الحارس: تحريرها لا ينبه بمنع حفظ لم يتغير
+  { id: 'c3', name: 'دفعة قديمة', organization_id: null, program_id: 'pa', status: 'running', delivery: {}, capacity: 10, enrolled: 2, hidden_requirements: ['T-ATTEND'] },
 ];
 const organizations = [
   { id: 'o1', name: 'جمعية سفراء', status: 'active', invite_code: 'sufara', seats: 50, seats_used: 31, contract_ends: '2027-06-30', auto_cohort: { id: 'c1', name: 'سفراء 2026', via: 'organization' } },
@@ -117,4 +119,20 @@ test('رفض النقل يبقي الدفعة بلا حفظ ويقول لماذ�
   await page.getByRole('alertdialog').getByRole('button', { name: /إلغاء|تراجع/ }).click();
   await expect(form.getByRole('alert')).toContainText('لم يُؤكَّد نقل المشاركين');
   expect(calls.filter((c) => c.action === 'admin.cohort-save').length).toBe(1);
+});
+
+test('إخفاء كاسر محفوظ قبل فتح النموذج لا يُنبَّه إليه بمنع الحفظ، وكسر جديد يُنبَّه إليه', async ({ page }) => {
+  const calls = await setup(page);
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة قديمة' }).getByRole('button', { name: 'تحرير' }).click();
+  const form = page.getByRole('dialog', { name: 'دفعة: دفعة قديمة' });
+  const hidden = form.getByRole('group', { name: 'بنود مخفية من رحلة هذه الدفعة' });
+  await expect(hidden.getByLabel('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)')).toBeChecked();
+  await expect(hidden).not.toContainText('لن يُحفظ');
+  await hidden.getByText('جلسات التوجيه (أربع جلسات) (التطبيق)', { exact: true }).click();
+  await expect(hidden).toContainText('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التطبيق»');
+  await hidden.getByText('جلسات التوجيه (أربع جلسات) (التطبيق)', { exact: true }).click();
+  await form.getByLabel('اسم الدفعة').fill('دفعة قديمة معدلة');
+  await form.getByRole('button', { name: 'حفظ' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c3', name: 'دفعة قديمة معدلة', hidden_requirements: ['T-ATTEND'] });
+  expect(calls.find((c) => c.action === 'admin.cohort-save')).not.toHaveProperty('hidden_before');
 });

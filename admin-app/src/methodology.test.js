@@ -88,6 +88,22 @@ describe('نموذج الدفعة: أسماء البنود كما يقرؤها �
     expect(formToCohort(v)).not.toHaveProperty('hidden_before');
     expect(formToCohort(v).hidden_requirements).toEqual(['T-ATTEND']);
   });
+  it('المحفوظ يبقى في حال النموذج كما يبنيها Form من الحقول وحدها، ولا يُعرض ولا يُرسل', async () => {
+    const { cohortToForm } = await import('./methodology.js');
+    const values = cohortToForm({ hidden_requirements: ['T-ATTEND'] });
+    // Form يبني حاله من أسماء الحقول فقط، ويرسل ويعرض ما show له true
+    const state = Object.fromEntries(fields.map((f) => [f.name, values[f.name] ?? '']));
+    expect(state.hidden_before).toEqual(['T-ATTEND']);
+    expect(fields.find((f) => f.name === 'hidden_requirements').help(state)).not.toContain('لن يُحفظ');
+    expect(fields.filter((f) => !f.show || f.show(state)).map((f) => f.name)).not.toContain('hidden_before');
+  });
+  it('الدفعة المثبتة على نسخة: لا حكم قاطع من آخر تعديل، بل إشارة إلى فحص النسخة عند الحفظ', () => {
+    const pinned = hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: 'v2' }, reqs);
+    expect(pinned).not.toContain('لن يُحفظ');
+    expect(pinned).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة. وحسب آخر تعديل على البرنامج: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة.');
+    expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).not.toContain('حسب آخر تعديل');
+  });
 });
 
 // P3: المقاعد من العقد مصدرًا واحدًا في العرض، والسعة التشغيلية مطوية لدفعة الجهة وظاهرة لغيرها
@@ -104,6 +120,19 @@ describe('نموذج الدفعة: مقاعد العقد والسعة التشغ
     expect(contractLine({ ...org, seats_used: null })).not.toContain('المستهلك');
     expect(fields.find((f) => f.name === 'organization_id').help({ organization_id: 'o1' })).toBe(contractLine(org));
     expect(fields.find((f) => f.name === 'organization_id').help({ organization_id: '' })).toBe('');
+  });
+  it('سطر العقد يقول حاله كما يفحصها pin_sponsor_seat: قبل البدء وبعد النهاية والجهة غير النشطة', () => {
+    const today = '2026-11-15';
+    const after = contractLine({ ...org, contract_ends: '2026-11-01' }, today);
+    expect(after).toContain('انتهى العقد في \u20662026-11-01\u2069، فلا يُعفى أعضاء جدد.');
+    expect(after).not.toContain('ينتهي');
+    expect(contractLine({ ...org, contract_ends: '2026-11-15' }, today)).toContain('ينتهي \u20662026-11-15\u2069');
+    const before = contractLine({ ...org, contract_starts: '2026-12-01' }, today);
+    expect(before).toContain('العقد لم يبدأ بعد (يبدأ \u20662026-12-01\u2069)، فلا يُعفى أحد قبله.');
+    expect(contractLine({ ...org, contract_starts: '2026-11-15' }, today)).not.toContain('لم يبدأ');
+    expect(contractLine({ ...org, status: 'suspended' }, today)).toContain('الجهة غير نشطة، فلا يُعفى أحد.');
+    expect(contractLine({ ...org, status: 'active' }, today)).toBe(contractLine(org, today));
+    expect(contractLine(org, today)).not.toMatch(/انتهى|لم يبدأ|غير نشطة/);
   });
   it('عقد 50 وسعة 60 يحذّر، وبلا حد في العقد لا تحذير', () => {
     expect(capacityWarning(org, 60)).toContain('تتجاوز مقاعد عقد الجهة (50)');

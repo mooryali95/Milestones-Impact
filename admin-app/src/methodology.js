@@ -243,20 +243,30 @@ export function hiddenHelp(v, reqs = []) {
     const r = reqs.find((x) => x.code === c);
     return `تنبيه: «${r ? reqLabel(r, reqs) : c}» ${CODE_FEATURES[c]}.`;
   });
-  return [HIDE_HELP, broken.length ? `لن يُحفظ: ${hideBreaksMessage(broken)}` : '', ...notes].filter(Boolean).join(' ');
+  // المتطلبات هنا من آخر تعديل على البرنامج، والخادم يفحص المثبتة على نسختها: فلا حكم قاطع لها، بل إشارة
+  const verdict = v?.program_version_id
+    ? `يُفحص الإخفاء عند الحفظ على النسخة المثبتة.${broken.length ? ` وحسب آخر تعديل على البرنامج: ${hideBreaksMessage(broken)}` : ''}`
+    : broken.length ? `لن يُحفظ: ${hideBreaksMessage(broken)}` : '';
+  return [HIDE_HELP, verdict, ...notes].filter(Boolean).join(' ');
 }
 
 // سطر عقد الجهة في نموذج دفعتها: المقاعد معلومة الجهة كلها من عقدها (seats_used من entitlements.ts)، لا من الدفعة.
 // ومعه الدفعة التي يدخلها أعضاء الجهة الجدد الآن تلقائيًا (pickCohort)، فلا يُفهم أن الدفعات تتقاسم المقاعد
-export function contractLine(org) {
+// وحال العقد كما يفحصها pin_sponsor_seat: الجهة غير النشطة، والعقد قبل بدئه أو بعد نهايته، لا يُعفى فيها أحد
+const isoDay = (d) => String(d).slice(0, 10);
+const ltr = (d) => `\u2066${isoDay(d)}\u2069`; // التاريخ معزول باتجاه لاتيني فلا تنقلب أجزاؤه داخل السطر العربي
+export function contractLine(org, today = new Date().toISOString().slice(0, 10)) {
   if (!org) return '';
   const used = org.seats_used == null ? '' : `، المستهلك ${org.seats_used} من العقد كله`;
   const seats = org.seats == null ? 'بلا حد في العقد' : `${org.seats} مقعدًا`;
-  // التاريخ معزول باتجاه لاتيني فلا تنقلب أجزاؤه داخل السطر العربي
-  const ends = org.contract_ends ? `، ينتهي \u2066${String(org.contract_ends).slice(0, 10)}\u2069` : '';
+  const ended = org.contract_ends && isoDay(org.contract_ends) < today;
+  const ends = org.contract_ends && !ended ? `، ينتهي ${ltr(org.contract_ends)}` : '';
+  const state = org.status && org.status !== 'active' ? ' الجهة غير نشطة، فلا يُعفى أحد.'
+    : org.contract_starts && isoDay(org.contract_starts) > today ? ` العقد لم يبدأ بعد (يبدأ ${ltr(org.contract_starts)})، فلا يُعفى أحد قبله.`
+      : ended ? ` انتهى العقد في ${ltr(org.contract_ends)}، فلا يُعفى أعضاء جدد.` : '';
   const auto = org.auto_cohort?.via === 'organization' ? ` أعضاء الجهة الجدد يدخلون الآن تلقائيًا دفعة «${org.auto_cohort.name}».`
     : org.auto_cohort ? ' لا دفعة مفتوحة أو جارية للجهة الآن، فيدخل أعضاؤها الجدد الدفعة المفتوحة العامة.' : '';
-  return `عقد الجهة: ${seats}${used}${ends}.${auto}`;
+  return `عقد الجهة: ${seats}${used}${ends}.${state}${auto}`;
 }
 // السعة التشغيلية تنبيهية، والعقد هو الحد الملزم: تجاوزه يُحذَّر منه ولا يُعدَّل آليًا
 export function capacityWarning(org, capacity) {
@@ -285,6 +295,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'capacity', label: 'سعة تشغيلية (اختياري)', type: 'number', show: (v) => !!v.organization_id && !!v.capacity_on,
       help: (v) => capacityWarning(orgOf(v), v.capacity) || 'تنبيهية لتنظيم الدفعة. الحد الملزم هو مقاعد عقد الجهة.' },
     { name: 'capacity', label: 'المقاعد', type: 'number', show: (v) => !v.organization_id },
+    // المخفي كما حُفظ: حقل لا يُعرض ولا يُرسل (show دائمًا false)، يبقى في حال النموذج لمقارنة الإخفاء به
+    { name: 'hidden_before', label: '', type: 'multi', options: {}, show: () => false },
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
       help: (v) => hiddenHelp(v, reqs) },
