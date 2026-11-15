@@ -55,15 +55,21 @@ describe('opsSummary: سطر البطاقة المطوية', () => {
 });
 
 describe('cardOpen: الطي والفتح', () => {
-  it('السليم يتبع المحفوظ (والمطوي إن لم يُحفظ شيء)، وغير السليم مفتوح مهما حُفظ', () => {
-    expect(cardOpen('green', null)).toBe(false);
+  it('السليم يتبع المحفوظ (والمفتوح إن لم يُحفظ شيء)، وغير السليم مفتوح مهما حُفظ', () => {
+    // أول زيارة: مفتوحة كما كانت قبل الطي
+    expect(cardOpen('green', null)).toBe(true);
     expect(cardOpen('green', 'open')).toBe(true);
     expect(cardOpen('green', 'closed')).toBe(false);
     expect(cardOpen('amber', 'closed')).toBe(true);
     expect(cardOpen('red', 'closed')).toBe(true);
-    // اختيار الجلسة يغلب حتى يُسقطه ظهور حال غير سليمة
-    expect(cardOpen('red', 'closed', false)).toBe(false);
-    expect(cardOpen('green', 'closed', true)).toBe(true);
+    // اختيار الجلسة يغلب في الحال التي اختير فيها
+    expect(cardOpen('green', 'closed', { lv: 'green', open: true })).toBe(true);
+    expect(cardOpen('red', 'open', { lv: 'red', open: false })).toBe(false);
+    // تغيّر الحال إلى غير سليمة يسقطه في الرسم نفسه: لا رسم مطوي قبل الفتح
+    expect(cardOpen('red', 'open', { lv: 'green', open: false })).toBe(true);
+    expect(cardOpen('amber', 'open', { lv: 'red', open: false })).toBe(true);
+    // والعودة إلى السليم تبقيه
+    expect(cardOpen('green', 'open', { lv: 'red', open: false })).toBe(false);
   });
 });
 
@@ -88,6 +94,10 @@ describe('ops-watch: الأرقام تتبع التنبيه التجريبي', (
     await vi.advanceTimersByTimeAsync(W.AFTER_TEST_MS);
     expect(L).toHaveBeenCalledTimes(3);
     expect(seen.at(-1).slack.ok_at).not.toBeNull();
+    // سؤال ثان بعد عشر ثوانٍ لسلاك البطيء (مهلة الأم ثم الفاصل ثم مهلة الرد)
+    await vi.advanceTimersByTimeAsync(W.AFTER_TEST_STEPS[1] - W.AFTER_TEST_STEPS[0]);
+    expect(L).toHaveBeenCalledTimes(4);
+    expect(W.AFTER_TEST_STEPS.at(-1)).toBeGreaterThanOrEqual(4000 + 1100 + 4000);
     off();
   });
   it('طلب قائم بدأ قبل التجربة لا يكفي: يُسأل بعده', async () => {

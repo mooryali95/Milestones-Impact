@@ -135,15 +135,21 @@ test('بعد التنبيه التجريبي تتحدث الأرقام وحده�
   await expect.poll(n, { timeout: 8000 }).toBe(2);
   await expect(card(page).getByText('آخر نشر ناجح').locator('..')).toContainText('الآن');
   await expect(card(page)).not.toContainText('لم يُنشر شيء بعد');
+  // وسؤال أخير بعد عشر ثوانٍ لسلاك البطيء، ثم لا شيء حتى سؤال الدقيقة
+  await expect.poll(n, { timeout: 12000 }).toBe(3);
 });
 
-test('الطي: السليم مطوي أول مرة بسطر ملخص هادئ، والزر يفتحه بالفأرة ولوحة المفاتيح، والاختيار يُحفظ', async ({ page }) => {
+test('الطي: السليم مفتوح أول مرة، والزر يطويه بالفأرة ولوحة المفاتيح إلى سطر ملخص هادئ، والاختيار يُحفظ', async ({ page }) => {
   await setup(page, { state: 'green', pref: null });
   const toggle = card(page).getByRole('button', { name: 'صحة البريد والتنبيه' });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(toggle).toHaveAttribute('aria-controls', 'ops-body');
-  await expect(page.locator('#ops-body')).toBeHidden();
+  await expect(page.locator('#ops-body')).toBeVisible();
   const strip = card(page).getByRole('list', { name: 'ملخص صحة البريد والتنبيه' });
+  await expect(strip).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#ops-body')).toBeHidden();
   await expect(strip).toBeVisible();
   await expect(strip.getByRole('img')).toHaveAttribute('aria-label', 'البريد في آخر 24 ساعة: أُرسل 12 من 80 (15٪ من السقف اليومي)');
   await expect(strip).toContainText('وصل 9');
@@ -152,23 +158,19 @@ test('الطي: السليم مطوي أول مرة بسطر ملخص هادئ،
   await expect(strip).toContainText('نُشر منذ 4 دقائق');
   await expect(strip).toContainText('3 من 3');
   await expect(card(page).getByText('يعمل', { exact: true })).toBeVisible();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('#ops-body')).toBeVisible();
-  await expect(strip).toHaveCount(0);
-  await expect(card(page)).toContainText('وصل 9 · تعذّر 0 · حُجب 0');
-  // محفوظ في المتصفح: يبقى مفتوحًا بعد إعادة التحميل
+  // محفوظ في المتصفح: يبقى مطويًا بعد إعادة التحميل
   await page.reload();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   // لوحة المفاتيح: Enter ثم المسافة
   await toggle.focus();
   await page.keyboard.press('Enter');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await page.keyboard.press(' ');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(card(page)).toContainText('وصل 9 · تعذّر 0 · حُجب 0');
+  await page.keyboard.press(' ');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await page.keyboard.press('Enter');
   await page.reload();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('الطي: أي حال غير سليمة تفتح البطاقة مهما حُفظ', async ({ page }) => {
@@ -179,6 +181,11 @@ test('الطي: أي حال غير سليمة تفتح البطاقة مهما �
   await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
   await expect(card(page)).toBeFocused();
   await expect(page.locator('#ops-body')).toBeVisible();
+  // طي بطاقة غير سليمة لهذه الجلسة وحدها: لا يُحفظ فيطوي زيارة سليمة لاحقة
+  await setup(page, { state: 'amber', pref: 'open' });
+  await card(page).getByRole('button', { name: 'صحة البريد والتنبيه' }).click();
+  await expect(page.locator('#ops-body')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('mi_admin_ops_card'))).toBe('open');
 });
 
 test('رموز مصفوفة التأثير المحجوبة: كهرماني بسطرها بلا شريط، وسلاك وحده قناة تنبيه', async ({ page }) => {

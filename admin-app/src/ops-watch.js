@@ -8,8 +8,10 @@ import { L } from './leaders.js';
 import { opsVerdict } from '../../supabase/functions/leaders-api/ops-health.js';
 
 export const POLL_MS = 60e3;
-// بعد التنبيه التجريبي: سؤال فوري (البريد يُعد قبل الرد)، وآخر بعد ثوانٍ لأن حالة سلاك تُكتب بعد الرد (الضخ لا يُنتظر)
-export const AFTER_TEST_MS = 4000;
+// بعد التنبيه التجريبي: سؤال فوري (البريد يُعد قبل الرد)، ثم بعد 4 ثوانٍ و10 لأن حالة سلاك تُكتب بعد الرد (الضخ لا
+// يُنتظر). سلاك البطيء: مهلة الأم 4 ثوانٍ ثم فاصل 1.1 ثم مهلة الرد 4، فالثاني يغطي أسوأ الحال قبل سؤال الدقيقة
+export const AFTER_TEST_STEPS = [4000, 10000];
+export const AFTER_TEST_MS = AFTER_TEST_STEPS[0];
 
 // هل يحين سؤال جديد؟ (منطق بلا متصفح للاختبار)
 export const dueIn = (lastAt, now = Date.now(), visible = true) => (visible ? Math.max(0, lastAt + POLL_MS - now) : null);
@@ -18,7 +20,7 @@ let data = null;
 let lastAt = 0;
 let inflight = null;
 let timer = null;
-let follow = null;
+let follow = [];
 const subs = new Set();
 const visible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
 const emit = () => subs.forEach((fn) => fn(data));
@@ -46,9 +48,10 @@ export function refresh() {
 }
 // سؤال جديد لا يكتفي بطلب قائم: ما بدأ قبل التجربة لا يحمل أثرها، فيُسأل بعده
 const fresh = () => (inflight ? inflight.then(() => refresh()) : refresh());
+const clearFollow = () => { follow.forEach(clearTimeout); follow = []; };
 export function refreshAfterTest() {
-  clearTimeout(follow);
-  follow = setTimeout(() => { follow = null; if (subs.size) fresh(); }, AFTER_TEST_MS);
+  clearFollow();
+  follow = AFTER_TEST_STEPS.map((ms) => setTimeout(() => { if (subs.size) fresh(); }, ms));
   return fresh();
 }
 function onVisibility() { if (visible() && Date.now() - lastAt >= POLL_MS) refresh(); else schedule(); }
@@ -62,14 +65,14 @@ function subscribe(fn) {
     subs.delete(fn);
     if (!subs.size) {
       clearTimeout(timer); timer = null;
-      clearTimeout(follow); follow = null;
+      clearFollow();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     }
   };
 }
 
 // للاختبار
-export function resetOpsWatch() { data = null; lastAt = 0; inflight = null; clearTimeout(timer); timer = null; clearTimeout(follow); follow = null; subs.clear(); }
+export function resetOpsWatch() { data = null; lastAt = 0; inflight = null; clearTimeout(timer); timer = null; clearFollow(); subs.clear(); }
 export const subscribeOpsHealth = (fn) => subscribe(fn);   // للاختبار
 
 // الحقائق والحكم. enabled=false (المراقب): لا طلب ولا حكم

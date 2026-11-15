@@ -8,13 +8,16 @@
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1';
 const S = await import('../_shared/slack.ts');
-const { CONFIG, mailUsage } = await import('./core.ts');
+const { CONFIG, mailUsage, db } = await import('./core.ts');
 const { alertTest } = await import('./system.ts');
 
 type Req = { method: string; path: string; profile: string | null; prefer: string | null; body: any };
 
 Deno.test('التنبيه التجريبي: حالة سلاك تُكتب بعد الرد، صحيحة على السلك، وبريده في العداد', async () => {
   S.resetSlack();
+  // كالإنتاج: core.ts يسجل عميله عند الإقلاع (slackUse(db))، فيمر الضخ بقراءة سلسلة اليوم وحجزها ثم الأم ثم الرد
+  S.slackUse(db);
+  const savedSlack = { ...S.SLACK };
   Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0 });
   Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
   Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
@@ -56,6 +59,9 @@ Deno.test('التنبيه التجريبي: حالة سلاك تُكتب بعد 
     // (1) سلاك رد: الكتابة تصل بالعميل الحقيقي إلى leaders.ops_status بعمود النجاح وحده
     releaseSlack();
     await S.slackIdle();
+    // مسار السلسلة نفسه الذي يمر به الإنتاج: قراءة سلسلة اليوم ثم حجزها
+    assert(reqs.some((q) => q.method === 'GET' && q.path.startsWith('/rest/v1/slack_threads')), 'قُرئت سلسلة اليوم');
+    assert(reqs.some((q) => q.method === 'POST' && q.path.startsWith('/rest/v1/slack_threads')), 'حُجزت سلسلة اليوم');
     const w = statusWrites();
     assert(w.length >= 1, 'كُتبت حالة سلاك بعد رده');
     for (const q of w) {
@@ -71,6 +77,46 @@ Deno.test('التنبيه التجريبي: حالة سلاك تُكتب بعد 
     await S.slackIdle();
     globalThis.fetch = real;
     Object.assign(CONFIG, saved);
+    Object.assign(S.SLACK, savedSlack);
+    S.resetSlack();
+    Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
+    Deno.env.delete('LEADERS_SLACK_CHANNEL');
+  }
+});
+
+// صلاحية مرفوضة على ops_status ليست غيابًا: لا توقف الكتابة دقائق، فالنشر التالي يكتب. والغياب الحق يوقفها دقيقة لا عشرًا
+Deno.test('ops_status: رفض الصلاحية لا يوقف الكتابة، والغياب يوقفها مدة statusMissingMs', async () => {
+  assertEquals(S.isMissing({ code: '42501', message: 'permission denied for table ops_status' }, 'ops_status'), false);
+  assertEquals(S.isMissing({ message: 'permission denied for table ops_status' }, 'ops_status'), false);
+  assertEquals(S.isMissing({ code: 'PGRST205', message: "Could not find the table 'leaders.ops_status'" }, 'ops_status'), true);
+  assertEquals(S.isMissing({ message: 'relation "leaders.ops_status" does not exist' }, 'ops_status'), true);
+  assertEquals(S.SLACK.statusMissingMs, 60e3);
+
+  S.resetSlack();
+  const savedSlack = { ...S.SLACK };
+  Object.assign(S.SLACK, { gapMs: 0 });
+  Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
+  Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
+  let writes = 0;
+  const denied = { error: { code: '42501', message: 'permission denied for table ops_status' } };
+  const q: any = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: null }), insert: async () => ({ error: null }), update: () => q, delete: () => q, then: (ok: any) => ok({ data: null, error: null }) };
+  const client: any = { schema: () => client, from: (t: string) => (t === 'ops_status' ? { upsert: async () => { writes++; return denied; } } : q) };
+  const real = globalThis.fetch;
+  const realErr = console.error;
+  globalThis.fetch = (async () => new Response('{"ok":true,"ts":"1700000000.000100"}')) as typeof fetch;
+  console.error = () => {};
+  try {
+    S.slackPost('mail', 'سطر أول', { client });
+    await S.slackIdle();
+    const first = writes;
+    assert(first >= 1);
+    S.slackPost('mail', 'سطر ثان', { client });
+    await S.slackIdle();
+    assert(writes > first, 'كُتبت حالة النشر التالي رغم رفض الصلاحية قبله');
+  } finally {
+    globalThis.fetch = real;
+    console.error = realErr;
+    Object.assign(S.SLACK, savedSlack);
     S.resetSlack();
     Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
     Deno.env.delete('LEADERS_SLACK_CHANNEL');

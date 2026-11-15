@@ -92,12 +92,17 @@ function AlertTest({ slackOn }) {
   );
 }
 
-// الطي والفتح: اختيار المتصفح محفوظ (localStorage)، وأي حال غير سليمة تفتح البطاقة مهما كان المحفوظ
+// الطي والفتح: اختيار المتصفح محفوظ (localStorage)، والبطاقة مفتوحة ما لم يطوها صاحبها، وأي حال غير سليمة تفتحها مهما كان
+// المحفوظ. اختيار الجلسة (chosen) مقرون بالحال التي اختير فيها: تغيّر الحال إلى غير سليمة يسقطه في الرسم نفسه، بلا رسم مطوي
+// قبله. وطي بطاقة غير سليمة لهذه الجلسة وحدها، فلا يُحفظ فيطوي زيارة سليمة لاحقة
 const PREF_KEY = 'mi_admin_ops_card';
 const BODY_ID = 'ops-body';
 const readPref = () => { try { return localStorage.getItem(PREF_KEY); } catch { return null; } };
 const writePref = (v) => { try { localStorage.setItem(PREF_KEY, v); } catch { /* التخزين محجوب: الاختيار لهذه الجلسة */ } };
-export const cardOpen = (level, pref, chosen = null) => (chosen ?? (level !== 'green' ? true : pref === 'open'));
+export const cardOpen = (level, pref, chosen = null) => {
+  if (chosen && (chosen.lv === level || level === 'green')) return chosen.open;
+  return level !== 'green' ? true : pref !== 'closed';
+};
 
 const Ring = ({ m }) => {
   const r = 11;
@@ -138,15 +143,13 @@ export function OpsHealthCard({ enabled, isSuper }) {
   const [chosen, setChosen] = useState(null);
   const [pref] = useState(readPref);
   const lv = verdict?.level;
-  // حال غير سليمة تظهر: يسقط اختيار الجلسة فتنفتح البطاقة
-  useEffect(() => { if (lv && lv !== 'green') setChosen(null); }, [lv]);
   useEffect(() => { if (data && focusPending) focusCard(); }, [data]);
   if (!enabled) return null;
   if (failed) return <p className="la-muted ops-unread" role="status">تعذّرت قراءة صحة البريد والتنبيه الآن، ويُعاد السؤال بعد دقيقة.</p>;
   if (!data || !verdict) return null;
   const { mail, slack, alerts } = data;
   const open = cardOpen(lv, pref, chosen);
-  const toggle = () => { setChosen(!open); writePref(open ? 'closed' : 'open'); };
+  const toggle = () => { setChosen({ lv, open: !open }); if (lv === 'green') writePref(open ? 'closed' : 'open'); };
   const q = mail.queue || {};
   const pct = mail.sent != null && mail.cap ? Math.min(100, Math.round((mail.sent / mail.cap) * 100)) : null;
   const meter = meterLevel(verdict);
@@ -190,7 +193,7 @@ export function OpsHealthCard({ enabled, isSuper }) {
           <h4>سلاك</h4>
           <dl>
             <Row label="الربط">{slack.configured ? <Flag on /> : <><Flag on={false} />{slack.missing?.length > 0 && <small className="ops-codes">ينقص: {slack.missing.map((k) => <code key={k}>{k}</code>)}</small>}</>}</Row>
-            <Row label="آخر نشر ناجح">{!slack.readable ? 'غير مقروء' : when(slack.ok_at) || 'لم يُنشر شيء بعد'}</Row>
+            <Row label="آخر نشر ناجح">{!slack.readable ? 'غير مقروء' : when(slack.ok_at) || (slack.configured ? 'لم يُنشر شيء بعد' : alerts.webhook ? 'البوت غير مضبوط، وما يصل عبر رابط التنبيه لا يُسجَّل هنا' : 'البوت غير مضبوط')}</Row>
             <Row label="آخر خطأ">{!slack.readable ? 'غير مقروء' : slack.error ? <>{slackLabel(slack.error)} {when(slack.error_at)} <code dir="ltr" className="ops-code">{slack.error}</code></> : 'لا خطأ'}</Row>
           </dl>
         </div>
