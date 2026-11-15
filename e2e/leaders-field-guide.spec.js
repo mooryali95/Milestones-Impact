@@ -84,3 +84,14 @@ test('المالك حجب الأمثلة بجانب الحقل: الدليل ب�
   await expect(page.getByRole('note').filter({ hasText: 'المطلوب:' })).toHaveCount(3);
   await expect(page.getByText(/مثال من /)).toHaveCount(0);
 });
+
+test('هيكل البداية: يُدرج في الجدول الفارغ وحده، وما بقي كما أُدرج يُنبَّه عليه', async ({ page }) => {
+  await open(page, 'beginner');
+  const start = page.getByRole('button', { name: '▤ ابدأ من هيكل' });
+  await start.click();
+  await expect(page.getByLabel('البند 1')).toHaveValue('الكوادر والاستشارات');
+  await expect(page.getByRole('status').filter({ hasText: 'صفوف من الهيكل كما أُدرج' })).toBeVisible();
+  await expect(start).toHaveCount(0);
+  await page.getByLabel('الكمية 1').fill('2');
+  await expect(page.getByRole('status').filter({ hasText: '4 صفوف من الهيكل' })).toBeVisible();
+});

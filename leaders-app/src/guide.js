@@ -10,6 +10,7 @@
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
 import GOV from '../../supabase/content/initiative-guide/v1/sectors/gov.json';
 import HEALTH from '../../supabase/content/initiative-guide/v1/sectors/health.json';
+import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
 import { costSummary } from '../../supabase/functions/leaders-api/capstone.js';
 import { nearCopy } from '../../supabase/functions/leaders-api/example-check.js';
 
@@ -62,6 +63,25 @@ export function guideFor(modelKey, fieldKey, level, sectorText = null, examples 
 /** هل الجواب قريب جدًا من جواب أي مثال محلول للحقل نفسه؟ يُقارن بكل الأمثلة ولو حُجب بعضها، كما يقارن المستشار */
 export const nearExample = (modelKey, fieldKey, value) => EXAMPLES.some((ex) => nearCopy(value, ex.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey)?.value));
 
+// ── صفوف البداية (4ج): هيكل لا محتوى للجدول الفارغ ──
+const blank = (rows) => !(Array.isArray(rows) ? rows : []).some((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim()));
+
+/** صفوف هيكل البداية للجدول، نسخة جديدة، أو null إن لم يكن له هيكل أو لم تطابق أعمدته */
+export function starterFor(modelKey, fieldKey, columns) {
+  const rows = STARTERS[modelKey]?.[fieldKey];
+  if (!Array.isArray(rows) || (Array.isArray(columns) && rows.some((r) => r.length !== columns.length))) return null;
+  return rows.map((r) => [...r]);
+}
+
+/** يُعرض زر «ابدأ من هيكل»؟ الجدول فارغ وله هيكل */
+export const canStart = (modelKey, fieldKey, columns, rows) => blank(rows) && !!starterFor(modelKey, fieldKey, columns);
+
+/** صفوف الهيكل التي بقيت كما أُدرجت: تُعدّل أو تُحذف قبل التسليم */
+export function untouchedStarters(modelKey, fieldKey, rows) {
+  const base = (STARTERS[modelKey]?.[fieldKey] || []).map((r) => JSON.stringify(r.map((c) => String(c))));
+  return (Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r) && base.includes(JSON.stringify(r.map((c) => String(c ?? ''))))).length;
+}
+
 export const hasGuide = (modelKey) => !!FIELDS[modelKey] && typeof FIELDS[modelKey] === 'object';
 
 /** المثال المحلول وثيقةً كاملة بصيغة الخادم، يطبعها قالب الوثيقة نفسه (capstoneReport) */
@@ -81,4 +101,57 @@ export function exampleDoc(ex) {
     sections: ex.sections.map((s) => ({ key: s.key, title: s.title, dimension: s.dimension, fields: s.fields })),
     cost, checks: [], review: null, sponsor: null, rubric: [],
   };
+}
+
+// ── اكتشاف المبادرة (4ج): قبل البطاقة، بأسئلة تختلف بالمستوى، وناتجه مسودة البطاقة نفسها ──
+// أسلوب الميسّرين: أفكار متعددة، ثم مفاضلة بمعايير بوابة البطاقة نفسها، ثم صياغة المختارة. لا نسخة ثانية: ما يُكتب هنا
+// يُحفظ مسودةً في «بطاقة المبادرة» ويعدّله المشارك هناك.
+export const DISCOVERY_CRITERIA = Object.freeze([
+  ['real', 'قائمة في جهتك، أو افتراضية واقعية في سياقها'],
+  ['size', 'يمكن البدء بها وإثبات قيمتها في مدة البرنامج'],
+  ['owner', 'لها صاحب قرار في جهتك يهمه حلها'],
+  ['measure', 'يمكن قياسها برقم: الآن، والمستهدف'],
+]);
+
+/** أسئلة الصياغة بمستوى المشارك: التأسيسي بأمثلة، والمتوسط بلا أمثلة، والمتقدم أسئلة استراتيجية */
+export function discoveryQuestions(level) {
+  if (level === 'advanced') {
+    return [
+      { key: 'decision', label: 'ما القرار الذي تريد أن يتخذه صاحب القرار بعد قراءة وثيقتك؟' },
+      { key: 'metric', label: 'أي مؤشر استراتيجي سيتحرك، ومن كم إلى كم؟' },
+      { key: 'goal', label: 'أي هدف معلن في استراتيجية جهتك تخدمه؟' },
+      { key: 'first', label: 'ما خطوتك الأولى خلال 30 يومًا، ومع من؟' },
+    ];
+  }
+  const ex = level === 'beginner';
+  return [
+    { key: 'who', label: 'من يتضرر منها، وكم عددهم تقريبًا؟', hint: ex ? 'مثال: 1,200 مستفيد شهريًا ينتظرون أكثر من أسبوع' : '' },
+    { key: 'size', label: 'كيف تعرف حجمها؟ رقم ومن أين أخذته', hint: ex ? 'مثال: متوسط الإنجاز 9 أيام (نظام الطلبات، 2025)' : '' },
+    { key: 'goal', label: 'أي هدف معلن لجهتك تمسه؟', hint: ex ? 'انقله كما هو في استراتيجية الجهة أو خطتها السنوية' : '' },
+    { key: 'first', label: 'ما خطوتك الأولى خلال 30 يومًا، ومع من؟', hint: ex ? 'مثال: اجتماع مع مالك البيانات لاستخراج أرقام الربع الماضي' : '' },
+  ];
+}
+
+/** درجة الفكرة: عدد المعايير المحققة من أربعة */
+export const discoveryScore = (checks) => DISCOVERY_CRITERIA.filter(([k]) => checks?.[k]).length;
+
+/**
+ * مسودة البطاقة من الاكتشاف. لا تكتب فوق ما كتبه المشارك في بطاقته من قبل: تملأ الفارغ وحده
+ * @param {string} level @param {{ idea: string, title?: string, answers: Record<string, string> }} input @param {Record<string, any>} [existing]
+ */
+export function charterFromDiscovery(level, { idea, title, answers }, existing = {}) {
+  const a = Object.fromEntries(Object.entries(answers || {}).map(([k, v]) => [k, String(v || '').trim()]));
+  const sentence = (t) => (t && !/[.؟!]$/.test(t) ? `${t}.` : t);
+  const problem = level === 'advanced'
+    ? [sentence(String(idea || '').trim()), a.metric && sentence(`المؤشر: ${a.metric}`), a.decision && sentence(`القرار المطلوب: ${a.decision}`)]
+    : [sentence(String(idea || '').trim()), a.who && sentence(`يتضرر منها ${a.who}`), a.size && sentence(`حجمها: ${a.size}`)];
+  const draft = {
+    title: String(title || idea || '').trim().slice(0, 120),
+    problem: problem.filter(Boolean).join(' '),
+    objective: a.goal || '',
+    first_step: a.first || '',
+  };
+  const out = { ...existing };
+  for (const [k, v] of Object.entries(draft)) if (v && !String(existing?.[k] ?? '').trim()) out[k] = v;
+  return out;
 }

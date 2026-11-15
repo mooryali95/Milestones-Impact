@@ -122,6 +122,7 @@ export const MIGRATIONS = [
   '20261114110000_leaders_mail_center',
   '20261114120000_public_lockdown',
   '20261114140000_leaders_initiative_business_case',
+  '20261115100000_leaders_initiative_reality',
   '20261115110000_leaders_pin_sponsor_seat_guard',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
@@ -163,5 +164,6 @@ export const MIGRATION_GATES = {
   '20261114110000_leaders_mail_center': ["tolerant", ""],
   '20261114120000_public_lockdown': ["tolerant", ""],
   '20261114140000_leaders_initiative_business_case': ["tolerant", "محتوى نماذج فقط: الدوال تقرأ النماذج كما هي في القاعدة، وفحص فصل الشراء يُطبَّق متى وُجد الفصل"],
+  '20261115100000_leaders_initiative_reality': ["tolerant", "محتوى نماذج فقط: حقول اختيارية تُضاف إلى بطاقة المبادرة، والدوال تقرأ الحقول كما هي في القاعدة"],
   '20261115110000_leaders_pin_sponsor_seat_guard': ["tolerant", "الدالة تفحص الشرط نفسه قبل استدعاء الدالة (entitlements.ts seatStopped)، فتعمل قبله وبعده"],
 };
