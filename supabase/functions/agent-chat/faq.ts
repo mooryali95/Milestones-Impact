@@ -44,6 +44,15 @@ export function isArabic(s: string) {
   return ar > 0 && ar >= lat;
 }
 
+// لغة رسالة الزائر بعدّ الكلمات لا الحروف، بعد حذف البريد والروابط: رسالة عربية فيها بريد طويل أو اسم منتج لاتيني
+// تبقى عربية. (isArabic بالحروف باقية للمصحح في evals/grade.ts، فلا يتغير التصحيح.)
+export function messageIsArabic(s: string) {
+  const words = String(s ?? '').replace(/\S+@\S+/g, ' ').replace(/(https?:\/\/|www\.)\S+/gi, ' ').split(/\s+/);
+  const ar = words.filter((w) => /[؀-ۿ]/.test(w)).length;
+  const lat = words.filter((w) => /[A-Za-z]/.test(w) && !/[؀-ۿ]/.test(w)).length;
+  return ar > 0 && ar >= lat;
+}
+
 const ENTRIES: { e: FaqEntry; keys: string[][]; not: string[] }[] = (FAQ as FaqEntry[]).map((e) => ({ e, keys: e.match.map((g) => g.map(normalizeText)), not: (e.not ?? []).map(normalizeText) }));
 
 const hasKey = (norm: string, tokens: string[], k: string) => (k.includes(' ') ? ` ${norm} `.includes(` ${k} `) : tokens.some((t) => tokenHits(t, k)));
@@ -80,7 +89,7 @@ export function matchFaq(question: string, page: string): { id: string; text: st
     if (!all) continue;
     if (not.some((k) => hasKey(norm, tokens, k))) continue;
     if (e.only && !tokens.every((t) => keys.some((g) => g.some((k) => !k.includes(' ') && tokenHits(t, k))))) continue;
-    const lang = isArabic(question) ? 'ar' : 'en';
+    const lang = messageIsArabic(question) ? 'ar' : 'en';
     return { id: e.id, text: lang === 'ar' ? e.ar : e.en, lang };
   }
   return null;
