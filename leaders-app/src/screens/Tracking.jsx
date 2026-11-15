@@ -8,9 +8,9 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { drafts, useUnsavedGuard } from '../unsaved.js';
 import ChooseExpert from './ChooseExpert.jsx';
+import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
 const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
-const CP_STATUS = { upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' };
 const pct = (v) => (v == null ? '·' : `${v}%`);
 const monthName = (p) => (p ? new Date(`${p}-01T00:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'long', year: 'numeric' }) : '');
 
@@ -102,7 +102,7 @@ export default function Tracking({ owner = '' }) {
         <div><b>{s.updates}</b><small>تحديث شهري</small></div>
       </div>
 
-      <ol className="tr-cps">{s.checkpoints.map((c) => <li key={c.key} className={c.status}><b>{c.title}</b><small>{c.verify_title || CP_STATUS[c.status]}</small></li>)}</ol>
+      <ol className="tr-cps">{s.checkpoints.map((c) => <li key={c.key} className={c.status}><b>{c.title}</b><small>{c.verify_title || CHECKPOINT_STATUS_AR[c.status]}</small></li>)}</ol>
       {msg?.warn ? <div className="alert err">{msg.warn}</div>
         : redo?.verify?.status === 'disputed' ? <div className="alert err">اعترض الراعي على أرقام «{checkpoint.title}»: «{redo.verify.note}». صحّحها ثم أرسل المراجعة من جديد.</div>
           : redo && <div className="alert info">لم يؤكد الراعي أرقام «{checkpoint.title}»، ورابطه لم يعد صالحًا. أرسل المراجعة من جديد ليصله رابط آخر.</div>}

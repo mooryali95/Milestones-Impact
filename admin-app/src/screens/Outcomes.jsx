@@ -7,9 +7,9 @@
 import React, { useEffect, useState } from 'react';
 import { L, date } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
+import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
 export const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
-const CP = { upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' };
 const pct = (v) => (v == null ? '·' : `${v}%`);
 
 // متابعة مبادرة واحدة، في صفحة الوثيقة عند المستشار
@@ -35,7 +35,7 @@ export function TrackingPanel({ t }) {
         <thead><tr><th>المعلم</th><th>المستهدف</th><th>الحالة</th><th>ملاحظة</th></tr></thead>
         <tbody>{t.state.milestones.map((m) => <tr key={m.key}><td>{m.title}</td><td>{m.due || '·'}</td><td>{t.statuses[m.status] || 'لم يُحدَّث'}{m.actual ? ` · ${m.actual}` : ''}</td><td>{m.note || ''}</td></tr>)}</tbody>
       </table>
-      <p>{s.checkpoints.map((c) => <span key={c.key} className="la-chip">{c.title}: {c.verify_title || CP[c.status]}</span>)}</p>
+      <p>{s.checkpoints.map((c) => <span key={c.key} className="la-chip">{c.title}: {c.verify_title || CHECKPOINT_STATUS_AR[c.status]}</span>)}</p>
       {last?.blockers && <p><b>ما يعيقه:</b> {last.blockers}</p>}
       {last?.support && <p><b>ما يحتاجه:</b> {last.support}</p>}
     </section>

@@ -8,17 +8,16 @@
 //   المتقدم: «سؤال الخبير» مطويًا: تحدٍّ لا شرح، والمثال الكامل عند الطلب فقط
 // المحتوى في المستودع (supabase/content/initiative-guide)، غير مُقاس، يراجعه خبير المحتوى.
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
-import GOV from '../../supabase/content/initiative-guide/v1/sectors/gov.json';
-import HEALTH from '../../supabase/content/initiative-guide/v1/sectors/health.json';
+import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
-import { costSummary } from '../../supabase/functions/leaders-api/capstone.js';
+import { CARD_CRITERIA, costSummary } from '../../supabase/functions/leaders-api/capstone.js';
 import { sectorFamily } from '../../supabase/functions/leaders-api/logic.js';
 import { nearCopy } from '../../supabase/functions/leaders-api/example-check.js';
 
 export const GUIDE_MODES = Object.freeze({ beginner: 'open', intermediate: 'collapsed', advanced: 'expert' });
 
 // الأمثلة المحلولة بترتيب العرض. القطاع الأقرب أولًا، والخدمات الحكومية أقرب مثال لمن لم يُضف قطاعه بعد
-export const EXAMPLES = Object.freeze([GOV, HEALTH]);
+export { EXAMPLES };
 const BY_SECTOR = Object.fromEntries(EXAMPLES.map((x) => [x.sector, x]));
 
 /** مفتاح قطاع المثال من قطاع المشارك المكتوب نصًا حرًا في ملفه، ومعه هل طابق قطاعه فعلًا (عائلات القطاع في logic.js) */
@@ -106,12 +105,7 @@ export function exampleDoc(ex) {
 // ── اكتشاف المبادرة (4ج): قبل البطاقة، بأسئلة تختلف بالمستوى، وناتجه مسودة البطاقة نفسها ──
 // أسلوب الميسّرين: أفكار متعددة، ثم مفاضلة بمعايير بوابة البطاقة نفسها، ثم صياغة المختارة. لا نسخة ثانية: ما يُكتب هنا
 // يُحفظ مسودةً في «بطاقة المبادرة» ويعدّله المشارك هناك.
-export const DISCOVERY_CRITERIA = Object.freeze([
-  ['real', 'قائمة في جهتك، أو افتراضية واقعية في سياقها'],
-  ['size', 'يمكن البدء بها وإثبات قيمتها في مدة البرنامج'],
-  ['owner', 'لها صاحب قرار في جهتك يهمه حلها'],
-  ['measure', 'يمكن قياسها برقم: الآن، والمستهدف'],
-]);
+export const DISCOVERY_CRITERIA = Object.freeze(CARD_CRITERIA.map((c) => [c.key, c.self]));
 
 /** أسئلة الصياغة بمستوى المشارك: التأسيسي بأمثلة، والمتوسط بلا أمثلة، والمتقدم أسئلة استراتيجية */
 export function discoveryQuestions(level) {
