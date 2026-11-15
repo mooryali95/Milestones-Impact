@@ -30,6 +30,7 @@ const MailCenter = lazy(() => import('./MailCenter.jsx'));
 const AppSettings = lazy(() => import('./AppSettings.jsx'));
 const Feedback360 = lazy(() => import('./Feedback360.jsx'));
 const Insight = lazy(() => import('./Insight.jsx'));
+const MasterBookScreen = lazy(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { TABS } from '../leaders-tabs.js';
@@ -42,7 +43,7 @@ const TAB_KEYS = new Set(TABS.map(([k]) => k));
 // الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
 const TAB_GROUPS = [
   ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
-  ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
+  ['المحتوى', ['journey', 'book', 'handbook', 'katon', 'lab', 'assessment', 'content']],
   ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings']],
   ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
 ];
@@ -109,6 +110,7 @@ export default function Leaders({ canWrite, pending, isSuper = false }) {
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
+  else if (tab === 'book') body = <MasterBookScreen onClose={() => at('handbook')} onExperts={() => at('experts')} />;
   else if (tab === 'katon') body = <KatonBank canWrite={canWrite} />;
   else if (tab === 'hall') body = <HallScreen canWrite={canWrite} />;
   else if (tab === 'capstones') body = <Capstones canWrite={canWrite} capId={capId} onOpen={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;

@@ -30,6 +30,8 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
   // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
   'assessment-answers',
+  // الكتاب الأم: قراءة لكل مدير، والتعليق والحسم بغلاف writer (master-book.ts)
+  'book',
   // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter
   'mail-center',
   // صحة البريد والتنبيه: أعداد وحالات بلا عناوين ولا قيم أسرار، يحصرها الخادم في المدير ذي الكتابة (ops_health_test.ts يحرس الفحص)
@@ -54,7 +56,11 @@ describe('4.4 صلاحيات الأدوار على الخادم', () => {
   });
   it('كل فعل خبير يمس مشاركًا أو دفعة أو طلبًا محصور فيما أُسند إليه', () => {
     const scoped = /requireAdvisorOf|requireAdvisorCohort|requireEffectiveAdvisor|hallSessionOf|requestFor|myParticipantIds|advisorOf|advisorCohorts|cohortsOf|assigned|e\.id|expert_id|mine\(/;
-    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key)).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl)).map(({ key }) => key);
+    // الكتاب الأم لا يمس مشاركًا ولا دفعة: يُحصر بعضوية لجنتي المحتوى والقياس (expertViewer ← bookAccess)
+    const book = mapOf('expert').filter(({ key }) => key.startsWith('xp.book'));
+    expect(book.length).toBe(3);
+    for (const { key, impl } of book) expect(impl, key).toMatch(/MB\.expertViewer\(e\)/);
+    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key) && !key.startsWith('xp.book')).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl)).map(({ key }) => key);
     expect(gaps).toEqual([]);
   });
   it('كل جلسة تُستخرج من جدولها: المشارك والخبير والمنسق والإدارة', () => {
