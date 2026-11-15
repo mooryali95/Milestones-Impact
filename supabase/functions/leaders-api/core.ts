@@ -4,7 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
-import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
+import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
@@ -202,7 +202,8 @@ export { mailButton };
 // كل رسالة تحمل عائلتها (السطر الإنجليزي فوق العنوان) وسطر معاينة صندوق الوارد
 const shell = (family: MailFamily, title: string, body: string, preheader = '', footnote?: string) =>
   mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
-const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
+// الاسم معزول الاتجاه (bdi): اسم لاتيني لا يقلب ترتيب التحية ولا ينقل فاصلتها
+const hello =(name: string | null | undefined) => (name ? `أهلًا ${bdi(name)}،` : 'أهلًا،');
 
 // حساب العرض التوضيحي: نطاق بريد لا يستقبل، ولا تُرسل إليه رسالة من أي مسار (الحارس هنا لا في كل موضع)
 export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
@@ -269,8 +270,8 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
 export function reviewMail(name: string, title: string, returned: boolean, note?: string | null) {
   return shell('journey', returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك',
-    mailText(`${hello(name)} ${returned ? `راجع المستشار «${esc(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
-    + (returned && note ? mailNote(esc(note)) : '')
+    mailText(`${hello(name)} ${returned ? `راجع المستشار «${bdi(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${bdi(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
+    + (returned && note ? mailNote(bdi(note)) : '')
     + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
     returned ? `ملاحظة على «${title}» قبل اعتماده` : `اعتُمد «${title}»`);
 }
@@ -289,7 +290,7 @@ export function stuckMail(name: string, text: string) {
 
 // ملاحظة أو تنبيه أو إشادة مرئية للمشارك (observations.ts): النص نفسه الذي تعرضه بطاقته في الموقع
 export function observationMail(name: string, heading: string, body: string) {
-  return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(body)}`) + mailButton(CONFIG.appUrl, 'افتح رحلتي'), body.slice(0, 140));
+  return shell('journey', esc(heading), mailText(`${hello(name)} ${bdi(body)}`) + mailButton(CONFIG.appUrl, 'افتح رحلتي'), body.slice(0, 140));
 }
 
 // طلب إعادة القياس: النص نفسه الذي تعرضه بطاقة الموقع (retake.js retakeText)
@@ -327,7 +328,7 @@ export function finalDecisionMail(name: string, decision: string, notes: string 
   };
   return shell('journey', FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي',
     mailText(`${hello(name)} ${next[decision] || 'اعتُمد تقييمك الختامي.'}`)
-    + (notes ? mailNote(esc(notes)) : '')
+    + (notes ? mailNote(bdi(notes)) : '')
     + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
     FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي');
 }
@@ -358,7 +359,7 @@ export function paymentRefundMail(name: string, item: string, amount: string) {
 }
 export function paymentAbandonMail(name: string, item: string) {
   return shell('journey', 'دفعك لم يكتمل',
-    mailText(`${hello(name)} فتحت صفحة الدفع لـ«${esc(item)}» ولم تكتمل العملية، ولم يُخصم منك شيء. إن واجهت مشكلة في الدفع فردّ على هذه الرسالة ونساعدك.`)
+    mailText(`${hello(name)} فتحت صفحة الدفع لـ«${bdi(item)}» ولم تكتمل العملية، ولم يُخصم منك شيء. إن واجهت مشكلة في الدفع فردّ على هذه الرسالة ونساعدك.`)
     + mailButton(CONFIG.appUrl, 'أكمل الدفع'),
     'خطوة واحدة باقية');
 }
@@ -369,7 +370,7 @@ export function paymentOwnerMail(what: string, rows: [string, string][]) {
 // إخطار النسخة الجوهرية (D18): ما تغيّر بنصه من POLICY_CHANGES، ورابط السجل والسياسة، وأن الموافقة تُطلب عند الدخول
 export function policyChangeMail(name: string, version: string, items: readonly string[]) {
   return shell('journey', 'حدّثنا سياسة الخصوصية وشروط البرنامج',
-    mailText(`${hello(name)} نشرنا النسخة ${esc(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
+    mailText(`${hello(name)} نشرنا النسخة ${bdi(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
     + items.map((t) => mailText(`• ${esc(t)}`)).join('')
     + mailButton(`${CONFIG.appUrl}/legal/changes`, 'اقرأ سجل التغييرات'),
     'ما تغيّر في سياسة الخصوصية والشروط');
@@ -398,16 +399,16 @@ export function nameConfirmMail(name: string, url: string) {
 export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' | 'f360' = 'post', f360?: { promise: string; closes: string; reminder?: boolean }) {
   if (phase === 'f360' && f360) {
     return shell('journey', f360.reminder ? `تذكير: تقديرك لـ${who}` : `طلب تقدير من ${who}`,
-      mailText(`${hello(rater)} ${f360.reminder ? `لم يصلنا تقديرك بعد لـ${esc(who)}، والنافذة تُغلق ${esc(f360.closes)}.` : `يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ورشّحك مستشاره لتقييم 360 للتطوير: مرآة لممارسته يناقشها معه في جلسة توجيه، ولا تدخل أي تقييم أو شهادة.`}`)
+      mailText(`${hello(rater)} ${f360.reminder ? `لم يصلنا تقديرك بعد لـ${bdi(who)}، والنافذة تُغلق ${bdi(f360.closes)}.` : `يشارك ${bdi(who)} في برنامج القادة من Milestone Impact، ورشّحك مستشاره لتقييم 360 للتطوير: مرآة لممارسته يناقشها معه في جلسة توجيه، ولا تدخل أي تقييم أو شهادة.`}`)
       + mailText('عبارات قصيرة تقدّر كلًّا منها كما رأيته في الأشهر الثلاثة الأخيرة، و«لا أستطيع الحكم» لما لم تشهده، ثم ثلاثة أسئلة اختيارية. يستغرق ذلك نحو عشر دقائق.')
       + mailText(esc(f360.promise))
       + mailButton(link, 'ابدأ التقدير')
-      + mailNote(`الرابط خاص بك وصالح حتى ${esc(f360.closes)}. نحفظ اسمك وبريدك وصلتك به وتقديرك لتقرير تطويري له وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
+      + mailNote(`الرابط خاص بك وصالح حتى ${bdi(f360.closes)}. نحفظ اسمك وبريدك وصلتك به وتقديرك لتقرير تطويري له وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
       `عشر دقائق لتقييم 360 لـ${who}`, '');
   }
   const pre = phase === 'pre';
   return shell('journey', `طلب تقدير من ${who}`,
-    mailText(`${hello(rater)} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
+    mailText(`${hello(rater)} يشارك ${bdi(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
     + mailText(pre
       ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
       : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.')
@@ -425,9 +426,9 @@ export const FEEDBACK_MAIL = {
 } as const;
 export function feedbackMail(kind: keyof typeof FEEDBACK_MAIL, name: string | null, who: string, opts: { note?: string | null; url: string }) {
   const body = {
-    list: mailText(`${hello(name)} رشّح ${esc(who)} مقيّميه لتقييم 360، والقائمة بانتظار اعتمادك بصفتك مستشاره. تأكد من تنوعها (المدير والزملاء والفريق وأصحاب المصلحة)، ومن أن فيها من يختلف معه لا المادحين وحدهم.`),
-    returned: mailText(`${hello(name)} أعاد مستشارك قائمة مقيّميك بملاحظة: ${esc(opts.note || '')}. عدّلها وأرسلها مرة أخرى.`),
-    ready: mailText(`${hello(name)} أُغلقت نافذة تقييم 360 لـ${esc(who)}، وتقريره جاهز لتطّلع عليه قبل جلسة الاستلام. لا يراه المشارك حتى تسلّمه له في الجلسة.`),
+    list: mailText(`${hello(name)} رشّح ${bdi(who)} مقيّميه لتقييم 360، والقائمة بانتظار اعتمادك بصفتك مستشاره. تأكد من تنوعها (المدير والزملاء والفريق وأصحاب المصلحة)، ومن أن فيها من يختلف معه لا المادحين وحدهم.`),
+    returned: mailText(`${hello(name)} أعاد مستشارك قائمة مقيّميك بملاحظة: ${bdi(opts.note || '')}. عدّلها وأرسلها مرة أخرى.`),
+    ready: mailText(`${hello(name)} أُغلقت نافذة تقييم 360 لـ${bdi(who)}، وتقريره جاهز لتطّلع عليه قبل جلسة الاستلام. لا يراه المشارك حتى تسلّمه له في الجلسة.`),
     released: mailText(`${hello(name)} سلّمك مستشارك تقرير 360: ما يراه فيك مديرك وزملاؤك وفريقك مقارنة بتقديرك، وملاحظاتهم المكتوبة بلا نسبة إلى أحد. للتطوير وحده، ولا يدخل أي تقييم أو شهادة.`),
   }[kind];
   const cta = { list: 'راجع القائمة واعتمدها', returned: 'عدّل القائمة', ready: 'اقرأ التقرير', released: 'افتح تقريرك' }[kind];
@@ -437,7 +438,7 @@ export function feedbackMail(kind: keyof typeof FEEDBACK_MAIL, name: string | nu
 // D19: مقيّم بانتظار تأكيد المستشار أو المنسق قبل إرسال دعوته، بلا عنوانه في البريد
 export function raterConfirmMail(who: string, why: string, url: string) {
   return shell('journey', 'مقيّم بانتظار تأكيدك',
-    mailText(`دعا ${esc(who)} مقيّمًا لتقدير أثره، وبريده يحتاج تأكيدك قبل إرسال الدعوة: ${esc(why)}.`)
+    mailText(`دعا ${bdi(who)} مقيّمًا لتقدير أثره، وبريده يحتاج تأكيدك قبل إرسال الدعوة: ${bdi(why)}.`)
     + mailText('تأكد أن المقيّم من يعمل معه فعلًا (مديره أو زميله أو أحد فريقه)، فتقديره يدخل حكم «تغير مؤكد» وتقرير الأثر للجهة.')
     + mailButton(url, 'راجع وأكّد'),
     'تأكيد مقيّم قبل إرسال دعوته');
@@ -445,7 +446,7 @@ export function raterConfirmMail(who: string, why: string, url: string) {
 
 export function raterRejectedMail(name: string, rater: string, reason: string) {
   return shell('journey', 'لم يُعتمد أحد مقيّميك',
-    mailText(`${hello(name)} لم يُعتمد ${esc(rater)} مقيّمًا لأثرك، والسبب: ${esc(reason)}.`)
+    mailText(`${hello(name)} لم يُعتمد ${bdi(rater)} مقيّمًا لأثرك، والسبب: ${bdi(reason)}.`)
     + mailText('ادعُ مقيّمًا آخر ممن يعملون معك، ويُفضَّل ببريد جهتك.')
     + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
     'ادعُ مقيّمًا آخر');
@@ -455,7 +456,7 @@ export function raterRejectedMail(name: string, rater: string, reason: string) {
 // تذكير قبل الجلسة بيوم، ومعه رابطها إن كانت عن بعد
 export function sessionReminderMail(name: string, when: string, expert: string | null, joinUrl: string | null) {
   return shell('sessions', 'جلستك غدًا',
-    mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${esc(expert)}` : ''}.`)
+    mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${bdi(expert)}` : ''}.`)
     + mailRows([['الموعد', when], ...(expert ? [['الخبير', expert] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(joinUrl || CONFIG.appUrl, joinUrl ? 'رابط الجلسة' : 'افتح رحلتي')
     + mailNote('جهّز سؤالًا أو موقفًا من عملك هذا الأسبوع، فالجلسة على قدر ما تحمله إليها.'),
@@ -528,7 +529,7 @@ export function coordinatorInviteMail(name: string | null, org: string, info: Or
     'تابع من اللوحة تقدّم مشاركيك بما تتيحه صلاحياتك، ويصلك ملخص أسبوعي بالبريد.',
   ];
   return shell('organization', `لوحة ${org} في برنامج القادة`,
-    mailText(`${hello(name)} أُنشئ لك حساب منسق لجهة ${esc(org)} في برنامج القادة.`)
+    mailText(`${hello(name)} أُنشئ لك حساب منسق لجهة ${bdi(org)} في برنامج القادة.`)
     + (rows.length ? mailRows(rows) : '')
     + mailText('<b>خطواتك الأولى</b>')
     + mailText(steps.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>'))
@@ -559,7 +560,7 @@ export function coordinatorWeeklyMail(name: string | null, org: string, k: Recor
 // إشعار المشارك حين تُفتح لجهته صلاحية تكشف بياناته (الشفافية قبل الاطلاع)
 export function orgAccessMail(name: string, org: string, items: string[]) {
   return shell('organization', `${org} تطّلع على رحلتك`,
-    mailText(`${hello(name)} فُتح لجهتك ${esc(org)} الاطلاع على: <b>${items.map(esc).join('، ')}</b>.`)
+    mailText(`${hello(name)} فُتح لجهتك ${bdi(org)} الاطلاع على: <b>${items.map(esc).join('، ')}</b>.`)
     + mailNote('لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.')
     + mailButton(`${CONFIG.appUrl}/?tab=profile`, 'ماذا ترى جهتك'),
     `فُتح لجهتك: ${items.join('، ')}`, '');
@@ -571,14 +572,14 @@ export function orgAccessMail(name: string, org: string, items: string[]) {
 export type AssignmentMail = { cohort: string; org: string | null; role: string; scope: string; period: string };
 export function teamAssignedMail(name: string | null, a: AssignmentMail) {
   return shell('experts', 'كُلّفت في فريق دفعة',
-    mailText(`${hello(name)} أضافتك إدارة برنامج القادة إلى فريق <b>${esc(a.cohort)}</b>${a.org ? ` في ${esc(a.org)}` : ''}.`)
+    mailText(`${hello(name)} أضافتك إدارة برنامج القادة إلى فريق <b>${bdi(a.cohort)}</b>${a.org ? ` في ${bdi(a.org)}` : ''}.`)
     + mailRows([['الدور', a.role], ['التكليف', a.scope], ['المدة', a.period]])
     + mailText('تجد تكليفاتك وعدد من تخدمهم في لوحة الخبير، تحت «تكليفاتي». إن تعذّر عليك هذا التكليف فراسل إدارة البرنامج.')
     + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'),
     `${a.role} في ${a.cohort}`, 'تصلك هذه الرسالة لأن إدارة برنامج القادة أضافتك إلى فريق دفعة.');
 }
 export const assignmentNote = (a: AssignmentMail) =>
-  mailNote(`<b>تكليفك:</b> ${esc(a.role)} في فريق ${esc(a.cohort)}${a.org ? ` (${esc(a.org)})` : ''}، ${esc(a.period)}. يبدأ عملك فيه بعد اعتماد ملفك.`);
+  mailNote(`<b>تكليفك:</b> ${bdi(a.role)} في فريق ${bdi(a.cohort)}${a.org ? ` (${bdi(a.org)})` : ''}، ${bdi(a.period)}. يبدأ عملك فيه بعد اعتماد ملفك.`);
 
 // ── الإدارة ──
 export function healthMail(rows: [string, string][], issues: string[]) {
@@ -595,7 +596,7 @@ export function healthMail(rows: [string, string][], issues: string[]) {
 export function alertMail(kind: string, detail: Record<string, unknown>) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
   return shell('admin', `تنبيه تشغيلي: ${kind}`,
-    mailText(`وقع <b>${esc(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
+    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
     + mailRows(rows)
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
     `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');

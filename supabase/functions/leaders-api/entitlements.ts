@@ -6,7 +6,7 @@
 // رمز يكتبه المشارك، ربط آلي بالنطاق، نقل من الإدارة، قبول طلب رعاية) يثبّت فورًا، وaccess()
 // يبقى احتياطًا لمن رُبط قبل هذا التغيير. وحدة مستقلة حتى لا تدور الاستيرادات (admin ↔ payments).
 import { alertOps, audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
-import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { inProgram } from './logic.js';
 
@@ -145,7 +145,7 @@ async function holdSponsorship(participantId: string, org: { id: string; name: s
   if (error) { console.error('hold sponsorship', error.message); return; }
   await audit('system', 'seats', 'sponsor.hold', 'participants', participantId, null, { org: org.id, why });
   const reason = why === 'full' ? 'اكتملت مقاعد العقد' : why === 'before' ? 'العقد لم يبدأ بعد' : 'انتهت مدة العقد';
-  await notifyOrg(org, `تسجيل بانتظار قرار الرعاية: ${reason}`, `سجّل مشارك برعاية ${esc(org.name)}، و${reason}. القرار خلال يومي عمل: مقعد يُضاف إلى العقد بتعليل، أو يتابع المشارك بدفع فردي.`);
+  await notifyOrg(org, `تسجيل بانتظار قرار الرعاية: ${reason}`, `سجّل مشارك برعاية ${bdi(org.name)}، و${reason}. القرار خلال يومي عمل: مقعد يُضاف إلى العقد بتعليل، أو يتابع المشارك بدفع فردي.`);
 }
 
 // تنبيه الاستهلاك عند 80% و100% من المقاعد، مرة لكل حد (D20)
@@ -159,7 +159,7 @@ async function seatAlerts(org: { id: string; name: string }) {
   if (count) return;
   await audit('system', 'seats', 'seats.alert', 'organizations', org.id, null, { level, seats: o.seats, used });
   await notifyOrg(org, level === 1 ? `اكتملت مقاعد ${org.name}` : `استُهلك ${Math.round(level * 100)}% من مقاعد ${org.name}`,
-    `استُهلك ${used} من ${o.seats} مقعدًا في عقد ${esc(org.name)}.${level === 1 ? ' التسجيلات التالية تنتظر قرار الرعاية.' : ''}`);
+    `استُهلك ${used} من ${o.seats} مقعدًا في عقد ${bdi(org.name)}.${level === 1 ? ' التسجيلات التالية تنتظر قرار الرعاية.' : ''}`);
 }
 
 // المنسق يُخطَر ببوابة جهته (لا يدخل لوحة الإدارة)، والإدارة بصفحة الطلبات حيث يُتخذ القرار

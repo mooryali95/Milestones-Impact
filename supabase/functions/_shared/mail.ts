@@ -5,7 +5,8 @@
 // تستورد من هنا ولا تحمل قوالب خاصة. أرضية Mist، بطاقة بيضاء بخط شعري،
 // الشعار ثم خط ذهبي، عنوان خفيف الوزن، زر بإطار ذهبي، وتوقيع وحقوق.
 // جداول لا عناصر حديثة حتى يظهر متطابقًا في Outlook وGmail وApple Mail.
-// كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML.
+// كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML، والقيمة داخل جملة عبر bdi() التي ترمّز وتعزل.
+// الاتجاه على كل جدول وخلية وفقرة لا على html وحده: Gmail يحذف سمات html وbody، فيرث المتن اتجاه واجهته.
 
 import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
 
@@ -22,31 +23,38 @@ const MONO = `'SF Mono',Menlo,Consolas,'Courier New',monospace`;
 export const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
+// قيمة متغيرة داخل جملة عربية (اسم، بريد، جهة، رمز، تاريخ، نص كتبه مستخدم): مرمّزة ومعزولة الاتجاه،
+// فلا يقلب اسم لاتيني أو بريد ترتيب ما حوله، ولا تنتقل نقطته إلى طرف السطر
+export const bdi = (v: unknown) => `<bdi>${esc(v)}</bdi>`;
+
+// اتجاه الكتلة العربية بالسمتين والنمط معًا: بعض برامج البريد تحذف أحدها. لا align على الجداول (يجعلها عائمة)
+const RTL = 'dir="rtl" align="right"';
+
 // سطر عنوان البريد نص لا HTML: بلا أسطر جديدة ولا طول مفتوح
 export const plain = (v: unknown, max = 60) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
 
 // ── مكوّنات المتن ──
-export const mailText = (html: string) => `<p style="font-size:15px;line-height:1.9;margin:0 0 18px;color:${MAIL.text}">${html}</p>`;
+export const mailText = (html: string) => `<p ${RTL} style="font-size:15px;line-height:1.9;margin:0 0 18px;color:${MAIL.text};text-align:right">${html}</p>`;
 
 // زر ممتلئ بلون الهوية الداكن وخط ذهبي سفلي، بجدول حتى يظهر في Outlook
 export const mailButton = (href: string, label: string) => `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:8px auto 26px"><tr>
-<td bgcolor="${MAIL.graphite}" style="background:${MAIL.graphite};border-radius:3px;border-bottom:2px solid ${MAIL.copper}"><a href="${esc(href)}" style="display:inline-block;padding:15px 44px;font-family:${FONT};font-size:15px;font-weight:600;color:${MAIL.ivory};text-decoration:none">${esc(label)}</a></td></tr></table>`;
+<td bgcolor="${MAIL.graphite}" style="background:${MAIL.graphite};border-radius:3px;border-bottom:2px solid ${MAIL.copper}"><a dir="rtl" href="${esc(href)}" style="display:inline-block;padding:15px 44px;font-family:${FONT};font-size:15px;font-weight:600;color:${MAIL.ivory};text-decoration:none">${esc(label)}</a></td></tr></table>`;
 
 // رمز تحقق: بطاقة مستقلة بإطار ذهبي رفيع، أرقام أحادية العرض متباعدة، ثم مدة الصلاحية
 export const mailCode = (code: string, note: string) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px"><tr>
-<td align="center" bgcolor="${MAIL.ivory}" style="background:${MAIL.ivory};border:1px solid ${MAIL.copper};border-radius:4px;padding:22px 12px 18px">
+<td dir="rtl" align="center" bgcolor="${MAIL.ivory}" style="background:${MAIL.ivory};border:1px solid ${MAIL.copper};border-radius:4px;padding:22px 12px 18px">
 <div style="font-family:${LATIN};font-size:10px;letter-spacing:3px;color:${MAIL.gold};margin:0 0 10px" dir="ltr">VERIFICATION CODE</div>
-<div style="font-family:${MONO};font-size:34px;letter-spacing:12px;font-weight:600;color:${MAIL.graphite};direction:ltr;padding-left:12px">${esc(code)}</div>
+<div style="font-family:${MONO};font-size:34px;letter-spacing:12px;font-weight:600;color:${MAIL.graphite};direction:ltr;padding-left:12px">${bdi(code)}</div>
 <div style="font-family:${FONT};font-size:13px;color:${MAIL.muted};margin:12px 0 0">${esc(note)}</div>
 </td></tr></table>`;
 
-// جدول بيانات بخطوط شعرية: [التسمية، القيمة، لاتيني؟]
-export const mailRows = (rows: [string, unknown, boolean?][]) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:0 0 22px">
-${rows.map(([k, v, ltr]) => `<tr><td style="padding:11px 0;border-bottom:1px solid ${MAIL.line};color:${MAIL.muted};width:34%">${esc(k)}</td><td style="padding:11px 0;border-bottom:1px solid ${MAIL.line};color:${MAIL.graphite};font-weight:600${ltr ? `;direction:ltr;text-align:right;font-family:${LATIN}` : ''}">${esc(v)}</td></tr>`).join('')}
+// جدول بيانات بخطوط شعرية: [التسمية، القيمة، لاتيني؟]. القيمة معزولة وتنكسر عند أي حرف، فلا يمد رابط طويل الرسالة على الجوال
+export const mailRows = (rows: [string, unknown, boolean?][]) => `<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:0 0 22px;text-align:right">
+${rows.map(([k, v, ltr]) => `<tr><td ${RTL} valign="top" style="padding:11px 0;border-bottom:1px solid ${MAIL.line};color:${MAIL.muted};width:34%;text-align:right">${esc(k)}</td><td dir="${ltr ? 'ltr' : 'rtl'}" align="right" style="padding:11px 0;border-bottom:1px solid ${MAIL.line};color:${MAIL.graphite};font-weight:600;text-align:right;word-break:break-word;overflow-wrap:anywhere${ltr ? `;direction:ltr;font-family:${LATIN}` : ''}">${bdi(v)}</td></tr>`).join('')}
 </table>`;
 
 // ملاحظة مميّزة بشريط ذهبي على الطرف
-export const mailNote = (html: string) => `<p style="font-size:14px;line-height:1.9;margin:0 0 20px;padding:14px 16px;background:${MAIL.ivory};border-right:2px solid ${MAIL.copper};border-radius:2px;color:${MAIL.text}">${html}</p>`;
+export const mailNote = (html: string) => `<p ${RTL} style="font-size:14px;line-height:1.9;margin:0 0 20px;padding:14px 16px;background:${MAIL.ivory};border-right:2px solid ${MAIL.copper};border-radius:2px;color:${MAIL.text};text-align:right">${html}</p>`;
 
 // ── الإطار ──
 // eyebrow: سطر صغير بالإنجليزية فوق العنوان (اسم المنتج)، في سطره وحده فلا يختلط بالعربي
@@ -66,26 +74,26 @@ export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IM
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${esc(title)}</title></head>
 <body style="margin:0;padding:0;background:${MAIL.ground};font-family:${FONT};color:${MAIL.graphite};-webkit-text-size-adjust:100%">
 ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">${esc(preheader)}&#8203;${'&nbsp;&zwnj;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${MAIL.ground}" style="background:${MAIL.ground}"><tr><td align="center" style="padding:40px 12px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px rgba(11,39,47,.08)">
+<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0" bgcolor="${MAIL.ground}" style="background:${MAIL.ground};text-align:right"><tr><td align="center" style="padding:40px 12px">
+<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px rgba(11,39,47,.08);text-align:right">
 <tr><td bgcolor="${MAIL.graphite}" style="background:${MAIL.graphite};padding:30px 40px 26px" align="left" dir="ltr">
   <!-- الشعار نصًا بخط الهوية وألوانها: يظهر دائمًا، ولو حجب البريد الصور الخارجية -->
   <div style="font-family:${LATIN};font-size:22px;line-height:1;color:${MAIL.ivory};letter-spacing:.4px;white-space:nowrap"><span style="color:${MAIL.copper};font-size:14px;vertical-align:3px">&#9670;</span>&nbsp;&nbsp;<b style="font-weight:700">Milestone</b> <span style="font-weight:300">Impact</span></div>
   <div style="width:48px;height:1px;line-height:1px;font-size:0;background:${MAIL.copper};margin:18px 0 0">&nbsp;</div>
 </td></tr>
-<tr><td bgcolor="${MAIL.paper}" style="background:${MAIL.paper};padding:36px 40px 10px">
-  <div style="font-family:${LATIN};font-size:10px;letter-spacing:3.5px;color:${MAIL.gold};text-transform:uppercase;margin:0 0 12px" dir="ltr" align="right">${esc(eyebrow)}</div>
-  <h1 style="font-family:${FONT};font-weight:700;font-size:23px;line-height:1.6;margin:0 0 18px;color:${MAIL.graphite}">${esc(title)}</h1>
-  <div style="font-size:15px;line-height:1.9;color:${MAIL.text}">${body}</div>
+<tr><td ${RTL} bgcolor="${MAIL.paper}" style="background:${MAIL.paper};padding:36px 40px 10px;text-align:right">
+  <div style="font-family:${LATIN};font-size:10px;letter-spacing:3.5px;color:${MAIL.gold};text-transform:uppercase;margin:0 0 12px;text-align:right" dir="ltr" align="right">${esc(eyebrow)}</div>
+  <h1 ${RTL} style="font-family:${FONT};font-weight:700;font-size:23px;line-height:1.6;margin:0 0 18px;color:${MAIL.graphite};text-align:right">${esc(title)}</h1>
+  <div ${RTL} style="font-size:15px;line-height:1.9;color:${MAIL.text};text-align:right">${body}</div>
 </td></tr>
 <tr><td bgcolor="${MAIL.paper}" style="background:${MAIL.paper};padding:6px 40px 32px">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${MAIL.line}"><tr>
-    <td style="padding-top:20px;font-size:13px;line-height:1.8;color:${MAIL.graphite}"><span dir="ltr" style="font-family:${LATIN};font-weight:700">Milestone Impact</span><br><span style="font-size:12px;color:${MAIL.gold}">من النية… إلى الأثر</span></td>
+  <table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${MAIL.line}"><tr>
+    <td ${RTL} style="padding-top:20px;font-size:13px;line-height:1.8;color:${MAIL.graphite};text-align:right"><span dir="ltr" style="font-family:${LATIN};font-weight:700">Milestone Impact</span><br><span style="font-size:12px;color:${MAIL.gold}">من النية… إلى الأثر</span></td>
     <td style="padding-top:20px;font-size:12px;color:${MAIL.muted}" align="left" valign="bottom"><a href="mailto:${MAIL_REPLY_TO}" style="color:${MAIL.muted};text-decoration:none;font-family:${LATIN}" dir="ltr">${MAIL_REPLY_TO}</a></td>
   </tr></table>
 </td></tr>
 </table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px"><tr><td style="padding:20px 8px 0;font-size:11px;line-height:1.9;color:${MAIL.muted}" align="center">
+<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px"><tr><td dir="rtl" style="padding:20px 8px 0;font-size:11px;line-height:1.9;color:${MAIL.muted}" align="center">
   ${footnote ? `${esc(footnote)}<br>` : ''}<span dir="ltr">© ${year} Milestone Impact</span> · جميع الحقوق محفوظة.
 </td></tr></table>
 </td></tr></table></body></html>`;

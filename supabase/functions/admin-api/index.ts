@@ -4,7 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { esc, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
+import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
@@ -361,12 +361,12 @@ Deno.serve(async (req: Request) => {
       const { data: owners } = await sb.from("admin_users").select("email").eq("is_owner", true).eq("is_active", true);
       for (const o of owners || []) {
         await sendEmail(o.email, `طلب استعادة وصول: ${user.name} — ${APP}`, mailShell("طلب استعادة وصول", `
-${mailText(`طلب <b>${esc(user.name)}</b> (<span dir="ltr">${esc(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only || hasKey ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
+${mailText(`طلب <b>${bdi(user.name)}</b> (<span dir="ltr">${bdi(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only || hasKey ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
 ${mailNote("إن عرفت أنه طلبه: من «المستخدمون» اضغط «إعادة الوصول» لحسابه، فيدخل برمز البريد ثم يضبط وسيلته من جديد. وإن لم تعرف، تجاهل الطلب.")}
 ${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }));
       }
       await sendEmail(user.email, `وصل طلب استعادة الوصول — ${APP}`, mailShell("وصل طلب استعادة الوصول", `
-${mailText(`أهلًا ${esc(user.name)}، أُبلغ مالك اللوحة بطلبك. حين يعيد وصولك تدخل برمز يصل إلى بريدك، ثم تضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
+${mailText(`أهلًا ${bdi(user.name)}، أُبلغ مالك اللوحة بطلبك. حين يعيد وصولك تدخل برمز يصل إلى بريدك، ثم تضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
 ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }));
       return reply;
     }
@@ -828,7 +828,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         await revokeSessions(sb, tid);
         await audit("reset-access", { targetId: tid });
         await sendEmail(t[0].email, `أُعيد وصولك إلى لوحة الإدارة — ${APP}`, mailShell("أُعيد وصولك إلى لوحة الإدارة", `
-${mailText(`أهلًا ${esc(t[0].name)}، أعاد مالك اللوحة وصولك. ادخل الآن برمز يصل إلى بريدك، ثم اضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
+${mailText(`أهلًا ${bdi(t[0].name)}، أعاد مالك اللوحة وصولك. ادخل الآن برمز يصل إلى بريدك، ثم اضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
 ${mailButton(SITES.admin, "الدخول إلى اللوحة")}`, { family: "access", preheader: "ادخل برمز البريد ثم اضبط وسيلتك الجديدة" }));
         return json({ success: true });
       }

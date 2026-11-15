@@ -112,16 +112,17 @@ describe('ترحيل 20261107120000_leaders_mail_events', () => {
 });
 
 describe('تهريب القيم في القوالب', () => {
-  it('أسماء المشاركين والرعاة والجهات والدفعات والخبراء تمر بـ esc في متن الرسائل', () => {
+  // bdi() ترمّز بـesc() ثم تعزل الاتجاه (P1-13)، فهي ترميز مثلها
+  it('أسماء المشاركين والرعاة والجهات والدفعات والخبراء تمر بـ esc أو bdi في متن الرسائل', () => {
     const bad = [];
     for (const f of ['advisor', 'sponsor', 'peer', 'experts']) {
       const s = read(`supabase/functions/leaders-api/${f}.ts`);
       for (const m of s.matchAll(/mail(?:Text|Note)\(`([^`]*)`/g)) {
-        for (const v of m[1].matchAll(/\$\{([^}]+)\}/g)) if (/full_name|typed|org\.name|cohort\.name|p\.email|\bwhat\b/.test(v[1]) && !/^esc\(/.test(v[1].trim())) bad.push(`${f}: ${v[1]}`);
+        for (const v of m[1].matchAll(/\$\{([^}]+)\}/g)) if (/full_name|typed|org\.name|cohort\.name|p\.email|\bwhat\b/.test(v[1]) && !/^(esc|bdi)\(/.test(v[1].trim())) bad.push(`${f}: ${v[1]}`);
       }
     }
     expect(bad).toEqual([]);
-    expect(read('supabase/functions/leaders-api/sponsor.ts')).toContain('`: ${esc(reason)}`');
+    expect(read('supabase/functions/leaders-api/sponsor.ts')).toContain('`: ${bdi(reason)}`');
   });
 });
 
