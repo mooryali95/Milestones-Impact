@@ -9,7 +9,8 @@ import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { RequestsBoard } from './ExpertMatch.jsx';
+import { RequestsBoard, requestView } from './ExpertMatch.jsx';
+import { readQuery } from '../route.js';
 import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
@@ -231,7 +232,11 @@ const EXPERT_COLS = [
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
   const [adding, setAdding] = useState(false);
+  // رابط «ينتظرني» (?view=attention) يفتح لوحة طلبات الإسناد على عرضه. يُقرأ قبل شريط الشبكة الذي يقرأ العنوان نفسه
+  const [reqView] = useState(() => requestView(readQuery()));
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee', 'sort'], {}, { scope: 'experts' });
+  // عرض اللوحة ليس عرضًا للشبكة: لا يبقى في شريطها ولا في عنوانها
+  useEffect(() => { if (f.view && !PRESETS.some((p) => p.key === f.view)) setF({ view: '' }); }, []); // eslint-disable-line
   const load = useCallback(async () => setD(await L('admin.experts')), []);
   useEffect(() => { if (!expertId) load(); }, [load, expertId]);
   const all = d?.experts || [];
@@ -266,7 +271,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
           </div>
         ))}
       </div>
-      <RequestsBoard canWrite={canWrite} onPerson={onPerson} />
+      <RequestsBoard canWrite={canWrite} onPerson={onPerson} view={reqView} />
       {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
       <section className="la-card">
         <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding(true)}>+ خبير</button>}</div>

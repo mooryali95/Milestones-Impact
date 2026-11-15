@@ -15,14 +15,15 @@ import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts, sortRows } from '../filters.js';
+import { applyFilters, isFiltered, presetCounts, sortRows } from '../filters.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
 
 const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
 const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
-const FILTERS = ['submitted', 'accepted', 'returned', 'approved'].map((k) => [k, STATUS[k]]);
+// طابور المراجعة أولًا، ثم ما قيد البناء، ثم «الكل» للمحفظة كاملة (تحليل لوحة الإدارة 2026-11-15)
+const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((k) => [k, STATUS[k]]);
 
 async function openDoc(doc, toast) {
   const win = window.open('', '_blank');
@@ -192,7 +193,14 @@ function Detail({ id, canWrite, onBack, onPerson }) {
 }
 
 // الوثائق كلها مرة واحدة والفلترة في المتصفح (شريط الفلترة الموحد)، وتبدأ بما ينتظر القرار
-const CAP_PRESETS = FILTERS.map(([k, l]) => ({ key: k, label: l, test: (x) => x.status === k }));
+export const CAP_PRESETS = [...FILTERS.map(([k, l]) => ({ key: k, label: l, test: (x) => x.status === k })), { key: 'all', label: 'الكل', test: () => true }];
+// رسالة القائمة الفارغة بحسب سببها: لا وثائق أصلًا، أو لا وثيقة في هذه الحالة، أو فلاتر أخرى تحجبها
+export function capEmpty(state, total) {
+  if (!total) return { title: 'لا وثائق بعد', hint: 'تظهر هنا وثيقة كل قائد حين يبدأ بناءها.' };
+  const status = STATUS[state.view];
+  if (status && !isFiltered({ ...state, view: '' })) return { title: `لا وثائق في «${status}» الآن`, hint: 'اختر حالة أخرى من الأعلى، أو «الكل» لترى الوثائق بكل حالاتها.' };
+  return { title: 'لا وثائق لهذه الفلاتر', hint: 'امسح البحث أو الفلاتر، أو اختر «الكل» لترى الوثائق بكل حالاتها.' };
+}
 const CAP_COLS = [
   { key: 'name', label: 'المبادرة', width: 34, get: (x) => x.initiative }, { key: 'lead', label: 'القائد', width: 26, get: (x) => x.full_name },
   { key: 'org', label: 'الجهة', width: 24, get: (x) => x.organization }, { key: 'scope', label: 'النوع', width: 10, get: (x) => SCOPE[x.scope] },
@@ -223,7 +231,7 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
       {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
         shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة"
         actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'مشاريع التخرج', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}
-      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact title={all.length ? 'لا وثائق لهذه الفلاتر' : 'لا وثائق بعد'} hint={all.length ? 'غيّر الحالة من الأعلى لترى ما هو قيد البناء أو المعتمد.' : 'تظهر هنا وثيقة كل قائد حين يبدأ بناءها.'} /> : (
+      {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact {...capEmpty(f, all.length)} /> : (
         <table className="la-table">
           <thead><tr><SortTh k="name" state={f} set={setF}>المبادرة</SortTh><SortTh k="lead" state={f} set={setF}>القائد</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="scope" state={f} set={setF}>النوع</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="ready" state={f} set={setF}>الجاهزية</SortTh><SortTh k="score" state={f} set={setF}>المعيار</SortTh><SortTh k="at" state={f} set={setF}>سُلّمت</SortTh></tr></thead>
           <tbody>{rows.map((x) => (

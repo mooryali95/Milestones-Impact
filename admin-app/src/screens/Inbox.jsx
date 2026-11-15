@@ -3,33 +3,64 @@
 // ════════════════════════════════════════════════════════════════
 // من admin.inbox (inbox.js على الخادم): تسعة أنواع بعمرها ووجهتها. الرقاقات تفلتر بالنوع، والمتأخر عن مهلة نوعه
 // معلَّم. يُحدَّث مع كل حفظ يطلق «mi:pending» كعدّادات التبويبات.
+// «اعتمد الجاهزين»: نافذة BulkApprove نفسها على المنتظرين الأقدم أولًا، ومعاينتها على الخادم تعطي «7 جاهزون، 5 تحتاج نظرك».
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
-import { navigate } from '../route.js';
+import { formatRoute, navigate } from '../route.js';
+import { refreshPending } from '../pending.js';
 import { Spinner } from '../ui.jsx';
-import { ageAr, INBOX_KINDS } from '../../../supabase/functions/leaders-api/inbox.js';
+import BulkApprove from './BulkApprove.jsx';
+import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabase/functions/leaders-api/inbox.js';
+import { BULK_APPROVE_MAX } from '../../../supabase/functions/leaders-api/approval.js';
 
-export default function Inbox({ contacts = 0 }) {
+export default function Inbox({ contacts = 0, canWrite, onPerson }) {
   const [d, setD] = useState(null);
   const [kind, setKind] = useState('');
+  const [bulk, setBulk] = useState(null);
+  const [ready, setReady] = useState(null);
   const load = useCallback(() => L('admin.inbox').then(setD), []);
   useEffect(() => {
     load();
     window.addEventListener('mi:pending', load);
     return () => window.removeEventListener('mi:pending', load);
   }, [load]);
+  // معاينة الاعتماد الجماعي للعدّ وحده (dry_run لا يكتب شيئًا): للمدير الذي يكتب، وتعذّرها يُبقي الزر بلا عدد
+  const ids = canWrite !== false && d?.success ? approvalIdsOf(d.items, BULK_APPROVE_MAX) : [];
+  const idsKey = ids.join(',');
+  useEffect(() => {
+    setReady(null);
+    if (!idsKey) return;
+    let live = true;
+    L('admin.approve-bulk', { participant_ids: idsKey.split(','), dry_run: true }).then((r) => live && r.success && setReady({ ready: r.ready.length, held: r.held.length }));
+    return () => { live = false; };
+  }, [idsKey]);
   if (!d) return <section className="la-card"><h3>ينتظرني</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card"><h3>ينتظرني</h3><div className="la-err">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></section>;
   // رد بلا قائمة (خادم أقدم من الواجهة) يُعامل كصندوق فارغ، لا كعطل في الصفحة
   const items = d.items || [], counts = d.counts || {}, total = d.total || 0;
   const shown = kind ? items.filter((i) => i.kind === kind) : items;
   const kinds = Object.keys(INBOX_KINDS).filter((k) => counts[k] > 0);
-  const open = (i) => navigate({ ctx: 'leaders', tab: i.to.tab, id: i.to.id || undefined });
+  const open = (i) => {
+    const to = { ctx: 'leaders', tab: i.to.tab, id: i.to.id || undefined };
+    // وجهة بعرض مصفّى (طلب خبير بلا مطابق ← الخبراء بعرض «يحتاج تدخلًا»): العرض بعد «?» كفلاتر الشاشات
+    if (i.to.query) window.location.hash = `${formatRoute(to)}?${i.to.query}`;
+    else navigate(to);
+  };
+  const pendingN = counts.approval || 0;
   return (
     <section className="la-card inbox" aria-labelledby="inbox-h">
       <div className="la-row between">
         <h3 id="inbox-h">ينتظرني <small className="la-muted">· {total}{d.late ? `، منها ${d.late} تجاوزت مهلتها` : ''}</small></h3>
+        {ids.length > 0 && (
+          <div className="inbox-bulk">
+            <button type="button" className="btn-sm primary" onClick={() => setBulk(ids)} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة لتراجعه من ملفه">
+              اعتمد الجاهزين{ready?.ready ? ` (${ready.ready})` : ''}…
+            </button>
+            <small className="la-muted">{ready ? readyLineAr(ready.ready, ready.held) : `${pendingN} بانتظار الاعتماد`}{pendingN > ids.length ? `، أقدم ${ids.length} في هذه الدفعة` : ''}</small>
+          </div>
+        )}
       </div>
+      {bulk && <BulkApprove ids={bulk} onPerson={(id) => (onPerson ? onPerson(id) : navigate({ ctx: 'leaders', tab: 'participants', id }))} onClose={(changed) => { setBulk(null); if (changed) refreshPending(); }} />}
       {!total ? <p className="la-muted">لا شيء بانتظارك الآن.</p> : (
         <>
           <div className="la-pills" role="group" aria-label="نوع البند">

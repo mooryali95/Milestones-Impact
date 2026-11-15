@@ -13,7 +13,7 @@ import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
-import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 // عنوان المتطلب برموزه مملوءة كما يراه المشارك: «حضور الأيام التدريبية (أربعة أيام)» لا «({days:T-ATTEND})» (التدقيق 2026-11-10، البند 9.9)
@@ -100,7 +100,7 @@ function Attendance({ id, canWrite, onClose }) {
               <tr key={p.id}>
                 <td>{p.full_name}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                 <td>{p.organization_name || ''}</td>
-                <td>{p.attendance ? <span className="la-chip ok">{{ qr: 'QR', join: 'انضمام', hall: 'القاعة', remote: 'القاعة عن بعد' }[p.attendance.method] || 'يدوي'} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}</td>
+                <td>{p.attendance ? <span className="la-chip ok">{ATTEND_METHOD_AR[p.attendance.method] || ATTEND_METHOD_AR.manual} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}</td>
                 <td>{canWrite && (p.attendance
                   ? <button className="la-link" onClick={() => mark(p.id, false)}>إلغاء</button>
                   : <button className="btn-sm ghost" onClick={() => mark(p.id, true)}>تسجيل حضور</button>)}</td>
@@ -139,7 +139,7 @@ function Workshops({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted"><code>{r.code}</code> · المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted">المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
               {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts), values: { active: true, mode: 'in_person', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
@@ -219,7 +219,7 @@ function Coaching({ data, reload, canWrite }) {
         return (
           <section key={r.id} className="la-card">
             <div className="la-row between">
-              <div><b>{reqTitle(r)}</b> <small className="la-muted"><code>{r.code}</code> · {sessionsAr(c.sessions_required || SESSION_DEFAULTS.sessions_required)} · {minutesAr(c.minutes || SESSION_DEFAULTS.minutes)} · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
+              <div><b title={r.code}>{reqTitle(r)}</b> <small className="la-muted">{sessionsAr(c.sessions_required || SESSION_DEFAULTS.sessions_required)} · {minutesAr(c.minutes || SESSION_DEFAULTS.minutes)} · {MODE_AR[c.mode || 'online']}{c.location_ar ? ` · ${c.location_ar}` : ''}</small></div>
               <div className="la-row">
                 {c.booking_url ? <span className="la-chip ok">الحجز عبر {c.provider === 'calendly' ? 'Calendly' : 'Cal.com'}</span> : <span className="la-chip warn">بلا رابط حجز</span>}
                 {canWrite && c.instant_url && c.mode !== 'in_person' && (r.instant_open

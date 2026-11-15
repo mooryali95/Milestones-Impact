@@ -10,7 +10,8 @@ export const INBOX_KINDS = {
   model: { label: 'نموذج للتقييم', tab: 'handbook', sla: 5 },
   capstone: { label: 'وثيقة مبادرة', tab: 'capstones', sla: 7 },
   expert_application: { label: 'طلب انضمام خبير', tab: 'experts', sla: 7 },
-  expert_unmatched: { label: 'طلب خبير بلا مطابق', tab: 'participants', sla: 3 },
+  // query: عرض مصفّى في شاشة الوجهة. الطلب بلا خبير يُرى ويُعالج في طلبات الإسناد بعرض «يحتاج تدخلًا»، لا في ملف المشارك
+  expert_unmatched: { label: 'طلب خبير بلا مطابق', tab: 'experts', sla: 3, query: 'view=attention' },
   sponsor: { label: 'طلب رعاية', tab: 'payments', sla: 3 },
   erasure: { label: 'طلب حذف بيانات', tab: 'participants', sla: 30 },
   coaching_confirm: { label: 'جلسة تنتظر التأكيد', tab: 'activities', sla: 2 },
@@ -31,8 +32,9 @@ export function inboxOf(src, now = Date.now()) {
       items.push({
         kind, kind_ar: def.label, id: r.id, title: r.title || '', sub: r.sub || '', at: r.at || null, days,
         late: days != null && days > def.sla,
-        // الوجهة: ملف المشارك حين يكون البند عن مشارك، وإلا تبويب نوعه بمعرّفه إن كان له صفحة
-        to: r.participant_id ? { tab: 'participants', id: r.participant_id } : { tab: def.tab, id: ['capstones', 'experts'].includes(def.tab) ? r.id : null },
+        // الوجهة: عرض نوعها المصفّى إن كان له عرض، وإلا ملف المشارك حين يكون البند عن مشارك، وإلا تبويب نوعه بمعرّفه إن كان له صفحة
+        to: def.query ? { tab: def.tab, id: null, query: def.query }
+          : r.participant_id ? { tab: 'participants', id: r.participant_id } : { tab: def.tab, id: ['capstones', 'experts'].includes(def.tab) ? r.id : null },
       });
     }
   }
@@ -41,3 +43,12 @@ export function inboxOf(src, now = Date.now()) {
   return { items, counts, total: items.length, late: items.filter((i) => i.late).length };
 }
 export const ageAr = (days) => (days == null ? '' : days === 0 ? 'اليوم' : days === 1 ? 'منذ يوم' : days === 2 ? 'منذ يومين' : days <= 10 ? `منذ ${days} أيام` : `منذ ${days} يومًا`);
+
+// «اعتمد الجاهزين» من الصندوق: المنتظرون الأقدم أولًا (ترتيب الصندوق) حتى حد الطلب الواحد
+export const approvalIdsOf = (items, max) => (items || []).filter((i) => i.kind === 'approval').map((i) => i.id).slice(0, max);
+// سطر المعاينة تحت الزر: «7 جاهزون، 5 تحتاج نظرك»
+export function readyLineAr(ready, held) {
+  const r = ready === 1 ? 'واحد جاهز' : `${ready} جاهزون`;
+  const h = held === 1 ? 'واحد يحتاج نظرك' : `${held} تحتاج نظرك`;
+  return [ready > 0 && r, held > 0 && h].filter(Boolean).join('، ') || 'لا أحد جاهز الآن';
+}
