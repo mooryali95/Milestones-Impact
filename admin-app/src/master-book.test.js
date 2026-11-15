@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   authorRole, bookAccess, bookSections, canDelete, canResolve, chapterVisible, cleanComment, markTiers, openCounts, orderChapters,
-  sectionsOf, shareRoster, threads, tierAr, tierVisible, toggleCommittee, versionFromMigration,
+  commentTarget, draftChapters, rowChapterId, sectionsOf, shareRoster, threads, tierAr, tierVisible, toggleCommittee, versionFromMigration,
 } from '../../supabase/functions/leaders-api/master-book.js';
 
 const MD = `## أولًا
@@ -154,5 +154,26 @@ describe('الكتاب الأم: الربط', () => {
     expect(sql).toMatch(/^-- deploy-gate: tolerant/m);
     expect(sql).toContain('enable row level security');
     expect(sql).toContain('revoke all on leaders.book_comments from anon, authenticated');
+  });
+});
+
+describe('الكتاب الأم: المسودات المعروضة على اللجنة', () => {
+  it('المسودة باب في جزء «مسودات» بمعرّف draft:مفتاحها، ويُعلَّق على أقسامها', () => {
+    const [d] = draftChapters([{ key: 'seven-competencies', title: 'مسودة', md: '## الجدارة 1: تلقّي الأمر\nنص' }]);
+    expect(d).toMatchObject({ id: 'draft:seven-competencies', dimension: 'draft', draft: true, min_level: 'beginner' });
+    expect(cleanComment({ module_id: d.id, section: 'الجدارة 1: تلقّي الأمر', body: 'ملاحظة واضحة' }, { modules: [{ id: d.id, body_md: d.md }] }).value.module_id).toBe(d.id);
+    expect(cleanComment({ module_id: 'draft:Bad Key', body: 'نص' }, { modules: [] }).error).toBe('الباب غير محدد');
+  });
+  it('هدف التعليق في الجدول باب أو مسودة، ويعود معرّفًا واحدًا في القارئ', () => {
+    expect(commentTarget('draft:seven-competencies')).toEqual({ module_id: null, draft_key: 'seven-competencies' });
+    expect(commentTarget(MOD.id)).toEqual({ module_id: MOD.id, draft_key: null });
+    expect(rowChapterId({ module_id: null, draft_key: 'x-y' })).toBe('draft:x-y');
+    expect(rowChapterId({ module_id: MOD.id })).toBe(MOD.id);
+  });
+  it('المسودة المولَّدة تطابق وثيقتها، وجداولها رسوم مقارنة وعناوينها الفرعية أقسام', async () => {
+    const { build, toBookMd } = await import('../../scripts/master-book/drafts.mjs');
+    expect(readFileSync(join(process.cwd(), 'supabase/functions/leaders-api/master-book-drafts.js'), 'utf8')).toBe(build());
+    const md = toBookMd('# عنوان\n\n### الجدارة 1\n| أ | ب | ج |\n|---|---|---|\n| س | ص | `ع` |\n---\nنص');
+    expect(md).toBe('## الجدارة 1\n\n@compare\nب | ج\nس | ص | ع\n\nنص');
   });
 });
