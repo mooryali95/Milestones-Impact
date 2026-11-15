@@ -18,7 +18,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply } from './core.ts';
+import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram } from './logic.js';
 import * as P from './participant.ts';
@@ -92,7 +92,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
     // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
-    mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })) }),
+    mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+    // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
+    mail_stuck: await stuckQueueAlert().catch((e) => ({ alerted: 0, error: String(e?.message || e) })) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,
@@ -398,6 +400,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.mail-queue-cancel': (a, b) => A.writer(a, MC.queueCancel, b),
   'admin.mail-login-link': (a, b) => A.superWriter(a, MC.loginLink, b),
   'admin.mail-send-test': S.mailSendTest,
+  // تنبيه تجريبي عبر alertOps، ويعيد القنوات المضبوطة بلا قيمها (للمدير الأعلى)
+  'admin.alert-test': (a, b) => A.superWriter(a, S.alertTest, b),
   'admin.visits': (_a, b) => S.visits(b),
   'admin.trends': () => S.trends(),
   'admin.item-analysis': (_a, b) => S.itemReport(b),

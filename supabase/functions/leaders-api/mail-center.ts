@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // القراءة من العداد الموحد leaders.mail_events (D15) وطابور leaders.mail_queue. السجل بلا عناوين ولا متون:
 // البحث بعنوان يمر ببصمته (addressHash)، والمتن يُقرأ من الطابور وحده (ما حُجب فانتظر).
-import { all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
+import { alertOps, all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
 import { isEmail } from './logic.js';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
@@ -126,7 +126,7 @@ export async function queueSend(a: Admin, b: Body) {
   const m = await queued(b.id);
   if (m.sent_at) throw new Fail('أُرسلت من قبل', 409, 'done');
   // قرار صريح من المدير: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي
-  const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, force: true });
+  const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, force: true, alert: alertOps });
   if (!r.ok) throw new Fail(r.reason === 'mail_cap' ? 'السقف اليومي ممتلئ: انسخ نص الرسالة وأرسلها بنفسك، أو انتظر تحرر الحصة' : 'تعذّر الإرسال الآن', r.reason === 'mail_cap' ? 429 : 502, r.reason);
   await db.from('mail_queue').update({ sent_at: new Date().toISOString(), gave_up_at: null, last_error: null }).eq('id', m.id);
   await audit('admin', a.email, 'mail.queue-send', 'mail_queue', m.id, null, { subject: m.subject });

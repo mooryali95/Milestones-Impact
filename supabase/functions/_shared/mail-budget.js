@@ -2,18 +2,20 @@
 // يقرأ leaders.mail_events. منطق بلا شبكة يقرؤه _shared/mail.ts واختبار سيناريو صباح الورشة.
 //
 // - code: رموز الدخول والتسجيل في البوابات كلها، وalert: تنبيه المالك. لهما السقف كاملًا.
+// - alert وحده يمر فوق السقف باحتياط صغير (ALERT_OVER_CAP): امتلاء اليوم لا يحجب التنبيه إليه، ويُحجب بعد الاحتياط.
 // - notify وbulk وcontact: كل ما سواهما، ولا يتجاوز نصيبها نصف السقف، فيبقى النصف لرموز الدخول.
 // - bulk (التذكيرات والملخصات) يدخل الطابور حين يُحجب، وتفرغه المهمة الساعية.
 export const MAIL_KINDS = ['code', 'alert', 'notify', 'bulk', 'contact'];
 export const PRIORITY_KINDS = new Set(['code', 'alert']);
 export const CODE_RESERVE = 0.5;
 export const ALERT_AT = 0.7;
+export const ALERT_OVER_CAP = 5;
 export const RETENTION_DAYS = 180;
 
 // sent: ما أُرسل في آخر 24 ساعة، وnonCode: ما أُرسل منه بغير الرموز والتنبيه
 export function mailDecision(kind, { sent, nonCode }, cap) {
   if (!MAIL_KINDS.includes(kind)) return { ok: false, reason: 'mail_kind' };
-  if (sent >= cap) return { ok: false, reason: 'mail_cap' };
+  if (sent >= cap + (kind === 'alert' ? ALERT_OVER_CAP : 0)) return { ok: false, reason: 'mail_cap' };
   if (!PRIORITY_KINDS.has(kind) && nonCode >= Math.floor(cap * (1 - CODE_RESERVE))) return { ok: false, reason: 'mail_share' };
   return { ok: true };
 }

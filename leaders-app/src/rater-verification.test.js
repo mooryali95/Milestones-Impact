@@ -55,7 +55,7 @@ describe('الخادم', () => {
     expect(c).toMatch(/if \(reason\.length < 5\) throw new Fail/);
     expect(c).toMatch(/verification: 'rejected', verified_by: who/);
     expect(c).toMatch(/raterRejectedMail\(/);
-    expect(c).toMatch(/verification: 'confirmed', verified_by: who, verified_at: now, token_hash: await hash\(token\)/);
+    expect(c).toMatch(/verification: 'confirmed', verified_by: who, verified_at: now, \.\.\.tokenPatch\(r, await hash\(token\)\)/);
     expect(c).toMatch(/'rater\.confirm'/);
     expect(c).toMatch(/'rater\.reject'/);
   });

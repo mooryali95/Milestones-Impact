@@ -1,6 +1,6 @@
 // server-sec-3 (تدقيق 2026-11-11): المسمى في طلب الانضمام المفتوح دخل بريد المالك بلا ترميز، فمن يرسل
 // «<a href=…>راجع الطلب</a>» يضع رابطه في رسالة من مرسل المنصة وبقالبها. كل قيمة تدخل متن mailText/mailNote
-// تمر بـesc() (أو hello() التي ترمّز)، أو تكون من قائمة قيم الخادم المراجعة أدناه. يقرأ القوالب من مصدرها
+// تمر بـesc() (أو bdi() وhello() اللتين ترمّزان)، أو تكون من قائمة قيم الخادم المراجعة أدناه. يقرأ القوالب من مصدرها
 // بقوالبها المتداخلة، فأي قيمة جديدة بلا ترميز تُسقط الاختبار.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -70,7 +70,7 @@ function ternary(e) {
 // ما يخرج إلى البريد من التعبير بلا ترميز ولا هو من قيم الخادم
 function unsafe(e) {
   e = e.trim();
-  if (wraps(e, 'esc') || wraps(e, 'hello') || CONST.test(e) || SERVER_VALUES.has(e)) return [];
+  if (wraps(e, 'esc') || wraps(e, 'bdi') || wraps(e, 'hello') || CONST.test(e) || SERVER_VALUES.has(e)) return [];
   const t = ternary(e);
   return t ? t.slice(1).flatMap(branch) : [e];
 }
@@ -95,6 +95,8 @@ describe('server-sec-3: لا قيمة بلا ترميز في متن البريد
     expect(unsafe("fields.title ? ` · ${fields.title}` : ''")).toEqual(['fields.title']);
     expect(unsafe("fields.title ? ` · ${esc(fields.title)}` : ''")).toEqual([]);
     expect(unsafe('esc(a) + b')).toEqual(['esc(a) + b']);
+    expect(unsafe('bdi(p.full_name)')).toEqual([]);
+    expect(unsafe('bdi(a) + b')).toEqual(['bdi(a) + b']);
     expect(unsafe("open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'")).toEqual([]);
     expect(unsafe('r.experts?.full_name ?? x')).toEqual(['r.experts?.full_name ?? x']);
   });

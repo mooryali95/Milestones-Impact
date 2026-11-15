@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
-import { ALERT_AT, CODE_RESERVE, crossesAlert, domainOf, mailDecision, simulateCodes } from '../../supabase/functions/_shared/mail-budget.js';
+import { ALERT_AT, ALERT_OVER_CAP, CODE_RESERVE, crossesAlert, domainOf, mailDecision, simulateCodes } from '../../supabase/functions/_shared/mail-budget.js';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
 
 const root = join(__dirname, '../..');
@@ -21,6 +21,24 @@ describe('سياسة الحصة', () => {
       expect(mailDecision(k, { sent: 50, nonCode: 50 }, 100), k).toEqual({ ok: false, reason: 'mail_share' });
     }
     expect(mailDecision('marketing', { sent: 0, nonCode: 0 }, 100).reason).toBe('mail_kind');
+  });
+  it('التنبيه يمر عند السقف باحتياط خمس رسائل فوقه ويُحجب بعدها، والرموز تُحجب عند السقف ونصفها المحجوز كما هو (P1-12)', () => {
+    expect(ALERT_OVER_CAP).toBe(5);
+    for (const cap of [80, 100, 200]) {
+      expect(mailDecision('alert', { sent: cap, nonCode: Math.floor(cap / 2) }, cap), `cap ${cap}`).toEqual({ ok: true });
+      expect(mailDecision('alert', { sent: cap + 4, nonCode: 0 }, cap).ok, `cap ${cap}`).toBe(true);
+      expect(mailDecision('alert', { sent: cap + 5, nonCode: 0 }, cap), `cap ${cap}`).toEqual({ ok: false, reason: 'mail_cap' });
+      // الرمز لا يأخذ من الاحتياط: يُحجب عند السقف نفسه، ولا تحجبه حصة غير الرموز
+      expect(mailDecision('code', { sent: cap, nonCode: 0 }, cap), `cap ${cap}`).toEqual({ ok: false, reason: 'mail_cap' });
+      expect(mailDecision('code', { sent: cap - 1, nonCode: Math.floor(cap / 2) }, cap), `cap ${cap}`).toEqual({ ok: true });
+      for (const k of ['notify', 'bulk', 'contact']) {
+        expect(mailDecision(k, { sent: Math.floor(cap / 2), nonCode: Math.floor(cap / 2) }, cap).reason, k).toBe('mail_share');
+        expect(mailDecision(k, { sent: cap, nonCode: 0 }, cap).reason, k).toBe('mail_cap');
+      }
+    }
+    // النصف المحجوز للرموز كما كان: صباح الورشة لم يتغير
+    expect(simulateCodes(100, 200, { sent: 100, nonCode: 100 })).toBe(100);
+    expect(simulateCodes(10, 80, { sent: 75, nonCode: 40 })).toBe(5);
   });
   it('التنبيه مرة واحدة عند عبور 70%، والنطاق وحده يُحفظ لا العنوان', () => {
     expect(ALERT_AT).toBe(0.7);
@@ -44,15 +62,21 @@ describe('سياسة الحصة', () => {
 
 describe('العداد الموحد في الدوال الأربع', () => {
   const mail = read('supabase/functions/_shared/mail.ts');
-  it('لا مرسل احتياطي من نطاق آخر، والرفض ينبّه عبر الرابط', () => {
+  it('لا مرسل احتياطي من نطاق آخر، والرفض والسقف و70% تنبّه عبر قناة المرسل (alertOps في leaders-api، والرابط في غيرها)', () => {
     expect(mail).not.toMatch(/MAIL_FROM_FALLBACK|basserh\.com/);
-    expect(mail).toMatch(/if \(!r\.ok && r\.rejected\) await alertWebhook\('mail_rejected'/);
-    expect(mail).toMatch(/crossesAlert\(counts\.sent, cap\)\) await alertWebhook\('mail_quota_70'/);
+    expect(mail).toMatch(/if \(!r\.ok && r\.rejected\) await raise\('mail_rejected'/);
+    expect(mail).toMatch(/crossesAlert\(counts\.sent, cap\)\) await raise\('mail_quota_70'/);
+    expect(mail).toMatch(/if \(d\.reason === 'mail_cap' && kind !== 'alert'\) await raise\('mail_cap'/);
+    // رسالة التنبيه نفسها تنبّه بالرابط وحده (لا حلقة)، ومن لا يمرر قناة يبقى على الرابط
+    expect(mail).toContain("const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;");
     expect(mail).toMatch(/Deno\.env\.get\('LEADERS_ALERT_WEBHOOK'\)/);
+    const core = read('supabase/functions/leaders-api/core.ts');
+    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
+    expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/force: true, alert: alertOps \}/);
   });
   it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
     expect(mail).not.toMatch(/لا عداد بعد|: Promise\.resolve\(\)/);
-    expect(mail).toMatch(/await alertWebhook\('mail_counter_unavailable', \{ source, kind \}\)/);
+    expect(mail).toMatch(/await raise\('mail_counter_unavailable', \{ source, kind \}\)/);
     expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
     expect(read('supabase/functions/leaders-api/core.ts')).not.toMatch(/contactMailCount|الصيغة القديمة/);
   });
@@ -73,7 +97,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
   it('الرموز code، والتنبيه alert، والتذكيرات والملخصات bulk تدخل الطابور ولا تفشل', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
-    expect(core).toMatch(/alertMail\(kind, detail\), \[\], \{ kind: 'alert' \}/);
+    expect(core).toMatch(/alertMail\(kind, detail, windowMs\), \[\], \{ kind: 'alert' \}/);
     expect(core).toContain("if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
     expect(read('supabase/functions/leaders-api/admin.ts')).toMatch(/reminderMail\(p\.full_name, open\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);
@@ -112,16 +136,17 @@ describe('ترحيل 20261107120000_leaders_mail_events', () => {
 });
 
 describe('تهريب القيم في القوالب', () => {
-  it('أسماء المشاركين والرعاة والجهات والدفعات والخبراء تمر بـ esc في متن الرسائل', () => {
+  // bdi() ترمّز بـesc() ثم تعزل الاتجاه (P1-13)، فهي ترميز مثلها
+  it('أسماء المشاركين والرعاة والجهات والدفعات والخبراء تمر بـ esc أو bdi في متن الرسائل', () => {
     const bad = [];
     for (const f of ['advisor', 'sponsor', 'peer', 'experts']) {
       const s = read(`supabase/functions/leaders-api/${f}.ts`);
       for (const m of s.matchAll(/mail(?:Text|Note)\(`([^`]*)`/g)) {
-        for (const v of m[1].matchAll(/\$\{([^}]+)\}/g)) if (/full_name|typed|org\.name|cohort\.name|p\.email|\bwhat\b/.test(v[1]) && !/^esc\(/.test(v[1].trim())) bad.push(`${f}: ${v[1]}`);
+        for (const v of m[1].matchAll(/\$\{([^}]+)\}/g)) if (/full_name|typed|org\.name|cohort\.name|p\.email|\bwhat\b/.test(v[1]) && !/^(esc|bdi)\(/.test(v[1].trim())) bad.push(`${f}: ${v[1]}`);
       }
     }
     expect(bad).toEqual([]);
-    expect(read('supabase/functions/leaders-api/sponsor.ts')).toContain('`: ${esc(reason)}`');
+    expect(read('supabase/functions/leaders-api/sponsor.ts')).toContain('`: ${bdi(reason)}`');
   });
 });
 
