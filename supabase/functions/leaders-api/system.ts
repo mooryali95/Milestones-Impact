@@ -3,8 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // ما طُبّق من الترحيلات في سجل leaders.schema_migrations (تُطبَّق بسير migrate.yml)، فيظهر في اللوحة
 // ما لم يُطبَّق بعد مقارنًا بمجلد الترحيلات، ومعه الأسرار الناقصة واستهلاك البريد اليوم.
-import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, sendMail } from './core.ts';
-import { requireWrite } from './admin.ts';
+import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, QUEUE_ALERT_HOURS, QUEUE_MAX_ATTEMPTS, raiseAlert, sendMail } from './core.ts';
+import { requireSuper, requireWrite } from './admin.ts';
+import type { Admin } from './admin.ts';
 import { compositeReliability, DEFAULT_MODEL, itemAnalysis, TIERS, weeklySeries } from './logic.js';
 import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
@@ -204,33 +205,78 @@ export async function trends() {
   return { success: true, weeks };
 }
 
+// البريد في الأسبوع لتقرير الصحة: عمق الطابور وعمر أقدم منتظر، وما تُرك منه بلا إرسال (فات أوانه أو استنفد محاولاته؛
+// لا ما ألغاه المدير)، وما حُجب بالحصة وما رفضه المزوّد من العداد الموحد للدوال الأربع. null: تعذّرت القراءة، لا صفر
+export async function mailWeek(weekAgo = new Date(Date.now() - 7 * 864e5).toISOString()) {
+  const head = (t: string) => db.from(t).select('id', { count: 'exact', head: true });
+  const n = async (q: any) => { const { count, error } = await q; return error ? null : (count ?? 0); };
+  const [waiting, oldest, expired, dropped, blocked, rejected] = await Promise.all([
+    n(head('mail_queue').is('sent_at', null).is('gave_up_at', null)),
+    db.from('mail_queue').select('created_at').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1),
+    n(head('mail_queue').eq('last_error', 'stale').gte('gave_up_at', weekAgo)),
+    n(head('mail_queue').not('last_error', 'in', '(stale,cancelled)').gte('gave_up_at', weekAgo)),
+    n(head('mail_events').eq('status', 'blocked').gte('created_at', weekAgo)),
+    n(head('mail_events').eq('status', 'failed').gte('created_at', weekAgo)),
+  ]);
+  const at = oldest.error ? null : (oldest.data as any)?.[0]?.created_at;
+  const oldest_hours = at ? Math.floor((Date.now() - Date.parse(at)) / 36e5) : waiting === 0 ? 0 : null;
+  return { waiting, oldest_hours, expired, dropped, blocked, rejected };
+}
+const hoursAr = (h: number) => (h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h >= 3 && h <= 10 ? `${h} ساعات` : `${h} ساعة`);
+const num = (v: number | null) => (v == null ? 'غير مقروء' : String(v));
+
 // تقرير الصحة الأسبوعي للمالك: يُرسل من تشغيلة cron.reminders نفسها
 export async function weeklyHealth() {
   if (!CONFIG.alertEmail) return { sent: false, reason: 'no LEADERS_ALERT_EMAIL' };
   const h = await health();
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const count = async (q: any) => (await q).count ?? 0;
-  const [joined, active, pending, submitted] = await Promise.all([
+  const [joined, active, pending, submitted, mail] = await Promise.all([
     count(db.from('participants').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo)),
     count(db.from('participants').select('id', { count: 'exact', head: true }).gte('last_login_at', weekAgo)),
     count(db.from('participants').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval')),
     count(db.from('participant_requirements').select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted')),
+    mailWeek(weekAgo),
   ]);
+  const left = mail.expired == null || mail.dropped == null ? null : mail.expired + mail.dropped;
+  const unread = [mail.waiting, mail.expired, mail.dropped, mail.blocked, mail.rejected].some((v) => v == null);
   const issues = [
     ...(h.migrations_ledger ? [] : ['تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق']),
     // المؤجل بقرار لا يحتاج تدخلًا: يُذكر في حالة النظام في اللوحة وحدها
     ...h.pending_migrations.filter((m) => m.gate === 'blocking').map((m) => `ترحيل حاجب لم يُطبَّق: ${m.name}.sql`),
     ...h.pending_migrations.filter((m) => m.gate === 'tolerant').map((m) => `ترحيل لم يُطبَّق تعمل الدوال قبله وبعده: ${m.name}.sql`),
     ...h.missing_secrets.map((k) => `سر ناقص في leaders-api: ${k}`),
-    ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`رسائل الرموز في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap}`] : []),
+    // العداد يعد كل بريد خرج من الدوال الأربع بأنواعه كلها، لا الرموز وحدها
+    ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`البريد المرسل في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap} (كل الأنواع)`] : []),
+    ...(unread ? ['تعذّرت قراءة طابور البريد أو سجله، فبعض أرقام البريد غير مقروءة'] : []),
+    ...(mail.waiting && mail.oldest_hours != null && mail.oldest_hours >= QUEUE_ALERT_HOURS ? [`طابور البريد: ${mail.waiting} تنتظر، أقدمها منذ ${hoursAr(mail.oldest_hours)}. راجع صندوق «لم يُرسل» في مركز البريد`] : []),
+    ...(left ? [`تُرك من طابور البريد هذا الأسبوع بلا إرسال: ${left} (فات أوانها: ${mail.expired}، وفشلت ${QUEUE_MAX_ATTEMPTS} مرات: ${mail.dropped})`] : []),
+    ...(mail.rejected ? [`رفض مزوّد البريد هذا الأسبوع: ${mail.rejected}. راجع حالة النطاق في مركز البريد`] : []),
+    ...(mail.blocked ? [`حُجب بحصة البريد اليومية هذا الأسبوع: ${mail.blocked}. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend`] : []),
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),
   ];
   await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],
     [PARTICIPANT_STATUS.pending_approval, String(pending)], ['متطلبات للمراجعة', String(submitted)],
-    ['رسائل الرموز آخر 24 ساعة', h.mail.today == null ? 'غير مقروءة' : `${h.mail.today} من ${h.mail.cap}`],
+    ['البريد المرسل آخر 24 ساعة (كل الأنواع)', h.mail.today == null ? 'غير مقروء' : `${h.mail.today} من ${h.mail.cap}`],
+    ['في طابور البريد الآن', mail.waiting == null ? 'غير مقروء' : mail.waiting && mail.oldest_hours != null ? `${mail.waiting}، أقدمها منذ ${hoursAr(mail.oldest_hours)}` : String(mail.waiting)],
+    ['تُرك من الطابور هذا الأسبوع (فات أوانه أو استنفد محاولاته)', num(left)],
+    ['حُجب بحصة البريد هذا الأسبوع', num(mail.blocked)],
+    ['رفضه مزوّد البريد هذا الأسبوع', num(mail.rejected)],
   ], issues));
-  return { sent: true, issues: issues.length };
+  return { sent: true, issues: issues.length, mail };
+}
+
+// تجربة قناة التنبيه (للمدير الأعلى): تنبيه واحد عبر alertOps بمساره الحقيقي (الرابط ثم البريد)، ويعيد أي القناتين
+// مضبوطة وما وصل منهما، بلا قيمتيهما (لا رابط ولا عنوان). مرة في الدقيقة
+export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
+  requireSuper(a);
+  const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail };
+  const r = await raiseAlert('alert_test', { note: 'تجربة قناة التنبيه من لوحة الإدارة، لا عطل' });
+  if (r.cooled) throw new Fail('جُرّبت قناة التنبيه قبل أقل من دقيقة، أعد بعد قليل', 429, 'rate');
+  const delivered = { webhook: r.webhook, email: r.email };
+  await audit('admin', a.email, 'system.alert-test', 'system', 'alert_test', null, { channels, delivered });
+  return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered };
 }
 
 // ── معرض رسائل البريد: كل قالب كما يصل، من الدوال نفسها التي تُرسل، ببيانات تجريبية ──

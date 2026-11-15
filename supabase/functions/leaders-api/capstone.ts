@@ -8,7 +8,7 @@
 // المسار: مسودة ← تسليم (اكتمال وجاهزية 80%) ← مراجعة المستشار (إعادة
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
-import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
@@ -287,9 +287,9 @@ export async function adminGet(b: Body) {
   };
 }
 
-function sponsorMail(sponsor: string | null, who: string, initiative: string, link: string) {
-  return mailShell(`طلب تأييد مبادرة: ${initiative}`,
-    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أعدّ ${esc(who)} وثيقة مبادرة «${esc(initiative)}» مشروع تخرجه في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتك.`)
+export function sponsorMail(sponsor: string | null, who: string, initiative: string, link: string) {
+  return mailShell(mailTitle`طلب تأييد مبادرة: ${initiative}`,
+    mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} أعدّ ${bdi(who)} وثيقة مبادرة «${bdi(initiative)}» مشروع تخرجه في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها في جهتك.`)
     + mailText('راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات جهتك، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
     + mailButton(link, 'اقرأ الوثيقة وأيّدها')
     + mailNote(`الرابط خاص بك وصالح ${SPONSOR_DAYS} يومًا.`),

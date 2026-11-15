@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المشارك لا يرى قائمة الجهات ولا نتيجة البحث: يُسجَّل طلبه فقط. الإدارة ترى أقرب الجهات
 // المسجلة (sponsor-match.js) ونطاق بريده، فتربط أو ترفض، ويصله بريد بالقرار.
-import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
@@ -38,7 +38,7 @@ export async function request(p: any, b: Body) {
   await audit('participant', p.id, 'sponsor.request', 'sponsor_requests', data.id, null, { typed });
   if (CONFIG.alertEmail) {
     sendMail(CONFIG.alertEmail, `طلب رعاية: ${p.full_name} · ${typed}`, shell('طلب رعاية جديد',
-      mailText(`${esc(p.full_name)} (${esc(p.email)}) يذكر أن «${esc(typed)}» رشّحته للبرنامج.`) + mailButton(`${SITES.admin}/#/leaders/payments`, 'راجع الطلب'))).catch(() => {});
+      mailText(`${bdi(p.full_name)} (${bdi(p.email)}) يذكر أن «${bdi(typed)}» رشّحته للبرنامج.`) + mailButton(`${SITES.admin}/#/leaders/payments`, 'راجع الطلب'))).catch(() => {});
   }
   return { success: true, request: await mine(p) };
 }
@@ -113,7 +113,7 @@ export async function adminDecide(a: Admin, b: Body) {
     // قرار صريح في سجله (ORG_DECISIONS): بعده لا يقف التثبيت الآلي عند سحب أو رفض قبله في هذه الجهة
     await audit('admin', a.email, 'sponsor.approve', 'participants', p.id, null, { org: org.id, typed: r.typed_name, ...(why ? { reason: why.slice(0, 300) } : {}) });
     sendMail(p.email, `تأكدت رعايتك من ${org.name}`, shell(`أهلًا ${firstName(p.full_name)}`,
-      mailText(`تأكدنا من ترشيحك للبرنامج برعاية ${esc(org.name)}. رسوم القياس والبرنامج مغطاة من جهتك، وما دفعته من قبل لا يُطلب منك بعده شيء.`)
+      mailText(`تأكدنا من ترشيحك للبرنامج برعاية ${bdi(org.name)}. رسوم القياس والبرنامج مغطاة من جهتك، وما دفعته من قبل لا يُطلب منك بعده شيء.`)
       + mailButton(CONFIG.appUrl, 'تابع رحلتك'))).catch(() => {});
     return { success: true };
   }
@@ -121,7 +121,7 @@ export async function adminDecide(a: Admin, b: Body) {
   await db.from('sponsor_requests').update({ status: 'rejected', decided_by: a.email, decided_at: now, reason }).eq('id', r.id);
   await audit('admin', a.email, 'sponsor.reject', 'participants', p.id, null, { typed: r.typed_name, reason });
   sendMail(p.email, 'بخصوص طلب الرعاية', shell(`أهلًا ${firstName(p.full_name)}`,
-    mailText(`لم نتمكن من تأكيد رعاية «${esc(r.typed_name)}» لك${reason ? `: ${esc(reason)}` : ''}. يمكنك متابعة البرنامج مشاركًا فرديًا، أو طلب رمز الجهة من منسقها.`)
+    mailText(`لم نتمكن من تأكيد رعاية «${bdi(r.typed_name)}» لك${reason ? `: ${bdi(reason)}` : ''}. يمكنك متابعة البرنامج مشاركًا فرديًا، أو طلب رمز الجهة من منسقها.`)
     + mailButton(CONFIG.appUrl, 'ادخل إلى رحلتك'))).catch(() => {});
   return { success: true };
 }

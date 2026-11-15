@@ -15,7 +15,7 @@
 | `RESEND_API_KEY` | نعم للبريد | `core.ts`، `_shared/mail.ts`، `admin-api`، `user-api`، `send-otp` | إرسال رموز الدخول والإشعارات؛ غيابه = `mail_unconfigured` وتنبيه فوري | من لوحة Resend |
 | `LEADERS_MAIL_FROM` | لا (افتراضي في `_shared/mail.ts`) | `core.ts` | عنوان المرسل | مع النطاق الموثّق في Resend |
 | `LEADERS_MAIL_DAILY_CAP` | لا (80) | `core.ts`، و`user-api` و`admin-api` و`send-otp` | السقف الموحد لكل بريد في 24 ساعة (D15، `leaders.mail_events`): نصفه على الأقل لرموز الدخول، والتسجيلات تقف عند 70% منه، ومصفوفة التأثير لا تتجاوز خُمسه | ضعف الدفعة على الأقل دون تجاوز خطة Resend المدفوعة |
-| `LEADERS_ALERT_WEBHOOK` | لا | `_shared/mail.ts` | تنبيه المالك عبر قناة غير البريد (Slack أو Teams أو Telegram): رفض النطاق، وبلوغ 70% من الحصة، وكل تنبيه من alertOps | رابط الويب الذي تعطيه القناة |
+| `LEADERS_ALERT_WEBHOOK` | لا | `_shared/mail.ts` | تنبيه المالك عبر قناة غير البريد (Slack أو Teams أو Telegram): رفض النطاق، وبلوغ 70% من الحصة، وامتلاء السقف، وكل تنبيه من alertOps. يُجرَّب بـ `admin.alert-test` | رابط الويب الذي تعطيه القناة |
 | `USER_OTP_PER_IP_DAY` | لا (60) | `user-api` | رموز مصفوفة التأثير من شبكة واحدة في اليوم | يُرفع قبل ورشة كبيرة على شبكة واحدة |
 | `CONTACT_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `send-otp` | من يُخطَر بطلب تواصل جديد من الموقع. كان بريدًا مكتوبًا في الكود حتى 2026-11-13 | بريد من يتابع الطلبات |
 | `MATRIX_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `user-api` | من يُخطَر بخطة مقدَّمة في المصفوفة (D14، بدل Lambda) | بريد المستشار |

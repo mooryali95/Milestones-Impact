@@ -5,7 +5,7 @@
 // vitest)، وهنا القراءة والكتابة والبريد فقط. كل شاشة وتقرير يقرأ
 // الملخص نفسه من trackingSummary، فلا يُحسب «على المسار» بطريقتين.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail } from './core.ts';
-import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award } from './participant.ts';
 import { isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail } from './logic.js';
 import {
@@ -90,9 +90,9 @@ export async function save(p: any, b: Body) {
 }
 
 // ── تأكيد الراعي ──
-function verifyMail(sponsor: string | null, who: string, initiative: string, title: string, link: string) {
-  return mailShell(`تأكيد أثر مبادرة: ${initiative}`,
-    mailText(`${sponsor ? `أهلًا ${esc(sponsor)}،` : 'أهلًا،'} أرسل ${esc(who)} «${esc(title)}» لمبادرة «${esc(initiative)}» التي أيدتها راعيًا لها في جهتك.`)
+export function verifyMail(sponsor: string | null, who: string, initiative: string, title: string, link: string) {
+  return mailShell(mailTitle`تأكيد أثر مبادرة: ${initiative}`,
+    mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} أرسل ${bdi(who)} «${bdi(title)}» لمبادرة «${bdi(initiative)}» التي أيدتها راعيًا لها في جهتك.`)
     + mailText('نطلب منك تأكيد الأرقام: هل تعكس قيم المؤشرات وحالة المعالم ما تراه فعلًا في الجهة؟ تقرأها من الرابط، ثم تؤكد أو تعترض بملاحظة.')
     + mailButton(link, 'راجع الأرقام وأكّدها')
     + mailNote(`الرابط خاص بك وصالح ${VERIFY_DAYS} يومًا.`),
@@ -162,7 +162,7 @@ export async function verifySubmit(b: Body) {
   if (status === 'confirmed') await award(p.id, 'capstone', u.id, VERIFIED_POINTS, 'تأكيد الراعي لأثر المبادرة');
   else if (p?.email) {
     sendMail(p.email, 'ملاحظة راعي مبادرتك على مراجعة الأثر', mailShell('ملاحظة الراعي على مراجعة الأثر',
-      mailText(`أهلًا ${esc(p.full_name || '')}، راجع راعي مبادرتك أرقام «مراجعة الأثر» وكتب:`) + mailNote(esc(note || ''))
+      mailText(`أهلًا ${bdi(p.full_name || '')}، راجع راعي مبادرتك أرقام «مراجعة الأثر» وكتب:`) + mailNote(bdi(note || ''))
       + mailText('صحّح التحديث من صفحة «مبادرتي» ثم أرسله من جديد، فيصل الراعي رابط آخر.')
       + mailButton(CONFIG.appUrl, 'افتح مبادرتي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
   }
@@ -208,8 +208,8 @@ export async function reminders() {
     await db.from('capstones').update({ tracking_reminded_at: new Date().toISOString() }).eq('participant_id', c.participant_id);
     await sendMail(p.email, `${title}: ${initiativeOf(c.snapshot)}`, mailShell(title,
       mailText(s.due.resubmit
-        ? `أهلًا ${esc(p.full_name || '')}، لم يؤكد الراعي أرقام «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}»: اعترض عليها أو لم يعد رابطه صالحًا.`
-        : `أهلًا ${esc(p.full_name || '')}، حان «${esc(title)}» لمبادرة «${esc(initiativeOf(c.snapshot))}».`)
+        ? `أهلًا ${bdi(p.full_name || '')}، لم يؤكد الراعي أرقام «${bdi(title)}» لمبادرة «${bdi(initiativeOf(c.snapshot))}»: اعترض عليها أو لم يعد رابطه صالحًا.`
+        : `أهلًا ${bdi(p.full_name || '')}، حان «${bdi(title)}» لمبادرة «${bdi(initiativeOf(c.snapshot))}».`)
       + mailText(s.due.resubmit ? 'صحّح ما يلزم من صفحة «مبادرتي» ثم أرسلها من جديد، فيصل الراعي رابط آخر.'
         : s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
       + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' }), [], { kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((e) => console.error(e));

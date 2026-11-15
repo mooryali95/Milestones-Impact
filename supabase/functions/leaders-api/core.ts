@@ -4,7 +4,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
-import { alertWebhook, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, sendCounted } from '../_shared/mail.ts';
+import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
@@ -200,9 +200,10 @@ export async function consentNeeded(subject: ConsentSubject, subjectId: string) 
 // القالب من المصدر الموحّد (_shared/mail.ts)؛ هنا رسائل البرنامج فقط
 export { mailButton };
 // كل رسالة تحمل عائلتها (السطر الإنجليزي فوق العنوان) وسطر معاينة صندوق الوارد
-const shell = (family: MailFamily, title: string, body: string, preheader = '', footnote?: string) =>
+const shell = (family: MailFamily, title: string | MailTitle, body: string, preheader = '', footnote?: string) =>
   mailShell(title, body, { family, preheader, ...(footnote != null ? { footnote } : {}) });
-const hello = (name: string | null | undefined) => (name ? `أهلًا ${esc(name)}،` : 'أهلًا،');
+// الاسم معزول الاتجاه (bdi): اسم لاتيني لا يقلب ترتيب التحية ولا ينقل فاصلتها
+const hello =(name: string | null | undefined) => (name ? `أهلًا ${bdi(name)}،` : 'أهلًا،');
 
 // حساب العرض التوضيحي: نطاق بريد لا يستقبل، ولا تُرسل إليه رسالة من أي مسار (الحارس هنا لا في كل موضع)
 export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
@@ -213,7 +214,7 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null }: { kind?: MailKind; ref?: string | null } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments });
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
@@ -246,7 +247,7 @@ export async function drainMailQueue(limit = 40) {
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
       continue;
     }
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom });
+    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
@@ -254,6 +255,31 @@ export async function drainMailQueue(limit = 40) {
   }
   const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
   return { sent, pending: count ?? 0 };
+}
+
+// من المهمة الساعية بعد التفريغ: رسالة انتظرت في الطابور أكثر من QUEUE_ALERT_HOURS تنبيه واحد للمالك يجمع ما تأخر.
+// كل رسالة يُنبَّه إليها مرة واحدة: علامتها سطر في audit_log (mail.queue-stuck بمعرّفها)، تُكتب بعد وصول التنبيه
+// من إحدى القناتين، فلا يضيع التنبيه إن لم يصل، ويُعاد في الساعة التالية
+export const QUEUE_ALERT_HOURS = 6;
+export async function stuckQueueAlert() {
+  const before = new Date(Date.now() - QUEUE_ALERT_HOURS * 36e5).toISOString();
+  const read = (cols: string) => db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).lt('created_at', before).order('created_at').limit(200);
+  let { data, error } = await read('id, created_at, kind, reason');
+  if (error) ({ data, error } = await read('id, created_at, kind'));   // قبل ترحيل مركز البريد: بلا عمود السبب
+  if (error) return { stuck: null, alerted: 0 };
+  const rows = (data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null }[];
+  if (!rows.length) return { stuck: 0, alerted: 0 };
+  const marks = await db.from('audit_log').select('entity_id').eq('action', 'mail.queue-stuck').in('entity_id', rows.map((m) => m.id));
+  // تعذّر قراءة العلامات: التنبيه مكررًا أهون من ضياعه
+  const seen = new Set(marks.error ? [] : (marks.data || []).map((x: any) => String(x.entity_id)));
+  const fresh = rows.filter((m) => !seen.has(m.id));
+  if (!fresh.length) return { stuck: rows.length, alerted: 0 };
+  const hours = Math.floor((Date.now() - Date.parse(fresh[0].created_at)) / 36e5);
+  const r = await raiseAlert('mail_queue_stuck', { messages: fresh.length, waiting_over_hours: QUEUE_ALERT_HOURS, oldest_hours: hours, ...(fresh[0].reason ? { reason: fresh[0].reason } : {}) });
+  if (!r.webhook && !r.email) return { stuck: rows.length, alerted: 0 };
+  const { error: markError } = await db.from('audit_log').insert(fresh.map((m) => ({ actor_type: 'system', actor: 'cron', action: 'mail.queue-stuck', entity: 'mail_queue', entity_id: m.id })));
+  if (markError) console.error('mail.queue-stuck marks:', markError.message);
+  return { stuck: rows.length, alerted: fresh.length };
 }
 
 // ── الدخول ──
@@ -269,8 +295,8 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
 export function reviewMail(name: string, title: string, returned: boolean, note?: string | null) {
   return shell('journey', returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك',
-    mailText(`${hello(name)} ${returned ? `راجع المستشار «${esc(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${esc(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
-    + (returned && note ? mailNote(esc(note)) : '')
+    mailText(`${hello(name)} ${returned ? `راجع المستشار «${bdi(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${bdi(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
+    + (returned && note ? mailNote(bdi(note)) : '')
     + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
     returned ? `ملاحظة على «${title}» قبل اعتماده` : `اعتُمد «${title}»`);
 }
@@ -289,7 +315,7 @@ export function stuckMail(name: string, text: string) {
 
 // ملاحظة أو تنبيه أو إشادة مرئية للمشارك (observations.ts): النص نفسه الذي تعرضه بطاقته في الموقع
 export function observationMail(name: string, heading: string, body: string) {
-  return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(body)}`) + mailButton(CONFIG.appUrl, 'افتح رحلتي'), body.slice(0, 140));
+  return shell('journey', esc(heading), mailText(`${hello(name)} ${bdi(body)}`) + mailButton(CONFIG.appUrl, 'افتح رحلتي'), body.slice(0, 140));
 }
 
 // طلب إعادة القياس: النص نفسه الذي تعرضه بطاقة الموقع (retake.js retakeText)
@@ -327,7 +353,7 @@ export function finalDecisionMail(name: string, decision: string, notes: string 
   };
   return shell('journey', FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي',
     mailText(`${hello(name)} ${next[decision] || 'اعتُمد تقييمك الختامي.'}`)
-    + (notes ? mailNote(esc(notes)) : '')
+    + (notes ? mailNote(bdi(notes)) : '')
     + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
     FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي');
 }
@@ -358,7 +384,7 @@ export function paymentRefundMail(name: string, item: string, amount: string) {
 }
 export function paymentAbandonMail(name: string, item: string) {
   return shell('journey', 'دفعك لم يكتمل',
-    mailText(`${hello(name)} فتحت صفحة الدفع لـ«${esc(item)}» ولم تكتمل العملية، ولم يُخصم منك شيء. إن واجهت مشكلة في الدفع فردّ على هذه الرسالة ونساعدك.`)
+    mailText(`${hello(name)} فتحت صفحة الدفع لـ«${bdi(item)}» ولم تكتمل العملية، ولم يُخصم منك شيء. إن واجهت مشكلة في الدفع فردّ على هذه الرسالة ونساعدك.`)
     + mailButton(CONFIG.appUrl, 'أكمل الدفع'),
     'خطوة واحدة باقية');
 }
@@ -369,7 +395,7 @@ export function paymentOwnerMail(what: string, rows: [string, string][]) {
 // إخطار النسخة الجوهرية (D18): ما تغيّر بنصه من POLICY_CHANGES، ورابط السجل والسياسة، وأن الموافقة تُطلب عند الدخول
 export function policyChangeMail(name: string, version: string, items: readonly string[]) {
   return shell('journey', 'حدّثنا سياسة الخصوصية وشروط البرنامج',
-    mailText(`${hello(name)} نشرنا النسخة ${esc(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
+    mailText(`${hello(name)} نشرنا النسخة ${bdi(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
     + items.map((t) => mailText(`• ${esc(t)}`)).join('')
     + mailButton(`${CONFIG.appUrl}/legal/changes`, 'اقرأ سجل التغييرات'),
     'ما تغيّر في سياسة الخصوصية والشروط');
@@ -397,17 +423,17 @@ export function nameConfirmMail(name: string, url: string) {
 // (feedbackPromiseAr في feedback360.js)، والمهلة نافذة الدورة لا 30 يومًا.
 export function raterMail(rater: string | null, who: string, link: string, phase: 'pre' | 'post' | 'f360' = 'post', f360?: { promise: string; closes: string; reminder?: boolean }) {
   if (phase === 'f360' && f360) {
-    return shell('journey', f360.reminder ? `تذكير: تقديرك لـ${who}` : `طلب تقدير من ${who}`,
-      mailText(`${hello(rater)} ${f360.reminder ? `لم يصلنا تقديرك بعد لـ${esc(who)}، والنافذة تُغلق ${esc(f360.closes)}.` : `يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ورشّحك مستشاره لتقييم 360 للتطوير: مرآة لممارسته يناقشها معه في جلسة توجيه، ولا تدخل أي تقييم أو شهادة.`}`)
+    return shell('journey', f360.reminder ? mailTitle`تذكير: تقديرك لـ${who}` : mailTitle`طلب تقدير من ${who}`,
+      mailText(`${hello(rater)} ${f360.reminder ? `لم يصلنا تقديرك بعد لـ${bdi(who)}، والنافذة تُغلق ${bdi(f360.closes)}.` : `يشارك ${bdi(who)} في برنامج القادة من Milestone Impact، ورشّحك مستشاره لتقييم 360 للتطوير: مرآة لممارسته يناقشها معه في جلسة توجيه، ولا تدخل أي تقييم أو شهادة.`}`)
       + mailText('عبارات قصيرة تقدّر كلًّا منها كما رأيته في الأشهر الثلاثة الأخيرة، و«لا أستطيع الحكم» لما لم تشهده، ثم ثلاثة أسئلة اختيارية. يستغرق ذلك نحو عشر دقائق.')
       + mailText(esc(f360.promise))
       + mailButton(link, 'ابدأ التقدير')
-      + mailNote(`الرابط خاص بك وصالح حتى ${esc(f360.closes)}. نحفظ اسمك وبريدك وصلتك به وتقديرك لتقرير تطويري له وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
+      + mailNote(`الرابط خاص بك وصالح حتى ${bdi(f360.closes)}. نحفظ اسمك وبريدك وصلتك به وتقديرك لتقرير تطويري له وحده، وتجد إشعار الخصوصية كاملًا في <a href="${CONFIG.appUrl}/legal/privacy">سياسة الخصوصية</a>.`),
       `عشر دقائق لتقييم 360 لـ${who}`, '');
   }
   const pre = phase === 'pre';
-  return shell('journey', `طلب تقدير من ${who}`,
-    mailText(`${hello(rater)} يشارك ${esc(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
+  return shell('journey', mailTitle`طلب تقدير من ${who}`,
+    mailText(`${hello(rater)} يشارك ${bdi(who)} في برنامج القادة من Milestone Impact، ${pre ? 'ويطلب تقديرك لممارسته الحالية في العمل قبل أن يبدأ البرنامج.' : 'ويطلب تقديرك لتغير ممارسته في العمل خلال البرنامج.'}`)
     + mailText(pre
       ? 'عبارات قصيرة تقدّر كلًّا منها مرة واحدة كما رأيته في الأشهر الثلاثة الأخيرة، وسنطلب منك التقدير نفسه بعد البرنامج لنقارن. يستغرق ذلك نحو ثلاث دقائق، ولا يظهر تقديرك له منفردًا.'
       : 'عبارات قصيرة، لكل منها تقديران: كيف يمارسها الآن، وكيف كان قبل البرنامج. يستغرق ذلك نحو خمس دقائق، ولا يظهر تقديرك له منفردًا.')
@@ -425,9 +451,9 @@ export const FEEDBACK_MAIL = {
 } as const;
 export function feedbackMail(kind: keyof typeof FEEDBACK_MAIL, name: string | null, who: string, opts: { note?: string | null; url: string }) {
   const body = {
-    list: mailText(`${hello(name)} رشّح ${esc(who)} مقيّميه لتقييم 360، والقائمة بانتظار اعتمادك بصفتك مستشاره. تأكد من تنوعها (المدير والزملاء والفريق وأصحاب المصلحة)، ومن أن فيها من يختلف معه لا المادحين وحدهم.`),
-    returned: mailText(`${hello(name)} أعاد مستشارك قائمة مقيّميك بملاحظة: ${esc(opts.note || '')}. عدّلها وأرسلها مرة أخرى.`),
-    ready: mailText(`${hello(name)} أُغلقت نافذة تقييم 360 لـ${esc(who)}، وتقريره جاهز لتطّلع عليه قبل جلسة الاستلام. لا يراه المشارك حتى تسلّمه له في الجلسة.`),
+    list: mailText(`${hello(name)} رشّح ${bdi(who)} مقيّميه لتقييم 360، والقائمة بانتظار اعتمادك بصفتك مستشاره. تأكد من تنوعها (المدير والزملاء والفريق وأصحاب المصلحة)، ومن أن فيها من يختلف معه لا المادحين وحدهم.`),
+    returned: mailText(`${hello(name)} أعاد مستشارك قائمة مقيّميك بملاحظة: ${bdi(opts.note || '')}. عدّلها وأرسلها مرة أخرى.`),
+    ready: mailText(`${hello(name)} أُغلقت نافذة تقييم 360 لـ${bdi(who)}، وتقريره جاهز لتطّلع عليه قبل جلسة الاستلام. لا يراه المشارك حتى تسلّمه له في الجلسة.`),
     released: mailText(`${hello(name)} سلّمك مستشارك تقرير 360: ما يراه فيك مديرك وزملاؤك وفريقك مقارنة بتقديرك، وملاحظاتهم المكتوبة بلا نسبة إلى أحد. للتطوير وحده، ولا يدخل أي تقييم أو شهادة.`),
   }[kind];
   const cta = { list: 'راجع القائمة واعتمدها', returned: 'عدّل القائمة', ready: 'اقرأ التقرير', released: 'افتح تقريرك' }[kind];
@@ -437,7 +463,7 @@ export function feedbackMail(kind: keyof typeof FEEDBACK_MAIL, name: string | nu
 // D19: مقيّم بانتظار تأكيد المستشار أو المنسق قبل إرسال دعوته، بلا عنوانه في البريد
 export function raterConfirmMail(who: string, why: string, url: string) {
   return shell('journey', 'مقيّم بانتظار تأكيدك',
-    mailText(`دعا ${esc(who)} مقيّمًا لتقدير أثره، وبريده يحتاج تأكيدك قبل إرسال الدعوة: ${esc(why)}.`)
+    mailText(`دعا ${bdi(who)} مقيّمًا لتقدير أثره، وبريده يحتاج تأكيدك قبل إرسال الدعوة: ${bdi(why)}.`)
     + mailText('تأكد أن المقيّم من يعمل معه فعلًا (مديره أو زميله أو أحد فريقه)، فتقديره يدخل حكم «تغير مؤكد» وتقرير الأثر للجهة.')
     + mailButton(url, 'راجع وأكّد'),
     'تأكيد مقيّم قبل إرسال دعوته');
@@ -445,7 +471,7 @@ export function raterConfirmMail(who: string, why: string, url: string) {
 
 export function raterRejectedMail(name: string, rater: string, reason: string) {
   return shell('journey', 'لم يُعتمد أحد مقيّميك',
-    mailText(`${hello(name)} لم يُعتمد ${esc(rater)} مقيّمًا لأثرك، والسبب: ${esc(reason)}.`)
+    mailText(`${hello(name)} لم يُعتمد ${bdi(rater)} مقيّمًا لأثرك، والسبب: ${bdi(reason)}.`)
     + mailText('ادعُ مقيّمًا آخر ممن يعملون معك، ويُفضَّل ببريد جهتك.')
     + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
     'ادعُ مقيّمًا آخر');
@@ -455,7 +481,7 @@ export function raterRejectedMail(name: string, rater: string, reason: string) {
 // تذكير قبل الجلسة بيوم، ومعه رابطها إن كانت عن بعد
 export function sessionReminderMail(name: string, when: string, expert: string | null, joinUrl: string | null) {
   return shell('sessions', 'جلستك غدًا',
-    mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${esc(expert)}` : ''}.`)
+    mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${bdi(expert)}` : ''}.`)
     + mailRows([['الموعد', when], ...(expert ? [['الخبير', expert] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(joinUrl || CONFIG.appUrl, joinUrl ? 'رابط الجلسة' : 'افتح رحلتي')
     + mailNote('جهّز سؤالًا أو موقفًا من عملك هذا الأسبوع، فالجلسة على قدر ما تحمله إليها.'),
@@ -527,8 +553,8 @@ export function coordinatorInviteMail(name: string | null, org: string, info: Or
     ...(join ? ['أرسل رابط التسجيل إلى من ترشّحهم جهتك. من يسجّل منه يظهر في دفعة جهتك، وتغطي الجهة رسومه ما دام العقد ساريًا وفيه مقعد شاغر.'] : []),
     'تابع من اللوحة تقدّم مشاركيك بما تتيحه صلاحياتك، ويصلك ملخص أسبوعي بالبريد.',
   ];
-  return shell('organization', `لوحة ${org} في برنامج القادة`,
-    mailText(`${hello(name)} أُنشئ لك حساب منسق لجهة ${esc(org)} في برنامج القادة.`)
+  return shell('organization', mailTitle`لوحة ${org} في برنامج القادة`,
+    mailText(`${hello(name)} أُنشئ لك حساب منسق لجهة ${bdi(org)} في برنامج القادة.`)
     + (rows.length ? mailRows(rows) : '')
     + mailText('<b>خطواتك الأولى</b>')
     + mailText(steps.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>'))
@@ -546,7 +572,7 @@ export function coordinatorSignInMail(name: string | null, code: string, link: s
 }
 
 export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
-  return shell('organization', `ملخص ${org} الأسبوعي`,
+  return shell('organization', mailTitle`ملخص ${org} الأسبوعي`,
     mailText(`${hello(name)} هذا ملخص مشاركي جهتك في برنامج القادة.`)
     + mailRows([['المشاركون', k.total], ['انضموا هذا الأسبوع', k.joined_week], ['نشطون هذا الأسبوع', k.active_week],
       ['اعتُمد مسارهم', k.approved], ['أنهوا البرنامج', k.completed], ['متوسط الإنجاز', `${k.avg_progress}%`],
@@ -558,8 +584,8 @@ export function coordinatorWeeklyMail(name: string | null, org: string, k: Recor
 
 // إشعار المشارك حين تُفتح لجهته صلاحية تكشف بياناته (الشفافية قبل الاطلاع)
 export function orgAccessMail(name: string, org: string, items: string[]) {
-  return shell('organization', `${org} تطّلع على رحلتك`,
-    mailText(`${hello(name)} فُتح لجهتك ${esc(org)} الاطلاع على: <b>${items.map(esc).join('، ')}</b>.`)
+  return shell('organization', mailTitle`${org} تطّلع على رحلتك`,
+    mailText(`${hello(name)} فُتح لجهتك ${bdi(org)} الاطلاع على: <b>${items.map(esc).join('، ')}</b>.`)
     + mailNote('لا ترى جهتك أبدًا: إجابات القياس، ونماذجك وتأملاتك، وملاحظات المستشار، ومسودة مبادرتك قبل اعتمادها.')
     + mailButton(`${CONFIG.appUrl}/?tab=profile`, 'ماذا ترى جهتك'),
     `فُتح لجهتك: ${items.join('، ')}`, '');
@@ -571,14 +597,14 @@ export function orgAccessMail(name: string, org: string, items: string[]) {
 export type AssignmentMail = { cohort: string; org: string | null; role: string; scope: string; period: string };
 export function teamAssignedMail(name: string | null, a: AssignmentMail) {
   return shell('experts', 'كُلّفت في فريق دفعة',
-    mailText(`${hello(name)} أضافتك إدارة برنامج القادة إلى فريق <b>${esc(a.cohort)}</b>${a.org ? ` في ${esc(a.org)}` : ''}.`)
+    mailText(`${hello(name)} أضافتك إدارة برنامج القادة إلى فريق <b>${bdi(a.cohort)}</b>${a.org ? ` في ${bdi(a.org)}` : ''}.`)
     + mailRows([['الدور', a.role], ['التكليف', a.scope], ['المدة', a.period]])
     + mailText('تجد تكليفاتك وعدد من تخدمهم في لوحة الخبير، تحت «تكليفاتي». إن تعذّر عليك هذا التكليف فراسل إدارة البرنامج.')
     + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'),
     `${a.role} في ${a.cohort}`, 'تصلك هذه الرسالة لأن إدارة برنامج القادة أضافتك إلى فريق دفعة.');
 }
 export const assignmentNote = (a: AssignmentMail) =>
-  mailNote(`<b>تكليفك:</b> ${esc(a.role)} في فريق ${esc(a.cohort)}${a.org ? ` (${esc(a.org)})` : ''}، ${esc(a.period)}. يبدأ عملك فيه بعد اعتماد ملفك.`);
+  mailNote(`<b>تكليفك:</b> ${bdi(a.role)} في فريق ${bdi(a.cohort)}${a.org ? ` (${bdi(a.org)})` : ''}، ${bdi(a.period)}. يبدأ عملك فيه بعد اعتماد ملفك.`);
 
 // ── الإدارة ──
 export function healthMail(rows: [string, string][], issues: string[]) {
@@ -590,35 +616,74 @@ export function healthMail(rows: [string, string][], issues: string[]) {
 }
 
 // ── تنبيه التشغيل الفوري ──
-// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة كل عشر
-// دقائق لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
-export function alertMail(kind: string, detail: Record<string, unknown>) {
+// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة في كل مهلة تهدئة
+// لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
+const ALERT_WINDOW_MS = 10 * 60e3;
+// حوادث البريد تدوم ساعات (السقف نافذة 24 ساعة، ورفض النطاق حتى يُصلح)، فمهلتها أطول: حادثة واحدة لا تُرسل تنبيهات كثيرة.
+// mail_queue_stuck بلا مهلة نوع: الرابط يُهدَّأ لكل رسالة في stuckQueueAlert، وبريده احتياط مقيّد (stuckMailDue).
+// وتجربة القناة مرة في الدقيقة
+export const ALERT_COOLDOWN_MS: Record<string, number> = {
+  mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
+};
+export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
+const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
+export function alertMail(kind: string, detail: Record<string, unknown>, windowMs = ALERT_WINDOW_MS) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  const calm = windowMs > 0 ? ` لن يصلك تنبيه آخر من النوع نفسه خلال ${SPAN_AR[windowMs] ?? `${Math.round(windowMs / 6e4)} دقيقة`}.` : '';
   return shell('admin', `تنبيه تشغيلي: ${kind}`,
-    mailText(`وقع <b>${esc(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
+    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن.${esc(calm)}`)
     + mailRows(rows)
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
     `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
-const ALERT_WINDOW_MS = 10 * 60e3;
+// بريد mail_queue_stuck: التنبيه بالبريد من نصيب الرموز في السقف، والطابور يتأخر في الأيام المزدحمة نفسها،
+// فلا يُرسل إلا حين لا يصل الرابط، ومرة كل ست ساعات بين النسخ (من سجل البريد بعنوانه). ما لم يصل لا يُعلَّم ويُعاد
+export const STUCK_MAIL_MS = 6 * 36e5;
+const alertSubject = (kind: string) => `تنبيه: ${kind} في leaders-api`;
+let stuckMailAt = 0;
+async function stuckMailDue() {
+  if (stuckMailAt > Date.now() - STUCK_MAIL_MS) return false;
+  const { count, error } = await db.from('mail_events').select('id', { count: 'exact', head: true })
+    .eq('kind', 'alert').eq('status', 'sent').eq('subject', alertSubject('mail_queue_stuck')).gte('created_at', new Date(Date.now() - STUCK_MAIL_MS).toISOString());
+  return !!error || !(count ?? 0);   // تعذّر السجل: التنبيه أهون من ضياعه
+}
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
-export async function alertOps(kind: string, detail: Record<string, unknown>) {
-  if ((lastAlert.get(kind) ?? 0) > Date.now() - ALERT_WINDOW_MS) return false;
+// cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
+export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean };
+export async function raiseAlert(kind: string, detail: Record<string, unknown>): Promise<AlertResult> {
+  const windowMs = alertCooldown(kind);
+  const cooled = { cooled: true, webhook: false, email: false };
+  if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
+  // المهلة تُحجز قبل أول انتظار: دفعة متزامنة (رموز محجوبة بالسقف) تنبيه واحد لا تستنفد احتياط البريد
+  if (windowMs > 0) lastAlert.set(kind, Date.now());
   try {
-    const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
-    const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
-      .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
-    if (!error && (count ?? 0) > 0) return false;
-    lastAlert.set(kind, Date.now());
+    if (windowMs > 0) {
+      const since = new Date(Date.now() - windowMs).toISOString();
+      const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+        .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
+      if (!error && (count ?? 0) > 0) return cooled;
+    }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
     // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه
-    const hooked = await alertWebhook(kind, detail);
-    if (!CONFIG.alertEmail || !CONFIG.resendKey) return hooked;
-    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail), [], { kind: 'alert' });
-    return true;
-  } catch (e) { console.error('alertOps:', e); return false; }
+    const webhook = await alertWebhook(kind, detail);
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, email: false };
+    if (kind === 'mail_queue_stuck') {
+      if (webhook || !(await stuckMailDue())) return { cooled: false, webhook, email: false };
+      stuckMailAt = Date.now();
+    }
+    // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
+    const email = await sendMail(CONFIG.alertEmail, alertSubject(kind), alertMail(kind, detail, windowMs), [], { kind: 'alert' })
+      .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
+    // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
+    if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
+    return { cooled: false, webhook, email };
+  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false }; }
+}
+export async function alertOps(kind: string, detail: Record<string, unknown>) {
+  const r = await raiseAlert(kind, detail);
+  return r.webhook || r.email;
 }
 
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل

@@ -7,7 +7,7 @@
 import { audit, db, Fail, must, sendMail } from './core.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
-import { esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { answerBlock, authorNameFor, cleanPeerRequest, cleanPeerText, cleanSupervision, PEER_ANSWER_STATUS_AR, PEER_SOURCE_AR, PEER_STATUS_AR, requestStatusFor, SUPERVISION_AR } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
@@ -98,7 +98,7 @@ export async function ask(p: any, b: Body) {
   if (supervision === 'expert_only') {
     const adv = await advisorOf(p);
     if (adv) await sendMail(adv.email, `طلب توجيه من ${p.full_name}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-      mailText(`رفع ${esc(p.full_name)} طلب توجيه في دفعتك «${esc(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
+      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
   }
   return list(p);
 }

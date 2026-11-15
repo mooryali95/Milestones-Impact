@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { esc, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
+import { bdi, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, mailTitle, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
 // send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
@@ -101,8 +101,8 @@ async function notifyAdmin(sb: SB, r: Row) {
   const dateStr = new Date(r.created_at as string).toLocaleString("ar-SA", {
     timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
-  const html = mailShell(`طلب تواصل جديد من ${r.name}`, `
-${mailText(`${esc(dateStr)} · ${esc(pageLabel)}`)}
+  const html = mailShell(mailTitle`طلب تواصل جديد من ${r.name}`, `
+${mailText(`${bdi(dateStr)} · ${bdi(pageLabel)}`)}
 ${mailRows([
   ["الاسم", r.name as string],
   ["الجهة", (r.organization as string) || "—"],
@@ -119,10 +119,10 @@ ${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admi
 async function confirmSender(sb: SB, r: Row) {
   if (!(await claim(sb, "confirm", String(r.id)))) return;
   const isLeaders = r.product === "MI-LEADERS";
-  const homeHtml = mailShell(`وصلتنا رسالتكم، ${r.name}`, `
+  const homeHtml = mailShell(mailTitle`وصلتنا رسالتكم، ${r.name}`, `
 ${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b>48 ساعة عمل</b>.`)}
-${mailNote(`طلبكم: ${esc((r.interest_label as string) || (r.interest as string) || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
-  const leadersHtml = mailShell(`أهلًا بكم، ${r.name}`, `
+${mailNote(`طلبكم: ${bdi((r.interest_label as string) || (r.interest as string) || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
+  const leadersHtml = mailShell(mailTitle`أهلًا بكم، ${r.name}`, `
 ${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b>48 ساعة عمل</b>.`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
   const subject = isLeaders ? `تأكيد طلبكم — برنامج القادة` : `استلمنا طلبكم — Milestone Impact`;
   await sendEmail(r.email as string, subject, isLeaders ? leadersHtml : homeHtml);
