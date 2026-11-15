@@ -13,6 +13,8 @@ import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import Discovery from './Discovery.jsx';
+import AskExpert from './AskExpert.jsx';
+import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leaders-api/stuck.js';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
@@ -27,6 +29,11 @@ const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.r
     : s.status === 'returned' ? { t: SUBMISSION_STATUS.returned, c: 'bad' }
       : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: SUBMISSION_STATUS.draft, c: 'warn' } : { t: 'لم يبدأ', c: '' });
 const CARD_GATE_TITLE = { none: 'الخطوة الأولى: اعتماد بطاقة المبادرة', waiting: 'بطاقة مبادرتك عند المستشار', returned: 'أعاد المستشار بطاقة مبادرتك' };
+// إغلاق بطاقة التوجيه راحة عرض لكل مشارك في جهازه (لا حالة رحلة)، فلا تعود الإشارة نفسها بعد «ليس الآن»
+const DISMISS_KEY = 'mi_leaders_stuck_dismissed';
+const readDismissed = () => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'); } catch { return []; } };
+const saveDismissed = (list) => { try { localStorage.setItem(DISMISS_KEY, JSON.stringify(list.slice(-50))); } catch { /* تخزين محجوب: تبقى في الجلسة */ } };
+
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
 const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي إن وُجد'], ['approved', 'الاعتماد']];
 
@@ -59,6 +66,8 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
   const [skipDiscovery, setSkipDiscovery] = useState(false);
+  const [ask, setAsk] = useState(null);
+  const [dismissed, setDismissed] = useState(readDismissed);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); }, []);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
@@ -168,7 +177,27 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         </div>
       )}
       {c.status === 'approved' && <Tracking owner={me.participant.id} />}
-      {c.status !== 'approved' && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
+      {/* إشارات التعثر (4د): أعلاها أولوية وحدها، بثلاثة خيارات. تُشتق مما يرسله الخادم (stuck.js) */}
+      {editable && (() => {
+        const sig = stuckSignals({ sections: d.sections, checks: d.checks, card: d.card }).find((x) => !dismissed.includes(x.key));
+        if (!sig) return null;
+        const ex = d.examples?.doc !== false ? examplesFor(me?.sector, d.examples?.sectors ?? null)[0] : null;
+        return (
+          <section className="card stuck" aria-labelledby="stuck-h" data-stuck={sig.kind}>
+            <h3 id="stuck-h">تحتاج توجيهًا؟</h3>
+            <p><b>{sig.title}</b>{sig.detail && <small className="muted"> {isoLtr(sig.detail)}</small>}</p>
+            <div className="row">
+              <button type="button" className="btn gold sm" onClick={() => openSection(sig.chapter.id)}>افتح «{sig.chapter.title}»</button>
+              {ex && <button type="button" className="btn ghost sm" onClick={() => openCapstoneDoc(exampleDoc(ex))}>أرني المثال</button>}
+              <button type="button" className="btn ghost sm" onClick={() => setAsk({ chapterTitle: sig.chapter.title, detail: sig.kind === 'check' ? sig.title : null, dimension: sig.chapter.dimension })}>أريد التحدث مع مختص</button>
+              <button type="button" className="link small" onClick={() => { const n = [...dismissed, sig.key]; setDismissed(n); saveDismissed(n); }}>ليس الآن</button>
+            </div>
+          </section>
+        );
+      })()}
+      {ask && <AskExpert {...ask} onClose={() => setAsk(null)} />}
+
+      {c.status !== 'approved' && !ask && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
@@ -218,7 +247,14 @@ export default function Capstone({ me, onEditProfile, onBack }) {
             <h3>فحوص الاتساق</h3>
             <p className="muted small">يفحص النظام اتساق الفصول كلما فتحت الصفحة.</p>
             <ul className="cp-checks">
-              {d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}</li>)}
+              {d.checks.map((x) => {
+                const ch = !x.ok && editable ? d.sections.find((sec) => (CHECK_CHAPTERS[x.key] || []).includes(sec.key)) : null;
+                return (
+                  <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
+                    {ch && <button type="button" className="link small" onClick={() => setAsk({ chapterTitle: ch.title, detail: x.title, dimension: ch.dimension })}>اسأل مختصًا</button>}
+                  </li>
+                );
+              })}
               {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
             </ul>
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}

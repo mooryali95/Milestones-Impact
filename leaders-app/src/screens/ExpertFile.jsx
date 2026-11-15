@@ -194,6 +194,15 @@ function PeerPending({ peer, advisor, reload }) {
   );
 }
 
+// الوثيقة تُفتح في نافذة متزامنة مع النقرة حتى لا يحجبها المتصفح، ثم تُملأ بعد رد الخادم (كما في صفحة المبادرة)
+async function openInitiative(pid) {
+  const win = window.open('', '_blank');
+  const r = await xpCall('xp.capstone-doc', { participant_id: pid });
+  if (!r.success) { win?.close(); window.alert(r.message); return; }
+  const { openCapstoneDoc } = await import('./Capstone.jsx');
+  await openCapstoneDoc(r.doc, win);
+}
+
 export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
   const [msNote, sayMs] = useNotice();
@@ -273,7 +282,10 @@ export default function ExpertFile({ id, onBack }) {
         <div className="xpp-cols">
           <div><b className="small">الجلسات</b>{d.sessions.length ? <ul className="small muted">{d.sessions.slice(0, 8).map((s) => <li key={s.id}>{when(s.starts_at)} · {SESSION_AR[s.status] || s.status}{s.expert ? ` · ${s.expert}` : ''}</li>)}</ul> : <p className="muted small">لا جلسات.</p>}</div>
           <div><b className="small">طلبات الخبراء</b>{d.expert_requests.length ? <ul className="small muted">{d.expert_requests.slice(0, 8).map((r) => <li key={r.id}>{r.role_ar}{r.expert ? ` · ${r.expert}` : ''} · {r.status_ar}</li>)}</ul> : <p className="muted small">لا طلبات.</p>}</div>
-          <div><b className="small">النماذج المسلّمة</b>{d.models.length ? <ul className="small muted">{d.models.slice(0, 8).map((m) => <li key={m.id}>{m.title} · {m.status_ar}{m.rating ? ` (${rubricLevelAr(m.rating)})` : ''}</li>)}</ul> : <p className="muted small">لا تسليمات.</p>}</div>
+          <div><b className="small">النماذج المسلّمة</b>{d.models.length ? <ul className="small muted">{d.models.slice(0, 8).map((m) => <li key={m.id}>{m.title} · {m.status_ar}{m.rating ? ` (${rubricLevelAr(m.rating)})` : ''}</li>)}</ul> : <p className="muted small">لا تسليمات.</p>}
+            {/* وثيقة المبادرة للقراءة: يجيب الخبير سؤال المشارك عن فصل وهو يراه (مرافق بناء المبادرة 4د). الصلاحية نفسها التي تكشف النماذج */}
+            {d.models.length > 0 && <button type="button" className="link small" onClick={() => openInitiative(d.participant.id)}>اقرأ وثيقة المبادرة ↗</button>}
+          </div>
         </div>
       </section>
 

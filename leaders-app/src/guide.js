@@ -12,6 +12,7 @@ import GOV from '../../supabase/content/initiative-guide/v1/sectors/gov.json';
 import HEALTH from '../../supabase/content/initiative-guide/v1/sectors/health.json';
 import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
 import { costSummary } from '../../supabase/functions/leaders-api/capstone.js';
+import { sectorFamily } from '../../supabase/functions/leaders-api/logic.js';
 import { nearCopy } from '../../supabase/functions/leaders-api/example-check.js';
 
 export const GUIDE_MODES = Object.freeze({ beginner: 'open', intermediate: 'collapsed', advanced: 'expert' });
@@ -19,13 +20,12 @@ export const GUIDE_MODES = Object.freeze({ beginner: 'open', intermediate: 'coll
 // الأمثلة المحلولة بترتيب العرض. القطاع الأقرب أولًا، والخدمات الحكومية أقرب مثال لمن لم يُضف قطاعه بعد
 export const EXAMPLES = Object.freeze([GOV, HEALTH]);
 const BY_SECTOR = Object.fromEntries(EXAMPLES.map((x) => [x.sector, x]));
-const SECTOR_WORDS = [['health', /صح|مستشف|طب|علاج|رعاي|مستوصف|تمريض|دواء|صيدل/]];
 
-/** مفتاح قطاع المثال من قطاع المشارك المكتوب نصًا حرًا في ملفه، ومعه هل طابق قطاعه فعلًا */
+/** مفتاح قطاع المثال من قطاع المشارك المكتوب نصًا حرًا في ملفه، ومعه هل طابق قطاعه فعلًا (عائلات القطاع في logic.js) */
 export function sectorOf(text) {
-  const t = String(text || '');
-  for (const [key, re] of SECTOR_WORDS) if (re.test(t)) return { key, matched: true };
-  return { key: 'gov', matched: /حكوم|وزار|هيئ|بلدي|أمان|جهة عامة|قطاع عام/.test(t) };
+  const f = sectorFamily(text);
+  if (f === 'health') return { key: 'health', matched: true };
+  return { key: 'gov', matched: f === 'gov' || f === 'municipal' };
 }
 
 // القطاعات المفتوحة للمشارك كما حسمها الخادم من مفاتيح الرؤية (examples.sectors). غيابها (خادم أقدم) يعني الكل

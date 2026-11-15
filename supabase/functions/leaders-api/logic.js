@@ -2193,6 +2193,31 @@ export function expertStats(sessions = [], rate = null, now = Date.now()) {
   };
 }
 
+// ── القطاع: عائلة القطاع من نص حر (ملف المشارك أو قطاعات الخبير) ──
+// كان التطابق نصًا حرفيًا، فلا يلتقي «القطاع الصحي» و«الصحة». العائلة مصدر واحد يقرؤه ترشيح الخبراء والمثال المحلول (guide.js)
+export const SECTOR_FAMILIES = Object.freeze([
+  ['health', /صح|مستشف|طب|علاج|رعاي|مستوصف|تمريض|دواء|صيدل/],
+  ['education', /تعليم|جامع|مدرس|أكاديم|كلي/],
+  ['municipal', /بلدي|أمان|إسكان|عمران/],
+  ['nonprofit', /غير ربحي|غير الربحي|خيري|جمعي|وقف/],
+  ['private', /خاص|شرك|تجار|مصرف|بنك|مالي|استثمار/],
+  ['gov', /حكوم|وزار|هيئ|جهة عامة|قطاع عام|القطاع العام/],
+]);
+/** عائلة القطاع أو null */
+export function sectorFamily(text) {
+  const t = String(text || '');
+  for (const [k, re] of SECTOR_FAMILIES) if (re.test(t)) return k;
+  return null;
+}
+/** هل القطاعان واحد؟ النص نفسه، أو عائلة واحدة */
+export function sameSector(a, b) {
+  const x = String(a || '').trim(), y = String(b || '').trim();
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const f = sectorFamily(x);
+  return !!f && f === sectorFamily(y);
+}
+
 // ── الإسناد: ترشيح الخبير الأنسب لطلب ──
 // الأوزان مصدر واحد (مجموعها 100) يقرؤها الخادم ولوحة الإدارة لشرح الترتيب
 export const MATCH_WEIGHTS = { fit: 35, capacity: 25, quality: 20, context: 10, continuity: 10 };
@@ -2215,7 +2240,7 @@ export function matchScore(e, need) {
   // الجودة: التقييم من 5 حين يوجد بعدد كافٍ، وإلا محايد
   const r = e.rating?.count >= MIN_RATINGS ? e.rating.avg : null;
   const quality = (r == null ? 0.6 : Math.max(0, Math.min(1, (r - 1) / 4))) * w.quality;
-  const context = (need.sector && (e.sectors || []).some((s) => String(s).trim() === String(need.sector).trim()) ? 1 : 0) * w.context;
+  const context = (need.sector && (e.sectors || []).some((s) => sameSector(s, need.sector)) ? 1 : 0) * w.context;
   const continuity = (e.served ? 1 : 0) * w.continuity;
   const parts = { fit, capacity, quality, context, continuity };
   const total = Math.round(Object.values(parts).reduce((a, n) => a + n, 0) * 10) / 10;
