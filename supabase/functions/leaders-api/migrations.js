@@ -133,7 +133,10 @@ export const MIGRATIONS = [
   '20261115180000_leaders_capstone_shares',
   '20261115190000_leaders_book_draft_comments',
   '20261115200000_leaders_book_comment_section_ids',
+  '20261115210000_leaders_initiative_owner_context',
   '20261115230000_leaders_agent_admin',
+  '20261115240000_leaders_initiative_owner_steps',
+  '20261116000000_leaders_book_proposals',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -185,5 +188,8 @@ export const MIGRATION_GATES = {
   '20261115180000_leaders_capstone_shares': ["tolerant", "الدالة تتحمل غياب الجدولين (share.ts): قبلهما تقول لوحة المشاركة إن الميزة لم تُفعَّل بعد، ولا يتعطل شيء"],
   '20261115190000_leaders_book_draft_comments': ["tolerant", "قبله تُقرأ المسودة في الكتاب الأم ويُرفض التعليق عليها برسالة (master-book.ts)، وتعليقات الأبواب كما هي"],
   '20261115200000_leaders_book_comment_section_ids': ["tolerant", "الدالة تكتب section_id إن وُجد العمود، وتقرأ التعليق بعنوانه المحفوظ إن غاب (master-book.ts)"],
+  '20261115210000_leaders_initiative_owner_context': ["tolerant", "محتوى نماذج فقط: الدوال تقرأ النماذج كما هي في القاعدة، والحقلان الجديدان اختياريان"],
   '20261115230000_leaders_agent_admin': ["tolerant", "agent-chat بلا الجدول يعد المساعد مطفأ (يفشل مغلقًا)، وleaders-api يرد not_migrated لشاشة المساعد، وحفظ الجهة لا يرسل companion_allowed قبل وجوده، وadmin-api يرد step_up_unavailable"],
+  '20261115240000_leaders_initiative_owner_steps': ["tolerant", "محتوى فقط: جملة في خطوات البطاقة ونص مساعدة متطلب CP-FINAL"],
+  '20261116000000_leaders_book_proposals': ["tolerant", "قبله يُقرأ الكتاب بلا مقترحات (book-proposals.ts: proposalRows يرجع null)، والاقتراح يُرفض برسالة"],
 };

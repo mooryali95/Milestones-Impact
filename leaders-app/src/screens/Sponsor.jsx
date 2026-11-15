@@ -51,7 +51,7 @@ export default function Sponsor() {
         <h1 style={{ fontSize: 22 }}>{data.sponsor ? `أهلًا ${data.sponsor}، ` : ''}هل تؤيد مبادرة «{m.initiative}»؟</h1>
         <p className="muted">
           أعدّها {m.participant?.name}{m.org?.name ? ` من ${m.org.name}` : ''} مشروع تخرجه في برنامج القادة، وراجعها المستشار وقبلها.
-          تأييدك يعني أنها مبادرة حقيقية تخدم أولويات جهتك، وأن خطتها واقعية.
+          تأييدك يعني أنها مبادرة حقيقية تخدم أولويات تعنيك، وأن خطتها واقعية.
         </p>
         <dl className="sp-meta">
           <div><dt>النوع</dt><dd>{m.scope_title || '·'}</dd></div>

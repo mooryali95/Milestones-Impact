@@ -737,6 +737,8 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mf-guide p + p { margin-top: 4px; }
 .mf-guide b { font-weight: 600; color: var(--ink); }
 .mf-guide .mf-avoid b { color: color-mix(in srgb, var(--copper) 62%, #000); }
+.mf-guide .mf-ctx { margin-top: 6px; padding: 4px 8px; border-radius: 6px; background: var(--paper, #fff); }
+.mf-guide .mf-ctx b { color: var(--gold-text); }
 .mf-guide summary { cursor: pointer; color: var(--gold-text); font-weight: 600; }
 .mf-guide[open] summary { margin-bottom: 6px; }
 .mf-ex { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }

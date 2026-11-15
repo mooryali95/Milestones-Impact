@@ -104,7 +104,9 @@ describe('الترحيل: المبرر والتكلفة للتأسيسي، وا�
     expect(MIG).toMatch(/"label": "الراعي: منصبه ودوره في هيكل المبادرة", "required": false/);
     expect(MIG).toMatch(/"label": "بريد الراعي \(إن كان للمبادرة راعٍ فعلي\)", "required": false/);
     expect(CARD_REVIEW_CRITERIA.join(' ')).not.toContain('ليست تمرينًا');
-    expect(CARD_REVIEW_CRITERIA).toContain('واقعية في سياق جهته، حقيقية كانت أو افتراضية');
+    expect(CARD_REVIEW_CRITERIA).toContain('واقعية في سياق تنفيذها، حقيقية كانت أو افتراضية');
+    // المبادرة ملك قائدها: لا معيار بطاقة يشترط جهة (قرار المالك 2026-11-15)
+    expect(CARD_REVIEW_CRITERIA.join(' ')).not.toMatch(/جهته|هيكل الجهة/);
   });
 
   const proc = (() => {

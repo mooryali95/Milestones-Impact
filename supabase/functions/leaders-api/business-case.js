@@ -85,7 +85,9 @@ export function charterData(doc) {
     : null;
   const rows = [
     ['المبادرة', c('title')],
-    ['الهدف الاستراتيجي', c('objective')],
+    ['سياق التنفيذ', c('context')],
+    ['الجهة المستضيفة', c('host')],
+    ['الهدف الأعلى', c('objective')],
     ['المشكلة أو الفرصة', c('problem')],
     ['داخل النطاق', c('in_scope')],
     ['خارج النطاق', c('out_scope')],
@@ -117,7 +119,7 @@ export function businessCase(doc) {
 
   const evidence = tableOf(doc, 'options-analysis', 'evidence');
   add(S, [
-    ['الهدف الاستراتيجي', text(doc, 'initiative-charter', 'objective')],
+    ['الهدف الأعلى', text(doc, 'initiative-charter', 'objective')],
     ['المشكلة أو الفرصة', text(doc, 'initiative-charter', 'problem')],
     ['الأثر المنشود', text(doc, 'theory-of-change', 'impact')],
   ], evidence && evidence.rows.length ? { table: { label: 'الدليل على المشكلة', columns: evidence.columns, rows: evidence.rows } } : {});

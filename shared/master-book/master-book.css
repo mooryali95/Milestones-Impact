@@ -161,7 +161,7 @@
 .mb-txt .cards { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0 18px; }
 @media (min-width: 560px) { .mb-txt .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mb-txt .cards.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .mb-txt .card { background: #fff; border: 1px solid var(--line); border-top: 2px solid var(--gold); border-radius: 10px; padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; box-shadow: 0 10px 24px -20px rgba(11, 39, 47, .5); }
-.mb-txt .card .n { font: 400 12px "Noto Sans", sans-serif; color: var(--gold); } .mb-txt .card b { display: block; font-weight: 500; margin: 2px 0 4px; }
+.mb-txt .card .n { font: 400 12px "Noto Sans", sans-serif; color: var(--gold); } .mb-txt .card > b { display: block; font-weight: 500; margin: 2px 0 4px; }
 .mb-txt .card p { margin: 0; font-size: 14.5px; line-height: 1.95; }
 .mb-txt .steps { list-style: none; margin: 12px 0 18px; padding: 0; position: relative; }
 .mb-txt .steps::before { content: ''; position: absolute; inset-inline-start: 14px; top: 10px; bottom: 10px; width: 1px; background: var(--gold); opacity: .45; }
@@ -345,3 +345,71 @@
 .mb-vol.draft .mb-vol-img { opacity: .18; }
 .mb-vol.draft .mb-vol-in i { font: 400 30px/1 var(--body); }
 @media (min-width: 720px) { .mb-vols:has(.mb-vol.draft) { grid-template-columns: repeat(4, 1fr); } }
+
+/* ── ما يعتمد على هذا (المرحلة 3) ── */
+.mb-chip.deps { cursor: pointer; border-color: var(--gold-light); color: #FFF3DC; background: rgba(6, 19, 24, .45); font: inherit; font-size: 11px; }
+.mb-chip.deps:hover { background: var(--gold); color: var(--ink); }
+.mb-sec-ref { position: absolute; top: 32px; inset-inline-end: 84px; border: 1px dashed var(--gold); background: transparent; color: var(--gold-text); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+.mb-dep-lead { margin: 4px 0 12px; font-size: 14px; line-height: 1.9; color: var(--slate); }
+.mb-dep { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+.mb-dep header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mb-dep header b { font-weight: 500; font-size: 14px; color: var(--graphite); }
+.mb-dep-n { min-width: 28px; height: 28px; border-radius: 14px; padding: 0 8px; display: inline-grid; place-items: center; background: var(--graphite); color: var(--gold-light); font: 400 13px "Noto Sans", sans-serif; }
+.mb-dep.none { opacity: .55; } .mb-dep.none .mb-dep-n { background: var(--line); color: var(--muted); }
+.mb-dep.warn:not(.none) { border-color: rgba(154, 91, 18, .45); } .mb-dep.warn:not(.none) .mb-dep-n { background: var(--warn); color: #fff; }
+.mb-dep p { margin: 6px 0 0; font-size: 13px; line-height: 1.85; color: var(--slate); }
+.mb-dep-list { margin: 6px 0 0; padding-inline-start: 18px; font-size: 13.5px; line-height: 1.9; color: var(--slate); }
+.mb-dep-list small { color: var(--muted); }
+.mb-dep-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mb-dep-tags .mb-tag { font-size: 11px; padding: 2px 8px; }
+
+/* ── مقترحات التعديل (المرحلة 4): أدوات القسم، والمحرر، والفرق، وبطاقة المقترح ── */
+.mb-sec-tools { position: absolute; top: 30px; inset-inline-end: 0; display: flex; align-items: center; gap: 6px; z-index: 2; }
+.mb-sec-tools .mb-sec-c, .mb-sec-tools .mb-sec-ref { position: static; }
+.mb-sec-p { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--muted); transition: all .2s; }
+.mb-sec-p svg { width: 15px; height: 15px; }
+.mb-sec-p:hover { border-color: var(--gold); color: var(--gold-text); }
+.mb-sec-p.has { background: rgba(169, 122, 46, .12); border-color: var(--gold); color: var(--gold-text); }
+.mb-txt .mb-sec-p b { font: 400 12px "Noto Sans", sans-serif; color: inherit; }
+@media (min-width: 900px) { .mb-sheet.wide { max-width: 760px; } }
+.mb-tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
+.mb-tabs button { border: 0; background: none; padding: 8px 14px; font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.mb-tabs button.on { color: var(--graphite); border-bottom-color: var(--gold); }
+.mb-hint { margin: 2px 0 10px; font-size: 12.5px; line-height: 1.9; color: var(--muted); }
+.mb-hint code { font: 400 11.5px "Noto Sans Mono", ui-monospace, monospace; background: var(--paper-2); padding: 1px 5px; border-radius: 4px; direction: ltr; unicode-bidi: isolate; }
+.mb-src { width: 100%; min-height: 46vh; resize: vertical; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #fff; color: #1F3238; font: 300 14.5px/2 var(--body); }
+.mb-src:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(169, 122, 46, .12); }
+.mb-levels.in { position: static; padding: 0 0 10px; background: none; border: 0; }
+.mb-preview { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 12px; margin-bottom: 12px; }
+.mb-lbl { display: block; font-size: 12.5px; color: var(--graphite); margin-bottom: 4px; }
+.mb-row-end { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.mb-btn.sm { padding: 5px 14px; font-size: 13px; }
+.mb-ic.sm { width: 30px; height: 30px; font-size: 16px; border-color: var(--line); }
+.mb-diff { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0 12px; font-size: 14px; line-height: 2.05; white-space: pre-wrap; color: #1F3238; overflow-wrap: anywhere; }
+.mb-diff del { background: rgba(155, 44, 44, .1); color: #8c2a2a; text-decoration: line-through; text-decoration-color: rgba(155, 44, 44, .6); border-radius: 3px; }
+.mb-diff ins { background: rgba(47, 107, 79, .14); color: #1f5a3f; text-decoration: none; border-radius: 3px; }
+.mb-diff-gap { color: var(--muted); }
+.mb-pr { background: #fff; border: 1px solid var(--line); border-inline-start: 3px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.mb-pr.st-review { border-inline-start-color: var(--gold); }
+.mb-pr.st-approved { border-inline-start-color: var(--ok); }
+.mb-pr.st-rejected, .mb-pr.st-withdrawn { opacity: .75; }
+.mb-pr header { display: flex; align-items: center; gap: 10px; }
+.mb-pr-st { flex: none; font-size: 11px; padding: 2px 10px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
+.mb-pr-st.st-review { background: rgba(169, 122, 46, .14); color: var(--gold-text); }
+.mb-pr-st.st-approved { background: rgba(47, 107, 79, .12); color: var(--ok); }
+.mb-pr-st.st-rejected { background: rgba(155, 44, 44, .1); color: #8c2a2a; }
+.mb-pr-where { flex: 1; min-width: 0; text-align: start; border: 0; background: none; padding: 0; line-height: 1.5; }
+.mb-pr-where small { display: block; font-size: 11.5px; color: var(--muted); } .mb-pr-where b { font-weight: 500; font-size: 14px; color: var(--graphite); }
+.mb-pr-why { margin: 8px 0 0; font-size: 14px; line-height: 1.9; color: #1F3238; }
+.mb-pr-meta { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+.mb-pr-stale { font-weight: 400; color: var(--warn); }
+.mb-pr-dec { margin: 6px 0 0; font-size: 12.5px; color: var(--slate); padding: 6px 10px; background: var(--paper); border-radius: 8px; }
+.mb-pr footer { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 8px; }
+.mb-pr footer .mb-btn { margin-inline-start: auto; } .mb-pr footer .mb-btn + .mb-btn { margin-inline-start: 0; }
+.mb-pr-decide textarea, .mb-compose #mb-reason { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font: 300 14px/1.9 var(--body); background: #fff; color: #1F3238; margin-top: 8px; }
+/* على الهاتف: أدوات القسم سطر فوق عنوانه لا فوقه، فلا تزاحم العنوان مهما طال */
+@media (max-width: 700px) {
+  .mb-sec-tools { position: static; justify-content: flex-end; margin: 22px 0 -22px; }
+  .mb-sec-tools + div > h3:first-child { margin-top: 26px; padding-inline-end: 0; }
+}
+@media (min-width: 701px) { .mb-sec-tools + div > h3:first-child { padding-inline-end: 230px; } }

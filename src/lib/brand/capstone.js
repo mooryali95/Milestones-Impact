@@ -291,7 +291,7 @@ function trackingBlock(t) {
 // الحقول التي يعرضها الميثاق من البطاقة (business-case.js charterData): لا تُكرر في فصل البطاقة
 // والبريد لا يُطبع في الوثيقة أصلًا: تُقرأ وتُتداول، والراعي يُعرف بمنصبه ودوره
 const NEVER_PRINTED = new Set(['sponsor_email']);
-const CHARTER_FIELDS = new Set(['sponsor_email', 'title', 'objective', 'problem', 'in_scope', 'out_scope', 'start', 'end', 'constraints', 'first_step', 'operator', 'sponsor', 'deliverables']);
+const CHARTER_FIELDS = new Set(['sponsor_email', 'title', 'context', 'host', 'objective', 'problem', 'in_scope', 'out_scope', 'start', 'end', 'constraints', 'first_step', 'operator', 'sponsor', 'deliverables']);
 
 function charterBlock(doc) {
   const c = charterData(doc);
@@ -487,10 +487,10 @@ export function capstoneReport(doc) {
       pdfName: `Milestone-Impact-Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
       eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
-      rows: [['القائد', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
-      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'سري: مخصص للقائد وجهته ومستشاره',
+      rows: [['قائد المبادرة', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
+      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد',
       closing: example
-        ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع جهتك، وقارن بنيتها بهذا المثال.'
+        ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'
         : approved
         ? 'وثيقة معتمدة. تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.'
         : 'نسخة عمل تُبنى آليًا من فصول المبادرة لحظة إصدارها.',
