@@ -4,7 +4,7 @@
 // يحفظ بالإجراء نفسه الذي يحفظ به نموذج الدفعة الكامل (admin.cohort-save)، فلا مدخل ثانٍ ولا قاعدة ثانية.
 // ما لا يحتاجه الإنشاء (صيغ الأنشطة والبنود المخفية والإشراف) يبقى في «تحرير الدفعة» من ملفها.
 import React, { useState } from 'react';
-import { COHORT_STATUS } from '../methodology.js';
+import { COHORT_STATUS, contractLine } from '../methodology.js';
 import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
 import { WIZARD_STEPS, wizardBlock, wizardBody, wizardNotes } from '../cohort-hub.js';
@@ -112,8 +112,10 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
                   {['open', 'running', 'planned'].map((k) => <option key={k} value={k}>{COHORT_STATUS[k]}</option>)}
                 </select>
               </label>
-              <label className="wiz-field">المقاعد (اختياري)<input type="number" min="1" value={v.capacity} onChange={(e) => set({ capacity: e.target.value })} /></label>
+              {/* المقاعد مصدرها واحد (P3): دفعة الجهة تأخذها من عقد الجهة فلا تُسأل هنا، ودفعة الأفراد حقلها هو المصدر */}
+              {v.kind !== 'org' && <label className="wiz-field">المقاعد (اختياري)<input type="number" min="1" value={v.capacity} onChange={(e) => set({ capacity: e.target.value })} /></label>}
             </div>
+            {v.kind === 'org' && org && <p className="la-muted wiz-contract">{contractLine(org)} يُعدَّل العقد من ملف الجهة، ولسعة تشغيلية خاصة بالدفعة افتح «تحرير الدفعة» بعد إنشائها.</p>}
           </fieldset>
         )}
 
