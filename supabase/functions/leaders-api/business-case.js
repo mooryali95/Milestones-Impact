@@ -95,6 +95,8 @@ export function charterData(doc) {
     ['أهم المنافع', benefits.length ? benefits.map((x) => `${x.title}${x.baseline || x.target ? ` (من ${x.baseline || '·'} إلى ${x.target || '·'})` : ''}`).join('؛ ') : null],
     ['المخاطر الكبرى', risks.length ? risks.map((x) => x.title).join('؛ ') : null],
     ['القيود والافتراضات', c('constraints')],
+    ['الخطوة الأولى خلال 30 يومًا', c('first_step')],
+    ['من يشغّل بعد المبادرة', c('operator')],
     ['الراعي ودوره', c('sponsor')],
   ].filter(([, v]) => v);
   return { rows, deliverables: del && del.rows.length ? { columns: del.columns, rows: del.rows } : null };

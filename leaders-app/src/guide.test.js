@@ -72,7 +72,7 @@ describe('العون يتلاشى بالمستوى', () => {
 });
 
 // ════════════ 4ب: المثال المحلول لكل قطاع ════════════
-import { capstoneChecks, costSummary } from '../../supabase/functions/leaders-api/capstone.js';
+import { capstoneChecks, CARD_REVIEW_CRITERIA, costSummary } from '../../supabase/functions/leaders-api/capstone.js';
 import { businessCase, charterData } from '../../supabase/functions/leaders-api/business-case.js';
 import { copiedFromExamples, nearCopy, similarity } from '../../supabase/functions/leaders-api/example-check.js';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
@@ -226,5 +226,83 @@ describe('المالك يعرض المبادرات المحلولة أو يحج�
     expect(p).toContain('m.capstone_sort != null ? examplesFor(p) : null,');
     const c = readFileSync(resolve(root, 'supabase/functions/leaders-api/capstone.ts'), 'utf8');
     expect(c).toContain('const [d, examples] = await Promise.all([build(p), examplesFor(p)]);');
+  });
+});
+
+// ════════════ 4ج: صفوف البداية، واختبار الواقعية، واكتشاف المبادرة ════════════
+import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
+import { canStart, charterFromDiscovery, DISCOVERY_CRITERIA, discoveryQuestions, discoveryScore, starterFor, untouchedStarters } from './guide.js';
+
+describe('صفوف البداية: هيكل لا محتوى', () => {
+  const entries4 = Object.entries(STARTERS).filter(([k]) => !k.startsWith('_'));
+  it('كل هيكل لجدول مزروع، وصفوفه بعدد أعمدته، وخاناته الأولى تُحسب صفًا', () => {
+    for (const [model, fields] of entries4) {
+      for (const [field, rows] of Object.entries(fields)) {
+        const cols = seededColumns(model, field);
+        expect(cols, `${model}.${field}`).toBeTruthy();
+        for (const r of rows) { expect(r.length, `${model}.${field}`).toBe(cols.length); expect(String(r[0]).trim(), `${model}.${field}`).not.toBe(''); }
+        expect(starterFor(model, field, cols)).toEqual(rows);
+      }
+    }
+  });
+  it('الزر للجدول الفارغ وحده، والهيكل نسخة جديدة لا تمس المصدر', () => {
+    const cols = seededColumns('raid', 'items');
+    expect(canStart('raid', 'items', cols, undefined)).toBe(true);
+    expect(canStart('raid', 'items', cols, [['', '', '', '', '', '', '', '']])).toBe(true);
+    expect(canStart('raid', 'items', cols, [['R1', '', '', '', '', '', '', '']])).toBe(false);
+    expect(canStart('schedule', 'activities', seededColumns('schedule', 'activities'), [])).toBe(false);
+    expect(starterFor('raid', 'items', ['عمود واحد'])).toBeNull();
+    const rows = starterFor('raid', 'items', cols); rows[0][2] = 'تغيير'; expect(STARTERS.raid.items[0][2]).toBe('');
+  });
+  it('الصفوف التي بقيت كما أُدرجت تُعد للتنبيه، والمعدّلة لا', () => {
+    const rows = starterFor('governance', 'cadence', seededColumns('governance', 'cadence'));
+    expect(untouchedStarters('governance', 'cadence', rows)).toBe(3);
+    rows[0][2] = 'أولويات الأسبوع'; expect(untouchedStarters('governance', 'cadence', rows)).toBe(2);
+    expect(untouchedStarters('governance', 'cadence', null)).toBe(0);
+  });
+});
+
+describe('اختبار الواقعية في البطاقة', () => {
+  const mig = readFileSync(resolve(root, 'supabase/migrations/20261115100000_leaders_initiative_reality.sql'), 'utf8');
+  it('ثلاثة حقول اختيارية تُضاف إن غابت: بطاقة معتمدة مقفلة فلا يُحرم صاحبها من التسليم', () => {
+    expect(mig.split('\n')[0]).toMatch(/^-- deploy-gate: tolerant/);
+    for (const k of ['reality', 'first_step', 'operator']) {
+      const m = mig.match(new RegExp(`add_field\\('initiative-charter', \\$j\\$(\\{"key": "${k}"[^\\n]*\\})\\$j\\$`));
+      expect(m, k).toBeTruthy();
+      expect(JSON.parse(m[1]).required, k).toBe(false);
+      expect(FIELDS['initiative-charter'][k], k).toBeTruthy();
+    }
+    expect(mig).toContain("insert into leaders.schema_migrations (name) values ('20261115100000_leaders_initiative_reality')");
+  });
+  it('الخطوة الأولى ومن يشغّل بعد المبادرة يظهران في الميثاق المولّد', () => {
+    const c = Object.fromEntries(charterData(exampleDoc(EXAMPLES[0])).rows);
+    expect(c['الخطوة الأولى خلال 30 يومًا']).toContain('اجتماع الأحد القادم');
+    expect(c['من يشغّل بعد المبادرة']).toContain('إدارة الخدمات');
+  });
+});
+
+describe('اكتشاف المبادرة: أسئلة بالمستوى، وناتجه مسودة البطاقة', () => {
+  it('المعايير معايير بوابة البطاقة الأربعة، والدرجة عدد المحقق منها', () => {
+    expect(DISCOVERY_CRITERIA.length).toBe(CARD_REVIEW_CRITERIA.length);
+    expect(discoveryScore({ real: true, owner: true })).toBe(2);
+    expect(discoveryScore(null)).toBe(0);
+  });
+  it('التأسيسي بأمثلة، والمتوسط بلا أمثلة، والمتقدم أسئلة استراتيجية، والخطوة الأولى للجميع', () => {
+    const b = discoveryQuestions('beginner'), m = discoveryQuestions('intermediate'), a = discoveryQuestions('advanced');
+    expect(b.every((q) => q.hint)).toBe(true);
+    expect(m.every((q) => !q.hint)).toBe(true);
+    expect(b.map((q) => q.key)).toEqual(m.map((q) => q.key));
+    expect(a.map((q) => q.key)).toEqual(['decision', 'metric', 'goal', 'first']);
+    for (const qs of [b, m, a]) expect(qs.some((q) => q.key === 'first')).toBe(true);
+  });
+  it('تُملأ الحقول الفارغة وحدها، ولا يُكتب فوق ما في البطاقة', () => {
+    const out = charterFromDiscovery('beginner', { idea: 'تجديد الترخيص يأخذ أسبوعين', title: 'تجديد في يوم', answers: { who: '1,200 مستفيد شهريًا', size: '9 أيام (نظام الطلبات)', goal: 'رفع الرضا إلى 85%', first: 'اجتماع مع مالك البيانات' } }, { objective: 'هدف كتبه المشارك' });
+    expect(out.title).toBe('تجديد في يوم');
+    expect(out.problem).toBe('تجديد الترخيص يأخذ أسبوعين. يتضرر منها 1,200 مستفيد شهريًا. حجمها: 9 أيام (نظام الطلبات).');
+    expect(out.objective).toBe('هدف كتبه المشارك');
+    expect(out.first_step).toBe('اجتماع مع مالك البيانات');
+    const adv = charterFromDiscovery('advanced', { idea: 'الانتظار طويل', answers: { decision: 'تمويل المرحلة الأولى', metric: 'الانتظار من 34 إلى 14 يومًا' } });
+    expect(adv.problem).toBe('الانتظار طويل. المؤشر: الانتظار من 34 إلى 14 يومًا. القرار المطلوب: تمويل المرحلة الأولى.');
+    expect(adv.title).toBe('الانتظار طويل');
   });
 });

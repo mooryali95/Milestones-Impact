@@ -7,7 +7,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
 import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
-import { guideFor, nearExample } from '../guide.js';
+import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '../guide.js';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -24,7 +24,7 @@ const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', r
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
 // id للحقل الذي تسمّيه <label htmlFor>، وlabelId لما لا تسمّيه label (مجموعة الاختيار والجدول) فيُسمّى بـaria-labelledby
-function Field({ f, value, onChange, locked, initiative, imp, id, labelId }) {
+function Field({ f, value, onChange, locked, initiative, imp, id, labelId, modelKey }) {
   // حقل اسم المشروع مصدره بطاقة المبادرة: يُعرض ولا يُكتب هنا
   if (f.bind === 'initiative') {
     return (
@@ -68,8 +68,11 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId }) {
           <div className="row mt-acts">
             <button type="button" className="link small" onClick={() => onChange([...rows, cols.map(() => '')])}>+ صف</button>
             {imp && <ImportRows imp={imp} rows={rows} onChange={onChange} />}
+            {/* هيكل البداية: يُدرج في الجدول الفارغ وحده، ويعدّله المشارك (guide.js، 4ج) */}
+            {canStart(modelKey, f.key, cols, value) && <button type="button" className="link small" onClick={() => onChange(starterFor(modelKey, f.key, cols))}>▤ ابدأ من هيكل</button>}
           </div>
         )}
+        {!locked && untouchedStarters(modelKey, f.key, value) > 0 && <p className="alert warn small" role="status">{untouchedStarters(modelKey, f.key, value) === 1 ? 'صف من الهيكل' : `${untouchedStarters(modelKey, f.key, value)} صفوف من الهيكل`} كما أُدرج. أكمل خاناته من واقع مبادرتك أو احذفه.</p>}
       </div>
     );
   }
@@ -260,7 +263,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, d.examples)} />}
-                <Field f={f} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
+                <Field f={f} modelKey={m.key} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
                 {!locked && nearExample(m.key, f.key, answers[f.key]) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}
                 {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
