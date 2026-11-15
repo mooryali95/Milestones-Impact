@@ -75,7 +75,9 @@ export function mentionedProduct(question: string): 'leaders' | 'matrix' | 'both
   return l && m ? 'both' : l ? 'leaders' : m ? 'matrix' : null;
 }
 
-export function matchFaq(question: string, page: string): { id: string; text: string; lang: 'ar' | 'en' } | null {
+// lang: لغة الرد التي حسبها الخادم (intent.ts)؛ بدونها لغة السؤال. ولغة غير العربية والإنجليزية لا جواب جاهز لها.
+export function matchFaq(question: string, page: string, lang?: string): { id: string; text: string; lang: 'ar' | 'en' } | null {
+  if (lang && lang !== 'ar' && lang !== 'en') return null;
   const norm = normalizeText(question);
   if (!norm) return null;
   if ((String(question).match(/[?؟]/g) || []).length >= 2) return null;
@@ -89,8 +91,8 @@ export function matchFaq(question: string, page: string): { id: string; text: st
     if (!all) continue;
     if (not.some((k) => hasKey(norm, tokens, k))) continue;
     if (e.only && !tokens.every((t) => keys.some((g) => g.some((k) => !k.includes(' ') && tokenHits(t, k))))) continue;
-    const lang = messageIsArabic(question) ? 'ar' : 'en';
-    return { id: e.id, text: lang === 'ar' ? e.ar : e.en, lang };
+    const l = lang === 'ar' || lang === 'en' ? lang : (messageIsArabic(question) ? 'ar' : 'en');
+    return { id: e.id, text: l === 'ar' ? e.ar : e.en, lang: l };
   }
   return null;
 }

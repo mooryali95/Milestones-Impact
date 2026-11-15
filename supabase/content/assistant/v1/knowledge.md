@@ -1,7 +1,7 @@
 # معرفة المساعد الآلي في موقع Milestone Impact (v1)
 
-> حالة الملف: مسودة بانتظار مراجعة المالك واعتماده. كُتب كل ما فيه مما تقوله صفحات الموقع العام وسياسات المنتجين اليوم (home/ وleaders-app/src/screens/Legal.jsx)، ولا شيء غيره.
-> لا يُكتب هنا أبدًا: سعر برنامج القادة (يُقرأ حيًا من إعداد الدفع حين يكون مفعّلًا)، ولا فقرات القياس أو خياراته أو درجاته أو منطق التسكين، ولا متن الكتيب أو إجابات اختباراته، ولا عروض الجهات أو عقودها.
+> حالة الملف: مسودة بانتظار اعتماد المالك. مصدرها صفحات الموقع العام وسياسات المنتجين (home/ وleaders-app/src/screens/Legal.jsx) وأجوبة المالك (15 نوفمبر 2026)، ولا شيء غيرها.
+> لا يُكتب هنا أبدًا: سعر البرنامج (يُقرأ حيًا من إعداد الدفع حين يكون مفعّلًا)، ولا فقرات القياس أو خياراته أو درجاته أو منطق التسكين، ولا متن الكتيب أو إجابات اختباراته، ولا عروض الجهات أو عقودها.
 > المستودع عام، فهذا الملف منشور بطبيعته.
 
 ## 1. من نحن
@@ -17,7 +17,7 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 
 الموقع: https://mi.sunkvalue.com
 
-## 2. برنامج إدارة المشروعات للقادة (MI Leaders)
+## 2. برنامج إدارة المشروعات للقادة (MI Leaders)، وهو اسمه الرسمي
 
 صفحة البرنامج: https://mi.sunkvalue.com/leaders/ ، والمنصة والتسجيل: https://leaders.sunkvalue.com
 
@@ -27,11 +27,11 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
   - إطار Impact: من إثبات الإنجاز إلى قيادة الأثر. يقيس القيمة عبر سلسلة خماسية: المخرجات، والنتائج المباشرة، والمنافع، والتحول، والأثر المستدام.
   - إطار Leadership: من إدارة المهام إلى قيادة الأشخاص، عبر أربع جدارات: سرعة الاستجابة، والتسليم والتسلم، والجدارات الاتجاهية الأربع، والقيادة الموقفية.
 - المستويات: يُقيَّم المشارك مستقلًا في كل بعد من الأبعاد الثلاثة، فيتشكل له ملف كفاءة بثلاثة مستويات ممكنة لكل بعد: تأسيسي، ومتوسط، واحترافي.
-- الرحلة بوصفها العام (للأفراد): يُنشئ المشارك حسابه وملفه، ثم يجيب عن قياس مبدئي يحدد مستواه في المعالم والأثر والقيادة، ثم يعتمد مستشار نتيجته ومساره خلال يومي عمل، ثم رحلة تأهيل على مقاسه ومبادرة أو مشروع حقيقي من جهته، ثم قياس بعدي وتقييم ختامي، وتصدر عند اعتماده بنجاح «شهادة إتمام بنجاح» برقم تحقق عام.
-- الشهادة: «شهادة إتمام بنجاح» من البرنامج برقم تحقق عام، ولا يُذكر لها اعتماد دولي أو مهني خارجي.
+- الرحلة بوصفها العام (للأفراد): يُنشئ المشارك حسابه وملفه، ثم يجيب عن قياس مبدئي يحدد مستواه في المعالم والأثر والقيادة، ثم يعتمد مستشار نتيجته ومساره خلال يومي عمل، ثم رحلة تأهيل على مقاسه ومبادرة أو مشروع حقيقي من جهته، ثم قياس بعدي وتقييم ختامي، وتصدر عند اعتماده بنجاح الشهادة.
+- الشهادة: «شهادة إتمام بنجاح» يصدرها البرنامج نفسه برقم تحقق عام، وليس لها اعتماد خارجي.
 - مراحل رحلة التأهيل كما في صفحة البرنامج: التدريب (4 أيام تدريبية)، والتوجيه على رأس العمل (4 أسابيع)، والاستشارة (أسبوعان)، والتوجيه القيادي (4 أسابيع)، والدعم والتمكين (3 أشهر)، والتقييم والقياس (أسبوعان).
-- ساعات البرنامج: لا يُنشر عدد ساعات للبرنامج ولا لليوم التدريبي، والمنشور مدد المراحل أعلاه. وساعات عمل الفريق (القسم 8) ليست مواعيد التدريب.
-- مسار المؤسسات: التشخيص المؤسسي، ثم تصميم البرنامج المؤسسي، ثم التنفيذ والتأهيل، ثم بناء القدرة المؤسسية، ثم المتابعة وقياس الأثر، ثم التقييم والتقرير.
+- ساعات التدريب: تُضبط مع كل جهة وفق برنامجها، فلا عدد ساعات منشور. والمنشور مدد المراحل أعلاه. وساعات عمل الفريق (القسم 8) ليست مواعيد التدريب.
+- مسار المؤسسات: التشخيص المؤسسي، ثم تصميم البرنامج المؤسسي، ثم التنفيذ والتأهيل، ثم بناء القدرة المؤسسية، ثم المتابعة وقياس الأثر، ثم التقييم والتقرير. وفي مرحلة التصميم يُصمَّم البرنامج ليوائم الجهة، في لغته ومستواه وغير ذلك.
 - المخرجات: خطط تنموية، واستراتيجيات تنموية، ومشروعات ومبادرات، وتقارير تقدم.
 - الأدوات المساندة: كتيب إدارة المشروعات للقادة، ومنصة تعليمية دائمة، ومنصة تواصل ومتابعة مع المدرب المرافق.
 - مستهدفات الدورة 2026/2027 المعلنة: أكثر من 200 قائد، و40 جهة، و3 كتب مرجعية، و1,000 نسخة توزع على الجهات، وأكثر من 2,000 قائد عند التوسع عبر المنصة.
@@ -43,9 +43,9 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 - الرسوم (بلا أرقام): رسم القياس المبدئي ورسم إكمال البرنامج دفعة واحدة لكل منهما، ورسم البرنامج بعد اعتماد المستشار للمسار. الدفع عبر Creem بوصفه البائع الرسمي على صفحة دفع باسم المشارك، والأسعار بالدولار الأمريكي، وتُحصَّل الضرائب المطبقة (ومنها ضريبة القيمة المضافة في السعودية) عند الدفع. الحق في القياس أو البرنامج يُفتح بعد تأكيد الدفع من Creem. ومن رشحته جهة تغطي جهته رسومه بحسب عقدها. الرقم نفسه يظهر في شاشة الدفع بعد التسجيل، ولا يذكره المساعد إلا إن وصله من إعداد الدفع الحي في سياق المحادثة.
 - ما تراه الجهة الراعية: الاسم والمسمى والمرحلة ونسبة الإنجاز، وقد يُمنح الاطلاع على آخر دخول أو بيانات التواصل. المسار والمستويات لا تصل الجهة إلا بموافقة المشارك، ولا ترى الجهة أبدًا إجابات القياس ولا النماذج والتأملات ولا ملاحظات المستشار ولا مسودة المبادرة قبل اعتمادها.
 - التحقق من شهادة: من صفحة التحقق العامة https://leaders.sunkvalue.com/v برقم الشهادة، بلا دخول. المساعد لا يتحقق بنفسه ولا يذكر اسم حامل أي شهادة.
-- اللغة: الموقع والمنصة بالعربية، ولا نسخة إنجليزية معلنة من البرنامج.
+- اللغة: يُقدَّم البرنامج اليوم بالعربية، والموقع والمنصة بالعربية، ومرحلة التصميم تكيّف لغته للجهة. والتواصل مع الفريق ممكن بالإنجليزية.
 
-### سياسات برنامج القادة (تخص برنامج القادة وحده)
+### سياسات البرنامج (تخصه وحده)
 
 - سياسة الاسترداد: https://leaders.sunkvalue.com/legal/refund
   - رسم القياس المبدئي: يُسترد خلال 14 يومًا من الدفع وقبل بدء القياس.
@@ -68,7 +68,7 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
   - أكثر من 20 مستخدمًا: عرض مخصص من الفريق.
 - الدفع سنوي، وطريقة الدفع يحددها الفريق بالتواصل. ويتجدد الاشتراك تلقائيًا ما لم يُلغَ قبل 30 يومًا من تاريخ التجديد.
 
-### سياسات المصفوفة (تخص منتج المصفوفة وحده، لا برنامج القادة)
+### سياسات المصفوفة (تخصها وحدها، لا البرنامج)
 
 - سياسة الاسترداد: https://mi.sunkvalue.com/refund.html
   - استرداد كامل خلال 14 يومًا من الاشتراك إن لم يتم الوصول الكامل للمنهجية أو البدء في إنشاء خطة.
@@ -97,7 +97,7 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 
 - خمس عشرة عبارة تمر بحلقات سلسلة النتائج الخمس (المدخلات، والأنشطة، والمخرجات، والنتائج، والأثر)، عن مشاريع الجهة في الاثني عشر شهرًا الماضية. يستغرق نحو أربع دقائق، ولا تُطلب بيانات قبل رؤية النتيجة.
 - يعطي قراءة أولية لموضع الجهة والحلقة الأضعف، والتقرير التفصيلي بأولويات التحسين يُطلب بالاسم والجهة والبريد.
-- هذه الأداة غير «القياس المبدئي» في برنامج القادة. أسئلة القياس المبدئي وطريقة تصحيحه محفوظة لضمان عدالته، والمساعد لا يعرضها ولا يلمح إليها.
+- هذه الأداة غير «القياس المبدئي» في البرنامج. أسئلة القياس المبدئي وطريقة تصحيحه محفوظة لضمان عدالته، والمساعد لا يعرضها ولا يلمح إليها.
 
 ## 6. الحوكمة
 
@@ -107,15 +107,15 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 ## 7. أين تُحفظ البيانات وتُعالج (بصدق)
 
 - قاعدة البيانات والملفات لدى Supabase على خوادم AWS في مومباي بالهند. أي أن البيانات تُحفظ اليوم خارج المملكة العربية السعودية، ولا يقول المساعد لأحد إنها في المملكة.
-- البريد عبر Resend، والاستضافة والحماية والتحقق البشري عبر Cloudflare، والنسخ الاحتياطية المشفرة لدى Cloudflare R2، والدفع الفردي لبرنامج القادة عبر Creem، وقناة التشغيل الداخلية عبر Slack ببريد مقنع.
+- البريد عبر Resend، والاستضافة والحماية والتحقق البشري عبر Cloudflare، والنسخ الاحتياطية المشفرة لدى Cloudflare R2، والدفع الفردي للبرنامج عبر Creem، وقناة التشغيل الداخلية عبر Slack ببريد مقنع.
 - محادثة هذا المساعد تعالجها Anthropic على خوادمها في الولايات المتحدة، ولا يرى المساعد بيانات أي حساب في المنصة.
 - إن اشترطت جهة الاستضافة في المملكة فهذا يبحثه الفريق قبل التعاقد، فيحولها المساعد إلى الفريق.
 
 ## 8. التواصل وساعات العمل
 
-- البريد الوحيد المنشور: mi@sunkvalue.com . لا رقم هاتف ولا جوال منشور.
-- الفروع والمقر: لا معلومة مؤكدة عن فروع أو عنوان مقر.
-- نموذج «تواصل معنا» في كل صفحة من الموقع.
+- البريد الوحيد المنشور: mi@sunkvalue.com . لا رقم هاتف ولا جوال منشور، فطالب الرقم أو الاتصال يُحال إلى نموذج «تواصل معنا» (في كل صفحة) والبريد.
+- الفروع: لا فروع لنا حتى الآن، ولنا شركاء حاضرون، والترتيب المحلي عبر نموذج «تواصل معنا». لا تُسمى مدينة ولا شريك.
+- يمكن مراسلة الفريق بالعربية أو بالإنجليزية.
 - ساعات عمل الفريق: الأحد إلى الخميس، من 9:00 إلى 17:00 بتوقيت الرياض. ما يصل في ساعات العمل يرد عليه الفريق خلال 4 ساعات عمل، وما يصل خارجها يرد عليه في يوم العمل التالي. المساعد الآلي متاح في أغلب الأوقات، وإن توقف فاترك رسالتك للفريق، ولا يعد برد فوري من الفريق.
 
 ## 9. ما يحوله المساعد إلى الفريق
@@ -124,10 +124,10 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 
 ## English summary (same facts as the Arabic text above; the policies are published in Arabic)
 
-- Milestone Impact is an institutional methodology linking decisions to value and impact (site: https://mi.sunkvalue.com). Three tracks: MI Leaders (executive programme for decision makers, https://mi.sunkvalue.com/leaders/ , platform https://leaders.sunkvalue.com), Impact Matrix (digital planning platform, https://matrix.sunkvalue.com), and MI Projects (managed development projects, https://mi.sunkvalue.com/projects/). There is also a free Impact Readiness Scale (https://mi.sunkvalue.com/assessment/).
-- MI Leaders: three frameworks (Milestone, Impact, Leadership); three levels per dimension (foundational, intermediate, professional). Journey: profile, initial assessment, advisor approval within two working days, tailored qualification, a real initiative, post assessment, final evaluation and a "certificate of successful completion" verifiable at https://leaders.sunkvalue.com/v (no external accreditation is stated).
-- MI Leaders stages: Training (4 training days), On-the-job coaching (coaching on the job, 4 weeks), Consulting (2 weeks), Leadership coaching (4 weeks), Support and enablement (3 months), Evaluation and measurement (2 weeks). Training hours are not published; team hours are not training times. Fees are paid via Creem in USD; the amount is shown at checkout and is not stated here. Refunds for MI Leaders: within 14 days of payment and before starting (details at https://leaders.sunkvalue.com/legal/refund).
+- Milestone Impact links decisions to value and impact (https://mi.sunkvalue.com). Three tracks: MI Leaders (executive programme, https://mi.sunkvalue.com/leaders/ , platform https://leaders.sunkvalue.com), Impact Matrix (planning platform, https://matrix.sunkvalue.com), and MI Projects (managed projects, https://mi.sunkvalue.com/projects/). There is also a free Impact Readiness Scale (https://mi.sunkvalue.com/assessment/).
+- MI Leaders: three frameworks (Milestone, Impact, Leadership); three levels per dimension (foundational, intermediate, professional). Journey: profile, initial assessment, advisor approval within two working days, tailored qualification, a real initiative, post assessment, final evaluation and a "certificate of successful completion" verifiable at https://leaders.sunkvalue.com/v ; no external accreditation.
+- MI Leaders stages: Training (4 training days), On-the-job coaching (coaching on the job, 4 weeks), Consulting (2 weeks), Leadership coaching (4 weeks), Support and enablement (3 months), Evaluation and measurement (2 weeks). Training hours are set with each organisation; none are published, and team hours are not training times. Fees: via Creem in USD, shown at checkout. Refunds for MI Leaders: within 14 days of payment and before starting (details at https://leaders.sunkvalue.com/legal/refund).
 - Impact Matrix pricing: Individual 200 USD per year; Organisations 5,000 USD per year (up to 20 users). Matrix refunds follow https://mi.sunkvalue.com/refund.html (different from MI Leaders).
 - Data location: stored today with Supabase on AWS in Mumbai, India, outside Saudi Arabia. This assistant is processed by Anthropic in the United States.
-- Contact: mi@sunkvalue.com and the contact form; no phone number is published. Team hours: Sunday to Thursday, 9:00 to 17:00 Riyadh time; replies within 4 business hours, otherwise the next business day.
-- Language: the website and platform are in Arabic; no English version of the programme is announced.
+- Contact: mi@sunkvalue.com and the contact form; no phone number (callers are referred to the contact form). English contact is fine. No branches yet; partners are present. Team hours: Sunday to Thursday, 9:00 to 17:00 Riyadh time; replies within 4 business hours, otherwise the next business day.
+- Language: delivered in Arabic today; the design stage tailors language and level to each organisation.
