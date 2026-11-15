@@ -9,7 +9,7 @@ function server({ level = 'beginner', initiative = null, card = 'none', examples
   const calls = [];
   const charterModel = { id: 'm-charter', key: 'initiative-charter', dimension: 'milestone', title_ar: 'بطاقة المبادرة', points: 20, min_level: 'beginner', capstone_sort: 10, level,
     fields: [{ key: 'title', type: 'text', label: 'اسم المبادرة', required: true }, { key: 'problem', type: 'textarea', label: 'المشكلة أو الفرصة بالأرقام', required: true },
-      { key: 'objective', type: 'textarea', label: 'الهدف الاستراتيجي الذي تخدمه في جهتك', required: true }, { key: 'first_step', type: 'textarea', label: 'خطوتك الأولى خلال 30 يومًا: ما هي، ومع من', required: false }] };
+      { key: 'objective', type: 'textarea', label: 'الهدف الأعلى الذي تخدمه مبادرتك', required: true }, { key: 'first_step', type: 'textarea', label: 'خطوتك الأولى خلال 30 يومًا: ما هي، ومع من', required: false }] };
   let saved = { objective: 'هدف كتبه المشارك من قبل' };
   const capstone = () => ({
     success: true, initiative, scope: 'project', scope_title: 'مشروع', level, track: null,
@@ -55,7 +55,7 @@ test('التأسيسي: ثلاث أفكار، فمفاضلة بمعايير ال
   await disc.getByRole('button', { name: 'التالي' }).click();
 
   const first = disc.locator('fieldset').first();
-  for (const c of ['قائمة في جهتك', 'يمكن البدء بها', 'لها صاحب قرار', 'يمكن قياسها']) await first.getByLabel(new RegExp(c)).check();
+  for (const c of ['قائمة اليوم في سياق تعرفه', 'يمكن البدء بها', 'لها صاحب قرار', 'يمكن قياسها']) await first.getByLabel(new RegExp(c)).check();
   await expect(first).toContainText('4 من 4');
   await expect(first).toContainText('الأنسب');
   await first.getByRole('radio').check();

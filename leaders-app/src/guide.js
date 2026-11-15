@@ -10,6 +10,7 @@
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
 import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
+import { ANATOMY } from '../../supabase/content/initiative-guide/v1/anatomy.js';
 import { CARD_CRITERIA, costSummary } from '../../supabase/functions/leaders-api/capstone.js';
 import { sectorFamily } from '../../supabase/functions/leaders-api/logic.js';
 import { nearCopy } from '../../supabase/functions/leaders-api/example-check.js';
@@ -20,8 +21,22 @@ export const GUIDE_MODES = Object.freeze({ beginner: 'open', intermediate: 'coll
 export { EXAMPLES };
 const BY_SECTOR = Object.fromEntries(EXAMPLES.map((x) => [x.sector, x]));
 
+// ── سياق المبادرة: أين تُنفَّذ (anatomy.json contexts). المبادرة ملك قائدها في كل سياق، والسياق يكيّف المثال والتلميح ──
+export const CONTEXTS = Object.freeze(ANATOMY.contexts.options.map((o) => Object.freeze({ ...o })));
+/** خيار السياق من نصه كما حُفظ في البطاقة، أو null */
+export const contextOf = (label) => CONTEXTS.find((o) => o.label === String(label || '').trim()) || null;
+/** تلميح الحقل في سياق المبادرة: { label, note } أو null إن لم يختلف الجواب في هذا السياق */
+export function contextNote(modelKey, fieldKey, label) {
+  const c = contextOf(label);
+  const note = c && ANATOMY.contexts.notes[`${modelKey}.${fieldKey}`]?.[c.key];
+  return note ? { label: c.label, note } : null;
+}
+
 /** مفتاح قطاع المثال من قطاع المشارك المكتوب نصًا حرًا في ملفه، ومعه هل طابق قطاعه فعلًا (عائلات القطاع في logic.js) */
-export function sectorOf(text) {
+export function sectorOf(text, context = null) {
+  // سياق المبادرة (حقل context في البطاقة) يسبق قطاع الملف: المبادرة الريادية مثالها الريادي أيًا كان قطاع صاحبها
+  const own = contextOf(context)?.example;
+  if (own && EXAMPLES.some((x) => x.sector === own)) return { key: own, matched: true };
   const f = sectorFamily(text);
   if (f === 'health') return { key: 'health', matched: true };
   return { key: 'gov', matched: f === 'gov' || f === 'municipal' };
@@ -31,14 +46,16 @@ export function sectorOf(text) {
 const openOf = (allowed) => (Array.isArray(allowed) ? EXAMPLES.filter((x) => allowed.includes(x.sector)) : [...EXAMPLES]);
 
 /** الأمثلة المفتوحة مرتبة: مثال قطاع المشارك أولًا */
-export const examplesFor = (sectorText, allowed = null) => {
-  const k = sectorOf(sectorText).key, open = openOf(allowed);
+export const examplesFor = (sectorText, allowed = null, context = null) => {
+  // مثال السياق إن كان مفتوحًا للمشارك، وإلا مثال قطاعه
+  const open = openOf(allowed), own = contextOf(context)?.example;
+  const k = own && open.some((x) => x.sector === own) ? own : sectorOf(sectorText).key;
   return [...open.filter((x) => x.sector === k), ...open.filter((x) => x.sector !== k)];
 };
 
 /** حقل المثال المحلول لقطاع المشارك، أو لأقرب مثال مفتوح إن حُجب مثال قطاعه: { value, type, columns, sector_title } أو null */
-export function exampleFor(modelKey, fieldKey, sectorText, allowed = null) {
-  const ex = examplesFor(sectorText, allowed)[0];
+export function exampleFor(modelKey, fieldKey, sectorText, allowed = null, context = null) {
+  const ex = examplesFor(sectorText, allowed, context)[0];
   const f = ex?.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey);
   if (!f || f.value == null || (Array.isArray(f.value) ? !f.value.length : !String(f.value).trim())) return null;
   return { value: f.value, type: f.type, columns: f.columns || null, sector_title: ex.sector_title };
@@ -55,8 +72,8 @@ export function guideFor(modelKey, fieldKey, level, sectorText = null, examples 
   const mode = GUIDE_MODES[level] || 'collapsed';
   // المتقدم لا يُعرض له المثال بجانب الحقل: يُثقل عليه (انعكاس الخبرة)، والوثيقة الكاملة متاحة له في صفحة المبادرة.
   // وما حجبه المالك (examples.field أو قطاع بعينه) لا يُعرض
-  const example = mode === 'expert' || examples?.field === false ? null : exampleFor(modelKey, fieldKey, sectorText, examples?.sectors ?? null);
-  return { mode, meaning: g.meaning, mistake: g.mistake, challenge: g.challenge, example };
+  const example = mode === 'expert' || examples?.field === false ? null : exampleFor(modelKey, fieldKey, sectorText, examples?.sectors ?? null, examples?.context ?? null);
+  return { mode, meaning: g.meaning, mistake: g.mistake, challenge: g.challenge, example, context: contextNote(modelKey, fieldKey, examples?.context) };
 }
 
 /** هل الجواب قريب جدًا من جواب أي مثال محلول للحقل نفسه؟ يُقارن بكل الأمثلة ولو حُجب بعضها، كما يقارن المستشار */
@@ -113,7 +130,7 @@ export function discoveryQuestions(level) {
     return [
       { key: 'decision', label: 'ما القرار الذي تريد أن يتخذه صاحب القرار بعد قراءة وثيقتك؟' },
       { key: 'metric', label: 'أي مؤشر استراتيجي سيتحرك، ومن كم إلى كم؟' },
-      { key: 'goal', label: 'أي هدف معلن في استراتيجية جهتك تخدمه؟' },
+      { key: 'goal', label: 'أي هدف أعلى تخدمه، وما مصدره؟ (استراتيجية جهة، أو خطة قطاع، أو رؤية وطنية، أو حاجة سوق)' },
       { key: 'first', label: 'ما خطوتك الأولى خلال 30 يومًا، ومع من؟' },
     ];
   }
@@ -121,7 +138,7 @@ export function discoveryQuestions(level) {
   return [
     { key: 'who', label: 'من يتضرر منها، وكم عددهم تقريبًا؟', hint: ex ? 'مثال: 1,200 مستفيد شهريًا ينتظرون أكثر من أسبوع' : '' },
     { key: 'size', label: 'كيف تعرف حجمها؟ رقم ومن أين أخذته', hint: ex ? 'مثال: متوسط الإنجاز 9 أيام (نظام الطلبات، 2025)' : '' },
-    { key: 'goal', label: 'أي هدف معلن لجهتك تمسه؟', hint: ex ? 'انقله كما هو في استراتيجية الجهة أو خطتها السنوية' : '' },
+    { key: 'goal', label: 'أي هدف أعلى تخدمه مبادرتك؟', hint: ex ? 'من استراتيجية جهة، أو خطة قطاع، أو رؤية وطنية، أو حاجة سوق. انقله بنصه واذكر مصدره' : '' },
     { key: 'first', label: 'ما خطوتك الأولى خلال 30 يومًا، ومع من؟', hint: ex ? 'مثال: اجتماع مع مالك البيانات لاستخراج أرقام الربع الماضي' : '' },
   ];
 }

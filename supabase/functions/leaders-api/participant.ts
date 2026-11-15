@@ -1298,9 +1298,14 @@ export async function modelGet(p: any, b: Body) {
 }
 
 // المبادرات المحلولة كما يضبطها المالك عامةً أو لدفعة المشارك (مفاتيح الرؤية). تعذّر القراءة يعيد الافتراضي، لا خطأ
+// context: أين تُنفَّذ المبادرة كما اختاره المشارك في بطاقتها، يقدّم به التطبيق المثال الأقرب لسياقه (guide.js sectorOf)
 export async function examplesFor(p: any) {
-  const vis: Record<string, boolean> = await visibilityOfParticipant(p.id).catch(() => resolveVisibility(null, null));
-  return examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } });
+  const [vis, card]: [Record<string, boolean>, any] = await Promise.all([
+    visibilityOfParticipant(p.id).catch(() => resolveVisibility(null, null)),
+    db.from('model_submissions').select('answers, learning_models!inner(key)').eq('participant_id', p.id).eq('learning_models.key', CHARTER_KEY).maybeSingle().then((r: any) => r.data, () => null),
+  ]);
+  const view = examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health, startup: vis.par_example_startup } });
+  return { ...view, context: typeof card?.answers?.context === 'string' ? card.answers.context.slice(0, 80) : null };
 }
 
 // حفظ مسودة أو تسليم نهائي؛ التسليم يمنح نقاط النموذج مرة واحدة

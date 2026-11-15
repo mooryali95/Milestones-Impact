@@ -18,6 +18,10 @@ for (const m of sql.matchAll(/\('\w+', '([a-z-]+)', \d+, \$q\$[\s\S]*?\$q\$(\[[\
 for (const m of sql.matchAll(/add_field\('([a-z-]+)', (?:\$j\$|')(\{[^\n]*?\})(?:\$j\$|')::jsonb/g)) {
   try { known[m[1]]?.add(JSON.parse(m[2]).key); } catch { /* حقل مسار يُبنى بالدالة */ }
 }
+// حقل يُضاف بعد حقل بعينه (pg_temp.add_after)
+for (const m of sql.matchAll(/add_after\('([a-z-]+)', '[a-z_]+', \$j\$(\{[^\n]*?\})\$j\$::jsonb/g)) {
+  try { known[m[1]]?.add(JSON.parse(m[2]).key); } catch { /* ليس حقلًا */ }
+}
 
 const entries = Object.entries(FIELDS).filter(([k]) => !k.startsWith('_'));
 
@@ -139,7 +143,7 @@ describe('قطاع المشارك يختار المثال', () => {
     expect(sectorOf('حكومي')).toEqual({ key: 'gov', matched: true });
     expect(sectorOf('خاص')).toEqual({ key: 'gov', matched: false });
     expect(sectorOf(null).key).toBe('gov');
-    expect(examplesFor('صحي').map((x) => x.sector)).toEqual(['health', 'gov']);
+    expect(examplesFor('صحي').map((x) => x.sector)).toEqual(['health', 'gov', 'startup']);
   });
   it('مثال الحقل من قطاعه، والمتقدم لا يُعرض له المثال بجانب الحقل', () => {
     expect(exampleFor('options-analysis', 'recommendation', 'صحي').sector_title).toBe('الصحة');
@@ -189,7 +193,7 @@ import { nearExample } from './guide.js';
 
 describe('المالك يعرض المبادرات المحلولة أو يحجبها، عامةً أو للدفعة، وكل قطاع وحده', () => {
   it('أربعة مفاتيح للمشارك مفتوحة افتراضيًا، فلا يتغير شيء عند النشر حتى يغيّرها المالك', () => {
-    for (const k of ['par_examples_field', 'par_examples_doc', 'par_example_gov', 'par_example_health']) {
+    for (const k of ['par_examples_field', 'par_examples_doc', 'par_example_gov', 'par_example_health', 'par_example_startup']) {
       expect(VISIBILITY[k].audience, k).toBe('participant');
       expect(VISIBILITY[k].default, k).toBe(true);
     }
@@ -197,17 +201,17 @@ describe('المالك يعرض المبادرات المحلولة أو يحج�
     for (const s of EXAMPLE_SECTORS) expect(VISIBILITY[`par_example_${s}`], s).toBeTruthy();
   });
   it('الحسم: حجب قطاع يُسقطه، وحجب كل القطاعات يُسقط العرضين، واستثناء الدفعة يعلو العام', () => {
-    const view = (vis) => examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } });
-    expect(view(resolveVisibility(null, null))).toEqual({ field: true, doc: true, sectors: ['gov', 'health'] });
-    expect(view(resolveVisibility({ par_example_health: false }, null)).sectors).toEqual(['gov']);
-    expect(view(resolveVisibility({ par_example_health: false }, { par_example_health: true })).sectors).toEqual(['gov', 'health']);
-    expect(view(resolveVisibility(null, { par_examples_doc: false }))).toEqual({ field: true, doc: false, sectors: ['gov', 'health'] });
-    expect(view(resolveVisibility({ par_example_gov: false, par_example_health: false }, null))).toEqual({ field: false, doc: false, sectors: [] });
+    const view = (vis) => examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health, startup: vis.par_example_startup } });
+    expect(view(resolveVisibility(null, null))).toEqual({ field: true, doc: true, sectors: ['gov', 'health', 'startup'] });
+    expect(view(resolveVisibility({ par_example_health: false }, null)).sectors).toEqual(['gov', 'startup']);
+    expect(view(resolveVisibility({ par_example_health: false }, { par_example_health: true })).sectors).toEqual(['gov', 'health', 'startup']);
+    expect(view(resolveVisibility(null, { par_examples_doc: false }))).toEqual({ field: true, doc: false, sectors: ['gov', 'health', 'startup'] });
+    expect(view(resolveVisibility({ par_example_gov: false, par_example_health: false, par_example_startup: false }, null))).toEqual({ field: false, doc: false, sectors: [] });
   });
   it('الواجهة تتبع ما حسمه الخادم: حُجب مثال قطاعه فيرى الأقرب المفتوح، وحُجب العرض بجانب الحقل فلا مثال', () => {
     expect(examplesFor('صحي', ['gov']).map((x) => x.sector)).toEqual(['gov']);
     expect(examplesFor('صحي', []).length).toBe(0);
-    expect(examplesFor('صحي', null).map((x) => x.sector)).toEqual(['health', 'gov']);
+    expect(examplesFor('صحي', null).map((x) => x.sector)).toEqual(['health', 'gov', 'startup']);
     expect(exampleFor('options-analysis', 'recommendation', 'صحي', ['gov']).sector_title).toBe('الخدمات الحكومية');
     expect(exampleFor('options-analysis', 'recommendation', 'صحي', [])).toBeNull();
     expect(guideFor('cost-plan', 'items', 'beginner', 'صحي', { field: false, sectors: ['gov', 'health'] }).example).toBeNull();
@@ -222,7 +226,7 @@ describe('المالك يعرض المبادرات المحلولة أو يحج�
   });
   it('الخادم يحسمها من رؤية المشارك النافذة ويرسلها مع الفصل وصفحة المبادرة', () => {
     const p = readFileSync(resolve(root, 'supabase/functions/leaders-api/participant.ts'), 'utf8');
-    expect(p).toContain('examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } })');
+    expect(p).toContain('examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health, startup: vis.par_example_startup } })');
     expect(p).toContain('m.capstone_sort != null ? examplesFor(p) : null,');
     const c = readFileSync(resolve(root, 'supabase/functions/leaders-api/capstone.ts'), 'utf8');
     expect(c).toContain('const [d, examples] = await Promise.all([build(p), examplesFor(p)]);');
