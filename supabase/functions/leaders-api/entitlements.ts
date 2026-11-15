@@ -30,7 +30,7 @@ export const SEAT_ALERTS = [0.8, 1];
 // P1-06: ما يوقف التثبيت ولا يمنح شيئًا. كان رد المقعد عند الانسحاب وسحب الإعفاء يُنقضان في أول قراءة للملف.
 // out: خارج البرنامج (inProgram)، لكل تثبيت، وهو وحده في leaders.pin_sponsor_seat (ترحيل 20261115100000).
 // cancelled وrejected: قرار للإدارة في رعاية هذه الجهة له (sponsorDecision)، للتثبيت الآلي وحده (auto: access()، والربط
-// بالنطاق، ورمز يكتبه المشارك، وعودة الحالة). والفعل الصريح من الإدارة (نقله إلى الجهة، قبول طلب رعايته) يتخطاهما إلى فحص
+// بالنطاق، ورمز يكتبه المشارك، ورابط الجهة عند الدخول، وعودة الحالة). والفعل الصريح من الإدارة (نقله إلى الجهة، قبول طلب رعايته) يتخطاهما إلى فحص
 // المقاعد والعقد. ورد المقعد عند الانسحاب (seat-return) ليس قرارًا: يحرسه out ما دام منسحبًا، ويعود التثبيت بعودته
 export const SEAT_STOPPED: PinResult[] = ['out', 'cancelled', 'rejected'];
 // ما يُعد مقعدًا من العقد: إعفاء أُدرج الآن أو حي قبله. وcovered: حقه في البندين حي من غير الجهة (دفع أو منحة أو إعفاء سابق
@@ -57,7 +57,7 @@ export async function recordOrgDecisions(actor: string, ids: string[], before: M
 // قرار الإدارة في رعاية هذه الجهة له، يسري ما لم يأت بعده تثبيت منها أو ربط صريح إليها:
 // cancelled: سُحب إعفاؤه منها (لا رد المقعد)، أو نقلته الإدارة منها أو فكّته عنها؛ rejected: رُفض طلب مقعده أو عقده فيها.
 // «آخر تثبيت» أحدث إعفاء منها أو أحدث ربط صريح إليها، فما قبله من قرار نقضه ذلك الفعل. والحساب نفسه يقرؤه holdSponsorship
-// (بعده لا رفض ساريًا) وprogramPaymentDue وربط المشارك نفسه (الرمز والنطاق)، فالحكم واحد في كل مسار
+// (بعده لا رفض ساريًا) وprogramPaymentDue وربط المشارك نفسه (الرمز والرابط والنطاق)، فالحكم واحد في كل مسار
 export async function sponsorDecision(participantId: string, orgId: string): Promise<'cancelled' | 'rejected' | null> {
   const [rows, refused, decided] = await Promise.all([
     db.from('entitlements').select('created_at, revoked_at, revoked_by').eq('participant_id', participantId).eq('organization_id', orgId).eq('source', 'sponsor').limit(200),

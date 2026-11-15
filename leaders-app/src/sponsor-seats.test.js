@@ -125,6 +125,11 @@ describe('صاحب حساب قائم يدخل برابط جهة (تدقيق ال
     expect(fn).toContain('if (!p || p.organization_id');
     expect(fn).toContain(".is('organization_id', null)");
     expect(fn).toMatch(/catch \(e\) \{[\s\S]*return p;/);
+    // حكم رمز الجهة نفسه (P1-06): لا ربط فوق قرار الإدارة في رعايته، والتثبيت آلي لا صريح
+    expect(fn.indexOf('await sponsorDecision(p.id, r.org.id)')).toBeGreaterThan(-1);
+    expect(fn.indexOf('await sponsorDecision(p.id, r.org.id)')).toBeLessThan(fn.indexOf(".update({ organization_id: r.org.id"));
+    expect(fn).toContain('pinSponsorFor(p.id, { auto: true })');
+    expect(fn).not.toMatch(/pinSponsorFor\(p\.id\);/);
   });
   it('الرابط الخاطئ أو المتوقف يُعلن في شاشة الدخول ولا يُتجاهل', () => {
     const si = read('leaders-app/src/screens/SignIn.jsx');

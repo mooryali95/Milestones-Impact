@@ -111,7 +111,8 @@ export function participantItem(it: any, p: any, open = true) {
   const c = it.config || {};
   const act = it.activity ? { ...it.activity } : null;
   if (act && it.kind === 'coaching') {
-    act.can_book = !!act.can_book && open && inProgram(p.status);
+    // حساب العرض لا يحجز موجّهًا حقيقيًا ولا يتصل به (coaching.instant في DEMO_BLOCKED)، فلا رابط حجز ولا زر له
+    act.can_book = !!act.can_book && open && inProgram(p.status) && !p.is_demo;
     act.book_url = c.booking_url && act.can_book
       ? bookingUrl(c, { name: p.full_name, email: p.email, ref: `${p.id}.${it.id}` }) : null;
     act.provider = c.booking_url ? c.provider || null : null;
@@ -142,13 +143,15 @@ async function stageOpen(p: any, requirementId: string) {
   const st = journey.find((s: any) => s.items.some((i: any) => i.id === requirementId));
   return !!st && st.status !== 'locked';
 }
-// رابط الجلسة وغرفة الموجّه والحجز: المعتمد مساره داخل البرنامج يصلها كما كان قبل P1-04 ولو قفل مرحلتها متطلب سابق ناقص،
-// فلا يُحجب مشارك دفع أو رعته جهته عن جلسة حية. وغير المعتمد حين تفتح مرحلتها في رحلته بقاعدة الفتح أو بفتح الأدمن،
-// والمنسحب والموقوف لا
+// رابط الجلسة وغرفة الموجّه والحجز على الخادم وفي البريد: المتطلب في رحلة المشارك نفسها (يخص مساره ودفعته)، ثم المعتمد
+// مساره داخل البرنامج يصلها كما كان قبل P1-04 ولو قفل مرحلتها متطلب سابق ناقص، فلا يُحجب مشارك دفع أو رعته جهته عن
+// جلسة حية برابط بريده. وغير المعتمد حين تفتح مرحلتها في رحلته بقاعدة الفتح أو بفتح الأدمن، والمنسحب والموقوف لا.
+// وأزرار الرحلة في التطبيق تتبع حال المرحلة كما هي في main (participantItem)، فلا يتغير ما يراه أحد
 async function sessionOpen(p: any, requirementId: string) {
   if (!inProgram(p.status)) return false;
-  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
-  return approvalOf(pl).approved || stageOpen(p, requirementId);
+  const { journey, approved } = await journeyFor(p, { lite: true });
+  const st = journey.find((s: any) => s.items.some((i: any) => i.id === requirementId));
+  return !!st && (approved || st.status !== 'locked');
 }
 
 async function levelsOf(participantId: string, approvedOnly = false) {
@@ -334,7 +337,7 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
     await db.from('coaching_sessions').update({ status: 'cancelled', updated_at: now }).eq('external_id', e.previous_id).eq('status', 'booked');
   }
   // رابط الحجز بقاعدة coaching.instant نفسها (P1-04): رابط التُقط قبل الخروج من البرنامج أو لمرحلة مقفلة لا يفتح غرفة موجّه
-  const why = !inProgram(p.status) ? 'out_of_program' : !(await sessionOpen(p, r.id)) ? 'stage_locked' : null;
+  const why = p.is_demo ? 'demo' : !inProgram(p.status) ? 'out_of_program' : !(await sessionOpen(p, r.id)) ? 'stage_locked' : null;
   if (why) {
     await bookingIgnored(provider, e, r.id, p.id, why);
     return { success: true, ignored: 'not_eligible' };

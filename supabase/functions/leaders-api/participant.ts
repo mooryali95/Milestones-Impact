@@ -168,10 +168,14 @@ async function linkOrgOnLogin(p: any, code: unknown, key: string) {
   try {
     const r = await resolveOrg({ org: code }, key);
     if (!r) return p;
+    // حكم الرمز نفسه (sponsorCode): قرار سارٍ للإدارة في رعاية هذه الجهة له (سحب أو فك أو رفض طلب مقعده، P1-06) لا يرده
+    // رابط يفتحه، فلا ربط به. وتعذّر القراءة يرمي إلى catch فيؤجل الربط إلى الدخول التالي ولا يمنع الدخول
+    if (await sponsorDecision(p.id, r.org.id)) return p;
     const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
     if (!data) return p;
     await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id, null, { via: 'login_link' });
-    await pinSponsorFor(p.id);
+    // ربط يأتي به المشارك لا يتخطى قرار الإدارة (P1-06)، كالرمز والنطاق
+    await pinSponsorFor(p.id, { auto: true });
     return data;
   } catch (e) {
     console.error('link org on login:', e);
@@ -373,7 +377,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
-    p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
+    // الموقوف لا يُربط بجهة (كما في Google)، ورفض دخوله بعد إصدار الجلسة كما كان
+    if (p.status !== 'suspended') p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
   }
   const token = await issueSession(p.id, b.link ? 'email_link' : 'email_code', ctx);
   return { success: true, token, ...(await mePayload(p)) };

@@ -467,3 +467,35 @@ Deno.test('كل فعل في خريطة المشارك مصنّف مرة: بوا�
   for (const a of ['assessment.get', 'assessment.answer', 'assessment.submit', 'pay.checkout', 'sponsor.request', 'profile.save']) assert(!program.has(a), a);
   for (const a of ['workshop.join', 'me.sponsor-code', 'f360.start']) assert(demoBlocked.has(a), a);
 });
+
+// المعتمد يأخذ رابط الجلسة ولو قفل مرحلتها متطلب سابق، لكن لمتطلب في رحلته هو: جلسة لمستوى غير مستواه لا رابط لها في
+// بريده، كما يردها workshop.join (هذا النشاط لا يخص مسارك)
+Deno.test('رابط الجلسة للمعتمد بشرط أن يخص متطلبها مساره: مستوى آخر لا رابط له في البريد ولا انضمام', async () => {
+  const w = await world();
+  try {
+    Object.assign(w.tables.stage_requirements.find((x) => x.id === REQ_W)!, { dimension: 'leadership', level: 'advanced' });
+    const { link } = await invite(w);
+    assertEquals([link('approved'), link('paid'), link('grand')], [false, false, false]);
+    const j = await w.call('approved', 'workshop.join', { session_id: WS });
+    assertEquals(j.status, 403);
+  } finally { w.restore(); }
+});
+
+// حساب العرض لا يحجز موجّهًا حقيقيًا: لا رابط حجز ولا اتصال فوري في رحلته، والحجز الذي يحمل مرجعه يُتجاهل بتنبيه
+Deno.test('حساب العرض: لا رابط حجز ولا اتصال فوري، وحجز بمرجعه يُتجاهل بسبب demo', async () => {
+  const w = await world();
+  const saved = CONFIG.calcomSecret;
+  Object.assign(CONFIG, { calcomSecret: 'cal-secret' });
+  try {
+    w.tables.participant_stage_overrides.push({ participant_id: w.ps.demo.id, program_id: 'prog', stage_key: 'training', action: 'open' });
+    const it = coachItem(await w.call('demo', 'me'));
+    assertEquals([it.activity.can_book, it.activity.book_url, it.activity.instant], [false, null, false]);
+    const raw = JSON.stringify({ triggerEvent: 'BOOKING_CREATED', payload: { uid: 'd1', metadata: { ref: `${w.ps.demo.id}.${REQ_C}` }, startTime: new Date(NOW + 864e5).toISOString(), endTime: new Date(NOW + 864e5 + 18e5).toISOString() } });
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('cal-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, '0')).join('');
+    assertEquals(await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': sig })), { success: true, ignored: 'not_eligible' });
+    assertEquals(w.tables.coaching_sessions.length, 0);
+    const alert = w.tables.audit_log.find((x) => x.action === 'system.alert' && String(x.entity_id) === 'booking_not_eligible:calcom:d1');
+    assertEquals(alert?.after?.reason, 'demo');
+  } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
+});
