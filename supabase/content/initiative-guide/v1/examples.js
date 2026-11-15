@@ -2,5 +2,6 @@
 // قطاعاتها هي EXAMPLE_SECTORS في visibility.js (الخادم لا يستورد JSON)، ويحرس اختبار تطابقهما.
 import GOV from './sectors/gov.json';
 import HEALTH from './sectors/health.json';
+import STARTUP from './sectors/startup.json';
 
-export const EXAMPLES = Object.freeze([GOV, HEALTH]);
+export const EXAMPLES = Object.freeze([GOV, HEALTH, STARTUP]);
