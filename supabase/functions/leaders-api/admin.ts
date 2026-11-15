@@ -27,6 +27,7 @@ import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from 
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
+import { renderJourneyText } from './journey.js';
 import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
@@ -836,11 +837,14 @@ export async function resetAssessment(a: Admin, b: Body) {
 async function notifyReview(participantId: string, requirementId: string, returned: boolean, note?: unknown) {
   const [{ data: p }, { data: r }] = await Promise.all([
     db.from('participants').select('full_name, email').eq('id', participantId).single(),
-    db.from('stage_requirements').select('title_ar').eq('id', requirementId).single(),
+    db.from('stage_requirements').select('title_ar, program_id').eq('id', requirementId).single(),
   ]);
   if (!p?.email) return;
+  // العنوان يحمل رموز إعداد النشاط ({sessions:الرمز} وأخواتها) فيُحوَّل بما يراه المشارك في رحلته، لا يُرسل خامًا
+  const reqs = r?.program_id ? (await db.from('stage_requirements').select('code, config').eq('program_id', r.program_id)).data || [] : [];
+  const title = renderJourneyText(r?.title_ar || '', { reqs }) || 'بند في رحلتك';
   sendMail(p.email, returned ? 'ملاحظة من المستشار على رحلتك' : 'اعتُمد بند في رحلتك',
-    reviewMail(p.full_name, r?.title_ar || 'بند في رحلتك', returned, note ? String(note) : null)).catch((e) => console.error(e));
+    reviewMail(p.full_name, title, returned, note ? String(note) : null)).catch((e) => console.error(e));
 }
 
 export async function reviewRequirement(a: Admin, b: Body) {
