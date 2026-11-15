@@ -342,3 +342,38 @@ test('الإجراءات الجماعية: تغيير الحالة بسبب مك
   await box.getByRole('button', { name: 'لا شيء' }).click();
   await expect(box.getByRole('button', { name: /^صدّر/ })).toBeDisabled();
 });
+
+test('الاعتماد الجماعي بالمستوى المحسوب: معاينة بمن يُعتمد ومن يُستبقى ولماذا، ثم التنفيذ ونتيجة كل شخص', async ({ page }) => {
+  const ready = [{ id: 'p1', full_name: 'سارة الأحمد', levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' } }];
+  const held = [{ id: 'p3', full_name: 'خالد ب.', holds: [{ key: 'borderline', dim: 'milestone', text: 'حالة حدّية في إدارة المشروعات: المستوى التالي في متناول هامش صغير' }, { key: 'effort', text: 'أجاب باستعجال' }] }];
+  const calls = await setup(page, {
+    'admin.participants': { success: true, participants: [people[0], { ...people[0], id: 'p3', full_name: 'خالد ب.', email: 'k@x.com' }, people[1]] },
+  });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.approve-bulk') return route.fallback();
+    calls.push(b);
+    return route.fulfill({ json: b.dry_run
+      ? { success: true, ready, held, mail: { now: 1, queued: 0 } }
+      : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 } } });
+  });
+  // في عرض «بانتظار الاعتماد»: اختصار لاعتماد المتسقين من الظاهرين
+  await page.getByRole('button', { name: /بانتظار الاعتماد/ }).first().click();
+  await page.getByRole('button', { name: /اعتمد المتسقين/ }).click();
+  const dlg = page.getByRole('dialog', { name: 'اعتماد جماعي' });
+  await expect(dlg.locator('.ba-sum')).toContainText('سيُعتمد 1');
+  await expect(dlg.locator('.ba-sum')).toContainText('يُستبقى للمراجعة 1');
+  await expect(dlg.locator('li.held', { hasText: 'خالد ب.' })).toContainText('حالة حدّية في إدارة المشروعات');
+  await expect(dlg.locator('li.held', { hasText: 'خالد ب.' })).toContainText('أجاب باستعجال');
+  // الدلالة على المحتوى الموحّد بدل تزوير القياس
+  await expect(dlg.locator('.ba-hint')).toContainText('مستويات المشاركين: متجانس');
+  expect(calls.find((c) => c.action === 'admin.approve-bulk')).toMatchObject({ dry_run: true, participant_ids: ['p1', 'p3'] });
+  await dlg.getByRole('button', { name: 'اعتمد 1' }).click();
+  await expect(dlg.locator('.ba-sum')).toContainText('اعتُمد 1');
+  const run = calls.filter((c) => c.action === 'admin.approve-bulk').pop();
+  expect(run).toMatchObject({ participant_ids: ['p1', 'p3'] });
+  expect(run).not.toHaveProperty('dry_run');
+  // المستبقى يُفتح ملفه للمراجعة الفردية
+  await dlg.locator('li.held').getByRole('button', { name: 'خالد ب.' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/participants\/p3/);
+});
