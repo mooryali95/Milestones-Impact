@@ -27,6 +27,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 const BULK_MAX = 50;
 import { FileExtras, FileFlags, FileIndex, Observations, Timeline } from './PersonFile.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
+import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
@@ -157,6 +158,10 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   };
   // طلب إعادة القياس للمحددين ممن سلّموا ولم يُعتمدوا (can_retake من الخادم): المدخل نفسه الذي في ملف المشارك
   const pickedRetake = all.filter((p) => picked.has(p.id) && p.can_retake).length;
+  // الاعتماد الجماعي بالمستوى المحسوب (BulkApprove): للمحددين ممن ينتظرون الاعتماد، والحكم والاستبقاء على الخادم
+  const [bulkApprove, setBulkApprove] = useState(null);
+  const pickedPending = all.filter((p) => picked.has(p.id) && p.status === 'pending_approval').map((p) => p.id);
+  const shownPending = shown.filter((p) => p.status === 'pending_approval').map((p) => p.id);
   const askRetake = async () => {
     if (!(await confirm(`طلب إعادة القياس من ${pickedRetake} مشارك؟ يُلغى قياسهم الحالي، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ.`, { danger: true }))) return;
     const r = await L('admin.reset-assessment', { participant_ids: all.filter((p) => picked.has(p.id) && p.can_retake).map((p) => p.id) });
@@ -231,9 +236,17 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           ))}
         </div>
       )}
+      {canWrite && !picked.size && f.view === 'approval' && shownPending.length > 0 && (
+        <div className="la-bulk" role="note">
+          <span>{shownPending.length} بانتظار الاعتماد في هذه القائمة. المتسق قياسه يُعتمد دفعة واحدة، ومن عليه إشارة يُستبقى لتراجعه.</span>
+          <button className="btn-sm primary" onClick={() => setBulkApprove(shownPending.slice(0, 50))}>اعتمد المتسقين{shownPending.length > 50 ? ' (أول 50)' : ''}…</button>
+        </div>
+      )}
+      {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onOpen} onClose={(changed) => { setBulkApprove(null); if (changed) { setPicked(new Set()); load(serverQ); } }} />}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk">
           <span><b>{picked.size}</b> محدد</span>
+          {pickedPending.length > 0 && <button className="btn-sm primary" onClick={() => setBulkApprove(pickedPending.slice(0, 50))} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة">اعتماد جماعي ({pickedPending.length})…</button>}
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
           <select className="filter-select" aria-label="تغيير حالة المحددين" value={statusTo} onChange={(e) => setStatusTo(e.target.value)}>

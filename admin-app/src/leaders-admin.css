@@ -1041,3 +1041,16 @@
 @media (max-width: 760px) { .mc .pay-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mc-split li { grid-template-columns: 96px 1fr 28px; } }
 .sr-only { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .data-table .la-chip.warn, .data-table .la-chip.ok { white-space: nowrap; }
+
+/* الاعتماد الجماعي بالمستوى المحسوب (BulkApprove.jsx) */
+.bulk-approve { max-inline-size: 680px; }
+.bulk-approve .ba-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.bulk-approve .ba-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-block-size: 280px; overflow: auto; }
+.bulk-approve .ba-list li { display: grid; gap: 4px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-ok); }
+.bulk-approve .ba-list li.held { border-inline-start-color: var(--st-warn); }
+.bulk-approve .ba-list li.bad { border-inline-start-color: var(--st-bad); }
+.bulk-approve .ba-list small { color: var(--ink-mid); font-size: .8rem; }
+.bulk-approve .ba-holds { display: flex; flex-wrap: wrap; gap: 4px; }
+.bulk-approve h4 { margin: 14px 0 4px; }
+.bulk-approve .ba-hint { margin-top: 14px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--brand-gold) 7%, transparent); font-size: .84rem; }
+.bulk-approve summary { cursor: pointer; font-weight: 600; }

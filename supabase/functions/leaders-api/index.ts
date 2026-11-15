@@ -416,6 +416,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
   'admin.assessment-answers': (a, b) => A.assessmentAnswers(a, b),
   'admin.approve': A.approve,
+  'admin.approve-bulk': A.approveBulk,
   'admin.status': A.setStatus,
   'admin.reset-assessment': A.resetAssessment,
   'admin.review': A.reviewRequirement,

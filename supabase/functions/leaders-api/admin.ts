@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, mailUsage, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
@@ -27,6 +27,7 @@ import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from 
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
+import { BULK_APPROVE_MAX, mailPlan, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -640,8 +641,15 @@ export async function approve(a: Admin, b: Body) {
   const id = String(b.participant_id);
   const p = must(await db.from('participants').select('*').eq('id', id).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
+  await approveOne(a, p, b.levels || {}, b.notes || {});
+  return { success: true };
+}
+
+// قلب الاعتماد لمشارك واحد: يستعمله الاعتماد من الملف والاعتماد الجماعي (approveBulk)، فلا نسخة ثانية من قواعده.
+// levels: ما يُعتمد لكل بُعد (الفارغ يبقى على المحفوظ) · notes: علة مخالفة المستوى القائم لكل بُعد
+async function approveOne(a: Admin, p: any, levels: Record<string, string>, notes: Record<string, string>, extra: Body = {}) {
+  const id = p.id;
   const before = must(await db.from('placements').select('*').eq('participant_id', id)) ?? [];
-  const levels: Record<string, string> = b.levels || {};
   const now = new Date().toISOString();
   const rows = DIMENSIONS.map((d) => {
     const old = before.find((x: any) => x.dimension === d);
@@ -649,21 +657,70 @@ export async function approve(a: Admin, b: Body) {
     if (!LEVELS.includes(level)) throw new Fail('حدّد مستوى كل بُعد');
     const changed = old && old.level !== level;
     // مخالفة المستوى القائم (المحسوب أو المعتمد قبله) تلزمها علة مكتوبة تُحفظ في admin_note
-    if (overrideNeedsReason(old?.level, level, b.notes?.[d])) throw new Fail(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_AR[d]} (${OVERRIDE_REASON_MIN} أحرف على الأقل)`, 400, 'override_reason');
+    if (overrideNeedsReason(old?.level, level, notes?.[d])) throw new Fail(`اكتب سبب مخالفة المستوى المحسوب في ${DIM_AR[d]} (${OVERRIDE_REASON_MIN} أحرف على الأقل)`, 400, 'override_reason');
     return {
       participant_id: id, dimension: d, level, source: changed || !old ? 'admin' : old.source,
       assessment_id: old?.assessment_id || null, decided_by: changed ? a.email : old?.decided_by || null,
       decided_at: changed ? now : old?.decided_at || now, approved_at: now, approved_by: a.email,
-      admin_note: b.notes?.[d] ? String(b.notes[d]).slice(0, 500) : old?.admin_note || null,
+      admin_note: notes?.[d] ? String(notes[d]).slice(0, 500) : old?.admin_note || null,
     };
   });
   must(await db.from('placements').upsert(rows));
   const to = statusAfterApprove(p.status);
   if (to) await db.from('participants').update({ status: to }).eq('id', id);
-  await audit('admin', a.email, 'placement.approve', 'participants', id, before, rows);
+  await audit('admin', a.email, 'placement.approve', 'participants', id, before, { rows, ...extra });
   const pay = await programPaymentDue(id).catch(() => false);
   sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
-  return { success: true };
+}
+
+// إشارات الاعتماد لمجموعة: المستوى المحفوظ، وتقييم آخر قياس مسلَّم لكل بُعد بالنموذج الحالي (evaluatePlacement
+// والموافقة المطلقة كما في ملف المشارك)، وجدية الإجابة وطلب الإعادة من baselineProgress. قراءة واحدة لكل مصدر
+async function approvalSignals(ids: string[]) {
+  const people = (must(await db.from('participants').select('id, full_name, email, status, is_demo, placements(dimension, level)').in('id', ids)) ?? []) as any[];
+  const progress = await baselineProgress(ids);
+  const submitted = Object.values(progress).filter((g: any) => g?.id && g.status === 'submitted').map((g: any) => g.id as string);
+  const [results, model, answers] = await Promise.all([
+    submitted.length ? db.from('assessment_results').select('*').in('assessment_id', submitted) : Promise.resolve({ data: [] as any[] }),
+    db.from('placement_model').select('*').eq('id', 1).maybeSingle(),
+    submitted.length ? db.from('assessment_answers').select('assessment_id, question_id, value, questions!inner(id, dimension, tier, options)').in('assessment_id', submitted).eq('questions.tier', 'behavior')
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  for (const r of [results, model, answers] as any[]) if (r.error) throw r.error;
+  return people.map((p: any) => {
+    const g = progress[p.id] || null;
+    const aid = g?.status === 'submitted' ? g.id : null;
+    const rows = ((answers as any).data || []).filter((x: any) => x.assessment_id === aid);
+    const acq: Record<string, boolean> = aid ? acquiescenceFor(rows.map((x: any) => x.questions), Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k]))) : {};
+    const evaluations: Record<string, any> = {};
+    for (const r of ((results as any).data || []).filter((x: any) => x.assessment_id === aid)) {
+      evaluations[r.dimension] = evaluatePlacement({ knowledge: r.knowledge_pct, skill: r.skill_pct, behavior: r.behavior_pct }, (model as any).data || DEFAULT_MODEL, { acquiescence: acq[r.dimension] });
+    }
+    return { ...p, evaluations, effort: g?.effort || null, retake: g?.retake || null };
+  });
+}
+
+// الاعتماد الجماعي بالمستوى المحسوب (المرحلة 1): المتسق يُعتمد، ومن عليه إشارة يُستبقى بسببه للمراجعة الفردية.
+// dry_run: المعاينة وحدها (من يُعتمد، ومن يُستبقى ولماذا، وأثر البريد). التنفيذ يعيد الحكم على الخادم ولا يثق بالمعاينة.
+export async function approveBulk(a: Admin, b: Body) {
+  requireWrite(a);
+  const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).map(String).filter(isUuid))] as string[];
+  if (!ids.length) throw new Fail('اختر من تعتمدهم');
+  if (ids.length > BULK_APPROVE_MAX) throw new Fail(`الحد ${BULK_APPROVE_MAX} مشاركًا في المرة الواحدة`);
+  const signals = await approvalSignals(ids);
+  const { ready, held } = splitForApproval(signals);
+  const used = await mailUsage().catch(() => null);
+  const mail = mailPlan(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
+  if (b.dry_run) return { success: true, ready, held, mail, mail_read: used != null };
+  const results: any[] = [];
+  for (const r of ready) {
+    const p = signals.find((x: any) => x.id === r.id);
+    try { await approveOne(a, p, r.levels, {}, { bulk: true }); results.push({ id: r.id, full_name: r.full_name, ok: true }); }
+    catch (e) { results.push({ id: r.id, full_name: r.full_name, ok: false, error: (e as Error).message }); }
+  }
+  await audit('admin', a.email, 'placement.approve-bulk', 'participants', 'bulk', null, {
+    approved: results.filter((x) => x.ok).map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id), held: held.map((x) => ({ id: x.id, holds: x.holds.map((h: any) => h.key) })),
+  });
+  return { success: true, results, held, mail };
 }
 
 // تغيير الحالة، المدخل الواحد لشخص من ملفه أو لمجموعة من القائمة (participant_ids، حتى BULK_MAX):
