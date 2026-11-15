@@ -34,6 +34,7 @@ describe('ملف الدفعة', () => {
     expect(i.ok).toBe(false);
     expect(i.other).toBe('c2');
     expect(i.detail).toContain('دفعة سفراء 2');
+    expect(i.detail).toContain('الملحقون يدويًا بهذه الدفعة باقون فيها، والبقية ينتقلون إلى الدفعة الأحدث');
   });
 
   it('جهة غير فعّالة: لا رابط، والبند يفتح الجهة', () => {
@@ -84,6 +85,8 @@ describe('معالج الدفعة الجديدة', () => {
   it('ينبّه إلى دفعة الجهة القائمة، والحالة «مخطط لها»', () => {
     const notes = wizardNotes({ v: { kind: 'org', organization_id: 'o1', status: 'planned', program_id: 'p1' }, cohorts: [base], orgs: [org], programs: [prog] });
     expect(notes.join(' ')).toContain('دفعة سفراء');
+    // بقاعدة pickCohort: الملحق يدويًا يبقى، ومن تبع الدفعة بجهته ينتقل إلى الأحدث (تصحيح بتنسيق الزميل)
+    expect(notes.join(' ')).toContain('الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث');
     expect(notes.join(' ')).toContain('مخطط لها');
   });
   it('جسم الحفظ: دفعة الأفراد بلا جهة، والتثبيت على أحدث نسخة', () => {
