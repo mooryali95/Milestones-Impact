@@ -23,7 +23,7 @@ async function setup(page) {
       'admin.catalog': catalog,
       'admin.book-preview': { success: true, levels: { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' }, chapters: [{ id: 'h1', dimension: 'milestone', min_level: 'beginner', title: 'المعلم', md: '## المفهوم\nنص للجميع', reflection: 'ما معلمك؟', quiz: [{ q: 'ما المعلم؟', options: ['تاريخ', 'نقطة قرار'], answer: 1, why: '' }] }], models: [model] },
       'admin.submissions': { success: true, submissions: [submission] }, 'admin.submission': { success: true, submission },
-      'admin.save': { success: true }, 'admin.reorder': { success: true }, 'admin.delete': { success: true }, 'admin.review-submission': { success: true },
+      'admin.save': { success: true }, 'admin.book-proposal-edit': { success: true, count: 1, sections: ['المفهوم'], status: 'review' }, 'admin.reorder': { success: true }, 'admin.delete': { success: true }, 'admin.review-submission': { success: true },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -53,12 +53,29 @@ test('الأبواب: معاينة بحسب المستوى، وأداة المح
   await expect(ed.getByText('أقصى نقاط الباب: 20')).toBeVisible();
   await expect(ed.getByRole('button', { name: '+ سؤال' })).toHaveCount(0);
   await expect(ed.getByLabel('أسئلة الاختبار')).toHaveAttribute('readonly', '');
-  await expect(ed.getByRole('note')).toContainText('يُعدَّل من المستودع');
-  await ed.getByRole('button', { name: 'حفظ الباب' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'handbook_modules', row: { id: 'h1', title_ar: 'المعلم', reflection_ar: 'ما معلمك؟' } });
-  const row = calls.find((c) => c.action === 'admin.save').row;
-  expect(row).not.toHaveProperty('quiz_md');
-  expect(row).not.toHaveProperty('min_level');
+  await expect(ed.getByRole('note').filter({ hasText: 'يُعدَّل من المستودع' })).toBeVisible();
+  await expect(ed.getByRole('note').filter({ hasText: 'يُرسل مقترحًا لكل قسم تغيّر' })).toBeVisible();
+  // المرحلة 4 (الخطوة 3): تعديل المتن يُرسل مقترحًا بسبب مكتوب، لا حفظًا حيًا
+  await ed.getByRole('button', { name: 'اعرض التعديل على اللجنة' }).click();
+  await expect(ed.getByRole('alert')).toContainText('سبب التعديل');
+  await ed.getByLabel('سبب التعديل').fill('خلاصة توضح الفكرة للمبتدئ');
+  await ed.getByRole('button', { name: 'اعرض التعديل على اللجنة' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.book-proposal-edit')).toMatchObject({ module_id: 'h1', reason: 'خلاصة توضح الفكرة للمبتدئ', submit: true });
+  const p = calls.find((c) => c.action === 'admin.book-proposal-edit');
+  expect(p.body_md).toMatch(/\n> نص للجميع\n/);
+  expect(p).not.toHaveProperty('quiz_md');
+  expect(calls.find((c) => c.action === 'admin.save')).toBeUndefined();
+});
+
+test('العنوان وحده يُحفظ مباشرة بلا مقترح', async ({ page }) => {
+  const calls = await setup(page);
+  await page.getByRole('button', { name: /^المعلم/ }).click();
+  const ed = page.getByRole('dialog', { name: 'تحرير الباب: المعلم' });
+  await ed.getByLabel('عنوان الباب').fill('المعلم نقطة قرار');
+  await ed.getByRole('button', { name: 'حفظ العنوان' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.save')).toMatchObject({ entity: 'handbook_modules', row: { id: 'h1', title_ar: 'المعلم نقطة قرار' } });
+  expect(Object.keys(calls.find((c) => c.action === 'admin.save').row)).toEqual(['id', 'title_ar']);
+  expect(calls.find((c) => c.action === 'admin.book-proposal-edit')).toBeUndefined();
 });
 
 test('الأبواب الجديدة وحذفها من المستودع: لا زر باب جديد ولا حذف في اللوحة', async ({ page }) => {

@@ -11,6 +11,7 @@ import { parseQuiz } from '../../supabase/functions/leaders-api/logic.js';
 import { bookSections, chapterVisible, markTiers, tierAr, tierVisible, BODY_MAX, QUOTE_MAX } from '../../supabase/functions/leaders-api/master-book.js';
 import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet } from './Proposals.jsx';
+import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
 import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -411,7 +412,9 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, onProposals,
           );
         })}
       </div>
-      {ch.reflection && <div className="mb-reflect"><small>تأمل</small><p>{ch.reflection}</p></div>}
+      {ch.reflection && <div className="mb-reflect"><small>تأمل</small><p>{ch.reflection}</p>
+        {!ch.draft && (data.viewer.propose || (data.proposals || []).some((p) => p.module_id === ch.id && p.section === REFLECTION && ['draft', 'review', 'approved'].includes(p.status)))
+          && <button type="button" className="mb-sec-p mb-reflect-p" onClick={() => onProposals({ section: REFLECTION })}>✎ اقترح تعديل السؤال</button>}</div>}
       <QuizReview md={ch.quiz_md} />
       <button type="button" className="mb-btn ghost wide" onClick={() => onThread({ section: '' })}>تعليق على الباب كله{(data.counts.bySection[`${ch.id}|`] || 0) ? ` (${data.counts.bySection[`${ch.id}|`]})` : ''}</button>
       <p className="mb-colophon">الباب {idx + 1} من {data.chapters.length}{ch.updated_at ? ` · آخر تعديل ${dateAr(ch.updated_at)}` : ''}</p>
