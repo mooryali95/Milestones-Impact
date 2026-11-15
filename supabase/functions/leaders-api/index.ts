@@ -469,6 +469,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.book-comment-status': (a, b) => A.writer(a, (x, y) => MB.setStatus(MB.adminViewer(x), y), b),
   'admin.book-proposal-save': (a, b) => A.writer(a, (x, y) => BP.saveProposal(MB.adminViewer(x), y), b),
   'admin.book-proposal-status': (a, b) => A.writer(a, (x, y) => BP.moveProposal(MB.adminViewer(x), y), b),
+  'admin.book-proposal-edit': (a, b) => A.writer(a, (x, y) => BP.proposeFromEdit(MB.adminViewer(x), y), b),
   // مشاركة الكتاب: إضافة خبير إلى لجنة المحتوى أو القياس أو إزالته (العضوية نفسها في ملفه)
   'admin.book-reader': (a, b) => A.writer(a, MB.setReader, b),
   'admin.track': (_a, b) => A.track(b),

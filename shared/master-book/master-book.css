@@ -413,3 +413,5 @@
   .mb-sec-tools + div > h3:first-child { margin-top: 26px; padding-inline-end: 0; }
 }
 @media (min-width: 701px) { .mb-sec-tools + div > h3:first-child { padding-inline-end: 230px; } }
+.mb-src.short { min-height: 120px; }
+.mb-reflect .mb-reflect-p { margin-top: 8px; }
