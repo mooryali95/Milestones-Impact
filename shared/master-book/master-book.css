@@ -15,6 +15,8 @@
   -webkit-font-smoothing: antialiased; scroll-behavior: smooth;
 }
 .mb-root *, .mb-root *::before, .mb-root *::after { box-sizing: border-box; }
+.mb-wm { position: fixed; inset: 0; z-index: 50; pointer-events: none; background-repeat: repeat; }
+@media print { .mb-wm { display: none; } }
 .mb-root button { font: inherit; color: inherit; cursor: pointer; }
 .mb-root :focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .mb-root, .mb-root * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }

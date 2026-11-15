@@ -10,7 +10,7 @@ const PLEDGE = ['أطّلع على الكتاب الأم بصفتي عضوًا �
 const reviewer = { full_name: 'د. هند الشمري', title: 'محكّمة مناهج', email: 'h@x.com', roles: [], committees: ['content'], dimensions: ['impact'], status: 'active' };
 const BOOK = {
   success: true, version: 'v3.1', generated_at: '2026-11-15T10:00:00Z', share: null, comments_ready: true,
-  viewer: { kind: 'expert', name: 'د. هند الشمري', role: 'لجنة المحتوى', write: true, resolve: false },
+  viewer: { kind: 'expert', name: 'د. هند الشمري', role: 'لجنة المحتوى', write: true, resolve: false, watermark: 'د. هند الشمري · h@x.com' },
   chapters: [{ id: '00000000-0000-4000-8000-000000000001', dimension: 'impact', chapter_key: 'i1', sort: 1, title: 'من المخرج إلى الأثر', min_level: 'beginner', md: '## المدخل\n\nنص الباب.', quiz_md: '', reflection: '', updated_at: '2026-11-10T00:00:00Z' }],
   comments: [], counts: { total: 0, byModule: {}, bySection: {} },
 };
@@ -24,7 +24,7 @@ async function mount(page, first) {
     if (b.action === 'xp.dashboard') return route.fulfill({ json: state });
     // ردّ xp.pledge هو portalDashboard وحده كما على الخادم: بلا بطاقة الكتاب ولا التكليفات لمن جمع الخدمتين، فالواجهة تعيد التحميل
     if (b.action === 'xp.pledge') { state = { ...state, pledge_needed: false }; const { book_access, assignments, ...plain } = state; return route.fulfill({ json: state.content_only ? state : plain }); }
-    if (b.action === 'xp.book') return route.fulfill({ json: state.pledge_needed ? { success: false, code: 'pledge', message: 'أكّد تعهد السرية أولًا ثم افتح الكتاب' } : BOOK });
+    if (b.action === 'xp.book') return route.fulfill({ json: state.pledge_needed ? { success: false, code: 'pledge', message: 'أكّد تعهد السرية أولًا ثم افتح الكتاب' } : state.expert?.status === 'paused' ? { ...BOOK, viewer: { ...BOOK.viewer, write: false } } : BOOK });
     return route.fulfill({ json: { success: false, message: `غير متوقع: ${b.action}` } });
   });
   await page.addInitScript((t) => localStorage.setItem('mi_leaders_expert_session', t), XP_TOKEN);
@@ -110,4 +110,19 @@ test('معتمد بلا خدمة: سطر يدله على الإدارة، بلا
   await expect(page.getByText('لم تُحدَّد خدمتك في البرنامج بعد')).toBeVisible();
   await expect(page.locator('.xpp-book')).toHaveCount(0);
   for (const t of ['جلساتك القادمة', 'طلبات بانتظار ردك', 'مشاركوك']) await expect(page.getByText(t), t).toHaveCount(0);
+});
+
+test('القارئ: علامة مائية باسم العضو وبريده، والعضو الموقوف مؤقتًا يقرأ ولا يعلّق', async ({ page }) => {
+  await mount(page, { success: true, content_only: true, consent_needed: false, book_access: true, pledge_needed: false, pledge: PLEDGE, switch_to: [], expert: { ...reviewer, status: 'paused' } });
+  await page.goto(PORTAL);
+  await expect(page.getByText('تقرأ بصفتك:')).toBeVisible();
+  const wm = page.locator('.mb-wm');
+  await expect(wm).toHaveCount(1);
+  const bg = decodeURIComponent(await wm.evaluate((el) => el.style.backgroundImage));
+  expect(bg).toContain('د. هند الشمري · h@x.com · ');
+  await expect(wm).toHaveCSS('pointer-events', 'none');
+  await page.locator('.mb-btn.gold').click();
+  await page.getByRole('button', { name: 'تعليقات القسم: المدخل' }).click();
+  await expect(page.getByText('عضويتك موقوفة مؤقتًا، فتقرأ الكتاب والتعليقات ولا تكتب حتى يُعاد تفعيل ملفك.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'أضف التعليق' })).toHaveCount(0);
 });

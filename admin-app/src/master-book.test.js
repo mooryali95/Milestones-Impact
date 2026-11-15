@@ -127,11 +127,16 @@ describe('الكتاب الأم: المشاركة مع الخبراء', () => {
     { id: '2', full_name: 'أحمد', status: 'active', committees: [] },
     { id: '3', full_name: 'جود', status: 'suspended', committees: ['measurement'] },
     { id: '4', full_name: 'دانة', status: 'applied', committees: [] },
+    { id: '5', full_name: 'سالم', status: 'active', roles: ['coach'], committees: [] },
+    { id: '6', full_name: 'نورة', status: 'active', roles: ['coach'], committees: ['content'] },
+    { id: '7', full_name: 'لمى', status: 'paused', roles: [], committees: ['measurement'] },
   ];
-  it('من يقرأ، ومن في لجنة وملفه غير فعّال، ومن يمكن إضافته (الفاعل وحده)', () => {
+  it('من يقرأ، ومن في لجنة وملفه غير فعّال، ومن يمكن إضافته (الفاعل خارج الرحلة وحده)', () => {
     const r = shareRoster(ex);
-    expect(r.readers.map((x) => x.name)).toEqual(['بدر']);
+    // من جمع الخدمتين يقرأ بعضويته، والموقوف مؤقتًا يقرأ ولا يكتب (expertViewer)
+    expect(r.readers.map((x) => x.name)).toEqual(['بدر', 'لمى', 'نورة']);
     expect(r.blocked.map((x) => x.name)).toEqual(['جود']);
+    // خبير الرحلة (سالم) لا يُعرض للمشاركة أبدًا؛ المنح الاستثنائي في المرحلة 4
     expect(r.candidates.map((x) => x.name)).toEqual(['أحمد']);
   });
   it('إضافة اللجنة وإزالتها بلا تكرار، واللجنة غير المعروفة تُرفض', () => {

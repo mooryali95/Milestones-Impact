@@ -117,13 +117,12 @@ describe('عضو اللجنة بلا دور لا يظهر في أي موضع م�
 
 // ── حارس المصدر ──
 // كل موضع يقرأ جدول الخبراء أو يفحص الحالة المعتمدة في وحدات الخادم يمر بـjourneyApproved داخل دالته، أو يحمل
-// تعليق «journey-guard:» بسببه. وحدات الكتاب الأم مستثناة هنا بسبب مكتوب، لأن طلب الزميل المفتوح (#358) يمسها ولا تُعدَّل الآن
+// تعليق «journey-guard:» بسببه. ووحدات الكتاب الأم داخل الحارس منذ دمج #358: مواضعها قاعدة الكتاب (bookAccess) أو قائمة
+// قرائه، فتحمل كل منها سببها بتعليق journey-guard لا باستثناء الوحدة كلها، فأي موضع جديد فيها بلا سبب يُمسك
 const FN = join(root, 'supabase/functions/leaders-api');
 // myParticipantIds يقرأ cohorts.advisor_expert_id لا جدول الخبراء، فمن يستدعيه يمر بالقاعدة كذلك (تسليمات المشاركين و360)
 const SITE = /from\('experts'\)|EXPERT_APPROVED\.includes|\['active', 'paused'\]\.includes|\bAPPROVED\.includes\(|\bmyParticipantIds\(/;
 const MODULE_EXEMPT = {
-  'master-book.ts': 'الكتاب الأم: القراءة بعضوية اللجنة (bookAccess) لا بخدمة الرحلة. استعلام المشاركة وتصفية المرشحين مؤجلان حتى يُدمج #358',
-  'master-book.js': 'bookAccess هي قاعدة الكتاب نفسها (معتمد وله عضوية لجنة)، لا مرشِّح للرحلة',
   'payments.ts': 'APPROVED فيه حالات المشارك المعتمد للدفع، لا حالة الخبير',
 };
 const DECL = /^(export\s+)?(async\s+)?function\s|^(export\s+)?const\s+\w+\s*(:[^=]+)?=|^\s{2}'[a-z0-9.-]+':\s/;
@@ -157,6 +156,21 @@ export function guardGaps(files) {
   }
   return gaps;
 }
+describe('الكتاب الأم بعد دمج #358: المشاركة لأعضاء اللجان، والموقوف يقرأ، والعلامة المائية', () => {
+  const mb = read('supabase/functions/leaders-api/master-book.ts');
+  it('استعلام المشاركة يقرأ الأدوار ليُستبعد خبير الرحلة، ونافذة المشاركة لا تضيفه', () => {
+    expect(mb).toContain("select('id, full_name, email, title, status, roles, committees')");
+    expect(mb).toContain("select('id, full_name, status, roles, committees')");
+    expect(mb).toContain("if (b?.on !== false && hasJourneyRole(e) && !hasCommittee(e)) throw");
+  });
+  it('العضو الموقوف مؤقتًا يقرأ ولا يكتب ولا يحذف، والعلامة المائية باسمه وبريده', () => {
+    expect(mb).toContain("write: e.status === 'active', email: String(e.email || '')");
+    expect(mb).toContain("if (v.kind === 'expert' && !v.write) throw new Fail('حسابك للقراءة فقط', 403, 'read_only');");
+    expect(mb).toContain("watermark: [v.name, v.email].filter(Boolean).join(' · ')");
+    expect(read('shared/master-book/MasterBook.jsx')).toContain('<Watermark text={data.viewer.watermark} />');
+  });
+});
+
 describe('حارس الرحلة على المصدر', () => {
   const server = readdirSync(FN).filter((f) => /\.(ts|js)$/.test(f) && !f.endsWith('_test.ts')).map((f) => [f, readFileSync(join(FN, f), 'utf8')]);
   const admin = ['admin-app/src/team.js', 'admin-app/src/screens/CohortTeam.jsx'].map((p) => [p, read(p)]);

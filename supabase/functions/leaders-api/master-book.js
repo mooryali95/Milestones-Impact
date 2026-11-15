@@ -5,7 +5,7 @@
 // لا نسخة ثانية من الكتاب: المتن من handbook_modules نفسه، والترتيب الثابت للأطر من DIMENSIONS (المعالم ← الأثر ← القيادة).
 // يقرؤه الخادم (master-book.ts) والقارئ في اللوحة وبوابة الخبير، فالقاعدة واحدة في الجهتين.
 import { DIMENSIONS } from './logic.js';
-import { COMMITTEES, COMMITTEE_AR } from './committees.js';
+import { COMMITTEES, COMMITTEE_AR, hasJourneyRole } from './committees.js';
 
 export const SECTION_MAX = 200;
 export const QUOTE_MAX = 600;
@@ -17,6 +17,7 @@ const DRAFT_ID = /^draft:[a-z0-9-]{2,60}$/;
 export const isChapterId = (id) => UUID.test(String(id || '')) || DRAFT_ID.test(String(id || ''));
 
 // من يقرأ الكتاب الأم من الخبراء: عضو فاعل في لجنة المحتوى أو القياس (experts.committees)، فالعضوية من سجل الخبير لا قائمة ثانية
+// journey-guard: قاعدة الكتاب نفسها (معتمد أو موقوف مؤقتًا وله عضوية لجنة)، لا مرشِّح للرحلة
 export const bookAccess = (e) => !!e && ['active', 'paused'].includes(e.status) && (e.committees || []).some((c) => COMMITTEES.includes(c));
 
 // صفة المعلّق كما تظهر بجانب اسمه
@@ -179,11 +180,13 @@ export const chapterVisible = (ch, level) => level === 'all' || RANK[level] >= (
 // ── مشاركة الكتاب مع الخبراء (لوحة الإدارة): من يقرأ الآن، ومن يمكن إضافته بنقرة ──
 // القارئ عضو فاعل في لجنة المحتوى أو القياس (bookAccess نفسها)، فالمشاركة هي العضوية لا رابط منفصل
 const expertRow = (e) => ({ id: e.id, name: e.full_name || e.email || '', title: e.title || '', status: e.status, committees: (e.committees || []).filter((c) => COMMITTEES.includes(c)) });
+export const shareCandidate = (e) => !!e && e.status === 'active' && !bookAccess(e) && !hasJourneyRole(e);
 export function shareRoster(experts = []) {
   const readers = experts.filter(bookAccess).map(expertRow);
   // عضو لجنة غير فاعل: لا يقرأ حتى يُفعَّل ملفه، فيُذكر ليعرف المدير لماذا لا يرى الكتاب
   const blocked = experts.filter((e) => !bookAccess(e) && (e.committees || []).some((c) => COMMITTEES.includes(c))).map(expertRow);
-  const candidates = experts.filter((e) => e.status === 'active' && !bookAccess(e)).map(expertRow);
+  // المرشحون أعضاء لجان لا خبراء رحلة: من له دور في الرحلة لا يُعرض هنا أبدًا (المنح الاستثنائي في المرحلة 4)
+  const candidates = experts.filter(shareCandidate).map(expertRow);
   const byName = (a, b) => a.name.localeCompare(b.name, 'ar');
   return { readers: readers.sort(byName), blocked: blocked.sort(byName), candidates: candidates.sort(byName) };
 }
