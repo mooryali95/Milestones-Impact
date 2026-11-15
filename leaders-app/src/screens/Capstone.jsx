@@ -12,6 +12,7 @@ import { useUnsavedGuard } from '../unsaved.js';
 import { dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
+import Discovery from './Discovery.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
@@ -57,6 +58,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
+  const [skipDiscovery, setSkipDiscovery] = useState(false);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); }, []);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
@@ -170,6 +172,13 @@ export default function Capstone({ me, onEditProfile, onBack }) {
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
+
+      {/* اكتشاف المبادرة (4ج): قبل البطاقة وحدها، حين لا اسم للمبادرة ولم تُسلَّم البطاقة بعد. ناتجه مسودة البطاقة نفسها */}
+      {(() => {
+        const charter = d.sections.find((s) => s.key === 'initiative-charter');
+        if (!editable || skipDiscovery || d.initiative || !charter || (d.card && d.card.state !== 'none')) return null;
+        return <Discovery level={d.level} charterId={charter.id} onSkip={() => setSkipDiscovery(true)} onDone={() => openSection(charter.id)} />;
+      })()}
 
       {/* بوابة البطاقة: ما ينتظره المشارك من المستشار قبل تسليم الوثيقة، وما يفعله في الأثناء */}
       {editable && d.card && d.card.state !== 'approved' && (
