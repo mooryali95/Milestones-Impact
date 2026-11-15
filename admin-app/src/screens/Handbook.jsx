@@ -5,7 +5,7 @@
 // admin.save / admin.delete / admin.reorder، والتقييم عبر admin.review-submission.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CARD_REVIEW_CRITERIA, CHARTER_KEY } from '../../../supabase/functions/leaders-api/capstone.js';
-import { DIM, DIM_EN, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
+import { DIM, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
   FTYPE, HB_TOOLS, HB_VIEWS, MASTER, RANK, SCOPE_VIEW, SUB_FILTER,
@@ -16,11 +16,13 @@ import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, sortRows } from '../filters.js';
 import { Empty, NoMatch, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
-import { RUBRIC_SCALE, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, DIM_ROMAN, RUBRIC_SCALE, TERMS, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
 const pad = (n) => String(n).padStart(2, '0');
-const ROM = { milestone: 'I', impact: 'II', leadership: 'III' };
+// العدد بتمييزه («بابان» و«5 أبواب» و«12 بابًا»)، والإطار باسمه العربي ورقمه من labels.js وحده
+export const chaptersAr = (n) => (n ? countAr(n, 'باب واحد', 'بابان', 'أبواب', 'بابًا') : 'لا أبواب');
+export const modelsAr = (n) => (n ? countAr(n, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجًا') : 'لا نماذج');
 
 function Move({ rows, entity, id, reload, canWrite }) {
   const { toast } = useUI();
@@ -172,7 +174,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   return (
     <Studio label={m ? `تحرير الباب: ${m.title_ar}` : 'باب جديد'} onClose={() => guard.guardClose(() => onClose())} onSubmit={submit}>
       <header className="hb-ed-head">
-        <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]}{labs.length > 0 && <span className="hb-ed-labs"> · مختبرات أسفل الباب: {labs.map((l) => l.title_ar).join('، ')}</span>}</small>
+        <div className="hb-ed-name"><small>{DIM[d]}{labs.length > 0 && <span className="hb-ed-labs"> · مختبرات أسفل الباب: {labs.map((l) => l.title_ar).join('، ')}</span>}</small>
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه (من المستودع)</small><LevelSeg value={v.min_level} onChange={() => {}} disabled /></div>
         <div className="hb-ed-btns">
@@ -216,7 +218,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
             <div className="hb-ed-out"><div className="hb-ed-cap">كما يراه المشارك بعد الباب</div>
               <article className="hb-page qz-out">
                 <QuizView qs={qs} reflection={v.reflection_ar.trim()} />
-                {!qs.length && <p className="la-muted">اكتب أول سؤال بالصيغة الموضحة، أو اضغط + سؤال.</p>}
+                {!qs.length && <p className="la-muted">لا اختبار لهذا الباب بعد. يُضاف في ملف الباب بالمستودع مع ترحيله.</p>}
                 <p className="la-muted">أقصى نقاط الباب: {maxPoints(qs.length, !!v.reflection_ar.trim())} · تُخلط الخيارات لكل مشارك، فلا يدل موضع الخيار على صحته</p>
               </article></div>
           </div>
@@ -234,7 +236,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
 function ModelGuide({ m }) {
   return (
     <div className="mp-hero"><span className="mp-icon">{m.icon || '◆'}</span>
-      <div><small>{DIM_EN[m.dimension]} · من مستوى {LVL[m.min_level]}</small><h3>{m.title_ar}</h3><p>{m.summary_ar || ''}</p></div>
+      <div><small>{DIM[m.dimension]} · من مستوى {LVL[m.min_level]}</small><h3>{m.title_ar}</h3><p>{m.summary_ar || ''}</p></div>
       <span className="mp-pts"><b>{m.points}</b>نقطة</span>
     </div>
   );
@@ -325,7 +327,7 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
   return (
     <Studio label={m ? `تحرير النموذج: ${m.title_ar}` : 'نموذج جديد'} onClose={() => guard.guardClose(() => onClose())} onSubmit={submit} two>
       <header className="hb-ed-head">
-        <div className="hb-ed-name"><small>{DIM_EN[d]} · {DIM[d]} · نموذج تعليمي</small>
+        <div className="hb-ed-name"><small>{DIM[d]} · نموذج تعليمي</small>
           <input aria-label="اسم النموذج" placeholder="اسم النموذج" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه</small><LevelSeg value={v.min_level} onChange={(l) => setV({ ...v, min_level: l })} disabled={!canWrite} /></div>
         <div className="hb-ed-btns">
@@ -431,7 +433,7 @@ export function Submission({ id, canWrite, onClose }) {
   return (
     <Studio label={`تقييم عمل ${x.participants.full_name}`} onClose={close} onSubmit={submit} two>
       <header className="hb-ed-head">
-        <div className="hb-ed-name"><small>{m.title_ar} · {DIM_EN[m.dimension]}</small><b className="sub-who">{x.participants.full_name}</b>
+        <div className="hb-ed-name"><small>{m.title_ar} · {DIM[m.dimension]}</small><b className="sub-who">{x.participants.full_name}</b>
           <small className="sub-meta">{[x.participants.job_title, x.participants.organization_name].filter(Boolean).join(' · ')} · سُلّم {date(x.submitted_at)}</small></div>
         <div className="hb-ed-btns"><span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0] || ''}</span><button className="btn-sm ghost" value="cancel" formNoValidate>إغلاق</button></div>
       </header>
@@ -472,8 +474,8 @@ function Chapters({ catalog, reload, canWrite, open }) {
     const list = mods.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
     return (
       <section key={d} className="hb-dim">
-        <header><span className="tx-roman">{DIM_EN[d][0]}</span><div><small>{DIM_EN[d]}</small><b>{DIM[d]}</b></div>
-          <span className="hb-dim-n">{list.length} باب</span>
+        <header><span className="tx-roman">{DIM_ROMAN[d]}</span><div><small>{TERMS.framework}</small><b>{DIM[d]}</b></div>
+          <span className="hb-dim-n">{chaptersAr(list.length)}</span>
 </header>
         {list.length ? <ol className="hb-list">{list.map((m, i) => {
           const n = words(m.body_md);
@@ -512,8 +514,8 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
     const items = list.filter((m) => m.dimension === d).sort((a, b) => a.sort - b.sort);
     return (
       <section key={d} className="hb-dim">
-        <header><span className="tx-roman">{DIM_EN[d][0]}</span><div><small>{DIM_EN[d]}</small><b>{DIM[d]}</b></div>
-          <span className="hb-dim-n">{items.length} نموذج</span>
+        <header><span className="tx-roman">{DIM_ROMAN[d]}</span><div><small>{TERMS.framework}</small><b>{DIM[d]}</b></div>
+          <span className="hb-dim-n">{modelsAr(items.length)}</span>
           {canWrite && <button className="tx-btn gold" onClick={() => open({ kind: 'model', dim: d })}>+ نموذج جديد</button>}</header>
         {items.length ? <ol className="hb-list">{items.map((m) => {
           const x = ms[m.id] || {};
@@ -559,7 +561,7 @@ function Preview({ catalog, canWrite, open }) {
   const editModel = () => open({ kind: 'model', m: (catalog.learning_models || []).find((x) => x.id === model.id) });
   const page = (c) => (
     <React.Fragment key={c.id}>
-      <div className="pv-acts"><span className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]} · من {LVL[c.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
+      <div className="pv-acts"><span className="la-muted">{DIM[c.dimension]} · من {LVL[c.min_level]}</span>{canWrite && <button className="btn-sm ghost" onClick={() => editCh(c)}>تحرير الباب واختباره</button>}</div>
       <article className="hb-page"><h3 className="hb-page-t">{c.title}</h3><div className="la-md"><Md text={c.md} tierLabel={master ? tierLabel : undefined} /></div></article>
       <section className="pv-review">
         {labsOf(c).length > 0 && <p className="pv-labs"><b>المختبرات أسفل هذا الباب:</b> {labsOf(c).map((l) => l.title).join('، ')}</p>}
@@ -584,8 +586,8 @@ function Preview({ catalog, canWrite, open }) {
         </select></label>}
         {master
           ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ{TRACK_COUNT}: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
-          : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`}>{DIM_EN[d][0]} {LVL[r.levels[d]]}</span>)}</span>}
-        <span className="la-muted">{chs.length} بابًا · {r.models.length} نماذج · الإجابات الصحيحة ظاهرة لك فقط</span>
+          : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`} title={DIM[d]}>{DIM_ROMAN[d]} {LVL[r.levels[d]]}</span>)}</span>}
+        <span className="la-muted">{chaptersAr(chs.length)} · {modelsAr(r.models.length)} · الإجابات الصحيحة ظاهرة لك فقط</span>
         {master && <button className={`btn-sm ${cur.all ? '' : 'ghost'}`} onClick={() => setCur(cur.all ? {} : { all: true })}>{cur.all ? 'باب باب' : 'الكتاب متصلًا'}</button>}
       </div>
       <div className="pv">
@@ -593,7 +595,7 @@ function Preview({ catalog, canWrite, open }) {
           {DIMS.map((d) => {
             const items = chs.filter((c) => c.dimension === d);
             return items.length > 0 && (
-              <div key={d} className="pv-part"><div className="pv-part-h"><span>{ROM[d]}</span>{DIM_EN[d]} · {DIM[d]}</div>
+              <div key={d} className="pv-part"><div className="pv-part-h"><span>{DIM_ROMAN[d]}</span>{DIM[d]}</div>
                 {items.map((c, i) => <button key={c.id} className={ch && c.id === ch.id ? 'on' : ''} onClick={() => setCur({ ch: c.id })}><i>{pad(i + 1)}</i>{c.title}{!c.quiz.length && <small className="hb-warn"> بلا اختبار</small>}</button>)}</div>
             );
           })}
@@ -614,7 +616,7 @@ function Preview({ catalog, canWrite, open }) {
 const REVIEW_COLS = [
   { key: 'who', label: 'المشارك', width: 26, get: (x) => x.participants?.full_name }, { key: 'email', label: 'البريد', width: 30, get: (x) => x.participants?.email },
   { key: 'org', label: 'الجهة', width: 24, get: (x) => x.participants?.organization_name }, { key: 'model', label: 'النموذج', width: 30, get: (x) => x.learning_models?.title_ar },
-  { key: 'dim', label: 'البُعد', width: 14, get: (x) => DIM_EN[x.learning_models?.dimension] }, { key: 'at', label: 'سُلّم', width: 16, get: (x) => date(x.submitted_at) },
+  { key: 'dim', label: 'الإطار', width: 24, get: (x) => DIM[x.learning_models?.dimension] }, { key: 'at', label: 'سُلّم', width: 16, get: (x) => date(x.submitted_at) },
   { key: 'status', label: 'الحالة', width: 16, get: (x) => SUB_ST[x.status]?.[0] || x.status }, { key: 'rating', label: 'التقييم', width: 18, get: (x) => ratingLabel(x.rating) },
   { key: 'bonus', label: 'نقاط إضافية', width: 12, get: (x) => x.bonus || 0 }, { key: 'reviewed', label: 'قُيّم', width: 16, get: (x) => date(x.reviewed_at) },
 ];
@@ -647,7 +649,7 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
           <tbody>{rows.length ? rows.map((x) => (
             <tr key={x.id}>
               <td><b>{x.participants?.full_name || ''}</b><br /><small className="la-muted">{x.participants?.organization_name || x.participants?.email || ''}</small></td>
-              <td>{x.learning_models?.title_ar || ''}<br /><small className="la-muted">{DIM_EN[x.learning_models?.dimension] || ''}</small></td>
+              <td>{x.learning_models?.title_ar || ''}<br /><small className="la-muted">{DIM[x.learning_models?.dimension] || ''}</small></td>
               <td>{date(x.submitted_at)}</td>
               <td><span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0] || x.status}</span></td>
               <td className="stars-c">{ratingLabel(x.rating)}{x.bonus ? <small> +{x.bonus}</small> : null}</td>

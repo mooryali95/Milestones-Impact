@@ -12,6 +12,8 @@ export const DIMENSIONS = [
 ];
 export const DIM_AR = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.title]));
 export const DIM_SHORT = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.short]));
+// رقم الإطار في رؤوس الأقسام والفهارس: رمز واحد للإطار في كل الشاشات (كان رأس القسم يعرض M وI وL والفهرس أرقامًا رومانية)
+export const DIM_ROMAN = Object.freeze({ milestone: 'I', impact: 'II', leadership: 'III' });
 
 export const LEVELS = [
   { key: 'beginner', title: 'تأسيسي', en: 'Foundation', step: 1 },
@@ -46,13 +48,16 @@ export const STAGE_OVERRIDE_AR = { open: 'فُتحت له', complete: 'اعتُ�
 export const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', hybrid: 'مدمج', self: 'ذاتي عبر المنصة' };
 export const SESSION_MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };
 export const VERIFY_AR = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا', auto: 'آلي: يُحتسب لكل أعضاء الدفعة بانتهاء الجلسة' };
+// كيف سُجل حضور المشارك في جلسة جماعية (قيد workshop_attendance.method)
+export const ATTEND_METHOD_AR = Object.freeze({ qr: 'رمز QR', join: 'انضمام من التطبيق', manual: 'يدوي', hall: 'القاعة', remote: 'القاعة عن بعد' });
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 
 // حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
 export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'بانتظار تقييم المستشار', returned: 'أُعيد إليك للتطوير', reviewed: 'قيّمه المستشار' };
+// وهي نفسها حالة فصل وثيقة المبادرة في لوحة المراجعة
 export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'بانتظار تقييمك', returned: 'أُعيد للتطوير', reviewed: 'قُيّم' };
-// جلسات التوجيه
+// جلسات التوجيه: COACH_STATUS بصوت المشارك، وCOACH_STATUS_ADMIN للإدارة وملف الخبير معًا (لا تُكتب نسخة ثالثة في شاشة)
 export const COACH_STATUS = { booked: 'محجوزة', requested: 'اتصال فوري', attended: 'حضرت', no_show: 'لم تحضر', cancelled: 'أُلغيت' };
 export const COACH_STATUS_ADMIN = { ...COACH_STATUS, attended: 'حضر', no_show: 'لم يحضر' };
 // حالة قراءة الباب كما يقيسها الخادم من وقت القراءة وتمريرها

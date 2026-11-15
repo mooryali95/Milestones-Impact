@@ -8,8 +8,8 @@ import { date, L } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { applyFilters, decodeState, isFiltered, presetCounts, sortRows } from '../filters.js';
+import { countAr, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MATCH_WEIGHTS, OFFER_HOURS } from '../../../supabase/functions/leaders-api/logic.js';
 
 const PART_AR = { fit: 'التخصص والمستوى', capacity: 'السعة المتاحة', quality: 'التقييم', context: 'القطاع', continuity: 'خدمه من قبل' };
@@ -99,8 +99,45 @@ export function ExpertAssign({ participantId, canWrite }) {
   );
 }
 
+// «يحتاج تدخلًا»: ما لا يتحرك وحده. الطلب بلا خبير دائمًا، والمعروض الذي تقترب مهلته أو فاتت قبل أن يمر عليه
+// الخادم، والمقبول الذي طال بلا إغلاق، والمفتوح الذي لم يُعرض على أحد بعد يوم. الترتيب بالأولوية نفسها (تحليل لوحة الإدارة 2026-11-15)
+const HOUR = 36e5;
+export const ATTENTION = { offerHours: 6, openHours: 24, acceptedDays: 30 };
+const ageH = (iso, now) => (iso ? (now - Date.parse(iso)) / HOUR : 0);
+export function attentionRank(x, now = Date.now()) {
+  if (x.status === 'unmatched') return 0;
+  if (x.status === 'offered' && x.expires_at && Date.parse(x.expires_at) - now <= ATTENTION.offerHours * HOUR) return 1;
+  if (x.status === 'open' && ageH(x.created_at, now) >= ATTENTION.openHours) return 2;
+  if (x.status === 'accepted' && ageH(x.accepted_at || x.created_at, now) >= ATTENTION.acceptedDays * 24) return 3;
+  return null;
+}
+export const needsAttention = (x, now = Date.now()) => attentionRank(x, now) != null;
+// سبب ظهور الطلب في «يحتاج تدخلًا» بكلام المالك، فلا يبدو كصف سليم. الرتبة من attentionRank نفسها
+const hoursAr = (n) => countAr(n, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+const daysAr = (n) => countAr(n, 'يوم', 'يومين', 'أيام', 'يومًا');
+export function attentionReason(x, now = Date.now()) {
+  const r = attentionRank(x, now);
+  if (r === 0) return 'لم يُطابق خبير بعد';
+  if (r === 1) {
+    const left = (Date.parse(x.expires_at) - now) / HOUR;
+    return left <= 0 ? 'فاتت مهلة العرض' : left < 1 ? 'تنتهي مهلة العرض خلال أقل من ساعة' : `تنتهي مهلة العرض خلال ${hoursAr(Math.floor(left))}`;
+  }
+  if (r === 2) {
+    const h = ageH(x.created_at, now);
+    return `مفتوح منذ ${h < 48 ? hoursAr(Math.floor(h)) : daysAr(Math.floor(h / 24))} بلا عرض`;
+  }
+  if (r === 3) return `مقبول منذ ${daysAr(Math.floor(ageH(x.accepted_at || x.created_at, now) / 24))} بلا إغلاق`;
+  return '';
+}
+// الأولى بالتدخل أولًا، وفي الرتبة الواحدة الأقدم أولًا (والمعروض: الأقرب انتهاءً)
+export function byAttention(list, now = Date.now()) {
+  const key = (x) => (x.status === 'offered' ? x.expires_at : x.status === 'accepted' ? (x.accepted_at || x.created_at) : x.created_at) || '';
+  return [...list].sort((a, b) => (attentionRank(a, now) ?? 9) - (attentionRank(b, now) ?? 9) || String(key(a)).localeCompare(String(key(b))));
+}
+
 // في تبويب الخبراء: كل طلبات الإسناد بحالاتها، والإلغاء وإعادة المحاولة
-const REQ_PRESETS = [
+export const REQ_PRESETS = [
+  { key: 'attention', label: 'يحتاج تدخلًا', test: needsAttention },
   { key: 'live', label: 'قائمة', test: (x) => LIVE.includes(x.status) },
   { key: 'offered', label: 'بانتظار رد الخبير', test: (x) => x.status === 'offered' },
   { key: 'unmatched', label: 'بلا خبير', test: (x) => x.status === 'unmatched' },
@@ -114,17 +151,27 @@ const REQ_COLS = [
   { key: 'at', label: 'التاريخ', width: 16, get: (x) => date(x.created_at) },
 ];
 const REQ_SORTS = { who: (x) => x.participants?.full_name, role: (x) => roleAr(x.role), expert: (x) => x.experts?.full_name, status: (x) => EXPERT_REQUEST_STATUS[x.status] };
-export function RequestsBoard({ canWrite, onPerson }) {
+// عرض اللوحة الذي جاء به الرابط (?view=attention من «ينتظرني»)، وإلا لا شيء. عرض شبكة الخبراء لا يُؤخذ هنا
+export const requestView = (qs) => {
+  const v = decodeState(qs, ['view']).view;
+  return REQ_PRESETS.some((p) => p.key === v) ? v : '';
+};
+export function RequestsBoard({ canWrite, onPerson, view = '' }) {
   const { toast, prompt } = useUI();
   const [d, setD] = useState(null);
-  // داخل شاشة الخبراء ولها شريطها وعنوانها، فحالة هذا الشريط لا تُكتب في العنوان (url: false)
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'sort'], {}, { scope: 'expert-requests', defaults: { view: 'live' }, url: false });
+  // داخل شاشة الخبراء ولها شريطها وعنوانها، فحالة هذا الشريط لا تُكتب في العنوان (url: false).
+  // الافتراضي «يحتاج تدخلًا»، والعرض الوارد من رابط يغلب ما تُرك آخر مرة
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'sort'], view ? { view } : {}, { scope: 'expert-requests', defaults: { view: 'attention' }, url: false });
   const load = useCallback(async () => setD(await L('admin.expert-requests')), []);
   useEffect(() => { load(); }, [load]);
   if (!d) return <section className="la-card"><h3>طلبات الإسناد</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card"><h3>طلبات الإسناد</h3><div className="la-err">{d.message}</div></section>;
   const all = d.requests;
-  const rows = sortRows(applyFilters(all, { fields: REQ_FIELDS, presets: REQ_PRESETS, text: (x) => [x.participants?.full_name, x.participants?.email, x.experts?.full_name].join(' ') }, f), REQ_SORTS, f.sort);
+  const now = Date.now();
+  const hit = applyFilters(all, { fields: REQ_FIELDS, presets: REQ_PRESETS, text: (x) => [x.participants?.full_name, x.participants?.email, x.experts?.full_name].join(' ') }, f, now);
+  const rows = f.sort ? sortRows(hit, REQ_SORTS, f.sort) : f.view === 'attention' ? byAttention(hit, now) : hit;
+  // لا شيء يحتاج تدخلًا وليس غير العرض مفعّلًا: خبر طيب لا «لا نتائج»
+  const calm = f.view === 'attention' && !isFiltered({ ...f, view: '', sort: '' });
   const act = async (action, x, ok) => {
     const reason = action.endsWith('cancel') ? await prompt('سبب الإلغاء؟', '', { danger: true, ok: 'إلغاء الطلب' }) : '';
     if (action.endsWith('cancel') && !reason?.trim()) return;
@@ -135,10 +182,10 @@ export function RequestsBoard({ canWrite, onPerson }) {
   return (
     <section className="la-card xm-board">
       <h3>طلبات الإسناد</h3>
-      <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS)}
+      <FilterBar scope="expert-requests" state={f} set={setF} clear={clearF} replace={replaceF} fields={REQ_FIELDS} presets={REQ_PRESETS} counts={presetCounts(all, REQ_PRESETS, now)}
         shown={rows.length} total={all.length} noun="طلب" placeholder="ابحث بالمشارك أو الخبير" capped={d.capped ? { limit: d.limit } : null}
         actions={<ExportButton scope="expert-requests" meta={{ kind: 'REQ', title: 'طلبات إسناد الخبراء', sheet: 'الطلبات', file: 'Expert-Requests' }} columns={REQ_COLS} all={all} filtered={rows} noun="طلب" />} />
-      {!rows.length ? (all.length ? <NoMatch what="طلبات" /> : <Empty compact title="لا طلبات إسناد بعد" hint="أسند خبيرًا من ملف أي مشارك، ويظهر طلبه هنا بحالته." />) : (
+      {!rows.length ? (all.length ? (calm ? <Empty compact title="لا طلب يحتاج تدخلًا الآن" hint="كل طلب قائم معروض على خبير بمهلة ممتدة أو جارٍ في وقته. اختر «قائمة» لترى الطلبات الجارية." /> : <NoMatch what="طلبات" />) : <Empty compact title="لا طلبات إسناد بعد" hint="أسند خبيرًا من ملف أي مشارك، ويظهر طلبه هنا بحالته." />) : (
         <div className="table-wrap"><table className="data-table la-cards">
           <thead><tr><SortTh k="who" state={f} set={setF}>المشارك</SortTh><SortTh k="role" state={f} set={setF}>الخدمة</SortTh><SortTh k="expert" state={f} set={setF}>الخبير</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><th /></tr></thead>
           <tbody>{rows.map((x) => (
@@ -146,7 +193,7 @@ export function RequestsBoard({ canWrite, onPerson }) {
               <td data-label="المشارك"><button className="link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button></td>
               <td data-label="الخدمة">{roleAr(x.role)}{x.dimension ? <small className="la-muted"> · {DIM_AR[x.dimension]}</small> : null}</td>
               <td data-label="الخبير">{x.experts?.full_name || <span className="la-muted">·</span>}{x.score != null && <small className="la-muted"> · {x.score}</small>}{x.manual_reason && <small className="la-muted" title={x.manual_reason}> · يدوي</small>}</td>
-              <td data-label="الحالة"><span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span>{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}</td>
+              <td data-label="الحالة"><span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span>{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}{f.view === 'attention' && attentionReason(x, now) && <small className="xm-why">{attentionReason(x, now)}</small>}</td>
               <td className="ce-act">{canWrite && <>
                 {x.status === 'accepted' && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-complete', x, 'أُغلق الطلب')}>اكتملت الخدمة</button>}
                 {x.status === 'unmatched' && <button className="btn-sm primary" onClick={() => act('admin.expert-request-retry', x, 'أُعيدت المحاولة')}>أعد المحاولة</button>}

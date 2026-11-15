@@ -47,99 +47,104 @@ export default function BulkApprove({ ids, onClose, onPerson }) {
   };
   const open = (id) => { onClose(!!done); onPerson(id); };
   const held = done?.held || preview?.held || [];
+  // المستبقون وأسبابهم قبل قائمة من سيُعتمد: يرى المدير لماذا استُبقي أحد قبل أن ينفّذ
+  const heldBlock = preview?.success && held.length > 0 && (
+    <div className="ba-held">
+      <h4>{done ? 'استُبقي للمراجعة من ملفه' : 'يُستبقى للمراجعة من ملفه'}</h4>
+      <ul className="ba-list">
+        {held.map((h) => (
+          <li key={h.id} className="held">
+            <button type="button" className="la-link" onClick={() => open(h.id)}><b>{h.full_name}</b></button>
+            <span className="ba-holds">{h.holds.map((x, i) => <span key={i} className="la-chip warn">{x.text}</span>)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
+  // العنوان والتذييل ثابتان والمحتوى يتمرر بينهما: زر التنفيذ ظاهر دائمًا مهما طالت القوائم
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose(!!done)}>
       <div className="la-form mi-form bulk-approve" role="dialog" aria-modal="true" aria-label="اعتماد جماعي">
         <h3>اعتماد جماعي</h3>
-        {isSuper && !done && (
-          <div className="ba-modes" role="radiogroup" aria-label="طريقة الاعتماد">
-            <label><input type="radio" name="ba-mode" checked={mode === 'computed'} onChange={() => setMode('computed')} /> كما حُسب <small>المتسق وحده، ويُستبقى من عليه إشارة</small></label>
-            <label><input type="radio" name="ba-mode" checked={mode === 'set'} onChange={() => setMode('set')} /> بمستوى محدد <small>للمدير العام، بتعليل يُحفظ لكل من خالفه</small></label>
-          </div>
-        )}
-        {mode === 'computed' ? (
-          <p className="la-muted">يُعتمد من اتسق قياسه بمستواه المحسوب كما هو. ومن عليه إشارة يُستبقى لتراجعه من ملفه: الحالة الحدّية، وعلامات القياس، والاستعجال، وإعادة القياس المعلّقة.</p>
-        ) : !done && (
-          <>
-            <p className="la-muted">اختر مستوى لبُعد أو أكثر، والبُعد المتروك يبقى على المحسوب. قرار صريح منك فلا تُستبقى الإشارات، ومن خالف مستواه المحسوب يُحفظ التعليل في ملفه.</p>
-            <div className="ba-levels">
-              {DIMS.map((d) => (
-                <label key={d} className="wiz-field">{DIM_AR[d]}
-                  <select aria-label={`مستوى ${DIM_AR[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
-                    <option value="">كما حُسب</option>
-                    {Object.entries(LVL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                  </select>
+        <div className="ba-body">
+          {isSuper && !done && (
+            <div className="ba-modes" role="radiogroup" aria-label="طريقة الاعتماد">
+              <label><input type="radio" name="ba-mode" checked={mode === 'computed'} onChange={() => setMode('computed')} /><span><b>كما حُسب</b> <small>المتسق وحده، ويُستبقى من عليه إشارة</small></span></label>
+              <label><input type="radio" name="ba-mode" checked={mode === 'set'} onChange={() => setMode('set')} /><span><b>بمستوى محدد</b> <small>للمدير العام، بتعليل يُحفظ لكل من خالفه</small></span></label>
+            </div>
+          )}
+          {mode === 'computed' ? (
+            <p className="la-muted">يُعتمد من اتسق قياسه بمستواه المحسوب كما هو. ومن عليه إشارة يُستبقى لتراجعه من ملفه: الحالة الحدّية، وعلامات القياس، والاستعجال، وإعادة القياس المعلّقة.</p>
+          ) : !done && (
+            <>
+              <p className="la-muted">اختر مستوى لبُعد أو أكثر، والبُعد المتروك يبقى على المحسوب. قرار صريح منك فلا تُستبقى الإشارات، ومن خالف مستواه المحسوب يُحفظ التعليل في ملفه.</p>
+              <div className="ba-levels">
+                {DIMS.map((d) => (
+                  <label key={d} className="wiz-field">{DIM_AR[d]}
+                    <select aria-label={`مستوى ${DIM_AR[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
+                      <option value="">كما حُسب</option>
+                      {Object.entries(LVL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              {preview?.needs_reason && (
+                <label className="wiz-field">التعليل (إلزامي، {OVERRIDE_REASON_MIN} أحرف على الأقل)
+                  <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثال: قرار لجنة البرنامج بمستوى بداية موحّد لهذه الدفعة" />
                 </label>
-              ))}
-            </div>
-            {preview?.needs_reason && (
-              <label className="wiz-field">التعليل (إلزامي، {OVERRIDE_REASON_MIN} أحرف على الأقل)
-                <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="مثال: قرار لجنة البرنامج بمستوى بداية موحّد لهذه الدفعة" />
-              </label>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {mode === 'set' && !Object.keys(chosen).length && !done ? <p className="la-muted">اختر مستوى لبُعد واحد على الأقل لتظهر المعاينة.</p>
-          : !preview ? <Spinner /> : !preview.success ? <p className="la-err" role="alert">{preview.message}</p> : !done ? (
-          <>
+          {mode === 'set' && !Object.keys(chosen).length && !done ? <p className="la-muted">اختر مستوى لبُعد واحد على الأقل لتظهر المعاينة.</p>
+            : !preview ? <Spinner /> : !preview.success ? <p className="la-err" role="alert">{preview.message}</p> : !done ? (
+            <>
+              <div className="ba-sum">
+                <span className="la-chip ok">سيُعتمد {preview.ready.length}</span>
+                {mode === 'set' && <span className={`la-chip ${preview.ready.some((r) => r.changes?.length) ? 'warn' : ''}`}>يخالف المحسوب {preview.ready.filter((r) => r.changes?.length).length}</span>}
+                <span className={`la-chip ${preview.held.length ? 'warn' : ''}`}>يُستبقى {preview.held.length}</span>
+              </div>
+              {heldBlock}
+              {preview.ready.length > 0 && (
+                <details open={preview.ready.length <= 12}>
+                  <summary>من سيُعتمد ({preview.ready.length})</summary>
+                  <ul className="ba-list">{preview.ready.map((r) => (
+                    <li key={r.id} className={r.changes?.length ? 'held' : ''}><b>{r.full_name}</b>
+                      <small>{r.changes?.length ? `يخالف المحسوب: ${changesLine(r.changes)}` : levelsLine(r.levels)}</small></li>
+                  ))}</ul>
+                </details>
+              )}
+              {preview.ready.length > 0 && (
+                <p className="la-muted ba-mail">يصل كل واحد بريد الاعتماد بخطوته التالية{preview.mail?.queued ? `: ${preview.mail.now} الآن، و${preview.mail.queued} في الطابور يصل بعد ساعات لبلوغ الحد اليومي للرسائل.` : '.'}</p>
+              )}
+            </>
+          ) : (
             <div className="ba-sum">
-              <span className="la-chip ok">سيُعتمد {preview.ready.length}</span>
-              {mode === 'set' && <span className={`la-chip ${preview.ready.some((r) => r.changes?.length) ? 'warn' : ''}`}>يخالف المحسوب {preview.ready.filter((r) => r.changes?.length).length}</span>}
-              <span className={`la-chip ${preview.held.length ? 'warn' : ''}`}>يُستبقى {preview.held.length}</span>
+              <span className="la-chip ok">اعتُمد {done.success ? done.results.filter((x) => x.ok).length : 0}</span>
+              {done.success && done.results.some((x) => !x.ok) && <span className="la-chip bad">تعذّر {done.results.filter((x) => !x.ok).length}</span>}
+              <span className={`la-chip ${held.length ? 'warn' : ''}`}>استُبقي {held.length}</span>
+              {!done.success && <p className="la-err" role="alert">{done.message}</p>}
             </div>
-            {preview.ready.length > 0 && (
-              <details open={preview.ready.length <= 12}>
-                <summary>من سيُعتمد ({preview.ready.length})</summary>
-                <ul className="ba-list">{preview.ready.map((r) => (
-                  <li key={r.id} className={r.changes?.length ? 'held' : ''}><b>{r.full_name}</b>
-                    <small>{r.changes?.length ? `يخالف المحسوب: ${changesLine(r.changes)}` : levelsLine(r.levels)}</small></li>
-                ))}</ul>
-              </details>
-            )}
-            {preview.ready.length > 0 && (
-              <p className="la-muted ba-mail">يصل كل واحد بريد الاعتماد بخطوته التالية{preview.mail?.queued ? `: ${preview.mail.now} الآن، و${preview.mail.queued} في الطابور يصل بعد ساعات لبلوغ الحد اليومي للرسائل.` : '.'}</p>
-            )}
-          </>
-        ) : (
-          <div className="ba-sum">
-            <span className="la-chip ok">اعتُمد {done.success ? done.results.filter((x) => x.ok).length : 0}</span>
-            {done.success && done.results.some((x) => !x.ok) && <span className="la-chip bad">تعذّر {done.results.filter((x) => !x.ok).length}</span>}
-            <span className={`la-chip ${held.length ? 'warn' : ''}`}>استُبقي {held.length}</span>
-            {!done.success && <p className="la-err" role="alert">{done.message}</p>}
-          </div>
-        )}
-        {done?.success && done.sample?.length > 0 && (
-          <div className="ba-sample">
-            <h4>عيّنة للتحقق ({done.sample.length})</h4>
-            <p className="la-muted">اختيرت عشوائيًا مما اعتُمد آليًا (10%). راجع ملفاتها: إن وجدت فيها خطأ فالقاعدة نفسها تحتاج ضبطًا، لا هؤلاء وحدهم.</p>
-            <ul className="ba-list">{done.sample.map((x) => <li key={x.id}><button type="button" className="la-link" onClick={() => open(x.id)}><b>{x.full_name}</b></button></li>)}</ul>
-          </div>
-        )}
-        {done?.success && done.results.some((x) => !x.ok) && (
-          <ul className="ba-list">{done.results.filter((x) => !x.ok).map((x) => <li key={x.id} className="bad"><button type="button" className="la-link" onClick={() => open(x.id)}><b>{x.full_name}</b></button><small>{x.error}</small></li>)}</ul>
-        )}
+          )}
+          {done?.success && done.sample?.length > 0 && (
+            <div className="ba-sample">
+              <h4>عيّنة للتحقق ({done.sample.length})</h4>
+              <p className="la-muted">اختيرت عشوائيًا مما اعتُمد آليًا (10%). راجع ملفاتها: إن وجدت فيها خطأ فالقاعدة نفسها تحتاج ضبطًا، لا هؤلاء وحدهم.</p>
+              <ul className="ba-list">{done.sample.map((x) => <li key={x.id}><button type="button" className="la-link" onClick={() => open(x.id)}><b>{x.full_name}</b></button></li>)}</ul>
+            </div>
+          )}
+          {done?.success && done.results.some((x) => !x.ok) && (
+            <ul className="ba-list">{done.results.filter((x) => !x.ok).map((x) => <li key={x.id} className="bad"><button type="button" className="la-link" onClick={() => open(x.id)}><b>{x.full_name}</b></button><small>{x.error}</small></li>)}</ul>
+          )}
+          {done && heldBlock}
 
-        {preview?.success && held.length > 0 && (
-          <>
-            <h4>يُستبقى للمراجعة من ملفه</h4>
-            <ul className="ba-list">
-              {held.map((h) => (
-                <li key={h.id} className="held">
-                  <button type="button" className="la-link" onClick={() => open(h.id)}><b>{h.full_name}</b></button>
-                  <span className="ba-holds">{h.holds.map((x, i) => <span key={i} className="la-chip warn">{x.text}</span>)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+          <p className="la-muted ba-hint">
+            تريد أن يدرس الجميع محتوى مستوى واحد؟ هذا من إعداد الدفعة لا من الاعتماد: «تحرير الدفعة» ← «مستويات المشاركين: متجانس». يتوحد المحتوى، ويبقى قياس كل واحد ومساره ليُقاس الأثر.
+          </p>
+        </div>
 
-        <p className="la-muted ba-hint">
-          تريد أن يدرس الجميع محتوى مستوى واحد؟ هذا من إعداد الدفعة لا من الاعتماد: «تحرير الدفعة» ← «مستويات المشاركين: متجانس». يتوحد المحتوى، ويبقى قياس كل واحد ومساره ليُقاس الأثر.
-        </p>
-
-        <div className="la-row between">
+        <div className="la-row between ba-foot">
           <button className="btn-sm ghost" onClick={() => onClose(!!done)} disabled={busy}>{done ? 'إغلاق' : 'إلغاء'}</button>
           {!done && preview?.success && (
             <button className="btn-sm primary" onClick={run} disabled={busy || !preview.ready.length || reasonShort} title={reasonShort ? 'اكتب التعليل أولًا' : undefined}>

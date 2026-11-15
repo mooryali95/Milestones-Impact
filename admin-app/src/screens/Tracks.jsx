@@ -40,7 +40,7 @@ function Board({ tracks, onOpen }) {
       <button key={key} className={`tx-cell${x.total ? ' on' : ''}`} style={{ '--heat': heat }} onClick={() => onOpen(key)} title={t.title_ar || key}>
         <span className="tx-key">{key}</span>
         <span className="tx-title">{shortTitle(t.title_ar)}</span>
-        <span className="tx-n"><b>{x.total || 0}</b>{x.pending ? <small>{x.pending} بانتظارك</small> : x.total ? <small>{x.active || 0} مفعّل</small> : null}</span>
+        <span className="tx-n"><b>{x.total || 0}</b>{x.pending ? <small>{x.pending} بانتظارك</small> : x.total ? <small>{x.active || 0} معتمد</small> : null}</span>
       </button>
     );
   };
@@ -55,7 +55,7 @@ function Board({ tracks, onOpen }) {
         <div className="tx-kpis">
           <div><b>{used}<small>/{TRACK_COUNT}</small></b><span>مسار به مشاركون</span></div>
           <div><b>{sum('total')}</b><span>مشارك مسكّن</span></div>
-          <div><b>{sum('active')}</b><span>مفعّل</span></div>
+          <div><b>{sum('active')}</b><span>معتمد</span></div>
           <div className={sum('pending') ? 'warn' : ''}><b>{sum('pending')}</b><span>بانتظار اعتمادك</span></div>
         </div>
       </section>
@@ -113,7 +113,8 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
       <section className="la-track-hero">
         <div className="la-row between">
           <div className="la-row"><code className="la-code">{t.key}</code><LvlChips k={t.key} /></div>
-          {canWrite && t.title_ar && <button className="btn-sm ghost" onClick={() => setEditing(true)}>تحرير هوية المسار</button>}
+          {/* المسار بلا هوية يُمنح هويته من هنا أيضًا، فلا يبقى طريقًا مسدودًا */}
+          {canWrite && <button className={`btn-sm ${t.title_ar ? 'ghost' : 'primary'}`} onClick={() => setEditing(true)}>{t.title_ar ? 'تحرير هوية المسار' : 'أنشئ هوية المسار'}</button>}
         </div>
         <h2>{t.title_ar || 'مسار بلا هوية بعد'}</h2>
         {t.summary_ar && <p>{t.summary_ar}</p>}
@@ -133,7 +134,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
       </section>
 
       <section className="la-card">
-        <div className="la-row between"><h3>المشاركون في هذا المسار</h3><span className="la-muted">{ps.length} مشارك · {ps.filter((p) => p.approved).length} مفعّل</span></div>
+        <div className="la-row between"><h3>المشاركون في هذا المسار</h3><span className="la-muted">{ps.length} مشارك · {ps.filter((p) => p.approved).length} معتمد</span></div>
         {ps.length ? (
           <table className="la-table">
             <thead><tr><th>الاسم</th><th>الجهة</th><th>الحالة</th><th>المسار</th></tr></thead>
@@ -141,7 +142,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
               <tr key={p.id} className="la-click" onClick={() => onPerson(p.id)}>
                 <td><button className="la-link" onClick={(e) => { e.stopPropagation(); onPerson(p.id); }}><b>{p.full_name}</b></button><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                 <td>{p.organization_name || ''}</td><td>{STATUS[p.status] || p.status}</td>
-                <td>{p.approved ? <span className="la-chip ok">مفعّل</span> : <span className="la-chip warn">مبدئي</span>}</td>
+                <td>{p.approved ? <span className="la-chip ok">معتمد</span> : <span className="la-chip warn">مبدئي</span>}</td>
               </tr>
             ))}</tbody>
           </table>

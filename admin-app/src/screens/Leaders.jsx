@@ -115,7 +115,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
   else if (tab === 'book') body = <MasterBookScreen onClose={() => at('handbook')} onExperts={() => at('experts')} />;
-  else if (tab === 'katon') body = <KatonBank canWrite={canWrite} />;
+  else if (tab === 'katon') body = <KatonBank canWrite={canWrite} programId={programId} />;   // البرنامج المختار في «الرحلة والمتطلبات»، فجدول نقاطه هو المعروض والمحرَّر
   else if (tab === 'hall') body = <HallScreen canWrite={canWrite} />;
   else if (tab === 'capstones') body = <Capstones canWrite={canWrite} capId={capId} onOpen={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;
   else if (tab === 'lab') body = <Lab canWrite={canWrite} />;
