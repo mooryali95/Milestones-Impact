@@ -127,6 +127,7 @@ export const MIGRATIONS = [
   '20261115120000_leaders_rater_token_hashes',
   '20261115130000_leaders_slack_threads',
   '20261115140000_leaders_ops_status',
+  '20261115150000_leaders_handbook_v3_1',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -172,4 +173,5 @@ export const MIGRATION_GATES = {
   '20261115120000_leaders_rater_token_hashes': ["tolerant", "الدالة تطابق token_hash أولًا ثم token_hashes وتتحمل غياب العمود (impact.ts raterFrom وtokenPatch)، فتعمل قبله وبعده"],
   '20261115130000_leaders_slack_threads': ["tolerant", "الدالة تتحمل غياب الجدول (_shared/slack.ts: findOrCreate ينشر بلا سلاسل، وslackHello لا يرسل)، فقبله يعمل سلاك بلا تجميع"],
   '20261115140000_leaders_ops_status': ["tolerant", "الدالة تتحمل غياب الجدول (_shared/slack.ts: recordSlack يكتب بلا انتظار ويتوقف عشر دقائق، وopsHealth يعرض حالة سلاك «غير مقروءة»)، فقبله تعمل البطاقة بلا آخر نشر"],
+  '20261115150000_leaders_handbook_v3_1': ["tolerant", "نص الأبواب يُقرأ من الجدول كما هو، فالدوال تعمل قبله وبعده (يبقى النص السابق حتى يُطبَّق)"],
 };
