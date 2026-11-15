@@ -75,3 +75,17 @@ describe('أداة القياس', () => {
     expect(DIM_AR.milestone).toBe('إدارة المشروعات');
   });
 });
+
+describe('حالة الجلسة وحالة الفصل من labels.js لا من الشاشات', () => {
+  it('ملف الخبير يأخذ COACH_STATUS_ADMIN ولا يكتب نسخة محلية', () => {
+    const s = read('admin-app/src/screens/Experts.jsx');
+    expect(s).toMatch(/COACH_STATUS_ADMIN as COACH_AR/);
+    expect(s).not.toMatch(/const COACH_AR\s*=/);
+    expect(COACH_STATUS_ADMIN.attended).toBe('حضر');
+  });
+  it('فصول وثيقة المبادرة تأخذ SUBMISSION_STATUS_ADMIN', () => {
+    const s = read('admin-app/src/screens/Capstones.jsx');
+    expect(s).toMatch(/SUBMISSION_STATUS_ADMIN\[s\.status\]/);
+    expect(s).not.toMatch(/'قيّمته'/);
+  });
+});

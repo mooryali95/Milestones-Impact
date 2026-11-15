@@ -11,7 +11,7 @@ import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { RequestsBoard, requestView } from './ExpertMatch.jsx';
 import { readQuery } from '../route.js';
-import { DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { COHORT_STATUS } from '../methodology.js';
@@ -110,7 +110,6 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
   );
 }
 
-const COACH_AR = { booked: 'محجوزة', requested: 'اتصال فوري', attended: 'منعقدة', no_show: 'لم يحضر المشارك', cancelled: 'أُلغيت' };
 const money = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} ريال`;
 
 // سجل الخدمات: من الجلسات المرتبطة بالخبير، ومراجعاته من حسابه في لوحة الإدارة بالبريد نفسه
