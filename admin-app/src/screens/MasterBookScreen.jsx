@@ -15,7 +15,7 @@ export default function MasterBookScreen({ onClose, onExperts }) {
     status: (id, status) => L('admin.book-comment-status', { id, status }),
     reader: (expert_id, committee, on) => L('admin.book-reader', { expert_id, committee, on }),
     propose: (b) => L('admin.book-proposal-save', b),
-    move: (id, to, note) => L('admin.book-proposal-status', { id, to, note }),
+    move: (id, to, note, seen) => L('admin.book-proposal-status', { id, to, note, seen }),
   }), []);
   return <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />;
 }

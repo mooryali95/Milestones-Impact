@@ -9,7 +9,11 @@ import { headingsOf } from './master-book.js';
 export const PROPOSAL_STATUS = ['draft', 'review', 'approved', 'rejected', 'withdrawn', 'released'];
 export const PROPOSAL_AR = { draft: 'مسودة', review: 'قيد المراجعة', approved: 'معتمد', rejected: 'مردود', withdrawn: 'مسحوب', released: 'في إصدار' };
 export const REASON_MIN = 10;
+export const REASON_MAX = 2000;
 export const PROPOSED_MAX = 20000;
+// عنوان القسم بالقاعدة نفسها في headingsOf (نص بعد ##)، فلا يختلف عدد الأقسام عن عدد مفاتيحها
+const H2 = /^##\s+\S/;
+const HEADING_LINE = /^(#{2,3})\s+(.+?)\s*$/;
 const OPEN = /^:::\s*((?:min|only|scope)=\S+(?:\s+(?:min|only|scope)=\S+)*)\s*$/;
 
 /** أقسام الباب نصًا خامًا بمفاتيحها (headingsOf)، فتُستبدل كما هي بوسوم مستواها.
@@ -20,7 +24,7 @@ export function rawSections(md) {
   const out = [{ key: '', lines: [] }];
   let k = 0;
   for (const line of lines) {
-    if (/^##\s+/.test(line)) {
+    if (H2.test(line)) {
       const prev = out[out.length - 1];
       const carry = [];
       while (prev.lines.length && OPEN.test(prev.lines[prev.lines.length - 1])) carry.unshift(prev.lines.pop());
@@ -67,12 +71,34 @@ export function checkProposal(b, mod) {
   if (proposed.length > PROPOSED_MAX) return { error: 'النص المقترح أطول من المسموح' };
   if (proposed === base.trim()) return { error: 'لم يتغير شيء عن النص الحالي' };
   if (reason.length < REASON_MIN) return { error: `اكتب سبب التعديل (${REASON_MIN} أحرف على الأقل): ما الذي يتحسن ولمن` };
+  if (reason.length > REASON_MAX) return { error: `سبب التعديل أطول من ${REASON_MAX} حرف` };
+  // نص الكتاب يدخل ترحيلًا بين وسوم $…$: لا يُقبل وسم مثلها داخله
+  if (/\$[A-Za-z0-9_]*\$/.test(proposed)) return { error: 'النص يحوي وسمًا بين علامتي $ ($…$)، وهو محجوز لترحيل الكتاب. احذفه أو افصل العلامتين' };
+  // عنوان بلا نص يُسقط القسم من فهرس الأقسام ويزيح مفاتيح ما بعده
+  const empty = proposed.split('\n').find((l) => /^#{2,3}(\s|$)/.test(l) && !l.replace(/^#{2,3}/, '').replace(/[*_\s]/g, ''));
+  if (empty !== undefined) return { error: 'في النص عنوان بلا نص (## أو ### وحدها). اكتب العنوان أو احذف السطر' };
   // قسم بعنوان لا يُحذف عنوانه بالمقترح: الحذف إلغاء قسم يمر بسجل الهويات في الإصدار
   if (section && !/^\s*(?::::[^\n]*\n)*##\s+/.test(proposed)) return { error: 'أبقِ عنوان القسم (## ...) في أول النص. حذف القسم كله قرار إصدار لا مقترح نص' };
   const next = replaceSection(mod.body_md, section, proposed);
   const errs = lintHandbookMd(next, mod.min_level || 'beginner').filter((x) => x.level === 'error');
   if (errs.length) return { error: `النص المقترح يكسر بنية الباب: ${errs.map((x) => x.msg).join('؛ ')}` };
+  // العناوين المكررة تُرقَّم في الباب كله ((2)، (3)…)، وهويات الأقسام تتبع المفاتيح: لا يغيّر مقترح مفاتيح أقسام غيره
+  const moved = outsideKeysChange(mod.body_md, section, proposed, next);
+  if (moved) return { error: `المقترح يغيّر ترقيم عنوان مكرر في قسم آخر من الباب («${moved}»). اجعل العنوان الجديد مميزًا عن عناوين الباب` };
   return { value: { module_id: mod.id, section, base_md: base, proposed_md: proposed, reason } };
+}
+
+// مفاتيح العناوين خارج القسم المستهدف قبل المقترح وبعده: أول مفتاح تغيّر، أو null
+function outsideKeysChange(before, section, proposed, after) {
+  const secs = rawSections(before);
+  const i = secs.findIndex((s) => s.key === section);
+  const count = (md) => String(md).split('\n').filter((l) => HEADING_LINE.test(l)).length;
+  const pre = secs.slice(0, i).reduce((n, s) => n + count(s.md), 0);
+  const kb = headingsOf(before).map((h) => h.key), ka = headingsOf(after).map((h) => h.key);
+  const ob = [...kb.slice(0, pre), ...kb.slice(pre + count(secs[i].md))];
+  const oa = [...ka.slice(0, pre), ...ka.slice(pre + count(proposed))];
+  for (let k = 0; k < Math.max(ob.length, oa.length); k++) if (ob[k] !== oa[k]) return ob[k] || oa[k];
+  return null;
 }
 
 // من يفعل ماذا: الكاتب يعدّل مسودته ويعرضها ويسحبها، والمدير العام يعتمد أو يرد ما قيد المراجعة
@@ -80,7 +106,10 @@ export function checkProposal(b, mod) {
 export function canMove(v, p, to) {
   if (!v?.write || v.kind !== 'admin') return false;
   const mine = p.author_ref === v.ref;
-  if (to === 'review' || to === 'withdrawn' || to === 'draft') return mine && ['draft', 'review'].includes(p.status) && p.status !== to;
+  if (to === 'review') return mine && p.status === 'draft';
+  // المعتمد الذي تخطاه الإصدار (تغيّر قسمه بعده): يعيده كاتبه مسودةً ليحدّثه، أو يسحبه هو أو المدير العام
+  if (to === 'draft') return mine && ['review', 'approved'].includes(p.status);
+  if (to === 'withdrawn') return (mine && ['draft', 'review', 'approved'].includes(p.status)) || (!!v.superAdmin && p.status === 'approved');
   if (to === 'approved' || to === 'rejected') return !!v.superAdmin && p.status === 'review';
   return false;
 }

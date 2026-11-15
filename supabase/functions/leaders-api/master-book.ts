@@ -14,7 +14,8 @@ type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: strin
 
 export const expertViewer = (e: any): Viewer => {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
-  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: true };
+  // الموقوف مؤقتًا يقرأ ولا يعلّق: التعليق لعضو فاعل في اللجنة
+  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active' };
 };
 // يكتب المدير بصلاحية الكتابة وعامل ثانٍ (كما في writer)، ويقرأ الباقون
 export const adminViewer = (a: { email: string; role: string; method?: string }): Viewer => ({

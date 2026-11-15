@@ -29,6 +29,11 @@ export async function proposalsFor(v: Viewer, mods: any[]) {
 }
 
 const actor = (v: Viewer) => v.ref;
+// خطأ القاعدة كما هو: الجدول غير موجود قبل ترحيله، أو قيد تجاوزه النص، أو غير ذلك
+const dbFail = (e: any) => (/does not exist|relation/.test(String(e?.message || ''))
+  ? new Fail('المقترحات تُفعَّل بعد تطبيق ترحيلها، والكتاب يُقرأ الآن', 503, 'db_error')
+  : /check constraint|violates/.test(String(e?.message || '')) ? new Fail('النص أو السبب أطول من المسموح', 400, 'invalid')
+    : new Fail('تعذّر حفظ المقترح، حاول بعد قليل', 503, 'db_error'));
 async function moduleOf(id: string) {
   const { data } = await db.from('handbook_modules').select(MOD_COLS).eq('id', id).maybeSingle();
   return data as any;
@@ -56,11 +61,13 @@ export async function saveProposal(v: Viewer, b: any) {
     module_id: val.module_id, section: val.section, section_id: val.section && val.section !== REFLECTION ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null,
     base_md: val.base_md, proposed_md: val.proposed_md, reason: val.reason, status, updated_at: new Date().toISOString(),
   };
+  // التعديل بحارس الحالة نفسها: إن اعتُمد المقترح أو رُد بين القراءة والكتابة لا يُكتب فوق القرار
   const q = prev
-    ? db.from('book_proposals').update(row).eq('id', prev.id).select('id').single()
+    ? db.from('book_proposals').update(row).eq('id', prev.id).eq('status', prev.status).select('id').maybeSingle()
     : db.from('book_proposals').insert({ ...row, author_ref: actor(v), author_name: v.name }).select('id').single();
   const { data, error } = await q;
-  if (error) throw new Fail('المقترحات تُفعَّل بعد تطبيق ترحيلها، والكتاب يُقرأ الآن', 503, 'db_error');
+  if (error) throw dbFail(error);
+  if (!data) throw new Fail('تغيّرت حالة المقترح أثناء الحفظ (اعتُمد أو رُد). أعد تحميل الكتاب', 409, 'changed');
   await audit('admin', v.ref, prev ? 'book.proposal-edit' : 'book.proposal', 'book_proposals', (data as any).id, prev ? { status: prev.status } : null, { module_id: val.module_id, section: val.section, status });
   return { success: true, id: (data as any).id, status };
 }
@@ -76,16 +83,21 @@ export async function moveProposal(v: Viewer, b: any) {
     throw new Fail(to === 'approved' || to === 'rejected' ? 'اعتماد المقترح أو رده للمدير العام، وما كان قيد المراجعة' : 'لا يمكن نقل المقترح إلى هذه الحالة', 403, 'forbidden');
   }
   if (to === 'rejected' && note.length < 5) throw new Fail('اكتب سبب الرد ليعرف الكاتب ما يصلحه', 400, 'invalid');
+  // يُعتمد النص الذي رآه المعتمد: إن عدّله كاتبه بعد فتحه يُرفض القرار ويُعاد عرضه
+  if (to === 'approved' && String(b?.seen || '') !== String(p.updated_at || '')) throw new Fail('عدّل الكاتب المقترح بعد أن فتحته. راجع النص الجديد ثم اعتمده', 409, 'changed');
   if (to === 'approved') {
     const mod = await moduleOf(p.module_id);
     const s = p.section_id ? sectionById(p.section_id) : null;
     if (isStale({ ...p, section: s && !s.retired ? s.key : p.section }, mod)) throw new Fail('القسم تغيّر بعد كتابة المقترح. يحدّثه كاتبه على النص الحالي ثم يُعتمد', 409, 'stale');
   }
   const decided = to === 'approved' || to === 'rejected';
-  must(await db.from('book_proposals').update({
+  const done = must(await db.from('book_proposals').update({
     status: to, updated_at: new Date().toISOString(),
     ...(decided ? { decided_by: v.ref, decided_at: new Date().toISOString(), decision_note: note } : {}),
-  }).eq('id', id).eq('status', p.status));
+    // الإعادة إلى مسودة من الاعتماد تمحو القرار، فيُراجع من جديد
+    ...(to === 'draft' ? { decided_by: null, decided_at: null, decision_note: '' } : {}),
+  }).eq('id', id).eq('status', p.status).eq('updated_at', p.updated_at).select('id')) as any[];
+  if (!done?.length) throw new Fail('تغيّر المقترح للتو (قرار أو تعديل آخر). أعد تحميل الكتاب', 409, 'changed');
   await audit('admin', v.ref, `book.proposal-${to}`, 'book_proposals', id, { status: p.status }, { status: to, note: note || undefined });
   return { success: true, status: to };
 }
@@ -96,6 +108,10 @@ export async function proposeFromEdit(v: Viewer, b: any) {
   if (!v.write || v.kind !== 'admin') throw new Fail('اقتراح التعديل للمدير الكاتب', 403, 'forbidden');
   const mod = await moduleOf(String(b?.module_id || ''));
   if (!mod) throw new Fail('الباب غير موجود', 404, 'not_found');
+  // التعديل على النص الذي فتحه المحرر: إن تغيّر الباب بعده (إصدار أو مقترح دخل) لا يُحسب الفرق على نص لم يره
+  if ('base_body_md' in (b || {}) && (String(b.base_body_md ?? '') !== String(mod.body_md ?? '') || String(b.base_reflection_ar ?? '').trim() !== String(mod.reflection_ar ?? '').trim())) {
+    throw new Fail('تغيّر الباب منذ فتحت المحرر (صدر إصدار جديد). أغلق المحرر وافتحه ليُبنى تعديلك على النص الحالي', 409, 'stale');
+  }
   const split = 'body_md' in (b || {}) ? splitEdit(mod.body_md, b.body_md) : { changes: [] as any[] };
   if ((split as any).error) throw new Fail((split as any).error, 400, 'invalid');
   const changes = [...(split as any).changes];
@@ -106,23 +122,26 @@ export async function proposeFromEdit(v: Viewer, b: any) {
     if (r.error) throw new Fail(`${targetLabel(c.section)}: ${r.error}`, 400, 'invalid');
     return r.value!;
   });
-  const { data: open, error: oe } = await db.from('book_proposals').select('id, section, status').eq('module_id', mod.id).eq('author_ref', v.ref).in('status', ['draft', 'review']);
-  if (oe) throw new Fail('المقترحات تُفعَّل بعد تطبيق ترحيلها', 503, 'db_error');
-  const status = b?.submit === false ? 'draft' : 'review';
+  const { data: open, error: oe } = await db.from('book_proposals').select('id, section, section_id, status').eq('module_id', mod.id).eq('author_ref', v.ref).in('status', ['draft', 'review']);
+  if (oe) throw dbFail(oe);
   const now = new Date().toISOString();
   const ids: string[] = [];
   for (const val of vals) {
     const row = {
       module_id: mod.id, section: val.section, section_id: val.section !== REFLECTION && val.section ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null,
-      base_md: val.base_md, proposed_md: val.proposed_md, reason: val.reason, status, updated_at: now,
+      base_md: val.base_md, proposed_md: val.proposed_md, reason: val.reason, updated_at: now,
     };
-    const prev = (open || []).find((p: any) => p.section === val.section);
+    // المقترح المفتوح على القسم نفسه بهويته (يبقى صحيحًا إن تغيّر العنوان بإصدار)، وإلا بعنوانه
+    const prev = (open || []).find((p: any) => (row.section_id && p.section_id ? p.section_id === row.section_id : p.section === val.section));
+    // «احفظه مسودة» لا يسحب مقترحًا معروضًا على اللجنة: يبقى قيد المراجعة بنصه الجديد
+    const status = b?.submit === false && prev?.status !== 'review' ? 'draft' : 'review';
     const { data, error } = prev
-      ? await db.from('book_proposals').update(row).eq('id', prev.id).select('id').single()
-      : await db.from('book_proposals').insert({ ...row, author_ref: v.ref, author_name: v.name }).select('id').single();
-    if (error) throw new Fail('تعذّر حفظ المقترح، حاول بعد قليل', 503, 'db_error');
+      ? await db.from('book_proposals').update({ ...row, status }).eq('id', prev.id).eq('status', prev.status).select('id').maybeSingle()
+      : await db.from('book_proposals').insert({ ...row, status, author_ref: v.ref, author_name: v.name }).select('id').single();
+    if (error) throw dbFail(error);
+    if (!data) throw new Fail(`${targetLabel(val.section)}: تغيّرت حالة مقترحك عليه أثناء الحفظ (اعتُمد أو رُد). أعد فتح المحرر`, 409, 'changed');
     ids.push((data as any).id);
     await audit('admin', v.ref, prev ? 'book.proposal-edit' : 'book.proposal', 'book_proposals', (data as any).id, null, { module_id: mod.id, section: val.section, status, from: 'studio' });
   }
-  return { success: true, count: ids.length, ids, status, sections: vals.map((x) => targetLabel(x.section)) };
+  return { success: true, count: ids.length, ids, sections: vals.map((x) => targetLabel(x.section)) };
 }

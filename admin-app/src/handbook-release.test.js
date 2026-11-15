@@ -40,6 +40,12 @@ describe('إصدار الكتاب من المقترحات المعتمدة', () 
     expect(r.applied[0].new_section).toBe('ثالثًا وأخيرًا');
     expect(REG.sections[3].key).toBe('ثالثًا');
   });
+  it('قسم جديد قبل القسم يبقي هويته عليه، ولا يأخذها الجديد', () => {
+    const r = applyProposals(CH, [P(1, 'أولًا', '## تمهيد جديد\nنص\n\n## أولًا\nنص عام')], REG);
+    expect(r.registry.sections.find((x) => x.id === 'M-CH1-01')).toMatchObject({ key: 'أولًا', aliases: [] });
+    expect(r.applied[0].new_section).toBe('أولًا');
+    expect(r.chapters[0].body_md.startsWith('## تمهيد جديد\nنص\n\n## أولًا\nنص عام')).toBe(true);
+  });
   it('العنوان الفرعي المزال يُلغى ولا يُحذف من السجل', () => {
     const r = applyProposals(CH, [P(1, 'ثانيًا', ':::min=intermediate\n## ثانيًا\nللمتوسط فأعلى بلا تفصيل\n:::')], REG);
     expect(r.registry.sections.find((x) => x.id === 'M-CH1-03').retired).toBe(true);
