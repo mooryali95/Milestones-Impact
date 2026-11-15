@@ -63,7 +63,7 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
         : { ok: true, detail: `«${p.name}» · ${p.requirements} متطلب · ${pinned ? `مثبتة على النسخة ${pinned.number}${newer ? `، وتوجد نسخة أحدث (${newer.number}) يمكن الترقية إليها` : ''}` : 'تتبع آخر تعديل على البرنامج'}`, action: newer ? 'upgrade' : null };
 
   const base = cohortSetup({
-    cohort: c, advisorName: c.advisor_name || null, teamCount: (c.team_expert_ids || []).length,
+    cohort: c, advisorName: c.advisor_name || null, advisorServes: c.advisor_serves !== false, teamCount: (c.team_expert_ids || []).length,
     members: c.members || 0, upcomingSessions: c.upcoming_sessions ?? 0,
   }).filter((x) => x.key !== 'sessions' || c.upcoming_sessions != null);
   const byKey = Object.fromEntries(base.map((x) => [x.key, x]));

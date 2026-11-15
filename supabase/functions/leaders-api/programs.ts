@@ -143,13 +143,14 @@ export async function orgCohortSetups(orgIds: string[]) {
   }
   const advIds = [...new Set(Object.values(own).map((c: any) => c?.advisor_expert_id).filter(Boolean))] as string[];
   // journey-guard: اسم المستشار المعيَّن للعرض في قائمة الدفعات، والتعيين نفسه يحرسه journeyApproved عند الحفظ
-  const advs = advIds.length ? must(await db.from('experts').select('id, full_name').in('id', advIds)) as any[] : [];
+  const advs = advIds.length ? must(await db.from('experts').select('id, full_name, status, roles').in('id', advIds)) as any[] : [];
   const advName = new Map(advs.map((x: any) => [x.id, x.full_name]));
+  const serving = new Set(advs.filter(journeyApproved).map((x: any) => x.id));
   for (const id of orgIds) {
     const c = own[id];
     if (!c) { out[id] = null; continue; }
     const setup = cohortSetup({
-      cohort: c, advisorName: advName.get(c.advisor_expert_id) || null,
+      cohort: c, advisorName: advName.get(c.advisor_expert_id) || null, advisorServes: serving.has(c.advisor_expert_id),
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
       members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
     });
@@ -187,9 +188,11 @@ export async function list() {
     // الجلسات الفعّالة الحديثة والقادمة، وبلا دفعة كذلك (تعمّ الدفعات)، ثم sessionsFor لكل دفعة: القاعدة الواحدة
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
     // journey-guard: اسم المستشار المعيَّن للعرض، والتعيين نفسه يحرسه journeyApproved عند الحفظ
-    advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
+    advIds.length ? db.from('experts').select('id, full_name, status, roles').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
   const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
+  // جاهزية «المستشار الأساسي» في ملف الدفعة (cohort-hub.js): يُحتسب من يخدم في الرحلة وحده
+  const advisorServing = new Set((advs.data || []).filter(journeyApproved).map((x: any) => x.id));
   const seated = await seatsUsedByOrg().catch(() => null);
   return {
     success: true,
@@ -203,6 +206,7 @@ export async function list() {
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
       pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
+      advisor_serves: c.advisor_expert_id ? advisorServing.has(c.advisor_expert_id) : null,
     })),
     // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
     // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ

@@ -57,6 +57,7 @@ export async function advisorCohorts(expertId: string) {
 }
 
 // مشاركو الدفعات التي هو مستشارها
+// journey-guard: المصدر نفسه بمعرّف الخبير، وكل مستدعٍ له يمر بـjourneyApproved أو requireJourney (اختبار الحارس)
 export async function myParticipantIds(expertId: string) {
   const { data: cohorts } = await db.from('cohorts').select('id, organization_id, is_default').eq('advisor_expert_id', expertId);
   // ليس مستشار دفعة: قد يكون خبير مجموعة في دفعة غيره
@@ -97,6 +98,8 @@ async function groupScoped(expertId: string, cohortIds: string[], myCohorts: str
 }
 
 export async function reviews(e: any) {
+  // خدمة الرحلة وحدها: الإسناد القديم في cohorts لا يفتح تسليمات المشاركين لمن رُفعت عنه
+  if (!journeyApproved(e)) return { success: true, items: [], advisor: false };
   const ids = await myParticipantIds(e.id);
   if (!ids.length) return { success: true, items: [], advisor: false };
   // كان الاستعلام يطلب learning_models.rubric، وهو عمود لا وجود له، فيفشل ويُبتلع خطؤه وتظهر القائمة فارغة دائمًا:

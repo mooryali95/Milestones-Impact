@@ -55,12 +55,18 @@ function Toggles({ value, options, onChange, disabled }) {
 const MATCH_EMPTY = { roles: [], levels: [], sectors: '', weekly_hours: '', hourly_rate: '' };
 // نموذج الملف: الإضافة والتعديل بالحقول نفسها. خدمتاه من سجله الواحد (expertService): الرحلة بأدوارها، واللجان بعضويتها
 function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [v, setV] = useState(() => ({ ...EMPTY, ...initial, sectors: (initial?.sectors || []).join('، '), hourly_rate: initial?.hourly_rate ?? '', weekly_hours: initial?.weekly_hours ?? '', years_experience: initial?.years_experience ?? '' }));
   // خدمة الرحلة ظاهرة للجديد ولمن له دور، ومخفية لعضو اللجنة بلا دور حتى تُختار
   const [journey, setJourney] = useState(() => (isNew ? true : !contentOnly(initial)));
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
+  // رفع خدمة الرحلة عن خبير له أدوار يمسح حقول المطابقة عند الحفظ ويُخرجه من ترشيحاتها وتكليفاتها، فيُسأل قبله
+  const toggleJourney = async (on) => {
+    if (!on && !isNew && (initial?.roles || []).length
+      && !(await confirm('رفع خدمة الرحلة يمسح أدواره ومستوياته وقطاعاته وساعاته وسعره عند الحفظ، ويُخرجه من ترشيحات الرحلة وتكليفاتها. متابعة؟', { danger: true, ok: 'رفع خدمة الرحلة' }))) return;
+    setJourney(on);
+  };
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -84,7 +90,7 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
         <label className="of-field"><span className="of-label">نبذة عن الخبرة</span><textarea rows={4} value={v.bio || ''} onChange={set('bio')} maxLength={3000} /></label>
 
         <h4>الخدمة <small className="la-muted">· الأدوار للرحلة، والعضوية للكتاب الأم. يُعتمد بأحدهما أو بهما</small></h4>
-        <label className="ex-tg-line"><input type="checkbox" checked={journey} onChange={(e) => setJourney(e.target.checked)} /> يخدم في رحلة المشاركين <small className="la-muted">(يُرشَّح ويُكلَّف بأدواره، ويُطلب منه سطر الموافقة D18)</small></label>
+        <label className="ex-tg-line"><input type="checkbox" checked={journey} onChange={(e) => toggleJourney(e.target.checked)} /> يخدم في رحلة المشاركين <small className="la-muted">(يُرشَّح ويُكلَّف بأدواره، ويُطلب منه سطر الموافقة D18)</small></label>
         <span className="of-label">لجان الحوكمة <small className="la-muted">· من يراجع المحتوى والقياس ويعتمده. المصدر الوحيد لعضوية اللجنتين، ويقرأ أعضاؤهما الكتاب الأم</small></span>
         <Toggles value={v.committees || []} options={Object.entries(COMMITTEE_AR)} onChange={(committees) => setV({ ...v, committees })} />
 
@@ -163,11 +169,12 @@ function Ratings({ r }) {
 }
 
 // تكليفاته من المصادر الثلاثة (مستشار دفعة، خبير مجموعة، عضو فريق): قراءة فقط، والتحرير من «الفريق والمجموعات» في الدفعة
-function Assignments({ list }) {
+function Assignments({ list, stale = false }) {
   if (!list) return null;
   return (
     <section className="la-card ex-assign" aria-labelledby="ex-assign-h">
       <h4 id="ex-assign-h">تكليفاته</h4>
+      {stale && <p className="la-muted">لا يخدم في الرحلة الآن، فهذه التكليفات معطّلة: لا يراها مشاركوها مستشارًا ولا يصل إليهم. أزلها من «الفريق والمجموعات» في الدفعة.</p>}
       {!list.length ? <p className="la-muted">لا تكليف له في أي دفعة. يُكلَّف من «الفريق والمجموعات» في الدفعة، أو من صفحة الجهة.</p> : (
         <ul className="la-log">{list.map((a) => (
           <li key={a.cohort_id}><b>{a.org ? `${a.org} · ` : ''}{a.cohort}</b> <span>{scopeText(a)}</span>
@@ -218,7 +225,8 @@ function Profile({ id, canWrite, onBack }) {
             {['applied', 'invited', 'active', 'paused'].includes(e.status) && <button className="btn-sm ghost" onClick={async () => { const r = await L('admin.expert-invite', { id: e.id }); toast(r.success ? 'أُرسلت الدعوة' : r.message); if (r.success) load(); }}>إرسال دعوة</button>}</div>}
         </div>
       </section>
-      {/* عضو اللجنة بلا دور: لا تكليف ولا خدمات ولا تقييم ولا تكلفة في ملفه، فهي للرحلة */}
+      {/* عضو اللجنة بلا دور: لا تكليف ولا خدمات ولا تقييم ولا تكلفة في ملفه، فهي للرحلة. وتكليف بقي له من قبل يظهر لتُزيله الإدارة */}
+      {contentOnly(e) && (d.assignments || []).length > 0 && <Assignments list={d.assignments} stale />}
       {!contentOnly(e) && <>
         <Assignments list={d.assignments} />
         <Service s={d.service} rate={e.hourly_rate} />
@@ -279,11 +287,13 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
 
   if (expertId) return <Profile id={expertId} canWrite={canWrite} onBack={() => onOpen(null)} />;
   const active = all.filter((e) => e.status === 'active');
+  // خبراء الرحلة وحدهم في العدّ، وأعضاء اللجان بلا دور سطرٌ تحته
+  const journeyActive = active.filter((e) => (e.roles || []).length);
   const hours = active.reduce((a, e) => a + (e.weekly_hours || 0), 0);
   return (
     <div className="ex">
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">خبراء نشطون</div><div className="stat-value s-replied">{d ? active.length : '·'}</div><div className="stat-sub">من {all.length} في الشبكة</div></div>
+        <div className="stat-card"><div className="stat-label">خبراء نشطون</div><div className="stat-value s-replied">{d ? journeyActive.length : '·'}</div><div className="stat-sub">من {all.length} في الشبكة{active.length > journeyActive.length ? ` · أعضاء لجان بلا دور: ${active.length - journeyActive.length}` : ''}</div></div>
         <div className="stat-card"><div className="stat-label">طلبات بانتظارك</div><div className="stat-value s-new">{d ? counts.applied : '·'}</div><div className="stat-sub">طلب انضمام</div></div>
         <div className="stat-card"><div className="stat-label">ساعات مقدّمة</div><div className="stat-value">{d ? Math.round(all.reduce((a, e) => a + (e.stats?.hours || 0), 0) * 10) / 10 : '·'}</div><div className="stat-sub">من {hours} ساعة متاحة أسبوعيًا</div></div>
         <div className="stat-card ex-cover"><div className="stat-label">التغطية بالأدوار</div>
@@ -315,7 +325,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
                   <td data-label="الأدوار">{contentOnly(e) ? <span className="la-chip">عضو لجنة، لا يخدم في الرحلة</span> : <Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />}
-                    {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).includes('content') ? 'لجنة المحتوى' : 'لجنة القياس'}</span></>}
+                    {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).map((k) => COMMITTEE_AR[k]).filter(Boolean).join(' و')}</span></>}
                     {e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
                   <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
                   <td data-label="الطاقة">{e.weekly_hours != null ? `${e.weekly_hours} س/أسبوع` : '·'}</td>

@@ -329,8 +329,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
   'xp.dashboard': async (e, b) => {
     const d: any = await E.portalDashboard(e);
-    // عضو اللجنة بلا دور في الرحلة: لا تكليفات ولا مشاركون ولا أقران ولا 360، والكتاب وحده (portalDashboard)
-    if (!d?.success || d.consent_needed || d.onboarding || d.content_only) return d;
+    // من لا يخدم في الرحلة (عضو لجنة بلا دور، أو معتمد بلا خدمة): لا تكليفات ولا مشاركون ولا أقران ولا 360 (portalDashboard)
+    if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
     d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
     // الكتاب الأم لأعضاء لجنتي المحتوى والقياس (master-book.js)

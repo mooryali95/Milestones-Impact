@@ -2455,7 +2455,7 @@ export const TEAM_SCOPES = ['cohort', 'group', 'advisor'];
 export const EXPERT_APPROVED = ['active', 'paused'];
 // خدمة الرحلة (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15): معتمد وله دور واحد على الأقل.
 // الأدوار للرحلة والعضوية في اللجان للكتاب (bookAccess في master-book.js)، فعضو اللجنة بلا دور لا يُرشَّح ولا يُكلَّف ولا يظهر
-// في أي موضع من الرحلة. كل مرشِّح للرحلة يمر بها (اختبار الحارس journey-guard.test.js). والثابت أعلاه لا يتغير
+// في أي موضع من الرحلة. كل مرشِّح للرحلة يمر بها (اختبار الحارس expert-service.test.js). والثابت أعلاه لا يتغير
 /** @param {{ status?: string | null, roles?: string[] | null } | null | undefined} e */
 export const journeyApproved = (e) => !!e && EXPERT_APPROVED.includes(String(e.status)) && (e.roles || []).length > 0;
 /** @param {{ advisor_expert_id?: string | null } | null} cohort

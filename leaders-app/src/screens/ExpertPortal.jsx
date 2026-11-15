@@ -376,7 +376,7 @@ function BookPledge({ lines, onAccept, onCancel }) {
     </div>
   );
 }
-// لوحة عضو اللجنة بلا دور في الرحلة: الكتاب وحده، بلا مشاركين ولا دفعات ولا قاعة ولا ساعات
+// لوحة عضو اللجنة بلا دور في الرحلة: الكتاب وحده، بلا مشاركين ولا دفعات ولا قاعة ولا ساعات. ومن لا خدمة له بعد يرى سطرًا يدله على الإدارة
 function ReviewerHome({ d, onOut, openBook }) {
   const e = d.expert;
   return (
@@ -394,7 +394,9 @@ function ReviewerHome({ d, onOut, openBook }) {
       </section>
       {d.book_access
         ? <BookCard label={committeesText(e.committees)} onOpen={openBook} />
-        : <section className="card stack"><p className="muted">عضويتك في اللجنة غير فعّالة الآن، فالكتاب مغلق. تواصل مع إدارة البرنامج.</p></section>}
+        : <section className="card stack"><p className="muted">{d.no_service
+          ? 'لم تُحدَّد خدمتك في البرنامج بعد، فلا تكليفات لك الآن ولا كتاب. تواصل مع إدارة البرنامج.'
+          : 'عضويتك في اللجنة غير فعّالة الآن، فالكتاب مغلق. تواصل مع إدارة البرنامج.'}</p></section>}
     </div>
   );
 }
@@ -451,16 +453,17 @@ function Dashboard({ onOut }) {
   const openFile = (id) => { setD((x) => (x ? { ...x, preload: undefined } : x)); setView(id); };
   if (!d) return <DashboardSkeleton />;
   if (!d.success) return <div className="page narrow"><div className="alert err" role="alert">{d.message}</div></div>;
-  if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
+  // بعد الموافقة أو التعهد تُعاد اللوحة كاملة من xp.dashboard (التكليفات وبطاقة الكتاب والأقسام المجمّعة)، لا ردّ الفعل وحده
+  if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) await load(); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
   const reading = book ?? (!!d.content_only && !!d.book_access);
   if (reading && d.pledge_needed) {
     return <BookPledge lines={d.pledge} onCancel={d.content_only ? null : () => setBook(false)}
-      onAccept={async () => { const r = await xpCall('xp.pledge'); if (r.success) setD(r); return r; }} />;
+      onAccept={async () => { const r = await xpCall('xp.pledge'); if (r.success) await load(); return r; }} />;
   }
   if (reading) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => setBook(false)} /></React.Suspense>;
-  if (d.content_only) return <ReviewerHome d={d} onOut={onOut} openBook={() => setBook(true)} />;
+  if (d.content_only || d.no_service) return <ReviewerHome d={d} onOut={onOut} openBook={() => setBook(true)} />;
   const e = d.expert;
   const pre = d.preload || {};
   const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);

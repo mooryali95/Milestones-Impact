@@ -8,6 +8,8 @@ import { coordTeamView, effectiveAdvisorId, EXPERT_APPROVED, journeyApproved, ra
 import { APPROVAL_NEEDS_AR, approvalBlock, CONTENT_NEEDS_DIM_AR, contentOnly, expertService } from '../../supabase/functions/leaders-api/committees.js';
 import { bookAccess } from '../../supabase/functions/leaders-api/master-book.js';
 import { rankForAdd } from '../../admin-app/src/team.js';
+import { launchReadiness } from '../../supabase/functions/leaders-api/readiness.js';
+import { cohortSetup } from '../../supabase/functions/leaders-api/cohort-setup.js';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -103,11 +105,13 @@ describe('عضو اللجنة بلا دور لا يظهر في أي موضع م�
   });
   it('البوابة: لا تكليفات ولا مشاركون ولا 360 لعضو اللجنة، ولا D18، والقارئ مباشرة بعد التعهد', () => {
     const index = read('supabase/functions/leaders-api/index.ts');
-    expect(index).toContain('if (!d?.success || d.consent_needed || d.onboarding || d.content_only) return d;');
+    expect(index).toContain('if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;');
     const portal = read('leaders-app/src/screens/ExpertPortal.jsx');
     expect(portal).toContain('const reading = book ?? (!!d.content_only && !!d.book_access);');
     expect(portal).toContain('if (reading && d.pledge_needed) {');
-    expect(portal).toContain('if (d.content_only) return <ReviewerHome');
+    expect(portal).toContain('if (d.content_only || d.no_service) return <ReviewerHome');
+    // بعد التعهد تُعاد اللوحة كاملة (بطاقة الكتاب والتكليفات)، لا ردّ xp.pledge وحده
+    expect(portal).toContain("const r = await xpCall('xp.pledge'); if (r.success) await load(); return r;");
   });
 });
 
@@ -115,7 +119,8 @@ describe('عضو اللجنة بلا دور لا يظهر في أي موضع م�
 // كل موضع يقرأ جدول الخبراء أو يفحص الحالة المعتمدة في وحدات الخادم يمر بـjourneyApproved داخل دالته، أو يحمل
 // تعليق «journey-guard:» بسببه. وحدات الكتاب الأم مستثناة هنا بسبب مكتوب، لأن طلب الزميل المفتوح (#358) يمسها ولا تُعدَّل الآن
 const FN = join(root, 'supabase/functions/leaders-api');
-const SITE = /from\('experts'\)|EXPERT_APPROVED\.includes|\['active', 'paused'\]\.includes|\bAPPROVED\.includes\(/;
+// myParticipantIds يقرأ cohorts.advisor_expert_id لا جدول الخبراء، فمن يستدعيه يمر بالقاعدة كذلك (تسليمات المشاركين و360)
+const SITE = /from\('experts'\)|EXPERT_APPROVED\.includes|\['active', 'paused'\]\.includes|\bAPPROVED\.includes\(|\bmyParticipantIds\(/;
 const MODULE_EXEMPT = {
   'master-book.ts': 'الكتاب الأم: القراءة بعضوية اللجنة (bookAccess) لا بخدمة الرحلة. استعلام المشاركة وتصفية المرشحين مؤجلان حتى يُدمج #358',
   'master-book.js': 'bookAccess هي قاعدة الكتاب نفسها (معتمد وله عضوية لجنة)، لا مرشِّح للرحلة',
@@ -142,7 +147,9 @@ export function guardGaps(files) {
       const body = enclosing(lines, i);
       // القاعدة في الشيفرة لا في تعليق يذكرها
       const code = body.split('\n').map((x) => x.replace(/(^|\s)\/\/.*$/, '')).join('\n');
-      if (/journeyApproved/.test(code)) return;
+      // موضع لكل قاعدة: دالة فيها موضعان وقاعدة واحدة تُمسك (إرجاع أحد مرشحَي cohortTeam دون الآخر)
+      const sites = code.split('\n').filter((x) => SITE.test(x)).length;
+      if ((code.match(/journeyApproved|requireJourney\(/g) || []).length >= sites) return;
       const why = body.match(/journey-guard:\s*(.+)/);
       if (why && why[1].trim().length >= 10) return;
       gaps.push(`${name}:${i + 1}`);
@@ -165,6 +172,12 @@ describe('حارس الرحلة على المصدر', () => {
     // ذكر القاعدة في تعليق لا يكفي
     expect(guardGaps([['x.ts', bad.replace('return data;', '// يمر بـjourneyApproved لاحقًا\n  return data;')]])).toEqual(['x.ts:2']);
     expect(guardGaps([['y.ts', "const ok = list.filter((e) => EXPERT_APPROVED.includes(e.status));\n"]])).toEqual(['y.ts:1']);
+    // موضعان في دالة واحدة بقاعدة واحدة: يُمسك الثاني
+    const two = "export async function team() {\n  const a = (await db.from('experts').select('*')).data.filter(journeyApproved);\n  const b = (await db.from('experts').select('*')).data;\n  return [a, b];\n}\n";
+    expect(guardGaps([['z.ts', two]])).toEqual(['z.ts:2', 'z.ts:3']);
+    expect(guardGaps([['z.ts', two.replace('.data;', '.data.filter(journeyApproved);')]])).toEqual([]);
+    // من يقرأ مشاركي المستشار من cohorts يمر بالقاعدة كذلك
+    expect(guardGaps([['w.ts', "export async function reviews(e) {\n  const ids = await myParticipantIds(e.id);\n  return ids;\n}\n"]])).toEqual(['w.ts:2']);
   });
   it('الوحدات التي سمّاها التصور تمر بالقاعدة فعلًا لا بالاستثناء', () => {
     for (const f of ['advisor.ts', 'programs.ts', 'team.ts', 'activities.ts', 'peer.ts', 'insight.ts', 'experts.ts', 'file.ts', 'logic.js', 'index.ts']) {
@@ -173,5 +186,22 @@ describe('حارس الرحلة على المصدر', () => {
     expect(read('supabase/functions/leaders-api/team.ts')).toMatch(/const EXPERT_COLS = '[^']*\bcommittees\b[^']*';/);
     expect(read('admin-app/src/team.js')).toContain('.filter(journeyApproved)');
     expect(read('admin-app/src/screens/CohortTeam.jsx')).toContain('journeyApproved(r.expert)');
+  });
+});
+
+describe('جاهزية «المستشار الأساسي» لا تحتسب من لا يخدم في الرحلة', () => {
+  const cohort = { id: 'c1', name: 'دفعة الهيئة', organization_id: 'o1', status: 'open', advisor_expert_id: 'x1' };
+  it('بنود الإطلاق (م2): الإسناد على عضو لجنة بلا دور ناقص، وغياب القائمة يكتفي بالإسناد', () => {
+    const rows = { organizations: [{ id: 'o1', name: 'الهيئة', status: 'active' }], cohorts: [cohort] };
+    const adv = (r) => r.find((x) => x.key === 'advisor');
+    expect(adv(launchReadiness({ ...rows, advisors: [] })).ok).toBe(false);
+    expect(adv(launchReadiness({ ...rows, advisors: ['x1'] })).ok).toBe(true);
+    expect(adv(launchReadiness(rows)).ok).toBe(true);
+  });
+  it('ملف الدفعة: المعيَّن الذي لا يخدم يُقال باسمه ولا يُحتسب', () => {
+    const off = cohortSetup({ cohort, advisorName: 'هند', advisorServes: false }).find((x) => x.key === 'advisor');
+    expect(off.ok).toBe(false);
+    expect(off.detail).toContain('هند لا يخدم في الرحلة الآن');
+    expect(cohortSetup({ cohort, advisorName: 'هند' }).find((x) => x.key === 'advisor').ok).toBe(true);
   });
 });

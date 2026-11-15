@@ -105,6 +105,11 @@ export async function adminGet(_a: Admin, b: Body) {
   };
 }
 
+// عضو اللجنة بلا دور: حقول المطابقة لا تخصه، فتُفرَّغ على الخادم ولو أرسلتها الواجهة (كما في portalProfileSave)
+function dropMatchFields(fields: Record<string, any>, committees: string[]) {
+  if ((fields.roles || []).length || !committees.length) return;
+  Object.assign(fields, { levels: [], sectors: [], weekly_hours: null, hourly_rate: null });
+}
 // إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم. opts.assignment من «ادعُ وأضف» في فريق الدفعة (team.ts) وحده:
 // سطر التكليف في الدعوة نفسها، فلا يُرسل للمدعو بريدان. الفعل admin.expert-save يمرر ctx هنا، ولا assignment فيه
 // journey-guard: حفظ الملف من الإدارة، لا ترشيح فيه
@@ -120,6 +125,11 @@ export async function adminSave(a: Admin, b: Body, opts: { assignment?: Assignme
   if (b.id) {
     const before = must(await db.from('experts').select('*').eq('id', String(b.id)).maybeSingle());
     if (!before) throw new Fail('الخبير غير موجود', 404);
+    const committeesNext = 'committees' in b ? cleanCommittees(b.committees) : cleanCommittees(before.committees);
+    dropMatchFields(fields, committeesNext);
+    // شرط الاعتماد يبقى بعده: المعتمد لا يُحفظ بلا دور ولا لجنة، ولا عضو لجنة المحتوى بلا إطار (approvalBlock)
+    const block = portalWorking(before) ? approvalBlock({ ...before, ...fields, committees: committeesNext }) : null;
+    if (block) throw new Fail(`${block.replace(/ قبل الاعتماد$/, '')}، لأن الملف معتمد`);
     let saved = must(await db.from('experts').update({ ...fields, phone, updated_at: now }).eq('id', before.id).select('*').single());
     // عضوية اللجان في تحديث مستقل: قبل تطبيق ترحيلها (20261113100000) يُحفظ الملف ويُقال ذلك بدل أن يفشل الحفظ كله
     let committees_ready = true;
@@ -137,6 +147,7 @@ export async function adminSave(a: Admin, b: Body, opts: { assignment?: Assignme
   if (!isEmail(email)) throw new Fail('بريد الخبير غير صحيح');
   const { data: dup } = await db.from('experts').select('id, status').eq('email', email).maybeSingle();
   if (dup) throw new Fail(`لهذا البريد ملف خبير قائم (${(EXPERT_STATUS as Record<string, string>)[dup.status] || dup.status})`, 409);
+  dropMatchFields(fields, cleanCommittees(b.committees));
   let saved = must(await db.from('experts').insert({ ...fields, email, phone, status: 'invited', source: 'admin', invited_at: now }).select('*').single());
   // عضوية اللجان تُحدَّد عند الإنشاء أيضًا (عضو اللجنة يُدعى من هنا، فالانضمام العام للرحلة وحدها)، في تحديث مستقل كالتعديل
   let committees_ready = true;
@@ -424,6 +435,9 @@ async function respondToOffer(r: any, b: Body) {
   const now = new Date().toISOString();
   if (b.accept === true) {
     if (Date.parse(r.expires_at) < Date.now()) throw new Fail('انتهت مهلة هذا العرض', 409, 'gone');
+    // عرض أُرسل قبل أن تُرفع عنه خدمة الرحلة (عضو لجنة بلا دور، أو موقوف): لا يُقبل، وتنقله المهلة إلى التالي
+    const { data: ex } = await db.from('experts').select('id, status, roles').eq('id', r.expert_id).maybeSingle();
+    if (!journeyApproved(ex)) throw new Fail('لم يعد هذا العرض قائمًا لك: خدمتك في الرحلة غير فعّالة الآن', 409, 'gone');
     must(await db.from('expert_requests').update({ status: 'accepted', accepted_at: now, updated_at: now }).eq('id', r.id));
     await audit('system', null, 'expert-request.accepted', 'expert_requests', r.id, null, { expert_id: r.expert_id });
     const { data: p } = await db.from('participants').select('full_name, email').eq('id', r.participant_id).maybeSingle();
@@ -625,13 +639,14 @@ export async function portalConsent(e: any) {
 export const BOOK_PLEDGE_VERSION = '2026-11-15';
 export const BOOK_PLEDGE_AR = [
   'أطّلع على الكتاب الأم بصفتي عضوًا في لجنة مراجعته، وما فيه من متن ومسودات وأسئلة وإجابات سري لا أنقله ولا أنسخه ولا أشاركه خارج اللجنة.',
-  'أستعمل ما أطّلع عليه للمراجعة والتعليق وحدهما، وأعرف أن نسختي تحمل اسمي وبريدي وتاريخ الاطلاع.',
+  'أستعمل ما أطّلع عليه للمراجعة والتعليق وحدهما.',
   'تنتهي صلاحيتي بانتهاء عضويتي، ويبقى التزامي بالسرية بعدها.',
 ];
 const PLEDGE_ACTION = `expert.book-pledge.${BOOK_PLEDGE_VERSION}`;
 export async function pledgeNeeded(e: any) {
   if (!bookAccess(e)) return false;
-  const { data, error } = await db.from('audit_log').select('id').eq('entity', 'experts').eq('entity_id', e.id).eq('action', PLEDGE_ACTION).limit(1);
+  // بفهرس الفاعل (audit_log_actor_idx) لا بمسح السجل: كل فعل xp.book* يقرأ هذا السطر
+  const { data, error } = await db.from('audit_log').select('id').eq('actor', `expert:${e.email}`).eq('entity', 'experts').eq('entity_id', e.id).eq('action', PLEDGE_ACTION).limit(1);
   if (error) throw new Fail('تعذّر التحقق من تعهد السرية الآن، حاول بعد قليل', 503, 'pledge_unavailable');
   return !data?.length;
 }
@@ -640,7 +655,7 @@ export async function requirePledge(e: any) {
 }
 export async function portalPledge(e: any) {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
-  if (await pledgeNeeded(e)) await audit('system', `expert:${e.email}`, PLEDGE_ACTION, 'experts', e.id, null, { version: BOOK_PLEDGE_VERSION });
+  if (await pledgeNeeded(e)) await audit('system', `expert:${e.email}`, PLEDGE_ACTION, 'experts', e.id, null, { version: BOOK_PLEDGE_VERSION, text_digest: await hash(BOOK_PLEDGE_AR.join('\n')) });
   return portalDashboard(e);
 }
 
@@ -654,9 +669,12 @@ export async function portalDashboard(e: any) {
     if (!portalWorking(e)) return { success: true, onboarding: true, content_only: true, switch_to, consent_needed: false, expert: pub };
     return { success: true, content_only: true, switch_to, consent_needed: false, book_access: bookAccess(e), pledge_needed: await pledgeNeeded(e), pledge: BOOK_PLEDGE_AR, expert: pub };
   }
-  // D18: سطر الموافقة عند أول دخول، قبل أي بيانات مشاركين
+  // معتمد بلا دور ولا لجنة (بيانات سابقة للقاعدة): لا شيء من الرحلة ولا الكتاب حتى تحدد الإدارة خدمته
+  if (portalWorking(e) && !journeyApproved(e)) return { success: true, no_service: true, switch_to, consent_needed: false, book_access: false, expert: pub };
+  // D18: سطر الموافقة عند أول دخول، قبل أي بيانات مشاركين: لا تُجلب حتى يوافق
   const consent_needed = await consentNeeded('expert', e.id);
   if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, consent_needed, expert: pub };
+  if (consent_needed) return { success: true, switch_to, consent_needed, expert: pub };
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
@@ -687,7 +705,8 @@ export async function portalDashboard(e: any) {
   return {
     success: true, switch_to, consent_needed,
     // من جمع الخدمتين: يفتح الكتاب من بطاقته بعد تعهد السرية
-    ...(bookAccess(e) ? { pledge_needed: await pledgeNeeded(e), pledge: BOOK_PLEDGE_AR } : {}),
+    // تعذّر قراءة التعهد لا يُسقط لوحة الرحلة: يُعرض التعهد، والقارئ يتحقق منه على الخادم (requirePledge)
+    ...(bookAccess(e) ? { pledge_needed: await pledgeNeeded(e).catch(() => true), pledge: BOOK_PLEDGE_AR } : {}),
     // دفعاته بصفته مستشارها: للقاعة من بوابته (المرحلة 9)
     advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),

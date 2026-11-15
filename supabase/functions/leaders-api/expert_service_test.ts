@@ -179,3 +179,86 @@ Deno.test('عضو اللجنة بلا دور لا يرى طلبات أقران �
     assertEquals(r.items, []);
   } finally { restore(); }
 });
+
+// ── المراجعات بعد المرحلة 1: لا يبقى معتمد بلا خدمة، ومن لا يخدم في الرحلة لا يصل بيانات مشارك من أي باب ──
+const V2 = await import('./advisor.ts');
+const FB = await import('./feedback360.ts');
+
+Deno.test('تعديل المعتمد: لا يُحفظ بلا دور ولا لجنة، ولا عضو لجنة المحتوى بلا إطار، وحقول المطابقة تُفرَّغ على الخادم', async () => {
+  const journey = { id: 'j1', email: 'j1@example.sa', full_name: 'سارة المستشارة', status: 'active', roles: ['advisor'], committees: [], dimensions: ['impact'], levels: ['advanced'], sectors: ['طاقة'], weekly_hours: 6, hourly_rate: 300 };
+  const tables: Record<string, Row[]> = { experts: [journey], audit_log: [] };
+  const restore = install(tables);
+  try {
+    const base = { id: 'j1', full_name: 'سارة المستشارة', bio: BIO, dimensions: ['impact'], levels: ['advanced'], sectors: 'طاقة', weekly_hours: 6, hourly_rate: 300 };
+    const none = await assertRejects(() => E.adminSave(ADMIN, { ...base, roles: [], committees: [] }), Fail);
+    assert((none as any).message.startsWith('حدّد دورًا في الرحلة أو عضوية في لجنة'));
+    assertEquals(tables.experts[0].roles, ['advisor']);
+    await assertRejects(() => E.adminSave(ADMIN, { ...base, roles: [], committees: ['content'], dimensions: [] }), Fail, 'عضو لجنة المحتوى يحتاج إطارًا');
+    // إلى عضو لجنة بلا دور: يُحفظ، وتُفرَّغ المطابقة ولو أرسلتها الواجهة
+    const r: any = await E.adminSave(ADMIN, { ...base, roles: [], committees: ['content'] });
+    assertEquals(r.success, true);
+    const row = tables.experts[0];
+    assertEquals([row.roles, row.levels, row.sectors, row.weekly_hours, row.hourly_rate], [[], [], [], null, null]);
+    assertEquals(row.committees, ['content']);
+    assertEquals(row.dimensions, ['impact']);
+    // من لم يُعتمد بعد يُحفظ بلا خدمة (الشرط عند الاعتماد)
+    tables.experts.push({ id: 'n1', email: 'n1@example.sa', full_name: 'مدعو جديد', status: 'invited', roles: [], committees: [] });
+    assertEquals(((await E.adminSave(ADMIN, { id: 'n1', full_name: 'مدعو جديد', roles: [], committees: [] })) as any).success, true);
+  } finally { restore(); }
+});
+
+Deno.test('معتمد بلا دور ولا لجنة: لوحة بلا شيء من الرحلة ولا الكتاب، ولا تسليمات ولا 360 ولو بقي مستشار دفعة', async () => {
+  const e = { id: 'z1', email: 'z1@example.sa', full_name: 'خبير بلا خدمة', status: 'active', roles: [], committees: [] };
+  const tables: Record<string, Row[]> = {
+    experts: [e], audit_log: [], consent_events: [], participants: [{ id: 'p1', full_name: 'نورة', is_demo: false }], org_coordinators: [],
+    cohorts: [{ id: 'c1', name: 'دفعة', advisor_expert_id: 'z1', is_default: true, organization_id: null }],
+    expert_requests: [{ id: 'r1', expert_id: 'z1', participant_id: 'p1', status: 'accepted', participants: { full_name: 'نورة', email: 'n@x.sa' } }],
+    model_submissions: [{ id: 's1', participant_id: 'p1', status: 'submitted', answers: { a: 'سر' } }],
+    feedback_cycles: [{ id: 'f1', participant_id: 'p1', status: 'approval' }],
+  };
+  const restore = install(tables);
+  try {
+    const d: any = await E.portalDashboard(e);
+    assertEquals(d.no_service, true);
+    assertEquals(d.book_access, false);
+    assertEquals(d.consent_needed, false);
+    for (const k of ['requests', 'sessions', 'stats', 'advisor_cohorts', 'rating', 'pledge']) assertEquals(k in d, false, k);
+    assertEquals(await V2.reviews(e), { success: true, items: [], advisor: false });
+    assertEquals(await FB.advisorList(e), { success: true, approvals: [], reports: [] });
+  } finally { restore(); }
+});
+
+Deno.test('خبير الرحلة قبل D18: لا تُجلب طلباته ولا جلساته حتى يوافق', async () => {
+  const e = { id: 'k1', email: 'k1@example.sa', full_name: 'خبير جديد', status: 'active', roles: ['coach'], committees: [] };
+  const tables: Record<string, Row[]> = { experts: [e], consent_events: [], participants: [], org_coordinators: [],
+    expert_requests: [{ id: 'r1', expert_id: 'k1', participant_id: 'p1', status: 'accepted' }] };
+  const restore = install(tables);
+  try {
+    const d: any = await E.portalDashboard(e);
+    assertEquals(d.consent_needed, true);
+    for (const k of ['requests', 'sessions', 'stats', 'advisor_cohorts']) assertEquals(k in d, false, k);
+  } finally { restore(); }
+});
+
+Deno.test('التعهد يُسجَّل ببصمة نصه، ولا وعد فيه بعلامة مائية لم تُبنَ', async () => {
+  const tables: Record<string, Row[]> = { experts: [reviewer({ status: 'active' })], audit_log: [], consent_events: [], participants: [], org_coordinators: [] };
+  const restore = install(tables);
+  try {
+    await E.portalPledge(tables.experts[0]);
+    const row = tables.audit_log.find((x) => x.action === `expert.book-pledge.${E.BOOK_PLEDGE_VERSION}`)!;
+    assertEquals(row.after.version, E.BOOK_PLEDGE_VERSION);
+    assertEquals(row.after.text_digest.length, 64);
+    assert(!E.BOOK_PLEDGE_AR.join(' ').includes('تحمل اسمي'));
+  } finally { restore(); }
+});
+
+Deno.test('عرض أُرسل قبل رفع خدمة الرحلة لا يُقبل من لوحة الخبير ولا من رابطه', async () => {
+  const e = reviewer({ status: 'active' });
+  const tables: Record<string, Row[]> = { experts: [e], audit_log: [],
+    expert_requests: [{ id: 'r1', expert_id: 'rv', participant_id: 'p1', status: 'offered', expires_at: new Date(Date.now() + 864e5).toISOString(), experts: { full_name: 'هند' } }] };
+  const restore = install(tables);
+  try {
+    await assertRejects(() => E.portalRespond(e, { id: 'r1', accept: true }), Fail, 'خدمتك في الرحلة غير فعّالة');
+    assertEquals(tables.expert_requests[0].status, 'offered');
+  } finally { restore(); }
+});

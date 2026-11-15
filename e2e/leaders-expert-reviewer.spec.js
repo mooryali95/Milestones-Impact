@@ -22,7 +22,8 @@ async function mount(page, first) {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b.action);
     if (b.action === 'xp.dashboard') return route.fulfill({ json: state });
-    if (b.action === 'xp.pledge') { state = { ...state, pledge_needed: false }; return route.fulfill({ json: state }); }
+    // ردّ xp.pledge هو portalDashboard وحده كما على الخادم: بلا بطاقة الكتاب ولا التكليفات لمن جمع الخدمتين، فالواجهة تعيد التحميل
+    if (b.action === 'xp.pledge') { state = { ...state, pledge_needed: false }; const { book_access, assignments, ...plain } = state; return route.fulfill({ json: state.content_only ? state : plain }); }
     if (b.action === 'xp.book') return route.fulfill({ json: state.pledge_needed ? { success: false, code: 'pledge', message: 'أكّد تعهد السرية أولًا ثم افتح الكتاب' } : BOOK });
     return route.fulfill({ json: { success: false, message: `غير متوقع: ${b.action}` } });
   });
@@ -46,7 +47,7 @@ test('عضو اللجنة بلا دور: بلا D18 ولا أقسام الرحل
   await page.getByLabel('قرأت التعهد وألتزم به').check();
   await go.click();
   await expect(page.getByText('تقرأ بصفتك:')).toBeVisible();
-  expect(calls).toEqual(['xp.dashboard', 'xp.pledge', 'xp.book']);
+  expect(calls).toEqual(['xp.dashboard', 'xp.pledge', 'xp.dashboard', 'xp.book']);
   // الرجوع من القارئ: مدخل الكتاب وحده، بلا مؤشرات ولا طلبات ولا جلسات ولا مشاركين ولا شهادة ساعات
   await page.getByRole('button', { name: 'رجوع' }).first().click();
   await expect(page.getByRole('heading', { name: 'أهلًا د. هند الشمري' })).toBeVisible();
@@ -86,4 +87,27 @@ test('من جمع الخدمتين: لوحة الرحلة كما هي، والك
   await expect(page.getByRole('heading', { name: 'تعهد السرية' })).toBeVisible();
   await page.getByRole('button', { name: 'ليس الآن' }).click();
   await expect(page.getByText('جلساتك القادمة')).toBeVisible();
+});
+
+test('من جمع الخدمتين: بعد التعهد يقرأ الكتاب، ويرجع إلى لوحته ببطاقة الكتاب كما هي', async ({ page }) => {
+  const both = { success: true, consent_needed: false, switch_to: [], book_access: true, pledge_needed: true, pledge: PLEDGE, assignments: [],
+    expert: { ...reviewer, roles: ['coach'] }, stats: { hours: 0, participants: 0, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [] };
+  const calls = await mount(page, both);
+  await page.goto(PORTAL);
+  await page.locator('.xpp-book').click();
+  await page.getByLabel('قرأت التعهد وألتزم به').check();
+  await page.getByRole('button', { name: 'أتعهد وأفتح الكتاب' }).click();
+  await expect(page.getByText('تقرأ بصفتك:')).toBeVisible();
+  await page.getByRole('button', { name: 'رجوع' }).first().click();
+  await expect(page.getByText('جلساتك القادمة')).toBeVisible();
+  await expect(page.locator('.xpp-book')).toBeVisible();
+  expect(calls.filter((a) => a === 'xp.dashboard').length).toBe(2);
+});
+
+test('معتمد بلا خدمة: سطر يدله على الإدارة، بلا كتاب ولا أقسام الرحلة', async ({ page }) => {
+  await mount(page, { success: true, no_service: true, consent_needed: false, book_access: false, switch_to: [], expert: { ...reviewer, committees: [] } });
+  await page.goto(PORTAL);
+  await expect(page.getByText('لم تُحدَّد خدمتك في البرنامج بعد')).toBeVisible();
+  await expect(page.locator('.xpp-book')).toHaveCount(0);
+  for (const t of ['جلساتك القادمة', 'طلبات بانتظار ردك', 'مشاركوك']) await expect(page.getByText(t), t).toHaveCount(0);
 });
