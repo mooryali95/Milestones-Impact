@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115130000_leaders_slack_threads
+-- as-of migration: 20261115140000_leaders_ops_status
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1062,6 +1062,17 @@ create table if not exists leaders.model_submissions (
   constraint model_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewed'::text, 'returned'::text]))),
   constraint model_submissions_pkey PRIMARY KEY (id),
   constraint model_submissions_participant_id_model_id_key UNIQUE (participant_id, model_id)
+);
+
+create table if not exists leaders.ops_status (
+  channel text not null,
+  ok_at timestamp with time zone,
+  error_at timestamp with time zone,
+  error text,
+  updated_at timestamp with time zone default now() not null,
+  constraint ops_status_channel_check CHECK ((channel = 'slack'::text)),
+  constraint ops_status_error_check CHECK ((char_length(error) <= 80)),
+  constraint ops_status_pkey PRIMARY KEY (channel)
 );
 
 create table if not exists leaders.org_coordinators (
@@ -3128,6 +3139,8 @@ alter table leaders.mail_queue enable row level security;
 
 alter table leaders.model_submissions enable row level security;
 
+alter table leaders.ops_status enable row level security;
+
 alter table leaders.org_coordinators enable row level security;
 
 alter table leaders.organizations enable row level security;
@@ -3390,6 +3403,31 @@ begin
      and coalesce(current_setting('leaders.content_patch', true), '') <> 'on'
      and exists (select 1 from leaders.lab_attempts la where la.item_id = old.id and la.finished_at is not null) then
     raise exception 'مواصفة الأداة «%» مقفلة بعد أول محاولة منتهية (D02)، والتصويب بمسار الترقيع بتوقيعين', old.title_ar using errcode = '42501';
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.ops_status_keep_latest()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  was_ok boolean := old.error_at is null or (old.ok_at is not null and old.ok_at >= old.error_at);
+  is_ok boolean;
+begin
+  new.ok_at := greatest(old.ok_at, new.ok_at);
+  if old.error_at is not null and (new.error_at is null or new.error_at <= old.error_at) then
+    new.error_at := old.error_at;
+    new.error := old.error;
+  end if;
+  is_ok := new.error_at is null or (new.ok_at is not null and new.ok_at >= new.error_at);
+  -- يُسقط تقدم وقت النتيجة الغالبة نفسها أقل من دقيقة، والوقت الآخر والرمز على حالهما
+  if is_ok = was_ok and new.error is not distinct from old.error and (
+       (is_ok and new.error_at is not distinct from old.error_at and new.ok_at < old.ok_at + interval '1 minute')
+    or (not is_ok and new.ok_at is not distinct from old.ok_at and new.error_at < old.error_at + interval '1 minute')) then
+    return null;
   end if;
   return new;
 end $function$
@@ -4061,6 +4099,8 @@ CREATE OR REPLACE TRIGGER katon_topics_provenance BEFORE INSERT OR UPDATE ON lea
 CREATE OR REPLACE TRIGGER lab_spec_locked BEFORE UPDATE OF spec ON leaders.lab_items FOR EACH ROW EXECUTE FUNCTION leaders.lab_spec_locked();
 
 CREATE OR REPLACE TRIGGER learning_models_provenance BEFORE INSERT OR UPDATE ON leaders.learning_models FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
+
+CREATE OR REPLACE TRIGGER ops_status_keep_latest BEFORE UPDATE ON leaders.ops_status FOR EACH ROW EXECUTE FUNCTION leaders.ops_status_keep_latest();
 
 CREATE OR REPLACE TRIGGER organizations_name_sync AFTER UPDATE OF name ON leaders.organizations FOR EACH ROW EXECUTE FUNCTION leaders.sync_org_name_to_participants();
 
