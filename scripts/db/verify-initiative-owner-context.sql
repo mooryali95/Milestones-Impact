@@ -43,7 +43,13 @@ select count(*) filter (where s.answers->>'reality' = 'افتراضية لكنه
        'إجابات الواقعية: ' || coalesce(string_agg(distinct s.answers->>'reality', ' | '), 'لا إجابات') || ' · العدد ' || count(*) filter (where s.answers ? 'reality') as detail
   from leaders.model_submissions s join leaders.learning_models m on m.id = s.model_id where m.key = 'initiative-charter';
 
--- 6) خطوات البطاقة ومساعدة متطلب CP-CARD بلا «جهتك»
+-- 6) خطوات البطاقة بلا «جهتك»، ومساعدة متطلب CP-CARD في كل برنامج: لا يبقى النص القديم (المحرَّر من الإدارة لم يُمس، ويُعدّ)
+with r as (select help_ar,
+            case when help_ar like 'اختر مبادرة تقودها أنت، في جهة أو مجتمع أو سوق%' then 'new'
+                 when help_ar like 'اختر مبادرة في جهتك، حقيقية أو افتراضية واقعية%' then 'old' else 'edited' end st
+             from leaders.stage_requirements where code = 'CP-CARD')
 select (select steps_ar from leaders.learning_models where key = 'initiative-charter') !~ 'في جهتك|هيكل جهتك'
-   and (select help_ar from leaders.stage_requirements where code = 'CP-CARD') !~ 'في جهتك' as ok,
-       'CP-CARD: ' || left((select help_ar from leaders.stage_requirements where code = 'CP-CARD'), 60) || '…' as detail;
+   and not exists (select 1 from r where st = 'old') as ok,
+       'خطوات البطاقة: ' || case when (select steps_ar from leaders.learning_models where key = 'initiative-charter') ~ 'اختر مبادرة تقودها أنت، في جهة أو مجتمع أو سوق' then 'جديدة' else 'غير متوقعة' end
+       || ' · CP-CARD في ' || (select count(*) from r) || ' برامج: جديد ' || (select count(*) from r where st = 'new')
+       || '، قديم ' || (select count(*) from r where st = 'old') || '، محرَّر ' || (select count(*) from r where st = 'edited') as detail;
