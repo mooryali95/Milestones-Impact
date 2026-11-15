@@ -52,4 +52,5 @@ select (select steps_ar from leaders.learning_models where key = 'initiative-cha
    and not exists (select 1 from r where st = 'old') as ok,
        'خطوات البطاقة: ' || case when (select steps_ar from leaders.learning_models where key = 'initiative-charter') ~ 'اختر مبادرة تقودها أنت، في جهة أو مجتمع أو سوق' then 'جديدة' else 'غير متوقعة' end
        || ' · CP-CARD في ' || (select count(*) from r) || ' برامج: جديد ' || (select count(*) from r where st = 'new')
-       || '، قديم ' || (select count(*) from r where st = 'old') || '، محرَّر ' || (select count(*) from r where st = 'edited') as detail;
+       || '، قديم ' || (select count(*) from r where st = 'old') || '، محرَّر ' || (select count(*) from r where st = 'edited')
+       || coalesce(' · ما بقي فيه «جهتك»: ' || (select string_agg(x[1], ' | ') from leaders.learning_models m, regexp_matches(m.steps_ar, '([^.\n]*(?:في جهتك|هيكل جهتك)[^.\n]*)', 'g') x where m.key = 'initiative-charter'), '') as detail;
