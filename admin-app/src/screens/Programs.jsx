@@ -16,6 +16,7 @@ import CohortVisibility from './CohortVisibility.jsx';
 import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
+import { saveCohort } from '../cohort-guard.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 
 
@@ -200,7 +201,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
       title: c.id ? `دفعة: ${c.name}` : 'دفعة جديدة',
       fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default }),
       values: cohortToForm(c.id ? c : { program_id: pid, status: 'planned', program_version_id: p?.versions[0]?.id || '' }),
-      onSave: (v) => L('admin.cohort-save', { ...(c.id ? { id: c.id } : {}), ...formToCohort(v) }),
+      onSave: (v) => saveCohort({ ...(c.id ? { id: c.id } : {}), ...formToCohort(v) }, confirm),
     }));
   };
 

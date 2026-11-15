@@ -5,7 +5,7 @@
 // كل مشارك، وتُثبَّت قيمة لاحقة إن تغيّر السعر بينهما. الآن كل مسار ربط (تسجيل برمز أو نطاق،
 // رمز يكتبه المشارك، ربط آلي بالنطاق، نقل من الإدارة، قبول طلب رعاية) يثبّت فورًا، وaccess()
 // يبقى احتياطًا لمن رُبط قبل هذا التغيير. وحدة مستقلة حتى لا تدور الاستيرادات (admin ↔ payments).
-import { alertOps, audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
+import { alertOps, all, audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { inProgram } from './logic.js';
@@ -83,10 +83,22 @@ async function seatStopped(p: { id: string; status?: string | null }, orgId: str
   return auto ? await sponsorDecision(p.id, orgId) : null;
 }
 
-// المقاعد المستهلكة من عقد الجهة: من له إعفاء حي منها (كما تعدّها leaders.pin_sponsor_seat)
+// المقاعد المستهلكة من عقد الجهة: من له إعفاء حي منها (كما تعدّها leaders.pin_sponsor_seat)، مشاركون مميزون لكل جهة.
+// قاعدة العد الواحدة: تعدّ بها الجهة الواحدة (seatsUsed) والجهات كلها بقراءة واحدة (seatsUsedByOrg)
+export function countSeats(ents: { participant_id: string; organization_id: string | null }[]) {
+  const by: Record<string, Set<string>> = {};
+  for (const e of ents || []) if (e.organization_id) (by[e.organization_id] ||= new Set()).add(e.participant_id);
+  return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v.size])) as Record<string, number>;
+}
+// بصفحات مرتبة: القراءة الواحدة تقف عند max_rows (1000) بلا خطأ فيخرج المستهلك أقل من حقيقته
+const liveSponsor = () => db.from('entitlements').select('participant_id, organization_id').eq('source', 'sponsor').is('revoked_at', null);
 export async function seatsUsed(orgId: string) {
-  const ents = must(await db.from('entitlements').select('participant_id').eq('organization_id', orgId).eq('source', 'sponsor').is('revoked_at', null)) ?? [];
-  return new Set((ents as any[]).map((e) => e.participant_id)).size;
+  const ents = await all((f, t) => liveSponsor().eq('organization_id', orgId).order('id').range(f, t));
+  return countSeats(ents)[orgId] || 0;
+}
+// لكل الجهات بقراءة واحدة مقسمة صفحات؛ الجهة بلا إعفاء حي غائبة فتُقرأ صفرًا
+export async function seatsUsedByOrg() {
+  return countSeats(await all((f, t) => liveSponsor().order('id').range(f, t)));
 }
 // هل يحتاج تثبيته مقعدًا؟ لا لمن له إعفاء حي منها (exists) ولا لمن حقه في البندين حي من غيرها (covered)
 async function heldItems(participantId: string, orgId: string): Promise<PinResult | null> {
