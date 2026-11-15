@@ -283,7 +283,8 @@ describe('قبول المستشار لا يُحفظ جزئيًا', () => {
   it('بريد الراعي وسبب التنازل يُفحصان قبل كتابة القبول والدرجة', () => {
     const write = review.indexOf("status: 'accepted'");
     expect(write).toBeGreaterThan(0);
-    for (const guard of ["if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي')", 'if (!waive && !sponsorEmailOf(charter)) throw new Fail(NO_SPONSOR_EMAIL_AR']) {
+    // بلا بريد راعٍ يُعتمد بسبب ثابت (قرار المالك 2026-11-14: الراعي توضيح لا شرط)، قبل كتابة القبول أيضًا
+    for (const guard of ["if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي')", 'if (!waive && !sponsorEmailOf(charter)) waive = NO_SPONSOR_WAIVER_AR;']) {
       expect(review.indexOf(guard)).toBeGreaterThan(0);
       expect(review.indexOf(guard)).toBeLessThan(write);
     }

@@ -103,3 +103,8 @@ export function raterVerification(email, { participantEmails = [], orgDomains = 
 }
 export const RATER_FLAG_AR = { self: 'بريد المشارك نفسه', public_mail: 'بريد عام', other_domain: 'نطاق غير نطاق جهته', individual: 'مشارك فردي بلا جهة' };
 export const RATER_VERIFICATION_AR = { org_domain: 'محقق بنطاق الجهة', confirmed: 'أكده المستشار أو المنسق', pending: 'بانتظار التأكيد', rejected: 'لم يُعتمد' };
+
+// رمز رابط دعوة الجهة (/j/<الرمز>) حين يُكتب أو يُغيَّر: من 10 إلى 40 حرفًا فلا يُخمَّن. المصدر الواحد لنموذج الجهة
+// في اللوحة وللخادم (admin.ts). الرموز الأقصر القائمة قبل هذا الشرط تبقى صالحة ما لم تُغيَّر
+export const INVITE_CODE_RE = /^[a-z0-9-]{10,40}$/;
+export const INVITE_CODE_RULE_AR = 'أحرف إنجليزية صغيرة وأرقام وشرطة، من 10 إلى 40';

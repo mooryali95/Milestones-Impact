@@ -15,6 +15,8 @@ import Tracking from './Tracking.jsx';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
+import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
+import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
@@ -25,7 +27,7 @@ const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.r
       : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: SUBMISSION_STATUS.draft, c: 'warn' } : { t: 'لم يبدأ', c: '' });
 const CARD_GATE_TITLE = { none: 'الخطوة الأولى: اعتماد بطاقة المبادرة', waiting: 'بطاقة مبادرتك عند المستشار', returned: 'أعاد المستشار بطاقة مبادرتك' };
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
-const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي'], ['approved', 'الاعتماد']];
+const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي إن وُجد'], ['approved', 'الاعتماد']];
 
 function Meter({ value, min }) {
   const r = 34, c = 2 * Math.PI * r;
@@ -213,6 +215,29 @@ export default function Capstone({ me, onEditProfile, onBack }) {
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}
           </section>
 
+          <section className="card cp-example" aria-labelledby="cp-ex-h">
+            <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
+            <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع جهتك.</p>
+            <div className="row">
+              {examplesFor(me?.sector).map((ex, i) => (
+                <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="card cp-case" aria-labelledby="cp-case-h">
+            <h3 id="cp-case-h">حالة العمل</h3>
+            <p className="muted small">خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصولك نفسها، وتظهر مع ميثاق المبادرة في الوثيقة الاحترافية.</p>
+            <ul className="cp-checks">
+              {caseStatus(d.sections).map((c) => (
+                <li key={c.key} className={c.state === 'done' ? 'ok' : 'no'}>
+                  <b>{c.title}{c.total > 0 && <span className="muted"> · {c.done} من {c.total}</span>}</b>
+                  <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : c.question}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
+
           <section className="card">
             <h3 id="cp-summary-h">الملخص التنفيذي</h3>
             <p className="muted small" id="cp-summary-hint">رسالتك لصانع القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
@@ -229,7 +254,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               <>
                 <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'سلّم الوثيقة للمستشار'}</button>
                 {!d.can_submit && d.blocker && <small className="muted">{d.blocker}</small>}
-                {d.can_submit && <small className="muted">بعد التسليم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي.</small>}
+                {d.can_submit && <small className="muted">بعد التسليم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي إن كتبت بريده.</small>}
               </>
             )}
           </section>

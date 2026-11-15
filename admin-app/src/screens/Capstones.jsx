@@ -5,6 +5,9 @@
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
 // للتحسين مرة أو تقبلها فيُطلب تأييد راعيها. الفصول نفسها نماذج تعليمية،
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
+import GOV from '../../../supabase/content/initiative-guide/v1/sectors/gov.json';
+import HEALTH from '../../../supabase/content/initiative-guide/v1/sectors/health.json';
+import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
@@ -29,6 +32,9 @@ async function openDoc(doc, toast) {
   if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
 
+// الأمثلة المحلولة نفسها التي يراها المشارك (leaders-app/src/guide.js)
+const EXAMPLES = [GOV, HEALTH];
+
 function Review({ d, canWrite, onSaved, onFailed }) {
   const { toast, confirm } = useUI();
   const c = d.capstone;
@@ -38,14 +44,17 @@ function Review({ d, canWrite, onSaved, onFailed }) {
   const [waive, setWaive] = useState('');
   const [busy, setBusy] = useState('');
   const canReturn = (c.revisions || 0) < d.max_revisions;
-  // بلا بريد صحيح للراعي لا يُطلب تأييد: القبول اعتماد دون تأييد بسبب مكتوب (الراعي اختياري)
+  // بلا بريد صحيح للراعي لا يُطلب تأييد: المبادرة قد تكون افتراضية والراعي توضيح لا شرط (قرار المالك 2026-11-14)،
+  // فالقبول اعتماد مباشر يسجّل الخادم سببه الثابت، ولا يُطلب من المستشار سبب لكل وثيقة
   const noSponsor = !d.sponsor_email;
-  // سبب الاعتماد دون تأييد بحد الخادم نفسه (عشرة أحرف، capstone.ts)؛ وكان وجود أي سبب يلغي التأكيد فيُعتمد نهائيًا بنقرة
-  const why = waive.trim();
-  const waiveShort = (noSponsor || !!why) && why.length < 10;
+  // سبب الاعتماد دون تأييد راعٍ له بريد، بحد الخادم نفسه (عشرة أحرف، capstone.ts)؛ وكان وجود أي سبب يلغي التأكيد فيُعتمد نهائيًا بنقرة
+  const why = noSponsor ? '' : waive.trim();
+  const waiveShort = !!why && why.length < 10;
   const send = async (decision) => {
     if (decision === 'return' && !(await confirm('تُعاد الوثيقة للمشارك ليحسّنها، وهذا التحسين الوحيد المتاح له. متابعة؟'))) return;
-    if (decision === 'accept' && !(await confirm(why
+    if (decision === 'accept' && !(await confirm(noSponsor
+      ? 'تُعتمد الوثيقة نهائيًا بقبولك، فلا راعٍ فعلي لها: تُمنح نقاط الاعتماد ويُبلَّغ المشارك بالبريد، ولا يُتراجع عن ذلك. متابعة؟'
+      : why
       ? 'تُعتمد الوثيقة نهائيًا دون تأييد الراعي: تُمنح نقاط الاعتماد ويُبلَّغ المشارك بالبريد، ولا يُتراجع عن ذلك. متابعة؟'
       : 'تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها في الجهة. متابعة؟'))) return;
     setBusy(decision);
@@ -53,7 +62,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
     setBusy('');
     // أي خطأ يعيد تحميل الوثيقة، فلا تبقى الشاشة على حالة تغيّرت على الخادم
     if (!r.success) { toast(r.message); onFailed(); return; }
-    toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : why ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
+    toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : why || noSponsor ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
     refreshPending();
     onSaved(r);
   };
@@ -74,8 +83,8 @@ function Review({ d, canWrite, onSaved, onFailed }) {
           </div>
         ))}
         <label className="cps-note">خلاصتك للمشارك<textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        {noSponsor && <p className="la-muted" role="note">لا بريد صحيح للراعي في بطاقة المبادرة، فلا يُطلب تأييده. اكتب سبب الاعتماد دون تأييد{canReturn ? '، أو أعدها للمشارك ليضيف بريد الراعي' : ''}.</p>}
-        <label className="cps-note">اعتماد دون تأييد الراعي ({noSponsor ? 'إلزامي' : 'اختياري'}، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>
+        {noSponsor && <p className="la-muted" role="note">لا راعٍ فعلي في بطاقة المبادرة (الراعي توضيح لدوره، والمبادرة قد تكون افتراضية)، فقبولك يعتمد الوثيقة مباشرة.</p>}
+        {!noSponsor && <label className="cps-note">اعتماد دون تأييد الراعي (اختياري، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>}
         <div className="la-row">
           <button className="btn-sm primary" disabled={waiveShort} title={waiveShort ? 'سبب الاعتماد دون تأييد عشرة أحرف على الأقل' : undefined} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : why ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
           {canReturn && <button className="btn-sm ghost" onClick={() => send('return')}>{busy === 'return' ? 'لحظة…' : 'إعادة للتحسين'}</button>}
@@ -143,6 +152,18 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
         </div>
       </section>
+
+      {/* حقول قريبة جدًا من المثال المحلول: تنبيه للمستشار لا يمنع (مرافق بناء المبادرة 4ب، example-check.js) */}
+      {(() => {
+        const near = copiedFromExamples(d.doc, EXAMPLES);
+        return near.length ? (
+          <section className="la-card" role="note">
+            <h3>قريبة من المثال المحلول</h3>
+            <p className="la-muted">هذه الحقول تطابق جواب المثال المحلول في أغلب كلماتها. اسأل المشارك عن واقع مبادرته فيها قبل التقييم.</p>
+            <ul>{near.map((x) => <li key={`${x.chapter}-${x.field}`}><b>{x.chapter}:</b> {x.field} <span className="la-muted">(مثال {x.sector})</span></li>)}</ul>
+          </section>
+        ) : null;
+      })()}
 
       <div className="la-grid2">
         <section className="la-card">

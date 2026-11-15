@@ -141,19 +141,20 @@ async function openReview(page, srv) {
   for (const title of RUBRIC) await page.getByRole('radiogroup', { name: title }).getByRole('radio').last().click();
 }
 
-test('المستشار: وثيقة بلا بريد راعٍ تُقبل وتُعتمد دون تأييد بسبب مكتوب، لا بطلب تأييد يفشل', async ({ page }) => {
+test('المستشار: وثيقة بلا بريد راعٍ تُعتمد بقبوله مباشرة، بلا سبب يكتبه ولا طلب تأييد يفشل', async ({ page }) => {
+  // المبادرة قد تكون افتراضية والراعي توضيح لا شرط (قرار المالك 2026-11-14)
   const srv = reviewServer({ sponsorEmail: null, review: (s, b, capstone) => { s.status = 'approved'; return capstone(); } });
   await openReview(page, srv);
-  await expect(page.getByRole('note')).toContainText('لا بريد صحيح للراعي في بطاقة المبادرة');
+  await expect(page.getByRole('note')).toContainText('لا راعٍ فعلي في بطاقة المبادرة');
   await expect(page.getByRole('button', { name: 'قبول وطلب تأييد الراعي' })).toHaveCount(0);
+  await expect(page.getByLabel(/اعتماد دون تأييد الراعي/)).toHaveCount(0);
   const accept = page.getByRole('button', { name: 'قبول واعتماد دون راعٍ' });
-  await expect(accept).toBeDisabled();
-  await page.getByLabel(/اعتماد دون تأييد الراعي \(إلزامي/).fill('مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها');
+  await expect(accept).toBeEnabled();
   await accept.click();
-  await expect(page.getByRole('alertdialog')).toContainText('تُعتمد الوثيقة نهائيًا دون تأييد الراعي');
+  await expect(page.getByRole('alertdialog')).toContainText('تُعتمد الوثيقة نهائيًا بقبولك، فلا راعٍ فعلي لها');
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByText('اعتُمدت الوثيقة')).toBeVisible();
-  expect(srv.calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ decision: 'accept', waive_sponsor: 'مبادرة داخلية يرعاها مدير الإدارة نفسه، بلا راعٍ من خارجها' });
+  expect(srv.calls.find((c) => c.action === 'admin.capstone-review')).toMatchObject({ decision: 'accept', waive_sponsor: '' });
   await expect(page.getByRole('button', { name: /قبول/ })).toHaveCount(0);
 });
 

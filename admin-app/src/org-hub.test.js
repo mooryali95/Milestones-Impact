@@ -56,3 +56,16 @@ describe('جاهزية الجهة', () => {
     expect(readinessSummary(x)).toBe('بقي 3 بنود من 7');
   });
 });
+
+import { validateOrg } from './screens/OrgForm.jsx';
+describe('رمز رابط الجهة في النموذج بشرط الخادم نفسه (تدقيق الرحلة 2026-11-14)', () => {
+  const v = (invite_code) => ({ name: 'جهة', short_name: '', seats: '', contract: '', color: '#12414E', invite_code });
+  const coord = { enabled: false, email: '' };
+  it('الجديد أو المغيَّر من 10 إلى 40، فالمثال القديم القصير يُرفض قبل الحفظ لا بعده', () => {
+    expect(validateOrg(v('moe-2026'), coord).invite_code).toMatch(/من 10 إلى 40/);
+    expect(validateOrg(v('moe-leaders-2026'), coord).invite_code).toBeUndefined();
+  });
+  it('الرمز القائم الأقصر يبقى صالحًا ما لم يُغيَّر، كما في الخادم', () => {
+    expect(validateOrg(v('wt01'), coord, 'wt01').invite_code).toBeUndefined();
+  });
+});

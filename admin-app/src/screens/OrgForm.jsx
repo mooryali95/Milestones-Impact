@@ -6,18 +6,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { domainsOf, inviteUrl, L, orgColor, isSuperAdminUser } from '../leaders.js';
 import { session } from '../api.js';
-import { hostOf, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
+import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
 import { useEscape, useUI } from '../ui.jsx';
 import { CertOverride, Field } from '../cert.jsx';
 
 export const SWATCHES = ['#12414E', '#0B272F', '#A97A2E', '#2E7D5B', '#1F5FA8', '#7A3E9D', '#A8322D', '#B26B00', '#4A6A72', '#00897B'];
 const HEX = /^#[0-9A-Fa-f]{6}$/;
-const CODE = /^[a-z0-9-]{4,40}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // نطاق الجهة بقواعد الخادم نفسها (domains.js): لا لاحقة عامة ولا بريد عام
 const host = (s) => (orgDomainIssue(s) ? null : hostOf(s));
 
-export function validateOrg(v, coord) {
+// prevCode: رمز الجهة المحفوظ. يُفحص الرمز حين يُكتب أو يُغيَّر فقط، كما في الخادم، فالرمز الأقصر القائم يبقى صالحًا
+export function validateOrg(v, coord, prevCode = '') {
   const e = {};
   if (!v.name.trim()) e.name = 'اسم الجهة مطلوب';
   else if (v.name.length > 200) e.name = 'الاسم أطول من 200 حرف';
@@ -25,7 +25,7 @@ export function validateOrg(v, coord) {
   if (v.seats !== '' && (!Number.isInteger(Number(v.seats)) || Number(v.seats) < 0)) e.seats = 'عدد صحيح موجب';
   if (v.contract !== '' && v.contract != null && !(Number(v.contract) >= 0)) e.contract = 'مبلغ صحيح';
   if (v.color && !HEX.test(v.color)) e.color = 'لون بصيغة #RRGGBB';
-  if (v.invite_code && !CODE.test(v.invite_code)) e.invite_code = 'أحرف إنجليزية صغيرة وأرقام وشرطة، من 4 إلى 40';
+  if (v.invite_code && v.invite_code !== prevCode && !INVITE_CODE_RE.test(v.invite_code)) e.invite_code = INVITE_CODE_RULE_AR;
   if (coord.enabled) {
     if (!EMAIL.test(coord.email.trim())) e.coord_email = 'بريد صحيح مطلوب لحساب الاطلاع';
   } else if (coord.email && !EMAIL.test(coord.email.trim())) e.coord_email = 'البريد غير صحيح';
@@ -171,6 +171,8 @@ export default function OrgForm({ org, coordinator, onClose }) {
     phone: coordinator?.phone || org?.contact_phone || '',
   }), [org, coordinator]);
   const [v, setV] = useState(initial);
+  // جهة جديدة حُفظت ثم تعثّرت خطوة بعدها (الدفعة أو المنسق): يبقى معرّفها، فالحفظ ثانية يكمل الجهة نفسها ولا يُنشئ أخرى
+  const [made, setMade] = useState({ id: null, cohort: false });
   const [coord, setCoord] = useState(initialCoord);
   // جهة جديدة: كتابة بريد المنسق تفعّل حسابه ودعوته، ما لم يُطفئ المفتاح صراحة (كان مطفأً فيُحفظ البريد ولا يصل صاحبه شيء)
   const [accountTouched, setAccountTouched] = useState(false);
@@ -194,7 +196,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
   const [globalCert, setGlobalCert] = useState(null);
   useEffect(() => { L('admin.cert-settings').then((r) => r.success && setGlobalCert(r.settings)); }, []);
 
-  const errors = validateOrg(v, coord);
+  const errors = validateOrg(v, coord, org?.invite_code || '');
   const dirty = JSON.stringify(v) !== JSON.stringify(initial) || JSON.stringify(coord) !== JSON.stringify(initialCoord);
   const err = (k) => (touched[k] || touched.all ? errors[k] : null);
   const set = (k) => (e) => { setV({ ...v, [k]: e.target.value }); setTouched({ ...touched, [k]: true }); };
@@ -219,25 +221,28 @@ export default function OrgForm({ org, coordinator, onClose }) {
     e?.preventDefault();
     setTouched({ all: true });
     const next = { ...v, ...patch };
-    if (Object.keys(validateOrg(next, coord)).length) return;
+    if (Object.keys(validateOrg(next, coord, org?.invite_code || '')).length) return;
     // بريد منسق بلا حساب: لا تصله دعوة ولا رابط التسجيل، فيُنبَّه الحافظ قبل الحفظ إن كان البريد جديدًا
     if (contactOnly && (!org || coord.email.trim().toLowerCase() !== (org.contact_email || '')) && !(await confirm(`لن يصل إلى ${coord.email.trim()} أي بريد: يُحفظ جهة اتصال فقط، بلا دعوة ولا رابط تسجيل للموظفين. الحفظ هكذا؟`, { ok: 'احفظ بلا دعوة' }))) return;
     setBusy(true); setServerErr('');
+    const known = org?.id || made.id;
     const row = {
       name: next.name.trim(), name_en: next.name_en.trim() || null, logo: next.logo, cert_cobrand: next.cert_cobrand, cert: next.cert, short_name: next.short_name.trim() || null, sector: next.sector.trim() || null, status: next.status,
       color: next.color, seats: next.seats === '' ? null : Number(next.seats),
       contract_cents: next.contract === '' ? null : Math.round(Number(next.contract) * 100), show_value: next.show_value,
       contract_starts: next.contract_starts || null, contract_ends: next.contract_ends || null, domains: next.domains.join(','), notes: next.notes.trim() || null,
       contact_name: coord.full_name.trim() || null, contact_email: coord.email.trim().toLowerCase() || null, contact_phone: coord.phone.trim() || null,
-      ...(next.invite_code || !org ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
+      ...(next.invite_code || !known ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
     };
-    const r = await L('admin.save', { entity: 'organizations', row: { ...(org ? { id: org.id } : {}), ...row } });
+    const r = await L('admin.save', { entity: 'organizations', row: { ...(known ? { id: known } : {}), ...row } });
     if (!r.success) { setBusy(false); return setServerErr(r.message || 'تعذّر الحفظ'); }
-    const orgId = org?.id || r.row?.id || r.id;
+    const orgId = known || r.row?.id || r.id;
+    if (!org && orgId && orgId !== made.id) setMade((m) => ({ ...m, id: orgId }));
     let note = 'تم الحفظ';
-    if (!org && orgId && plan.cohort && plan.program_id) {
+    if (!org && orgId && plan.cohort && plan.program_id && !made.cohort) {
       const c = await L('admin.cohort-save', { name: `دفعة ${row.name}`, organization_id: orgId, program_id: plan.program_id, status: 'open', ...(plan.starts_on ? { starts_on: plan.starts_on } : {}) });
-      if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن دفعتها لم تُنشأ: ${c.message}. أنشئها من «البرامج والدفعات».`); }
+      if (!c.success) { setBusy(false); return setServerErr(`حُفظت الجهة، لكن دفعتها لم تُنشأ: ${c.message}. صحّح وأعد الحفظ فتُكمل الجهة نفسها، أو أنشئها من صفحة الجهة.`); }
+      setMade((m) => ({ ...m, id: orgId, cohort: true }));
     }
     if (coord.enabled && orgId) {
       const c = await L('admin.coordinator-save', { organization_id: orgId, email: coord.email, full_name: coord.full_name, phone: coord.phone });
@@ -353,7 +358,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
                 </div>
               </Field>
               <Field label="رمز رابط الدعوة" hint={org ? 'تغييره يعطّل الرابط القديم' : 'اتركه فارغًا ليُولَّد تلقائيًا'} error={err('invite_code')}>
-                <input dir="ltr" value={v.invite_code} onChange={(e) => { setV({ ...v, invite_code: e.target.value.toLowerCase() }); setTouched({ ...touched, invite_code: true }); }} placeholder="مثل moe-2026" />
+                <input dir="ltr" value={v.invite_code} onChange={(e) => { setV({ ...v, invite_code: e.target.value.toLowerCase() }); setTouched({ ...touched, invite_code: true }); }} placeholder="مثل moe-leaders-2026" />
               </Field>
               <div className="of-link wide"><small>رابط الدعوة</small><code dir="ltr">{preview}</code></div>
               <Field group label="نطاقات الجهة" hint="من يصل من موقعها، أو يسجّل ببريد وظيفي عليها (مثل name@moe.gov.sa)، يُربط بها ويُعفى تلقائيًا. النطاقات العامة كـ gmail لا تربط أحدًا. اكتب النطاق واضغط Enter." wide>

@@ -209,6 +209,8 @@ export function dateAr(v) {
 }
 
 const codeOf = (v) => String(v || '').trim().replace(/\s+/g, '').toUpperCase();
+// رمز في أول الخلية قبل اسم الحزمة («1.1 رحلة المستفيد»)، كما يكتبه المشارك حين يُطلب منه «الرمز أو الاسم»
+const leadCode = (v) => codeOf(String(v || '').trim().split(/\s+/)[0]);
 const listCodes = (v) => String(v || '').split(/[،,;\s]+/).map(codeOf).filter(Boolean);
 
 // تكلفة صف: الإجمالي إن كُتب، وإلا الكمية × سعر الوحدة
@@ -274,7 +276,7 @@ export function capstoneChecks(ctx) {
     const cover = raci ? raci.rows.map((r) => raci.cell(r, 0)) : [];
     const a = raci ? raci.col('المحاسب', 'A') : -1;
     const noA = raci ? raci.rows.filter((r) => !raci.cell(r, a)).map((r) => raci.cell(r, 0)) : [];
-    const uncovered = wbsCodes.filter((c, i) => !cover.some((x) => codeOf(x) === c || (wbsNames[i] && norm(x).includes(wbsNames[i]))));
+    const uncovered = wbsCodes.filter((c, i) => !cover.some((x) => codeOf(x) === c || leadCode(x) === c || (wbsNames[i] && norm(x).includes(wbsNames[i]))));
     add('raci-cover', 'مصفوفة المسؤوليات تغطي حزم العمل', wbsCodes.length && uncovered.length <= Math.floor(wbsCodes.length / 4), `حزم لم تظهر في مصفوفة المسؤوليات: ${uncovered.slice(0, 6).join('، ')}`);
     add('raci-a', 'لكل بند في المصفوفة محاسب واحد', raci && raci.rows.length && !noA.length, `بنود بلا محاسب: ${noA.slice(0, 6).join('، ')}`);
   }
@@ -340,6 +342,14 @@ export function capstoneChecks(ctx) {
       add('evidence', 'خطة الأدلة تقيس كل مؤشرات المنافع', !miss.length, `مؤشرات بلا خطة قياس: ${miss.slice(0, 6).join('، ')}. استوردها من سجل المنافع.`);
     }
   }
+  // فصل الشراء (البعد التجاري): من قال إنه يحتاج شراء يكتب ما يشتريه
+  if (has('procurement')) {
+    const need = String(A.procurement?.need || '');
+    if (need.startsWith('نعم')) {
+      const t = table(M.procurement, A.procurement, 'items');
+      add('procurement', 'ما يُشترى مكتوب بقيمته وطريقة طرحه', t && t.rows.length, 'اخترت أن المبادرة تحتاج شراء أو تعاقدًا: اكتب في فصل «الشراء والتعاقد» بندًا واحدًا على الأقل.');
+    }
+  }
   const roadmap = ctx.scope === 'program' && has('roadmap') ? table(M.roadmap, A.roadmap, 'tranches') : null;
   if (roadmap) {
     const t = roadmap;
@@ -376,10 +386,11 @@ export function sectionState(model, fields, sub) {
 // المستشار يعتمد اختيار المبادرة من بطاقتها قبل تسليم الوثيقة كاملة: هل هي حقيقية في جهته، وبحجم يكفيه زمن البرنامج،
 // ولها راعٍ. كان الحكم الأول على المبادرة يأتي عند الوثيقة كاملة في آخر الرحلة، فتُكتشف المبادرة غير المناسبة بعد بنائها.
 // البوابة لا تقفل الفصول: المشارك يكمل البناء أثناء الانتظار، والذي ينتظر الاعتماد هو تسليم الوثيقة وحده.
+// المبادرة قد تكون افتراضية (قرار المالك 2026-11-14): المعيار واقعيتها في سياق جهته، والراعي توضيح لدوره لا اسم ولا بريد.
 export const CARD_REVIEW_CRITERIA = [
-  'حقيقية في جهته وليست تمرينًا',
+  'واقعية في سياق جهته، حقيقية كانت أو افتراضية',
   'بحجم يُخطَّط له في زمن البرنامج',
-  'لها راعٍ في الجهة يملك قرارها',
+  'موضّح فيها من يرعاها في هيكل الجهة وما يقرره',
   'مشكلتها ومنفعتها المتوقعة واضحتان',
 ];
 /** @param {string | null | undefined} status حالة تسليم نموذج البطاقة */

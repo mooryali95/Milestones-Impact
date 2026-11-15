@@ -100,7 +100,10 @@ describe('الخادم والواجهة', () => {
     expect(pt).toMatch(/resolveOrg\(b, `ip:\$\{ctx\.ip \|\| 'none'\}`\)/);
     expect(read('supabase/functions/leaders-api/index.ts')).toContain("'org.info': (b, ctx) => P.orgInfo(b, ctx),");
     const admin = read('supabase/functions/leaders-api/admin.ts');
-    expect(admin).toMatch(/\^\[a-z0-9-\]\{10,40\}\$/);
+    // الشرط في domains.js وحده، يقرؤه الخادم ونموذج الجهة في اللوحة (تدقيق الرحلة 2026-11-14: كان النموذج يقبل 4)
+    expect(read('supabase/functions/leaders-api/domains.js')).toMatch(/INVITE_CODE_RE = \/\^\[a-z0-9-\]\{10,40\}\$\//);
+    expect(admin).toMatch(/INVITE_CODE_RE\.test\(code\)/);
+    expect(read('admin-app/src/screens/OrgForm.jsx')).toMatch(/INVITE_CODE_RE\.test\(v\.invite_code\)/);
     expect(admin).toMatch(/export const inviteCode = \(n = 12\)/);
   });
   it('الواجهة: الطلب المعلّق بالمقاعد أو العقد يعرض شاشة الانتظار بلا بوابة دفع', () => {
@@ -109,5 +112,23 @@ describe('الخادم والواجهة', () => {
     expect(seatHold({ access: { request: { status: 'rejected', kind: 'seats' } } })).toBe(false);
     expect(read('leaders-app/src/App.jsx')).toMatch(/seatHold\(me\) && \(!paidFor\('assessment'\) \|\| !paidFor\('program'\)\)\) screen = <SponsorshipPending \/>/);
     expect(read('leaders-app/src/screens/Paywall.jsx')).not.toMatch(/SponsorshipPending[\s\S]{0,600}(مقاعد|المقاعد|seats)/);
+  });
+});
+
+describe('صاحب حساب قائم يدخل برابط جهة (تدقيق الرحلة 2026-11-14)', () => {
+  it('يُربط بالجهة عند الدخول بالرمز أو Google إن لم يكن مرتبطًا، ولا يتغير المرتبط، وتعثّر الربط لا يمنع الدخول', () => {
+    const pt = read('supabase/functions/leaders-api/participant.ts');
+    expect(pt).toMatch(/const pending: Body \| null = existing \? orgCode :/);
+    expect(pt).toMatch(/p = await linkOrgOnLogin\(p, ch\.pending_profile\?\.org,/);
+    expect(pt).toMatch(/p = await linkOrgOnLogin\(p, b\.org,/);
+    const fn = pt.slice(pt.indexOf('async function linkOrgOnLogin'), pt.indexOf('// المشارك المسجل يضيف رمز جهته'));
+    expect(fn).toContain('if (!p || p.organization_id');
+    expect(fn).toContain(".is('organization_id', null)");
+    expect(fn).toMatch(/catch \(e\) \{[\s\S]*return p;/);
+  });
+  it('الرابط الخاطئ أو المتوقف يُعلن في شاشة الدخول ولا يُتجاهل', () => {
+    const si = read('leaders-app/src/screens/SignIn.jsx');
+    expect(si).toContain("else setOrg({ invalid: true, message: r.message })");
+    expect(si).toContain('{org?.invalid && (');
   });
 });

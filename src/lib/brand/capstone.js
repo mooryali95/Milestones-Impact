@@ -9,6 +9,7 @@ import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js'
 import { parseDate, parseNumber, PRIORITY_WEIGHT, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 
 import { DIMENSIONS, DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { businessCase, charterData } from '../../../supabase/functions/leaders-api/business-case.js';
 
 const DIM_EN = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.en]));
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
@@ -50,6 +51,12 @@ const STYLE = `<style>
 .cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
 .cp-score b { font: 200 30pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
+.cp-charter { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
+.cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.8mm 0; border-bottom: 1px solid #EEF1F0; }
+.cp-charter td { padding: 1.8mm 0 1.8mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.8; color: #2C4148; white-space: pre-line; }
+.cp-case { margin: 0 0 5mm; break-inside: avoid; }
+.cp-case h3 { margin: 0 0 1mm; } .cp-case > small { display: block; color: #5F7176; font-size: 8pt; margin-bottom: 2mm; }
+.cp-case .cp-miss { color: #5F7176; font-size: 8.6pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
 </style>`;
 
 // شجرة هيكل التجزئة من الترميز الهرمي (1، 1.1، 1.1.2)
@@ -183,12 +190,32 @@ function trackingBlock(t) {
     'الخطة من الوثيقة المعتمدة، والفعلي من تحديثات القائد الشهرية. نسبة التحقق هي ما تحرك من خط الأساس نحو المستهدف، ويؤكد الراعي أرقام نقطتي المراجعة.');
 }
 
+// ── ميثاق المبادرة وحالة العمل: عرضان مولّدان من الفصول (business-case.js) ──
+function charterBlock(doc) {
+  const c = charterData(doc);
+  if (!c || !c.rows.length) return '';
+  return section('Initiative charter', 'ميثاق المبادرة', `
+    <table class="cp-charter"><tbody>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
+    ${c.deliverables ? `<div class="cp-f" style="margin-top:4mm"><b>المخرجات الرئيسة</b>${table(c.deliverables.columns.map((x) => ({ label: x })), c.deliverables.rows)}</div>` : ''}`,
+  'صفحة واحدة تُولَّد من البطاقة والتكلفة والمنافع والمخاطر، فلا تُكتب مرتين.');
+}
+
+function caseBlock(doc) {
+  const cases = businessCase(doc);
+  if (!cases.length) return '';
+  return section('Business case', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
+    ${c.missing ? `<p class="cp-miss">${esc(c.missing)}</p>` : `${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? `<div class="cp-f"><b>${esc(c.table.label)}</b>${table(c.table.columns.map((x) => ({ label: x })), c.table.rows)}</div>` : ''}`}</div>`).join(''),
+  'خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصول الوثيقة نفسها.');
+}
+
 // ── الوثيقة ──
 // doc: { meta, summary, sections, cost, checks, review, sponsor, rubric, tracking? }
 export function capstoneReport(doc) {
   const m = doc.meta || {};
   const secs = doc.sections || [];
   const approved = m.status === 'approved';
+  // مثال محلول (guide.js): وثيقة تعليمية كاملة، بلا تنبيه المسودة ولا فحوص ولا اعتماد
+  const example = !!m.example;
   const count = (key, field) => ((secs.find((s) => s.key === key)?.fields || []).find((f) => f.key === field)?.value || []).filter(filled).length;
   const charter = Object.fromEntries((secs.find((s) => s.key === 'initiative-charter')?.fields || []).map((f) => [f.key, f.value]));
 
@@ -202,15 +229,18 @@ export function capstoneReport(doc) {
   ]));
 
   body += section('Executive summary', 'الملخص التنفيذي', `
-    ${doc.summary ? callout('رسالة القائد', doc.summary) : ''}
+    ${doc.summary ? callout(example ? 'عن المثال' : 'رسالة القائد', doc.summary) : ''}
     ${points([
       charter.objective && raw(`<b>الهدف الاستراتيجي:</b> ${esc(charter.objective)}`),
       charter.problem && raw(`<b>المشكلة أو الفرصة:</b> ${esc(charter.problem)}`),
-      (m.start || m.end) && raw(`<b>المدة:</b> ${esc(m.start || '·')} إلى ${esc(m.end || '·')}`),
+      (m.start || m.end) && raw(`<b>المدة:</b> <bdi dir="ltr">${esc(m.start || '·')}</bdi> إلى <bdi dir="ltr">${esc(m.end || '·')}</bdi>`),
       m.sponsor && raw(`<b>الراعي:</b> ${esc(m.sponsor)}`),
       doc.cost && raw(`<b>التكلفة:</b> ${esc(money(doc.cost.withContingency))} مع احتياطي ${esc(doc.cost.contingency || 0)}%`),
     ].filter(Boolean), '')}
-    ${approved ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+    ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+
+  body += charterBlock(doc);
+  body += caseBlock(doc);
 
   body += section('Contents', 'فهرس الوثيقة', `<ol class="cp-toc">${secs.map((s, i) => `<li><span>${String(i + 1).padStart(2, '0')}</span>${esc(s.title)}<small>${esc(DIM_AR[s.dimension] || '')}</small></li>`).join('')}</ol>`);
 
@@ -219,7 +249,7 @@ export function capstoneReport(doc) {
     if (s.key === 'cost-plan') body += section('Cost summary', 'ملخص التكلفة', costBlock(doc.cost));
   });
 
-  if (!approved && (doc.checks || []).length) {
+  if (!approved && !example && (doc.checks || []).length) {
     body += section('Coherence', 'فحوص الاتساق بين الفصول', `<ul class="cp-check">${doc.checks.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${esc(c.title)}${c.detail ? `<small>${esc(c.detail)}</small>` : ''}</li>`).join('')}</ul>`,
       'يفحصها النظام آليًا: كل حزمة لها مالك وتكلفة، وكل منفعة لها خط أساس وخطة قياس، والجدول داخل مدة المبادرة.');
   }
@@ -252,11 +282,13 @@ export function capstoneReport(doc) {
   return {
     meta: {
       id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document',
-      eyebrow: 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
-      subtitle: `وثيقة ${m.scope_title ? `${m.scope_title} ` : ''}مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
+      eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
+      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة ${m.scope_title ? `${m.scope_title} ` : ''}مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['القائد', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
-      confidential: 'سري: مخصص للقائد وجهته ومستشاره',
-      closing: approved
+      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'سري: مخصص للقائد وجهته ومستشاره',
+      closing: example
+        ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع جهتك، وقارن بنيتها بهذا المثال.'
+        : approved
         ? 'وثيقة معتمدة. تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.'
         : 'نسخة عمل تُبنى آليًا من فصول المبادرة لحظة إصدارها.',
     },
