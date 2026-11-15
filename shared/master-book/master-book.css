@@ -337,3 +337,11 @@
 .mb-tag:disabled { opacity: .5; cursor: not-allowed; }
 .mb-ok { color: var(--ok); font-size: 13px; margin: 8px 0 0; }
 .mb-foot { margin: 16px 0 6px; line-height: 1.9; }
+
+/* ── المسودات ── */
+.mb-chip.draft { border-color: var(--gold-light); background: rgba(217, 168, 90, .18); color: #FFF3DC; }
+.mb-note.draft { border-style: dashed; }
+.mb-vol.draft { border-style: dashed; border-color: rgba(217, 168, 90, .7); background: linear-gradient(150deg, var(--graphite-2), var(--ink)); }
+.mb-vol.draft .mb-vol-img { opacity: .18; }
+.mb-vol.draft .mb-vol-in i { font: 400 30px/1 var(--body); }
+@media (min-width: 720px) { .mb-vols:has(.mb-vol.draft) { grid-template-columns: repeat(4, 1fr); } }
