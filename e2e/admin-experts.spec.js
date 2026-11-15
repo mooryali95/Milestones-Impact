@@ -26,7 +26,8 @@ async function admin(page) {
       'admin.expert-save': { success: true, expert: { ...experts[0], id: 'e3' }, invited: true },
       'admin.expert-requests': { success: true, requests: [
         { id: 'r1', participant_id: 'p1', role: 'coach', dimension: 'impact', status: 'unmatched', tried: ['e9'], created_at: '2026-10-29', participants: { full_name: 'سارة' } },
-        { id: 'r2', participant_id: 'p2', role: 'advisor', dimension: null, status: 'accepted', expert_id: 'e1', score: 82.5, created_at: '2026-10-28', participants: { full_name: 'عمر' }, experts: { full_name: 'د. سارة الحربي' } },
+        // قبِله الخبير قبل يومين: جارٍ في وقته، فلا يظهر في «يحتاج تدخلًا»
+        { id: 'r2', participant_id: 'p2', role: 'advisor', dimension: null, status: 'accepted', expert_id: 'e1', score: 82.5, created_at: new Date(Date.now() - 3 * 864e5).toISOString(), accepted_at: new Date(Date.now() - 2 * 864e5).toISOString(), participants: { full_name: 'عمر' }, experts: { full_name: 'د. سارة الحربي' } },
       ] },
       'admin.expert-request-retry': { success: true, status: 'offered' },
     }[b.action];
@@ -115,9 +116,15 @@ test('انضم كخبير: التحقق ثم الإرسال', async ({ page }) =
   expect(sent).toMatchObject({ full_name: 'سارة الحربي', roles: ['advisor'], dimensions: ['leadership'] });
 });
 
-test('طلبات الإسناد: القائمة بحالاتها، وإعادة المحاولة لطلب بلا خبير', async ({ page }) => {
+test('طلبات الإسناد: «يحتاج تدخلًا» افتراضيًا، ثم القائمة بحالاتها، وإعادة المحاولة لطلب بلا خبير', async ({ page }) => {
   const calls = await admin(page);
   const board = page.locator('.xm-board');
+  // الافتراضي «يحتاج تدخلًا»: الطلب بلا خبير وحده، وكان العرض القديم «قائمة» يخفيه
+  await expect(board.getByRole('button', { name: /يحتاج تدخلًا/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(board.locator('tbody tr')).toHaveCount(1);
+  await expect(board).toContainText('سارة');
+  await expect(board).not.toContainText('قبِله الخبير');
+  await board.getByRole('button', { name: /^قائمة/ }).click();
   await expect(board.locator('tbody tr')).toHaveCount(1);
   await expect(board).toContainText('قبِله الخبير');
   await board.getByRole('button', { name: /بلا خبير/ }).click();

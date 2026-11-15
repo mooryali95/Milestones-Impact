@@ -2635,3 +2635,9 @@ export function linkAfterDecisionOk(decidedAt, now = Date.now()) {
   return !Number.isFinite(t) || now - t <= LINK_AFTER_DECISION_DAYS * 864e5;
 }
 export const LINK_CLOSED_AR = 'انتهت مدة الاطلاع على هذا الرابط بعد تسجيل القرار. إن احتجت شيئًا فراسلنا.';
+
+// المرافق الذكي داخل تطبيق القادة (لم يُبنَ بعد، والقاعدة هنا مصدرها الواحد): يعمل حين تسمح به الجهة ولا تطفئه الدفعة،
+// والفرد بلا جهة مسموح له افتراضيًا. مساعد الموقع العام (agent-chat) لا يمر بهذه القاعدة.
+export function companionAllowed(org, cohort) {
+  return (org ? org.companion_allowed !== false : true) && cohort?.companion !== false;
+}

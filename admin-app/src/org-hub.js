@@ -8,6 +8,17 @@
 const today = () => new Date().toISOString().slice(0, 10);
 const plural = (n) => (n === 1 ? 'بند واحد' : n === 2 ? 'بندان' : `${n} بنود`);
 
+// المقاعد المستهلكة من مصدرها الواحد: seats_used من admin.orgs (seatsUsed في entitlements.ts: إعفاء حي من الجهة).
+// تعذّر عدّها في الخادم يرسلها فارغة، فيُعرض عدد الأعضاء بدلها كما كان
+export const seatsUsedOf = (o, members = 0) => o?.seats_used ?? members;
+
+// سطر المقاعد في بطاقة الجهة ورأس ملفها: «31 من 50» بالمستهلك من العقد، وبلا مقاعد في العقد عدد المشاركين
+export function seatsView(o, members = 0) {
+  if (!o?.seats) return { label: 'المشاركون', value: String(members), hint: 'بلا حد في العقد', pct: null };
+  const used = seatsUsedOf(o, members);
+  return { label: 'المقاعد', value: `${used} من ${o.seats}`, hint: null, pct: Math.min(100, (used / o.seats) * 100) };
+}
+
 /** @param {{ org: any, access?: any, journey?: any, members?: number, seatsUsed?: number|null, pending?: number, now?: string }} d
  *  seatsUsed: المقاعد المستهلكة من العقد (admin.orgs ← seatsUsed: إعفاء حي من الجهة)، وبلاها عدد الأعضاء */
 export function orgReadiness({ org: o, access = null, journey = null, members = 0, seatsUsed = null, pending = 0, now = today() }) {

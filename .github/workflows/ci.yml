@@ -138,7 +138,7 @@ jobs:
       - name: Deno unit tests
         if: needs.changes.outputs.functions == 'true'
         # --node-modules-dir=none: لا يكتب في node_modules (الكتابة فيه تكسر Playwright بنسختين من المكتبة)
-        run: deno test --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/
+        run: deno test --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/
 
       - name: Test
         run: npm test
