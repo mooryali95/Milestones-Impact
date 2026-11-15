@@ -154,7 +154,7 @@ function Notes({ notes, shares, sections, onChange }) {
           <li key={n.id} className={`sh-note${n.read_at ? '' : ' new'}`} data-note={n.read_at ? 'read' : 'new'}>
             <header>
               <span className="sh-avatar" aria-hidden="true">{n.author_name.trim()[0]}</span>
-              <div className="grow"><b>{n.author_name}</b>{n.author_role && <small> · {n.author_role}</small>}
+              <div className="grow"><span className="sh-who"><b>{n.author_name}</b>{n.author_role && <small className="muted">{n.author_role}</small>}</span>
                 <small className="muted">{when(n.created_at)} · من رابط «{n.share_label || '·'}»{title(n.section_key) ? ` · عن «${title(n.section_key)}»` : ''}</small></div>
               {!n.read_at && <span className="sh-dot" aria-label="جديدة" />}
             </header>

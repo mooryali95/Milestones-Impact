@@ -1749,3 +1749,8 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .si-foot { text-align: center; margin-top: 14px; }
 .si-closed { text-align: center; }
 @media (max-width: 760px) { .sh-grid { grid-template-columns: 1fr; } .si-hero { padding: 18px; } .si-hero h1 { font-size: 22px; } }
+.sh-tabs { border-bottom: 1px solid var(--line); gap: 2px; }
+.sh-tabs [role=tab] { background: none; border: 0; border-bottom: 3px solid transparent; font: inherit; font-weight: 600; font-size: 15px; color: var(--muted); padding: 10px 16px 12px; cursor: pointer; margin-bottom: -1px; }
+.sh-tabs [role=tab].on { color: var(--fg); border-bottom-color: var(--gold); }
+.sh-tabs [role=tab]:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.sh-note .sh-who { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }

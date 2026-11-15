@@ -86,9 +86,8 @@ export function documentHtml(meta, body, opts = {}) {
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : ''}><head><meta charset="utf-8">
 <title>${esc(meta.title)} · Milestone Impact</title>
-${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : ''}
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
+${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">`}
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }

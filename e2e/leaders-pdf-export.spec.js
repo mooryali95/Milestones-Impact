@@ -2,6 +2,9 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
+// سياسة CSP كما تُرسل في الإنتاج: الملف يُبنى تحتها (إطار srcdoc، وخطوط المنصة، وصور data:)
+const CSP = readFileSync('leaders-app/public/_headers', 'utf8').match(/Content-Security-Policy: (.+)/)[1];
+
 const APP = 'http://localhost:4304/';
 const S = (id, key, title, dimension) => ({ id, key, title, icon: '◆', dimension, complete: true, missing: 0, status: 'draft' });
 const SECTIONS = [S('m1', 'initiative-charter', 'بطاقة المبادرة', 'milestone'), S('m2', 'raid', 'سجل المخاطر والافتراضات والاعتماديات', 'milestone')];
@@ -40,6 +43,7 @@ function server() {
 async function open(page) {
   const reply = server();
   await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: reply(JSON.parse(r.request().postData() || '{}')) }));
+  await page.route((u) => u.pathname === '/', async (r) => { const res = await r.fetch(); r.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': CSP } }); });
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-pdf-0000000000000000000000'); });
   await page.goto(APP);
   await page.getByRole('button', { name: 'مبادرتي' }).first().click();
@@ -47,8 +51,10 @@ async function open(page) {
 
 const pagesOf = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 
-test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز باسم الوثيقة وإصدارها، والجدول الطويل يمتد صفحات', async ({ page }) => {
+test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز باسم الوثيقة وإصدارها، والجدول الطويل يمتد صفحات، تحت سياسة الإنتاج', async ({ page }) => {
   test.setTimeout(120000);
+  const csp = [];
+  page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) csp.push(m.text()); });
   await open(page);
   const dl = page.waitForEvent('download', { timeout: 100000 });
   await page.getByRole('button', { name: 'تحميل PDF' }).click();
@@ -59,6 +65,7 @@ test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز با
   expect(pagesOf(buf)).toBeGreaterThanOrEqual(5);
   expect(buf.length).toBeLessThan(6 * 1024 * 1024);
   await expect(page.getByRole('button', { name: 'تحميل PDF' })).toBeEnabled();
+  expect(csp).toEqual([]);
 });
 
 test('نافذة الوثيقة: «تحميل PDF» بجانب «طباعة»، والملف يُحفظ من المنصة', async ({ page }) => {

@@ -38,7 +38,7 @@ function NoteForm({ t, sections, owner, onSent }) {
   };
   return (
     <form className="si-note" onSubmit={send} aria-labelledby="si-note-h">
-      <h2 id="si-note-h">ملاحظة لـ{owner}</h2>
+      <h2 id="si-note-h">ملاحظة إلى {owner}</h2>
       <p className="small muted">تصله وحده، ولا يراها أحد غيره. اكتب ما يقوّي المبادرة: سؤال، أو تحفّظ، أو فرصة رأيتها.</p>
       <div className="grid2">
         <label className="field"><span>اسمك</span><input className="input" required minLength={2} maxLength={80} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoComplete="name" /></label>
