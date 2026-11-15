@@ -12,6 +12,9 @@ export const QUOTE_MAX = 600;
 export const BODY_MIN = 2;
 export const BODY_MAX = 4000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// الباب بمعرّفه، والمسودة المعروضة على اللجنة بمعرّف «draft:مفتاحها» (master-book-drafts.js)
+const DRAFT_ID = /^draft:[a-z0-9-]{2,60}$/;
+export const isChapterId = (id) => UUID.test(String(id || '')) || DRAFT_ID.test(String(id || ''));
 
 // من يقرأ الكتاب الأم من الخبراء: عضو فاعل في لجنة المحتوى أو القياس (experts.committees)، فالعضوية من سجل الخبير لا قائمة ثانية
 export const bookAccess = (e) => !!e && ['active', 'paused'].includes(e.status) && (e.committees || []).some((c) => COMMITTEES.includes(c));
@@ -47,7 +50,7 @@ export function cleanComment(b = {}, { modules = [] } = {}) {
   const section = String(b.section ?? '').trim();
   const quote = String(b.quote ?? '').replace(/\s+/g, ' ').trim();
   const parent_id = b.parent_id ? String(b.parent_id) : null;
-  if (!UUID.test(String(b.module_id || ''))) return { error: 'الباب غير محدد' };
+  if (!isChapterId(b.module_id)) return { error: 'الباب غير محدد' };
   const mod = modules.find((m) => m.id === b.module_id);
   if (!mod) return { error: 'الباب غير موجود' };
   if (section && !sectionsOf(mod.body_md).includes(section)) return { error: 'القسم غير موجود في الباب، فقد يكون تغيّر. أعد تحميل الكتاب' };
@@ -164,3 +167,14 @@ export function toggleCommittee(list = [], committee, on) {
   const cur = (list || []).filter((c) => COMMITTEES.includes(c));
   return on ? [...new Set([...cur, committee])] : cur.filter((c) => c !== committee);
 }
+
+// ── المسودات في الكتاب الأم: وثيقة معروضة على اللجنة تُقرأ كبابٍ في جزء «مسودات للمراجعة» ويُعلَّق عليها ──
+export const DRAFT_PART = 'draft';
+/** @param {{ key: string, title: string, md: string, status?: string, source?: string, dimension?: string }[]} drafts */
+export const draftChapters = (drafts = []) => drafts.map((d, i) => ({
+  id: `draft:${d.key}`, dimension: DRAFT_PART, chapter_key: d.key, sort: i + 1, title: d.title, min_level: 'beginner',
+  md: d.md, quiz_md: '', reflection: '', draft: true, status: d.status || 'مسودة', source: d.source || '', about: d.dimension || null,
+}));
+// هدف التعليق في الجدول: باب (module_id) أو مسودة (draft_key)، وفي القارئ معرّف واحد
+export const commentTarget = (id) => (String(id).startsWith('draft:') ? { module_id: null, draft_key: String(id).slice(6) } : { module_id: String(id), draft_key: null });
+export const rowChapterId = (row) => row.module_id || (row.draft_key ? `draft:${row.draft_key}` : null);
