@@ -1754,3 +1754,35 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .sh-tabs [role=tab].on { color: var(--fg); border-bottom-color: var(--gold); }
 .sh-tabs [role=tab]:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .sh-note .sh-who { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+
+/* ── لوحة المبادرة المرئية (Visuals.jsx) ومعاينة الجدول وأداة العلاقات (Models.jsx) ── */
+.viz-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.viz-stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.viz-stats b { font-size: 26px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.viz-stats span { font-size: 13px; color: var(--muted); }
+.viz-stats .crit b { color: var(--gold-text); } .viz-stats .bad b { color: var(--bad); } .viz-stats .ok b { color: var(--ok); }
+.viz-card { display: grid; gap: 12px; }
+.viz-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.viz-scroll svg { min-width: 760px; display: block; }
+.viz-scroll [data-chapter]:hover rect { filter: brightness(1.12); }
+.viz-missing { border: 1px dashed var(--gold); background: var(--brand-cream-light); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; justify-items: start; }
+.viz-missing ul { margin: 0; padding-inline-start: 18px; }
+.mi-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.mi-lg { display: inline-flex; align-items: center; gap: 6px; }
+.mi-lg i { display: inline-block; width: 18px; height: 8px; border-radius: 2px; }
+.mi-lg i.dash { height: 0; border-top: 2px dashed var(--muted); background: none; }
+.mi-lg i.dm { width: 9px; height: 9px; transform: rotate(45deg); border-radius: 0; }
+.mi-lg i.ln { height: 0; border-top: 1.5px solid var(--muted); background: none; }
+.dep-cell { display: grid; gap: 4px; margin-top: 4px; }
+.dep-list { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+.dep-list li::before { content: '↤ '; color: var(--gold); }
+.dep-add { justify-self: start; font-size: 12.5px !important; }
+.dep-pop { border: 1px solid var(--gold); background: var(--surface); border-radius: 10px; padding: 10px; display: grid; gap: 8px; min-width: 200px; box-shadow: var(--shadow); }
+.dep-pop label { display: grid; gap: 2px; font-size: 13px; } .dep-pop span { color: var(--muted); }
+.dep-pop select, .dep-pop input { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: var(--surface); }
+.sched-preview { margin: 6px 0 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: grid; gap: 8px; }
+.viz-scroll svg.mi-narrow { min-width: 0; margin-inline: auto; }
+.viz-tabs { overflow-x: auto; flex-wrap: nowrap; }
+.viz-tabs [role=tab] { white-space: nowrap; }
+.viz-part { display: grid; gap: 10px; } .viz-part + .viz-part { border-top: 1px solid var(--line); padding-top: 14px; }
+.viz-part h3 { margin: 0; font-size: 16px; }

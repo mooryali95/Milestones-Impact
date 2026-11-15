@@ -23,6 +23,7 @@ import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { ChapterNav, Meaning, Navigator } from './InitiativeMap.jsx';
 import SharePanel, { ShareCard } from './Share.jsx';
+import Visuals, { VisualsCard } from './Visuals.jsx';
 import { Annotated } from '../Term.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
@@ -68,6 +69,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   // المشاركة برابط وملاحظات القراء (Share.jsx): ملخصها في الصفحة، ولوحتها تُفتح مكانها كالفصل
   const [shares, setShares] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [vizOpen, setVizOpen] = useState(false);
   const [msg, setMsg] = useState(null);
   const [skipDiscovery, setSkipDiscovery] = useState(false);
   const [ask, setAsk] = useState(null);
@@ -87,6 +89,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           nav={d?.success ? <ChapterNav sections={d.sections} id={open} onOpen={(x) => { setOpen(x); window.scrollTo({ top: 0 }); }} onHandbook={onHandbook} /> : null} />
       </div>
     );
+  }
+  if (vizOpen && d?.success) {
+    return <div className="page"><Visuals initiative={d.initiative} sections={d.sections} onBack={() => setVizOpen(false)} onOpenChapter={(id) => { setVizOpen(false); setOpen(id); window.scrollTo({ top: 0 }); }} /></div>;
   }
   if (shareOpen && d?.success) {
     return <div className="page"><SharePanel initiative={d.initiative} sections={d.sections} onBack={() => setShareOpen(false)} onChanged={setShares} /></div>;
@@ -309,6 +314,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
               aria-labelledby="cp-summary-h" aria-describedby="cp-summary-hint" />
             {editable && <button className="btn ghost sm" disabled={!!busy} onClick={saveSummary}>{busy === 'summary' ? 'لحظة…' : 'حفظ الملخص'}</button>}
           </section>
+
+          <VisualsCard onOpen={() => { setVizOpen(true); window.scrollTo({ top: 0 }); }} />
 
           <ShareCard data={shares} onOpen={() => { setShareOpen(true); window.scrollTo({ top: 0 }); }} />
 

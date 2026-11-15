@@ -12,6 +12,7 @@ import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tr
 import { DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
+import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
 import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
@@ -104,6 +105,13 @@ html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; fon
 .cp-gloss th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; color: #0B272F; }
 .cp-gloss td { padding: 1.6mm 0 1.6mm 2mm; border-bottom: 1px solid #EEF1F0; color: #2C4148; line-height: 1.7; }
 .cp-gloss tr { break-inside: avoid; }
+.cp-fig svg.mi-narrow { max-width: 105mm !important; display: block; margin: 0 auto; }
+.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: 7.4pt; color: #5F7176; margin-top: 1.5mm; }
+.mi-lg { display: inline-flex; align-items: center; gap: 1.2mm; }
+.mi-lg i { display: inline-block; width: 4mm; height: 1.6mm; border-radius: 1px; }
+.mi-lg i.dash { height: 0; border-top: 1px dashed #5F7176; background: none; }
+.mi-lg i.dm { width: 2mm; height: 2mm; transform: rotate(45deg); }
+.mi-lg i.ln { height: 0; border-top: 1px solid #5F7176; background: none; }
 .cp-case .cp-miss { color: #5F7176; font-size: 8.6pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
 </style>`;
 
@@ -179,15 +187,19 @@ export function heatmap(columns, rows) {
 <figcaption>خريطة المخاطر: عدد البنود في كل خانة</figcaption></figure>`;
 }
 
-function costBlock(cost) {
+function costBlock(cost, doc = null) {
   if (!cost) return '';
+  // منحنى الإنفاق والتكلفة بالحزمة (visuals.js) حين تكتمل بياناتهما، وإلا أشرطة البنود
+  const curve = doc ? sCurveSvg(doc) : null, bars2 = doc ? costBarsSvg(doc) : null;
+  const figs = [curve?.svg && `<figure class="cp-fig">${curve.svg}<figcaption>الإنفاق التراكمي المخطط على أنشطة الجدول، مقابل الموازنة والتكلفة مع الاحتياطي</figcaption></figure>`,
+    bars2?.svg && `<figure class="cp-fig">${bars2.svg}<figcaption>التكلفة بالحزمة الأولى في هيكل التجزئة</figcaption></figure>`].filter(Boolean).join('');
   const rows = Object.entries(cost.by || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => ({ label: k, value: Math.round(v) }));
   return `${kpis([
     { value: money(cost.total), label: 'التكلفة التقديرية' },
     { value: `${cost.contingency || 0}%`, label: 'الاحتياطي' },
     { value: money(cost.withContingency), label: 'مع الاحتياطي' },
     { value: money(cost.envelope), label: 'الميزانية المتاحة', hint: cost.envelope != null ? (cost.withContingency <= cost.envelope ? 'ضمن الميزانية' : 'تتجاوز الميزانية') : '' },
-  ])}${rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : ''}`;
+  ])}${figs || (rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : '')}`;
 }
 
 // عرض كل عمود بقدر محتواه: الرقم القصير لا يأخذ عرض الوصف الطويل فينكسر الوصف كلمةً في كل سطر
@@ -222,7 +234,15 @@ const anchor = (key, np = false) => `<span class="cp-anchor${np ? ' cp-np' : ''}
 const eyebrow = (s, n) => `الفصل ${n}${DIM_AR[s.dimension] ? ` · إطار ${DIM_AR[s.dimension]}` : ''}`;
 
 // skip: حقول عُرضت في الميثاق فلا تُكرر في فصل البطاقة
-function chapter(s, i, skip = null) {
+// رسم الفصل في الوثيقة من سجل اللوحات نفسه (visuals.js BOARDS): ما يقرأ فصلًا يُطبع داخله. الجدول والإنفاق لهما موضعاهما
+const INLINE = Object.freeze({ wbs: 'wbs', 'milestone-register': 'roadmap', raid: 'risk', 'stakeholder-map': 'stakeholders', 'theory-of-change': 'change', 'benefits-register': 'benefits', governance: 'raci' });
+function boardFigures(key, doc, viz) {
+  const b = BOARDS.find((x) => x.key === INLINE[key]);
+  if (!b || !doc) return '';
+  return b.parts(doc, viz).filter((p) => p.svg).map((p) => `<figure class="cp-fig">${p.svg}${p.legend || ''}<figcaption>${esc(p.title || b.title)}: يُولَّد من هذا الفصل</figcaption></figure>`).join('');
+}
+
+function chapter(s, i, skip = null, viz = null, doc = null) {
   const info = chapterInfo(s.key);
   let body = info?.why ? `<p class="cp-why">${esc(info.why)}</p>` : '';
   const shown = s.fields.filter((f) => !NEVER_PRINTED.has(f.key) && !skip?.has(f.key));
@@ -230,10 +250,15 @@ function chapter(s, i, skip = null) {
   for (const f of shown) {
     body += fieldHtml(f);
     const rows = Array.isArray(f.value) ? f.value : [];
-    if (s.key === 'wbs' && f.key === 'packages') body += wbsTree(f.columns, rows);
-    if (s.key === 'schedule' && f.key === 'activities') body += gantt(f.columns, rows);
-    if ((s.key === 'raid' && f.key === 'items') || (s.key === 'stage-gate' && f.key === 'risks')) body += heatmap(f.columns, rows);
+    if (s.key === 'wbs' && f.key === 'packages' && !boardFigures('wbs', doc, viz)) body += wbsTree(f.columns, rows);
+    if (s.key === 'schedule' && f.key === 'activities') {
+      // جانت المتكامل بعلاقاته ومساره الحرج (visuals.js)، وإن لم يُرسم فالمخطط البسيط
+      const g = viz ? ganttSvg(viz, { today: null }) : null;
+      body += g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني بعلاقات الأنشطة؛ الذهبي على المسار الحرج${g.stats.finish ? ` (${g.stats.finish} يومًا)` : ''}</figcaption></figure>` : gantt(f.columns, rows);
+    }
+    if ((s.key === 'raid' && f.key === 'items' && !boardFigures('raid', doc, viz)) || (s.key === 'stage-gate' && f.key === 'risks')) body += heatmap(f.columns, rows);
   }
+  body += boardFigures(s.key, doc, viz);
   return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${s.title}`, body);
 }
 
@@ -325,6 +350,18 @@ function tocBlock(doc, front, { draft }) {
   </div>`, draft ? 'الفصول مجمّعة بالأسئلة التي تجيب عنها، وأمام كل فصل حالته. انقر عنوانًا لتنتقل إليه.' : 'الفصول مجمّعة بالأسئلة التي تجيب عنها. انقر عنوانًا لتنتقل إليه.');
 }
 
+// ملحق اللوحات المرئية: ما لا يقع في فصل بعينه (visuals.js). يُبنى منه ما اكتملت بياناته وحده
+function visualsBlock(viz) {
+  const net = networkSvg(viz, { vertical: true, width: 800 });
+  if (!net.svg) return '';
+  const st = net.stats;
+  return anchor('visuals', true) + section('ملحق', 'اللوحات المرئية', `
+    <h3>مخطط الشبكة والمسار الحرج</h3>
+    ${kpis([{ value: st.activities, label: 'نشاطًا' }, { value: st.finish, label: 'يومًا على المسار الحرج' }, { value: st.critical, label: 'نشاطًا حرجًا' }])}
+    <figure class="cp-fig">${net.svg}${networkLegend()}<figcaption>المسار الحرج: ${esc(st.path.join(' ← '))}</figcaption></figure>`,
+  'رسوم تُولَّد من فصول الوثيقة نفسها، فلا تُكتب مرتين.');
+}
+
 // مسرد ملحق: المصطلحات التي وردت في هذه الوثيقة وحدها، من مسرد واحد (anatomy.json)
 function glossaryBlock(doc) {
   const txt = [doc.summary, ...(doc.sections || []).flatMap((s) => [s.title, ...(s.fields || []).flatMap((f) => [f.label, ...(f.columns || []), ...(Array.isArray(f.value) ? f.value.flat() : [f.value])])])].join(' \n ');
@@ -397,14 +434,18 @@ export function capstoneReport(doc) {
     ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
 
   const charter = charterBlock(doc), bcase = caseBlock(doc), launch = launchBlock(doc);
-  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], ['glossary', 'مسرد المصطلحات']].filter(Boolean);
+  const viz = scheduleModel(doc);
+  const visuals = visualsBlock(viz);
+  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات']].filter(Boolean);
   body += tocBlock(doc, front, { draft: !approved && !example });
   body += charter + bcase + launch;
 
   secs.forEach((s, i) => {
-    body += chapter(s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null);
-    if (s.key === 'cost-plan') body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost));
+    body += chapter(s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null, viz, doc);
+    if (s.key === 'cost-plan') body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
   });
+
+  body += visuals;
 
   if (!approved && !example && (doc.checks || []).length) {
     body += section('فحوص آلية', 'فحوص الاتساق بين الفصول', `<ul class="cp-check">${doc.checks.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${esc(c.title)}${c.detail ? `<small>${esc(c.detail)}</small>` : ''}</li>`).join('')}</ul>`,

@@ -49,7 +49,7 @@ describe('الوثيقة جاهزة للتصدير', () => {
     expect(documentHtml(meta, body, { pdf: true })).toContain('<html lang="ar" dir="rtl" class="pdf">');
   });
   it('الأقسام التي تبدأ صفحة جديدة معلَّمة، ولكل عنوان في الفهرس موضع لرقم صفحته', () => {
-    for (const k of ['toc', 'charter', 'case', 'launch', 'glossary']) expect(body).toContain(`class="cp-anchor cp-np" id="ch-${k}"`);
-    expect(body.match(/class="cp-pgno"/g).length).toBe(EXAMPLES[0].sections.length + 4);
+    for (const k of ['toc', 'charter', 'case', 'launch', 'visuals', 'glossary']) expect(body).toContain(`class="cp-anchor cp-np" id="ch-${k}"`);
+    expect(body.match(/class="cp-pgno"/g).length).toBe(EXAMPLES[0].sections.length + 5);
   });
 });
