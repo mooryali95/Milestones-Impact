@@ -71,13 +71,15 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(mail).toContain("const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;");
     expect(mail).toMatch(/Deno\.env\.get\('LEADERS_ALERT_WEBHOOK'\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
-    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
+    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps(, queued: true)? \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
+    // التفريغ الساعي يعيد رسالة في الطابور: حجبها بالحصة لا يُنشر في سلاك كل ساعة
+    expect(core).toMatch(/sendCounted\(db, m\.to_email,[^\n]*alert: alertOps, queued: true \}\)/);
     expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/force: true, alert: alertOps \}/);
   });
   it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
     expect(mail).not.toMatch(/لا عداد بعد|: Promise\.resolve\(\)/);
     expect(mail).toMatch(/await raise\('mail_counter_unavailable', \{ source, kind \}\)/);
-    expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
+    expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); if \(!queued\) report\('blocked', 'mail_counter_unavailable'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
     expect(read('supabase/functions/leaders-api/core.ts')).not.toMatch(/contactMailCount|الصيغة القديمة/);
   });
   it('حدود الشبكة تفشل مغلقة، ولا إعادة بلا عمود الشبكة', () => {

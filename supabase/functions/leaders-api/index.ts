@@ -19,6 +19,7 @@
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
 import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
+import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram } from './logic.js';
 import * as P from './participant.ts';
@@ -94,7 +95,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
     // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
-    mail_stuck: await stuckQueueAlert().catch((e) => ({ alerted: 0, error: String(e?.message || e) })) }),
+    mail_stuck: await stuckQueueAlert().catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
+    // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
+    slack_hello: await slackHello(db) }),
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,

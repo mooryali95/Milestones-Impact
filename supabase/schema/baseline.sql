@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115120000_leaders_rater_token_hashes
+-- as-of migration: 20261115130000_leaders_slack_threads
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1587,6 +1587,15 @@ create table if not exists leaders.schema_migrations (
   constraint schema_migrations_pkey PRIMARY KEY (name)
 );
 
+create table if not exists leaders.slack_threads (
+  day date not null,
+  category text not null,
+  ts text default ''::text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint slack_threads_category_check CHECK ((category = ANY (ARRAY['alerts'::text, 'codes'::text, 'mail'::text, 'hello'::text]))),
+  constraint slack_threads_pkey PRIMARY KEY (day, category)
+);
+
 create table if not exists leaders.sponsor_requests (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -3166,6 +3175,8 @@ alter table leaders.reading_progress enable row level security;
 alter table leaders.reports enable row level security;
 
 alter table leaders.schema_migrations enable row level security;
+
+alter table leaders.slack_threads enable row level security;
 
 alter table leaders.sponsor_requests enable row level security;
 
