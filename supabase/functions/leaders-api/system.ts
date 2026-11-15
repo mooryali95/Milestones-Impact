@@ -13,6 +13,7 @@ import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
 import { launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
+import { codeStreak, OPS } from './ops-health.js';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -277,6 +278,46 @@ export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
   const delivered = { webhook: r.webhook, email: r.email };
   await audit('admin', a.email, 'system.alert-test', 'system', 'alert_test', null, { channels, delivered });
   return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered };
+}
+
+// صحة البريد والتنبيه (بطاقة النظرة العامة وشريط اللوحة): الحقائق وحدها، والحكم بالألوان في ops-health.js على المتصفح.
+// للمدير ذي الكتابة (لا المراقب)، ولا يشترط العامل الثاني: قراءة لا تعديل. رخيص: عدّ بالفهارس (mail_events_window
+// وmail_queue_pending) وآخر عشرين رمزًا وصف واحد من ops_status، بلا مسح كامل. أسرار سلاك والتنبيه بأسمائها لا قيمها.
+// null: تعذّرت القراءة، لا صفر
+export async function opsHealth(a: Admin) {
+  if (a.role !== 'admin' && a.role !== 'super_admin') throw new Fail('صحة البريد والتنبيه للمدير، لا للمراقب', 403, 'forbidden');
+  const dayAgo = new Date(Date.now() - 864e5).toISOString();
+  const head = (t: string) => db.from(t).select('id', { count: 'exact', head: true });
+  const n = async (q: any) => { const { count, error } = await q; return error ? null : (count ?? 0); };
+  const events = () => head('mail_events').gte('created_at', dayAgo);
+  const [sent, codeSent, codeFailed, codeBlocked, failed, blocked, recent, waiting, oldest, slackRow] = await Promise.all([
+    mailUsage(dayAgo).catch(() => null),
+    n(events().eq('kind', 'code').eq('status', 'sent')),
+    n(events().eq('kind', 'code').eq('status', 'failed')),
+    n(events().eq('kind', 'code').eq('status', 'blocked')),
+    n(events().eq('status', 'failed')),
+    n(events().eq('status', 'blocked')),
+    db.from('mail_events').select('status, created_at').eq('kind', 'code').gte('created_at', dayAgo).order('created_at', { ascending: false }).limit(OPS.codeWindow),
+    n(head('mail_queue').is('sent_at', null).is('gave_up_at', null)),
+    db.from('mail_queue').select('created_at').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1),
+    db.from('ops_status').select('ok_at, error_at, error').eq('channel', 'slack').maybeSingle(),
+  ]);
+  const at = oldest.error ? null : (oldest.data as any)?.[0]?.created_at;
+  const slackSecrets = ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'];
+  const slackMissing = slackSecrets.filter((k) => !Deno.env.get(k));
+  const row: any = slackRow.error ? null : slackRow.data;
+  return {
+    success: true, at: new Date().toISOString(),
+    mail: {
+      key: !!CONFIG.resendKey, cap: CONFIG.mailDailyCap, sent,
+      codes: { sent: codeSent, failed: codeFailed, blocked: codeBlocked },
+      code_streak: recent.error ? null : codeStreak(recent.data || []),
+      failed_24h: failed, blocked_24h: blocked,
+      queue: { waiting, oldest_minutes: at ? Math.floor((Date.now() - Date.parse(at)) / 6e4) : waiting === 0 ? 0 : null },
+    },
+    slack: { configured: !slackMissing.length, missing: slackMissing, readable: !slackRow.error, ok_at: row?.ok_at ?? null, error_at: row?.error_at ?? null, error: row?.error ?? null },
+    alerts: { email: !!CONFIG.alertEmail, webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK') },
+  };
 }
 
 // ── معرض رسائل البريد: كل قالب كما يصل، من الدوال نفسها التي تُرسل، ببيانات تجريبية ──

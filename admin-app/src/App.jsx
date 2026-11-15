@@ -15,6 +15,7 @@ const Matrix = lazy(() => import('./screens/Matrix.jsx'));
 import { navigate, parseRoute, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';
+import { OpsBanner } from './OpsHealth.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 
@@ -40,6 +41,8 @@ function Dashboard({ user, onUser, onLogout }) {
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
     <div id="screen-dashboard" className="visible">
+      {/* عطل البريد الآن: شريط أحمر رفيع أعلى كل صفحة يفتح بطاقة الصحة (للمدير ذي الكتابة) */}
+      <OpsBanner enabled={canWrite} />
       <header className="dash-header">
         <div className="dash-header-left">
           <div className="mi-logo"><img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" /></div>

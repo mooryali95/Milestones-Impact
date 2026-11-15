@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMs: 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -54,7 +54,13 @@ let pausedUntil = 0;
 let lastSendAt = 0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type Sent = { ok: boolean; ts?: string; error?: string };
+// كل نشر يُسجَّل نتيجته في leaders.ops_status (بطاقة صحة البريد والتنبيه)، ولا يُنتظر التسجيل
 async function post(text: string, threadTs?: string): Promise<Sent> {
+  const r = await postOnce(text, threadTs);
+  recordSlack(r);
+  return r;
+}
+async function postOnce(text: string, threadTs?: string): Promise<Sent> {
   const { token, channel } = cfg();
   const wait = lastSendAt + SLACK.gapMs - Date.now();
   if (wait > 0) await sleep(wait);
@@ -82,6 +88,39 @@ async function post(text: string, threadTs?: string): Promise<Sent> {
   } finally { clearTimeout(timer); }
 }
 
+// ── آخر نجاح وآخر خطأ في leaders.ops_status (صف channel=slack) ──
+// النسخ كثيرة وقصيرة العمر، فما في الذاكرة لا يكفي: يُكتب الصف حين تتغير النتيجة (نجاح، أو خطأ برمزه)، وللنتيجة نفسها
+// مرة في statusMs على الأكثر في النسخة. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الكتابة مدة missingTableMs.
+// 'paused' ليس ردًا من سلاك (توقف بعد 429 داخل النسخة) فلا يُسجَّل
+const statusOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('ops_status');
+let statusLast: { key: string; at: number } | null = null;
+let statusMissingUntil = 0;
+let statusWrite: Promise<void> | null = null;
+function recordSlack(r: Sent) {
+  try {
+    if (!r.ok && r.error === 'paused') return;
+    const now = Date.now();
+    if (!lastClient || statusMissingUntil > now) return;
+    const key = r.ok ? 'ok' : `error:${r.error || 'unknown'}`;
+    if (statusLast && statusLast.key === key && now - statusLast.at < SLACK.statusMs) return;
+    statusLast = { key, at: now };
+    const at = new Date(now).toISOString();
+    const row = r.ok ? { channel: 'slack', ok_at: at, updated_at: at } : { channel: 'slack', error_at: at, error: String(r.error || 'unknown').slice(0, 80), updated_at: at };
+    const client = lastClient;
+    const w: Promise<void> = Promise.resolve()
+      .then(() => statusOf(client).upsert(row, { onConflict: 'channel' }))
+      .then((res: { error?: { code?: string; message?: string } } | null) => {
+        if (!res?.error) return;
+        if (isMissing(res.error, 'ops_status')) statusMissingUntil = Date.now() + SLACK.missingTableMs;
+        statusLast = null;
+        console.error('ops_status write:', res.error.message || res.error);
+      })
+      .catch((e: unknown) => { statusLast = null; console.error('ops_status write:', e); })
+      .finally(() => { if (statusWrite === w) statusWrite = null; });
+    statusWrite = w;
+  } catch (e) { console.error('ops_status:', e); }
+}
+
 // ── سلسلة اليوم لكل فئة ──
 // cache=false: سلسلة لا يعرفها الجدول، تُستعمل لهذه الدفعة ولا تُحفظ
 // settled: حجز عالق حُكم عليه، فتبقى الفئة بلا سلسلة مدة flatMs بلا قراءة ولا انتظار
@@ -89,7 +128,7 @@ type Thread = { ts: string; cache?: boolean } | { flat: true; settled?: boolean 
 const threads = new Map<string, Promise<Thread>>();
 const flatUntil = new Map<string, number>();
 let missingUntil = 0;
-const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01' || e?.code === 'PGRST205' || /slack_threads/.test(String(e?.message || ''));
+const isMissing = (e: { code?: string; message?: string }, table = 'slack_threads') => e?.code === '42P01' || e?.code === 'PGRST205' || String(e?.message || '').includes(table);
 
 // الحجز قبل النشر (كرسالة الربط): الصف (day, category, ts='') أولًا، ومن ينجح إدراجه وحده ينشر الأم ثم يكتب ts.
 // نسخة أخرى سبقت: تنتظر ts قليلًا، وإن لم يظهر نشرت هذه الدفعة بلا سلسلة
@@ -202,7 +241,7 @@ export function slackPost(category: SlackCategory, text: string, { client }: { c
     return start() ?? Promise.resolve();
   } catch (e) { console.error('slack:', e); return Promise.resolve(); }
 }
-export async function slackIdle() { while (pump) await pump; }
+export async function slackIdle() { while (pump || statusWrite) await (pump ?? statusWrite); }
 
 // ── السطور الجاهزة ──
 // رمز الدخول: الحالة والغرض والبريد المقنّع والدالة، وأي ستة أرقام متتالية تُطمس احتياطًا
@@ -251,4 +290,5 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 // للاختبار
 export function resetSlack() {
   threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
+  statusLast = null; statusMissingUntil = 0; statusWrite = null;
 }

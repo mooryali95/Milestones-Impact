@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115130000_leaders_slack_threads
+-- as-of migration: 20261115140000_leaders_ops_status
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1062,6 +1062,17 @@ create table if not exists leaders.model_submissions (
   constraint model_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewed'::text, 'returned'::text]))),
   constraint model_submissions_pkey PRIMARY KEY (id),
   constraint model_submissions_participant_id_model_id_key UNIQUE (participant_id, model_id)
+);
+
+create table if not exists leaders.ops_status (
+  channel text not null,
+  ok_at timestamp with time zone,
+  error_at timestamp with time zone,
+  error text,
+  updated_at timestamp with time zone default now() not null,
+  constraint ops_status_channel_check CHECK ((channel = 'slack'::text)),
+  constraint ops_status_error_check CHECK ((char_length(error) <= 80)),
+  constraint ops_status_pkey PRIMARY KEY (channel)
 );
 
 create table if not exists leaders.org_coordinators (
@@ -3127,6 +3138,8 @@ alter table leaders.mail_events enable row level security;
 alter table leaders.mail_queue enable row level security;
 
 alter table leaders.model_submissions enable row level security;
+
+alter table leaders.ops_status enable row level security;
 
 alter table leaders.org_coordinators enable row level security;
 
