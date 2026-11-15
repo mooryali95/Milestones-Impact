@@ -54,3 +54,16 @@ select (select steps_ar from leaders.learning_models where key = 'initiative-cha
        || ' · CP-CARD في ' || (select count(*) from r) || ' برامج: جديد ' || (select count(*) from r where st = 'new')
        || '، قديم ' || (select count(*) from r where st = 'old') || '، محرَّر ' || (select count(*) from r where st = 'edited')
        || coalesce(' · ما بقي فيه «جهتك»: ' || (select string_agg(x[1], ' | ') from leaders.learning_models m, regexp_matches(m.steps_ar, '([^.\n]*(?:في جهتك|هيكل جهتك)[^.\n]*)', 'g') x where m.key = 'initiative-charter'), '') as detail;
+
+-- 7) مسح شامل: كل نص في فصول وثيقة المبادرة (نماذجها كاملة) ومتطلبات CP-* بلا صياغة تفترض جهة (قاعدة anatomy.json writing_rules)
+with t as (
+  select m.key src, v.k fld, v.val txt from leaders.learning_models m,
+    lateral (select key k, value val from jsonb_each_text(to_jsonb(m) - 'fields' - 'id')
+             union all select (f->>'key') || '.' || p.key, p.value from jsonb_array_elements(m.fields) f, jsonb_each_text(f) p) v
+   where m.capstone_sort is not null
+  union all select 'req:' || code, 'help_ar', help_ar from leaders.stage_requirements where code like 'CP-%'),
+hits as (select distinct src, fld, substring(txt from '[^.\n،]*(?:جهتك|جهته|هيكل الجهة|استراتيجية الجهة|خطة الجهة|يقنع الجهة|تكلّف الجهة|من الجهة نفسها)[^.\n،]*') snip
+           from t where txt ~ 'جهتك|جهته|هيكل الجهة|استراتيجية الجهة|خطة الجهة|يقنع الجهة|تكلّف الجهة|من الجهة نفسها')
+select not exists (select 1 from hits) as ok,
+       'نماذج الوثيقة: ' || (select count(*) from leaders.learning_models where capstone_sort is not null) || ' · مواضع: ' || (select count(*) from hits)
+       || coalesce(' · ' || (select string_agg(src || '.' || fld || ': «' || trim(snip) || '»', ' | ' order by src, fld) from hits), '') as detail;
