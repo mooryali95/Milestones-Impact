@@ -119,7 +119,7 @@ Milestone Impact منهجية مؤسسية تربط القرار بالقيمة 
 
 طلب صريح لإنسان، وعرض أو سعر لجهة أو شراكة، واشتراط الاستضافة داخل المملكة، والاسترداد أو مشكلة الدفع، والشكوى، وطلب حذف البيانات أو الاطلاع عليها، والسؤال عن حساب أو نتيجة أو دفعة بعينها، وما لا مصدر له هنا، والمحتوى الإعلامي أو القانوني.
 
-## English summary (same facts; the Arabic text above and the Arabic policies are binding)
+## English summary (same facts as the Arabic text above; the policies are published in Arabic)
 
 - Milestone Impact is an institutional methodology linking decisions to value and impact (site: https://mi.sunkvalue.com). Three tracks: MI Leaders (executive programme for decision makers, https://mi.sunkvalue.com/leaders/ , platform https://leaders.sunkvalue.com), Impact Matrix (digital planning platform, https://matrix.sunkvalue.com), and MI Projects (managed development projects, https://mi.sunkvalue.com/projects/). There is also a free Impact Readiness Scale (https://mi.sunkvalue.com/assessment/).
 - MI Leaders: three frameworks (Milestone, Impact, Leadership); three levels per dimension (foundational, intermediate, professional). Journey: profile, initial assessment, advisor approval within two working days, tailored qualification, a real initiative, post assessment, final evaluation and a certificate verifiable at https://leaders.sunkvalue.com/v . Fees are paid via Creem in USD; the amount is shown at checkout and is not stated here. Refunds for MI Leaders: within 14 days of payment and before starting (details at https://leaders.sunkvalue.com/legal/refund).

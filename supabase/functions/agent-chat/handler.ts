@@ -14,13 +14,16 @@ import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
 import { inServiceHours, promiseNow } from '../_shared/hours.js';
 import { isArabic, matchFaq, normalizeText, productOf } from './faq.ts';
 import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
-import { capState, costMicros, estimateTokens, worstCaseMicros } from './pricing.ts';
+import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } from './pricing.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
 import { redactInput, StreamSanitizer } from './redact.ts';
 import { type Store, Unavailable } from './store.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 
-export const LIMITS = { convPerIpHour: 5, convGlobalHour: 120, modelCallsHour: 300, messagesPerConversation: 12, messageChars: 1500, handoffPerIpHour: 3, handoffGlobalHour: 30 };
+// الحدود لكل شبكة تشمل الطلبات بلا عنوان معروف دلوًا واحدًا مشتركًا (لا إعفاء). وحصة الشبكة من استدعاءات النموذج في
+// يوم الرياض (modelCallsPerIpDay) تمنع طرفًا واحدًا من استنزاف السقف اليومي على الجميع: 40 استدعاء بأسوأ تكلفة
+// Haiku نحو 2000 ميكرو للواحد = نحو 4% من السقف.
+export const LIMITS = { convPerIpHour: 5, convGlobalHour: 120, modelCallsHour: 300, modelCallsPerIpDay: 40, messagesPerConversation: 12, messageChars: 1500, handoffPerIpHour: 3, handoffGlobalHour: 30 };
 
 export type Env = {
   apiKey: string; model: string; capCents: number; enabled: boolean;
@@ -75,6 +78,7 @@ export const TEXT = {
     ar: 'لا أستطيع المساعدة في هذا هنا، والأفضل أن يتولاه أحد من الفريق. اترك اسمك وبريدك وأحوله إليهم.',
     en: 'I cannot help with this here; it is better handled by our team. Leave your name and email and I will pass it on.',
   },
+  sent: { ar: 'وصل طلبك إلى الفريق.', en: 'Your request has reached our team.' },
   error: {
     ar: 'تعذّر الرد الآن. حاول بعد قليل، أو اترك رسالتك للفريق.',
     en: 'I could not reply just now. Please try again shortly, or leave a message for our team.',
@@ -83,6 +87,15 @@ export const TEXT = {
 
 // يوم الرياض (UTC+3 بلا توقيت صيفي) لسجل الإنفاق
 export const riyadhDay = (now: number) => new Date(now + 3 * 36e5).toISOString().slice(0, 10);
+// بداية يوم الرياض بتوقيت UTC (لحصة الشبكة اليومية)
+export const riyadhDayStartIso = (now: number) => new Date(Date.parse(`${riyadhDay(now)}T00:00:00+03:00`)).toISOString();
+
+// عمل بعد الرد لا ينتظره الزائر: يُسلَّم إلى EdgeRuntime.waitUntil إن وُجد فلا يُقطع بانتهاء الطلب
+function background(p: Promise<unknown>) {
+  const q = p.catch((e) => console.error('agent background:', e));
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  try { rt?.waitUntil?.(q); } catch { /* خارج Supabase */ }
+}
 
 async function sha256(s: string) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -150,6 +163,8 @@ async function status(d: Deps) {
 }
 
 async function start(d: Deps, b: Record<string, unknown>, req: Request) {
+  // الحذف بعد 90 يومًا تتولاه مهمة مجدولة في القاعدة (leaders-agent-purge)، وهذا احتياط إضافي يعمل ولو أُغلق المساعد
+  background(d.store.purgeExpired());
   if (!d.env.enabled) return json({ success: false, code: 'agent_off' }, 503);
   if (!d.env.turnstileSecret || !d.env.turnstileSite) {
     console.error('agent-chat: Turnstile keys missing; the assistant is closed');
@@ -159,7 +174,7 @@ async function start(d: Deps, b: Record<string, unknown>, req: Request) {
   if (!(await d.turnstile(b.captcha, ip))) return json({ success: false, code: 'captcha', site_key: d.env.turnstileSite }, 400);
   const now = d.now?.() ?? Date.now();
   const hourAgo = new Date(now - 36e5).toISOString();
-  const perIp = ip ? await d.store.countConversations(hourAgo, ip) : 0;
+  const perIp = await d.store.countConversations(hourAgo, ip);
   const global = await d.store.countConversations(hourAgo);
   if (perIp === null || global === null) return json({ success: false, code: 'rate' }, 429);
   if (perIp >= LIMITS.convPerIpHour || global >= LIMITS.convGlobalHour) return json({ success: false, code: 'rate' }, 429);
@@ -167,10 +182,10 @@ async function start(d: Deps, b: Record<string, unknown>, req: Request) {
   const page = pageOf(b.page);
   const locale = clip(b.locale, 10) || 'ar';
   await d.store.createConversation({ public_token_hash: await sha256(token), product: page, source_url: clip(b.source_url, 500), locale, ip });
-  d.store.purgeExpired().catch((e) => console.error('agent purge:', e));
   const spent = await d.store.spentToday(riyadhDay(now));
   const lang = locale.startsWith('en') ? 'en' : 'ar';
-  return json({ success: true, token, greeting: TEXT.greeting[lang], capped: spent === null || capState(spent, 0, d.env.capCents) === 'capped' });
+  const capped = spent === null || capState(spent, 0, d.env.capCents) === 'capped' || !knownModel(d.env.model);
+  return json({ success: true, token, greeting: TEXT.greeting[lang], capped, ...(capped ? { capped_text: TEXT.capped[lang] } : {}) });
 }
 
 async function conversationOf(d: Deps, b: Record<string, unknown>) {
@@ -222,11 +237,19 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
     const capMicros = d.env.capCents * 1e4;
     const calls = await d.store.countModelCalls(new Date(now - 36e5).toISOString());
+    // حصة الشبكة في يوم الرياض (الطلبات بلا عنوان دلو واحد)
+    const ipCalls = await d.store.countIpModelCalls(riyadhDayStartIso(now), conv.ip ?? null);
     const capped = async () => {
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: 'capped', lang });
       emit('capped', { text: TEXT.capped[lang] });
     };
     if (!d.env.apiKey || calls === null || calls >= LIMITS.modelCallsHour) return await capped();
+    if (ipCalls === null || ipCalls >= LIMITS.modelCallsPerIpDay) return await capped();
+    // نموذج غير موجود في جدول الأسعار: لا يُستدعى (السقف لا يُحسب بسعر مجهول)، وتنبيه إعداد مرة في اليوم
+    if (!knownModel(d.env.model)) {
+      await configAlert(d, day, 'agent_model_unknown', {});
+      return await capped();
+    }
     // حجز أسوأ تكلفة قبل الاستدعاء، ذريًا ومقيدًا بالسقف: المتوازي لا يتجاوزه، والفاشل يبقى محسوبًا
     const res = await d.store.reserveSpend(day, worst, capMicros);
     if (!res.ok) {
@@ -258,7 +281,8 @@ async function send(d: Deps, b: Record<string, unknown>) {
       emit('error', { code: 'model', text: TEXT.error[lang] });
       return;
     }
-    const cost = costMicros(result.model || d.env.model, result.usage);
+    // بسعر النموذج الذي خدم الطلب إن كان في الجدول، وإلا فبسعر المطلوب (وهو في الجدول بالتحقق أعلاه)
+    const cost = costMicros(knownModel(result.model) ? result.model : d.env.model, result.usage);
     const total = await d.store.settleSpend(day, cost - worst);
     if (total !== null) {
       if (total >= capMicros * 0.8) await spendAlert(d, day, 80, total);
@@ -295,17 +319,19 @@ async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
   const reason = REASONS[String(b.reason)] ? String(b.reason) : 'request';
   const interest = INTERESTS[String(b.interest)] ? String(b.interest) : (productOf(conv.product) === 'leaders' ? 'leaders' : 'general');
   const note = redactInput(clip(b.note, 1000)).text;
+  // رسائل الزائر بعد الحجب (لا ردود المساعد): بلا رسالة منه ولا ملاحظة لا يصل الفريق طلب فارغ
+  const visitorTurns = (await d.store.history(conv.id)).filter((t) => t.role === 'visitor');
+  if (!note && !visitorTurns.length) return json({ success: false, code: 'invalid', field: 'note' }, 400);
   const now = d.now?.() ?? Date.now();
   // حدود التحويل للشبكة وللجميع في الساعة: البريد المشترك لطلبات التواصل لا يستنزفه طرف واحد
   const ip = d.clientIp(req);
   const hourAgo = new Date(now - 36e5).toISOString();
-  const perIp = ip ? await d.store.countHandoffs(hourAgo, ip) : 0;
+  const perIp = await d.store.countHandoffs(hourAgo, ip);
   const global = await d.store.countHandoffs(hourAgo);
   if (perIp === null || global === null || perIp >= LIMITS.handoffPerIpHour || global >= LIMITS.handoffGlobalHour) return json({ success: false, code: 'rate' }, 429);
   // الحجز ذري: طلب واحد فقط من الطلبات المتوازية يصل إلى الإدراج والبريد
   if (!(await d.store.claimHandoff(conv.id, REASONS[reason], new Date(now).toISOString()))) return json({ success: false, code: 'already' }, 409);
-  // السياق للإدارة: الوسم ورقم المحادثة وسببها ورسائل الزائر بعد الحجب (لا ردود المساعد)
-  const visitorTurns = (await d.store.history(conv.id)).filter((t) => t.role === 'visitor');
+  // السياق للإدارة: الوسم ورقم المحادثة وسببها ورسائل الزائر
   const turns = visitorTurns.map((t) => `- ${t.body}`);
   const context = [`${AGENT_CONTEXT_PREFIX} conversation ${conv.id} · ${REASONS[reason]}`, note ? `ملاحظة: ${note}` : '', ...turns].filter(Boolean).join('\n').slice(0, 3900);
   const row: ContactRow = {
@@ -329,7 +355,7 @@ async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
   // بريد الإدارة القائم (بلا بريد تأكيد للزائر: الوعد قيل في المحادثة) وسطر في قناة التشغيل بلا نص
   await d.notifyAdmin(ins.data).catch((e) => console.error('agent notify:', e));
   slackPost('alerts', `💬 محادثة محولة من المساعد · ${conv.product} · ${lang} · ${maskEmail(email)} · ${REASONS[reason]}`, { client: d.store.client() });
-  return json({ success: true, promise });
+  return json({ success: true, promise, sent: TEXT.sent[lang], lang });
 }
 
 async function rate(d: Deps, b: Record<string, unknown>) {

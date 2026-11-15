@@ -3348,6 +3348,30 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.agent_ip_calls(p_ip inet, p_since timestamp with time zone)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select count(*)::integer from leaders.conversation_messages m
+  join leaders.conversations c on c.id = m.conversation_id
+  where m.role = 'agent' and m.created_at >= p_since and c.ip is not distinct from p_ip;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_purge_expired()
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare n integer;
+begin
+  delete from leaders.conversations where contact_request_id is null and expires_at < now();
+  get diagnostics n = row_count;
+  return n;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.agent_spend_alert(p_day date, p_level integer)
  RETURNS boolean
  LANGUAGE plpgsql

@@ -9,7 +9,7 @@ import type { Turn } from './model.ts';
 type SB = any;
 export class Unavailable extends Error {}
 
-export type Conversation = { id: string; product: string; source_url: string | null; locale: string | null; status: 'bot' | 'waiting' | 'closed'; visitor_messages: number; contact_request_id: string | null; created_at: string };
+export type Conversation = { id: string; product: string; source_url: string | null; locale: string | null; status: 'bot' | 'waiting' | 'closed'; ip?: string | null; visitor_messages: number; contact_request_id: string | null; created_at: string };
 export type MessageRow = {
   conversation_id: string; role: 'visitor' | 'agent' | 'canned' | 'system'; body: string; lang?: string | null; model?: string | null; stop_reason?: string | null;
   input_tokens?: number | null; cache_read_tokens?: number | null; cache_write_tokens?: number | null; output_tokens?: number | null; cost_micros?: number | null;
@@ -17,9 +17,12 @@ export type MessageRow = {
 export type Reserve = { ok: true; total: number } | { ok: false; reason: 'refused' | 'error' };
 export type Price = { enabled: boolean; currency: string; assessment_cents: number; program_cents: number };
 
+// ip في العدادات: undefined للجميع، وnull للطلبات بلا عنوان معروف (دلو واحد مشترك بحده، لا إعفاء)، وإلا فالعنوان
 export interface Store {
   countConversations(sinceIso: string, ip?: string | null): Promise<number | null>;
   countModelCalls(sinceIso: string): Promise<number | null>;
+  // استدعاءات النموذج من محادثات هذه الشبكة منذ الوقت المعطى
+  countIpModelCalls(sinceIso: string, ip: string | null): Promise<number | null>;
   countHandoffs(sinceIso: string, ip?: string | null): Promise<number | null>;
   createConversation(row: { public_token_hash: string; product: string; source_url: string; locale: string; ip: string | null }): Promise<string>;
   findConversation(tokenHash: string): Promise<Conversation | null>;
@@ -42,6 +45,8 @@ export interface Store {
   client(): SB;
 }
 
+// deno-lint-ignore no-explicit-any
+const byIp = (q: any, ip: string | null | undefined) => (ip === undefined ? q : ip === null ? q.is('ip', null) : q.eq('ip', ip));
 const missing = (e: { code?: string; message?: string } | null) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202');
 function check(error: { code?: string; message?: string } | null, what: string) {
   if (!error) return;
@@ -55,8 +60,7 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
   return {
     client: () => base,
     async countConversations(since, ip) {
-      let q = lead().from('conversations').select('id', { count: 'exact', head: true }).gte('created_at', since);
-      if (ip) q = q.eq('ip', ip);
+      const q = byIp(lead().from('conversations').select('id', { count: 'exact', head: true }).gte('created_at', since), ip);
       const { count, error } = await q;
       if (missing(error)) throw new Unavailable('conversations');
       return error ? null : (count ?? 0);
@@ -66,9 +70,14 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
       if (missing(error)) throw new Unavailable('conversation_messages');
       return error ? null : (count ?? 0);
     },
+    async countIpModelCalls(since, ip) {
+      const { data, error } = await lead().rpc('agent_ip_calls', { p_ip: ip, p_since: since });
+      if (missing(error)) throw new Unavailable('agent_ip_calls');
+      if (error) { console.error('agent ip calls:', error.message); return null; }
+      return Number(data ?? 0);
+    },
     async countHandoffs(since, ip) {
-      let q = lead().from('conversations').select('id', { count: 'exact', head: true }).gte('handoff_at', since);
-      if (ip) q = q.eq('ip', ip);
+      const q = byIp(lead().from('conversations').select('id', { count: 'exact', head: true }).gte('handoff_at', since), ip);
       const { count, error } = await q;
       if (missing(error)) throw new Unavailable('conversations');
       return error ? null : (count ?? 0);
@@ -80,7 +89,7 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
     },
     async findConversation(hash) {
       const { data, error } = await lead().from('conversations')
-        .select('id, product, source_url, locale, status, visitor_messages, contact_request_id, created_at, expires_at')
+        .select('id, product, source_url, locale, status, ip, visitor_messages, contact_request_id, created_at, expires_at')
         .eq('public_token_hash', hash).maybeSingle();
       check(error, 'conversation read');
       if (!data || Date.parse(data.expires_at) < Date.now()) return null;
@@ -153,10 +162,9 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
     },
     insertContact: (row, ip) => insertContactRequest(base, row, ip),
     async purgeExpired() {
-      // غير المحولة بعد مدتها (90 يومًا)، دفعة صغيرة في كل بدء محادثة
-      const { data } = await lead().from('conversations').select('id').is('contact_request_id', null).lt('expires_at', new Date().toISOString()).limit(100);
-      const ids = (data ?? []).map((r: { id: string }) => r.id);
-      if (ids.length) await lead().from('conversations').delete().in('id', ids);
+      // غير المحولة بعد مدتها (90 يومًا): الدالة نفسها التي تشغلها المهمة المجدولة اليومية في القاعدة
+      const { error } = await lead().rpc('agent_purge_expired');
+      if (error) console.error('agent purge:', error.message);
     },
   };
 }

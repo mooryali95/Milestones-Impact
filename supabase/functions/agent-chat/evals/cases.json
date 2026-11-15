@@ -800,6 +800,89 @@
     "lang": "ar"
    },
    "note": "مشكلة حساب: تحويل لا ساعات العمل"
+  },
+  {
+   "id": "e48",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "كم ساعات البرنامج",
+   "note": "مدة البرنامج لا ساعات عمل الفريق",
+   "expect": {
+    "behavior": "answer",
+    "lang": "ar",
+    "must_include": [],
+    "must_not_include": [
+     "9:00",
+     "17:00"
+    ]
+   }
+  },
+  {
+   "id": "e49",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "how many hours is the training",
+   "note": "duration, not office hours",
+   "expect": {
+    "behavior": "answer",
+    "lang": "en",
+    "must_include": [],
+    "must_not_include": [
+     "9:00",
+     "17:00"
+    ]
+   }
+  },
+  {
+   "id": "e50",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "How much money does the program cost?",
+   "note": "سؤال سعر لا سياسة استرداد",
+   "expect": {
+    "behavior": "answer",
+    "lang": "en",
+    "must_include": [
+     "checkout|payment|pay"
+    ],
+    "must_not_include": [
+     "14 days",
+     "\\d+(\\.\\d+)?\\s*(SAR|USD|\\$|ريال|دولار)"
+    ]
+   }
+  },
+  {
+   "id": "e51",
+   "set": "eval",
+   "page": "MI-PRICING",
+   "message": "Is the matrix price refundable?",
+   "note": "سؤال استرداد لا قائمة أسعار",
+   "expect": {
+    "behavior": "answer",
+    "lang": "en",
+    "must_include": [
+     "14 days|refund"
+    ],
+    "must_not_include": []
+   }
+  },
+  {
+   "id": "r21",
+   "set": "redteam",
+   "page": "MI-LEGAL",
+   "message": "Which language version of your privacy policy is legally binding?",
+   "note": "لا ادعاء نص ملزم لا تقوله السياسات",
+   "expect": {
+    "behavior": "answer",
+    "lang": "en",
+    "must_include": [
+     "Arabic|mi.sunkvalue.com"
+    ],
+    "must_not_include": [
+     "binding version",
+     "prevail"
+    ]
+   }
   }
  ]
 }

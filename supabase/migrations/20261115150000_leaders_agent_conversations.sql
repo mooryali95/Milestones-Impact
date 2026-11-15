@@ -3,7 +3,8 @@
 -- ════════════════════════════════════════════════════════════════
 -- deploy-gate: tolerant الدالة agent-chat ترد agent_unavailable (503) بلا الجداول فتعرض النافذة «اترك رسالتك» عبر النموذج، وsend-otp لا تقرؤها
 -- المصدر الواحد للمحادثة هنا، وسلاك (المرحلة 2) نافذة عليها لا مكان حفظها. لا يقرؤها إلا دور الخدمة.
--- الاحتفاظ: غير المحولة 90 يومًا (expires_at) ثم تحذفها agent-chat تباعًا، والمحولة تبقى مع طلب التواصل المرتبط.
+-- الاحتفاظ: غير المحولة 90 يومًا (expires_at) ثم تحذفها مهمة pg_cron يومية (leaders-agent-purge) ولو أُغلق المساعد،
+-- وagent-chat تشغل الدالة نفسها احتياطًا عند كل بدء محادثة. والمحولة تبقى مع طلب التواصل المرتبط.
 -- السقف اليومي (قرار المالك: 2 دولار في يوم الرياض): agent_spend_daily يُجمع فيه ما كلّفه كل استدعاء من usage،
 -- بحجز ذري قبل كل استدعاء (agent_spend_reserve: أسوأ تكلفة، ويُرفض إن تجاوز السقف) ثم تسوية بالتكلفة الفعلية
 -- بعده (agent_spend_settle). الاستدعاء الذي يفشل أو ينقطع يبقى محسوبًا بحجزه، فلا يضيع ما فوتره Anthropic.
@@ -88,6 +89,25 @@ returns integer language sql as $$
   returning visitor_messages;
 $$;
 
+-- استدعاءات النموذج من محادثات شبكة واحدة منذ وقت (حصة الشبكة اليومية). p_ip null = الطلبات بلا عنوان معروف دلوًا واحدًا
+create or replace function leaders.agent_ip_calls(p_ip inet, p_since timestamptz)
+returns integer language sql stable as $$
+  select count(*)::integer from leaders.conversation_messages m
+  join leaders.conversations c on c.id = m.conversation_id
+  where m.role = 'agent' and m.created_at >= p_since and c.ip is not distinct from p_ip;
+$$;
+
+-- حذف المحادثات غير المحولة بعد مدتها (والرسائل بالتتالي)، ويعيد عدد المحذوف
+create or replace function leaders.agent_purge_expired()
+returns integer language plpgsql as $$
+declare n integer;
+begin
+  delete from leaders.conversations where contact_request_id is null and expires_at < now();
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
 -- تنبيه واحد لكل حد في اليوم (80 و100، و1 لخطأ إعداد النموذج): يعيد true لمن سجّله أولًا وحده
 create or replace function leaders.agent_spend_alert(p_day date, p_level integer)
 returns boolean language plpgsql as $$
@@ -111,8 +131,22 @@ alter table leaders.conversation_messages enable row level security;
 alter table leaders.agent_spend_daily enable row level security;
 revoke all on leaders.conversations, leaders.conversation_messages, leaders.agent_spend_daily from anon, authenticated;
 revoke all on function leaders.agent_spend_reserve(date, bigint, bigint), leaders.agent_spend_settle(date, bigint),
-  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer) from public, anon, authenticated;
+  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer),
+  leaders.agent_ip_calls(inet, timestamptz), leaders.agent_purge_expired() from public, anon, authenticated;
 grant execute on function leaders.agent_spend_reserve(date, bigint, bigint), leaders.agent_spend_settle(date, bigint),
-  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer) to service_role;
+  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer),
+  leaders.agent_ip_calls(inet, timestamptz), leaders.agent_purge_expired() to service_role;
+
+-- كل يوم 01:23 UTC (04:23 بتوقيت الرياض): الحذف بعد 90 يومًا لا يتوقف على حركة المحادثات.
+-- cron.schedule بالاسم نفسه يحدّث المهمة، فإعادة التشغيل آمنة. وبلا pg_cron يبقى الاحتياط في agent-chat.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.schedule('leaders-agent-purge', '23 1 * * *', 'select leaders.agent_purge_expired()');
+  else
+    raise notice 'pg_cron غير مفعل: leaders-agent-purge لم تُجدول';
+  end if;
+end;
+$$;
 
 insert into leaders.schema_migrations (name) values ('20261115150000_leaders_agent_conversations') on conflict do nothing;

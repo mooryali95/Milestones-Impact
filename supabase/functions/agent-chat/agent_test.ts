@@ -3,7 +3,7 @@
 import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
 import { redactInput, sanitizeOutput, StreamSanitizer, luhn, normalizeDigits, ALLOWED_HOSTS } from './redact.ts';
 import { matchFaq, normalizeText, productOf } from './faq.ts';
-import { capState, costMicros, PRICES, worstCaseMicros } from './pricing.ts';
+import { capState, costMicros, FALLBACK, PRICES, worstCaseMicros } from './pricing.ts';
 import { buildMessages, HISTORY_TURNS, MAX_TOKENS, requestParams, resetClient, streamAnswer, type ModelResult, type Turn } from './model.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS, SYSTEM_RULES } from './prompt.ts';
 import { type Deps, type Env, handle, LIMITS, riyadhDay, TEXT } from './handler.ts';
@@ -445,7 +445,7 @@ Deno.test('السجل يفشل مغلقًا: خطأ الحجز لا يستدعي
 Deno.test('التحويل ذري ومحدود: المتوازي ينتج طلبًا واحدًا وبريدًا واحدًا، وحد الشبكة في الساعة', async () => {
   const s = setup();
   const token = await started(s.deps);
-  const rs = await Promise.all(Array.from({ length: 6 }, () => post(s.deps, { action: 'handoff', token, name: 'سارة', email: 'sara@company.test' })));
+  const rs = await Promise.all(Array.from({ length: 6 }, () => post(s.deps, { action: 'handoff', token, name: 'سارة', email: 'sara@company.test', note: 'أريد عرضًا لجهتنا' })));
   assertEquals(rs.filter((r) => r.status === 200).length, 1);
   assertEquals(s.m.contacts.length, 1);
   assertEquals(s.calls.notify, 1);
@@ -454,7 +454,7 @@ Deno.test('التحويل ذري ومحدود: المتوازي ينتج طلب�
   const toks: string[] = [];
   for (let i = 0; i < LIMITS.handoffPerIpHour + 1; i++) { toks.push(await started(more.deps)); more.m.convs.forEach((c) => { c.created_at = '2000-01-01T00:00:00Z'; }); }
   const codes = [];
-  for (const t of toks) codes.push((await post(more.deps, { action: 'handoff', token: t, name: 'سارة', email: 'sara@company.test' })).status);
+  for (const t of toks) codes.push((await post(more.deps, { action: 'handoff', token: t, name: 'سارة', email: 'sara@company.test', note: 'أريد عرضًا لجهتنا' })).status);
   assertEquals(codes, [...Array(LIMITS.handoffPerIpHour).fill(200), 429]);
 });
 
@@ -517,4 +517,104 @@ Deno.test('نموذج التواصل العام: بادئة [agent] من الز�
 Deno.test('send-otp يمرر السياق عبر formContext', async () => {
   const src = await Deno.readTextFile(new URL('../send-otp/index.ts', import.meta.url));
   assertMatch(src, /context: formContext\(text\(body\.context, 2000\)\)/);
+});
+
+// ── إصلاحات المراجعة الثانية ──
+Deno.test('الأسعار: الاحتياط لا يقل عن أعلى سعر في الجدول، ونموذج غير مسعّر لا يُستدعى أصلًا', async () => {
+  for (const k of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) {
+    assert(FALLBACK[k] >= Math.max(...Object.values(PRICES).map((r) => r[k])), k);
+  }
+  // النماذج الأغلى التي ما زالت تُخدم في الجدول
+  assert(PRICES['claude-fable-5-1'].output >= 50);
+  assertEquals(costMicros('claude-unknown', { output_tokens: 1000 }), costMicros('claude-fable-5-1', { output_tokens: 1000 }));
+  const s = setup({}, { model: 'claude-made-up-9' });
+  const token = await started(s.deps);
+  for (let i = 0; i < 2; i++) {
+    const evs = await events(await post(s.deps, { action: 'send', token, message: `سؤال مفصل عن مراحل البرنامج رقم ${i}` }));
+    assertEquals(evs[0].ev, 'capped');
+  }
+  assertEquals(s.calls.model, 0);
+  assertEquals(s.m.spend.size, 0);
+  assertEquals(s.calls.alerts, ['agent_model_unknown']);
+  // والبدء يقول إن المساعد متوقف، بنصه
+  const st = await (await post(s.deps, { action: 'start', captcha: 'ok-token-123', page: 'MI-HOME', locale: 'ar' })).json();
+  assertEquals(st.capped, true);
+  assertEquals(st.capped_text, TEXT.capped.ar);
+});
+
+Deno.test('الحذف بعد 90 يومًا لا يتوقف على تشغيل المساعد: مهمة مجدولة في الترحيل، واحتياط قبل فحص التفعيل', async () => {
+  const sql = await Deno.readTextFile(new URL('../../migrations/20261115150000_leaders_agent_conversations.sql', import.meta.url));
+  assertMatch(sql, /cron\.schedule\('leaders-agent-purge', '[^']+', 'select leaders\.agent_purge_expired\(\)'\)/);
+  assertMatch(sql, /delete from leaders\.conversations where contact_request_id is null and expires_at < now\(\)/);
+  const off = setup({}, { enabled: false });
+  await post(off.deps, { action: 'start', captcha: 'ok-token-123' });
+  assertEquals(off.m.purges, 1);
+});
+
+Deno.test('حصة الشبكة اليومية من استدعاءات النموذج، والطلبات بلا عنوان دلو واحد لا إعفاء', async () => {
+  const s = setup();
+  const token = await started(s.deps);
+  const conv = s.m.convs[0];
+  // استدعاءات سابقة من الشبكة نفسها اليوم بلغت الحصة
+  for (let i = 0; i < LIMITS.modelCallsPerIpDay; i++) s.m.msgs.push({ id: `old${i}`, conversation_id: conv.id, role: 'agent', body: 'x' });
+  const evs = await events(await post(s.deps, { action: 'send', token, message: 'سؤال مفصل عن مراحل البرنامج' }));
+  assertEquals(evs[0].ev, 'capped');
+  assertEquals(s.calls.model, 0);
+  // شبكة أخرى لا تتأثر
+  const other = setup({ msgs: s.m.msgs, convs: s.m.convs });
+  other.deps.clientIp = () => '192.0.2.77';
+  const t2 = await started(other.deps);
+  assertEquals((await events(await post(other.deps, { action: 'send', token: t2, message: 'سؤال مفصل عن مراحل البرنامج' })))[0].ev, 'delta');
+  // بلا عنوان: حد المحادثات في الساعة يسري على الدلو المشترك
+  const anon = setup();
+  anon.deps.clientIp = () => null;
+  for (let i = 0; i < LIMITS.convPerIpHour; i++) await started(anon.deps);
+  assertEquals((await post(anon.deps, { action: 'start', captcha: 'ok-token-123' })).status, 429);
+});
+
+Deno.test('buildMessages: لا رسالة نظام بعد رد مساعد (رد طلب موازٍ كُتب بعد رسالة الزائر)', () => {
+  const h: Turn[] = [{ role: 'visitor', body: 'كم سعر المصفوفة' }, { role: 'visitor', body: 'وش مراحل البرنامج' }, { role: 'canned', body: 'خطط المصفوفة...' }];
+  const ctx = { product: 'leaders' as const, page: 'MI-LEADERS', promise: 'p', inHours: true, droppedTurns: 0, leadersPrice: null };
+  const { messages } = buildMessages(h, ctx);
+  assertEquals(messages.map((m) => m.role), ['user', 'user', 'system']);
+  assertEquals(messages[1].content, 'وش مراحل البرنامج');
+});
+
+Deno.test('الأجوبة الجاهزة لا تبتلع مدة البرنامج ولا السعر ولا الاسترداد بعضها في بعض', () => {
+  assertEquals(matchFaq('كم ساعات البرنامج', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('ساعات التدريب كم', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('how many hours is the training', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('التواصل مع الخبير', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('How much money does the program cost?', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('How much money?', 'MI-PRICING'), null);
+  assertEquals(matchFaq('Is the matrix price refundable?', 'MI-PRICING'), null);
+  assertEquals(matchFaq('وش اوقات الدوام', 'MI-HOME')?.id, 'contact_hours');
+  assertEquals(matchFaq('what are your working hours', 'MI-HOME')?.id, 'contact_hours');
+});
+
+Deno.test('الموجه والمعرفة لا يدعيان أن النص العربي هو الملزم (لا تقوله أي سياسة منشورة)', () => {
+  const all = SYSTEM_BLOCKS.map((b) => b.text).join('\n');
+  assertNotMatch(all, /هو الملزم|binding|prevail/i);
+});
+
+Deno.test('التحويل: تأكيد بلغة الزائر، ولا طلب فارغ بلا رسالة ولا ملاحظة', async () => {
+  const s = setup();
+  const token = await started(s.deps);
+  const empty = await post(s.deps, { action: 'handoff', token, name: 'Sara', email: 'sara@company.test', reason: 'capped' });
+  assertEquals(empty.status, 400);
+  assertEquals((await empty.json()).field, 'note');
+  await events(await post(s.deps, { action: 'send', token, message: 'I would like to talk to someone about a partnership' }));
+  const r = await (await post(s.deps, { action: 'handoff', token, name: 'Sara', email: 'sara@company.test' })).json();
+  assertEquals(r.sent, TEXT.sent.en);
+  assertEquals(r.lang, 'en');
+});
+
+Deno.test('النافذة: Turnstile يُزال ويُرفض عند المهلة والانتهاء، والتحويل بلا نقر مزدوج، ونص السقف عند البدء', async () => {
+  const js = await Deno.readTextFile(new URL('../../../home/assets/program/js/chat.js', import.meta.url));
+  assertMatch(js, /'timeout-callback': fail, 'expired-callback': fail/);
+  assertMatch(js, /t\.remove\(wid\)/);
+  assertMatch(js, /if \(handingOff \|\| state\.handedOff\) return;/);
+  assertMatch(js, /j\.capped_text/);
+  assertMatch(js, /j\.sent \|\|/);
+  assertMatch(js, /وما حولته إلى الفريق يُحفظ مع طلبك/);
 });

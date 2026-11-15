@@ -8,6 +8,7 @@ export type Mem = {
   contacts: Record<string, unknown>[]; price: Price | null; missing?: boolean;
   // محاكاة أعطال السجل
   reserveError?: boolean; settleError?: boolean;
+  purges?: number;
 };
 
 export const emptyMem = (over: Partial<Mem> = {}): Mem => ({ convs: [], msgs: [], spend: new Map(), alerts: new Set(), contacts: [], price: null, ...over });
@@ -18,9 +19,10 @@ export function memStore(m: Mem): Store {
   let broken: string | null = null;
   return {
     client: () => null,
-    countConversations: async (since, ip) => { guard(); return m.convs.filter((c) => c.created_at >= since && (!ip || c.ip === ip)).length; },
+    countConversations: async (since, ip) => { guard(); return m.convs.filter((c) => c.created_at >= since && (ip === undefined || c.ip === ip)).length; },
     countModelCalls: async () => m.msgs.filter((x) => x.role === 'agent').length,
-    countHandoffs: async (since, ip) => m.convs.filter((c) => c.handoff_at && c.handoff_at >= since && (!ip || c.ip === ip)).length,
+    countIpModelCalls: async (_since, ip) => m.msgs.filter((x) => x.role === 'agent' && m.convs.find((c) => c.id === x.conversation_id)?.ip === ip).length,
+    countHandoffs: async (since, ip) => m.convs.filter((c) => c.handoff_at && c.handoff_at >= since && (ip === undefined || c.ip === ip)).length,
     createConversation: async (row) => { guard(); const id = crypto.randomUUID(); m.convs.push({ id, status: 'bot', visitor_messages: 0, contact_request_id: null, created_at: new Date().toISOString(), ...row }); return id; },
     findConversation: async (h) => { guard(); const c = m.convs.find((x) => x.public_token_hash === h); return c ? { ...c } : null; },
     history: async (id) => m.msgs.filter((x) => x.conversation_id === id && x.role !== 'system' && x.body !== '').map((x) => ({ role: x.role as Turn['role'], body: x.body })),
@@ -55,6 +57,6 @@ export function memStore(m: Mem): Store {
     markAlert: async (day, level) => { const k = `${day}|${level}`; if (m.alerts.has(k)) return false; m.alerts.add(k); return true; },
     leadersPrice: async () => m.price,
     insertContact: async (row) => { const data = { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }; m.contacts.push(data); return { data, error: null }; },
-    purgeExpired: async () => {},
+    purgeExpired: async () => { m.purges = (m.purges ?? 0) + 1; },
   };
 }

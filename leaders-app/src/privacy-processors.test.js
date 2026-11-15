@@ -49,6 +49,15 @@ describe('معالجو البيانات في سياسة الخصوصية', () =>
     expect(legal).toMatch(/<li>Anthropic: [^<]*الولايات المتحدة/);
   });
 
+  // التخزين في مومباي لا يُقال عن «جميع» البيانات ما دام نص المحادثة يُعالج في الولايات المتحدة، ومدة احتفاظ Anthropic مذكورة
+  it('مادة التخزين تستثني المعالجين، ومدة احتفاظ Anthropic في السياستين', () => {
+    const storage = policy.slice(policy.indexOf('id="s3"'), policy.indexOf('id="s4"'));
+    expect(storage).not.toMatch(/جميع بياناتكم/);
+    expect(storage).toMatch(/Anthropic في الولايات المتحدة/);
+    expect(thirdParties).toMatch(/<strong>Anthropic<\/strong>:[^<]*لا تتجاوز 30 يومًا/);
+    expect(legal).toMatch(/<li>Anthropic: [^<]*لا تتجاوز 30 يومًا/);
+  });
+
   it('الجوال لتعريف الحساب، ورمز التحقق يُرسل إلى البريد لا إلى الجوال', () => {
     expect(policy).not.toMatch(/التحقق عبر OTP/);
     expect(policy).toMatch(/<td>رقم الجوال<\/td><td>تعريف الحساب/);

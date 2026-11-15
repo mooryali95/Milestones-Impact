@@ -15,7 +15,7 @@
       "product": "any",
       "max_words": 10,
       "match": [["سعر", "اسعار", "تكلفه", "بكم", "كم", "قيمه", "رسوم", "اشتراك", "price", "prices", "pricing", "cost", "much", "fee", "fees"], ["مصفوفه", "matrix"]],
-      "not": ["استرداد", "استرجاع", "ارجاع", "refund", "refunds", "قاده", "leaders", "leader"],
+      "not": ["استرداد", "استرجاع", "ارجاع", "refund", "refunds", "قاده", "leaders", "leader", "يسترد", "مسترد", "تسترد", "refundable", "refunded", "refunding", "money back"],
       "ar": "خطط مصفوفة التأثير المنشورة: الخطة الفردية 200 دولار أمريكي سنويًا، وخطة المؤسسات 5,000 دولار أمريكي سنويًا وتشمل حتى 20 مستخدمًا، وما يزيد على 20 مستخدمًا له عرض مخصص من الفريق. يتجدد الاشتراك تلقائيًا ما لم يُلغَ قبل 30 يومًا من التجديد. التفاصيل في https://mi.sunkvalue.com/pricing.html",
       "en": "Published Impact Matrix plans: Individual 200 USD per year, and Organisations 5,000 USD per year for up to 20 users; larger groups get a custom offer from the team. Subscriptions renew automatically unless cancelled 30 days before renewal. Details: https://mi.sunkvalue.com/pricing.html"
     },
@@ -48,8 +48,8 @@
       "id": "contact_hours",
       "product": "any",
       "max_words": 8,
-      "match": [["تواصل", "اتواصل", "التواصل", "تردون", "ايميل", "بريد", "دوام", "ساعات", "اوقات", "contact", "email", "hours", "reach"]],
-      "not": ["رمز", "كود", "حساب", "حسابي", "تحقق", "دخول", "كلمه", "يصلني", "وصلني", "وصل", "اغير", "تغيير", "otp", "code", "account", "login", "password", "sign", "arrive", "change", "verification"],
+      "match": [["تواصل", "اتواصل", "التواصل", "نتواصل", "تردون", "ايميل", "بريد", "دوام", "الدوام", "contact", "email", "reach", "office", "ساعات العمل", "اوقات العمل", "ساعات الدوام", "working hours", "business hours", "office hours", "opening hours"]],
+      "not": ["رمز", "كود", "حساب", "حسابي", "تحقق", "دخول", "كلمه", "يصلني", "وصلني", "وصل", "اغير", "تغيير", "otp", "code", "account", "login", "password", "sign", "arrive", "change", "verification", "برنامج", "البرنامج", "تدريب", "التدريب", "دوره", "خبير", "الخبير", "مستشار", "مدرب", "مده", "program", "programme", "training", "course", "expert", "advisor", "coach", "duration", "long"],
       "ar": "البريد المنشور الوحيد mi@sunkvalue.com ، ولا رقم هاتف منشور. ساعات عمل الفريق الأحد إلى الخميس، من 9:00 إلى 17:00 بتوقيت الرياض، ويرد خلال 4 ساعات عمل، وما يصل خارجها يُرد عليه في يوم العمل التالي. وأستطيع تحويل سؤالك إلى الفريق من هنا.",
       "en": "Our only published email is mi@sunkvalue.com , and no phone number is published. The team works Sunday to Thursday, 9:00 to 17:00 Riyadh time, and replies within 4 business hours; messages outside these hours are answered on the next business day. I can also pass your question to the team from here."
     },
@@ -57,8 +57,8 @@
       "id": "refund_leaders",
       "product": "leaders",
       "max_words": 10,
-      "match": [["استرداد", "استرجاع", "ارجاع", "refund", "refunds", "money"]],
-      "not": ["مصفوفه", "matrix"],
+      "match": [["استرداد", "استرجاع", "ارجاع", "يسترد", "مسترد", "refund", "refunds", "refundable", "refunded"]],
+      "not": ["مصفوفه", "matrix", "سعر", "اسعار", "تكلفه", "بكم", "price", "prices", "pricing", "cost", "costs"],
       "ar": "في برنامج القادة: يُسترد رسم القياس المبدئي خلال 14 يومًا من الدفع وقبل بدء القياس، ورسم إكمال البرنامج خلال 14 يومًا من الدفع وقبل فتح رحلتك، وبعد ذلك لا يُسترد إلا بتقدير البرنامج لظرف قاهر. الطلب برسالة إلى mi@sunkvalue.com من بريد حسابك مع رقم الإيصال. التفاصيل في https://leaders.sunkvalue.com/legal/refund ، وإن كان لديك طلب استرداد قائم فأحوله إلى الفريق.",
       "en": "For MI Leaders: the initial assessment fee is refundable within 14 days of payment and before you start the assessment, and the programme fee within 14 days of payment and before your journey opens; after that only at the programme's discretion for force majeure. Email mi@sunkvalue.com from your account email with the receipt number. Details: https://leaders.sunkvalue.com/legal/refund"
     },
@@ -66,8 +66,8 @@
       "id": "refund_matrix",
       "product": "matrix",
       "max_words": 10,
-      "match": [["استرداد", "استرجاع", "ارجاع", "refund", "refunds", "money"]],
-      "not": ["قاده", "برنامج", "leaders", "leader", "program", "programme"],
+      "match": [["استرداد", "استرجاع", "ارجاع", "يسترد", "مسترد", "refund", "refunds", "refundable", "refunded"]],
+      "not": ["قاده", "برنامج", "leaders", "leader", "program", "programme", "سعر", "اسعار", "تكلفه", "بكم", "price", "prices", "pricing", "cost", "costs"],
       "ar": "في مصفوفة التأثير: استرداد كامل خلال 14 يومًا من الاشتراك إن لم يتم الوصول الكامل للمنهجية أو البدء في إنشاء خطة، ولخطة المؤسسات وحدها 50% بعد 14 يومًا وخلال الأشهر الثلاثة الأولى. الطلب بالبريد إلى mi@sunkvalue.com ، ويرد الفريق خلال 3 أيام عمل. التفاصيل في https://mi.sunkvalue.com/refund.html",
       "en": "For the Impact Matrix: a full refund within 14 days of subscribing if the methodology was not fully accessed and no plan was started; for the Organisations plan only, 50% after 14 days and within the first three months. Email mi@sunkvalue.com ; the team replies within 3 business days. Details: https://mi.sunkvalue.com/refund.html"
     }

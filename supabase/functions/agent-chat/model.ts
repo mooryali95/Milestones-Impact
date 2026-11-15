@@ -28,6 +28,10 @@ export function buildMessages(history: Turn[], context: Context): { messages: An
   const from = visitorIdx.length > HISTORY_TURNS ? visitorIdx[visitorIdx.length - HISTORY_TURNS] : (visitorIdx[0] ?? 0);
   const kept = history.slice(from);
   const dropped = from;
+  // رسالة النظام في منتصف المحادثة لا تقبلها الواجهة إلا بعد رسالة مستخدم: يُقطع ما بعد آخر رسالة للزائر
+  // (رد طلب موازٍ بالرمز نفسه قد يُكتب بعد رسالة الطلب الحالي)
+  while (kept.length && kept[kept.length - 1].role !== 'visitor') kept.pop();
+  if (!kept.length) throw new Error('buildMessages: no visitor turn');
   const messages: Anthropic.MessageParam[] = kept.map((t) => ({ role: t.role === 'visitor' ? 'user' : 'assistant', content: t.body }));
   messages.push({ role: 'system', content: contextBlock({ ...context, droppedTurns: dropped }) });
   return { messages, dropped };

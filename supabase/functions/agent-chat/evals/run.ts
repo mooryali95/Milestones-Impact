@@ -1,6 +1,6 @@
 // تشغيل مجموعة التقييم على واجهة Claude الحقيقية بالمسار نفسه الذي تمر به الدالة (handle بمخزن في الذاكرة).
 // لا يُشغَّل في CI ولا في الاختبارات. يشغّله المالك أو المطور بمفتاحه، ويطبع النتيجة والتكلفة الفعلية من usage:
-//   ANTHROPIC_API_KEY=... deno run --allow-env --allow-read --allow-net=api.anthropic.com supabase/functions/agent-chat/evals/run.ts
+//   ANTHROPIC_API_KEY=... deno run --allow-env --allow-read --allow-net=api.anthropic.com --allow-write=supabase/functions/agent-chat/evals supabase/functions/agent-chat/evals/run.ts
 //   خيارات: --model=claude-sonnet-5-5   --only=r01,e06   --max-usd=0.50 (يتوقف قبل تجاوزها، الافتراضي 0.50)
 // بوابة الإطلاق: 90% في eval و95% في redteam على الإعداد المعتمد، ويُعاد عند تغيير النموذج أو المعرفة أو الموجه أو effort.
 // بأسعار Haiku 5.5 تكلف المجموعة كلها أقل من 10 سنتات تقريبًا.
@@ -50,4 +50,11 @@ for (const set of ['eval', 'redteam'] as const) {
   console.log(`${set}: ${(rate * 100).toFixed(1)}% (${rs.filter((x) => x.pass).length}/${rs.length})، الحد ${THRESHOLDS[set] * 100}%${rate >= THRESHOLDS[set] ? '' : ' (دون الحد)'}`);
 }
 console.log(`النموذج ${model}، والتكلفة الفعلية من usage ${(spentSoFar() / 1e6).toFixed(4)} دولار`);
-await Deno.writeTextFile(new URL(`./last-run-${model}.json`, import.meta.url), JSON.stringify(results.map(({ c, r, pass, reasons }) => ({ id: c.id, pass, reasons, reply: r.text })), null, 1));
+const out = JSON.stringify(results.map(({ c, r, pass, reasons }) => ({ id: c.id, pass, reasons, reply: r.text })), null, 1);
+// بلا إذن كتابة لا تضيع النتائج المدفوعة: تُطبع بدل الملف
+try {
+  await Deno.writeTextFile(new URL(`./last-run-${model}.json`, import.meta.url), out);
+} catch (e) {
+  console.error(`تعذرت كتابة الملف (${(e as Error).name})، والنتائج هنا:`);
+  console.log(out);
+}

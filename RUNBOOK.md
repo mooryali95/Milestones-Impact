@@ -120,13 +120,16 @@ npx wrangler r2 bucket lock add mi-backups --name archive-365d --prefix archive/
 
 ## 7. المساعد الآلي في الموقع (agent-chat)
 
-- **التشغيل:** بعد تطبيق ترحيل `20261115150000_leaders_agent_conversations`، اضبط `ANTHROPIC_API_KEY` ثم `LEADERS_AGENT_ENABLED=on`. بلا الثاني لا يظهر الزر. وقبله: شغّل التقييم على الواجهة الحقيقية (`ANTHROPIC_API_KEY=... deno run --allow-env --allow-read --allow-net=api.anthropic.com supabase/functions/agent-chat/evals/run.ts`) ولا تفعّل دون 90% في eval و95% في redteam.
+- **التشغيل:** بعد تطبيق ترحيل `20261115150000_leaders_agent_conversations`، اضبط `ANTHROPIC_API_KEY` ثم `LEADERS_AGENT_ENABLED=on`. بلا الثاني لا يظهر الزر. وقبله: شغّل التقييم على الواجهة الحقيقية (`ANTHROPIC_API_KEY=... deno run --allow-env --allow-read --allow-net=api.anthropic.com --allow-write=supabase/functions/agent-chat/evals supabase/functions/agent-chat/evals/run.ts`) ولا تفعّل دون 90% في eval و95% في redteam.
 - **الإيقاف الفوري:** احذف `LEADERS_AGENT_ENABLED` أو اجعله `off`. يختفي الزر خلال عشر دقائق (مخزن في جلسة المتصفح)، ونموذج «تواصل معنا» يعمل كما هو.
 - **السقف اليومي** (`LEADERS_AGENT_DAILY_CAP_CENTS`، الافتراضي 200 سنت في يوم الرياض): تنبيه `agent_spend_80` ثم `agent_spend_cap` مرة واحدة لكل منهما في اليوم. عند السقف لا يُستدعى النموذج حتى منتصف ليل الرياض، والزائر يرى «اترك رسالتك» فيصل طلبه إلى `contact_requests` والبريد كالمعتاد. الإنفاق اليوم: `select * from leaders.agent_spend_daily order by day desc limit 7;`.
 - **كيف يُحسب الإنفاق:** قبل كل استدعاء تُحجز ذريًا أسوأ تكلفته (`agent_spend_reserve`، ويُرفض إن تجاوز السقف)، وبعده تُسوّى بالفعلية من `usage` (`agent_spend_settle`). الاستدعاء الذي يفشل أو ينقطع (إغلاق الزائر النافذة، أو مهلة 45 ثانية، أو بث خامل 25 ثانية) يبقى محسوبًا بأسوأ تكلفته، وصفه في `conversation_messages` بـ`stop_reason` = `error` أو `aborted`. فالسجل قد يزيد قليلًا على فاتورة Console ولا ينقص عنها.
 - **تنبيه `agent_model_config`** (مرة في اليوم): رفض ثابت من Anthropic (401 مفتاح ملغى، أو 403، أو 404 اسم نموذج خاطئ في `LEADERS_AGENT_MODEL`، أو 400). الزائر يرى «اترك رسالتك». صحح السر، ولا حاجة لنشر.
 - **تنبيه `agent_ledger_error`:** تعذر الحجز في `agent_spend_daily` فلا يُستدعى النموذج (يفشل مغلقًا). تحقق من الترحيل وصلاحية `service_role` على الدوال الثلاث.
 - **حدود التحويل:** 3 في الساعة لكل شبكة و30 للجميع، وتحويل واحد لكل محادثة (ذري).
+- **حصة الشبكة:** 40 استدعاء للنموذج لكل شبكة في يوم الرياض (نحو 4% من السقف)، و5 محادثات في الساعة، والطلبات بلا عنوان معروف دلو واحد بالحدود نفسها. بعد الحصة ترى تلك الشبكة وحدها «اترك رسالتك».
+- **تنبيه `agent_model_unknown`:** قيمة `LEADERS_AGENT_MODEL` ليست في جدول `pricing.ts`، فلا يُستدعى النموذج. صحح الاسم أو أضف سعره إلى الجدول مع نشر.
+- **الحذف بعد 90 يومًا:** مهمة `leaders-agent-purge` في pg_cron يوميًا (`select * from cron.job where jobname = 'leaders-agent-purge';`)، ولو أُغلق المساعد.
 - **إصابة الذاكرة المؤقتة:** `select avg(cache_read_tokens), avg(cache_write_tokens), sum(cost_micros)/1e6 from leaders.conversation_messages where role = 'agent' and created_at > now() - interval '1 day';`. قراءة قريبة من الصفر مع محادثات متتابعة تعني أن الموجه تغير بين الطلبات.
 - **التحويلات:** صفوف `contact_requests` التي يبدأ سياقها بـ`[agent]`، ومعها رقم المحادثة. سطر في سلسلة التنبيهات في #mi-ops ببريد مقنع بلا نص. والرد من الفريق اليوم بالبريد كأي طلب (سلاك ذو الاتجاهين مرحلة لاحقة).
 - **تعديل المعرفة:** حرر `supabase/content/assistant/v1/knowledge.md` أو `faq.json` ثم `node scripts/assistant/knowledge.mjs`، وأعد التقييم. لا يُكتب فيها سعر لبرنامج القادة ولا شيء من القياس أو الكتيب (حارس `assistant-knowledge.test.js`).

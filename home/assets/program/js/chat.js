@@ -22,7 +22,7 @@
     launch: 'اسأل Milestone Impact',
     title: 'المساعد الآلي',
     sub: 'Milestone Impact',
-    notice: 'مساعد آلي يجيب من معلوماتنا المعتمدة، وقد يطلع فريقنا على المحادثة. تُحفظ المحادثة 90 يومًا. ',
+    notice: 'مساعد آلي يجيب من معلوماتنا المعتمدة، وقد يطلع فريقنا على المحادثة. تُحفظ المحادثة 90 يومًا، وما حولته إلى الفريق يُحفظ مع طلبك. ',
     privacy: 'سياسة الخصوصية',
     placeholder: 'اكتب سؤالك هنا',
     send: 'إرسال',
@@ -35,11 +35,14 @@
     expired: 'انتهت هذه المحادثة. ابدأ محادثة جديدة.',
     tooLong: `الرسالة أطول من ${MAX_CHARS} حرف.`,
     handoffTitle: 'اترك رسالتك للفريق',
-    handoffLead: 'نحتاج اسمك وبريدك فقط، والجهة إن وُجدت. يصل طلبك إلى الفريق مع هذه المحادثة.',
+    handoffLead: 'نحتاج اسمك وبريدك، والجهة ورقم التواصل إن شئت. يصل طلبك إلى الفريق مع هذه المحادثة.',
+    noteRequired: 'رسالتك',
+    badNote: 'اكتب رسالتك للفريق.',
     name: 'الاسم', email: 'البريد الإلكتروني', org: 'الجهة (اختياري)', phone: 'رقم التواصل (اختياري)', note: 'رسالتك (اختياري)',
     submit: 'أرسل إلى الفريق', back: 'رجوع إلى المحادثة',
     badName: 'اكتب اسمك.', badEmail: 'البريد الإلكتروني غير صحيح.',
     sent: 'وصل طلبك إلى الفريق.',
+    sentEn: 'Your request has reached our team.',
     newChat: 'محادثة جديدة',
   };
 
@@ -106,6 +109,7 @@
     return el('label', {}, el('span', { text: label }), f[key]);
   };
   const hErr = el('p', { class: 'mi-chat__err', role: 'alert' });
+  const hSubmit = el('button', { class: 'mi-chat__chip mi-chat__chip--solid', type: 'submit', text: T.submit });
   const hForm = el('form', { class: 'mi-chat__handoff', hidden: '', novalidate: '' },
     el('h3', { text: T.handoffTitle }), el('p', { text: T.handoffLead }),
     field('name', T.name, 'text', { autocomplete: 'name', required: '' }),
@@ -115,8 +119,11 @@
     field('note', T.note, 'textarea'),
     hErr,
     el('div', { class: 'mi-chat__actions', style: 'padding:0' },
-      el('button', { class: 'mi-chat__chip mi-chat__chip--solid', type: 'submit', text: T.submit }),
+      hSubmit,
       el('button', { class: 'mi-chat__chip', type: 'button', text: T.back, onclick: () => hideHandoff() })));
+  const noteLabel = f.note.previousElementSibling;
+  // بلا رسالة من الزائر في المحادثة تصير «رسالتك» مطلوبة: لا يصل الفريق طلب فارغ
+  const noteNeeded = () => !state.log.some((x) => x.who === 'me');
   panel.insertBefore(hForm, form);
   let handoffReason = 'request';
 
@@ -139,6 +146,9 @@
     handoffReason = reason;
     hForm.hidden = false; form.hidden = true; actions.hidden = true;
     hErr.textContent = '';
+    const need = noteNeeded();
+    noteLabel.textContent = need ? T.noteRequired : T.note;
+    if (need) f.note.setAttribute('required', ''); else f.note.removeAttribute('required');
     log.scrollTop = log.scrollHeight;
     f.name.focus({ preventScroll: true });
   }
@@ -156,14 +166,25 @@
       const st = load(STATUS);
       const siteKey = st && st.site_key;
       const note = addMsg('note', T.verifying, { transient: true });
+      let t = null; let wid = null; let timer = null;
+      // يُزال الودجت في كل نهاية (نجاح أو فشل)، فإعادة المحاولة ترسم في حاوية نظيفة
+      const clearCaptcha = () => {
+        clearTimeout(timer);
+        try { if (t && wid !== null && wid !== undefined) t.remove(wid); } catch { /* أُزيل */ }
+        wid = null; captcha.textContent = '';
+      };
       try {
-        const t = await C.loadTurnstile();
+        t = await C.loadTurnstile();
         const token = await new Promise((ok, no) => {
-          t.render(captcha, { sitekey: siteKey, appearance: 'interaction-only', callback: ok, 'error-callback': () => no(new Error('captcha')), language: 'ar' });
+          const fail = () => no(new Error('captcha'));
+          // التحقق لا ينتظر إلى الأبد: مهلة كلية، ومهلة التحدي وانتهاء الرمز قبل استعماله فشل
+          timer = setTimeout(fail, 60_000);
+          wid = t.render(captcha, { sitekey: siteKey, appearance: 'interaction-only', callback: ok, 'error-callback': fail, 'timeout-callback': fail, 'expired-callback': fail, language: 'ar' });
         });
+        clearCaptcha();
         const res = await call({ action: 'start', captcha: token, page, source_url: location.href, locale: lang0 });
         const j = await res.json().catch(() => ({}));
-        note.remove(); captcha.textContent = '';
+        note.remove();
         if (!j.success) {
           addMsg('note', j.code === 'rate' ? T.rate : (j.code === 'agent_unavailable' || j.code === 'agent_off') ? T.unavailable : T.failed, { transient: true });
           if (j.code === 'agent_unavailable' || j.code === 'agent_off') showHandoffFallback();
@@ -171,9 +192,11 @@
         }
         state.token = j.token; persist();
         addMsg('bot', j.greeting);
-        if (j.capped) showHandoff('capped');
+        // السقف اليومي بلغ قبل البدء: يُقال السبب قبل نموذج «اترك رسالتك»
+        if (j.capped) { if (j.capped_text) addMsg('bot', j.capped_text); showHandoff('capped'); }
         return true;
       } catch {
+        clearCaptcha();
         note.remove();
         addMsg('note', T.failed, { transient: true });
         return false;
@@ -263,19 +286,30 @@
   const autosize = () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 140)}px`; };
   input.addEventListener('input', autosize);
 
+  // طلب تحويل واحد في كل مرة: النقر المزدوج لا يرسل طلبين ولا يضيف تأكيدين
+  let handingOff = false;
   hForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (handingOff || state.handedOff) return;
     hErr.textContent = '';
     const v = (k) => f[k].value.trim();
     if (v('name').length < 2) { hErr.textContent = T.badName; f.name.focus(); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v('email'))) { hErr.textContent = T.badEmail; f.email.focus(); return; }
-    if (!(await ensureStarted())) return;
-    const res = await call({ action: 'handoff', token: state.token, name: v('name'), email: v('email'), organization: v('organization'), phone: v('phone'), note: v('note'), reason: handoffReason });
-    const j = await res.json().catch(() => ({}));
-    if (!j.success && j.code !== 'already') { hErr.textContent = j.field === 'email' ? T.badEmail : j.field === 'name' ? T.badName : T.failed; return; }
+    if (noteNeeded() && !v('note')) { hErr.textContent = T.badNote; f.note.focus(); return; }
+    handingOff = true; hSubmit.disabled = true;
+    let j = {};
+    try {
+      if (!(await ensureStarted())) return;
+      const res = await call({ action: 'handoff', token: state.token, name: v('name'), email: v('email'), organization: v('organization'), phone: v('phone'), note: v('note'), reason: handoffReason });
+      j = await res.json().catch(() => ({}));
+    } catch { j = {}; } finally { handingOff = false; hSubmit.disabled = false; }
+    if (!j.success && j.code !== 'already') { hErr.textContent = j.field === 'email' ? T.badEmail : j.field === 'name' ? T.badName : j.field === 'note' ? T.badNote : T.failed; return; }
+    if (state.handedOff) return;
     state.handedOff = true; persist();
     hForm.hidden = true; form.hidden = true;
-    addMsg('bot', `${T.sent} ${j.promise || ''}`.trim());
+    // التأكيد بلغة الخادم (لغة آخر رسالة للزائر) فلا يختلط العربي بالإنجليزي في فقاعة واحدة
+    const sent = j.sent || (j.lang === 'en' ? T.sentEn : T.sent);
+    addMsg('bot', `${sent} ${j.promise || ''}`.trim());
     actions.hidden = false; actions.textContent = '';
     actions.append(el('button', { class: 'mi-chat__chip', type: 'button', text: T.newChat, onclick: () => { resetChat(); } }));
   });
