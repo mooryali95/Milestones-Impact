@@ -11,6 +11,7 @@ import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
 import GOV from '../../supabase/content/initiative-guide/v1/sectors/gov.json';
 import HEALTH from '../../supabase/content/initiative-guide/v1/sectors/health.json';
 import { costSummary } from '../../supabase/functions/leaders-api/capstone.js';
+import { nearCopy } from '../../supabase/functions/leaders-api/example-check.js';
 
 export const GUIDE_MODES = Object.freeze({ beginner: 'open', intermediate: 'collapsed', advanced: 'expert' });
 
@@ -26,12 +27,18 @@ export function sectorOf(text) {
   return { key: 'gov', matched: /حكوم|وزار|هيئ|بلدي|أمان|جهة عامة|قطاع عام/.test(t) };
 }
 
-/** الأمثلة مرتبة: مثال قطاع المشارك أولًا */
-export const examplesFor = (sectorText) => { const k = sectorOf(sectorText).key; return [BY_SECTOR[k], ...EXAMPLES.filter((x) => x.sector !== k)]; };
+// القطاعات المفتوحة للمشارك كما حسمها الخادم من مفاتيح الرؤية (examples.sectors). غيابها (خادم أقدم) يعني الكل
+const openOf = (allowed) => (Array.isArray(allowed) ? EXAMPLES.filter((x) => allowed.includes(x.sector)) : [...EXAMPLES]);
 
-/** حقل المثال المحلول لقطاع المشارك: { value, type, columns, sector_title } أو null */
-export function exampleFor(modelKey, fieldKey, sectorText) {
-  const ex = BY_SECTOR[sectorOf(sectorText).key];
+/** الأمثلة المفتوحة مرتبة: مثال قطاع المشارك أولًا */
+export const examplesFor = (sectorText, allowed = null) => {
+  const k = sectorOf(sectorText).key, open = openOf(allowed);
+  return [...open.filter((x) => x.sector === k), ...open.filter((x) => x.sector !== k)];
+};
+
+/** حقل المثال المحلول لقطاع المشارك، أو لأقرب مثال مفتوح إن حُجب مثال قطاعه: { value, type, columns, sector_title } أو null */
+export function exampleFor(modelKey, fieldKey, sectorText, allowed = null) {
+  const ex = examplesFor(sectorText, allowed)[0];
   const f = ex?.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey);
   if (!f || f.value == null || (Array.isArray(f.value) ? !f.value.length : !String(f.value).trim())) return null;
   return { value: f.value, type: f.type, columns: f.columns || null, sector_title: ex.sector_title };
@@ -40,15 +47,20 @@ export function exampleFor(modelKey, fieldKey, sectorText) {
 /**
  * عون الحقل بمستوى المشارك في إطار الفصل، أو null إن لم يكن للحقل دليل
  * @param {string} modelKey @param {string} fieldKey @param {string | null | undefined} level @param {string | null} [sectorText]
+ * @param {{ field?: boolean, sectors?: string[] } | null} [examples] ما حسمه الخادم من مفاتيح الرؤية
  */
-export function guideFor(modelKey, fieldKey, level, sectorText = null) {
+export function guideFor(modelKey, fieldKey, level, sectorText = null, examples = null) {
   const g = FIELDS[modelKey]?.[fieldKey];
   if (!g || typeof g !== 'object') return null;
   const mode = GUIDE_MODES[level] || 'collapsed';
-  // المتقدم لا يُعرض له المثال بجانب الحقل: يُثقل عليه (انعكاس الخبرة)، والوثيقة الكاملة متاحة له في صفحة المبادرة
-  const example = mode === 'expert' ? null : exampleFor(modelKey, fieldKey, sectorText);
+  // المتقدم لا يُعرض له المثال بجانب الحقل: يُثقل عليه (انعكاس الخبرة)، والوثيقة الكاملة متاحة له في صفحة المبادرة.
+  // وما حجبه المالك (examples.field أو قطاع بعينه) لا يُعرض
+  const example = mode === 'expert' || examples?.field === false ? null : exampleFor(modelKey, fieldKey, sectorText, examples?.sectors ?? null);
   return { mode, meaning: g.meaning, mistake: g.mistake, challenge: g.challenge, example };
 }
+
+/** هل الجواب قريب جدًا من جواب أي مثال محلول للحقل نفسه؟ يُقارن بكل الأمثلة ولو حُجب بعضها، كما يقارن المستشار */
+export const nearExample = (modelKey, fieldKey, value) => EXAMPLES.some((ex) => nearCopy(value, ex.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey)?.value));
 
 export const hasGuide = (modelKey) => !!FIELDS[modelKey] && typeof FIELDS[modelKey] === 'object';
 

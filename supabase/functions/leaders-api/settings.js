@@ -50,7 +50,7 @@ export const SETTINGS = {
   },
   // الرؤية (visibility.js): الحقول تُولَّد من المفاتيح نفسها، فلا يُكتب مفتاح مرتين
   visibility: {
-    title_ar: 'الرؤية: ما يراه المستشار والخبير',
+    title_ar: 'الرؤية: ما يراه المستشار والخبير والمشارك',
     note_ar: 'الافتراضي لكل الدفعات. لكل دفعة أن تستثني مفتاحًا من نموذجها. موافقة المشارك على مشاركة مستواه مع جهته وسرية مقيّمي 360 ليست مفاتيح.',
     fields: Object.fromEntries(VISIBILITY_KEYS.map((k) => [k, { type: 'bool', default: VISIBILITY[k].default, label_ar: visibilityLabel(k), hint_ar: VISIBILITY[k].hint_ar }])),
   },

@@ -28,8 +28,8 @@ import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor } from './entitlements.ts';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
-import { visibilityOfCohort } from './visibility.ts';
-import { resolveVisibility } from './visibility.js';
+import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
+import { examplesView, resolveVisibility } from './visibility.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -1259,18 +1259,25 @@ async function importsFor(p: any, fields: any[]) {
 
 export async function modelGet(p: any, b: Body) {
   const m = await myModel(p, b.id);
-  const [{ data: sub }, initiative, status] = await Promise.all([
+  const [{ data: sub }, initiative, status, examples] = await Promise.all([
     db.from('model_submissions').select('*').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle(),
     initiativeFor(p.id),
     m.capstone_sort != null ? capstoneStatus(p.id) : null,
+    m.capstone_sort != null ? examplesFor(p) : null,
   ]);
   const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
   return {
     // sector: قطاع المشارك من ملفه، يختار به التطبيق المثال المحلول الأقرب (leaders-app/src/guide.js)
-    success: true, model: m, submission, initiative, sector: p.sector || null,
+    success: true, model: m, submission, initiative, sector: p.sector || null, examples,
     imports: await importsFor(p, m.fields),
     capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
   };
+}
+
+// المبادرات المحلولة كما يضبطها المالك عامةً أو لدفعة المشارك (مفاتيح الرؤية). تعذّر القراءة يعيد الافتراضي، لا خطأ
+export async function examplesFor(p: any) {
+  const vis: Record<string, boolean> = await visibilityOfParticipant(p.id).catch(() => resolveVisibility(null, null));
+  return examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } });
 }
 
 // حفظ مسودة أو تسليم نهائي؛ التسليم يمنح نقاط النموذج مرة واحدة

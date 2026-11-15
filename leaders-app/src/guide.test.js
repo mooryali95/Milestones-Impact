@@ -182,3 +182,49 @@ describe('فحص تغطية مصفوفة المسؤوليات يقرأ الرم�
     expect(capstoneChecks({ scope: 'project', models, answers }).find((c) => c.key === 'raci-cover').ok).toBe(true);
   });
 });
+
+// ════════════ تحكم المالك في المبادرات المحلولة (مفاتيح الرؤية) ════════════
+import { EXAMPLE_SECTORS, examplesView, resolveVisibility, VISIBILITY } from '../../supabase/functions/leaders-api/visibility.js';
+import { nearExample } from './guide.js';
+
+describe('المالك يعرض المبادرات المحلولة أو يحجبها، عامةً أو للدفعة، وكل قطاع وحده', () => {
+  it('أربعة مفاتيح للمشارك مفتوحة افتراضيًا، فلا يتغير شيء عند النشر حتى يغيّرها المالك', () => {
+    for (const k of ['par_examples_field', 'par_examples_doc', 'par_example_gov', 'par_example_health']) {
+      expect(VISIBILITY[k].audience, k).toBe('participant');
+      expect(VISIBILITY[k].default, k).toBe(true);
+    }
+    expect(EXAMPLE_SECTORS).toEqual(EXAMPLES.map((x) => x.sector));
+    for (const s of EXAMPLE_SECTORS) expect(VISIBILITY[`par_example_${s}`], s).toBeTruthy();
+  });
+  it('الحسم: حجب قطاع يُسقطه، وحجب كل القطاعات يُسقط العرضين، واستثناء الدفعة يعلو العام', () => {
+    const view = (vis) => examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } });
+    expect(view(resolveVisibility(null, null))).toEqual({ field: true, doc: true, sectors: ['gov', 'health'] });
+    expect(view(resolveVisibility({ par_example_health: false }, null)).sectors).toEqual(['gov']);
+    expect(view(resolveVisibility({ par_example_health: false }, { par_example_health: true })).sectors).toEqual(['gov', 'health']);
+    expect(view(resolveVisibility(null, { par_examples_doc: false }))).toEqual({ field: true, doc: false, sectors: ['gov', 'health'] });
+    expect(view(resolveVisibility({ par_example_gov: false, par_example_health: false }, null))).toEqual({ field: false, doc: false, sectors: [] });
+  });
+  it('الواجهة تتبع ما حسمه الخادم: حُجب مثال قطاعه فيرى الأقرب المفتوح، وحُجب العرض بجانب الحقل فلا مثال', () => {
+    expect(examplesFor('صحي', ['gov']).map((x) => x.sector)).toEqual(['gov']);
+    expect(examplesFor('صحي', []).length).toBe(0);
+    expect(examplesFor('صحي', null).map((x) => x.sector)).toEqual(['health', 'gov']);
+    expect(exampleFor('options-analysis', 'recommendation', 'صحي', ['gov']).sector_title).toBe('الخدمات الحكومية');
+    expect(exampleFor('options-analysis', 'recommendation', 'صحي', [])).toBeNull();
+    expect(guideFor('cost-plan', 'items', 'beginner', 'صحي', { field: false, sectors: ['gov', 'health'] }).example).toBeNull();
+    expect(guideFor('cost-plan', 'items', 'beginner', 'صحي', { field: true, sectors: ['gov'] }).example.sector_title).toBe('الخدمات الحكومية');
+    // خادم أقدم لا يرسل الحسم: يبقى السلوك كما كان
+    expect(guideFor('cost-plan', 'items', 'beginner', 'صحي', null).example.sector_title).toBe('الصحة');
+  });
+  it('تنبيه النقل يقارن بكل الأمثلة ولو حُجب بعضها، كما يقارن المستشار', () => {
+    const rec = EXAMPLES[1].sections.find((s) => s.key === 'options-analysis').fields.find((f) => f.key === 'recommendation').value;
+    expect(nearExample('options-analysis', 'recommendation', rec)).toBe(true);
+    expect(nearExample('options-analysis', 'recommendation', 'نوصي بتوحيد نموذج الطلب في الفروع الثلاثة لأنه أسرع أثرًا وأقل كلفة من التعاقد مع مورد خارجي.')).toBe(false);
+  });
+  it('الخادم يحسمها من رؤية المشارك النافذة ويرسلها مع الفصل وصفحة المبادرة', () => {
+    const p = readFileSync(resolve(root, 'supabase/functions/leaders-api/participant.ts'), 'utf8');
+    expect(p).toContain('examplesView({ field: vis.par_examples_field, doc: vis.par_examples_doc, sectors: { gov: vis.par_example_gov, health: vis.par_example_health } })');
+    expect(p).toContain('m.capstone_sort != null ? examplesFor(p) : null,');
+    const c = readFileSync(resolve(root, 'supabase/functions/leaders-api/capstone.ts'), 'utf8');
+    expect(c).toContain('const [d, examples] = await Promise.all([build(p), examplesFor(p)]);');
+  });
+});
