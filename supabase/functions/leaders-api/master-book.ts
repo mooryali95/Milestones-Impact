@@ -7,6 +7,7 @@
 import { audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
 import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
 import { DRAFTS } from './master-book-drafts.js';
+import { sectionById, sectionIdOf } from './section-refs.js';
 
 type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean };
 
@@ -31,7 +32,11 @@ async function modules() {
 async function commentRows() {
   const { data, error } = await db.from('book_comments').select('*').order('created_at').limit(5000);
   // تعليق المسودة بلا module_id (ترحيل 20261115190000): معرّفه في القارئ «draft:مفتاحها» كما تُعرض
-  return error ? null : (data as any[]).map((r) => ({ ...r, module_id: rowChapterId(r) }));
+  // بهوية القسم (المرحلة 2): التعليق يظهر تحت عنوان قسمه الحالي إن تغيّر بعده، والملغى يبقى بعنوانه المحفوظ
+  return error ? null : (data as any[]).map((r) => {
+    const sec = r.section_id ? sectionById(r.section_id) : null;
+    return { ...r, module_id: rowChapterId(r), section: sec && !sec.retired ? sec.key : r.section };
+  });
 }
 // المسودات المعروضة على اللجنة بصيغة الأبواب، من وثائقها (master-book-drafts.js المولَّد)
 const drafts = () => draftChapters(DRAFTS as any[]);
@@ -77,7 +82,12 @@ export async function addComment(v: Viewer, b: any) {
   const target = commentTarget(val.module_id);
   const row: Record<string, unknown> = { ...val, ...target, fingerprint: await fp(mod), author_kind: v.kind, author_ref: v.ref, author_name: v.name, author_role: v.role };
   if (!target.draft_key) delete row.draft_key;
-  const { data, error } = await db.from('book_comments').insert(row).select('id').single();
+  // هوية القسم للباب (لا للمسودة ولا للباب كله)، فيتبع التعليق قسمه إن تغيّر عنوانه
+  const sid = !target.draft_key && val.section ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null;
+  if (sid) row.section_id = sid;
+  let { data, error } = await db.from('book_comments').insert(row).select('id').single();
+  // قبل ترحيل section_id (20261115200000) يُحفظ التعليق بعنوانه وحده
+  if (error && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
   if (error) throw new Fail(target.draft_key ? 'التعليق على المسودات يُفعَّل بعد تطبيق ترحيله، وقراءتها متاحة الآن' : 'تعذّر حفظ التعليق، حاول بعد قليل', 503, 'db_error');
   await audit(v.kind === 'admin' ? 'admin' : 'system', v.kind === 'admin' ? v.ref : `expert:${v.ref}`, 'book.comment', 'book_comments', (data as any).id, null, { module_id: val.module_id, section: val.section, reply: !!val.parent_id });
   return { success: true, id: (data as any).id };
