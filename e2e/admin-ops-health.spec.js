@@ -13,10 +13,12 @@ const facts = (over = {}) => ({
 const STATES = {
   green: () => facts(),
   amber: () => facts({ mail: { sent: 61 }, slack: { error: 'not_in_channel', error_at: ago(6), ok_at: ago(50) } }),
+  // رموز مصفوفة التأثير بلغت نصيبها: متابعة لا عطل، وسلاك وحده قناة التنبيه
+  matrix: () => facts({ mail: { sent: 30, codes: { sent: 9, failed: 0, blocked: 0, matrix_blocked: 4 }, code_streak: { count: 0, since: null, last_at: ago(2), last_ok_at: ago(2), open: false } }, alerts: { email: false, webhook: false, slack: true } }),
   red: () => facts({ mail: { codes: { sent: 9, failed: 3, blocked: 1 }, code_streak: { count: 4, since: ago(20), last_at: ago(1), last_ok_at: ago(25), open: false }, failed_24h: 3 } }),
 };
 
-async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview' } = {}) {
+async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest } = {}) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -31,7 +33,7 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
       'admin.overview': { success: true, total: 4, by_status: { pending_approval: 1, enrolled: 2 }, pending_reviews: 0, matrix: { milestone: { beginner: 1, intermediate: 1, advanced: 0 }, impact: { beginner: 2, intermediate: 0, advanced: 0 }, leadership: { beginner: 1, intermediate: 1, advanced: 0 } } },
       'admin.reviews': { success: true, pending_approval: [], submitted: [] },
       'admin.health': { success: true, readiness: [], missing_migrations: [], pending_migrations: [], migrations_ledger: true, missing_secrets: [], mail: { today: 12, cap: 80 } },
-      'admin.alert-test': { success: true, channels: { webhook: true, email: true }, mail_key: true, delivered: { webhook: true, email: false } },
+      'admin.alert-test': alertTest ?? { success: true, channels: { webhook: true, email: true, slack: true }, mail_key: true, delivered: { webhook: true, email: false } },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
   });
@@ -54,7 +56,8 @@ test('أخضر: البطاقة أعلى النظرة العامة بالكلمة
   await expect(card(page).getByRole('status').first()).toContainText('لا شيء يحتاج تدخلك');
   await expect(card(page)).toContainText('12 من 80');
   await expect(card(page)).toContainText('وصل 9 · تعذّر 0 · حُجب 0');
-  await expect(card(page)).toContainText('رُفض 0 · حُجب 2');
+  await expect(card(page)).toContainText('تعذّر 0 · حُجب 2');
+  await expect(card(page).getByRole('heading', { name: 'البريد في آخر 24 ساعة' })).toBeVisible();
   await expect(card(page)).toContainText('منذ 4 دقائق');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
   // البطاقة أول ما في النظرة العامة
@@ -67,8 +70,11 @@ test('كهرماني: اقتراب السقف وخطأ سلاك برمزه وإ�
   await setup(page, { state: 'amber' });
   await expect(card(page)).toHaveAttribute('data-level', 'amber');
   await expect(card(page).getByText('يحتاج متابعة', { exact: true })).toBeVisible();
-  await expect(card(page)).toContainText('آخر نشر في سلاك تعذّر: not_in_channel');
-  await expect(card(page)).toContainText('البوت ليس عضوًا في القناة');
+  // المعنى العربي يتصدر، والرمز الخام تفصيل ثانوي من اليسار
+  await expect(card(page).locator('.ops-issues')).toContainText('آخر نشر في سلاك تعذّر: البوت ليس عضوًا في القناة');
+  await expect(card(page).locator('.ops-issues code[dir="ltr"]')).toHaveText('not_in_channel');
+  await expect(card(page).locator('.ops-issues')).toContainText('إضافة تطبيق');
+  await expect(card(page).getByRole('status').first()).toContainText('البريد والتنبيه: يحتاج متابعتك (أمران).');
   await expect(card(page)).toContainText('البريد في آخر 24 ساعة 61 من 80');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
 });
@@ -94,6 +100,17 @@ test('التنبيه التجريبي للمدير الأعلى: يستدعي ad
   await card(page).getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).click();
   await expect(card(page).getByRole('status').filter({ hasText: 'وصل التنبيه' })).toContainText('وصل التنبيه التجريبي عبر: رابط التنبيه');
   expect(calls.filter((c) => c.action === 'admin.alert-test').length).toBe(1);
+});
+
+test('رموز مصفوفة التأثير المحجوبة بنصيبها: كهرماني بسطرها بلا شريط، وسلاك وحده قناة تنبيه', async ({ page }) => {
+  await setup(page, { state: 'matrix', alertTest: { success: true, channels: { webhook: false, email: false, slack: true }, mail_key: true, delivered: { webhook: false, email: false } } });
+  await expect(card(page)).toHaveAttribute('data-level', 'amber');
+  await expect(card(page)).toContainText('مصفوفة التأثير بلغت نصيبها من البريد: حُجب 4');
+  await expect(card(page)).toContainText('لا يمس دخول القادة');
+  await expect(card(page)).not.toContainText('لا قناة تنبيه مضبوطة');
+  await expect(page.locator('.ops-banner')).toHaveCount(0);
+  await card(page).getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).click();
+  await expect(card(page).locator('.ops-test-out')).toHaveText('أُرسل إلى سلسلة التنبيهات في سلاك، وهو قناة التنبيه الوحيدة المضبوطة.');
 });
 
 test('المدير غير الأعلى يرى البطاقة والشريط بلا زر التجربة', async ({ page }) => {

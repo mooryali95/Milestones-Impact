@@ -44,3 +44,5 @@
 .ops-banner-link { color: var(--st-bad); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .ops-banner-link:focus-visible, .ops-test button:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; border-radius: 3px; }
 @media (max-width: 860px) { .ops-grid { grid-template-columns: 1fr; } }
+/* رمز الخطأ الخام تفصيل ثانوي بعد معناه العربي */
+.ops-code { font-size: .72rem; direction: ltr; unicode-bidi: isolate; background: var(--sand-light); color: var(--ink-mid); padding: 1px 6px; border-radius: 4px; }

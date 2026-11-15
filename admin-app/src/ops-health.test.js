@@ -1,5 +1,6 @@
 // صحة البريد والتنبيه: العتبات التي تحكم بلون البطاقة والشريط (ops-health.js)، ومتى يُسأل الخادم (ops-watch.js)
-import { agoAr, codeStreak, minutesAr, OPS, opsVerdict, slackHint } from '../../supabase/functions/leaders-api/ops-health.js';
+import { agoAr, codeStreak, countAr, minutesAr, OPS, opsVerdict, slackHint, slackLabel, TITLE_AR } from '../../supabase/functions/leaders-api/ops-health.js';
+import { alertTestText } from './OpsHealth.jsx';
 import { dueIn, POLL_MS } from './ops-watch.js';
 
 const NOW = Date.parse('2026-11-15T12:00:00Z');
@@ -47,20 +48,36 @@ describe('opsVerdict: الكهرماني', () => {
     expect(keys(v)).toEqual(['codes_lost_day']);
   });
   it('رفض المزوّد، والطابور المتأخر ست ساعات، وتعذّر العداد والطابور', () => {
-    expect(keys(opsVerdict(healthy({ mail: { failed_24h: 2 } }), NOW))).toEqual(['mail_rejected']);
+    const f = opsVerdict(healthy({ mail: { failed_24h: 2 } }), NOW);
+    expect(keys(f)).toEqual(['mail_failed']);
+    expect(f.issues[0].text).toBe('تعذّر إرسال 2 من الرسائل غير رموز الدخول في آخر 24 ساعة');
+    expect(f.issues[0].hint).not.toMatch(/^راجع حالة النطاق/);
     expect(keys(opsVerdict(healthy({ mail: { queue: { waiting: 4, oldest_minutes: OPS.queueWatchHours * 60 - 1 } } }), NOW))).toEqual([]);
     const q = opsVerdict(healthy({ mail: { queue: { waiting: 4, oldest_minutes: 7 * 60 } } }), NOW);
     expect(q.issues[0].text).toBe('طابور البريد: 4 تنتظر، أقدمها منذ 7 ساعات');
     expect(keys(opsVerdict(healthy({ mail: { sent: null, queue: { waiting: null, oldest_minutes: null } } }), NOW))).toEqual(['mail_counter', 'queue_unread']);
   });
-  it('لا قناة تنبيه أصلًا', () => {
-    expect(keys(opsVerdict(healthy({ alerts: { email: false, webhook: false } }), NOW))).toEqual(['no_alert_channel']);
+  it('لا قناة تنبيه أصلًا، وسلاك وحده قناة تكفي', () => {
+    const none = { configured: false, missing: ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'] };
+    expect(keys(opsVerdict(healthy({ slack: none, alerts: { email: false, webhook: false, slack: false } }), NOW))).toEqual(['no_alert_channel']);
+    expect(opsVerdict(healthy({ alerts: { email: false, webhook: false, slack: true } }), NOW).level).toBe('green');
+  });
+  it('رموز مصفوفة التأثير المحجوبة بنصيبها: متابعة بسطرها، لا عطل دخول ولا شريط', () => {
+    const v = opsVerdict(healthy({ mail: { sent: 30, codes: { sent: 9, failed: 0, blocked: 0, matrix_blocked: 5 } } }), NOW);
+    expect(v.level).toBe('amber');
+    expect(keys(v)).toEqual(['matrix_share']);
+    expect(v.banner).toBeNull();
+    expect(v.issues[0].hint).toContain('لا يمس دخول القادة');
+    // السقف ممتلئ: سطره الأحمر يكفي
+    expect(keys(opsVerdict(healthy({ mail: { sent: 80, codes: { sent: 9, failed: 0, blocked: 0, matrix_blocked: 5 } } }), NOW))).toEqual(['mail_cap']);
   });
   it('سلاك: آخر نشر تعذّر برمزه وإرشاد إصلاحه، ونصف ضبط بالسر الناقص', () => {
     const v = opsVerdict(healthy({ slack: { error: 'not_in_channel', error_at: ago(2), ok_at: ago(30) } }), NOW);
     expect(v.level).toBe('amber');
-    expect(v.issues[0]).toMatchObject({ key: 'slack_error', text: 'آخر نشر في سلاك تعذّر: not_in_channel' });
+    expect(v.issues[0]).toMatchObject({ key: 'slack_error', text: 'آخر نشر في سلاك تعذّر: البوت ليس عضوًا في القناة', code: 'not_in_channel' });
+    expect(v.issues[0].text).not.toMatch(/[a-z_]{4,}/);
     expect(v.issues[0].hint).toContain('إضافة تطبيق');
+    expect(slackLabel('something_new')).toBe('رفض سلاك النشر');
     const never = opsVerdict(healthy({ slack: { error: 'invalid_auth', error_at: ago(2), ok_at: null } }), NOW);
     expect(never.issues[0].hint).toContain('LEADERS_SLACK_BOT_TOKEN');
     const half = opsVerdict(healthy({ slack: { configured: false, missing: ['LEADERS_SLACK_CHANNEL'] } }), NOW);
@@ -82,8 +99,8 @@ describe('opsVerdict: الأحمر والشريط', () => {
     expect(v.banner).toContain('بلغ السقف اليومي');
   });
   it('لا مفتاح بريد: يتقدم الشريط، والكهرماني بعد الأحمر', () => {
-    const v = opsVerdict(healthy({ mail: { key: false, failed_24h: 1 }, alerts: { email: false, webhook: false } }), NOW);
-    expect(keys(v)).toEqual(['mail_key', 'mail_rejected', 'no_alert_channel']);
+    const v = opsVerdict(healthy({ mail: { key: false, failed_24h: 1 }, slack: { configured: false, missing: ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'] }, alerts: { email: false, webhook: false } }), NOW);
+    expect(keys(v)).toEqual(['mail_key', 'mail_failed', 'no_alert_channel']);
     expect(v.banner).toBe('البريد متوقف: مفتاح البريد غير مضبوط، ورموز الدخول لا تخرج');
   });
   it('الحكم نفسه للبطاقة والشريط: الكهرماني بلا شريط', () => {
@@ -106,6 +123,17 @@ describe('الأدوات', () => {
     expect(agoAr(ago(14), NOW)).toBe('منذ 14 دقيقة');
     expect(agoAr(ago(3000), NOW)).toBeNull();
     expect(slackHint('something_new')).toContain('سجل الدالة');
+  });
+  it('عدد الأمور بالعربية، وعنوان الكهرماني لا يناقض العدد', () => {
+    expect([1, 2, 3, 10, 11, 25].map(countAr)).toEqual(['أمر واحد', 'أمران', '3 أمور', '10 أمور', '11 أمرًا', '25 أمرًا']);
+    expect(TITLE_AR.amber).toBe('البريد والتنبيه: يحتاج متابعتك');
+  });
+  it('أين ذهب التنبيه التجريبي: سلاك قناة وإن لم يُضبط الرابط ولا البريد', () => {
+    const none = { webhook: false, email: false };
+    expect(alertTestText({ channels: { ...none, slack: true }, delivered: none }, true)).toEqual({ bad: false, text: 'أُرسل إلى سلسلة التنبيهات في سلاك، وهو قناة التنبيه الوحيدة المضبوطة.' });
+    expect(alertTestText({ channels: { ...none, slack: false }, delivered: none }, false).bad).toBe(true);
+    expect(alertTestText({ channels: { webhook: true, email: true, slack: true }, delivered: { webhook: true, email: false } }, true).text)
+      .toBe('وصل التنبيه التجريبي عبر: رابط التنبيه. وأُرسل إلى سلسلة التنبيهات في سلاك.');
   });
   it('السؤال كل 60 ثانية والصفحة ظاهرة، ولا سؤال وهي مخفية', () => {
     expect(POLL_MS).toBe(60e3);

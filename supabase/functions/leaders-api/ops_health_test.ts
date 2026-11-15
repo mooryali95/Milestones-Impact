@@ -38,7 +38,8 @@ Deno.test('صحة البريد: الحقائق للمدير ذي الكتابة 
   const { seen, restore } = install((t, ops) => {
     if (t === 'mail_events' && has(ops, 'order')) return { data: codes, error: null };
     if (t === 'mail_events' && has(ops, 'eq', 'kind', 'code') && has(ops, 'eq', 'status', 'failed')) return { count: 2, error: null };
-    if (t === 'mail_events' && has(ops, 'eq', 'kind', 'code') && has(ops, 'eq', 'status', 'blocked')) return { count: 1, error: null };
+    if (t === 'mail_events' && has(ops, 'eq', 'kind', 'code') && has(ops, 'eq', 'status', 'blocked') && has(ops, 'eq', 'source', 'user-api')) return { count: 6, error: null };
+    if (t === 'mail_events' && has(ops, 'eq', 'kind', 'code') && has(ops, 'eq', 'status', 'blocked') && has(ops, 'neq', 'source', 'user-api')) return { count: 1, error: null };
     if (t === 'mail_events' && has(ops, 'eq', 'kind', 'code')) return { count: 7, error: null };
     if (t === 'mail_events' && has(ops, 'eq', 'status', 'sent')) return { count: 30, error: null };
     if (t === 'mail_events' && has(ops, 'eq', 'status', 'failed')) return { count: 4, error: null };
@@ -55,7 +56,11 @@ Deno.test('صحة البريد: الحقائق للمدير ذي الكتابة 
     }
     // المدير بلا عامل ثان يقرأ (قراءة لا تعديل)
     const r: any = await opsHealth({ email: 'a@x.sa', role: 'admin', method: 'email' });
-    assertEquals(r.mail.codes, { sent: 7, failed: 2, blocked: 1 });
+    assertEquals(r.mail.codes, { sent: 7, failed: 2, blocked: 1, matrix_blocked: 6 });
+    // رموز المصفوفة المحجوبة بنصيبها لا تدخل سلسلة الرموز، ولا يُعد ما سوى الرموز مرتين
+    assert(seen.some((s) => s.table === 'mail_events' && has(s.ops, 'order') && has(s.ops, 'or', 'source.neq.user-api,status.neq.blocked')));
+    for (const s of seen.filter((x) => x.table === 'mail_events' && !has(x.ops, 'eq', 'kind', 'code') && !has(x.ops, 'order') && (has(x.ops, 'eq', 'status', 'failed') || has(x.ops, 'eq', 'status', 'blocked')))) assert(has(s.ops, 'neq', 'kind', 'code'));
+    assertEquals(r.alerts.slack, false);
     assertEquals(r.mail.code_streak.count, 3);
     assertEquals(r.mail.failed_24h, 4);
     assertEquals(r.mail.blocked_24h, 5);
@@ -106,10 +111,11 @@ Deno.test('صحة البريد: ترحيل ops_status في القائمة ومت
   assertEquals((MIGRATION_GATES as any)['20261115140000_leaders_ops_status'][0], 'tolerant');
 });
 
-// سلاك: آخر نجاح وآخر خطأ يُكتبان في ops_status، بلا انتظار، ومرة في الدقيقة لكل نتيجة، والتغير يُكتب فورًا
-Deno.test('سلاك: نتيجة النشر تُسجَّل في ops_status حين تتغير ومرة في الدقيقة للنتيجة نفسها', async () => {
+// سلاك: كل نتيجة نشر تُرسل إلى ops_status بلا انتظار، ولا تحجبها ذاكرة النسخة (نجاح بعد خطأ نسخة أخرى يصل)؛
+// إسقاط المكرر خلال دقيقة وإبقاء الأحدث في مشغّل القاعدة (admin-app/src/ops-status-sql.test.js)
+Deno.test('سلاك: كل نتيجة نشر تُسجَّل في ops_status بعمودها وحده، ولا تُحجب في النسخة', async () => {
   S.resetSlack();
-  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0, statusMs: 60e3 });
+  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0 });
   Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
   Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
   const writes: any[] = [];
@@ -128,19 +134,20 @@ Deno.test('سلاك: نتيجة النشر تُسجَّل في ops_status حين
   globalThis.fetch = (() => Promise.resolve(new Response(mode === 'ok' ? '{"ok":true,"ts":"1.1"}' : '{"ok":false,"error":"channel_not_found"}'))) as typeof fetch;
   try {
     for (let i = 0; i < 3; i++) { await S.slackPost('alerts', `حدث ${i}`, { client }); await S.slackIdle(); }
-    assertEquals(writes.length, 1);
+    assertEquals(writes.length, 3);
     assertEquals(writes[0].table, 'ops_status');
     assertEquals(writes[0].opt, { onConflict: 'channel' });
     assert(writes[0].row.ok_at && !('error' in writes[0].row));
     mode = 'error';
     await S.slackPost('alerts', 'حدث خطأ', { client }); await S.slackIdle();
     await S.slackPost('alerts', 'حدث خطأ ثان', { client }); await S.slackIdle();
-    assertEquals(writes.length, 2);
-    assertEquals(writes[1].row.error, 'channel_not_found');
-    assert(writes[1].row.error_at && !('ok_at' in writes[1].row));
+    assertEquals(writes.length, 5);
+    assertEquals(writes[3].row.error, 'channel_not_found');
+    assert(writes[3].row.error_at && !('ok_at' in writes[3].row));
     mode = 'ok';
     await S.slackPost('alerts', 'عاد', { client }); await S.slackIdle();
-    assertEquals(writes.length, 3);
+    assertEquals(writes.length, 6);
+    assert(writes[5].row.ok_at && !('error_at' in writes[5].row));
   } finally {
     globalThis.fetch = real;
     S.resetSlack();

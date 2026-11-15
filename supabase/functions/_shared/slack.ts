@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMs: 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -89,11 +89,11 @@ async function postOnce(text: string, threadTs?: string): Promise<Sent> {
 }
 
 // ── آخر نجاح وآخر خطأ في leaders.ops_status (صف channel=slack) ──
-// النسخ كثيرة وقصيرة العمر، فما في الذاكرة لا يكفي: يُكتب الصف حين تتغير النتيجة (نجاح، أو خطأ برمزه)، وللنتيجة نفسها
-// مرة في statusMs على الأكثر في النسخة. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الكتابة مدة missingTableMs.
+// النسخ كثيرة وقصيرة العمر، وما تذكره نسخة لا تعرفه أختها: نسخة تحجب نجاحها لأنها كتبت نجاحًا قبل قليل تُبقي خطأ نسخة
+// أخرى ظاهرًا بعده. فكل نتيجة تُرسل، والقاعدة تحكم (مشغّل ops_status_keep_latest): الأحدث يبقى ولو وصل قبل الأقدم، وما لا
+// يغير الحال خلال دقيقة لا يُكتب. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الإرسال مدة missingTableMs.
 // 'paused' ليس ردًا من سلاك (توقف بعد 429 داخل النسخة) فلا يُسجَّل
 const statusOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('ops_status');
-let statusLast: { key: string; at: number } | null = null;
 let statusMissingUntil = 0;
 let statusWrite: Promise<void> | null = null;
 function recordSlack(r: Sent) {
@@ -101,9 +101,6 @@ function recordSlack(r: Sent) {
     if (!r.ok && r.error === 'paused') return;
     const now = Date.now();
     if (!lastClient || statusMissingUntil > now) return;
-    const key = r.ok ? 'ok' : `error:${r.error || 'unknown'}`;
-    if (statusLast && statusLast.key === key && now - statusLast.at < SLACK.statusMs) return;
-    statusLast = { key, at: now };
     const at = new Date(now).toISOString();
     const row = r.ok ? { channel: 'slack', ok_at: at, updated_at: at } : { channel: 'slack', error_at: at, error: String(r.error || 'unknown').slice(0, 80), updated_at: at };
     const client = lastClient;
@@ -112,10 +109,9 @@ function recordSlack(r: Sent) {
       .then((res: { error?: { code?: string; message?: string } } | null) => {
         if (!res?.error) return;
         if (isMissing(res.error, 'ops_status')) statusMissingUntil = Date.now() + SLACK.missingTableMs;
-        statusLast = null;
         console.error('ops_status write:', res.error.message || res.error);
       })
-      .catch((e: unknown) => { statusLast = null; console.error('ops_status write:', e); })
+      .catch((e: unknown) => console.error('ops_status write:', e))
       .finally(() => { if (statusWrite === w) statusWrite = null; });
     statusWrite = w;
   } catch (e) { console.error('ops_status:', e); }
@@ -290,5 +286,5 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 // للاختبار
 export function resetSlack() {
   threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
-  statusLast = null; statusMissingUntil = 0; statusWrite = null;
+  statusMissingUntil = 0; statusWrite = null;
 }

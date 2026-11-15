@@ -268,11 +268,12 @@ export async function weeklyHealth() {
   return { sent: true, issues: issues.length, mail };
 }
 
-// تجربة قناة التنبيه (للمدير الأعلى): تنبيه واحد عبر alertOps بمساره الحقيقي (الرابط ثم البريد)، ويعيد أي القناتين
-// مضبوطة وما وصل منهما، بلا قيمتيهما (لا رابط ولا عنوان). مرة في الدقيقة
+// تجربة قناة التنبيه (للمدير الأعلى): تنبيه واحد عبر alertOps بمساره الحقيقي (سلاك والرابط ثم البريد)، ويعيد أي القنوات
+// مضبوطة وما وصل منها، بلا قيمها (لا رابط ولا عنوان). مرة في الدقيقة
 export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
   requireSuper(a);
-  const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail };
+  // سلاك يحمل كل تنبيه إلى سلسلة التنبيهات إن ضُبط سرّاه (alertWebhook في _shared/mail.ts)، ولا يُنتظر فلا نتيجة له هنا
+  const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail, slack: SLACK_SECRETS.every((k) => !!Deno.env.get(k)) };
   const r = await raiseAlert('alert_test', { note: 'تجربة قناة التنبيه من لوحة الإدارة، لا عطل' });
   if (r.cooled) throw new Fail('جُرّبت قناة التنبيه قبل أقل من دقيقة، أعد بعد قليل', 429, 'rate');
   const delivered = { webhook: r.webhook, email: r.email };
@@ -283,40 +284,44 @@ export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
 // صحة البريد والتنبيه (بطاقة النظرة العامة وشريط اللوحة): الحقائق وحدها، والحكم بالألوان في ops-health.js على المتصفح.
 // للمدير ذي الكتابة (لا المراقب)، ولا يشترط العامل الثاني: قراءة لا تعديل. رخيص: عدّ بالفهارس (mail_events_window
 // وmail_queue_pending) وآخر عشرين رمزًا وصف واحد من ops_status، بلا مسح كامل. أسرار سلاك والتنبيه بأسمائها لا قيمها.
-// null: تعذّرت القراءة، لا صفر
+// null: تعذّرت القراءة، لا صفر.
+// رموز مصفوفة التأثير (user-api) المحجوبة تُعد وحدها (matrix_blocked): حصتها خُمس السقف، فحجبها نصيب بلغته لا عطل في دخول
+// القادة، فلا تدخل سلسلة الرموز ولا عدد المحجوب منها. والمرسل غير الرموز (failed_24h وblocked_24h) بلا الرموز، فلا يُعد مرتين
+const SLACK_SECRETS = ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'];
+const MATRIX_SOURCE = 'user-api';
 export async function opsHealth(a: Admin) {
   if (a.role !== 'admin' && a.role !== 'super_admin') throw new Fail('صحة البريد والتنبيه للمدير، لا للمراقب', 403, 'forbidden');
   const dayAgo = new Date(Date.now() - 864e5).toISOString();
   const head = (t: string) => db.from(t).select('id', { count: 'exact', head: true });
   const n = async (q: any) => { const { count, error } = await q; return error ? null : (count ?? 0); };
   const events = () => head('mail_events').gte('created_at', dayAgo);
-  const [sent, codeSent, codeFailed, codeBlocked, failed, blocked, recent, waiting, oldest, slackRow] = await Promise.all([
+  const [sent, codeSent, codeFailed, codeBlocked, matrixBlocked, failed, blocked, recent, waiting, oldest, slackRow] = await Promise.all([
     mailUsage(dayAgo).catch(() => null),
     n(events().eq('kind', 'code').eq('status', 'sent')),
     n(events().eq('kind', 'code').eq('status', 'failed')),
-    n(events().eq('kind', 'code').eq('status', 'blocked')),
-    n(events().eq('status', 'failed')),
-    n(events().eq('status', 'blocked')),
-    db.from('mail_events').select('status, created_at').eq('kind', 'code').gte('created_at', dayAgo).order('created_at', { ascending: false }).limit(OPS.codeWindow),
+    n(events().eq('kind', 'code').eq('status', 'blocked').neq('source', MATRIX_SOURCE)),
+    n(events().eq('kind', 'code').eq('status', 'blocked').eq('source', MATRIX_SOURCE)),
+    n(events().neq('kind', 'code').eq('status', 'failed')),
+    n(events().neq('kind', 'code').eq('status', 'blocked')),
+    db.from('mail_events').select('status, created_at').eq('kind', 'code').gte('created_at', dayAgo).or(`source.neq.${MATRIX_SOURCE},status.neq.blocked`).order('created_at', { ascending: false }).limit(OPS.codeWindow),
     n(head('mail_queue').is('sent_at', null).is('gave_up_at', null)),
     db.from('mail_queue').select('created_at').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1),
     db.from('ops_status').select('ok_at, error_at, error').eq('channel', 'slack').maybeSingle(),
   ]);
   const at = oldest.error ? null : (oldest.data as any)?.[0]?.created_at;
-  const slackSecrets = ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'];
-  const slackMissing = slackSecrets.filter((k) => !Deno.env.get(k));
+  const slackMissing = SLACK_SECRETS.filter((k) => !Deno.env.get(k));
   const row: any = slackRow.error ? null : slackRow.data;
   return {
     success: true, at: new Date().toISOString(),
     mail: {
       key: !!CONFIG.resendKey, cap: CONFIG.mailDailyCap, sent,
-      codes: { sent: codeSent, failed: codeFailed, blocked: codeBlocked },
+      codes: { sent: codeSent, failed: codeFailed, blocked: codeBlocked, matrix_blocked: matrixBlocked },
       code_streak: recent.error ? null : codeStreak(recent.data || []),
       failed_24h: failed, blocked_24h: blocked,
       queue: { waiting, oldest_minutes: at ? Math.floor((Date.now() - Date.parse(at)) / 6e4) : waiting === 0 ? 0 : null },
     },
     slack: { configured: !slackMissing.length, missing: slackMissing, readable: !slackRow.error, ok_at: row?.ok_at ?? null, error_at: row?.error_at ?? null, error: row?.error ?? null },
-    alerts: { email: !!CONFIG.alertEmail, webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK') },
+    alerts: { email: !!CONFIG.alertEmail, webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), slack: !slackMissing.length },
   };
 }
 

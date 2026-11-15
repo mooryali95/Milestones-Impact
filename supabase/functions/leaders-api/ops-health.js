@@ -4,7 +4,7 @@
 // منطق بلا شبكة يقرؤه الخادم (system.ts opsHealth) وبطاقة النظرة العامة وشريط اللوحة معًا، فالعتبات نفسها
 // تحكم باللون والشريط. الحقائق من الخادم، والحكم هنا وحده.
 //   أحمر: عطل الآن يمنع الدخول (لا مفتاح بريد، أو السقف امتلأ، أو رموز الدخول تتعذّر متتالية).
-//   كهرماني: ما يستحق المتابعة ولا يوقف الدخول (اقتراب السقف، رفض المزوّد، طابور متأخر، سلاك متعثر، لا قناة تنبيه).
+//   كهرماني: ما يستحق المتابعة ولا يوقف الدخول (اقتراب السقف، رسائل تعذّرت، نصيب المصفوفة، طابور متأخر، سلاك متعثر، لا قناة تنبيه).
 //   أخضر: ما سواهما.
 import { ALERT_AT } from '../_shared/mail-budget.js';
 
@@ -43,30 +43,46 @@ export const minutesAr = (m) => {
 };
 export const hoursAr = (h) => (h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h >= 3 && h <= 10 ? `${h} ساعات` : `${h} ساعة`);
 
-// رمز خطأ سلاك كما يرده chat.postMessage، بإرشاد عربي لإصلاحه
-export const SLACK_HINTS = {
-  invalid_auth: 'رمز البوت غير صالح: أنشئ رمزًا جديدًا (xoxb) من صفحة التطبيق في سلاك، وضعه في السر LEADERS_SLACK_BOT_TOKEN',
-  not_authed: 'لم يصل رمز البوت: تأكد من السر LEADERS_SLACK_BOT_TOKEN في دالة leaders-api',
-  token_revoked: 'أُلغي رمز البوت: أعد تثبيت التطبيق في مساحة العمل، وضع الرمز الجديد في LEADERS_SLACK_BOT_TOKEN',
-  account_inactive: 'حساب البوت معطل: أعد تثبيت التطبيق في مساحة العمل، وضع الرمز الجديد في LEADERS_SLACK_BOT_TOKEN',
-  channel_not_found: 'القناة غير موجودة: ضع في LEADERS_SLACK_CHANNEL معرّف القناة (يبدأ بحرف C) من تفاصيل القناة في سلاك',
-  not_in_channel: 'البوت ليس عضوًا في القناة: أضفه من تفاصيل القناة في سلاك، تبويب «التكاملات»، ثم «إضافة تطبيق»',
-  is_archived: 'القناة مؤرشفة: أعدها من الأرشيف، أو ضع قناة أخرى في LEADERS_SLACK_CHANNEL',
-  missing_scope: 'تنقص البوت صلاحية chat:write: أضفها في صفحة التطبيق ثم أعد تثبيته',
-  rate_limited: 'طلب سلاك التمهل لكثرة الرسائل: يعود النشر وحده بعد قليل',
-  timeout: 'لم يرد سلاك في المهلة: غالبًا عارض مؤقت يزول وحده',
+// رمز خطأ سلاك كما يرده chat.postMessage: معناه بالعربية (يتصدر السطر) وإرشاد إصلاحه، والرمز نفسه تفصيل ثانوي
+export const SLACK_LABEL = {
+  invalid_auth: 'رمز البوت غير صالح',
+  not_authed: 'لم يصل رمز البوت',
+  token_revoked: 'أُلغي رمز البوت',
+  account_inactive: 'حساب البوت معطل',
+  channel_not_found: 'القناة غير موجودة',
+  not_in_channel: 'البوت ليس عضوًا في القناة',
+  is_archived: 'القناة مؤرشفة',
+  missing_scope: 'تنقص البوت صلاحية النشر',
+  rate_limited: 'طلب سلاك التمهل لكثرة الرسائل',
+  timeout: 'لم يرد سلاك في المهلة',
 };
-export const slackHint = (code) => SLACK_HINTS[code] || 'رفض سلاك النشر: راجع سجل الدالة leaders-api في Supabase لمعرفة السبب';
+export const SLACK_HINTS = {
+  invalid_auth: 'أنشئ رمزًا جديدًا (xoxb) من صفحة التطبيق في سلاك، وضعه في السر LEADERS_SLACK_BOT_TOKEN',
+  not_authed: 'تأكد من السر LEADERS_SLACK_BOT_TOKEN في دالة leaders-api',
+  token_revoked: 'أعد تثبيت التطبيق في مساحة العمل، وضع الرمز الجديد في LEADERS_SLACK_BOT_TOKEN',
+  account_inactive: 'أعد تثبيت التطبيق في مساحة العمل، وضع الرمز الجديد في LEADERS_SLACK_BOT_TOKEN',
+  channel_not_found: 'ضع في LEADERS_SLACK_CHANNEL معرّف القناة (يبدأ بحرف C) من تفاصيل القناة في سلاك',
+  not_in_channel: 'أضفه من تفاصيل القناة في سلاك، تبويب «التكاملات»، ثم «إضافة تطبيق»',
+  is_archived: 'أعدها من الأرشيف، أو ضع قناة أخرى في LEADERS_SLACK_CHANNEL',
+  missing_scope: 'أضف صلاحية chat:write في صفحة التطبيق ثم أعد تثبيته',
+  rate_limited: 'يعود النشر وحده بعد قليل',
+  timeout: 'غالبًا عارض مؤقت يزول وحده',
+};
+export const slackLabel = (code) => SLACK_LABEL[code] || 'رفض سلاك النشر';
+export const slackHint = (code) => SLACK_HINTS[code] || 'راجع سجل الدالة leaders-api في Supabase لمعرفة السبب';
+
+// عدد الأمور بالعربية: أمر واحد، أمران، 3 إلى 10 أمور، 11 فأكثر أمرًا
+export const countAr = (n) => (n === 1 ? 'أمر واحد' : n === 2 ? 'أمران' : n >= 3 && n <= 10 ? `${n} أمور` : `${n} أمرًا`);
 
 export const LEVEL_AR = { green: 'يعمل', amber: 'يحتاج متابعة', red: 'عطل الآن' };
-export const TITLE_AR = { green: 'البريد والتنبيه يعملان', amber: 'البريد والتنبيه: أمر يحتاج متابعتك', red: 'البريد والتنبيه: عطل الآن' };
+export const TITLE_AR = { green: 'البريد والتنبيه يعملان', amber: 'البريد والتنبيه: يحتاج متابعتك', red: 'البريد والتنبيه: عطل الآن' };
 
 const ms = (iso) => (iso ? Date.parse(iso) : NaN);
 
 // الحكم من الحقائق. issues مرتبة: الأحمر أولًا، وbanner نص الشريط حين يكون الحكم أحمر وحده
 export function opsVerdict(f, now = Date.now()) {
   const issues = [];
-  const add = (level, key, text, hint, banner) => issues.push({ level, key, text, ...(hint ? { hint } : {}), ...(banner ? { banner } : {}) });
+  const add = (level, key, text, hint, banner, code) => issues.push({ level, key, text, ...(hint ? { hint } : {}), ...(banner ? { banner } : {}), ...(code ? { code } : {}) });
   const mail = f?.mail || {};
   const cap = Number(mail.cap) || 0;
   const sent = mail.sent;
@@ -89,18 +105,24 @@ export function opsVerdict(f, now = Date.now()) {
 
   const lost = mail.codes ? (mail.codes.failed ?? 0) + (mail.codes.blocked ?? 0) : 0;
   if (!recent && lost >= OPS.codeLostWatch) add('amber', 'codes_lost_day', `رموز دخول لم تصل في آخر 24 ساعة: ${lost}`, 'عاد الإرسال بعدها، فراجع في مركز البريد سبب ما لم يصل');
-  if (mail.failed_24h > 0) add('amber', 'mail_rejected', `رفض مزوّد البريد ${mail.failed_24h} في آخر 24 ساعة`, 'راجع حالة النطاق في مركز البريد');
+  // رسائل غير الرموز تعذّر إرسالها (مهلة أو خطأ عند المزوّد أو رفض): الرموز لها سطرها، فلا تُعد مرتين
+  if (mail.failed_24h > 0) add('amber', 'mail_failed', `تعذّر إرسال ${mail.failed_24h} من الرسائل غير رموز الدخول في آخر 24 ساعة`, 'افتح مركز البريد لمعرفة السبب: المهلة العابرة تزول وحدها، والرفض المتكرر يستدعي مراجعة النطاق');
+  // رموز مصفوفة التأثير بلغت خُمس السقف: لا يمس دخول القادة والمنسقين والخبراء، فمتابعة لا عطل
+  const matrix = mail.codes?.matrix_blocked ?? 0;
+  if (matrix > 0 && !(sent != null && cap && sent >= cap)) add('amber', 'matrix_share', `مصفوفة التأثير بلغت نصيبها من البريد: حُجب ${matrix} من رموز دخولها في آخر 24 ساعة`, 'لا يمس دخول القادة ولا المنسقين ولا الخبراء. نصيب المصفوفة خُمس السقف اليومي، فإن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend');
 
   const q = mail.queue || {};
   if (q.waiting == null) add('amber', 'queue_unread', 'تعذّرت قراءة طابور البريد');
   else if (q.waiting > 0 && q.oldest_minutes != null && q.oldest_minutes >= OPS.queueWatchHours * 60) add('amber', 'queue_stuck', `طابور البريد: ${q.waiting} تنتظر، أقدمها منذ ${minutesAr(q.oldest_minutes)}`, 'راجع صندوق «لم يُرسل» في مركز البريد');
 
   const al = f?.alerts || {};
-  if (al.email === false && al.webhook === false) add('amber', 'no_alert_channel', 'لا قناة تنبيه مضبوطة: لن يصلك تنبيه حين يتعطل البريد', 'أضف LEADERS_ALERT_WEBHOOK أو LEADERS_ALERT_EMAIL في دالة leaders-api');
+  // سلاك قناة تنبيه أيضًا: كل تنبيه يصل سلسلة التنبيهات فيه (alertWebhook)
+  const slackOn = f?.slack?.configured === true || al.slack === true;
+  if (al.email === false && al.webhook === false && !slackOn) add('amber', 'no_alert_channel', 'لا قناة تنبيه مضبوطة: لن يصلك تنبيه حين يتعطل البريد', 'اضبط سلاك، أو أضف LEADERS_ALERT_WEBHOOK أو LEADERS_ALERT_EMAIL في دالة leaders-api');
 
   const sl = f?.slack || {};
   if (!sl.configured && (sl.missing || []).length === 1) add('amber', 'slack_half', `سلاك نصف مضبوط: ينقص السر ${sl.missing[0]}`, 'أضفه في دالة leaders-api، أو احذف الآخر إن لم ترد سلاك');
-  if (sl.configured && sl.error_at && !(ms(sl.ok_at) >= ms(sl.error_at))) add('amber', 'slack_error', `آخر نشر في سلاك تعذّر: ${sl.error || 'خطأ غير معروف'}`, slackHint(sl.error));
+  if (sl.configured && sl.error_at && !(ms(sl.ok_at) >= ms(sl.error_at))) add('amber', 'slack_error', `آخر نشر في سلاك تعذّر: ${slackLabel(sl.error)}`, slackHint(sl.error), null, sl.error || null);
 
   issues.sort((a, b) => (a.level === b.level ? 0 : a.level === 'red' ? -1 : 1));
   const level = issues.some((i) => i.level === 'red') ? 'red' : issues.length ? 'amber' : 'green';
