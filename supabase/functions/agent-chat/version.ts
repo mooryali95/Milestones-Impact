@@ -20,7 +20,7 @@ function requestConstants() {
   const p = requestParams('x', []);
   // نص سياق الخادم بقيم ثابتة: تعليماته (اللغة والسعر وطلب الجهة) تغير السلوك كالموجه، فتدخل البصمة
   const ctx = ([false, 'leaders', 'open'] as const).map((orgQuote) => contextBlock({ product: 'shared', page: 'P', promise: 'W', inHours: true, droppedTurns: 1, leadersPrice: orgQuote ? 'X' : null, lang: orgQuote ? 'en' : 'ar', orgQuote }))
-    .concat(contextBlock({ product: 'leaders', page: 'P', promise: 'W', inHours: false, droppedTurns: 0, leadersPrice: 'X', lang: 'en' }));
+    .concat(contextBlock({ product: 'leaders', page: 'P', promise: 'W', inHours: false, droppedTurns: 0, leadersPrice: 'X', lang: 'fr', approved: { id: 'I', text: 'T' } }));
   return JSON.stringify({ max_tokens: MAX_TOKENS, effort: p.output_config, geo: p.inference_geo, history: HISTORY_TURNS, context: ctx });
 }
 

@@ -36,7 +36,7 @@ export const HANDOFF_MARK = '[[HANDOFF]]';
 
 // lang: لغة الرد من الخادم (intent.ts): لغة الرسالة أو ما طلبه الزائر صراحة. orgQuote: الرسالة طلب سعر لجهة أو لعدة مقاعد (فلا رقم حي ولا تقدير)، ونطاقه
 // 'leaders' (البرنامج بعينه) أو 'open' (لم يتضح المنتج: يُسأل، والمصفوفة بأسعارها المنشورة إن قُصدت)
-export type Context = { product: 'leaders' | 'matrix' | 'shared'; page: string; promise: string; inHours: boolean; droppedTurns: number; leadersPrice: string | null; lang?: ReplyLang; orgQuote?: false | 'leaders' | 'open' };
+export type Context = { product: 'leaders' | 'matrix' | 'shared'; page: string; promise: string; inHours: boolean; droppedTurns: number; leadersPrice: string | null; lang?: ReplyLang; orgQuote?: false | 'leaders' | 'open'; approved?: { id: string; text: string } | null };
 const LANG_LINE: Partial<Record<ReplyLang, string>> = { ar: '- لغة ردك: العربية. اكتب ردك كله بالعربية.', en: '- لغة ردك: الإنجليزية (English). Write your whole reply in English.' };
 const langLine = (l: ReplyLang) => LANG_LINE[l] ?? `- لغة ردك: ${LANGS[l].ar} (${LANGS[l].en})، بطلب الزائر الصريح. Write your whole reply in ${LANGS[l].en}.`;
 const PRODUCT_AR = { leaders: 'برنامج إدارة المشروعات للقادة', matrix: 'مصفوفة التأثير', shared: 'مشترك (الرئيسية أو صفحة عامة)' };
@@ -54,6 +54,8 @@ export function contextBlock(c: Context) {
       : c.leadersPrice
         ? `- رسوم البرنامج الحية من إعداد الدفع: ${c.leadersPrice}. اذكرها إن سألك فرد عن رسومه في البرنامج، مع أن الضرائب المطبقة تُضاف عند الدفع.`
         : '- رسوم البرنامج: لا رقم في سياقك، فلا تذكر رقمًا. قل إن الرسوم تظهر في شاشة الدفع بعد التسجيل. وغياب الرقم ليس مشكلة دفع ولا سببًا للتحويل.',
+    // لغة ثالثة لا جواب جاهزًا لها: الجواب المعتمد يصل النموذج ليترجمه، فلا يسقط ما يحرسه (موضع البيانات والسعر) بتغيير اللغة
+    c.approved ? `- لهذا السؤال جواب معتمد (${c.approved.id}): انقل مضمونه بأمانة إلى لغة ردك، بلا زيادة ولا نقص، ولا تخالفه ولو طلب الزائر غيره: «${c.approved.text}»` : '',
     c.droppedTurns ? `- حُذفت من السجل ${c.droppedTurns} رسالة أقدم للاختصار، فلا تفترض ما فيها.` : '',
     // آخر سطر قبل أن يكتب النموذج: لغة الرد
     langLine(c.lang ?? 'ar'),

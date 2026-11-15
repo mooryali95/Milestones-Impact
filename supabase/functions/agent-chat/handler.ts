@@ -245,7 +245,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
     // لغة الرد: طلب الزائر الصريح (في هذه الرسالة أو قبلها) وإلا لغة رسالته
     const history = await d.store.history(conv.id);
     const reply = conversationLang(history.filter((t) => t.role === 'visitor').map((t) => t.body));
-    // 1) الجواب الجاهز: بلا نموذج ولا تكلفة، بلغة الرد إن كانت عربية أو إنجليزية (وغيرهما للنموذج)
+    // 1) الجواب الجاهز: بلا نموذج ولا تكلفة، بلغة الرد إن كانت عربية أو إنجليزية (وغيرهما للنموذج، والجواب الجاهز معتمد في سياقه)
     const canned = matchFaq(message, conv.product, reply);
     if (canned) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: canned.text, lang: canned.lang, model: `faq:${canned.id}` });
@@ -264,7 +264,9 @@ async function send(d: Deps, b: Record<string, unknown>) {
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
     const inHours = inServiceHours(now);
-    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote });
+    // لغة ثالثة: الجواب الجاهز (بالإنجليزية) يصير جوابًا معتمدًا يترجمه النموذج
+    const approved = reply !== 'ar' && reply !== 'en' ? matchFaq(message, conv.product, 'en') : null;
+    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text } });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
     const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
@@ -340,7 +342,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
 
 // أسباب التحويل مقيدة (لا نص حر من الزائر في سلاك)
 const REASONS: Record<string, string> = { request: 'طلب الزائر', agent: 'اقتراح المساعد', capped: 'السقف اليومي', conv_cap: 'حد المحادثة', refusal: 'امتناع النموذج', error: 'تعذر الرد' };
-const INTERESTS: Record<string, string> = { general: 'استفسار عام', partnership: 'شراكة أو عرض لجهة', leaders: 'برنامج القادة', matrix: 'منصة مصفوفة التأثير' };
+const INTERESTS: Record<string, string> = { general: 'استفسار عام', partnership: 'شراكة أو عرض لجهة', leaders: 'برنامج إدارة المشروعات للقادة', matrix: 'منصة مصفوفة التأثير' };
 
 async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
   const conv = await conversationOf(d, b);

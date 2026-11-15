@@ -32,17 +32,46 @@ export const LANGS = {
 export type ReplyLang = keyof typeof LANGS;
 export const uiLang = (l: ReplyLang): Lang => (l === 'ar' ? 'ar' : 'en');
 
-// فعل يخص الرد أو الحديث، أو عبارة تأدب: بدونهما ذكر اللغة سؤال عنها («هل البرنامج بالإنجليزي؟») لا طلب
-const AR_ASK = ['جاوب', 'اجب', 'رد', 'اكتب', 'كلمني', 'كلمنا', 'تكلم', 'حدثني', 'تحدث', 'خاطب', 'ترجم', 'اشرح', 'تواصل معي'];
-const AR_PLEASE = ['لو سمحت', 'لوسمحت', 'من فضلك', 'فضلا', 'رجاء', 'ياليت', 'يا ليت'];
-const AR_LANG_PREFIX = ['', 'ال', 'ب', 'بال', 'باللغه ال', 'بلغه', 'اللغه ال'];
+// الطلب الصريح: ذكر اللغة ملاصقًا لفعل رد موجه إلينا («جاوبني بالإنجليزي»، «اكتب لي بالفرنسية»، «رد علي بالإنجليزي»)
+// أو لعبارة تأدب («بالعربي لو سمحت»)، لا يفصل بينهما إلا ضمير المخاطَب («لي»، «علي»، «معي»). ذكرها في سؤال عنها
+// («هل البرنامج متاح بالإنجليزي؟»، «لو سمحت هل الشهادة بالإنجليزي؟»، «هل يمكن التحدث بالإنجليزي مع المدرب؟»،
+// «رد الفريق بالإنجليزي ولا بالعربي؟») ليس طلبًا: الطلب يبقى ساريًا في المحادثة، فالخطأ فيه يقلب لغة ما بعده كله.
+const AR_ASK = ['جاوب', 'اجب', 'رد', 'اكتب', 'كلمني', 'كلمنا', 'تكلم', 'حدثني', 'تحدث', 'خاطب', 'ترجم', 'اشرح', 'تواصل', 'ترد', 'تجاوب', 'تكتب', 'تشرح', 'تكلمني'];
+// الاسم المعرف من الفعل («الرد»، «التحدث») طلب فقط بعد فعل إرادة: «ابي الرد باللغة الإنجليزية»
+const AR_WANT = ['ابي', 'ابغي', 'ابغا', 'ابغى', 'اريد', 'ودي', 'نبي', 'نبغي', 'نريد', 'بغيت', 'ابيك', 'اريدك', 'ابغاك'].map(normalizeText);
+const AR_PLEASE = ['لو سمحت', 'لوسمحت', 'من فضلك', 'فضلا', 'رجاء', 'رجاءا', 'ياليت', 'يا ليت'].map((p) => normalizeText(p).split(' '));
+const AR_FILLER = new Set(['لي', 'علي', 'عليا', 'معي', 'معاي', 'لنا', 'علينا', 'معنا', 'كل', 'كلامك', 'الكلام', 'الرد', 'ردك', 'ردودك', 'فقط', 'بس', 'الحين', 'الان']);
+const AR_LANG_PREFIX = ['ب', 'بال', 'باللغه ال', 'بلغه', 'لل', 'الي ال', 'ل', '', 'ال'];
 const EN_NAMES = Object.entries(LANGS).flatMap(([code, l]) => l.words.map((w) => [w, code as ReplyLang] as const));
 const EN_ALT = EN_NAMES.map(([w]) => w).join('|');
+// فعل الرد موجه إلينا: في أول الجملة، أو بعد please أو you («Can you reply...»)، لا بعد فاعل آخر ("Can the trainer speak in Arabic?")
+const EN_LEAD = String.raw`(?:^|[.?!:;,\n]|\b(?:please|pls|kindly|you|u|and|now|just|then|also|only)\b)\s*`;
 const EN_RX = [
-  new RegExp(`\\b(?:reply|respond|answer|write|speak|talk|explain|translate|continue|switch|chat|communicate)\\b[^.?!\\n]{0,24}?\\b(?:in|into|to)\\s+(${EN_ALT})\\b`, 'i'),
+  new RegExp(`${EN_LEAD}(?:reply|respond|answer|write|speak|talk|explain|translate|continue|switch|chat|communicate)\\b[^.?!\\n]{0,24}?\\b(?:in|into|to)\\s+(${EN_ALT})\\b`, 'i'),
   new RegExp(`\\b(?:in|use)\\s+(${EN_ALT})\\s*,?\\s*(?:please|pls|only)\\b`, 'i'),
   new RegExp(`\\bplease\\s+(?:in|use)\\s+(${EN_ALT})\\b`, 'i'),
 ];
+
+// ذكر لغة في الموضع i (كلمة أو كلمتان، «باللغة الفرنسية»): رمزها وعدد كلماتها، أو null
+function langAt(tokens: string[], i: number): [ReplyLang, number] | null {
+  const two = i + 1 < tokens.length ? `${tokens[i]} ${tokens[i + 1]}` : '';
+  for (const [code, l] of Object.entries(LANGS) as [ReplyLang, (typeof LANGS)[ReplyLang]][]) {
+    for (const s of l.stems) {
+      for (const p of AR_LANG_PREFIX) {
+        if (p.includes(' ') ? two === p + s : tokens[i] === p + s) return [code, p.includes(' ') ? 2 : 1];
+      }
+    }
+  }
+  return null;
+}
+
+const isAskVerb = (t: string) => { const b = t.replace(/^(و|ف)/, ''); return AR_ASK.some((s) => b.startsWith(s)); };
+const isVerbNoun = (t: string) => { const b = t.replace(/^(وال|فال|ال)/, ''); return t !== b && AR_ASK.some((s) => b.startsWith(s)); };
+// طول عبارة التأدب التي تبدأ عند i، أو 0
+function pleaseAt(tokens: string[], i: number) {
+  for (const p of AR_PLEASE) if (p.every((w, k) => tokens[i + k] === w)) return p.length;
+  return 0;
+}
 
 // اللغة التي طلبها الزائر صراحة في رسالته، أو null
 export function requestedLang(message: string): ReplyLang | null {
@@ -51,27 +80,32 @@ export function requestedLang(message: string): ReplyLang | null {
     const m = raw.match(rx);
     if (m) return EN_NAMES.find(([w]) => w === m[1].toLowerCase())?.[1] ?? null;
   }
-  const norm = normalizeText(raw);
-  const tokens = norm.split(' ');
-  const asks = tokens.some((t) => { const bare = t.replace(/^(وال|فال|ال|و|ف)/, ''); return AR_ASK.some((s) => !s.includes(' ') && (t.startsWith(s) || bare.startsWith(s))); })
-    || [...AR_ASK, ...AR_PLEASE].some((p) => p.includes(' ') && ` ${norm} `.includes(` ${p} `));
-  if (!asks) return null;
-  // أول ذكر للغة مسبوق بالباء («بالإنجليزي»، «باللغة الفرنسية») أولى، فـ«اكتب بالإنجليزية وتجاهل العربية» إنجليزية
-  let loose: ReplyLang | null = null;
+  const tokens = normalizeText(raw).split(' ').filter(Boolean);
+  const question = tokens.includes('هل');
   for (let i = 0; i < tokens.length; i++) {
-    const two = i + 1 < tokens.length ? `${tokens[i]} ${tokens[i + 1]}` : '';
-    for (const [code, l] of Object.entries(LANGS) as [ReplyLang, (typeof LANGS)[ReplyLang]][]) {
-      for (const s of l.stems) {
-        for (const p of AR_LANG_PREFIX) {
-          const hit = p.includes(' ') ? two === p + s : tokens[i] === p + s;
-          if (!hit) continue;
-          if (p.startsWith('ب')) return code;
-          loose ??= code;
-        }
+    // بعد فعل رد موجه إلينا، أو اسمه المعرف بعد فعل إرادة، ولا يفصل إلا ضمير المخاطب
+    const verb = isAskVerb(tokens[i]) || (isVerbNoun(tokens[i]) && i > 0 && AR_WANT.includes(tokens[i - 1]));
+    if (verb) {
+      let j = i + 1;
+      while (j < tokens.length && AR_FILLER.has(tokens[j]) && !langAt(tokens, j)) j++;
+      const hit = j < tokens.length ? langAt(tokens, j) : null;
+      // في سؤال لا يُعد إلا الفعل الموجه إلينا بضميره («هل ممكن تكلمني بالإنجليزي»)، و«بالعربي ولا بالإنجليزي؟» تخيير لا طلب
+      const toUs = j > i + 1 || /(ني|نا)$/.test(tokens[i]);
+      const choice = hit && ['ولا', 'او', 'or'].includes(tokens[j + hit[1]] ?? '');
+      if (hit && !choice && (!question || toUs)) return hit[0];
+    }
+    // ملاصقًا لعبارة تأدب، قبلها أو بعدها، في غير سؤال («هل الشهادة بالإنجليزي لو سمحت؟» سؤال)
+    const pl = question ? 0 : pleaseAt(tokens, i);
+    if (pl) {
+      const after = langAt(tokens, i + pl);
+      if (after) return after[0];
+      for (const back of [1, 2]) {
+        const before = i - back >= 0 ? langAt(tokens, i - back) : null;
+        if (before && before[1] === back) return before[0];
       }
     }
   }
-  return loose;
+  return null;
 }
 
 // لغة رسالة واحدة: المطلوبة صراحة، وإلا لغة نصها

@@ -16,7 +16,7 @@ Deno.test('المجموعة: معرفات فريدة، وحقول كاملة، �
   assert(cases.filter((c) => c.set === 'redteam').length >= 20);
   for (const c of cases) {
     assert(['answer', 'handoff', 'refuse', 'canned'].includes(c.expect.behavior), c.id);
-    assert(['ar', 'en'].includes(c.expect.lang), c.id);
+    assert(['ar', 'en', 'fr'].includes(c.expect.lang), c.id);
     for (const p of [...(c.expect.must_include ?? []), ...(c.expect.must_not_include ?? [])]) new RegExp(p, 'i');
   }
 });
