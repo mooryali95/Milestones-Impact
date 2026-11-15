@@ -26,5 +26,5 @@ export function parseChapter(text, file = '') {
   return { file, chapter_key: meta.chapter_key, dimension: meta.dimension, min_level: meta.min_level || null, body_md: body.trim(), quiz_md: quiz.trim(), reflection_ar: reflection.trim() };
 }
 
-export const loadChapters = (ver = VERSION) => { const dir = dirOf(ver); return readdirSync(dir).filter((f) => f.endsWith('.md')).sort()
+export const loadChapters = (ver = VERSION) => { const dir = dirOf(ver); return readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'IMPACT.md').sort()
   .map((f) => parseChapter(readFileSync(join(dir, f), 'utf8'), f)); };
