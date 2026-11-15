@@ -118,3 +118,19 @@ Deno.test('seatsUsedByOrg يطابق seatsUsed لكل جهة', async () => {
     assertEquals(countSeats([{ participant_id: 'x', organization_id: null }]), {});
   } finally { f.restore(); }
 });
+
+// القراءة الواحدة تقف عند max_rows (1000) بلا خطأ: العد يقرأ بصفحات range مرتبة فلا يخرج أقل من حقيقته
+Deno.test('seatsUsedByOrg يعد ما بعد الألف صف الأولى', async () => {
+  const ents = Array.from({ length: 1200 }, (_, i) => ['assessment', 'program'].map((item) => ({ id: `e${i}${item}`, participant_id: `p${i}`, organization_id: i % 3 ? 'o1' : 'o2', source: 'sponsor', item }))).flat();
+  const f = install((table, ops) => {
+    if (table !== 'entitlements') return { data: [], error: null };
+    const range = ops.find(([k]) => k === 'range')?.[1] as number[] | undefined;
+    const rows = ents.filter((r: any) => ops.every(([k, a]) => k === 'eq' ? r[a[0] as string] === a[1] : true));
+    const [from, to] = range || [0, rows.length];
+    return { data: rows.slice(from, Math.min(to + 1, from + 1000)), error: null };
+  });
+  try {
+    assertEquals(await seatsUsedByOrg(), { o1: 800, o2: 400 });
+    assertEquals(await seatsUsed('o1'), 800);
+  } finally { f.restore(); }
+});
