@@ -312,6 +312,11 @@ function Participant() {
     requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
   }, []);
   const openLab = (id = null) => { setLabOpen(id); go('lab'); };
+  // إحالة من فصل في وثيقة المبادرة إلى بابه في الكتيب، والعودة إلى الفصل نفسه (anatomy.json)
+  const [bookTarget, setBookTarget] = useState(null);
+  const [capReturn, setCapReturn] = useState(null);
+  const openBook = (t) => { setBookTarget(t); setCapReturn(t?.chapter_id || null); go('handbook'); };
+  useEffect(() => { if (view !== 'handbook') setBookTarget(null); }, [view]);   // «كتيبي» من القائمة يفتح الكتيب عاديًا لا على إحالة قديمة
 
   const logout = async () => {
     if (!(await askSignOut('participant'))) return;
@@ -369,10 +374,10 @@ function Participant() {
   // D04: رسم البرنامج بعد اعتماد المسار؛ قبله حالة انتظار مؤرخة بلا بوابة دفع
   else if (!paidFor('program')) screen = me.profile?.approved ? <Paywall item="program" me={me} onUpdate={accept} /> : <AwaitingApproval me={me} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
-  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => go('home')} />;
+  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => { setBookTarget(null); go('home'); }} target={bookTarget} onReturn={bookTarget ? () => { setBookTarget(null); go('capstone'); } : null} />;
   else if (SHOW_KATON && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
   else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
-  else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} />;
+  else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} onHandbook={openBook} reopen={capReturn} onReopened={() => setCapReturn(null)} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
   else if (view === 'f360' && me.profile?.approved) screen = <Feedback360 onBack={() => go('profile')} />;
   else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={() => go('hall')} lab={lab?.items} onLab={() => openLab()} onLabItem={(labId) => openLab(labId)} />;

@@ -4,7 +4,7 @@
 // التصور: docs/content/2026-11-14-تصور-بناء-المبادرة-وحالة-العمل-v1.md (اعتمده المالك، الخيار ج).
 // لكل معلومة مصدر واحد: الموازنة من «الموارد والتكلفة»، والمنافع من «سجل المنافع»، والمخاطر من «سجل المخاطر».
 // يعمل على الوثيقة كما يبنيها الخادم (docFor) وعلى لقطة الوثيقة المعتمدة معًا، فلا يمس الخادم ولا القاعدة.
-import { norm, parseNumber, RISK_HIGH } from './capstone.js';
+import { dateAr, norm, parseDate, parseNumber, RISK_HIGH } from './capstone.js';
 import { countAr } from './labels.js';
 
 // التاريخ بصيغة 2026-03-15 داخل جملة عربية: يُعزل اتجاهه (LRI…PDI) فلا تنقلب أجزاؤه
@@ -161,4 +161,62 @@ export function businessCase(doc) {
     ['القياس', plan?.rows.length ? `${countAr(plan.rows.length, 'مؤشر واحد', 'مؤشران', 'مؤشرات', 'مؤشرًا')} بخطة قياس` : null],
   ]);
   return out;
+}
+
+// ── خطة الانطلاق: أول 90 يومًا ──
+// عرض مولّد كالميثاق: يُقرأ من البطاقة (البداية والخطوة الأولى والمشغّل)، والجدول، وسجل المعالم، وخطة القياس، وسجل المخاطر.
+// لا حقل له ولا جدول. ما لا تاريخ له لا يدخل نافذة، ويُذكر ما يلزم لإكماله بدل إخفائه.
+const DAY = 864e5;
+export const LAUNCH_WINDOWS = Object.freeze([
+  { key: 'd30', title: 'أول 30 يومًا', from: 0, to: 30 },
+  { key: 'd60', title: 'من اليوم 31 إلى 60', from: 31, to: 60 },
+  { key: 'd90', title: 'من اليوم 61 إلى 90', from: 61, to: 90 },
+]);
+
+export function launchPlan(doc) {
+  if (!sectionOf(doc, 'initiative-charter')) return null;
+  const acts = tableOf(doc, 'schedule', 'activities');
+  const ms = tableOf(doc, 'milestone-register', 'milestones');
+  const dated = [];
+  if (acts) {
+    const s = acts.col('البداية'), n = acts.col('النشاط', 'الحزمة');
+    for (const r of acts.rows) { const at = parseDate(acts.cell(r, s)); if (at != null) dated.push({ at, kind: 'activity', text: `يبدأ: ${acts.cell(r, n >= 0 ? n : 1)}` }); }
+  }
+  if (ms) {
+    const d = ms.col('التاريخ'), q = ms.col('القرار'), who = ms.col('صاحب القرار');
+    for (const r of ms.rows) {
+      const at = parseDate(ms.cell(r, d));
+      if (at == null) continue;
+      const dec = ms.cell(r, q), by = ms.cell(r, who);
+      dated.push({ at, kind: 'milestone', text: `معلم: ${ms.cell(r, 0)}${dec ? `، والقرار عنده ${dec}` : ''}${by ? ` (${by})` : ''}` });
+    }
+  }
+  const start = parseDate(text(doc, 'initiative-charter', 'start') || '') ?? (dated.length ? Math.min(...dated.map((x) => x.at)) : null);
+  const first = text(doc, 'initiative-charter', 'first_step');
+  const windows = LAUNCH_WINDOWS.map((w) => ({ key: w.key, title: w.title,
+    range: start == null ? null : `${dateAr(new Date(start + w.from * DAY).toISOString().slice(0, 10))} إلى ${dateAr(new Date(start + w.to * DAY).toISOString().slice(0, 10))}`,
+    items: [] }));
+  if (first) windows[0].items.push(`الخطوة الأولى: ${first}`);
+  if (start != null) {
+    for (const x of dated.sort((a, b) => a.at - b.at)) {
+      const day = Math.round((x.at - start) / DAY);
+      const w = LAUNCH_WINDOWS.findIndex((v) => day >= v.from && day <= v.to);
+      if (w >= 0) windows[w].items.push(x.text);
+    }
+  }
+  const plan = tableOf(doc, 'evidence-plan', 'plan');
+  const measure = plan ? plan.rows.slice(0, 2).map((r) => {
+    const src = plan.cell(r, plan.col('المصدر')), freq = plan.cell(r, plan.col('التكرار')), who = plan.cell(r, plan.col('المسؤول'));
+    return `${plan.cell(r, 0)}${src ? ` من ${src}` : ''}${freq ? `، ${freq}` : ''}${who ? `، يقيسه ${who}` : ''}`;
+  }) : [];
+  const watch = highRisks(doc, 2).map((x) => `${x.title}${x.owner ? ` (المالك: ${x.owner})` : ''}${x.response ? `: ${x.response}` : ''}`);
+  const operator = text(doc, 'initiative-charter', 'operator');
+  const missing = [
+    !first && 'اكتب الخطوة الأولى في بطاقة المبادرة',
+    start == null && 'اكتب تاريخ البداية في بطاقة المبادرة',
+    !dated.length && 'أضف تواريخ إلى الجدول الزمني أو سجل المعالم',
+    !measure.length && 'املأ خطة القياس',
+  ].filter(Boolean);
+  if (!windows.some((w) => w.items.length) && !measure.length && !watch.length) return { windows, measure, watch, operator, missing, empty: true };
+  return { windows, measure, watch, operator, missing, empty: false };
 }

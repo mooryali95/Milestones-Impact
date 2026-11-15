@@ -1106,7 +1106,8 @@ export async function handbookToc(p: any) {
     // الكتاب عام: يُعرض رمز المسار فقط
     code: trackKey(levels),
     chapters: chapters.map((m: any) => ({
-      id: m.id, dimension: m.dimension, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
+      // chapter_key: إحالة فصول وثيقة المبادرة إلى الباب نفسه (anatomy.json)، فيقفز إليه المشارك من فصله
+      id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
       // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتيب كان يعدّ الاختبار وحده
       // فيقول «أتممت 1 من 22» والرحلة «قرأت 0 من 22» (التدقيق 2026-11-10، البند 7.2)

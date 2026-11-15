@@ -17,17 +17,15 @@ import AskExpert from './AskExpert.jsx';
 import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leaders-api/stuck.js';
 import ChooseExpert from './ChooseExpert.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
-import { countAr, SUBMISSION_STATUS, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
 import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
+import { ChapterNav, Meaning, Navigator } from './InitiativeMap.jsx';
+import { Annotated } from '../Term.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
 
-const SECTION_STATE = (s) => (s.status === 'reviewed' ? { t: SUBMISSION_STATUS.reviewed, c: 'ok' }
-  : s.status === 'submitted' ? { t: SUBMISSION_STATUS.submitted, c: 'gold' }
-    : s.status === 'returned' ? { t: SUBMISSION_STATUS.returned, c: 'bad' }
-      : s.complete ? { t: 'مكتمل', c: 'ok' } : s.status === 'draft' ? { t: SUBMISSION_STATUS.draft, c: 'warn' } : { t: 'لم يبدأ', c: '' });
 const CARD_GATE_TITLE = { none: 'الخطوة الأولى: اعتماد بطاقة المبادرة', waiting: 'بطاقة مبادرتك عند المستشار', returned: 'أعاد المستشار بطاقة مبادرتك' };
 // إغلاق بطاقة التوجيه راحة عرض لكل مشارك في جهازه (لا حالة رحلة)، فلا تعود الإشارة نفسها بعد «ليس الآن»
 const DISMISS_KEY = 'mi_leaders_stuck_dismissed';
@@ -59,7 +57,8 @@ export async function openCapstoneDoc(doc, win = window.open('', '_blank')) {
   return writeDocument(win, meta, body);
 }
 
-export default function Capstone({ me, onEditProfile, onBack }) {
+// onHandbook: إحالة فصل إلى بابه في الكتيب؛ reopen: الفصل الذي يُفتح عند العودة من الكتيب
+export default function Capstone({ me, onEditProfile, onBack, onHandbook = null, reopen = null, onReopened = () => {} }) {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null);
   const [summary, setSummary] = useState('');
@@ -70,11 +69,20 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   const [dismissed, setDismissed] = useState(readDismissed);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); }, []);
+  // العودة من الكتيب تفتح الفصل الذي خرج منه المشارك
+  useEffect(() => { if (reopen && d?.success) { setOpen(reopen); onReopened(); } }, [reopen, d]);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
   const summaryDirty = !!d?.success && ['draft', 'returned'].includes(d.capstone.status) && summary !== (d.capstone.summary || '');
   useUnsavedGuard(summaryDirty, () => call('capstone.summary', { summary }));
 
-  if (open) return <div className="page"><ModelView id={open} name={me.participant.full_name} backLabel="وثيقة مبادرتك" onBack={() => { setOpen(null); load(); }} onPoints={() => {}} /></div>;
+  if (open) {
+    return (
+      <div className="page">
+        <ModelView key={open} id={open} name={me.participant.full_name} backLabel="وثيقة مبادرتك" onBack={() => { setOpen(null); load(); }} onPoints={() => {}}
+          nav={d?.success ? <ChapterNav sections={d.sections} id={open} onOpen={(x) => { setOpen(x); window.scrollTo({ top: 0 }); }} onHandbook={onHandbook} /> : null} />
+      </div>
+    );
+  }
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
 
@@ -123,7 +131,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
   return (
     <div className="page capstone">
       <FirstOpen id="capstone" icon="compass" title="مبادرتك على عملك الحقيقي" lines={[
-        'اختر مشروعًا من عملك، وفصول الوثيقة تتبع نطاق ما تقوده كما حددته في ملفك.',
+        'ابنِ مبادرة من واقع عملك، وفصول الوثيقة تتبع نوعها (مشروع أو برنامج أو محفظة) كما حددته في ملفك.',
         'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تسلّمها.',
         // قاعدة التحسين من مصدرها (MAX_REVISIONS): تُقال قبل التسليم لا بعده
         `بعد التسليم لك ${REVISIONS_AR} بعد ملاحظات المستشار، ثم يقرر بدرجتها. فسلّمها حين تكتمل.`,
@@ -202,6 +210,9 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
 
+      {/* ما المبادرة؟ مفتوحة لمن لم يسمّ مبادرته بعد، ومطوية بعدها (anatomy.json) */}
+      <Meaning scope={d.scope} open={!d.initiative} onHandbook={onHandbook} />
+
       {/* اكتشاف المبادرة (4ج): قبل البطاقة وحدها، حين لا اسم للمبادرة ولم تُسلَّم البطاقة بعد. ناتجه مسودة البطاقة نفسها */}
       {(() => {
         const charter = d.sections.find((s) => s.key === 'initiative-charter');
@@ -222,25 +233,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
         </div>
       )}
       <div className="cp-grid">
-        <section className="card cp-sections" data-tour="capstone-sections">
-          <h2>فصول الوثيقة</h2>
-          <p className="muted small">كل فصل نموذج من مكتبة النماذج، يُحفظ تلقائيًا ويُحسب في نقاطك. ابدأ ببطاقة المبادرة: منها يأخذ كل فصل اسمها.</p>
-          <ol className="cp-list">
-            {d.sections.map((s, i) => {
-              const st = SECTION_STATE(s);
-              return (
-                <li key={s.id}>
-                  <button className={`cp-sec${s.complete ? ' done' : ''}`} disabled={busy === 'summary'} onClick={() => openSection(s.id)}>
-                    <span className="cp-n">{String(i + 1).padStart(2, '0')}</span>
-                    <span className="model-icon sm">{s.icon}</span>
-                    <span className="cp-t"><b>{s.title}</b><small>{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}</small></span>
-                    {st.t && <span className={`chip ${st.c}`}>{st.t}</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+        <Navigator sections={d.sections} busy={busy === 'summary'} onOpen={openSection} onHandbook={onHandbook} />
 
         <aside className="cp-side">
           <section className="card">
@@ -250,7 +243,7 @@ export default function Capstone({ me, onEditProfile, onBack }) {
               {d.checks.map((x) => {
                 const ch = !x.ok && editable ? d.sections.find((sec) => (CHECK_CHAPTERS[x.key] || []).includes(sec.key)) : null;
                 return (
-                  <li key={x.key} className={x.ok ? 'ok' : 'no'}><b>{x.title}{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
+                  <li key={x.key} className={x.ok ? 'ok' : 'no'}><b><Annotated text={x.title} />{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
                     {ch && <button type="button" className="link small" onClick={() => setAsk({ chapterTitle: ch.title, detail: x.title, dimension: ch.dimension })}>اسأل مختصًا</button>}
                   </li>
                 );

@@ -76,12 +76,14 @@ describe('ميثاق المبادرة: صفحة مولّدة', () => {
     expect(c['مصدر التمويل']).toBe('الميزانية التشغيلية');
   });
   it('بلا بطاقة لا ميثاق', () => expect(charterData({ sections: [] })).toBeNull());
-  it('الوثيقة الاحترافية تحمل الميثاق وحالة العمل قبل الفهرس', () => {
+  it('الوثيقة الاحترافية: الفهرس أولًا بروابطه، ثم الميثاق وحالة العمل قبل الفصول', () => {
     const { body } = capstoneReport(doc());
     const i = (t) => body.indexOf(t);
-    expect(i('ميثاق المبادرة')).toBeGreaterThan(0);
-    expect(i('حالة العمل')).toBeGreaterThan(i('ميثاق المبادرة'));
-    expect(i('فهرس الوثيقة')).toBeGreaterThan(i('حالة العمل'));
+    expect(i('فهرس الوثيقة')).toBeGreaterThan(0);
+    expect(body).toContain('href="#ch-charter"');
+    expect(i('id="ch-charter"')).toBeGreaterThan(i('فهرس الوثيقة'));
+    expect(i('id="ch-case"')).toBeGreaterThan(i('id="ch-charter"'));
+    expect(i('id="ch-initiative-charter"')).toBeGreaterThan(i('id="ch-case"'));
     expect(body).toContain('البعد التجاري');
   });
 });
