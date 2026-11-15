@@ -130,6 +130,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 .alert.err { background: var(--st-bad-bg); color: var(--bad); }
 .alert.ok { background: var(--st-ok-bg); color: var(--ok); }
 .alert.info { background: var(--mist); color: var(--slate); }
+.alert.warn { background: var(--st-warn-bg); color: var(--st-warn-text); }
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -718,6 +719,22 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mf-n { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(169,122,46,.5); color: var(--gold); font-family: "Cormorant Garamond", Georgia, serif; font-size: 16px; font-weight: 600; }
 .mf.ok .mf-n { background: var(--ok); border-color: var(--ok); color: #fff; font-family: inherit; font-size: 14px; }
 .mf-opt { color: var(--muted); font-weight: 400; }
+/* دليل الحقل (guide.js): مفتوح للتأسيسي، ومطوي للمتوسط والمتقدم */
+.mf-guide { border-inline-start: 3px solid var(--gold); background: var(--sand); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; line-height: 1.8; color: var(--slate); }
+.mf-guide p { margin: 0; }
+.mf-guide p + p { margin-top: 4px; }
+.mf-guide b { font-weight: 600; color: var(--ink); }
+.mf-guide .mf-avoid b { color: color-mix(in srgb, var(--copper) 62%, #000); }
+.mf-guide summary { cursor: pointer; color: var(--gold-text); font-weight: 600; }
+.mf-guide[open] summary { margin-bottom: 6px; }
+.mf-ex { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.mf-ex b { display: block; color: var(--gold-text); }
+.mf-ex q { display: block; quotes: none; color: var(--slate); }
+.mf-ex-t { overflow-x: auto; margin-top: 4px; }
+.mf-ex-t table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+.mf-ex-t th, .mf-ex-t td { border: 1px solid var(--line); padding: 3px 6px; text-align: start; vertical-align: top; }
+.mf-ex-t th { background: rgba(11, 39, 47, .05); font-weight: 600; white-space: nowrap; }
+details.mf-guide:not([open]) { background: transparent; border-inline-start-color: transparent; padding: 2px 0; }
 .wsheet .mf > :not(label) { margin-inline-start: 40px; width: calc(100% - 40px); }
 .wsheet .input, .wsheet .mtable textarea { background: #fff; }
 .wsheet > .alert { margin: 14px 22px 0; }

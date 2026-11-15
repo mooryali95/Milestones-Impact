@@ -1197,7 +1197,8 @@ async function myModel(p: any, id: unknown) {
   if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
   const priority = await participantPriority(p.id, levels);
-  return { ...m, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
+  // level: مستوى المشارك في بُعد النموذج، يحدد صورة دليل الحقل في الواجهة (leaders-app/src/guide.js)
+  return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
 }
 
 // اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
@@ -1265,7 +1266,8 @@ export async function modelGet(p: any, b: Body) {
   ]);
   const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
   return {
-    success: true, model: m, submission, initiative,
+    // sector: قطاع المشارك من ملفه، يختار به التطبيق المثال المحلول الأقرب (leaders-app/src/guide.js)
+    success: true, model: m, submission, initiative, sector: p.sector || null,
     imports: await importsFor(p, m.fields),
     capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
   };
