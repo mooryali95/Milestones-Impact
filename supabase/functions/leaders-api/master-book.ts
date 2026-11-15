@@ -8,8 +8,9 @@ import { all, audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
 import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
 import { DRAFTS } from './master-book-drafts.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
+import { proposalsFor } from './book-proposals.ts';
 
-type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean };
+type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; superAdmin?: boolean };
 
 export const expertViewer = (e: any): Viewer => {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
@@ -19,6 +20,7 @@ export const expertViewer = (e: any): Viewer => {
 export const adminViewer = (a: { email: string; role: string; method?: string }): Viewer => ({
   kind: 'admin', ref: a.email, name: a.email.split('@')[0], role: authorRole('admin', { role: a.role }),
   write: (a.role === 'admin' || a.role === 'super_admin') && a.method !== 'email',
+  superAdmin: a.role === 'super_admin' && a.method !== 'email',
 });
 
 // بصمة الباب: يُعرف بها أن تعليقًا كُتب على نص تغيّر بعده
@@ -58,9 +60,12 @@ export async function book(v: Viewer) {
   // للإدارة وحدها (المرحلة 3 من «الكتاب الأم»): ما يعتمد على كل باب من القاعدة، فيُعرف حجم أي تعديل قبله.
   // تعذّر القراءة لا يُسقط الكتاب: تُعرض اللوحة بلا هذه الأجزاء
   const deps = v.kind === 'admin' ? await bookDeps().catch(() => null) : null;
+  // مقترحات التعديل (المرحلة 4): تعذّر القراءة لا يُسقط الكتاب
+  const props = await proposalsFor(v, mods).catch(() => ({ ready: false, list: [], counts: null }));
   return {
     success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
-    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, resolve: canResolve(v) },
+    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
+    proposals_ready: props.ready, proposals: props.list, proposal_counts: props.counts,
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({
       id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, sort: m.sort, title: m.title_ar, min_level: m.min_level,
