@@ -20,7 +20,8 @@ const STATES = {
   red: () => facts({ mail: { codes: { sent: 9, failed: 3, blocked: 1 }, code_streak: { count: 4, since: ago(20), last_at: ago(1), last_ok_at: ago(25), open: false }, failed_24h: 3 } }),
 };
 
-async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest } = {}) {
+// pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن
+async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health } = {}) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -31,7 +32,7 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b);
     const replies = {
-      'admin.ops-health': STATES[state](),
+      'admin.ops-health': health ? health(calls) : STATES[state](),
       'admin.overview': { success: true, total: 4, by_status: { pending_approval: 1, enrolled: 2 }, pending_reviews: 0, matrix: { milestone: { beginner: 1, intermediate: 1, advanced: 0 }, impact: { beginner: 2, intermediate: 0, advanced: 0 }, leadership: { beginner: 1, intermediate: 1, advanced: 0 } } },
       'admin.reviews': { success: true, pending_approval: [], submitted: [] },
       'admin.health': { success: true, readiness: [], missing_migrations: [], pending_migrations: [], migrations_ledger: true, missing_secrets: [], mail: { today: 12, cap: 80 } },
@@ -40,10 +41,11 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
   });
   await page.goto(BASE);
-  await page.evaluate((r) => {
+  await page.evaluate(([r, p]) => {
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x.com', role_id: r }, ts: Date.now() }));
     localStorage.clear();
-  }, role);
+    if (p) localStorage.setItem('mi_admin_ops_card', p);
+  }, [role, pref]);
   await page.goto(`${BASE}${hash}`);
   await page.reload();
   return calls;
@@ -118,6 +120,74 @@ test('التنبيه التجريبي للمدير الأعلى: يستدعي ad
   expect(calls.filter((c) => c.action === 'admin.alert-test').length).toBe(1);
 });
 
+test('بعد التنبيه التجريبي تتحدث الأرقام وحدها: البريد فورًا، وحالة سلاك بعد ثوانٍ', async ({ page }) => {
+  // قبل التجربة: 9 بلا نشر. أول سؤال بعدها: البريد عُدّ وسلاك لم يُكتب بعد. الثاني بعد ثوانٍ: كُتبت حالة سلاك
+  const after = (calls) => { const t = calls.findIndex((c) => c.action === 'admin.alert-test'); return t < 0 ? 0 : calls.slice(t).filter((c) => c.action === 'admin.ops-health').length; };
+  const health = (calls) => { const i = after(calls); return facts({ mail: { sent: i ? 10 : 9 }, slack: { ok_at: i >= 2 ? ago(0) : null } }); };
+  const calls = await setup(page, { state: 'green', health });
+  const n = () => after(calls);
+  await expect(card(page)).toContainText('9 من 80');
+  await expect(card(page)).toContainText('لم يُنشر شيء بعد');
+  await card(page).getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).click();
+  await expect(card(page)).toContainText('10 من 80');
+  expect(n()).toBe(1);
+  await expect(card(page)).toContainText('لم يُنشر شيء بعد');
+  await expect.poll(n, { timeout: 8000 }).toBe(2);
+  await expect(card(page).getByText('آخر نشر ناجح').locator('..')).toContainText('الآن');
+  await expect(card(page)).not.toContainText('لم يُنشر شيء بعد');
+  // وسؤال أخير بعد عشر ثوانٍ لسلاك البطيء، ثم لا شيء حتى سؤال الدقيقة
+  await expect.poll(n, { timeout: 12000 }).toBe(3);
+});
+
+test('الطي: السليم مفتوح أول مرة، والزر يطويه بالفأرة ولوحة المفاتيح إلى سطر ملخص هادئ، والاختيار يُحفظ', async ({ page }) => {
+  await setup(page, { state: 'green', pref: null });
+  const toggle = card(page).getByRole('button', { name: 'صحة البريد والتنبيه' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveAttribute('aria-controls', 'ops-body');
+  await expect(page.locator('#ops-body')).toBeVisible();
+  const strip = card(page).getByRole('list', { name: 'ملخص صحة البريد والتنبيه' });
+  await expect(strip).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#ops-body')).toBeHidden();
+  await expect(strip).toBeVisible();
+  await expect(strip.getByRole('img')).toHaveAttribute('aria-label', 'البريد في آخر 24 ساعة: أُرسل 12 من 80 (15٪ من السقف اليومي)');
+  await expect(strip).toContainText('وصل 9');
+  await expect(strip).toContainText('تعذّر 0');
+  await expect(strip).toContainText('حُجب 0');
+  await expect(strip).toContainText('نُشر منذ 4 دقائق');
+  await expect(strip).toContainText('3 من 3');
+  await expect(card(page).getByText('يعمل', { exact: true })).toBeVisible();
+  // محفوظ في المتصفح: يبقى مطويًا بعد إعادة التحميل
+  await page.reload();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  // لوحة المفاتيح: Enter ثم المسافة
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(card(page)).toContainText('وصل 9 · تعذّر 0 · حُجب 0');
+  await page.keyboard.press(' ');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Enter');
+  await page.reload();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('الطي: أي حال غير سليمة تفتح البطاقة مهما حُفظ', async ({ page }) => {
+  await setup(page, { state: 'amber', pref: 'closed' });
+  await expect(card(page).getByRole('button', { name: 'صحة البريد والتنبيه' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(card(page).locator('.ops-issues')).toBeVisible();
+  await setup(page, { state: 'red', pref: 'closed', hash: '#/contacts' });
+  await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
+  await expect(card(page)).toBeFocused();
+  await expect(page.locator('#ops-body')).toBeVisible();
+  // طي بطاقة غير سليمة لهذه الجلسة وحدها: لا يُحفظ فيطوي زيارة سليمة لاحقة
+  await setup(page, { state: 'amber', pref: 'open' });
+  await card(page).getByRole('button', { name: 'صحة البريد والتنبيه' }).click();
+  await expect(page.locator('#ops-body')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('mi_admin_ops_card'))).toBe('open');
+});
+
 test('رموز مصفوفة التأثير المحجوبة: كهرماني بسطرها بلا شريط، وسلاك وحده قناة تنبيه', async ({ page }) => {
   await setup(page, { state: 'matrix', alertTest: { success: true, channels: { webhook: false, email: false, slack: true }, mail_key: true, delivered: { webhook: false, email: false } } });
   await expect(card(page)).toHaveAttribute('data-level', 'amber');
@@ -143,6 +213,21 @@ test('المراقب لا يرى البطاقة ولا الشريط، ولا ي�
   await expect(page.locator('#ops-health')).toHaveCount(0);
   await expect(page.locator('.ops-banner')).toHaveCount(0);
   expect(calls.some((c) => c.action === 'admin.ops-health')).toBe(false);
+});
+
+// لقطتا الطي والفتح بعرض سطح المكتب: OPS_SHOTS=<مجلد> وحده
+test('لقطتا البطاقة مطوية ومفتوحة', async ({ browser }) => {
+  test.skip(!process.env.OPS_SHOTS, 'اللقطات بطلب');
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  for (const pref of ['closed', 'open']) {
+    await setup(page, { state: 'green', pref, health: () => facts({ mail: { sent: 9 } }) });
+    await expect(card(page).getByRole('button', { name: 'صحة البريد والتنبيه' })).toHaveAttribute('aria-expanded', pref === 'open' ? 'true' : 'false');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const box = await card(page).boundingBox();
+    await page.screenshot({ path: `${process.env.OPS_SHOTS}/card-${pref === 'open' ? 'expanded' : 'collapsed'}-1440.png`, fullPage: true, clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } });
+  }
+  await ctx.close();
 });
 
 // لقطات للمراجعة: OPS_SHOTS=<مجلد> وحده
