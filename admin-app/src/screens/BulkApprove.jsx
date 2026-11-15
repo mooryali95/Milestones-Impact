@@ -4,6 +4,7 @@
 // الإدارة بالاستثناء (تصور 2026-11-15). وضعان، والحكم في الاثنين على الخادم (approval.js) في المعاينة والتنفيذ معًا:
 // · «كما حُسب» (المرحلة 1): المتسق يُعتمد بمستواه المحسوب، ومن عليه إشارة يُستبقى بسببه للمراجعة من ملفه.
 // · «بمستوى محدد» (المرحلة 2، للمدير العام): مستوى يُفرض لبُعد أو أكثر، بتعليل إلزامي يُحفظ في ملف كل من خالفه.
+// · بعد «كما حُسب» عيّنة عشوائية للتحقق (المرحلة 3): ضبط جودة القاعدة نفسها، تُحفظ في السجل الجامع.
 import React, { useEffect, useState } from 'react';
 import { L, LVL, isSuperAdminUser } from '../leaders.js';
 import { session } from '../api.js';
@@ -107,6 +108,13 @@ export default function BulkApprove({ ids, onClose, onPerson }) {
             {done.success && done.results.some((x) => !x.ok) && <span className="la-chip bad">تعذّر {done.results.filter((x) => !x.ok).length}</span>}
             <span className={`la-chip ${held.length ? 'warn' : ''}`}>استُبقي {held.length}</span>
             {!done.success && <p className="la-err" role="alert">{done.message}</p>}
+          </div>
+        )}
+        {done?.success && done.sample?.length > 0 && (
+          <div className="ba-sample">
+            <h4>عيّنة للتحقق ({done.sample.length})</h4>
+            <p className="la-muted">اختيرت عشوائيًا مما اعتُمد آليًا (10%). راجع ملفاتها: إن وجدت فيها خطأ فالقاعدة نفسها تحتاج ضبطًا، لا هؤلاء وحدهم.</p>
+            <ul className="ba-list">{done.sample.map((x) => <li key={x.id}><button type="button" className="la-link" onClick={() => open(x.id)}><b>{x.full_name}</b></button></li>)}</ul>
           </div>
         )}
         {done?.success && done.results.some((x) => !x.ok) && (

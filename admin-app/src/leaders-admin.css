@@ -1059,3 +1059,4 @@
 .bulk-approve .ba-modes label:has(input:checked) { border-color: var(--gold); background: color-mix(in srgb, var(--brand-gold) 6%, transparent); }
 .bulk-approve .ba-modes small { color: var(--ink-mid); }
 .bulk-approve .ba-levels { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.bulk-approve .ba-sample { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-gold); }

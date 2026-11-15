@@ -355,7 +355,7 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
     calls.push(b);
     return route.fulfill({ json: b.dry_run
       ? { success: true, ready, held, mail: { now: 1, queued: 0 } }
-      : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 } } });
+      : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 }, sample: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }] } });
   });
   // في عرض «بانتظار الاعتماد»: اختصار لاعتماد المتسقين من الظاهرين
   await page.getByRole('button', { name: /بانتظار الاعتماد/ }).first().click();
@@ -370,6 +370,9 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
   expect(calls.find((c) => c.action === 'admin.approve-bulk')).toMatchObject({ dry_run: true, participant_ids: ['p1', 'p3'] });
   await dlg.getByRole('button', { name: 'اعتمد 1' }).click();
   await expect(dlg.locator('.ba-sum')).toContainText('اعتُمد 1');
+  // المرحلة 3: عيّنة للتحقق مما اعتُمد آليًا، كل اسم يفتح ملفه
+  await expect(dlg.locator('.ba-sample')).toContainText('عيّنة للتحقق (1)');
+  await expect(dlg.locator('.ba-sample').getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
   const run = calls.filter((c) => c.action === 'admin.approve-bulk').pop();
   expect(run).toMatchObject({ participant_ids: ['p1', 'p3'] });
   expect(run).not.toHaveProperty('dry_run');

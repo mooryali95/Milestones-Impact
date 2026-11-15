@@ -69,3 +69,15 @@ export function planUniform(rows = [], levels = {}, reason = '') {
 }
 // علة كل بُعد خالفه المستوى المفروض: التعليل الواحد نفسه، فيقبله approveOne بقاعدته (overrideNeedsReason)
 export const notesFor = (row, reason) => Object.fromEntries((row.changes || []).map((c) => [c.dim, String(reason).trim()]));
+
+// ── المرحلة 3: التحقق بالعينة ──
+// مراجعة نسبة عشوائية مما اعتُمد آليًا تكشف إن كانت القاعدة نفسها تخطئ (ضبط جودة لا مراجعة كاملة). 10% وواحد على الأقل.
+// rnd قابل للحقن في الاختبار؛ الخادم يمرر Math.random
+export const SAMPLE_RATE = 0.1;
+export function pickSample(ids = [], { rate = SAMPLE_RATE, rnd = Math.random } = {}) {
+  if (!ids.length) return [];
+  const n = Math.min(ids.length, Math.max(1, Math.ceil(ids.length * rate)));
+  const pool = [...ids];
+  for (let i = pool.length - 1; i > 0; i -= 1) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, n);
+}
