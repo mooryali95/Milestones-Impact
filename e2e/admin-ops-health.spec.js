@@ -15,6 +15,8 @@ const STATES = {
   amber: () => facts({ mail: { sent: 61 }, slack: { error: 'not_in_channel', error_at: ago(6), ok_at: ago(50) } }),
   // رموز مصفوفة التأثير بلغت نصيبها: متابعة لا عطل، وسلاك وحده قناة التنبيه
   matrix: () => facts({ mail: { sent: 30, codes: { sent: 9, failed: 0, blocked: 0, matrix_blocked: 4 }, code_streak: { count: 0, since: null, last_at: ago(2), last_ok_at: ago(2), open: false } }, alerts: { email: false, webhook: false, slack: true } }),
+  // 695 من 1000 تُقرَّب 70٪ ودون عتبة الحكم (700): البطاقة خضراء والعداد معها
+  edge: () => facts({ mail: { cap: 1000, sent: 695 } }),
   red: () => facts({ mail: { codes: { sent: 9, failed: 3, blocked: 1 }, code_streak: { count: 4, since: ago(20), last_at: ago(1), last_ok_at: ago(25), open: false }, failed_24h: 3 } }),
 };
 
@@ -60,6 +62,7 @@ test('أخضر: البطاقة أعلى النظرة العامة بالكلمة
   await expect(card(page).getByRole('heading', { name: 'البريد في آخر 24 ساعة' })).toBeVisible();
   await expect(card(page)).toContainText('منذ 4 دقائق');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
+  await expect(card(page).locator('.ops-meter')).not.toHaveClass(/near|full/);
   // البطاقة أول ما في النظرة العامة
   const first = await page.locator('.la-card').first().getAttribute('id');
   expect(first).toBe('ops-health');
@@ -76,19 +79,32 @@ test('كهرماني: اقتراب السقف وخطأ سلاك برمزه وإ�
   await expect(card(page).locator('.ops-issues')).toContainText('إضافة تطبيق');
   await expect(card(page).getByRole('status').first()).toContainText('البريد والتنبيه: يحتاج متابعتك (أمران).');
   await expect(card(page)).toContainText('البريد في آخر 24 ساعة 61 من 80');
+  await expect(card(page).locator('.ops-meter')).toHaveClass(/near/);
   await expect(page.locator('.ops-banner')).toHaveCount(0);
+});
+
+test('العداد يتلون بعتبة الحكم نفسها: 695 من 1000 أخضر بلا لون اقتراب', async ({ page }) => {
+  await setup(page, { state: 'edge' });
+  await expect(card(page)).toHaveAttribute('data-level', 'green');
+  await expect(card(page)).toContainText('لا شيء يحتاج تدخلك');
+  await expect(card(page).locator('.ops-meter')).toHaveAttribute('aria-label', '70٪ من السقف اليومي');
+  await expect(card(page).locator('.ops-meter')).not.toHaveClass(/near|full/);
 });
 
 test('أحمر: الشريط أعلى كل صفحة بالمدة، ويفتح البطاقة ويضع التركيز عليها', async ({ page }) => {
   await setup(page, { state: 'red', hash: '#/contacts' });
-  const banner = page.getByRole('alert').filter({ hasText: 'البريد متوقف' });
+  const banner = page.locator('.ops-banner');
   await expect(banner).toContainText('البريد متوقف: رموز الدخول لا تصل منذ 20 دقيقة');
+  // منطقة التنبيه فيها الجملة الثابتة وحدها، والمدة المتغيرة خارجها فلا يُعاد التنبيه على قارئ الشاشة كل دقيقة
+  await expect(page.getByRole('alert').filter({ hasText: 'البريد متوقف' })).toHaveText('البريد متوقف: رموز الدخول لا تصل');
+  await expect(banner.locator('[aria-live="off"]')).toHaveText(/منذ 20 دقيقة/);
   await banner.getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
   await expect(page).toHaveURL(/#\/leaders\/overview$/);
   await expect(card(page)).toHaveAttribute('data-level', 'red');
   await expect(card(page)).toBeFocused();
   await expect(card(page).getByText('عطل الآن', { exact: true })).toBeVisible();
   await expect(card(page)).toContainText('آخر 4 محاولات تعذّرت أو حُجبت متتالية');
+  await expect(card(page)).toContainText('رموز الدخول لا تصل منذ 20 دقيقة');
   // الشريط باقٍ في النظرة العامة نفسها، والرابط يعيد التركيز إلى البطاقة
   await page.getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).focus();
   await banner.getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
@@ -102,10 +118,11 @@ test('التنبيه التجريبي للمدير الأعلى: يستدعي ad
   expect(calls.filter((c) => c.action === 'admin.alert-test').length).toBe(1);
 });
 
-test('رموز مصفوفة التأثير المحجوبة بنصيبها: كهرماني بسطرها بلا شريط، وسلاك وحده قناة تنبيه', async ({ page }) => {
+test('رموز مصفوفة التأثير المحجوبة: كهرماني بسطرها بلا شريط، وسلاك وحده قناة تنبيه', async ({ page }) => {
   await setup(page, { state: 'matrix', alertTest: { success: true, channels: { webhook: false, email: false, slack: true }, mail_key: true, delivered: { webhook: false, email: false } } });
   await expect(card(page)).toHaveAttribute('data-level', 'amber');
-  await expect(card(page)).toContainText('مصفوفة التأثير بلغت نصيبها من البريد: حُجب 4');
+  await expect(card(page)).toContainText('حُجب 4 من رموز دخول مصفوفة التأثير في آخر 24 ساعة (لبلوغ نصيبها أو السقف اليومي)');
+  await expect(card(page)).toContainText('ومصفوفة التأثير: حُجب 4 (نصيبها أو السقف)');
   await expect(card(page)).toContainText('لا يمس دخول القادة');
   await expect(card(page)).not.toContainText('لا قناة تنبيه مضبوطة');
   await expect(page.locator('.ops-banner')).toHaveCount(0);

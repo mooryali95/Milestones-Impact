@@ -80,7 +80,8 @@ Deno.test('صحة البريد: الحقائق للمدير ذي الكتابة 
     assertEquals(opsVerdict(r).issues[0].key, 'mail_key');
     const v = opsVerdict({ ...r, mail: { ...r.mail, key: true } });
     assertEquals(v.level, 'red');
-    assertEquals(v.banner, 'البريد متوقف: رموز الدخول لا تصل منذ 20 دقيقة');
+    assertEquals(v.banner, 'البريد متوقف: رموز الدخول لا تصل');
+    assertEquals(v.bannerSince, 'منذ 20 دقيقة');
   } finally {
     restore();
     Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
@@ -150,6 +151,50 @@ Deno.test('سلاك: كل نتيجة نشر تُسجَّل في ops_status بع�
     assert(writes[5].row.ok_at && !('error_at' in writes[5].row));
   } finally {
     globalThis.fetch = real;
+    S.resetSlack();
+    Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
+    Deno.env.delete('LEADERS_SLACK_CHANNEL');
+  }
+});
+
+// النسخة قد تُسترد بعد ردها: كتابة ops_status تُسجَّل في EdgeRuntime.waitUntil كالنشر، فلا تضيع نتيجة آخر نشر
+Deno.test('سلاك: كتابة ops_status تُسلَّم إلى waitUntil لا تُترك معلقة بعد انتهاء الضخ', async () => {
+  S.resetSlack();
+  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0 });
+  Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
+  Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
+  let release!: () => void;
+  const held = new Promise<void>((r) => { release = r; });
+  let written = false;
+  const from = (table: string) => {
+    const q: any = {
+      select: () => q, eq: () => q, maybeSingle: () => q, limit: () => q,
+      insert: () => ({ then: (ok: any) => ok({ error: { code: 'PGRST205', message: 'no slack_threads' } }) }),
+      upsert: () => held.then(() => { written = table === 'ops_status'; return { error: null }; }),
+      then: (ok: any) => ok({ data: null, error: { code: 'PGRST205', message: 'no slack_threads' } }),
+    };
+    return q;
+  };
+  const client = { from, schema: () => ({ from }) };
+  const kept: Promise<unknown>[] = [];
+  const g = globalThis as any;
+  const savedRt = g.EdgeRuntime;
+  g.EdgeRuntime = { waitUntil: (p: Promise<unknown>) => { kept.push(p); } };
+  const real = globalThis.fetch;
+  globalThis.fetch = (() => Promise.resolve(new Response('{"ok":false,"error":"invalid_auth"}'))) as typeof fetch;
+  try {
+    await S.slackPost('alerts', 'رمز تعذّر', { client });
+    // الضخ انتهى والكتابة ما زالت معلقة: يجب أن تكون بين ما سُلّم إلى waitUntil
+    assertEquals(written, false);
+    assert(kept.length >= 2, 'الضخ وكتابة الحالة كلاهما في waitUntil');
+    release();
+    await Promise.all(kept);
+    assertEquals(written, true);
+  } finally {
+    release();
+    globalThis.fetch = real;
+    if (savedRt === undefined) delete g.EdgeRuntime; else g.EdgeRuntime = savedRt;
+    await S.slackIdle();
     S.resetSlack();
     Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
     Deno.env.delete('LEADERS_SLACK_CHANNEL');

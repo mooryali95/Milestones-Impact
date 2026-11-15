@@ -73,16 +73,24 @@ export const slackHint = (code) => SLACK_HINTS[code] || 'راجع سجل الد�
 
 // عدد الأمور بالعربية: أمر واحد، أمران، 3 إلى 10 أمور، 11 فأكثر أمرًا
 export const countAr = (n) => (n === 1 ? 'أمر واحد' : n === 2 ? 'أمران' : n >= 3 && n <= 10 ? `${n} أمور` : `${n} أمرًا`);
+// عدد المحاولات: محاولة واحدة، محاولتان، 3 إلى 10 محاولات، 11 فأكثر محاولة
+export const attemptsAr = (n) => (n === 1 ? 'محاولة واحدة' : n === 2 ? 'محاولتان' : n >= 3 && n <= 10 ? `${n} محاولات` : `${n} محاولة`);
+// آخر رموز دخول لم تصل: المفرد والمثنى بأفعالهما، ثم الجمع (3 إلى 10) والتمييز المفرد (11 فأكثر)
+export const lostCodesAr = (n) => (n === 1 ? 'آخر رمز دخول لم يصل (تعذّر أو حُجب)'
+  : n === 2 ? 'آخر رمزي دخول لم يصلا (تعذّرا أو حُجبا)'
+  : n >= 3 && n <= 10 ? `آخر ${n} رموز دخول لم تصل (تعذّرت أو حُجبت)` : `آخر ${n} رمز دخول لم تصل (تعذّرت أو حُجبت)`);
 
 export const LEVEL_AR = { green: 'يعمل', amber: 'يحتاج متابعة', red: 'عطل الآن' };
 export const TITLE_AR = { green: 'البريد والتنبيه يعملان', amber: 'البريد والتنبيه: يحتاج متابعتك', red: 'البريد والتنبيه: عطل الآن' };
 
 const ms = (iso) => (iso ? Date.parse(iso) : NaN);
 
-// الحكم من الحقائق. issues مرتبة: الأحمر أولًا، وbanner نص الشريط حين يكون الحكم أحمر وحده
+// الحكم من الحقائق. issues مرتبة: الأحمر أولًا، وbanner نص الشريط حين يكون الحكم أحمر وحده.
+// banner جملة ثابتة لا تتغير بمرور الوقت (منطقة التنبيه تُقرأ لقارئ الشاشة كلما تغير نصها)، والمدة المتغيرة في bannerSince
+// تُعرض بجوارها خارج منطقة التنبيه
 export function opsVerdict(f, now = Date.now()) {
   const issues = [];
-  const add = (level, key, text, hint, banner, code) => issues.push({ level, key, text, ...(hint ? { hint } : {}), ...(banner ? { banner } : {}), ...(code ? { code } : {}) });
+  const add = (level, key, text, hint, banner, code, bannerSince) => issues.push({ level, key, text, ...(hint ? { hint } : {}), ...(banner ? { banner } : {}), ...(code ? { code } : {}), ...(bannerSince ? { bannerSince } : {}) });
   const mail = f?.mail || {};
   const cap = Number(mail.cap) || 0;
   const sent = mail.sent;
@@ -94,10 +102,10 @@ export function opsVerdict(f, now = Date.now()) {
   const recent = s && s.count > 0 && now - ms(s.last_at) <= OPS.codeRecentMin * 60e3;
   if (recent && s.count >= OPS.codeStreakRed) {
     const since = minutesAr((now - ms(s.since)) / 60e3);
-    add('red', 'codes_failing', `رموز الدخول لا تصل منذ ${since}: آخر ${s.open ? `${s.count} فأكثر` : s.count} محاولات تعذّرت أو حُجبت متتالية`,
-      'افتح مركز البريد وابحث بعنوان أحدهم لمعرفة السبب، ويبقى الدخول بمفتاح المرور أو برابط دخول يدوي', `البريد متوقف: رموز الدخول لا تصل منذ ${since}`);
+    add('red', 'codes_failing', `رموز الدخول لا تصل منذ ${since}: آخر ${attemptsAr(s.count)}${s.open ? ' أو أكثر' : ''} تعذّرت أو حُجبت متتالية`,
+      'افتح مركز البريد وابحث بعنوان أحدهم لمعرفة السبب، ويبقى الدخول بمفتاح المرور أو برابط دخول يدوي', 'البريد متوقف: رموز الدخول لا تصل', null, `منذ ${since}`);
   } else if (recent) {
-    add('amber', 'code_lost', s.count === 1 ? 'آخر رمز دخول لم يصل (تعذّر أو حُجب)' : `آخر ${s.count} رموز دخول لم تصل (تعذّرت أو حُجبت)`, 'قد يكون عنوانًا خاطئًا: ابحث به في مركز البريد');
+    add('amber', 'code_lost', lostCodesAr(s.count), 'قد يكون عنوانًا خاطئًا: ابحث به في مركز البريد');
   }
 
   if (sent == null) add('amber', 'mail_counter', 'تعذّرت قراءة عداد البريد: لا يخرج الآن إلا الرموز والتنبيه', 'غالبًا عارض في القاعدة يزول وحده؛ إن بقي فراجع سجل الدالة');
@@ -107,9 +115,10 @@ export function opsVerdict(f, now = Date.now()) {
   if (!recent && lost >= OPS.codeLostWatch) add('amber', 'codes_lost_day', `رموز دخول لم تصل في آخر 24 ساعة: ${lost}`, 'عاد الإرسال بعدها، فراجع في مركز البريد سبب ما لم يصل');
   // رسائل غير الرموز تعذّر إرسالها (مهلة أو خطأ عند المزوّد أو رفض): الرموز لها سطرها، فلا تُعد مرتين
   if (mail.failed_24h > 0) add('amber', 'mail_failed', `تعذّر إرسال ${mail.failed_24h} من الرسائل غير رموز الدخول في آخر 24 ساعة`, 'افتح مركز البريد لمعرفة السبب: المهلة العابرة تزول وحدها، والرفض المتكرر يستدعي مراجعة النطاق');
-  // رموز مصفوفة التأثير بلغت خُمس السقف: لا يمس دخول القادة والمنسقين والخبراء، فمتابعة لا عطل
+  // رموز مصفوفة التأثير المحجوبة: لا تمس دخول القادة والمنسقين والخبراء، فمتابعة لا عطل. السجل لا يفرق بين حجب
+  // نصيبها (خُمس السقف) وحجب السقف الكلي، وما حُجب بالسقف قبل ساعات يبقى في نافذة 24 ساعة بعد أن تخف، فالنص يذكر السببين
   const matrix = mail.codes?.matrix_blocked ?? 0;
-  if (matrix > 0 && !(sent != null && cap && sent >= cap)) add('amber', 'matrix_share', `مصفوفة التأثير بلغت نصيبها من البريد: حُجب ${matrix} من رموز دخولها في آخر 24 ساعة`, 'لا يمس دخول القادة ولا المنسقين ولا الخبراء. نصيب المصفوفة خُمس السقف اليومي، فإن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend');
+  if (matrix > 0 && !(sent != null && cap && sent >= cap)) add('amber', 'matrix_share', `حُجب ${matrix} من رموز دخول مصفوفة التأثير في آخر 24 ساعة (لبلوغ نصيبها أو السقف اليومي)`, 'لا يمس دخول القادة ولا المنسقين ولا الخبراء. نصيب المصفوفة خُمس السقف اليومي، وإن امتلأ السقف كله حُجبت معه. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend');
 
   const q = mail.queue || {};
   if (q.waiting == null) add('amber', 'queue_unread', 'تعذّرت قراءة طابور البريد');
@@ -126,7 +135,14 @@ export function opsVerdict(f, now = Date.now()) {
 
   issues.sort((a, b) => (a.level === b.level ? 0 : a.level === 'red' ? -1 : 1));
   const level = issues.some((i) => i.level === 'red') ? 'red' : issues.length ? 'amber' : 'green';
-  return { level, label: LEVEL_AR[level], title: TITLE_AR[level], issues, banner: level === 'red' ? issues[0].banner : null };
+  const top = level === 'red' ? issues[0] : null;
+  return { level, label: LEVEL_AR[level], title: TITLE_AR[level], issues, banner: top ? top.banner : null, bannerSince: top?.bannerSince ?? null };
+}
+
+// لون عداد البريد من عتبات الحكم نفسها لا من النسبة المقربة: full مع mail_cap، وnear مع mail_near
+export function meterLevel(verdict) {
+  const k = new Set((verdict?.issues || []).map((i) => i.key));
+  return k.has('mail_cap') ? 'full' : k.has('mail_near') ? 'near' : '';
 }
 
 // «منذ 20 دقيقة» لما في اليوم، وnull لما هو أقدم (يعرض المستدعي تاريخه)

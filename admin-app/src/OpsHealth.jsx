@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { L } from './leaders.js';
 import { navigate, parseRoute } from './route.js';
 import { useOpsHealth } from './ops-watch.js';
-import { agoAr, countAr, minutesAr, slackLabel } from '../../supabase/functions/leaders-api/ops-health.js';
+import { agoAr, countAr, meterLevel, minutesAr, slackLabel } from '../../supabase/functions/leaders-api/ops-health.js';
 import { dateTime } from './dates.js';
 import './ops-health.css';
 
@@ -18,7 +18,8 @@ let focusPending = false;
 const when = (iso) => (iso ? agoAr(iso) || dateTime(iso) : null);
 const n = (v) => (v == null ? 'غير مقروء' : String(v));
 
-// الشريط: يظهر في الحكم الأحمر وحده، ويفتح البطاقة ويضع التركيز عليها
+// الشريط: يظهر في الحكم الأحمر وحده، ويفتح البطاقة ويضع التركيز عليها. منطقة التنبيه (role=alert) فيها الجملة الثابتة
+// وحدها، فلا يعيد قارئ الشاشة قراءتها كل دقيقة؛ المدة المتغيرة («منذ 20 دقيقة») بجوارها خارج المنطقة
 export function OpsBanner({ enabled }) {
   const { verdict } = useOpsHealth(enabled);
   if (!verdict || verdict.level !== 'red') return null;
@@ -30,9 +31,12 @@ export function OpsBanner({ enabled }) {
     else navigate({ ctx: 'leaders', tab: 'overview' });
   };
   return (
-    <div className="ops-banner" role="alert">
+    <div className="ops-banner">
       <span className="ops-ic" aria-hidden="true">{ICON.red}</span>
-      <span className="ops-banner-text"><b>{verdict.banner}</b></span>
+      <span className="ops-banner-text">
+        <b role="alert">{verdict.banner}</b>
+        {verdict.bannerSince && <span className="ops-banner-since" aria-live="off"> {verdict.bannerSince}</span>}
+      </span>
       <a className="ops-banner-link" href="#/leaders/overview" onClick={open}>افتح بطاقة صحة البريد</a>
     </div>
   );
@@ -96,6 +100,7 @@ export function OpsHealthCard({ enabled, isSuper }) {
   const lv = verdict.level;
   const q = mail.queue || {};
   const pct = mail.sent != null && mail.cap ? Math.min(100, Math.round((mail.sent / mail.cap) * 100)) : null;
+  const meter = meterLevel(verdict);
   return (
     <section id={CARD_ID} tabIndex={-1} className={`la-card ops-card ops-${lv}`} aria-labelledby="ops-title" data-level={lv}>
       <div className="ops-head">
@@ -119,9 +124,9 @@ export function OpsHealthCard({ enabled, isSuper }) {
           <h4>البريد في آخر 24 ساعة</h4>
           <dl>
             <Row label="أُرسل">{mail.sent == null ? 'غير مقروء' : <><b>{mail.sent}</b> من {mail.cap}</>}
-              {pct != null && <span className={`ops-meter${mail.sent >= mail.cap ? ' full' : pct >= 70 ? ' near' : ''}`} role="img" aria-label={`${pct}٪ من السقف اليومي`}><i style={{ inlineSize: `${pct}%` }} /></span>}</Row>
+              {pct != null && <span className={`ops-meter${meter ? ` ${meter}` : ''}`} role="img" aria-label={`${pct}٪ من السقف اليومي`}><i style={{ inlineSize: `${pct}%` }} /></span>}</Row>
             <Row label="رموز الدخول">وصل {n(mail.codes?.sent)} · تعذّر {n(mail.codes?.failed)} · حُجب {n(mail.codes?.blocked)}
-              {mail.codes?.matrix_blocked > 0 && <small className="ops-codes">ومصفوفة التأثير: حُجب {mail.codes.matrix_blocked} لبلوغ نصيبها</small>}</Row>
+              {mail.codes?.matrix_blocked > 0 && <small className="ops-codes">ومصفوفة التأثير: حُجب {mail.codes.matrix_blocked} (نصيبها أو السقف)</small>}</Row>
             <Row label="طابور البريد">{q.waiting == null ? 'غير مقروء' : q.waiting ? `${q.waiting} تنتظر${q.oldest_minutes != null ? `، أقدمها منذ ${minutesAr(q.oldest_minutes)}` : ''}` : 'فارغ'}</Row>
             <Row label="رسائل أخرى لم تصل">تعذّر {n(mail.failed_24h)} · حُجب {n(mail.blocked_24h)}</Row>
           </dl>

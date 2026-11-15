@@ -1,5 +1,5 @@
 // صحة البريد والتنبيه: العتبات التي تحكم بلون البطاقة والشريط (ops-health.js)، ومتى يُسأل الخادم (ops-watch.js)
-import { agoAr, codeStreak, countAr, minutesAr, OPS, opsVerdict, slackHint, slackLabel, TITLE_AR } from '../../supabase/functions/leaders-api/ops-health.js';
+import { agoAr, attemptsAr, codeStreak, countAr, lostCodesAr, meterLevel, minutesAr, OPS, opsVerdict, slackHint, slackLabel, TITLE_AR } from '../../supabase/functions/leaders-api/ops-health.js';
 import { alertTestText } from './OpsHealth.jsx';
 import { dueIn, POLL_MS } from './ops-watch.js';
 
@@ -40,7 +40,9 @@ describe('opsVerdict: الكهرماني', () => {
   it('رمز أو رمزان لم يصلا للتو: متابعة لا عطل', () => {
     const v = opsVerdict(healthy({ mail: { code_streak: { count: 2, since: ago(8), last_at: ago(2), open: false } } }), NOW);
     expect(v.level).toBe('amber');
-    expect(v.issues[0].text).toBe('آخر 2 رموز دخول لم تصل (تعذّرت أو حُجبت)');
+    expect(v.issues[0].text).toBe('آخر رمزي دخول لم يصلا (تعذّرا أو حُجبا)');
+    const one = opsVerdict(healthy({ mail: { code_streak: { count: 1, since: ago(2), last_at: ago(2), open: false } } }), NOW);
+    expect(one.issues[0].text).toBe('آخر رمز دخول لم يصل (تعذّر أو حُجب)');
   });
   it('سلسلة فشل قديمة (أكثر من ساعة) لا تُحسب عطلًا قائمًا، ويبقى عدد اليوم للمتابعة', () => {
     const v = opsVerdict(healthy({ mail: { codes: { sent: 3, failed: 4, blocked: 0 }, code_streak: { count: 4, since: ago(200), last_at: ago(90), open: false } } }), NOW);
@@ -67,6 +69,9 @@ describe('opsVerdict: الكهرماني', () => {
     expect(v.level).toBe('amber');
     expect(keys(v)).toEqual(['matrix_share']);
     expect(v.banner).toBeNull();
+    // السجل لا يفرق بين حجب النصيب وحجب السقف الكلي (ما حُجب بالسقف يبقى في النافذة بعد أن تخف)، فالنص لا ينسبه للنصيب وحده
+    expect(v.issues[0].text).toBe('حُجب 5 من رموز دخول مصفوفة التأثير في آخر 24 ساعة (لبلوغ نصيبها أو السقف اليومي)');
+    expect(v.issues[0].hint).toContain('وإن امتلأ السقف كله حُجبت معه');
     expect(v.issues[0].hint).toContain('لا يمس دخول القادة');
     // السقف ممتلئ: سطره الأحمر يكفي
     expect(keys(opsVerdict(healthy({ mail: { sent: 80, codes: { sent: 9, failed: 0, blocked: 0, matrix_blocked: 5 } } }), NOW))).toEqual(['mail_cap']);
@@ -90,7 +95,31 @@ describe('opsVerdict: الأحمر والشريط', () => {
     const v = opsVerdict(healthy({ mail: { code_streak: { count: 3, since: ago(20), last_at: ago(1), open: false } } }), NOW);
     expect(v.level).toBe('red');
     expect(v.label).toBe('عطل الآن');
-    expect(v.banner).toBe('البريد متوقف: رموز الدخول لا تصل منذ 20 دقيقة');
+    // الجملة في منطقة التنبيه ثابتة، والمدة بجوارها: لا يتغير نص التنبيه كل دقيقة فيعاد على قارئ الشاشة
+    expect(v.banner).toBe('البريد متوقف: رموز الدخول لا تصل');
+    expect(v.bannerSince).toBe('منذ 20 دقيقة');
+    const later = opsVerdict(healthy({ mail: { code_streak: { count: 3, since: ago(21), last_at: ago(1), open: false } } }), NOW);
+    expect(later.banner).toBe(v.banner);
+    expect(later.bannerSince).toBe('منذ 21 دقيقة');
+    expect(v.issues[0].text).toBe('رموز الدخول لا تصل منذ 20 دقيقة: آخر 3 محاولات تعذّرت أو حُجبت متتالية');
+  });
+  it('عدد المحاولات بالعربية: التمييز المفرد من 11، و«أو أكثر» بعد المعدود حين يتجاوز ما قُرئ', () => {
+    const at = (count, open) => opsVerdict(healthy({ mail: { code_streak: { count, since: ago(20), last_at: ago(1), open } } }), NOW).issues[0].text;
+    expect(at(12, false)).toContain('آخر 12 محاولة تعذّرت');
+    expect(at(OPS.codeWindow, true)).toContain(`آخر ${OPS.codeWindow} محاولة أو أكثر تعذّرت`);
+    expect(at(5, true)).toContain('آخر 5 محاولات أو أكثر تعذّرت');
+    expect([1, 2, 3, 10, 11, 20].map(attemptsAr)).toEqual(['محاولة واحدة', 'محاولتان', '3 محاولات', '10 محاولات', '11 محاولة', '20 محاولة']);
+    expect(lostCodesAr(4)).toBe('آخر 4 رموز دخول لم تصل (تعذّرت أو حُجبت)');
+    expect(lostCodesAr(12)).toBe('آخر 12 رمز دخول لم تصل (تعذّرت أو حُجبت)');
+  });
+  it('لون العداد من عتبة الحكم نفسها لا من النسبة المقربة', () => {
+    // 695 من 1000 تُقرَّب 70٪ لكنها دون عتبة الحكم (700): البطاقة خضراء والعداد بلا لون تنبيه
+    const below = opsVerdict(healthy({ mail: { cap: 1000, sent: 695 } }), NOW);
+    expect(below.level).toBe('green');
+    expect(meterLevel(below)).toBe('');
+    expect(meterLevel(opsVerdict(healthy({ mail: { cap: 1000, sent: 700 } }), NOW))).toBe('near');
+    expect(meterLevel(opsVerdict(healthy({ mail: { cap: 1000, sent: 1000 } }), NOW))).toBe('full');
+    expect(meterLevel(null)).toBe('');
   });
   it('امتلاء السقف', () => {
     const v = opsVerdict(healthy({ mail: { sent: 80 } }), NOW);
@@ -102,6 +131,7 @@ describe('opsVerdict: الأحمر والشريط', () => {
     const v = opsVerdict(healthy({ mail: { key: false, failed_24h: 1 }, slack: { configured: false, missing: ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'] }, alerts: { email: false, webhook: false } }), NOW);
     expect(keys(v)).toEqual(['mail_key', 'mail_failed', 'no_alert_channel']);
     expect(v.banner).toBe('البريد متوقف: مفتاح البريد غير مضبوط، ورموز الدخول لا تخرج');
+    expect(v.bannerSince).toBeNull();
   });
   it('الحكم نفسه للبطاقة والشريط: الكهرماني بلا شريط', () => {
     for (const f of [healthy(), healthy({ mail: { sent: 60 } }), healthy({ mail: { sent: 80 } })]) {

@@ -114,6 +114,11 @@ function recordSlack(r: Sent) {
       .catch((e: unknown) => console.error('ops_status write:', e))
       .finally(() => { if (statusWrite === w) statusWrite = null; });
     statusWrite = w;
+    // الكتابة تبقى حية بعد رد الدالة كالنشر نفسه: waitUntil لا يحميها إلا إن سُجّلت فيه
+    try {
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil?.(w);
+    } catch { /* بيئة بلا waitUntil */ }
   } catch (e) { console.error('ops_status:', e); }
 }
 
