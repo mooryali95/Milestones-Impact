@@ -35,7 +35,10 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   // صحة البريد والتنبيه: أعداد وحالات بلا عناوين ولا قيم أسرار، يحصرها الخادم في المدير ذي الكتابة (ops_health_test.ts يحرس الفحص)
   'ops-health',
   // تقييم 360: حالة الدورات وأعدادها بلا نتيجة فرد
-  'f360']);
+  'f360',
+  // شاشة المساعد الآلي: قراءة يحصرها الخادم في المدير الأعلى والمالك (requireAgentRead، agent_admin_test.ts يحرس الفحص)،
+  // وفتح نص محادثة أو تشغيل يُسجَّل. الكتابة كلها بغلاف superWriter
+  'agent-state', 'agent-usage', 'agent-conversations', 'agent-transcript', 'agent-eval-runs', 'agent-eval-run']);
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {

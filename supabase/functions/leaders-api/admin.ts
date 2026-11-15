@@ -1325,13 +1325,8 @@ export async function save(a: Admin, b: Body) {
     for (const k of e.key) q = q.eq(k, b.row[k]);
     return q.select('*').single();
   };
-  let res = await write(stamp);
-  // متسامح قبل ترحيل 20261115200000: عمود مفتاح المرافق غائب فيُحفظ ما سواه (يُحذف هذا بعد التطبيق كقاعدة RUNBOOK)
-  if (res.error && b.entity === 'organizations' && 'companion_allowed' in row && ['PGRST204', '42703'].includes(String((res.error as any).code))) {
-    delete row.companion_allowed;
-    res = await write(stamp);
-  }
-  const saved = must(res, isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
+  // companion_allowed (ترحيل 20261115200000) لا يرسله نموذج الجهة قبل وجود العمود في صفها المقروء (OrgForm companionKnown)
+  const saved = must(await write(stamp), isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
   const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
   if (runningReason) await audit('admin', a.email, 'placement_model.running-change', 'placement_model', '1', before, { reason: runningReason });
