@@ -27,7 +27,7 @@ import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from 
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
-import { BULK_APPROVE_MAX, mailPlan, notesFor, planUniform, splitForApproval } from './approval.js';
+import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -719,10 +719,14 @@ export async function approveBulk(a: Admin, b: Body) {
     try { await approveOne(a, p, r.levels, {}, { bulk: true }); results.push({ id: r.id, full_name: r.full_name, ok: true }); }
     catch (e) { results.push({ id: r.id, full_name: r.full_name, ok: false, error: (e as Error).message }); }
   }
+  // المرحلة 3: عينة عشوائية مما اعتُمد آليًا تُراجع يدويًا، وتُحفظ في السجل الجامع فيُعرف ما رُوجع وما بقي
+  const approved = results.filter((x) => x.ok);
+  const sample = pickSample(approved.map((x) => x.id)).map((id) => approved.find((x) => x.id === id));
   await audit('admin', a.email, 'placement.approve-bulk', 'participants', 'bulk', null, {
-    approved: results.filter((x) => x.ok).map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id), held: held.map((x) => ({ id: x.id, holds: x.holds.map((h: any) => h.key) })),
+    approved: approved.map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id), held: held.map((x) => ({ id: x.id, holds: x.holds.map((h: any) => h.key) })),
+    sample: sample.map((x: any) => x.id),
   });
-  return { success: true, results, held, mail };
+  return { success: true, results, held, mail, sample };
 }
 
 // اعتماد المحددين بمستوى واحد (المرحلة 2): قرار صريح من المدير العام، فلا تُستبقى الإشارات، والتعليل يلزم إن خالف
