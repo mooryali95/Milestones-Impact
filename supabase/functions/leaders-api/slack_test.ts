@@ -4,11 +4,11 @@ import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1';
 const S = await import('../_shared/slack.ts');
 const { sendCounted, alertWebhook } = await import('../_shared/mail.ts');
-const { db, raiseAlert } = await import('./core.ts');
+const { db, raiseAlert, sendMail, CONFIG } = await import('./core.ts');
 const { MIGRATIONS, MIGRATION_GATES } = await import('./migrations.js');
 
 type Row = { day: string; category: string; ts: string };
-function fakeDb({ missing = false } = {}) {
+function fakeDb({ missing = false, insertError = null as null | { code: string; message: string } } = {}) {
   const rows = new Map<string, Row>();
   const from = (table: string) => {
     const st = { op: 'select', filters: {} as Record<string, unknown>, payload: null as any, single: false };
@@ -17,6 +17,7 @@ function fakeDb({ missing = false } = {}) {
       if (missing) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'leaders.slack_threads'" } };
       const match = [...rows.values()].filter((r: any) => Object.entries(st.filters).every(([k, v]) => r[k] === v));
       if (st.op === 'insert') {
+        if (insertError) return { error: insertError };
         const k = `${st.payload.day}|${st.payload.category}`;
         if (rows.has(k)) return { error: { code: '23505', message: 'duplicate key' } };
         rows.set(k, { ...st.payload });
@@ -41,7 +42,7 @@ function fakeDb({ missing = false } = {}) {
 }
 
 type Call = { url: string; body: any };
-type SlackMode = 'ok' | 'hang' | 'error' | 'throw' | 'rate';
+type SlackMode = 'ok' | 'hang' | 'error' | 'throw' | 'rate' | 'rate1';
 async function withNet<T>(fn: (calls: Call[]) => Promise<T>, { slack = 'ok' as SlackMode } = {}) {
   const real = globalThis.fetch;
   const calls: Call[] = [];
@@ -57,6 +58,8 @@ async function withNet<T>(fn: (calls: Call[]) => Promise<T>, { slack = 'ok' as S
     }
     if (slack === 'throw') return Promise.reject(new TypeError('network down'));
     if (slack === 'error') return Promise.resolve(new Response('{"ok":false,"error":"channel_not_found"}', { status: 200 }));
+    if (slack === 'rate1' && n === 0) { n = -1; return Promise.resolve(new Response('{"ok":false}', { status: 429, headers: { 'Retry-After': '30' } })); }
+    if (slack === 'rate1' && n < 0) n = 0;
     if (slack === 'rate') return Promise.resolve(new Response('{"ok":false,"error":"ratelimited"}', { status: 429, headers: { 'Retry-After': '30' } }));
     n += 1;
     return Promise.resolve(new Response(JSON.stringify({ ok: true, ts: `17000.${n}` }), { status: 200 }));
@@ -67,7 +70,7 @@ const slackCalls = (calls: Call[]) => calls.filter((c) => c.url.startsWith('http
 
 function setup() {
   S.resetSlack();
-  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0, maxLines: 20, maxPending: 60 });
+  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0, maxLines: 20, maxPending: 60, claimWaitMs: 1, claimTries: 3 });
   Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
   Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
 }
@@ -212,9 +215,11 @@ Deno.test('سلاك: تعطله أو بطؤه أو رفضه لا يُفشل ال
         if (mode === 'hang') assertEquals(settled, false, 'المستدعي لم ينتظر سلاك');
         await p;   // لا يرمي
         await S.slackIdle();
-        // أم فشلت: لا رد ولا إعادة
+        // أم فشلت: لا رد ولا إعادة. الرفض الصريح يحرر الحجز، والمهلة الغامضة تبقيه فارغًا فلا أم ثانية
         assertEquals(slackCalls(calls).length, 1, mode);
-        assertEquals(client.rows.size, 0);
+        const left = [...client.rows.values()];
+        assertEquals(left.length, mode === 'hang' ? 1 : 0, mode);
+        assert(left.every((r) => r.ts === ''));
       }, { slack: mode });
     } finally { teardown(); }
   }
@@ -316,4 +321,137 @@ Deno.test('سلاك: ترحيل الجدول في القائمة ومتسامح 
   assert(MIGRATIONS.includes(name));
   assertEquals((MIGRATION_GATES as Record<string, string[]>)[name][0], 'tolerant');
   assert((MIGRATION_GATES as Record<string, string[]>)[name][1].length > 20);
+});
+
+Deno.test('سلاك: نص المستخدم لا يصير أمرًا (<!channel> ورابط مقنّع)، والنطاق غير السليم يُطمس', async () => {
+  assertEquals(S.maskEmail('a@<!channel>.co'), 'a***@***');
+  assertEquals(S.maskEmail('a@<https://x|y>.co'), 'a***@***');
+  assertEquals(S.maskEmail('<x@b.co'), '****@b.co');
+  assertEquals(S.slackEscape('a & <!here> <https://x|y>'), 'a &amp; &lt;!here&gt; &lt;https://x|y&gt;');
+  setup();
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      for (const to of ['a@<!channel>.co', 'a@<https://evil.example/login|verify-ops>.co']) {
+        await sendCounted(client, to, 'رمز', '<p>x</p>', { kind: 'code', source: 'leaders-api', cap: 80, key: 'k', purpose: 'دخول مشارك' });
+      }
+      S.slackPost('alerts', S.alertLine('mail_failed', { error: 'bad <!channel> <https://x|y>' }), { client });
+      S.slackPost('mail', S.mailLine({ kind: 'notify', to: 'b@c.co', source: 's', reason: '<!here>' }), { client });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      const replies = sc.filter((c) => c.body.thread_ts).map((c) => c.body.text as string);
+      assert(replies.length >= 3, replies.join('\n'));
+      for (const t of replies) assert(!/[<>]/.test(t), t);
+      assert(replies.some((t) => t.includes('a***@***')), replies.join('\n'));
+      assert(!JSON.stringify(sc.map((c) => c.body)).includes('evil.example'));
+      assert(replies.some((t) => t.includes('&lt;!channel&gt;')), replies.join('\n'));
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: الحجز قبل نشر الأم: نسخة أخرى حجزت فلا أم ثانية، وتُستعمل سلسلتها حين يظهر ts', async () => {
+  setup();
+  Object.assign(S.SLACK, { claimWaitMs: 5, claimTries: 20 });
+  const client = fakeDb();
+  const key = `${S.riyadhDay()}|codes`;
+  client.rows.set(key, { day: S.riyadhDay(), category: 'codes', ts: '' });
+  setTimeout(() => { client.rows.get(key)!.ts = '999.1'; }, 20);
+  try {
+    await withNet(async (calls) => {
+      await S.slackPost('codes', 'one', { client });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 1, 'لا أم ثانية');
+      assertEquals(sc[0].body.thread_ts, '999.1');
+      assertEquals(sc[0].body.text, 'one');
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: حجز لا يكتمل ينشر الدفعة بلا سلسلة، وإدراج يفشل لا ينشر أمًّا لا يعرفها الجدول', async () => {
+  setup();
+  Object.assign(S.SLACK, { claimWaitMs: 1, claimTries: 3 });
+  const stuck = fakeDb();
+  stuck.rows.set(`${S.riyadhDay()}|mail`, { day: S.riyadhDay(), category: 'mail', ts: '' });
+  try {
+    await withNet(async (calls) => {
+      await S.slackPost('mail', 'm1', { client: stuck });
+      await S.slackIdle();
+      let sc = slackCalls(calls);
+      assertEquals(sc.length, 1);
+      assertEquals(sc[0].body.thread_ts, undefined);
+      assertEquals(sc[0].body.text, '📨 بريد لم يصل\nm1');
+      S.resetSlack();
+      const broken = fakeDb({ insertError: { code: 'XX000', message: 'boom' } });
+      await S.slackPost('codes', 'c1', { client: broken });
+      await S.slackPost('codes', 'c2', { client: broken });
+      await S.slackIdle();
+      sc = slackCalls(calls).slice(1);
+      assertEquals(sc.map((c) => c.body.text), ['🔐 رموز الدخول\nc1', '🔐 رموز الدخول\nc2']);
+      assert(sc.every((c) => c.body.thread_ts === undefined));
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: ما في الطابور حين يصل 429 يُحسب في المتروك ويُذكر بعد التوقف', async () => {
+  setup();
+  const client = fakeDb();
+  const day = S.riyadhDay();
+  client.rows.set(`${day}|codes`, { day, category: 'codes', ts: '1.1' });
+  client.rows.set(`${day}|mail`, { day, category: 'mail', ts: '2.2' });
+  const realNow = Date.now;
+  try {
+    await withNet(async (calls) => {
+      S.slackPost('codes', 'c1', { client });
+      S.slackPost('codes', 'c2', { client });
+      S.slackPost('mail', 'm1', { client });
+      await S.slackIdle();
+      assertEquals(slackCalls(calls).length, 1, 'بعد 429 لا طلب');
+      const later = realNow() + 31e3;
+      Date.now = () => later;
+      await S.slackPost('codes', 'c3', { client });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 2);
+      assert((sc[1].body.text as string).includes('(تُرك 3 سطرًا لازدحام القناة)'), sc[1].body.text);
+    }, { slack: 'rate1' });
+  } finally { Date.now = realNow; teardown(); }
+});
+
+Deno.test('سلاك: رسالة ربط انتهت مهلتها (قد تكون وصلت) يبقى حجزها فلا تتكرر', async () => {
+  setup();
+  S.SLACK.timeoutMs = 30;
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      assertEquals(await S.slackHello(client), 'failed');
+      assertEquals(await S.slackHello(client), 'exists');
+      assertEquals(slackCalls(calls).length, 1);
+    }, { slack: 'hang' });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: رمز leaders-api بلا مفتاح البريد يُبلَّغ تعذّرًا في سلسلة الرموز، وغير الرمز في سلسلة البريد', async () => {
+  setup();
+  const fake = fakeDb();
+  Object.assign(db as any, { from: fake.from, schema: () => ({ from: fake.from }) });
+  const key = CONFIG.resendKey;
+  (CONFIG as any).resendKey = '';
+  try {
+    await withNet(async (calls) => {
+      let err: any = null;
+      try { await sendMail('Pat@Corp.com', 'رمز', '<p>123456</p>', [], { kind: 'code', purpose: 'دخول مشارك' }); } catch (e) { err = e; }
+      assertEquals(err?.code, 'mail_unconfigured', 'يبقى الخطأ للمستدعي');
+      try { await sendMail('lee@corp.com', 'تذكير', '<p>x</p>', [], { kind: 'notify' }); } catch { /* متوقع */ }
+      await S.slackIdle();
+      const texts = slackCalls(calls).map((c) => c.body.text);
+      assert(texts.includes('❌ تعذّر · دخول مشارك · p***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
+      assert(texts.includes('notify · l***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
+      assert(!texts.some((t) => t.includes('123456')));
+    });
+  } finally {
+    (CONFIG as any).resendKey = key;
+    delete (db as any).from; delete (db as any).schema;
+    teardown();
+  }
 });

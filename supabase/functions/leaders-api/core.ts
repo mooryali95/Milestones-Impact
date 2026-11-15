@@ -6,7 +6,7 @@ import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
 import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
-import { slackUse } from '../_shared/slack.ts';
+import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
@@ -217,7 +217,12 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 // purpose: غرض الرمز كما يظهر في سلسلة الرموز في سلاك (دخول مشارك، دخول جهة...)
 export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null }: { kind?: MailKind; ref?: string | null; purpose?: string | null } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
-  if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
+  if (!CONFIG.resendKey) {
+    // يُبلَّغ في سلاك كما تبلغه الدوال الأخرى من sendCounted: سلاك هو الاحتياط حين يتعطل البريد
+    if (kind === 'code') slackCode(db, { status: 'failed', purpose, to, source: 'leaders-api', reason: 'mail_unconfigured' });
+    else slackMail(db, { kind, to, source: 'leaders-api', reason: 'mail_unconfigured' });
+    throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
+  }
   const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {

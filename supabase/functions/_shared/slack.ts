@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -36,13 +36,18 @@ export function parentText(category: SlackCategory, now = Date.now()) {
   return `${c.icon} ${c.label} · ${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-// الحرف الأول والنطاق وحدهما
+// الحرف الأول والنطاق وحدهما، والنطاق بحروف النطاقات وحدها: ما سواها (< > ! |) يُطمس كله
 export function maskEmail(email: unknown) {
   const e = String(email ?? '').trim().toLowerCase();
   const at = e.lastIndexOf('@');
   if (at < 1) return '***';
-  return `${e[0]}***@${e.slice(at + 1)}`;
+  const first = /[a-z0-9]/.test(e[0]) ? e[0] : '*';
+  const domain = e.slice(at + 1);
+  return `${first}***@${/^[a-z0-9.-]+$/.test(domain) ? domain : '***'}`;
 }
+
+// نص من خارج المنصة لا يصير أمرًا في سلاك (<!channel> ورابط مقنّع): الرموز الثلاثة تُرمَّز في كل سطر
+export const slackEscape = (t: string) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // ── الاستدعاء: مهلة قصيرة، ولا إعادة ──
 let pausedUntil = 0;
@@ -78,11 +83,14 @@ async function post(text: string, threadTs?: string): Promise<Sent> {
 }
 
 // ── سلسلة اليوم لكل فئة ──
-type Thread = { ts: string } | { flat: true } | { fail: true };
+// cache=false: سلسلة لا يعرفها الجدول، تُستعمل لهذه الدفعة ولا تُحفظ
+type Thread = { ts: string; cache?: boolean } | { flat: true } | { fail: true; error?: string };
 const threads = new Map<string, Promise<Thread>>();
 let missingUntil = 0;
 const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01' || e?.code === 'PGRST205' || /slack_threads/.test(String(e?.message || ''));
 
+// الحجز قبل النشر (كرسالة الربط): الصف (day, category, ts='') أولًا، ومن ينجح إدراجه وحده ينشر الأم ثم يكتب ts.
+// نسخة أخرى سبقت: تنتظر ts قليلًا، وإن لم يظهر نشرت هذه الدفعة بلا سلسلة
 async function findOrCreate(client: Client, category: SlackCategory, day: string): Promise<Thread> {
   if (!client || missingUntil > Date.now()) return { flat: true };
   const read = () => tableOf(client).select('ts').eq('day', day).eq('category', category).maybeSingle();
@@ -93,14 +101,32 @@ async function findOrCreate(client: Client, category: SlackCategory, day: string
     return { flat: true };
   }
   if (data?.ts) return { ts: String(data.ts) };
+  const waitOther = async (): Promise<Thread> => {
+    for (let i = 0; i < SLACK.claimTries; i++) {
+      await sleep(SLACK.claimWaitMs);
+      const again = await read();
+      if (again.data?.ts) return { ts: String(again.data.ts) };
+    }
+    return { flat: true };
+  };
+  if (data) return await waitOther();
+  const claim = await tableOf(client).insert({ day, category, ts: '' });
+  if (claim.error?.code === '23505') return await waitOther();
+  if (claim.error) {
+    if (isMissing(claim.error)) missingUntil = Date.now() + SLACK.missingTableMs;
+    console.error('slack_threads claim:', claim.error.message || claim.error);
+    return { flat: true };
+  }
+  const drop = () => tableOf(client).delete().eq('day', day).eq('category', category).eq('ts', '');
   const parent = await post(parentText(category));
-  if (!parent.ok || !parent.ts) { console.error('slack parent:', parent.error); return { fail: true }; }
-  const ins = await tableOf(client).insert({ day, category, ts: parent.ts });
-  if (ins.error?.code === '23505') {
-    // نسخة أخرى سبقت: سلسلتها هي المعتمدة
-    const again = await read();
-    if (again.data?.ts) return { ts: String(again.data.ts) };
-  } else if (ins.error) console.error('slack_threads insert:', ins.error.message || ins.error);
+  if (!parent.ok || !parent.ts) {
+    console.error('slack parent:', parent.error);
+    // المهلة غامضة (قد تكون الأم نُشرت): يبقى الحجز فلا تُنشر أم ثانية، وبقية اليوم بلا سلسلة. الرفض الصريح يحرر الحجز
+    if (parent.ok || parent.error !== 'timeout') await drop();
+    return { fail: true, error: parent.error };
+  }
+  const upd = await tableOf(client).update({ ts: parent.ts }).eq('day', day).eq('category', category);
+  if (upd.error) { console.error('slack_threads update:', upd.error.message || upd.error); return { ts: parent.ts, cache: false }; }
   return { ts: parent.ts };
 }
 function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
@@ -110,7 +136,7 @@ function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
     t = findOrCreate(client, category, key.slice(0, 10)).catch((e) => { console.error('slack thread:', e); return { flat: true } as Thread; });
     threads.set(key, t);
     // ما ليس سلسلة لا يُحفظ: يُعاد البحث في الرسالة التالية
-    t.then((r) => { if (!('ts' in r)) threads.delete(key); });
+    t.then((r) => { if (!('ts' in r) || r.cache === false) threads.delete(key); });
   }
   return t;
 }
@@ -130,12 +156,15 @@ async function drain() {
     const shown = lines.slice(0, SLACK.maxLines);
     let text = shown.join('\n');
     if (lines.length > shown.length) text += `\n(و${lines.length - shown.length} أخرى من النوع نفسه)`;
+    const carried = dropped;
     if (dropped) { text += `\n(تُرك ${dropped} سطرًا لازدحام القناة)`; dropped = 0; }
+    // ما لم يُنشر لازدحام (429 أو التوقف بعده) يُحسب في المتروك فيُذكر في أول رسالة بعده
+    const lost = (error?: string) => { if (error === 'paused' || error === 'rate_limited') dropped += carried + lines.length; };
     const t = await threadFor(lastClient, category);
-    if ('fail' in t) continue;
+    if ('fail' in t) { lost(t.error); continue; }
     const c = SLACK_CATEGORIES[category];
     const r = 'ts' in t ? await post(text, t.ts) : await post(`${c.icon} ${c.label}\n${text}`);
-    if (!r.ok) console.error('slack post:', category, r.error);
+    if (!r.ok) { console.error('slack post:', category, r.error); lost(r.error); }
   }
 }
 function start() {
@@ -157,7 +186,7 @@ export function slackPost(category: SlackCategory, text: string, { client }: { c
     if (!slackConfigured() || !SLACK_CATEGORIES[category]) return Promise.resolve();
     slackUse(client);
     if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; return pump ?? Promise.resolve(); }
-    const line = String(text || '').slice(0, 600);
+    const line = slackEscape(String(text || '').slice(0, 600));
     const list = pending.get(category) ?? [];
     list.push(line);
     pending.set(category, list);
@@ -196,15 +225,17 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
     if (error) return 'no_table';
     if (data?.length) return 'exists';
     // الحجز قبل الإرسال: نسختان معًا لا ترسلان مرتين
-    const claim = await tableOf(client).insert({ day: riyadhDay(), category: 'hello', ts: '' });
+    const day = riyadhDay();
+    const claim = await tableOf(client).insert({ day, category: 'hello', ts: '' });
     if (claim.error) return claim.error.code === '23505' ? 'exists' : 'failed';
     const r = await post(SLACK_HELLO);
     if (!r.ok) {
       console.error('slack hello:', r.error);
-      await tableOf(client).delete().eq('category', 'hello');
+      // المهلة غامضة (قد تكون وصلت): يبقى الحجز فلا تتكرر. الرفض الصريح يحرره فتُعاد في الساعة التالية
+      if (r.error !== 'timeout') await tableOf(client).delete().eq('day', day).eq('category', 'hello');
       return 'failed';
     }
-    await tableOf(client).update({ ts: r.ts }).eq('category', 'hello');
+    await tableOf(client).update({ ts: r.ts }).eq('day', day).eq('category', 'hello');
     return 'sent';
   } catch (e) { console.error('slack hello:', e); return 'failed'; }
 }
