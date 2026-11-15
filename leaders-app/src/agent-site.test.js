@@ -49,7 +49,7 @@ describe('المساعد الآلي في الموقع', () => {
     expect(ci).toMatch(/\n\s+deploy agent-chat\n/);
     expect(ci).toMatch(/deno test [^\n]*supabase\/functions\/agent-chat\//);
     expect(read('.github/workflows/deploy-leaders-api.yml')).toMatch(/\n\s+deploy agent-chat\n/);
-    const sql = read('supabase/migrations/20261115150000_leaders_agent_conversations.sql');
+    const sql = read('supabase/migrations/20261115170000_leaders_agent_conversations.sql');
     expect(gateOf(sql).gate).toBe('tolerant');
     expect(sql).toMatch(/revoke all on leaders\.conversations, leaders\.conversation_messages, leaders\.agent_spend_daily from anon, authenticated;/);
   });
@@ -70,7 +70,7 @@ describe('المساعد الآلي في الموقع', () => {
     await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
       create role anon; create role authenticated; create role service_role;
       create table public.contact_requests (id uuid primary key default gen_random_uuid());`);
-    const sql = read('supabase/migrations/20261115150000_leaders_agent_conversations.sql');
+    const sql = read('supabase/migrations/20261115170000_leaders_agent_conversations.sql');
     await db.exec(sql);
     await db.exec(sql);
     const one = async (q, p) => Object.values((await db.query(q, p)).rows[0] ?? {})[0] ?? null;

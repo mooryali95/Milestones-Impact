@@ -149,4 +149,4 @@ begin
 end;
 $$;
 
-insert into leaders.schema_migrations (name) values ('20261115150000_leaders_agent_conversations') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261115170000_leaders_agent_conversations') on conflict do nothing;

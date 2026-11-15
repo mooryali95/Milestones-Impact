@@ -543,7 +543,7 @@ Deno.test('الأسعار: الاحتياط لا يقل عن أعلى سعر ف�
 });
 
 Deno.test('الحذف بعد 90 يومًا لا يتوقف على تشغيل المساعد: مهمة مجدولة في الترحيل، واحتياط قبل فحص التفعيل', async () => {
-  const sql = await Deno.readTextFile(new URL('../../migrations/20261115150000_leaders_agent_conversations.sql', import.meta.url));
+  const sql = await Deno.readTextFile(new URL('../../migrations/20261115170000_leaders_agent_conversations.sql', import.meta.url));
   assertMatch(sql, /cron\.schedule\('leaders-agent-purge', '[^']+', 'select leaders\.agent_purge_expired\(\)'\)/);
   assertMatch(sql, /delete from leaders\.conversations where contact_request_id is null and expires_at < now\(\)/);
   const off = setup({}, { enabled: false });
