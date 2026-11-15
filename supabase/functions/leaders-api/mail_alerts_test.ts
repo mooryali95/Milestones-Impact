@@ -2,7 +2,7 @@
 // وتجربة قناة التنبيه للمدير الأعلى وحده بلا كشف قيم القناتين.
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { CONFIG, db, QUEUE_ALERT_HOURS, stuckQueueAlert } = await import('./core.ts');
+const { CONFIG, db, QUEUE_ALERT_HOURS, raiseAlert, stuckQueueAlert } = await import('./core.ts');
 const { alertTest, weeklyHealth } = await import('./system.ts');
 const { MIGRATIONS } = await import('./migrations.js');
 
@@ -28,13 +28,13 @@ function install(route: (table: string, ops: Op[]) => Res) {
 }
 
 // الشبكة محاكاة: Resend والرابط، ولا يخرج طلب حقيقي
-async function withFetch<T>(fn: (calls: { url: string; body: any }[]) => Promise<T>, { hookStatus = 200 } = {}) {
+async function withFetch<T>(fn: (calls: { url: string; body: any }[]) => Promise<T>, { hookStatus = 200, resendStatus = 200 } = {}) {
   const real = globalThis.fetch;
   const calls: { url: string; body: any }[] = [];
   globalThis.fetch = ((url: string | URL, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     calls.push({ url: String(url), body });
-    if (String(url).includes('resend.com')) return Promise.resolve(new Response('{"id":"re_1"}', { status: 200 }));
+    if (String(url).includes('resend.com')) return Promise.resolve(new Response(resendStatus === 200 ? '{"id":"re_1"}' : '{"message":"down"}', { status: resendStatus }));
     return Promise.resolve(new Response('ok', { status: hookStatus }));
   }) as typeof fetch;
   try { return await fn(calls); } finally { globalThis.fetch = real; }
@@ -96,6 +96,47 @@ Deno.test('P1-12: رسالة بقيت في الطابور أكثر من ست س�
     });
     assertEquals(marks.has('q4'), true);
   } finally { restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+// قبل اختبار البريد الناجح: الفشل يرفع المهلة فلا يبقى في النسخة ما يحجب ما بعده
+Deno.test('P1-12: بريد الطابور المتأخر فشل: تعيده الساعة التالية ولا تحجبه مهلة الست ساعات', async () => {
+  const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
+  Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const queue = [{ id: 'f1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share' }];
+  const marks = new Set<string>();
+  const restore = install((t, ops) => {
+    if (t === 'mail_queue') return { data: queue.filter((m) => m.created_at < String(arg(ops, 'lt'))), error: null };
+    if (t === 'audit_log' && has(ops, 'insert')) {
+      for (const r of ([] as any[]).concat(arg(ops, 'insert', 0))) if (r.action === 'mail.queue-stuck') marks.add(r.entity_id);
+      return { error: null };
+    }
+    if (t === 'audit_log' && has(ops, 'eq', 'action', 'mail.queue-stuck')) return { data: (arg(ops, 'in') as string[]).filter((id) => marks.has(id)).map((entity_id) => ({ entity_id })), error: null };
+    return { data: [], count: 0, error: null };
+  });
+  try {
+    await withFetch(async (calls) => {
+      assertEquals(await stuckQueueAlert(), { stuck: 1, alerted: 0 });
+      assertEquals(await stuckQueueAlert(), { stuck: 1, alerted: 0 });
+      // محاولتا بريد لا واحدة: الثانية لم تحجبها مهلة الأولى الفاشلة
+      assertEquals(resend(calls).length, 2);
+    }, { hookStatus: 500, resendStatus: 500 });
+    assertEquals(marks.has('f1'), false);
+  } finally { restore(); Object.assign(CONFIG, saved); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('P1-12: دفعة متزامنة من تنبيه mail_cap رابط واحد وبريد واحد، فلا يُستنفد احتياط البريد', async () => {
+  const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
+  Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const restore = install(() => ({ data: [], count: 0, error: null }));
+  try {
+    await withFetch(async (calls) => {
+      const rs = await Promise.all(Array.from({ length: 10 }, () => raiseAlert('mail_cap', { source: 'leaders-api', kind: 'code' })));
+      assertEquals(rs.filter((r) => !r.cooled).length, 1);
+      assertEquals([hooks(calls).length, resend(calls).length], [1, 1]);
+    });
+  } finally { restore(); Object.assign(CONFIG, saved); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });
 
 Deno.test('P1-12: بريد الطابور المتأخر احتياط: لا يُرسل إن وصل الرابط، ومرة في ست ساعات إن لم يصل، وما لم يصل يُعاد', async () => {

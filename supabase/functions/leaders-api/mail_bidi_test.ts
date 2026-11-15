@@ -40,6 +40,11 @@ Deno.test('العنوان الظاهر: القيمة المتغيرة فيه م�
   const s = mailShell(mailTitle`وصلتنا رسالتكم، ${'<b>J&J</b>'}`, '');
   assertEquals(h1(s), 'وصلتنا رسالتكم، <bdi>&lt;b&gt;J&amp;J&lt;/b&gt;</bdi>');
   assert(s.includes('<title>وصلتنا رسالتكم، &lt;b&gt;J&amp;J&lt;/b&gt;</title>'));
+  // اسم المبادرة يكتبه المشارك، وأول ما يراه الراعي
+  const { sponsorMail } = await import('./capstone.ts');
+  const { verifyMail } = await import('./tracking.ts');
+  assertEquals(h1(sponsorMail('خالد', 'سارة', 'Lean Ops.', 'https://leaders.test/s/x')), 'طلب تأييد مبادرة: <bdi>Lean Ops.</bdi>');
+  assertEquals(h1(verifyMail('خالد', 'سارة', 'KPI Hub (v2)', 'تقرير', 'https://leaders.test/v/x')), 'تأكيد أثر مبادرة: <bdi>KPI Hub (v2)</bdi>');
   // العنوان الثابت كما هو، مرمّز مرة واحدة
   assertEquals(h1(mailShell('رمز & دخول', '')), 'رمز &amp; دخول');
 });

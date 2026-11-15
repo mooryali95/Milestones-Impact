@@ -5,7 +5,7 @@
 // vitest)، وهنا القراءة والكتابة والبريد فقط. كل شاشة وتقرير يقرأ
 // الملخص نفسه من trackingSummary، فلا يُحسب «على المسار» بطريقتين.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail } from './core.ts';
-import { bdi, mailNote, mailShell, mailText } from '../_shared/mail.ts';
+import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award } from './participant.ts';
 import { isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail } from './logic.js';
 import {
@@ -90,8 +90,8 @@ export async function save(p: any, b: Body) {
 }
 
 // ── تأكيد الراعي ──
-function verifyMail(sponsor: string | null, who: string, initiative: string, title: string, link: string) {
-  return mailShell(`تأكيد أثر مبادرة: ${initiative}`,
+export function verifyMail(sponsor: string | null, who: string, initiative: string, title: string, link: string) {
+  return mailShell(mailTitle`تأكيد أثر مبادرة: ${initiative}`,
     mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} أرسل ${bdi(who)} «${bdi(title)}» لمبادرة «${bdi(initiative)}» التي أيدتها راعيًا لها في جهتك.`)
     + mailText('نطلب منك تأكيد الأرقام: هل تعكس قيم المؤشرات وحالة المعالم ما تراه فعلًا في الجهة؟ تقرأها من الرابط، ثم تؤكد أو تعترض بملاحظة.')
     + mailButton(link, 'راجع الأرقام وأكّدها')

@@ -401,6 +401,8 @@ async function raterByToken(h: string) {
   if (r) return r;
   const { data, error } = await db.from('raters').select(sel).contains('token_hashes', [h]).limit(1).maybeSingle();
   if (error) { if (missingColumn(error)) return null; throw error; }
+  // نسخة سابقة كتبت token_hash وحده بعد الترحيل (إعادة دعوة بعد إلغاء مثلًا): المصفوفة قديمة فلا يُوثق بها، والأحدث وحده يعمل
+  if (data?.token_hash && Array.isArray(data.token_hashes) && !data.token_hashes.includes(data.token_hash)) return null;
   return data;
 }
 async function raterFrom(t: unknown) {

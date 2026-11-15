@@ -2,7 +2,7 @@
 // كلاهما صالح حتى الإغلاق ومرفوضان بعده؛ والإغلاق 23:59 بتوقيت الرياض، ويوم الإغلاق يُعرض بيوم الرياض.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { db, Fail } = await import('./core.ts');
+const { db, Fail, hash } = await import('./core.ts');
 const FB = await import('./feedback360.ts');
 const { raterGet, tokenPatch } = await import('./impact.ts');
 const { closesAtRiyadh } = await import('./feedback360.js');
@@ -131,6 +131,24 @@ Deno.test('P1-14: قبل ترحيل العمود يعمل الرابط الأح�
     const raters = t.raters as Row[];
     assertEquals(raters.some((r) => 'token_hashes' in r), false);
     await at(6, () => ok(cap.tokens[2]));
+  } finally { cap.restore(); }
+});
+
+Deno.test('P1-14: بعد الترحيل كتب الإصدار السابق token_hash وحده (إعادة دعوة بعد إلغاء): الرابط الملغى مرفوض والأحدث يعمل', async () => {
+  const t = world();
+  const cap = captureTokens();
+  try {
+    await FB.advisorDecide(E, { cycle_id: CYCLE, decision: 'approve' });
+    const [a] = cap.tokens;
+    const r = (t.raters as Row[])[0];
+    assertEquals(r.token_hashes, [r.token_hash]);
+    // الإصدار السابق: إلغاء ثم دعوة جديدة تكتب token_hash وحده، فتبقى المصفوفة على الرابط الملغى
+    const b = 'b'.repeat(43);
+    Object.assign(r, { status: 'invited', token_hash: await hash(b) });
+    await at(1, async () => {
+      await assertRejects(() => raterGet({ t: a }), Fail, 'أُلغي');
+      await ok(b);
+    });
   } finally { cap.restore(); }
 });
 

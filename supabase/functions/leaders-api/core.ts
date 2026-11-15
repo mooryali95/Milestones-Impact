@@ -655,13 +655,14 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
   const windowMs = alertCooldown(kind);
   const cooled = { cooled: true, webhook: false, email: false };
   if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
+  // المهلة تُحجز قبل أول انتظار: دفعة متزامنة (رموز محجوبة بالسقف) تنبيه واحد لا تستنفد احتياط البريد
+  if (windowMs > 0) lastAlert.set(kind, Date.now());
   try {
     if (windowMs > 0) {
       const since = new Date(Date.now() - windowMs).toISOString();
       const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
         .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
       if (!error && (count ?? 0) > 0) return cooled;
-      lastAlert.set(kind, Date.now());
     }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
@@ -675,6 +676,8 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
     const email = await sendMail(CONFIG.alertEmail, alertSubject(kind), alertMail(kind, detail, windowMs), [], { kind: 'alert' })
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
+    // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
+    if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
     return { cooled: false, webhook, email };
   } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false }; }
 }
