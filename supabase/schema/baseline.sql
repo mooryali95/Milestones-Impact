@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115130000_leaders_slack_threads
+-- as-of migration: 20261115160000_leaders_capstone_shares
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -115,6 +115,44 @@ create table if not exists leaders.auth_sessions (
   constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text, 'demo'::text, 'switch'::text]))),
   constraint auth_sessions_pkey PRIMARY KEY (id),
   constraint auth_sessions_token_hash_key UNIQUE (token_hash)
+);
+
+create table if not exists leaders.capstone_share_notes (
+  id uuid default gen_random_uuid() not null,
+  share_id uuid not null,
+  participant_id uuid not null,
+  author_name text not null,
+  author_role text,
+  section_key text,
+  body text not null,
+  ip_hash text,
+  read_at timestamp with time zone,
+  archived_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint capstone_share_notes_author_name_check CHECK (((char_length(author_name) >= 2) AND (char_length(author_name) <= 80))),
+  constraint capstone_share_notes_author_role_check CHECK (((author_role IS NULL) OR (char_length(author_role) <= 80))),
+  constraint capstone_share_notes_body_check CHECK (((char_length(body) >= 2) AND (char_length(body) <= 2000))),
+  constraint capstone_share_notes_section_key_check CHECK (((section_key IS NULL) OR (char_length(section_key) <= 60))),
+  constraint capstone_share_notes_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.capstone_shares (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  token_hash text not null,
+  label text not null,
+  allow_notes boolean default false not null,
+  allow_download boolean default true not null,
+  show_levels boolean default false not null,
+  expires_at timestamp with time zone not null,
+  revoked_at timestamp with time zone,
+  views integer default 0 not null,
+  last_viewed_at timestamp with time zone,
+  notified_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint capstone_shares_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80))),
+  constraint capstone_shares_pkey PRIMARY KEY (id),
+  constraint capstone_shares_token_hash_key UNIQUE (token_hash)
 );
 
 create table if not exists leaders.capstone_updates (
@@ -2129,6 +2167,18 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.capstone_share_notes add constraint capstone_share_notes_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.capstone_share_notes add constraint capstone_share_notes_share_id_fkey FOREIGN KEY (share_id) REFERENCES leaders.capstone_shares(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.capstone_shares add constraint capstone_shares_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.capstone_updates add constraint capstone_updates_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.capstones(participant_id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2748,6 +2798,12 @@ CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON leaders.audit_log USING btree
 
 CREATE INDEX IF NOT EXISTS auth_sessions_participant_idx ON leaders.auth_sessions USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS capstone_share_notes_owner ON leaders.capstone_share_notes USING btree (participant_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS capstone_share_notes_share ON leaders.capstone_share_notes USING btree (share_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS capstone_shares_participant ON leaders.capstone_shares USING btree (participant_id, created_at DESC);
+
 CREATE UNIQUE INDEX IF NOT EXISTS capstone_updates_checkpoint ON leaders.capstone_updates USING btree (participant_id, checkpoint) WHERE (checkpoint IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS capstones_status_idx ON leaders.capstones USING btree (status, submitted_at);
@@ -3027,6 +3083,10 @@ alter table leaders.assessments enable row level security;
 alter table leaders.audit_log enable row level security;
 
 alter table leaders.auth_sessions enable row level security;
+
+alter table leaders.capstone_share_notes enable row level security;
+
+alter table leaders.capstone_shares enable row level security;
 
 alter table leaders.capstone_updates enable row level security;
 

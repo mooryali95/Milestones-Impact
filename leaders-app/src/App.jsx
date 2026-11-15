@@ -32,6 +32,7 @@ const Feedback360 = lazy(() => import('./screens/Feedback360.jsx'));
 const Feedback360Entry = lazy(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
 const Rater = lazy(() => import('./screens/Rater.jsx'));
 const Sponsor = lazy(() => import('./screens/Sponsor.jsx'));
+const SharedInitiative = lazy(() => import('./screens/SharedInitiative.jsx'));
 const Outcome = lazy(() => import('./screens/Outcome.jsx'));
 const ExpertApply = lazy(() => import('./screens/ExpertApply.jsx'));
 const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
@@ -128,6 +129,8 @@ export default function App() {
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
   if (location.pathname === '/rate') return <Shell tag="تقدير الأثر" back={false}><Rater /></Shell>;
   if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة" back={false}><Sponsor /></Shell>;
+  // وثيقة مبادرة مشاركة برابط خاص من صاحبها (Share.jsx)، بلا حساب
+  if (location.pathname === '/i') return <Shell tag="وثيقة مبادرة" back={false}><SharedInitiative /></Shell>;
   if (location.pathname === '/outcome') return <Shell tag="تأكيد أثر المبادرة" back={false}><Outcome /></Shell>;
   if (location.pathname === '/expert') return <Shell tag="شبكة الخبراء"><ExpertApply /></Shell>;
   if (location.pathname === '/offer') return <Shell tag="طلب خدمة"><ExpertOffer /></Shell>;

@@ -1691,3 +1691,61 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .term-tip b { display: block; color: var(--brand-gold-light); font-weight: 500; }
 .term.on .term-tip { opacity: 1; visibility: visible; }
 @media (max-width: 520px) { .im-next { flex-wrap: wrap; } .im-chnav .row { width: 100%; } }
+
+/* ── المشاركة والملاحظات (Share.jsx) وصفحة الوثيقة المشاركة (SharedInitiative.jsx) ── */
+.sh-card h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sh-hero { margin: 10px 0 18px; display: grid; gap: 4px; }
+.sh-hero h1 { margin: 0; font-size: 26px; }
+.sh-hero p { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.9; }
+.sh-tabs { margin-bottom: 14px; }
+.sh-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 16px; align-items: start; }
+.sh-grid h2, .sh-panel .card > h2 { font-size: 18px; margin: 0 0 12px; }
+.sh-new { display: grid; gap: 14px; }
+.sh-days { border: 0; padding: 0; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.sh-days legend, .sh-opts legend { font-size: 14px; color: var(--muted); margin-bottom: 6px; padding: 0; }
+.sh-days label { border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; cursor: pointer; font-size: 14px; background: var(--surface); }
+.sh-days label.on { border-color: var(--gold); background: var(--brand-cream-light); }
+.sh-days input { position: absolute; opacity: 0; pointer-events: none; }
+.sh-days label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.sh-opts { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+.sh-opts.inline { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: 8px 0; }
+.sh-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.sh-toggle.off { opacity: .55; cursor: not-allowed; }
+.sh-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.sh-switch { flex: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; transition: background .2s; margin-top: 2px; }
+.sh-switch::after { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: inset-inline-start .2s; }
+.sh-toggle input:checked + .sh-switch { background: var(--gold); }
+.sh-toggle input:checked + .sh-switch::after { inset-inline-start: 19px; }
+.sh-toggle input:focus-visible + .sh-switch { outline: 2px solid var(--gold); outline-offset: 2px; }
+.sh-toggle b { display: block; font-weight: 500; font-size: 15px; } .sh-toggle small { display: block; color: var(--muted); font-size: 13px; }
+.sh-created { border: 1px solid var(--gold); background: var(--brand-cream-light); border-radius: 12px; padding: 14px; display: grid; gap: 8px; }
+.sh-url { background: var(--surface); border: 1px dashed var(--gold); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; font-size: 13px; }
+.sh-links, .sh-note-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sh-link { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.sh-link:not(.active) { background: var(--mist); opacity: .8; }
+.sh-link header { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.sh-link header b { font-size: 16px; }
+.sh-link p { margin: 4px 0 0; }
+.link.danger { color: var(--bad); }
+.sh-empty { padding: 18px 0; text-align: center; }
+.sh-filter { min-width: 200px; margin: 0; }
+.sh-note { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface); }
+.sh-note.new { border-color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+.sh-note header { display: flex; gap: 10px; align-items: center; }
+.sh-note header .grow { display: grid; } .sh-note header small { font-size: 13px; }
+.sh-note > p { margin: 10px 0; line-height: 1.9; white-space: pre-line; }
+.sh-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--brand-gold-light); display: grid; place-items: center; font-size: 15px; flex: none; }
+.sh-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); flex: none; }
+.si-hero { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; background: var(--ink); color: #fff; border-radius: var(--radius); padding: 22px 24px; margin-bottom: 14px; }
+.si-hero .book-eyebrow { color: var(--brand-gold-light); }
+.si-hero h1 { margin: 4px 0; font-size: 26px; color: #fff; }
+.si-hero p { margin: 0; color: rgba(255, 255, 255, .78); line-height: 1.9; }
+.si-hero b { color: #fff; }
+.si-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.si-acts .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, .45); }
+.si-frame { display: block; width: 100%; min-height: 900px; border: 0; background: transparent; }
+.si-note { display: grid; gap: 12px; } .si-note h2 { margin: 0; font-size: 19px; }
+.si-thanks { border-color: var(--gold); }
+.si-foot { text-align: center; margin-top: 14px; }
+.si-closed { text-align: center; }
+@media (max-width: 760px) { .sh-grid { grid-template-columns: 1fr; } .si-hero { padding: 18px; } .si-hero h1 { font-size: 22px; } }

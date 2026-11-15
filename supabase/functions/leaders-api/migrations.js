@@ -126,6 +126,7 @@ export const MIGRATIONS = [
   '20261115110000_leaders_pin_sponsor_seat_guard',
   '20261115120000_leaders_rater_token_hashes',
   '20261115130000_leaders_slack_threads',
+  '20261115160000_leaders_capstone_shares',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -170,4 +171,5 @@ export const MIGRATION_GATES = {
   '20261115110000_leaders_pin_sponsor_seat_guard': ["tolerant", "الدالة تفحص الشرط نفسه قبل استدعاء الدالة (entitlements.ts seatStopped)، فتعمل قبله وبعده"],
   '20261115120000_leaders_rater_token_hashes': ["tolerant", "الدالة تطابق token_hash أولًا ثم token_hashes وتتحمل غياب العمود (impact.ts raterFrom وtokenPatch)، فتعمل قبله وبعده"],
   '20261115130000_leaders_slack_threads': ["tolerant", "الدالة تتحمل غياب الجدول (_shared/slack.ts: findOrCreate ينشر بلا سلاسل، وslackHello لا يرسل)، فقبله يعمل سلاك بلا تجميع"],
+  '20261115160000_leaders_capstone_shares': ["tolerant", "الدالة تتحمل غياب الجدولين (share.ts): قبلهما تقول لوحة المشاركة إن الميزة لم تُفعَّل بعد، ولا يتعطل شيء"],
 };

@@ -22,6 +22,7 @@ import { caseStatus } from '../../../supabase/functions/leaders-api/business-cas
 import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { ChapterNav, Meaning, Navigator } from './InitiativeMap.jsx';
+import SharePanel, { ShareCard } from './Share.jsx';
 import { Annotated } from '../Term.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
@@ -63,12 +64,16 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const [open, setOpen] = useState(null);
   const [summary, setSummary] = useState('');
   const [busy, setBusy] = useState('');
+  const [pdfNote, setPdfNote] = useState('');
+  // المشاركة برابط وملاحظات القراء (Share.jsx): ملخصها في الصفحة، ولوحتها تُفتح مكانها كالفصل
+  const [shares, setShares] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const [msg, setMsg] = useState(null);
   const [skipDiscovery, setSkipDiscovery] = useState(false);
   const [ask, setAsk] = useState(null);
   const [dismissed, setDismissed] = useState(readDismissed);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
   // العودة من الكتيب تفتح الفصل الذي خرج منه المشارك
   useEffect(() => { if (reopen && d?.success) { setOpen(reopen); onReopened(); } }, [reopen, d]);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
@@ -82,6 +87,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           nav={d?.success ? <ChapterNav sections={d.sections} id={open} onOpen={(x) => { setOpen(x); window.scrollTo({ top: 0 }); }} onHandbook={onHandbook} /> : null} />
       </div>
     );
+  }
+  if (shareOpen && d?.success) {
+    return <div className="page"><SharePanel initiative={d.initiative} sections={d.sections} onBack={() => setShareOpen(false)} onChanged={setShares} /></div>;
   }
   if (!d) return <div className="center-load"><div className="spinner" /></div>;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div></div>;
@@ -118,6 +126,21 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     if (!r.success) return setMsg({ err: r.message });
     setD(r);
     setMsg({ ok: 'سُلّمت الوثيقة للمستشار. يصلك بريد بقراره.' });
+  };
+  // ملف PDF جاهز مباشرة، بلا نافذة طباعة (src/lib/brand/pdf.js). التقدم يظهر في الزر نفسه
+  const downloadPdfNow = async () => {
+    setBusy('pdf'); setMsg(null); setPdfNote('لحظة…');
+    const r = await call('capstone.doc');
+    if (!r.success) { setBusy(''); setPdfNote(''); return setMsg({ err: r.message }); }
+    try {
+      const [{ capstoneReport }, { downloadPdf }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/pdf.js')]);
+      const { meta, body } = capstoneReport(r.doc);
+      await downloadPdf(meta, body, { onProgress: setPdfNote });
+    } catch (e) {
+      console.error(e);
+      setMsg({ err: 'تعذّر بناء الملف في هذا المتصفح. افتح «اعرض الوثيقة الاحترافية» واختر «طباعة» ثم «حفظ PDF».' });
+    }
+    setBusy(''); setPdfNote('');
   };
   const view = async () => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح، ثم تُملأ بعد رد الخادم
@@ -287,10 +310,13 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
             {editable && <button className="btn ghost sm" disabled={!!busy} onClick={saveSummary}>{busy === 'summary' ? 'لحظة…' : 'حفظ الملخص'}</button>}
           </section>
 
+          <ShareCard data={shares} onOpen={() => { setShareOpen(true); window.scrollTo({ top: 0 }); }} />
+
           <section className="card cp-act">
             {msg?.err && <div className="alert err">{msg.err}</div>}
             {msg?.ok && <div className="alert ok">{msg.ok}</div>}
             <button className="btn ghost block" disabled={!!busy} onClick={view}>{busy === 'doc' ? 'لحظة…' : 'اعرض الوثيقة الاحترافية'}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={downloadPdfNow} aria-live="polite">{busy === 'pdf' ? pdfNote || 'لحظة…' : 'تحميل PDF'}</button>
             {editable && (
               <>
                 <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'سلّم الوثيقة للمستشار'}</button>
