@@ -4,7 +4,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { cohortSave } = await import('./programs.ts');
+const { cohortSave, cohortEnroll } = await import('./programs.ts');
 
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
@@ -196,5 +196,32 @@ Deno.test('عالم الحارس يُقرأ بصفحات: ما بعد الألف
     const e = await failOf(() => cohortSave(admin, second(PB)));
     assertEquals(e.code, 'confirm_move');
     assertEquals(e.extra.affected, 1);
+  } finally { w.restore(); }
+});
+
+// الإلحاق الصريح (admin.cohort-enroll) بالحارس نفسه: كان يسحب التسجيلات ويلحق بدفعة على برنامج آخر بصمت
+const E2 = U(30), E3 = U(31);
+function withTargets(w: ReturnType<typeof world>) {
+  w.tables.cohorts.push({ id: E2, name: 'أفراد ب', organization_id: null, program_id: PB, program_version_id: null, status: 'open', starts_on: '2026-10-01', created_at: '2026-10-01T00:00:00Z', hidden_requirements: [] });
+  w.tables.cohorts.push({ id: E3, name: 'أفراد أ', organization_id: null, program_id: PA, program_version_id: null, status: 'open', starts_on: '2026-10-01', created_at: '2026-10-01T00:00:00Z', hidden_requirements: [] });
+  return w;
+}
+Deno.test('الإلحاق بدفعة على برنامج آخر لمن له تقدم يُرفض بلا تأكيد، ولا يُسحب أحد ولا يُلحق', async () => {
+  const w = withTargets(world());
+  try {
+    const e = await failOf(() => cohortEnroll(admin, { cohort_id: E2, participant_ids: [P1, P2] }));
+    assertEquals(e.code, 'confirm_move');
+    assertEquals(e.extra.affected, 1);
+    assertEquals((e.extra.from as any[])[0].name, 'سفراء 2026');
+    assertEquals((e.extra.to as any[])[0].name, 'أفراد ب');
+    assertEquals(w.tables.enrollments.length, 0);
+  } finally { w.restore(); }
+});
+Deno.test('الإلحاق المؤكد يمر، وعلى البرنامج نفسه أو بلا تقدم لا يُسأل', async () => {
+  const w = withTargets(world());
+  try {
+    assertEquals(((await cohortEnroll(admin, { cohort_id: E3, participant_ids: [P1] })) as any).enrolled, 1);
+    assertEquals(((await cohortEnroll(admin, { cohort_id: E2, participant_ids: [P2] })) as any).enrolled, 1);
+    assertEquals(((await cohortEnroll(admin, { cohort_id: E2, participant_ids: [P1], confirm_move: true })) as any).enrolled, 1);
   } finally { w.restore(); }
 });

@@ -74,7 +74,7 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
   const over = cap > 0 && (c.members || 0) > cap;
   const members = byKey.members && {
     key: 'members', title: 'الأعضاء', ok: byKey.members.ok && !over, action: 'participants',
-    detail: over ? `${c.members} عضوًا وللدفعة ${cap} مقعدًا: زد المقاعد من «تحرير الدفعة» أو انقل بعضهم`
+    detail: over ? (kind === 'org' ? `${c.members} عضوًا وسعة الدفعة التشغيلية ${cap}: ارفعها أو ألغها من «تحرير الدفعة» (مقاعد العقد الملزمة في ملف الجهة)، أو انقل بعضهم` : `${c.members} عضوًا وللدفعة ${cap} مقعدًا: زد المقاعد من «تحرير الدفعة» أو انقل بعضهم`)
       : byKey.members.ok ? `${byKey.members.detail}${cap ? ` · ${cap} مقعدًا` : ''}` : kind === 'org' ? 'لا أحد بعد: شارك رابط تسجيل الجهة' : kind === 'open' ? 'لا أحد بعد' : 'لا أحد بعد: ألحق بها المشاركين من شاشة المشاركين',
   };
   const pending = c.pending_approval || 0;
@@ -135,6 +135,7 @@ export function wizardBody(v, { canPin = true } = {}) {
     name: String(v.name || '').trim(), organization_id: v.kind === 'org' ? v.organization_id : null, program_id: v.program_id,
     program_version_id: v.pin && canPin ? 'latest' : '', status: v.status || 'open',
     ...(v.starts_on ? { starts_on: v.starts_on } : {}), ...(v.ends_on ? { ends_on: v.ends_on } : {}),
-    ...(v.capacity ? { capacity: Number(v.capacity) } : {}),
+    // دفعة الجهة بلا سعة من المعالج: مقاعدها من عقد الجهة (P3)، والسعة التشغيلية اختيار لاحق في «تحرير الدفعة»
+    ...(v.capacity && v.kind !== 'org' ? { capacity: Number(v.capacity) } : {}),
   };
 }
