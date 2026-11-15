@@ -277,60 +277,124 @@ export function capacityWarning(org, capacity) {
   return `تنبيه: السعة ${n} تتجاوز مقاعد عقد الجهة (${org.seats}). العقد هو الحد الملزم على الجهة كلها، فلن يُعفى أكثر منه.`;
 }
 
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, defVersion }) {
+// أقسام محرر الدفعة (CohortEditor.jsx): الأساسيات ظاهرة، والرحلة، ثم التنفيذ والمتقدم مطويان. لكل حقل قسم واحد
+export const COHORT_SECTIONS = [
+  { key: 'basics', title: 'الأساسيات' },
+  { key: 'journey', title: 'الرحلة' },
+  { key: 'delivery', title: 'التنفيذ' },
+  { key: 'advanced', title: 'متقدم' },
+];
+
+// حقول الدفعة: المصدر الواحد لتعريف كل حقل، يقرؤه المحرر (CohortEditor.jsx) والمعالج (CohortWizard.jsx) معًا.
+// section: قسمه في المحرر. req: رمز المتطلب لحقول التنفيذ، فتُجمع بالنشاط. isNew: دفعة تُنشأ الآن فلا تُعرض «مغلقة»
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, defVersion, isNew = false }) {
   const orgOf = (v) => orgs.find((o) => o.id === v.organization_id);
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
+  const status = isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running }
+    : isNew ? { planned: COHORT_STATUS.planned, open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS;
   const base = [
-    { name: 'name', label: 'اسم الدفعة' },
+    { name: 'name', label: 'اسم الدفعة', section: 'basics' },
     ...(isDefault ? [] : [{ name: 'organization_id', label: 'الجهة', type: 'select', empty: 'بلا جهة (أفراد)', options: Object.fromEntries(orgs.map((o) => [o.id, o.name])),
-      help: (v) => contractLine(orgOf(v)) }]),
-    { name: 'program_id', label: 'البرنامج', type: 'select', options: Object.fromEntries(programs.filter((p) => !p.archived_at).map((p) => [p.id, p.name])) },
-    {
-      name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: 'تتبع آخر تعديل على البرنامج', options: verN,
-      help: 'التثبيت على نسخة يحمي الدفعة الجارية من أي تعديل لاحق على البرنامج حتى ترقيها بنفسك.',
-    },
-    { name: 'starts_on', label: 'تبدأ', type: 'date' },
-    { name: 'ends_on', label: 'تنتهي', type: 'date' },
-    { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
-    // دفعة الجهة: المقاعد من العقد في سطر الجهة، والسعة التشغيلية مطوية خلف اختيار. دفعة الأفراد والمفتوحة: الحقل هو المصدر الوحيد
-    { name: 'capacity_on', label: 'حدد سعة تشغيلية لهذه الدفعة (اختياري)', type: 'check', show: (v) => !!v.organization_id },
-    { name: 'capacity', label: 'سعة تشغيلية (اختياري)', type: 'number', show: (v) => !!v.organization_id && !!v.capacity_on,
-      help: (v) => capacityWarning(orgOf(v), v.capacity) || 'تنبيهية لتنظيم الدفعة. الحد الملزم هو مقاعد عقد الجهة.' },
-    { name: 'capacity', label: 'المقاعد', type: 'number', show: (v) => !v.organization_id },
+      help: (v) => contractLine(orgOf(v)), section: 'basics' }]),
+    // البرنامج المؤرشف لا يُعرض خيارًا أبدًا
+    { name: 'program_id', label: 'البرنامج', type: 'select', options: Object.fromEntries(programs.filter((p) => !p.archived_at).map((p) => [p.id, p.name])), section: 'basics' },
+    { name: 'starts_on', label: 'تبدأ', type: 'date', section: 'basics' },
+    { name: 'ends_on', label: 'تنتهي', type: 'date', section: 'basics' },
+    { name: 'status', label: 'الحالة', type: 'select', options: status, section: 'basics' },
+    // دفعة الأفراد والمفتوحة: المقاعد هي المصدر الوحيد للسعة فتبقى ظاهرة. دفعة الجهة: مقاعدها من العقد في سطر الجهة
+    { name: 'capacity', label: 'المقاعد', type: 'number', show: (v) => !v.organization_id, section: 'basics' },
     // المخفي كما حُفظ: حقل لا يُعرض ولا يُرسل (show دائمًا false)، يبقى في حال النموذج لمقارنة الإخفاء به
-    { name: 'hidden_before', label: '', type: 'multi', options: {}, show: () => false },
+    { name: 'hidden_before', label: '', type: 'multi', options: {}, show: () => false, section: 'journey' },
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
-      help: (v) => hiddenHelp(v, reqs, defVersion) },
-    { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
-      help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
-    { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
+      help: (v) => hiddenHelp(v, reqs, defVersion), section: 'journey' },
+    {
+      name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: 'تتبع آخر تعديل على البرنامج', options: verN,
+      help: 'التثبيت على نسخة يحمي الدفعة الجارية من أي تعديل لاحق على البرنامج حتى ترقيها بنفسك.', section: 'advanced',
+    },
+    { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR, section: 'advanced',
       help: 'المتجانس يوحّد المحتوى (الرحلة والكتيب والنماذج) للجميع، ويبقى قياس كل مشارك ومساره من نتيجته.' },
-    { name: 'content_level', label: 'مستوى المحتوى للدفعة', type: 'select', options: LVL, show: (v) => v.level_mode === 'uniform' },
-    { name: 'project_mode', label: 'المشروع', type: 'select', options: PROJECT_MODE_AR },
-    { name: 'notes_ar', label: 'ملاحظات', type: 'textarea', rows: 2 },
+    { name: 'content_level', label: 'مستوى المحتوى للدفعة', type: 'select', empty: 'اختر المستوى', options: LVL, show: (v) => v.level_mode === 'uniform', section: 'advanced' },
+    { name: 'project_mode', label: 'المشروع', type: 'select', options: PROJECT_MODE_AR, section: 'advanced' },
+    { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR, section: 'advanced',
+      help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
+    // دفعة الجهة: السعة التشغيلية مطوية خلف اختيار، والحد الملزم مقاعد العقد
+    { name: 'capacity_on', label: 'حدد سعة تشغيلية لهذه الدفعة (اختياري)', type: 'check', show: (v) => !!v.organization_id, section: 'advanced' },
+    { name: 'capacity', label: 'سعة تشغيلية (اختياري)', type: 'number', show: (v) => !!v.organization_id && !!v.capacity_on, section: 'advanced',
+      help: (v) => capacityWarning(orgOf(v), v.capacity) || 'تنبيهية لتنظيم الدفعة. الحد الملزم هو مقاعد عقد الجهة.' },
+    { name: 'notes_ar', label: 'ملاحظات', type: 'textarea', rows: 2, section: 'advanced' },
   ];
   const delivery = [];
   for (const r of reqs.filter((x) => x.active !== false)) {
     const t = reqLabel(r, reqs);
+    const d = { section: 'delivery', req: r.code };
     if (r.kind === 'workshop') {
       delivery.push(
-        { name: `d:${r.code}:format`, label: `${t}: الصيغة`, type: 'select', empty: 'أيام حضورية أو عن بعد (كما في البرنامج)', options: { handbook: 'تدريب ذاتي بالكتيب: كل باب يوم' },
+        { ...d, name: `d:${r.code}:format`, label: `${t}: الصيغة`, type: 'select', empty: 'أيام حضورية أو عن بعد (كما في البرنامج)', options: { handbook: 'تدريب ذاتي بالكتيب: كل باب يوم' },
           help: 'بالكتيب: يكتمل البند بقراءة أبواب الكتيب واجتياز أسئلتها بدل الحضور، وما أُنجز يبقى. أخفِ «قراءة كتيبك» من الدفعة إن صار مكررًا.' },
-        { name: `d:${r.code}:verify`, label: `${t}: توثيق الحضور`, type: 'select', empty: `${INHERIT} (${VERIFY[r.config?.verify || 'qr']})`, options: VERIFY, show: (v) => v[`d:${r.code}:format`] !== 'handbook' },
+        { ...d, name: `d:${r.code}:verify`, label: `${t}: توثيق الحضور`, type: 'select', empty: `${INHERIT} (${VERIFY[r.config?.verify || 'qr']})`, options: VERIFY, show: (v) => v[`d:${r.code}:format`] !== 'handbook' },
       );
     }
     if (r.kind === 'coaching') {
       delivery.push(
-        { name: `d:${r.code}:mode`, label: `${t}: طريقة الجلسة`, type: 'select', empty: `${INHERIT} (${COACH_MODE[r.config?.mode || 'online']})`, options: COACH_MODE },
-        { name: `d:${r.code}:location_ar`, label: `${t}: المكان`, show: (v) => (v[`d:${r.code}:mode`] || r.config?.mode) !== 'online' },
-        { name: `d:${r.code}:booking_url`, label: `${t}: رابط حجز مدربي هذه الدفعة`, dir: 'ltr', help: 'فارغ: رابط البرنامج' },
-        { name: `d:${r.code}:coach_email`, label: `${t}: بريد الموجّه`, type: 'email', dir: 'ltr' },
+        { ...d, name: `d:${r.code}:mode`, label: `${t}: طريقة الجلسة`, type: 'select', empty: `${INHERIT} (${COACH_MODE[r.config?.mode || 'online']})`, options: COACH_MODE },
+        { ...d, name: `d:${r.code}:location_ar`, label: `${t}: المكان`, show: (v) => (v[`d:${r.code}:mode`] || r.config?.mode) !== 'online' },
+        { ...d, name: `d:${r.code}:booking_url`, label: `${t}: رابط حجز مدربي هذه الدفعة`, dir: 'ltr', help: 'فارغ: رابط البرنامج' },
+        { ...d, name: `d:${r.code}:coach_email`, label: `${t}: بريد الموجّه`, type: 'email', dir: 'ltr' },
       );
     }
   }
   if (delivery.length) delivery[0] = { ...delivery[0], help: 'التنفيذ في هذه الدفعة. اتركه فارغًا ليبقى كما في البرنامج.' };
   return [...base, ...delivery];
+}
+
+// تحقق الدفعة، واحد للمعالج والمحرر وبرسائل الخادم نفسها: لكل حقل خطؤه أو لا شيء
+/** @param {any} v */
+export function cohortErrors(v = {}) {
+  const e = {};
+  if (!String(v.name || '').trim()) e.name = 'اكتب اسم الدفعة';
+  if (v.starts_on && v.ends_on && v.ends_on < v.starts_on) e.ends_on = 'تاريخ النهاية قبل البداية';
+  if (v.level_mode === 'uniform' && !v.content_level) e.content_level = 'اختر مستوى المحتوى للدفعة المتجانسة';
+  return e;
+}
+
+// قيم النموذج كما تُرسل: الحقول الظاهرة وحدها (show)، بأنواعها، كما يرسلها Form.jsx
+/** @param {any[]} fields @param {any} v */
+export function cohortOut(fields, v) {
+  const out = {};
+  for (const f of fields) {
+    if (f.show && !f.show(v)) continue;
+    const x = v[f.name];
+    out[f.name] = f.type === 'number' ? (x === '' || x == null ? null : Number(x))
+      : f.type === 'check' ? !!x : f.type === 'multi' ? (Array.isArray(x) ? x : [])
+        : (String(x ?? '').trim() || null);
+  }
+  return out;
+}
+
+// رحلة الدفعة كما يراها المحرر: لكل مرحلة بنودها بأسمائها المقروءة، وما ظهر منها «3 ظاهرة من 4»، ومجموع الدفعة.
+// lock: سبب منع إخفاء بند ظاهر لأن إخفاءه يكسر مرحلة لم تكن مكسورة قبل فتح المحرر (hideBreaksStage كالخادم).
+// warn: ميزة تعتمد على رمز البند (CODE_FEATURES). الإخفاء لا يحذف شيئًا: البند يبقى في القائمة بعلامته
+/** @param {{ stages?: any[], requirements?: any[] }} def @param {string[]} hidden @param {string[]} before */
+export function journeyView(def = {}, hidden = [], before = []) {
+  const stages = def.stages || [];
+  const reqs = (def.requirements || []).filter((r) => r.active !== false);
+  const h = new Set(hidden || []);
+  const was = hideBreaksStage(stages, reqs, before || []);
+  const out = stages.map((st) => {
+    const items = reqs.filter((r) => r.stage_key === st.key).map((r) => {
+      const shown = !h.has(r.code);
+      const broken = shown ? newlyBroken(hideBreaksStage(stages, reqs, [...h, r.code]), was) : [];
+      return {
+        code: r.code, kind: r.kind, required: r.required !== false, shown,
+        title: renderJourneyText(r.title_ar || r.code, { reqs }), label: reqLabel(r, reqs),
+        lock: broken.length ? hideBreaksMessage(broken) : '',
+        warn: CODE_FEATURES[r.code] ? `«${reqLabel(r, reqs)}» ${CODE_FEATURES[r.code]}.` : '',
+      };
+    });
+    return { key: st.key, title: renderJourneyText(st.title_ar || st.key, { reqs }), items, shown: items.filter((x) => x.shown).length, total: items.length };
+  }).filter((st) => st.total);
+  return { stages: out, shown: out.reduce((n, st) => n + st.shown, 0), total: out.reduce((n, st) => n + st.total, 0) };
 }
 
 export function cohortToForm(c = {}) {

@@ -148,3 +148,105 @@ test('جدول الدفعة المثبتة يعرض مراحل نسختها وح
   await dlg.getByRole('button', { name: 'حفظ الجدول' }).click();
   await expect(page.getByRole('status').getByText(/لم تُحفظ مواعيد مرحلة «التأسيس»/)).toBeVisible();
 });
+
+// ── P6: محرر الدفعة بالأقسام ──
+const openEditor = async (page, name) => {
+  await page.locator('.data-table tbody tr', { hasText: name }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  const ed = page.getByRole('dialog', { name: `دفعة: ${name}` });
+  await expect(ed.locator('.ce-stage').first()).toBeVisible();
+  return ed;
+};
+const sw = (ed, label) => ed.getByRole('switch', { name: `إظهار ${label} في رحلة الدفعة` });
+
+for (const width of [1440, 390]) {
+  test(`محرر الدفعة: أربعة أقسام، والرحلة بأسماء مقروءة ومفتاح لكل بند (${width})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
+    const calls = await setup(page);
+    const ed = await openEditor(page, 'سفراء 2026');
+    // الأساسيات ظاهرة، والرحلة مفتوحة، والتنفيذ والمتقدم مطويان بسطر خلاصة
+    await expect(ed.getByLabel('اسم الدفعة')).toHaveValue('سفراء 2026');
+    await expect(ed.getByRole('button', { name: 'الرحلة' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(ed.getByRole('button', { name: 'التنفيذ' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(ed.getByRole('button', { name: 'متقدم' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(ed.locator('.ce-summary')).toContainText(['كما في البرنامج', 'تتبع آخر تعديل على البرنامج']);
+    // البرنامج المؤرشف لا يُعرض خيارًا
+    await expect(ed.locator('#f-program_id option', { hasText: 'برنامج قديم' })).toHaveCount(0);
+    // لكل مرحلة «كذا ظاهرة من كذا»، ومجموع الدفعة، والمخفي يبقى في القائمة بعلامته
+    await expect(ed.locator('.ce-stage', { hasText: 'الانطلاق' }).locator('h5')).toContainText('1 ظاهرة من 2');
+    await expect(ed.locator('.ce-total')).toContainText('4 ظاهرًا من 5 بندًا');
+    await expect(sw(ed, 'تأمل الانطلاق (الانطلاق)')).toHaveAttribute('aria-checked', 'false');
+    await expect(ed).not.toContainText(/T-ATTEND|P-PLAN|\{[a-z]+:/);
+    // المفتاح الكاسر معطل بشرحه
+    await expect(sw(ed, 'خطة المشروع (المشروع)')).toBeDisabled();
+    await expect(ed.locator('#ce-lock-P-PLAN')).toContainText('لا يُخفى: إخفاء هذه البنود يترك مرحلة «المشروع»');
+    await shot(page, 'editor-basics', ed);
+    await ed.locator('.ce-stage').first().scrollIntoViewIfNeeded();
+    await shot(page, 'editor-journey', ed);
+    // إخفاء بند يحفظ hidden_requirements بالرموز نفسها، ولا يُحذف المخفي من قبل
+    await sw(ed, 'قراءة إضافية (المشروع)').click();
+    await expect(sw(ed, 'قراءة إضافية (المشروع)')).toHaveAttribute('aria-checked', 'false');
+    await expect(ed.locator('.ce-stage', { hasText: 'المشروع' }).locator('h5')).toContainText('1 ظاهرة من 2');
+    // التنفيذ مجمع بالنشاط، ومعه افتراضي الجهة
+    await ed.getByRole('button', { name: 'التنفيذ' }).click();
+    await expect(ed.locator('.ce-act legend')).toHaveText(['حضور الأيام التدريبية (يومان) (الانطلاق)']);
+    await expect(ed.getByLabel('حضور الأيام التدريبية (يومان) (الانطلاق): توثيق الحضور')).toBeVisible();
+    await ed.locator('.ce-act').scrollIntoViewIfNeeded();
+    await shot(page, 'editor-delivery', ed);
+    await ed.getByRole('button', { name: 'متقدم' }).click();
+    await expect(ed.getByLabel('نسخة البرنامج')).toBeVisible();
+    await ed.getByLabel('مستويات المشاركين').selectOption('uniform');
+    // خطأ مستوى المحتوى ظاهر ويمنع الحفظ
+    await expect(ed.locator('.ce-err')).toHaveText('اختر مستوى المحتوى للدفعة المتجانسة');
+    await ed.getByLabel('مستوى المحتوى للدفعة').scrollIntoViewIfNeeded();
+    await shot(page, 'editor-advanced', ed);
+    await ed.getByRole('button', { name: 'حفظ', exact: true }).click();
+    await expect(ed.getByRole('alert')).toHaveText('اختر مستوى المحتوى للدفعة المتجانسة');
+    expect(calls.filter((c) => c.action === 'admin.cohort-save')).toHaveLength(0);
+    await ed.getByLabel('مستوى المحتوى للدفعة').selectOption('intermediate');
+    expect(await noOverflow(page)).toBe(true);
+    await ed.getByRole('button', { name: 'حفظ', exact: true }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c1', program_id: 'pb', hidden_requirements: ['R-B', 'P-EXTRA'], level_mode: 'uniform', content_level: 'intermediate' });
+    const body = calls.find((c) => c.action === 'admin.cohort-save');
+    expect(body).not.toHaveProperty('hidden_before');
+    expect(body).not.toHaveProperty('capacity_on');
+  });
+}
+
+test('تغيير البرنامج يعيد تحميل الرحلة، والنسخة تعود إلى «آخر تعديل»', async ({ page }) => {
+  const calls = await setup(page);
+  const ed = await openEditor(page, 'سفراء 2026');
+  await expect(ed.locator('.ce-stage h5').first()).toContainText('الانطلاق');
+  await ed.locator('#f-program_id').selectOption('pa');
+  await expect(ed.locator('.ce-stage h5').first()).toContainText('التأسيس');
+  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pa', program_version_id: '' });
+  await expect(ed.locator('.ce-source').first()).toContainText('برنامج الجهة «برنامج سفراء». اخترت برنامجًا آخر');
+  // الإخفاء نفسه يبقى بالرموز: «تأمل» في التطبيق رمزه R-B فيظهر مخفيًا
+  await expect(sw(ed, 'تأمل (التطبيق)')).toHaveAttribute('aria-checked', 'false');
+  // النسخة من «متقدم» تعيد التحميل كذلك: مراحل النسخة 1 وحدها
+  await ed.getByRole('button', { name: 'متقدم' }).click();
+  await ed.getByLabel('نسخة البرنامج').selectOption('v1');
+  await expect(ed.locator('.ce-stage h5')).toHaveText([/مرحلة النسخة الأولى/]);
+});
+
+test('Esc مع تعديل يسأل قبل الإغلاق، وبلا تعديل يغلق مباشرة', async ({ page }) => {
+  await setup(page);
+  const ed = await openEditor(page, 'دفعة مثبتة');
+  await expect(ed.getByLabel('اسم الدفعة')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(ed).toBeHidden();
+  const again = await openEditor(page, 'دفعة مثبتة');
+  await sw(again, 'بند النسخة الأولى (مرحلة النسخة الأولى)').isDisabled();
+  await again.getByLabel('اسم الدفعة').fill('دفعة مثبتة معدلة');
+  await page.keyboard.press('Escape');
+  const ask = page.getByRole('alertdialog');
+  await expect(ask).toContainText('لديك تعديلات لم تُحفظ');
+  await ask.getByRole('button', { name: 'إلغاء' }).click();
+  await expect(again.getByLabel('اسم الدفعة')).toHaveValue('دفعة مثبتة معدلة');
+  // المثبتة تقرأ رحلتها من نسختها، ودفعة الأفراد مقاعدها ظاهرة في الأساسيات
+  await expect(again.locator('.ce-source').first()).toContainText('الرحلة من النسخة 1 المثبتة (الإطلاق).');
+  await expect(again.getByLabel('المقاعد')).toHaveValue('20');
+  // الروابط إلى ما يُضبط في نوافذه تغلق المحرر بالسؤال نفسه
+  await again.getByRole('button', { name: 'الجدول', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'إغلاق دون حفظ' }).click();
+  await expect(page.getByRole('dialog', { name: 'جدول الدفعة' })).toBeVisible();
+});

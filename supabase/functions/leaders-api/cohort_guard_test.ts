@@ -4,7 +4,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups, cohortDefinitionFor, cohortGroups } = await import('./programs.ts');
+const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups, cohortDefinitionFor, cohortGroups, journeyDefinition } = await import('./programs.ts');
 
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
@@ -297,5 +297,23 @@ Deno.test('جدول الدفعة المثبتة يُحفظ بمراحل النس
     w.tables.cohort_groups = []; w.tables.cohort_group_members = []; w.tables.experts = []; w.tables.placements = [];
     const g: any = await cohortGroups({ cohort_id: C1 });
     assertEquals(g.stages, [{ key: 's9', title_ar: 'مرحلة النسخة' }]);
+  } finally { w.restore(); }
+});
+
+// ── P6: ما يحفظه المحرر من الإخفاء يختفي من رحلة العضو، ولا يُحذف تقدمه ──
+Deno.test('إخفاء بند من المحرر يحفظ hidden_requirements نفسها ويختفي من رحلة عضو الدفعة، وتقدمه باقٍ', async () => {
+  const w = world();
+  try {
+    w.tables.participant_requirements.push({ participant_id: P1, requirement_id: R2, status: 'done' });
+    const before: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(before.requirements.map((r: any) => r.code), ['A-ONE', 'A-TWO']);
+    await cohortSave(admin, { id: C1, hidden_requirements: ['A-TWO'] });
+    assertEquals(w.tables.cohorts[0].hidden_requirements, ['A-TWO']);
+    const after: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(after.requirements.map((r: any) => r.code), ['A-ONE']);
+    assertEquals(w.tables.participant_requirements.filter((r: Row) => r.requirement_id === R2).length, 1);
+    // تعريف الدفعة للمحرر يبقيه بعلامته
+    const d: any = await cohortDefinitionFor({ cohort_id: C1 });
+    assertEquals(d.requirements.find((r: any) => r.code === 'A-TWO').hidden, true);
   } finally { w.restore(); }
 });

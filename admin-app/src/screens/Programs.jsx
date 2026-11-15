@@ -6,8 +6,8 @@
 // المشارك يتبع دفعة جهته الجارية تلقائيًا، ومن ليس له جهة يتبع الدفعة المفتوحة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly, L, LVL, STATUS } from '../leaders.js';
-import { COHORT_STATUS, cohortFields, cohortToForm, formToCohort } from '../methodology.js';
-import Form from '../Form.jsx';
+import { COHORT_STATUS } from '../methodology.js';
+import CohortEditor from './CohortEditor.jsx';
 import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { CohortSchedule } from './Milestones.jsx';
@@ -16,9 +16,7 @@ import CohortVisibility from './CohortVisibility.jsx';
 import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
-import { saveCohort } from '../cohort-guard.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
-import { orgProgram } from '../../../supabase/functions/leaders-api/logic.js';
 
 
 function DiffList({ diff }) {
@@ -44,7 +42,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
   const people = `#/leaders/participants?cohort=${encodeURIComponent(c.id)}`;
   // كل إعدادات الدفعة وما تتبعه في مكان واحد: ما يُضبط للدفعة نفسها، وما يُضبط في برنامجها أو جهتها ويسري عليها
   const tiles = [
-    ['الأساسيات', 'الاسم والجهة والبرنامج ونسخته والمدة والحالة والمقاعد، وصيغة كل نشاط (حضوري أو عن بعد)، والبنود المخفية', on.edit, true],
+    ['الأساسيات', 'الاسم والجهة والبرنامج والمدة والحالة، والرحلة بندًا بندًا (الظاهر والمخفي)، وصيغة كل نشاط، والنسخة والمستويات', on.edit, true],
     ['الجدول', 'موعد كل مرحلة، ويوزَّع تلقائيًا على مدة الدفعة', on.schedule, true],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
     ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
@@ -114,7 +112,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const [d, setD] = useState(null);
   const [wizard, setWizard] = useState(null);
   const onWizard = (preset) => setWizard(preset);
-  const [form, setForm] = useState(null);
+  const [editor, setEditor] = useState(null);
   const [open, setOpen] = useState(null);
   const [compare, setCompare] = useState(null);
   const [cert, setCert] = useState(null);
@@ -195,25 +193,15 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     const parts = [general && 'الجميع (الدفعة المفتوحة)', orgs.length && `الجهات: ${orgs.join('، ')}`, indiv && `${indiv} دفعة أفراد`].filter(Boolean);
     return parts.length ? { on: true, text: `يسري على: ${parts.join(' · ')}` } : { on: false, text: 'لا توجد دفعة على هذا البرنامج بعد، فلا يسري على أي مشارك. أنشئ له دفعة لجهة أو لأفراد متى احتجته.' };
   };
-  const editCohort = (c = {}) => {
-    // دفعة جهة جديدة تُقترح على برنامج الجهة (P4، orgProgram)، والمؤرشف لا يُقترح
-    const pid = c.program_id || orgProgram(d.cohorts, programs, c.organization_id || null)?.program_id || programs.find((p) => p.is_default)?.id;
-    const p = programs.find((x) => x.id === pid);
-    // خيارات البنود من تعريف الدفعة (P5): نسختها المثبتة أو برنامجها الحي، لا البرنامج الحي دائمًا
-    const vid = c.id ? c.program_version_id || '' : p?.versions[0]?.id || '';
-    L('admin.cohort-definition', { ...(c.id ? { cohort_id: c.id } : {}), program_id: pid, program_version_id: vid }).then((pr) => setForm({
-      title: c.id ? `دفعة: ${c.name}` : 'دفعة جديدة',
-      fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default, defVersion: vid }),
-      values: cohortToForm(c.id ? c : { program_id: pid, status: 'planned', program_version_id: p?.versions[0]?.id || '' }),
-      onSave: (v) => saveCohort({ ...(c.id ? { id: c.id } : {}), ...formToCohort(v) }, confirm),
-    }));
-  };
+  // تحرير الدفعة بالأقسام (CohortEditor.jsx): الرحلة من تعريفها، والحفظ بالإجراء الواحد وحارس النقل
+  const editCohort = (c = {}) => setEditor(c);
 
   const shown = cohortId ? d.cohorts.find((c) => c.id === cohortId) : null;
   // النوافذ واحدة للجدول ولصفحة الدفعة
   const dialogs = (
     <>
-      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); load(); } }} />}
+      {editor && <CohortEditor cohort={editor} data={d} canWrite={canWrite} onClose={(saved) => { setEditor(null); if (saved) { toast('تم الحفظ'); load(); } }}
+        onOpen={(k) => { const c = editor; if (k === 'schedule') setSchedule(c); else if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(c.program_id); }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}

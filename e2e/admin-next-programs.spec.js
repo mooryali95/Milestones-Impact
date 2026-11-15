@@ -87,10 +87,11 @@ test('الدفعات: طريقة التنفيذ لكل نشاط، والترقي
 
   await row.getByRole('button', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
+  await form.getByRole('button', { name: 'التنفيذ' }).click();
   await expect(form.getByLabel('حضور الأيام التدريبية: توثيق الحضور')).toHaveValue('join');
   await form.getByLabel('جلسات التوجيه: طريقة الجلسة').selectOption('in_person');
   await form.getByLabel('جلسات التوجيه: المكان').fill('مقر الجمعية');
-  await form.getByRole('button', { name: 'حفظ' }).click();
+  await form.getByRole('button', { name: 'حفظ', exact: true }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({
     id: 'c1', organization_id: 'o1', program_version_id: 'v1',
     delivery: { 'T-ATTEND': { verify: 'join' }, 'O-SESS': { mode: 'in_person', location_ar: 'مقر الجمعية' } },

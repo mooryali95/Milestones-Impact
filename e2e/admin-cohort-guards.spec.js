@@ -37,7 +37,7 @@ async function setup(page) {
       'admin.participants': { success: true, participants: [] },
       'admin.programs': { success: true, programs, cohorts, organizations },
       'admin.program': { success: true, program: programs[0], stages: [], requirements: reqs },
-      'admin.cohort-definition': { success: true, program_id: 'pa', version: null, stages: [], requirements: reqs, hidden: [] },
+      'admin.cohort-definition': { success: true, program_id: 'pa', version: null, stages: [{ key: 's1', title_ar: 'التأسيس', rules: {} }, { key: 's2', title_ar: 'التطبيق', rules: {} }], requirements: reqs, hidden: [] },
       // دفعة جهة على برنامج آخر: الخادم يرفض بعدد المتأثرين حتى يصله التأكيد
       'admin.cohort-save': b.confirm_move || b.program_id !== 'pb' ? { success: true, cohort: { id: 'c9', name: b.name } }
         : { success: false, code: 'confirm_move', message: 'ينقل', affected: 7, from: [{ id: 'c1', name: 'سفراء 2026' }], to: [{ id: 'c2', name: 'أفراد الربيع' }] },
@@ -59,31 +59,33 @@ for (const width of [1440, 390]) {
     const calls = await setup(page);
     await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'تحرير' }).click();
     const form = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
-    // الرموز محوَّلة والمرحلة تميز العنوانين المتطابقين، بلا الرمز الداخلي
-    const hidden = form.getByRole('group', { name: 'بنود مخفية من رحلة هذه الدفعة' });
-    await expect(hidden.getByText('جلسات التوجيه (أربع جلسات) (التطبيق)', { exact: true })).toBeVisible();
-    await expect(hidden.getByText('تأمل (التأسيس)', { exact: true })).toBeVisible();
-    await expect(hidden.getByText('تأمل (التطبيق)', { exact: true })).toBeVisible();
+    // الرموز محوَّلة والمرحلة تميز العنوانين المتطابقين، بلا الرمز الداخلي (الرحلة في قسمها، لكل بند مفتاح إظهار)
+    const sw = (label) => form.getByRole('switch', { name: `إظهار ${label} في رحلة الدفعة` });
+    await expect(sw('جلسات التوجيه (أربع جلسات) (التطبيق)')).toBeVisible();
+    await expect(sw('تأمل (التأسيس)')).toBeVisible();
+    await expect(sw('تأمل (التطبيق)')).toBeVisible();
+    await form.getByRole('button', { name: 'التنفيذ' }).click();
     await expect(form.getByLabel('جلسات التوجيه (أربع جلسات) (التطبيق): طريقة الجلسة')).toBeVisible();
     await expect(form).not.toContainText(/\{[a-z]+:|O-SESS|T-ATTEND/);
-    // سطر العقد من الجهة، والسعة مطوية
+    // سطر العقد من الجهة، والسعة مطوية في «متقدم»
     await expect(form).toContainText('عقد الجهة: 50 مقعدًا، المستهلك 31 من العقد كله، ينتهي \u20662027-06-30\u2069. أعضاء الجهة الجدد يدخلون الآن تلقائيًا دفعة «سفراء 2026».');
     await expect(form.getByLabel('سعة تشغيلية (اختياري)')).toHaveCount(0);
     await form.getByLabel('الجهة').scrollIntoViewIfNeeded();
     await shot(page, 'cohort-form-contract');
+    await form.getByRole('button', { name: 'متقدم' }).click();
     await form.getByLabel('حدد سعة تشغيلية لهذه الدفعة (اختياري)').check();
     await form.getByLabel('سعة تشغيلية (اختياري)').fill('60');
     await expect(form).toContainText('تتجاوز مقاعد عقد الجهة (50)');
     await form.getByLabel('سعة تشغيلية (اختياري)').scrollIntoViewIfNeeded();
     await shot(page, 'cohort-form-capacity');
-    // الإخفاء الكاسر يُنبَّه إليه قبل الحفظ
-    await hidden.getByText('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)', { exact: true }).click();
-    await expect(hidden).toContainText('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التأسيس»');
-    await hidden.scrollIntoViewIfNeeded();
+    // الإخفاء الكاسر معطل بشرحه قبل الحفظ، والاختياري يُخفى
+    const attend = sw('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)');
+    await expect(attend).toBeDisabled();
+    await expect(form.locator('#ce-lock-T-ATTEND')).toContainText('لا يُخفى: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    await attend.scrollIntoViewIfNeeded();
     await shot(page, 'cohort-form-names');
-    await hidden.getByText('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)', { exact: true }).click();
-    await form.getByRole('button', { name: 'حفظ' }).click();
-    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c1', capacity: 60 });
+    await form.getByRole('button', { name: 'حفظ', exact: true }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c1', capacity: 60, hidden_requirements: [] });
     expect(calls.find((c) => c.action === 'admin.cohort-save')).not.toHaveProperty('capacity_on');
   });
 
@@ -98,7 +100,7 @@ for (const width of [1440, 390]) {
     await form.locator('#f-organization_id').selectOption('o1');
     await form.locator('#f-program_id').selectOption('pb');
     await form.locator('#f-status').selectOption('open');
-    await form.getByRole('button', { name: 'حفظ' }).click();
+    await form.getByRole('button', { name: 'حفظ', exact: true }).click();
     const ask = page.getByRole('alertdialog');
     // العدد بصيغته العربية الصحيحة، ومن أين وإلى أين
     await expect(ask).toContainText('بهذا الحفظ ينتقل تلقائيًا 7 مشاركين من «سفراء 2026» إلى «أفراد الربيع» على برنامج آخر');
@@ -116,7 +118,7 @@ test('رفض النقل يبقي الدفعة بلا حفظ ويقول لماذ�
   const form = page.getByRole('dialog', { name: 'دفعة: أفراد الربيع' });
   await form.locator('#f-organization_id').selectOption('o1');
   await form.locator('#f-program_id').selectOption('pb');
-  await form.getByRole('button', { name: 'حفظ' }).click();
+  await form.getByRole('button', { name: 'حفظ', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: /إلغاء|تراجع/ }).click();
   await expect(form.getByRole('alert')).toContainText('لم يُؤكَّد نقل المشاركين');
   expect(calls.filter((c) => c.action === 'admin.cohort-save').length).toBe(1);
@@ -126,14 +128,15 @@ test('إخفاء كاسر محفوظ قبل فتح النموذج لا يُنب�
   const calls = await setup(page);
   await page.locator('.data-table tbody tr', { hasText: 'دفعة قديمة' }).getByRole('button', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: دفعة قديمة' });
-  const hidden = form.getByRole('group', { name: 'بنود مخفية من رحلة هذه الدفعة' });
-  await expect(hidden.getByLabel('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)')).toBeChecked();
-  await expect(hidden).not.toContainText('لن يُحفظ');
-  await hidden.getByText('جلسات التوجيه (أربع جلسات) (التطبيق)', { exact: true }).click();
-  await expect(hidden).toContainText('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التطبيق»');
-  await hidden.getByText('جلسات التوجيه (أربع جلسات) (التطبيق)', { exact: true }).click();
+  const sw = (label) => form.getByRole('switch', { name: `إظهار ${label} في رحلة الدفعة` });
+  // المخفي قبل فتح المحرر يظهر مخفيًا، ولا يمنع الحفظ، وإظهاره متاح
+  await expect(sw('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)')).toHaveAttribute('aria-checked', 'false');
+  await expect(sw('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)')).toBeEnabled();
+  // كسر جديد: إخفاء آخر بند إلزامي في «التطبيق» معطل بشرحه
+  await expect(sw('جلسات التوجيه (أربع جلسات) (التطبيق)')).toBeDisabled();
+  await expect(form.locator('#ce-lock-O-SESS')).toContainText('لا يُخفى: إخفاء هذه البنود يترك مرحلة «التطبيق»');
   await form.getByLabel('اسم الدفعة').fill('دفعة قديمة معدلة');
-  await form.getByRole('button', { name: 'حفظ' }).click();
+  await form.getByRole('button', { name: 'حفظ', exact: true }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c3', name: 'دفعة قديمة معدلة', hidden_requirements: ['T-ATTEND'] });
   expect(calls.find((c) => c.action === 'admin.cohort-save')).not.toHaveProperty('hidden_before');
 });
