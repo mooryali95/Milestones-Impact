@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -19,13 +19,12 @@ type Body = Record<string, any>;
 const COHORT_COLS = '*';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
-let defaultId: string | null = null;
+// يُقرأ في كل طلب بلا تخزين: التخزين في الذاكرة يبقى على القيمة القديمة في بقية نسخ دالة الحافة بعد تغيير
+// البرنامج الافتراضي، والقراءة استعلام واحد صغير (P4)
 export async function defaultProgramId() {
-  if (defaultId) return defaultId;
   const { data } = await db.from('programs').select('id').eq('is_default', true).maybeSingle();
   if (!data) throw new Fail('لا يوجد برنامج افتراضي', 500);
-  defaultId = data.id;
-  return defaultId as string;
+  return data.id as string;
 }
 
 async function liveRows(programId: string) {
@@ -126,12 +125,13 @@ export function memberCounts(participants: any[], enrollments: any[], cohorts: a
 export async function orgCohortSetups(orgIds: string[]) {
   const out: Record<string, any> = {};
   if (!orgIds.length) return out;
-  const [cohorts, enr, people, team, sess] = await Promise.all([
+  const [cohorts, enr, people, team, sess, progs] = await Promise.all([
     db.from('cohorts').select(COHORT_COLS),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
     db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
     db.from('cohort_experts').select('cohort_id, expert_id'),
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
+    db.from('programs').select('id, name, archived_at'),
   ]);
   for (const r of [cohorts, enr, people, team, sess]) if (r.error) throw r.error;
   const all = cohorts.data || [];
@@ -152,7 +152,10 @@ export async function orgCohortSetups(orgIds: string[]) {
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
       members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
     });
-    out[id] = { cohort: { id: c.id, name: c.name, status: c.status }, setup, setup_missing: setupMissing(setup) };
+    // برنامج الجهة للقراءة (P4): مشتق بترتيب pickCohort نفسه (orgProgram)، وتعذّر قراءة البرامج يتركه فارغًا
+    const op = progs.error ? null : orgProgram(all, progs.data || [], id);
+    out[id] = { cohort: { id: c.id, name: c.name, status: c.status }, setup, setup_missing: setupMissing(setup),
+      program: op ? { id: op.program_id, name: op.program_name, via: op.via, cohort_id: op.cohort_id, cohort_name: op.cohort_name } : null };
   }
   return out;
 }

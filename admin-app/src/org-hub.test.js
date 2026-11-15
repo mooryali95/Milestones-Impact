@@ -15,6 +15,12 @@ describe('جاهزية الجهة', () => {
     expect(readinessSummary(x)).toBe('جاهزة');
   });
 
+  it('برنامج الجهة يُقرأ في بند الدفعة (P4)، ويُحرَّر من ملفها', () => {
+    const x = item(r({ journey: { ...journey, program: { id: 'p1', name: 'برنامج القادة', via: 'current' } } }), 'cohort');
+    expect(x.detail).toBe('«دفعة سفراء» مكتملة الإعداد · برنامج الجهة «برنامج القادة»');
+    expect(item(r(), 'cohort').detail).toBe('«دفعة سفراء» مكتملة الإعداد');
+  });
+
   it('صفحة «بدون جهة» بلا جاهزية', () => {
     expect(orgReadiness({ org: { id: 'none' } }).items).toEqual([]);
   });

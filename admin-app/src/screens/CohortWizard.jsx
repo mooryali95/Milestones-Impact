@@ -8,6 +8,8 @@ import { COHORT_STATUS, contractLine } from '../methodology.js';
 import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
 import { WIZARD_STEPS, wizardBlock, wizardBody, wizardNotes } from '../cohort-hub.js';
+import { orgProgram, orgProgramLine } from '../../../supabase/functions/leaders-api/logic.js';
+import '../cohort-editor.css';
 
 const defaultName = (v, orgs) => {
   const o = orgs.find((x) => x.id === v.organization_id);
@@ -21,20 +23,29 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
   const programs = (data.programs || []).filter((p) => !p.archived_at);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const fallback = programs.find((p) => p.is_default)?.id || programs[0]?.id || '';
+  // برنامج الجهة (P4): دفعة جهة جديدة تُقترح على برنامج دفعتها الحالية، وإلا آخر دفعة لها، والمؤرشف لا يُقترح.
+  // البرنامج القادم من «أنشئ له دفعة» أو ما اختاره المدير بنفسه لا يُستبدل
+  const suggest = (o) => orgProgram(data.cohorts || [], data.programs || [], o || null);
   const [v, setV] = useState(() => {
     const init = {
       kind: 'org', organization_id: preset.organization_id || '',
-      program_id: preset.program_id || programs.find((p) => p.is_default)?.id || programs[0]?.id || '',
+      program_id: preset.program_id || suggest(preset.organization_id)?.program_id || fallback,
       pin: true, status: 'open', starts_on: '', ends_on: '', capacity: '', name: '',
     };
     return { ...init, name: defaultName(init, orgs) };
   });
   const [named, setNamed] = useState(false);   // كتب المدير الاسم بنفسه: لا يُستبدل باسم الجهة
+  const [picked, setPicked] = useState(!!preset.program_id);   // اختار المدير البرنامج بنفسه: لا يُستبدل ببرنامج الجهة
   const set = (patch) => setV((cur) => {
     const next = { ...cur, ...patch };
     if (!named && ('organization_id' in patch || 'kind' in patch)) next.name = defaultName(next, orgs) || cur.name;
+    if (!picked && !('program_id' in patch) && ('organization_id' in patch || 'kind' in patch)) {
+      next.program_id = (next.kind === 'org' && suggest(next.organization_id)?.program_id) || fallback;
+    }
     return next;
   });
+  const orgProg = v.kind === 'org' ? suggest(v.organization_id) : null;
   const close = useGuardedClose(step > 0, () => onClose());
   useEscape(close, true);
 
@@ -86,10 +97,14 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
           <fieldset className="wiz-body">
             <legend>أي برنامج يمر به المشاركون؟</legend>
             <label className="wiz-field">البرنامج
-              <select aria-label="البرنامج" value={v.program_id} onChange={(e) => set({ program_id: e.target.value })} autoFocus>
+              <select aria-label="البرنامج" value={v.program_id} onChange={(e) => { setPicked(true); set({ program_id: e.target.value }); }} autoFocus>
                 {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.requirements} متطلب</option>)}
               </select>
             </label>
+            {orgProg && (orgProg.program_id === v.program_id
+              ? <p className="wiz-source" role="note">{orgProgramLine(orgProg)} <small className="la-muted">يمكنك تغييره.</small></p>
+              : <p className="wiz-source warn" role="note">برنامج الجهة «{orgProg.program_name}» ({orgProg.via === 'current' ? 'من دفعتها الحالية' : 'من آخر دفعة لها'}). اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الإنشاء، لأن تقدمه مربوط ببرنامجه.{' '}
+                  <button type="button" className="la-link" onClick={() => { setPicked(false); set({ program_id: orgProg.program_id }); }}>ارجع إلى برنامج الجهة</button></p>)}
             {prog && (prog.versions?.length
               ? <label className="wiz-check"><input type="checkbox" checked={v.pin} onChange={(e) => set({ pin: e.target.checked })} />
                   <span>ثبّت الدفعة على أحدث نسخة محفوظة (النسخة {prog.versions[0].number}). <small className="la-muted">تحميها من أي تعديل لاحق على البرنامج حتى ترقّيها بنفسك.</small></span></label>

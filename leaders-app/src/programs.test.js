@@ -1,7 +1,7 @@
 // البرامج والدفعات: اختيار الدفعة، تخصيص طريقة التنفيذ، النسخ والاسترجاع
 import { describe, expect, it } from 'vitest';
 import {
-  applyDelivery, cleanDelivery, cohortDefinition, pickCohort, programDiff, programSnapshot, restorePlan,
+  applyDelivery, cleanDelivery, cohortDefinition, orgProgram, orgProgramLine, pickCohort, programDiff, programSnapshot, restorePlan,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const open = { id: 'c-open', is_default: true, status: 'running', program_id: 'p1' };
@@ -109,5 +109,26 @@ describe('versions', () => {
     expect(programDiff(from, to)).toEqual({
       added: [{ code: 'C', title: 'ج' }], removed: [{ code: 'B', title: 'ب' }], changed: [{ code: 'A', title: 'أ' }],
     });
+  });
+});
+
+// P4: برنامج الجهة يُشتق بترتيب pickCohort نفسه، ولا يُقترح المؤرشف
+describe('orgProgram', () => {
+  const programs = [{ id: 'p1', name: 'القادة' }, { id: 'p2', name: 'سفراء' }, { id: 'p3', name: 'قديم', archived_at: '2026-01-01' }];
+  it('matches the program of the cohort pickCohort places the org members in', () => {
+    const r = orgProgram(cohorts, programs, 'org-s');
+    expect(r.program_id).toBe(pickCohort({ cohorts, organizationId: 'org-s' }).cohort.program_id);
+    expect(r).toMatchObject({ cohort_id: 'c-saf', program_name: 'القادة', via: 'current' });
+    expect(orgProgramLine({ ...r, cohort_name: 'سفراء 2026' })).toBe('من دفعة الجهة الحالية «سفراء 2026»: برنامج «القادة».');
+  });
+  it('without a live cohort falls to the newest org cohort, and never to the open default', () => {
+    expect(orgProgram(cohorts, programs, 'org-m')).toMatchObject({ program_id: 'p2', cohort_id: 'c-closed', via: 'latest' });
+    expect(orgProgram(cohorts, programs, 'org-none')).toBeNull();
+    expect(orgProgram(cohorts, programs, null)).toBeNull();
+  });
+  it('an archived program is never suggested', () => {
+    const list = [{ id: 'a', organization_id: 'o', status: 'running', starts_on: '2026-10-01', program_id: 'p3' }, { id: 'b', organization_id: 'o', status: 'closed', starts_on: '2026-01-01', program_id: 'p1' }];
+    expect(orgProgram(list, programs, 'o')).toMatchObject({ program_id: 'p1', cohort_id: 'b', via: 'latest' });
+    expect(orgProgram([list[0]], programs, 'o')).toBeNull();
   });
 });

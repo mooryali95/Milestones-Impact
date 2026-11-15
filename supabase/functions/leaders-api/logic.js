@@ -1482,6 +1482,26 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
+// برنامج الجهة: يُشتق ولا يُخزَّن، بترتيب pickCohort نفسه فلا يخالف ما يمر به أعضاؤها فعلًا.
+// برنامج الدفعة التي يدخلها أعضاء الجهة الآن (via 'current')، وإلا برنامج أحدث دفعة للجهة أيًا كانت حالتها
+// (via 'latest')، والبرنامج المؤرشف لا يُقترح أبدًا. null: لا دفعة للجهة على برنامج فعّال، فيبقى الافتراضي.
+/** @param {any[]} cohorts @param {any[]} programs @param {string|null} orgId */
+export function orgProgram(cohorts = [], programs = [], orgId = null) {
+  if (!orgId) return null;
+  const live = new Map((programs || []).filter((p) => !p.archived_at).map((p) => [p.id, p]));
+  const of = (c, via) => ({ program_id: c.program_id, program_name: live.get(c.program_id)?.name || '', cohort_id: c.id, cohort_name: c.name || '', via });
+  const now = pickCohort({ enrollments: [], cohorts, organizationId: orgId }).cohort;
+  if (now && now.organization_id === orgId && live.has(now.program_id)) return of(now, 'current');
+  const own = (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && live.has(c.program_id))
+    .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
+  return own.length ? of(own[0], 'latest') : null;
+}
+// سطر مصدر البرنامج المقترح لدفعة جهة جديدة، واحد للمعالج والمحرر وملف الجهة
+/** @param {{ program_name?: string, cohort_name?: string, via?: string }|null} op */
+export const orgProgramLine = (op) => (!op ? ''
+  : op.via === 'current' ? `من دفعة الجهة الحالية «${op.cohort_name}»: برنامج «${op.program_name}».`
+    : `من آخر دفعة للجهة «${op.cohort_name}»: برنامج «${op.program_name}».`);
+
 // ── حراس المشاركين الأحياء ──
 // التقدم مربوط بمعرف المتطلب، ومعرفات برنامج آخر غيرها، فمن ينتقل بين برنامجين يفقد ما أنجزه من رحلته
 const byParticipant = (enrollments) => {

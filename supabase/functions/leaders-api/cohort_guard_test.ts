@@ -4,7 +4,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { cohortSave, cohortEnroll } = await import('./programs.ts');
+const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups } = await import('./programs.ts');
 
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
@@ -223,5 +223,28 @@ Deno.test('الإلحاق المؤكد يمر، وعلى البرنامج نفس
     assertEquals(((await cohortEnroll(admin, { cohort_id: E3, participant_ids: [P1] })) as any).enrolled, 1);
     assertEquals(((await cohortEnroll(admin, { cohort_id: E2, participant_ids: [P2] })) as any).enrolled, 1);
     assertEquals(((await cohortEnroll(admin, { cohort_id: E2, participant_ids: [P1], confirm_move: true })) as any).enrolled, 1);
+  } finally { w.restore(); }
+});
+
+// ── P4: وراثة برنامج الجهة ──
+Deno.test('البرنامج الافتراضي يُقرأ بلا تخزين: تغيير is_default يظهر في القراءة التالية', async () => {
+  const w = world();
+  try {
+    assertEquals(await defaultProgramId(), PA);
+    w.tables.programs[0].is_default = false;
+    w.tables.programs[1].is_default = true;
+    assertEquals(await defaultProgramId(), PB);
+  } finally { w.restore(); }
+});
+
+Deno.test('جاهزية دفعة الجهة تحمل برنامج الجهة المشتق من دفعتها الحالية، ولا تقترح المؤرشف', async () => {
+  const w = world();
+  try {
+    w.tables.programs = [{ id: PA, name: 'برنامج القادة', is_default: true, archived_at: null }, { id: PB, name: 'برنامج سفراء', is_default: false, archived_at: null }];
+    w.tables.workshop_sessions = [];
+    const r: any = await orgCohortSetups([ORG]);
+    assertEquals(r[ORG].program, { id: PA, name: 'برنامج القادة', via: 'current', cohort_id: C1, cohort_name: 'سفراء 2026' });
+    w.tables.programs[0].archived_at = '2026-11-01T00:00:00Z';
+    assertEquals(((await orgCohortSetups([ORG])) as any)[ORG].program, null);
   } finally { w.restore(); }
 });

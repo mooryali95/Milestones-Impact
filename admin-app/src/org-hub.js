@@ -44,7 +44,8 @@ export function orgReadiness({ org: o, access = null, journey = null, members = 
     !journey ? null : !cohort
       ? { key: 'cohort', title: 'الدفعة', ok: false, action: 'new-cohort', detail: 'لا دفعة مفتوحة أو جارية: مشاركوها يدخلون الدفعة المفتوحة العامة، بلا جدول ولا مستشار خاص بهم' }
       : { key: 'cohort', title: 'الدفعة', ok: !left, action: 'cohort', other: cohort.id,
-          detail: left ? `«${cohort.name}»: بقي فيها ${plural(left)}${gaps.length ? ` (${gaps.join('، ')})` : ''}` : `«${cohort.name}» مكتملة الإعداد` },
+          // برنامج الجهة للقراءة (P4): يُشتق من دفعتها (orgProgram في الخادم)، ويُحرَّر من ملف الدفعة وحده
+          detail: `${left ? `«${cohort.name}»: بقي فيها ${plural(left)}${gaps.length ? ` (${gaps.join('، ')})` : ''}` : `«${cohort.name}» مكتملة الإعداد`}${journey.program?.name ? ` · برنامج الجهة «${journey.program.name}»` : ''}` },
     !access ? null : access.state === 'active'
       ? { key: 'coordinator', title: 'منسق الجهة', ok: true, action: null, detail: `${access.n === 1 ? 'منسق واحد يتابع' : `${access.n} يتابعون`} لوحة الجهة` }
       : { key: 'coordinator', title: 'منسق الجهة', ok: false, action: 'coordinator',

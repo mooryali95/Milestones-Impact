@@ -18,6 +18,7 @@ import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { saveCohort } from '../cohort-guard.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
+import { orgProgram } from '../../../supabase/functions/leaders-api/logic.js';
 
 
 function DiffList({ diff }) {
@@ -195,7 +196,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     return parts.length ? { on: true, text: `يسري على: ${parts.join(' · ')}` } : { on: false, text: 'لا توجد دفعة على هذا البرنامج بعد، فلا يسري على أي مشارك. أنشئ له دفعة لجهة أو لأفراد متى احتجته.' };
   };
   const editCohort = (c = {}) => {
-    const pid = c.program_id || programs.find((p) => p.is_default)?.id;
+    // دفعة جهة جديدة تُقترح على برنامج الجهة (P4، orgProgram)، والمؤرشف لا يُقترح
+    const pid = c.program_id || orgProgram(d.cohorts, programs, c.organization_id || null)?.program_id || programs.find((p) => p.is_default)?.id;
     const p = programs.find((x) => x.id === pid);
     L('admin.program', { id: pid }).then((pr) => setForm({
       title: c.id ? `دفعة: ${c.name}` : 'دفعة جديدة',
