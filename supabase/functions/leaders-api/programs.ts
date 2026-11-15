@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -544,11 +544,12 @@ export async function cohortMembers(c: any) {
   const byP = new Map<string, any[]>();
   for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const mine = (ps || []).filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts: cohorts.data || [], organizationId: p.organization_id }).cohort?.id === c.id);
-  const { data: pl } = await db.from('placements').select('participant_id, dimension, level').in('participant_id', mine.map((p: any) => p.id));
-  return mine.map((p: any) => ({
-    id: p.id, name: p.full_name, email: p.email, status: p.status, title: p.job_title || null, org: p.organization_name || null,
-    levels: Object.fromEntries((pl || []).filter((x: any) => x.participant_id === p.id).map((x: any) => [x.dimension, x.level])),
-  }));
+  const { data: pl } = await db.from('placements').select('participant_id, dimension, level, approved_at').in('participant_id', mine.map((p: any) => p.id));
+  return mine.map((p: any) => {
+    const a = approvalOf((pl || []).filter((x: any) => x.participant_id === p.id));
+    // approved: مساره معتمد (approvalOf)، به تحصر القاعة أعضاءها فيمن تفتح له بوابة البرنامج (P1-04)
+    return { id: p.id, name: p.full_name, email: p.email, status: p.status, title: p.job_title || null, org: p.organization_name || null, levels: a.levels, approved: a.approved };
+  });
 }
 
 export async function cohortGroups(b: Body) {

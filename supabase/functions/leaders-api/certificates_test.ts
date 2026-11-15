@@ -1,7 +1,7 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
-const { certificateNotice, checkCertificate, heldCertificates, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
+const { certificateNotice, checkCertificate, heldCertificates, issueAfterNameConfirm, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
 const { db, Fail, finalDecisionMail } = await import('./core.ts');
 
 const K1 = 'k1-'.padEnd(40, 'a');
@@ -49,19 +49,25 @@ Deno.test('معاينة النموذج «شهادة إتمام بنجاح» بق
 });
 
 // قاعدة مُحاكاة لجدول بعينه: كل استعلام يعيد ما في tables[table]، والإدراج يُسجَّل في log. تُعاد الأصلية بعد الاختبار.
-// إن كان ما في الجدول صفوفًا رُشّحت بـ eq وin على الأعمدة المباشرة كما تفعل القاعدة، وأعمدة الجداول المضمّنة تُترك
+// إن كان ما في الجدول صفوفًا رُشّحت بـ eq وin على الأعمدة المباشرة كما تفعل القاعدة، وأعمدة الجداول المضمّنة تُترك.
+// single وmaybeSingle تعيدان أول صف مطابق، والإدراج يعيد الصف المُدرج بمعرّف
 function fakeDb(tables: Record<string, unknown>, log: [string, any][]) {
   const orig = db.from;
   (db as any).from = (table: string) => {
     const where: ((r: any) => boolean)[] = [];
+    let one = false;
+    let added: any = null;
     const q: any = new Proxy({}, {
       get: (_t, k) => k === 'then'
         ? (res: any, rej: any) => {
-          const data = tables[table] ?? null;
-          return Promise.resolve({ data: Array.isArray(data) ? data.filter((r) => where.every((w) => w(r))) : data, error: null }).then(res, rej);
+          const data = added ? [added] : tables[table] ?? null;
+          const rows = Array.isArray(data) ? data.filter((r) => where.every((w) => w(r))) : data;
+          return Promise.resolve({ data: one && Array.isArray(rows) ? rows[0] ?? null : rows, error: null }).then(res, rej);
         }
         : (...args: any[]) => {
+          if (k === 'single' || k === 'maybeSingle') one = true;
           if (k === 'insert' || k === 'update') log.push([table, args[0]]);
+          if (k === 'insert') added = { id: `${table}-new`, ...args[0] };
           const [col, v] = args;
           if (k === 'eq' && !/[.>]/.test(col)) where.push((r) => r[col] === v);
           if (k === 'in' && !/[.>]/.test(col)) where.push((r) => v.includes(r[col]));
@@ -126,4 +132,92 @@ Deno.test('من أُلغيت شهادته بعد اعتماده ليس ممن ل
     const held = await heldCertificates();
     assertEquals(held.map((h: any) => [h.participant_id, h.awaiting_name]), [['earlier', false], ['two-programs', false], ['replaced', false], ['awaiting', true]]);
   } finally { restore(); }
+});
+
+// P1-05: تأكيد الاسم (profile.confirm-name يستدعي issueAfterNameConfirm بعد confirmName دائمًا، وهو بلا حق دفع) لا يعيد
+// شهادة أُلغيت أو عُلّقت بعد آخر اعتماد، ولا يصدر بدلًا منها. وتعليق إعادة الفتح يعيده الاعتماد المطابق كما كان
+const PID = 'participant-p105';
+const APPROVED_AT = '2026-11-10T10:00:00+00:00';
+const SERIAL = 'MI-LDR-2026-AAAAAA';
+function confirmState(cert: Record<string, unknown> | null, person: Record<string, unknown> = {}) {
+  return {
+    certificate_settings: { id: 1, enabled: true },
+    final_evaluations: [{ participant_id: PID, program_id: 'program-1', status: 'approved', decision: 'pass', snapshot: { decision: 'pass', config_version: 3 }, decided_at: APPROVED_AT }],
+    certificates: cert ? [{ id: 'cert-1', participant_id: PID, snapshot: { serial: SERIAL, decision: 'pass', kind: 'completion_success' }, ...cert }] : [],
+    participants: [{ id: PID, full_name: 'سارة أحمد العلي', name_en: null, email: null, is_demo: false, organization_id: null, created_at: '2026-09-01T08:00:00+00:00',
+      name_confirmed_at: '2026-11-11T08:00:00+00:00', name_locked_at: cert ? '2026-11-10T10:00:01+00:00' : null, ...person }],
+    programs: [{ id: 'program-1', is_default: true, cert: {} }],
+    cohorts: [], enrollments: [], placements: [], journey_stages: [], stage_requirements: [], tracks: [], track_profiles: [],
+  };
+}
+const certWrites = (log: [string, any][]) => log.filter(([t]) => t === 'certificates');
+
+Deno.test('تأكيد الاسم بعد إلغاء الشهادة (استرداد أو إلغاء يدوي) لا يصدر شهادة ولا يغيّر حالًا', async () => {
+  Deno.env.set('LEADERS_CERT_SIGNING_KEY', K2); Deno.env.set('LEADERS_CERT_KEY_ID', 'k2');
+  for (const [by, reason] of [['creem', 'استرداد الرسوم'], ['super@example.sa', 'صدرت بالخطأ لغير مستحق']]) {
+    const log: [string, any][] = [];
+    const restore = fakeDb(confirmState({ status: 'revoked', revoked_at: '2026-11-12T09:00:00+00:00', revoked_by: by, revoke_reason: reason }), log);
+    try {
+      assertEquals(await issueAfterNameConfirm(PID), null, reason);
+      assertEquals(log, [], reason);
+    } finally { restore(); }
+  }
+});
+
+Deno.test('تأكيد الاسم بعد تعليق يدوي، أو أثناء إعادة فتح جارية، أو بلا وقت معروف للإلغاء: لا إعادة ولا إصدار', async () => {
+  Deno.env.set('LEADERS_CERT_SIGNING_KEY', K2); Deno.env.set('LEADERS_CERT_KEY_ID', 'k2');
+  const cases: Record<string, unknown>[] = [
+    { status: 'suspended', revoked_at: '2026-11-12T09:00:00+00:00', revoked_by: 'super@example.sa', revoke_reason: 'تعليق حتى التحقق من الهوية' },
+    // اعتماد برنامج آخر أقدم من إعادة الفتح: المراجعة لم تنته بعد
+    { status: 'suspended', revoked_at: '2026-11-12T09:00:00+00:00', revoked_by: 'admin@example.sa', revoke_reason: 'إعادة فتح التقييم الختامي: مراجعة الدرجة' },
+    { status: 'revoked', revoked_at: null, revoked_by: 'super@example.sa', revoke_reason: 'إلغاء قديم بلا وقت' },
+  ];
+  for (const c of cases) {
+    const log: [string, any][] = [];
+    const restore = fakeDb(confirmState(c), log);
+    try {
+      assertEquals(await issueAfterNameConfirm(PID), null, String(c.revoke_reason));
+      assertEquals(log, [], String(c.revoke_reason));
+    } finally { restore(); }
+  }
+});
+
+Deno.test('تعليق إعادة الفتح ثم اعتماد بالقرار نفسه: تعود الشهادة نفسها سارية، من الاعتماد ومن تأكيد الاسم', async () => {
+  const reopened = { status: 'suspended', revoked_at: '2026-11-08T09:00:00+00:00', revoked_by: 'admin@example.sa', revoke_reason: 'إعادة فتح التقييم الختامي: تصحيح درجة القياس' };
+  for (const run of [() => onFinalApproved(PID, { decision: 'pass', program_id: 'program-1' }, 'admin@example.sa'), () => issueAfterNameConfirm(PID)]) {
+    const log: [string, any][] = [];
+    const restore = fakeDb(confirmState(reopened), log);
+    try {
+      assertEquals(await run(), { id: 'cert-1', serial: SERIAL });
+      assertEquals(certWrites(log).map(([, row]) => row.status), ['valid']);
+      assert(log.some(([t, row]) => t === 'audit_log' && row.action === 'certificate.restore'));
+    } finally { restore(); }
+  }
+});
+
+// التعليق اليدوي لا يعيده اعتماد ولو طابق قراره: الاعتماد الجديد يستبدله كبقية المعلّقات، فلا تعود الشهادة المعلّقة نفسها
+Deno.test('اعتماد جديد بالقرار نفسه لا يعيد شهادة معلّقة يدويًا', async () => {
+  const log: [string, any][] = [];
+  const restore = fakeDb(confirmState({ status: 'suspended', revoked_at: '2026-11-08T09:00:00+00:00', revoked_by: 'super@example.sa', revoke_reason: 'تعليق حتى التحقق من الهوية' },
+    { name_confirmed_at: null }), log);
+  try {
+    assertEquals(await onFinalApproved(PID, { decision: 'pass', program_id: 'program-1' }, 'admin@example.sa'), { awaiting_name: true });
+    assertEquals(certWrites(log).map(([, row]) => row.status), ['replaced']);
+  } finally { restore(); }
+});
+
+// لا يُحجب مستحق: بلا شهادة، أو بإلغاء ثبت أنه قبل آخر اعتماد (قرار ختامي سابق)، يصدر تأكيد الاسم شهادته كما كان
+Deno.test('تأكيد الاسم يصدر الشهادة لمن لا شهادة له، ولمن أُلغيت شهادته قبل آخر اعتماد', async () => {
+  Deno.env.set('LEADERS_CERT_SIGNING_KEY', K2); Deno.env.set('LEADERS_CERT_KEY_ID', 'k2');
+  for (const cert of [null, { status: 'revoked', revoked_at: '2026-11-03T09:00:00+00:00', revoked_by: 'admin@example.sa', revoke_reason: 'قرار ختامي: extend' }]) {
+    const log: [string, any][] = [];
+    const restore = fakeDb(confirmState(cert), log);
+    try {
+      await issueAfterNameConfirm(PID);
+      const inserted = certWrites(log).map(([, row]) => row);
+      assertEquals(inserted.length, 1);
+      assertEquals([inserted[0].participant_id, inserted[0].snapshot.decision, inserted[0].snapshot.kind], [PID, 'pass', 'completion_success']);
+      assert(inserted[0].signature.startsWith('k2:'));
+    } finally { restore(); }
+  }
 });

@@ -15,7 +15,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -26,7 +26,7 @@ import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
-import { pinSponsorFor } from './entitlements.ts';
+import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
@@ -168,10 +168,14 @@ async function linkOrgOnLogin(p: any, code: unknown, key: string) {
   try {
     const r = await resolveOrg({ org: code }, key);
     if (!r) return p;
+    // حكم الرمز نفسه (sponsorCode): قرار سارٍ للإدارة في رعاية هذه الجهة له (سحب أو فك أو رفض طلب مقعده، P1-06) لا يرده
+    // رابط يفتحه، فلا ربط به. وتعذّر القراءة يرمي إلى catch فيؤجل الربط إلى الدخول التالي ولا يمنع الدخول
+    if (await sponsorDecision(p.id, r.org.id)) return p;
     const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
     if (!data) return p;
     await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id, null, { via: 'login_link' });
-    await pinSponsorFor(p.id);
+    // ربط يأتي به المشارك لا يتخطى قرار الإدارة (P1-06)، كالرمز والنطاق
+    await pinSponsorFor(p.id, { auto: true });
     return data;
   } catch (e) {
     console.error('link org on login:', e);
@@ -184,9 +188,18 @@ export async function sponsorCode(p: any, b: Body) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
   const r = await sponsorByCode(b.sponsor_code, `p:${p.id}`);
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
+  // قرار سارٍ للإدارة في رعاية هذه الجهة له (سحب أو فك أو رفض طلب مقعده، P1-06) لا يرده رمز يكتبه: يُرد قبل الربط بسببه،
+  // فيبقى له الدفع وطلب الرعاية من الإدارة. كان يُربط بلا رعاية، فيختفي نموذج الرمز ولا يعرف لماذا بقي الدفع عليه
+  const stop = await sponsorDecision(p.id, r.org.id);
+  if (stop) {
+    throw new Fail(stop === 'rejected'
+      ? `قررت الإدارة من قبل أن تتابع البرنامج بدفع فردي لا برعاية هذه الجهة، فلا يغيّر الرمز ذلك. لمراجعة القرار راسل ${CONTACT_EMAIL}`
+      : `أنهت الإدارة من قبل رعاية هذه الجهة لك، فلا يعيدها الرمز. لمراجعة القرار راسل ${CONTACT_EMAIL}`, 409, 'sponsor_decided');
+  }
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
-  await pinSponsorFor(p.id);
+  // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
+  await pinSponsorFor(p.id, { auto: true });
   return { success: true, ...(await mePayload(saved)) };
 }
 
@@ -364,7 +377,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
-    p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
+    // الموقوف لا يُربط بجهة (كما في Google)، ورفض دخوله بعد إصدار الجلسة كما كان
+    if (p.status !== 'suspended') p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
   }
   const token = await issueSession(p.id, b.link ? 'email_link' : 'email_code', ctx);
   return { success: true, token, ...(await mePayload(p)) };
@@ -632,7 +646,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       })),
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
-      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p)) })),
+      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p, st.status !== 'locked')) })),
     progress,
     // معالم الرحلة وموقع المشارك منها (المتأخر بعدد أيامه)
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
@@ -665,9 +679,11 @@ export async function me(p: any) {
   // المسجل قبل تسجيل نطاق جهته: يُربط بها عند دخوله التالي، مرة واحدة ويُسجَّل
   if (!p.organization_id && !p.is_demo && p.email_verified_at) {
     const r = await orgByEmail(p.email);
-    if (r) {
+    // ولا ربط آلي بجهة أنهت الإدارة رعايتها له أو فكّته عنها أو رُفض طلب مقعده فيها (sponsorDecision، P1-06): يبقى بلا جهة
+    // فيرى طلب الرعاية ورمزها ويعرف بالرمز سبب بقاء الدفع. وتعذّر القراءة يؤجل الربط إلى الدخول التالي
+    if (r && !(await sponsorDecision(p.id, r.org.id).catch((e) => { console.error('me sponsor decision:', e); return 'error'; }))) {
       const { data } = await db.from('participants').update({ organization_id: r.org.id, org_via: 'domain' }).eq('id', p.id).is('organization_id', null).select('*').maybeSingle();
-      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id); p = data; }
+      if (data) { await audit('system', p.email, 'participant.sponsor-domain', 'organizations', r.org.id); await pinSponsorFor(data.id, { auto: true }); p = data; }
     }
   }
   return { success: true, ...(await mePayload(p)) };
@@ -942,7 +958,13 @@ export async function assessmentSubmit(p: any, b: Body) {
   await db.from('assessments').update({ status: 'submitted', submitted_at: now }).eq('id', a.id);
   // مؤشر الجهد يُحفظ على القياس بعد احتساب المستوى وحفظه (effort.ts): استشاري للمراجع، لا يدخل ما سبق، وتعذّره لا يُسقط الإرسال
   await saveEffort({ id: a.id, instrument_id: a.instrument_id, started_at: a.started_at, submitted_at: now }).catch((e) => console.error('effort:', e));
-  const updated = must(await db.from('participants').update({ status: locked.size === 3 || p.is_demo ? 'placed' : 'pending_approval' })
+  // الحالة من القياس (P1-04): كان يكتب حالة فوق أي حالة، فيعيد المنسحب إلى البرنامج بلا قرار، وينزل من «في البرنامج»
+  // أو «أنهى البرنامج» إلى «معتمد المستوى» بقياس جديد. الآن: المنسحب والموقوف كما هما، ومن مساره معتمد (المستويات الثلاثة)
+  // يبقى على حالته إن كان معتمدًا أو بعده وإلا «معتمد المستوى»، ومن لم يُعتمد مساره «بانتظار الاعتماد» من أي حالة داخل
+  // البرنامج، فيظهر في قوائم الاعتماد (ومنه من وُضع على «في البرنامج» قبل قياسه)
+  const ready = locked.size === 3 || p.is_demo;
+  const next = !inProgram(p.status) ? p.status : !ready ? 'pending_approval' : ['placed', 'enrolled', 'completed'].includes(p.status) ? p.status : 'placed';
+  const updated = next === p.status ? p : must(await db.from('participants').update({ status: next })
     .eq('id', p.id).select('*').single());
   await audit('participant', p.id, 'assessment.submit', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(updated)) };

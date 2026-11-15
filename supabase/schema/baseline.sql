@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115100000_leaders_initiative_reality
+-- as-of migration: 20261115110000_leaders_pin_sponsor_seat_guard
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -3392,6 +3392,7 @@ declare
 begin
   select id, seats, contract_starts, contract_ends, status into o from leaders.organizations where id = p_org for update;
   if not found or o.status <> 'active' then return 'inactive'; end if;
+  if exists (select 1 from leaders.participants where id = p_participant and status in ('withdrawn', 'suspended')) then return 'out'; end if;
   if exists (select 1 from leaders.entitlements where participant_id = p_participant and organization_id = p_org and source = 'sponsor' and revoked_at is null) then
     insert into leaders.entitlements (participant_id, item, source, organization_id, granted_by, note, value_cents, currency)
       select p_participant, i, 'sponsor', p_org, 'sponsor', p_note, case when i = 'program' then p_program_value else 0 end, p_currency

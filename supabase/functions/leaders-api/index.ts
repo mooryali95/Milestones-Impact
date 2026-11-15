@@ -18,8 +18,9 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, clientIp, drainMailQueue, Fail, preflight, reply } from './core.ts';
-import { CONSENT_GATED, consentState } from './labels.js';
+import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply } from './core.ts';
+import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
+import { approvalOf, inProgram } from './logic.js';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -103,19 +104,72 @@ const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 // ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
+// ورابط الجلسة عن بعد يُعرض على شاشة الورشة، ورمز الجهة يربطه بجهة حقيقية، وتقييم 360 يفتح دورة ترشيح (P1-04)
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
-  'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request']);
+  'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
+  'workshop.join', 'me.sponsor-code', 'f360.start']);
+// وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
+const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+  'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
+  'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
+  'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
+  'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
+  'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
+  'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
+
+// بوابة البرنامج (P1-04): كل فعل للمشارك في واحدة من ثلاث، وprogram_gate_test.ts يُسقط فعلًا لم يُصنَّف.
+// المعتمد مساره: approvalOf (ثلاثة تسكينات معتمدة، القاعدة نفسها في الكتيب وكاتون والمبادرة). وداخل البرنامج: inProgram
+// (المنسحب والموقوف خارجه، والموقوف يُرد قبل هذا في participantFromToken). الاعتماد لا يُسحب بعد منحه، فيُحفظ في العامل
+// فلا يُقرأ مع كل سؤال من أسئلة القاعة. الأولى: يبقى لكل من يدخل ومنهم المنسحب (الحساب وبياناته وملفه وشهادته)
+const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name', 'certificate',
+  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
+  'consent.accept', 'org.share-consent', 'org.visibility', 'me.switch', 'pay.access', 'sponsor.cancel', 'sus.state', 'sus.submit']);
+// داخل البرنامج قبل الاعتماد وبعده: الملف والقياس المبدئي والدفع والرعاية، ودعوة المدير للتقدير القبلي (impact)،
+// ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)،
+// ورابط الجلسة عن بعد وغرفة الموجّه على الخادم: للمعتمد كما كان، ولغيره حين تفتح مرحلتهما في رحلته بقاعدة الفتح أو بفتح
+// الأدمن (sessionOpen في activities.ts)
+const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
+  'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
+  'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
+// البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
+const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
+  'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
+  'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
+  'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
+  'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
+// وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتيبه، وتقدير أثره) وتقييم
+// خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
+// GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
+const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
+const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. تبقى لك بياناتك وشهادتك ومخرجاتك للاطلاع والتنزيل، وللاستفسار: ${CONTACT_EMAIL}`;
+const approvedSeen = new Set<string>();
+async function programGate(action: string, p: any) {
+  if (GATE_ACCOUNT.has(action)) return;
+  if (!inProgram(p.status) && !GATE_KEPT.has(action)) throw new Fail(OUT_OF_PROGRAM_AR, 403, 'out_of_program');
+  if (GATE_PRE.has(action)) return;
+  // فعل البرنامج، وما لم يُصنَّف يُعامل معاملته فلا يُفتح بلا اعتماد. تعذّر القراءة يرمي ولا يفتح شيئًا
+  if (approvedSeen.has(p.id)) return;
+  if (!approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id))).approved) {
+    throw new Fail('يُفتح هذا بعد اعتماد مسارك', 403, 'locked');
+  }
+  if (approvedSeen.size > 5000) approvedSeen.clear();
+  approvedSeen.add(p.id);
+}
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
   if (action.startsWith('assessment.')) return b.kind === 'post' ? 'program' : 'assessment';
   return 'program';
 }
 
-// فعل مشارك ببواباته كلها (حساب العرض، والدفع، وتجديد الموافقة) كما في معالج الطلب، لاستعماله داخل طلب مجمّع
+// فعل مشارك ببواباته كلها (حساب العرض، والبرنامج، والدفع، وتجديد الموافقة)، في معالج الطلب وداخل الطلب المجمّع
 async function asAction(action: string, p: any, b: Body, sid: string, ctx: any) {
   if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
+  // قبل الدفع: المنسحب ومن لم يُعتمد مساره يعرف السبب الحقيقي لا «ادفع أولًا»
+  await programGate(action, p);
+  // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
   const need = payGate(action, b);
   if (need) await Y.requireAccess(p, need);
+  // D18: ما يعتمد على أغراض النسخة الجوهرية وحدها ينتظر تجديد الموافقة، والرحلة نفسها لا تُحجب
   if (CONSENT_GATED.includes(action) && 'consented_at' in p && consentState(p.consent_version, p.consented_at).needed) {
     throw new Fail('جدّد موافقتك على سياسة الخصوصية المحدّثة أولًا، من الشريط أعلى رحلتك', 428, 'consent_renew');
   }
@@ -226,6 +280,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'tracking.get': (p) => T.mine(p),
   'tracking.save': (p, b) => T.save(p, b),
 };
+// تصنيف أفعال المشارك كما يقرؤه program_gate_test.ts
+export const ACTION_GATES = { actions: Object.keys(participant), account: GATE_ACCOUNT, pre: GATE_PRE, program: GATE_PROGRAM, kept: GATE_KEPT, demoBlocked: DEMO_BLOCKED, demoOpen: DEMO_OPEN };
 
 // نتيجة فعل داخل طلب مجمّع بالشكل نفسه الذي يرده الفعل وحده، فخطؤه يبقى له ولا يُفشل الطلب كله
 async function settle(action: string, p: Promise<unknown>) {
@@ -508,15 +564,8 @@ Deno.serve(async (req) => {
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
-      if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
-      // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
-      const need = payGate(action, b);
-      if (need) await Y.requireAccess(p, need);
-      // D18: ما يعتمد على أغراض النسخة الجوهرية وحدها ينتظر تجديد الموافقة، والرحلة نفسها لا تُحجب
-      if (CONSENT_GATED.includes(action) && 'consented_at' in p && consentState(p.consent_version, p.consented_at).needed) {
-        throw new Fail('جدّد موافقتك على سياسة الخصوصية المحدّثة أولًا، من الشريط أعلى رحلتك', 428, 'consent_renew');
-      }
-      return reply(req, await participant[action](p, b, sessionId, ctx));
+      // البوابات كلها في asAction، مصدرها الواحد للطلب وحده وللطلب المجمّع
+      return reply(req, await asAction(action, p, b, sessionId, ctx));
     }
     if (coordinator[action]) {
       const { coordinator: c, sessionId } = await C.fromToken(b.token);

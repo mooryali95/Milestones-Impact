@@ -6,7 +6,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { answersClosed, answerSeconds, assignTables, hallAttendance, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
-import { checkinOpen, overallLevel } from './logic.js';
+import { checkinOpen, inProgram, overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
 import type { Actor } from './admin.ts';
 
@@ -61,6 +61,10 @@ async function seatOne(cohortId: string, participantId: string, team: string) {
   await saveSeats(cohortId, roles, tables, [participantId]);
 }
 
+// أعضاء القاعة من cohortMembers، ومنهم من تفتح له بوابة البرنامج وحده (P1-04): مسار معتمد وحالة داخل البرنامج.
+// من لم يُعتمد بعد أو انسحب لا يدخلها، فلا يُعرض اسمه ومستواه المبدئي على الحاضرين، ولا يُعدّ في فرقها وحضورها
+const hallMembers = async (cohort: any) => ((await cohortMembers(cohort)) as any[]).filter((m) => m.approved && inProgram(m.status));
+
 // جلسات الورشة التي يصح أن تنتمي إليها قاعة الدفعة: الفعّالة لدفعتها أو لكل الدفعات، من الأمس إلى أسبوع قادم
 async function workshopsFor(cohortId: string) {
   const now = Date.now();
@@ -87,7 +91,7 @@ const shared = new Map<string, { version: number; at: number; data: Promise<any>
 async function readShared(session: any) {
   const cohort = must(await db.from('cohorts').select('*').eq('id', session.cohort_id).single()) as any;
   const [members, seat, presence, sentence, prog] = await Promise.all([
-    cohortMembers(cohort),
+    hallMembers(cohort),
     seats(cohort.id),
     db.from('hall_presence').select('participant_id, last_seen, hand').eq('session_id', session.id),
     session.sentence_id ? db.from('katon_sentences').select('*').eq('id', session.sentence_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -328,7 +332,7 @@ export async function split(a: Actor, b: Body) {
     const cohort = must(await db.from('cohorts').select('*').eq('id', s.cohort_id).single());
     const { data: pres } = await db.from('hall_presence').select('participant_id').eq('session_id', s.id);
     const ids = new Set((pres || []).map((x: any) => x.participant_id));
-    const members = (await cohortMembers(cohort)).filter((m: any) => !ids.size || ids.has(m.id));
+    const members = (await hallMembers(cohort)).filter((m: any) => !ids.size || ids.has(m.id));
     const roles = splitTeams(members, method);
     // تقسيم جديد يعني طاولات جديدة؛ والترتيب بالمستوى فتتنوع المستويات داخل الطاولة
     const byLevel = [...members].sort((x: any, y: any) => String(overallLevel(x.levels)).localeCompare(String(overallLevel(y.levels)))).map((m: any) => m.id);
@@ -364,7 +368,7 @@ export async function close(a: Actor, b: Body) {
   const attendance: Body = { written: 0, eligible: 0, rounds: 0, workshop: null, reason: null };
   if (s.mode === 'live') {
     const cohort = must(await db.from('cohorts').select('*').eq('id', s.cohort_id).single()) as any;
-    const att = await attendanceOf(s, (await cohortMembers(cohort)).map((m: any) => m.id));
+    const att = await attendanceOf(s, (await hallMembers(cohort)).map((m: any) => m.id));
     Object.assign(attendance, { eligible: att.eligible.length, rounds: att.rounds });
     const w = s.workshop_session_id ? (await db.from('workshop_sessions').select('id, title_ar').eq('id', s.workshop_session_id).maybeSingle()).data as any : null;
     if (!w) attendance.reason = 'no_workshop';

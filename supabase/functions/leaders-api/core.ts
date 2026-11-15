@@ -468,13 +468,15 @@ export const WORKSHOP_MAIL = {
   day: { subject: 'جلستك التدريبية غدًا', lead: 'نذكّرك بجلستك التدريبية غدًا.', note: 'أحضر جوالك مشحونًا، فالمشاركة في الجولات من تطبيقك، وبها يُحتسب حضورك.' },
   hour: { subject: 'جلستك التدريبية بعد ساعة', lead: 'جلستك التدريبية تبدأ بعد نحو ساعة.', note: 'افتح «القاعة» في التطبيق حين تصل، وادخلها لتظهر لزملائك وللخبير.' },
 } as const;
-export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null) {
+// staged: جلسة عن بعد لم تُفتح مرحلتها في رحلته بعد، فلا رابط في البريد ولا تعليمات القاعة: الرابط في رحلته حين تُفتح
+export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في رحلتك حين تُفتح لك مرحلة هذه الجلسة، فافتح رحلتك يومها.';
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged = false) {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
     + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح رحلتي')
-    + mailNote(m.note),
+    + mailNote(staged ? WORKSHOP_STAGED_NOTE : m.note),
     `${title} · ${when}`, '');
 }
 
