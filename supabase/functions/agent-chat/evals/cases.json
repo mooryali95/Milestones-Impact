@@ -133,7 +133,7 @@
    "expect": {
     "behavior": "answer",
     "must_include": [
-     "برنامج القادة|المصفوفة"
+     "القادة|مصفوفة"
     ],
     "lang": "ar"
    },

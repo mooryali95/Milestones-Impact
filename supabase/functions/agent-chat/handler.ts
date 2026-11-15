@@ -12,7 +12,8 @@ import { slackPost } from '../_shared/slack.ts';
 import { maskEmail } from '../_shared/slack.ts';
 import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
 import { inServiceHours, promiseNow } from '../_shared/hours.js';
-import { isArabic, matchFaq, normalizeText, productOf } from './faq.ts';
+import { matchFaq, productOf } from './faq.ts';
+import { asksPrice, orgQuote, replyLang } from './intent.ts';
 import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
 import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } from './pricing.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
@@ -113,13 +114,11 @@ function randomToken() {
 }
 const clip = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const isEmail = (s: string) => /^[^\s@<>"'();,]+@[^\s@<>"'();,]+\.[a-z]{2,}$/i.test(s) && s.length <= 254;
-const langOf = (s: string): 'ar' | 'en' => (isArabic(s) ? 'ar' : 'en');
+const langOf = replyLang;
 const PAGES = new Set(['MI-HOME', 'MI-LEADERS', 'MI-ASSESSMENT', 'MI-PROJECTS', 'MI-GOVERNANCE', 'MI-PRICING', 'MI-LEGAL']);
 const pageOf = (v: unknown) => (PAGES.has(String(v)) ? String(v) : 'MI-HOME');
 
-// السعر الحي يُطلب حين يسأل الزائر عن سعر، وتكون الصفحة صفحة البرنامج أو صفحة مشتركة
-const PRICE_WORDS = ['سعر', 'اسعار', 'تكلفه', 'بكم', 'كم', 'رسوم', 'رسم', 'مبلغ', 'price', 'cost', 'fee', 'fees', 'much'];
-const asksPrice = (q: string) => normalizeText(q).split(' ').some((t) => PRICE_WORDS.some((w) => t === w || t.endsWith(w)));
+// السعر الحي يُطلب حين يسأل فرد عن سعر (asksPrice في intent.ts)، وتكون الصفحة صفحة البرنامج أو صفحة مشتركة
 const money = (cents: number, cur: string) => `${(cents / 100).toFixed(2)} ${cur}`;
 
 // ── بث SSE ──
@@ -255,12 +254,14 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const history = await d.store.history(conv.id);
     const product = productOf(conv.product);
     let leadersPrice: string | null = null;
-    if (product !== 'matrix' && asksPrice(message)) {
+    // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق)
+    const quote = orgQuote(message, product);
+    if (!quote && product !== 'matrix' && asksPrice(message)) {
       const p = await d.store.leadersPrice();
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
     const inHours = inServiceHours(now);
-    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(lang, now), inHours, droppedTurns: 0, leadersPrice });
+    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(lang, now), inHours, droppedTurns: 0, leadersPrice, lang, orgQuote: quote });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
     const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
