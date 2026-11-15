@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -15,6 +15,7 @@
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
 //             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
+//             capstone.shares · capstone.share-create · capstone.share-update · capstone.share-revoke · capstone.note-mark (المشاركة برابط وملاحظات القراء)
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
@@ -38,6 +39,7 @@ import * as S from './system.ts';
 import * as L from './lab.ts';
 import * as X from './capstone.ts';
 import * as T from './tracking.ts';
+import * as SH from './share.ts';
 import * as E from './experts.ts';
 import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
@@ -82,6 +84,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'rater.submit': I.raterSubmit,
   'sponsor.get': X.sponsorGet,
   'sponsor.submit': X.sponsorSubmit,
+  // مشاركة وثيقة المبادرة برابط خاص (share.ts): القراءة، وملاحظة القارئ إن فتحها صاحب الوثيقة
+  'share.get': SH.get,
+  'share.note': (b, ctx) => SH.note(b, ctx),
   'outcome.get': T.verifyGet,
   'outcome.submit': T.verifySubmit,
   'expert.apply': E.apply,
@@ -114,7 +119,7 @@ const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility',
 // ورابط الجلسة عن بعد يُعرض على شاشة الورشة، ورمز الجهة يربطه بجهة حقيقية، وتقييم 360 يفتح دورة ترشيح (P1-04)
 const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
-  'workshop.join', 'me.sponsor-code', 'f360.start']);
+  'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
 const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
@@ -122,7 +127,8 @@ const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.priv
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
   'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
-  'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
+  'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
+  'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
 
 // بوابة البرنامج (P1-04): كل فعل للمشارك في واحدة من ثلاث، وprogram_gate_test.ts يُسقط فعلًا لم يُصنَّف.
 // المعتمد مساره: approvalOf (ثلاثة تسكينات معتمدة، القاعدة نفسها في الكتيب وكاتون والمبادرة). وداخل البرنامج: inProgram
@@ -143,11 +149,14 @@ const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
-  'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save']);
+  'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
+  'capstone.shares', 'capstone.share-create', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
 // وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتيبه، وتقدير أثره) وتقييم
 // خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
 // GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
-const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit']);
+// ومشاركة الوثيقة: يرى روابطه وملاحظاتها ويلغي ما شاء، ولا ينشئ رابطًا جديدًا
+const GATE_KEPT = new Set(['f360.report', 'capstone.get', 'capstone.doc', 'handbook.export', 'impact.mine', 'ratings.pending', 'ratings.submit',
+  'capstone.shares', 'capstone.share-revoke', 'capstone.note-mark']);
 const OUT_OF_PROGRAM_AR = `أنت خارج البرنامج الآن، فهذا لم يعد متاحًا لك. تبقى لك بياناتك وشهادتك ومخرجاتك للاطلاع والتنزيل، وللاستفسار: ${CONTACT_EMAIL}`;
 const approvedSeen = new Set<string>();
 async function programGate(action: string, p: any) {
@@ -284,6 +293,11 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'capstone.summary': (p, b) => X.saveSummary(p, b),
   'capstone.submit': (p) => X.submit(p),
   'capstone.doc': (p) => X.doc(p),
+  'capstone.shares': (p) => SH.list(p),
+  'capstone.share-create': (p, b) => SH.create(p, b),
+  'capstone.share-update': (p, b) => SH.update(p, b),
+  'capstone.share-revoke': (p, b) => SH.revoke(p, b),
+  'capstone.note-mark': (p, b) => SH.noteMark(p, b),
   'tracking.get': (p) => T.mine(p),
   'tracking.save': (p, b) => T.save(p, b),
 };

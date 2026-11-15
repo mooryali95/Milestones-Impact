@@ -13,6 +13,7 @@ import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
+import { DEP_AR, DEP_TYPES, depAr, formatDeps, parseDeps } from '../../../supabase/functions/leaders-api/schedule.js';
 import logoDark from '../milestone-impact.svg';
 import { rubricLevelAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -26,7 +27,7 @@ const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', r
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
 // id للحقل الذي تسمّيه <label htmlFor>، وlabelId لما لا تسمّيه label (مجموعة الاختيار والجدول) فيُسمّى بـaria-labelledby
-function Field({ f, value, onChange, locked, initiative, imp, id, labelId, modelKey }) {
+function Field({ f, value, onChange, locked, initiative, imp, id, labelId, modelKey, level }) {
   // حقل اسم المشروع مصدره بطاقة المبادرة: يُعرض ولا يُكتب هنا
   if (f.bind === 'initiative') {
     return (
@@ -58,7 +59,13 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
               <tr key={ri}>
                 <td className="mt-n">{ri + 1}</td>
                 {cols.map((c, ci) => (
-                  <td key={c}><textarea rows={1} disabled={locked} value={r[ci] || ''} aria-label={`${c} ${ri + 1}`} onChange={(e) => set(ri, ci, e.target.value)} /></td>
+                  <td key={c}><textarea rows={1} disabled={locked} value={r[ci] || ''} aria-label={`${c} ${ri + 1}`} onChange={(e) => set(ri, ci, e.target.value)} />
+                    {/* علاقات الأنشطة في الجدول الزمني (schedule.js): أداة اختيار تكتب الصيغة، ووصفها العربي تحت الخلية */}
+                    {modelKey === 'schedule' && String(c).includes('يعتمد') && (
+                      <DepCell value={r[ci] || ''} own={String(r[0] || '').trim()} codes={rows.map((x) => String(x[0] || '').trim()).filter(Boolean)} level={level} locked={locked}
+                        label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
+                    )}
+                  </td>
                 ))}
                 {!locked && <td><button type="button" className="mt-x" title="حذف الصف" disabled={rows.length <= 1}
                   onClick={() => onChange(rows.filter((_, i) => i !== ri))}>×</button></td>}
@@ -83,6 +90,51 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
 }
 
 // استيراد صفوف من جدول نموذج آخر (مصدرها الوحيد)، لقطة يعدّلها المشارك بعدها
+// ── علاقة نشاط بسابقه: النوع بالمستوى، فالتأسيسي يرى «بعد انتهاء» وحدها، والمتقدم يضيف التأخير والتقديم ──
+const DEP_LEVEL = { beginner: ['FS'], intermediate: DEP_TYPES, advanced: DEP_TYPES };
+function DepCell({ value, own, codes, level, locked, label, onChange }) {
+  const [open, setOpen] = useState(false);
+  const types = DEP_LEVEL[level] || DEP_TYPES;
+  const others = codes.filter((c) => c.toUpperCase() !== own.toUpperCase());
+  const [pick, setPick] = useState({ code: '', type: 'FS', lag: 0 });
+  const deps = parseDeps(value);
+  const add = () => {
+    if (!pick.code) return;
+    onChange(formatDeps([...deps.filter((d) => d.code !== pick.code.toUpperCase()), { code: pick.code.toUpperCase(), type: pick.type, lag: Number(pick.lag) || 0 }]));
+    setOpen(false); setPick({ code: '', type: 'FS', lag: 0 });
+  };
+  return (
+    <div className="dep-cell">
+      {deps.length > 0 && <ul className="dep-list">{deps.map((d) => <li key={d.code}>{depAr(d)}</li>)}</ul>}
+      {!locked && others.length > 0 && (open ? (
+        <div className="dep-pop" role="group" aria-label={`علاقة جديدة: ${label}`}>
+          <label><span>النشاط السابق</span><select value={pick.code} onChange={(e) => setPick({ ...pick, code: e.target.value })}><option value="">اختر</option>{others.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
+          {types.length > 1 && <label><span>العلاقة</span><select value={pick.type} onChange={(e) => setPick({ ...pick, type: e.target.value })}>{types.map((t) => <option key={t} value={t}>{DEP_AR[t].title} ({t})</option>)}</select></label>}
+          {level === 'advanced' && <label><span>تأخير (+) أو تقديم (−) بالأيام</span><input type="number" value={pick.lag} onChange={(e) => setPick({ ...pick, lag: e.target.value })} /></label>}
+          <small className="muted">{DEP_AR[pick.type].hint}</small>
+          <div className="row"><button type="button" className="btn gold sm" disabled={!pick.code} onClick={add}>أضف</button><button type="button" className="link small" onClick={() => setOpen(false)}>إلغاء</button></div>
+        </div>
+      ) : <button type="button" className="link small dep-add" onClick={() => setOpen(true)}>+ علاقة</button>)}
+    </div>
+  );
+}
+
+function SchedulePreview({ f, rows }) {
+  const [lib, setLib] = useState(null);
+  useEffect(() => { import('../../../src/lib/brand/visuals.js').then(setLib); }, []);
+  if (!lib || !f) return null;
+  const v = lib.ganttFromTable(f.columns, Array.isArray(rows) ? rows : []);
+  if (!v.svg) return null;
+  return (
+    <section className="sched-preview" aria-label="معاينة المخطط الزمني">
+      <span className="mg-cap">معاينة حية: جانت بعلاقاته ومساره الحرج</span>
+      {v.stats.cycle && <p className="alert err small" role="alert">حلقة في العلاقات بين {v.stats.cycle.join('، ')}: لا يُحسب المسار الحرج حتى تُحذف إحداها.</p>}
+      <div className="viz-scroll" dangerouslySetInnerHTML={{ __html: v.svg }} />
+      {v.missing.length > 0 && <p className="small muted">{v.missing.join('. ')}.</p>}
+    </section>
+  );
+}
+
 function ImportRows({ imp, rows, onChange }) {
   const n = imp.rows?.length || 0;
   const has = rows.some((r) => r.some((c) => String(c || '').trim()));
@@ -268,7 +320,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, d.examples)} />}
-                <Field f={f} modelKey={m.key} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
+                <Field f={f} modelKey={m.key} level={m.level} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
                 {!locked && nearExample(m.key, f.key, answers[f.key]) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}
                 {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
@@ -276,6 +328,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               </div>
             );
           })}
+          {/* الجدول الزمني يُرى وهو يُكتب: جانت بعلاقاته ومساره الحرج من صفوف الجدول نفسها (visuals.js) */}
+          {m.key === 'schedule' && <SchedulePreview f={m.fields.find((x) => x.key === 'activities')} rows={answers.activities} />}
           {msg?.err && <div className="alert err">{msg.err}</div>}
           {msg?.ok && <div className="alert ok">{msg.ok}</div>}
           <div className="ws-bar">

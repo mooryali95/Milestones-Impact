@@ -130,6 +130,7 @@ export const MIGRATIONS = [
   '20261115150000_leaders_handbook_v3_1',
   '20261115160000_leaders_book_comments',
   '20261115170000_leaders_agent_conversations',
+  '20261115180000_leaders_capstone_shares',
   '20261115190000_leaders_book_draft_comments',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
@@ -179,5 +180,6 @@ export const MIGRATION_GATES = {
   '20261115150000_leaders_handbook_v3_1': ["tolerant", "نص الأبواب يُقرأ من الجدول كما هو، فالدوال تعمل قبله وبعده (يبقى النص السابق حتى يُطبَّق)"],
   '20261115160000_leaders_book_comments': ["tolerant", "القارئ يعرض الكتاب بلا تعليقات إن غاب الجدول (master-book.ts: commentRows يرجع null فتُعرض قائمة فارغة)، والتعليق يُرفض برسالة"],
   '20261115170000_leaders_agent_conversations': ["tolerant", "الدالة agent-chat ترد agent_unavailable (503) بلا الجداول فتعرض النافذة «اترك رسالتك» عبر النموذج، وsend-otp لا تقرؤها"],
+  '20261115180000_leaders_capstone_shares': ["tolerant", "الدالة تتحمل غياب الجدولين (share.ts): قبلهما تقول لوحة المشاركة إن الميزة لم تُفعَّل بعد، ولا يتعطل شيء"],
   '20261115190000_leaders_book_draft_comments': ["tolerant", "قبله تُقرأ المسودة في الكتاب الأم ويُرفض التعليق عليها برسالة (master-book.ts)، وتعليقات الأبواب كما هي"],
 };
