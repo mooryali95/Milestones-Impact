@@ -18,6 +18,7 @@ import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } fro
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
 import { redactInput, StreamSanitizer } from './redact.ts';
 import { type Store, Unavailable } from './store.ts';
+import { keyErrorCode, type Runtime } from './runtime.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 
 // الحدود لكل شبكة تشمل الطلبات بلا عنوان معروف دلوًا واحدًا مشتركًا (لا إعفاء). وحصة الشبكة من استدعاءات النموذج في
@@ -47,7 +48,12 @@ export type Deps = {
   env: Env;
   now?: () => number;
   turnstile: (token: unknown, ip: string | null) => Promise<boolean>;
-  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void, signal: AbortSignal) => Promise<ModelResult>;
+  // apiKey: المفتاح الفعلي لهذا الطلب (القاعدة ثم البيئة، runtime.ts)
+  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void, signal: AbortSignal, apiKey?: string) => Promise<ModelResult>;
+  // حالة المساعد الفعلية (القاعدة ومفتاح الطوارئ والبصمة). بلاها (الاختبارات القديمة وrun.ts) تحكم env.enabled وenv.apiKey
+  runtime?: () => Promise<Runtime>;
+  // آخر نجاح وآخر خطأ للمفتاح بعد كل استدعاء (agent_key_status)، في الخلفية
+  keyStatus?: (ok: boolean, code: string | null, source: 'db' | 'env' | null) => Promise<unknown>;
   notifyAdmin: (row: ContactRow) => Promise<void>;
   alert: (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
   clientIp: (req: Request) => string | null;
@@ -157,15 +163,30 @@ async function spendAlert(d: Deps, day: string, level: 80 | 100, spent: number) 
     .catch((e) => console.error('agent alert:', e));
 }
 
+async function rt(d: Deps): Promise<Runtime> {
+  if (d.runtime) return await d.runtime();
+  return { enabled: d.env.enabled, reason: d.env.enabled ? null : 'env_off', apiKey: d.env.apiKey, keySource: d.env.apiKey ? 'env' : null };
+}
+// الإعداد المنشور غير الذي نجح تقييمه: مطفأ، وتنبيه إعداد واحد في اليوم (علامة alerted_config نفسها)
+function staleAlert(d: Deps, r: Runtime) {
+  if (r.reason !== 'stale') return;
+  background(configAlert(d, riyadhDay(d.now?.() ?? Date.now()), 'agent_eval_stale', {}));
+}
+
 // ════════ الإجراءات ════════
 async function status(d: Deps) {
-  return json({ success: true, enabled: d.env.enabled, site_key: d.env.enabled ? d.env.turnstileSite : null });
+  const r = await rt(d);
+  staleAlert(d, r);
+  // الفعلي وحده، بلا سببه للزائر
+  return json({ success: true, enabled: r.enabled, site_key: r.enabled ? d.env.turnstileSite : null });
 }
 
 async function start(d: Deps, b: Record<string, unknown>, req: Request) {
   // الحذف بعد 90 يومًا تتولاه مهمة مجدولة في القاعدة (leaders-agent-purge)، وهذا احتياط إضافي يعمل ولو أُغلق المساعد
   background(d.store.purgeExpired());
-  if (!d.env.enabled) return json({ success: false, code: 'agent_off' }, 503);
+  const r = await rt(d);
+  staleAlert(d, r);
+  if (!r.enabled) return json({ success: false, code: 'agent_off' }, 503);
   if (!d.env.turnstileSecret || !d.env.turnstileSite) {
     console.error('agent-chat: Turnstile keys missing; the assistant is closed');
     return json({ success: false, code: 'captcha_unconfigured' }, 503);
@@ -204,6 +225,9 @@ async function send(d: Deps, b: Record<string, unknown>) {
   if (conv.status !== 'bot') return json({ success: false, code: 'handed_off', text: promiseNow(lang, d.now?.() ?? Date.now()) }, 409);
   const convCap = () => json({ success: false, code: 'conv_cap', text: TEXT.convCap[lang], handoff: true }, 429);
   if (conv.visitor_messages >= LIMITS.messagesPerConversation) return convCap();
+  // الإطفاء من اللوحة يوقف الإرسال في المحادثات المفتوحة كذلك (خلال دقيقة لكل نسخة)
+  const r = await rt(d);
+  if (!r.enabled) return json({ success: false, code: 'agent_off' }, 503);
 
   const now = d.now?.() ?? Date.now();
   // الحجز ذري: الطلبات المتوازية برمز واحد لا تتجاوز حد المحادثة
@@ -243,7 +267,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: 'capped', lang });
       emit('capped', { text: TEXT.capped[lang] });
     };
-    if (!d.env.apiKey || calls === null || calls >= LIMITS.modelCallsHour) return await capped();
+    if (!r.apiKey || calls === null || calls >= LIMITS.modelCallsHour) return await capped();
     if (ipCalls === null || ipCalls >= LIMITS.modelCallsPerIpDay) return await capped();
     // نموذج غير موجود في جدول الأسعار: لا يُستدعى (السقف لا يُحسب بسعر مجهول)، وتنبيه إعداد مرة في اليوم
     if (!knownModel(d.env.model)) {
@@ -268,19 +292,22 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const san = new StreamSanitizer(48, (t) => t.split(HANDOFF_MARK).join(''));
     let result: ModelResult;
     try {
-      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); }, signal);
+      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); }, signal, r.apiKey);
     } catch (e) {
       const st = errStatus(e);
       console.error('agent model:', (e as Error)?.name, st, (e as Error)?.message);
+      // انقطاع الزائر ليس خطأ مفتاح
+      if (!signal.aborted && d.keyStatus) background(d.keyStatus(false, keyErrorCode(e), r.keySource));
       // لا usage: يبقى الحجز (أسوأ تكلفة) محسوبًا كما هو
       await d.store.updateMessage(callId, { stop_reason: signal.aborted ? 'aborted' : 'error' });
       if (st !== null && CONFIG_STATUSES.has(st)) {
-        await configAlert(d, day, 'agent_model_config', { status: st, type: (e as Error)?.name });
+        await configAlert(d, day, 'agent_model_config', { status: st, type: (e as Error)?.name, key_source: r.keySource });
         return await capped();
       }
       emit('error', { code: 'model', text: TEXT.error[lang] });
       return;
     }
+    if (d.keyStatus) background(d.keyStatus(true, null, r.keySource));
     // بسعر النموذج الذي خدم الطلب إن كان في الجدول، وإلا فبسعر المطلوب (وهو في الجدول بالتحقق أعلاه)
     const cost = costMicros(knownModel(result.model) ? result.model : d.env.model, result.usage);
     const total = await d.store.settleSpend(day, cost - worst);
