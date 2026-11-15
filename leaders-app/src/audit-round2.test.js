@@ -51,7 +51,8 @@ describe('7.5 رئيسية المشارك', () => {
 
 describe('9.13 حزمة الإدارة', () => {
   it('شريط البحث لا يجرّ الأقسام، وكل قسم كسول', () => {
-    expect(read('admin-app/src/Palette.jsx')).toContain("import { TABS } from './leaders-tabs.js';");
+    // من الوحدة الخفيفة leaders-tabs.js لا من Leaders.jsx (وOWNER_TABS منها لإخفاء تبويب المالك عن غيره)
+    expect(read('admin-app/src/Palette.jsx')).toMatch(/import \{ (OWNER_TABS, )?TABS \} from '\.\/leaders-tabs\.js';/);
     const l = read('admin-app/src/screens/Leaders.jsx');
     expect(l).not.toMatch(/^import \w+ from '\.\/\w+\.jsx';/m);
     expect(l.match(/= (lazy|named)\(/g).length).toBeGreaterThanOrEqual(20);

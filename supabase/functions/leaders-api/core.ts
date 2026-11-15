@@ -624,6 +624,16 @@ export function healthMail(rows: [string, string][], issues: string[]) {
     issues.length ? `${issues.length} يحتاج تدخلك` : 'لا شيء يحتاج تدخلك', 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 
+// تنبيه أمني بتغيير مفتاح المساعد للمالكين: الحساب والطريقة والوقت وآخر أربعة وحدها، بلا شيء آخر من المفتاح
+export const AGENT_KEY_MAIL_SUBJECT = { changed: 'تنبيه أمني: تم تغيير مفتاح المساعد', reverted: 'تنبيه أمني: أُعيد مفتاح المساعد إلى سر الخادم' };
+export function agentKeyMail(kind: 'changed' | 'reverted', rows: [string, string][]) {
+  return shell('admin', AGENT_KEY_MAIL_SUBJECT[kind],
+    mailRows(rows)
+    + mailNote('إن لم تكن أنت، ادخل وارجع إلى سر الخادم من «المساعد الآلي» وأنهِ الجلسات الأخرى.')
+    + mailButton(`${SITES.admin}/#/leaders/agent`, 'افتح شاشة المساعد'),
+    AGENT_KEY_MAIL_SUBJECT[kind], 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
+}
+
 // ── تنبيه التشغيل الفوري ──
 // خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة في كل مهلة تهدئة
 // لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
@@ -633,6 +643,8 @@ const ALERT_WINDOW_MS = 10 * 60e3;
 // وتجربة القناة مرة في الدقيقة
 export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
+  // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
+  agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
 };
 export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
 const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
@@ -735,6 +747,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'team-assigned', family: 'experts', label: 'التكليف في فريق دفعة', subject: 'كُلّفت في فريق دفعة وزارة التجربة 2026', html: () => teamAssignedMail('منى', { cohort: 'دفعة وزارة التجربة 2026', org: 'وزارة التجربة', role: 'موجّه', scope: 'خبير المجموعة 2', period: '1 مارس 2026 إلى 30 يونيو 2026' }) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },
+  { key: 'agent-key', family: 'admin', label: 'تنبيه أمني: تغيير مفتاح المساعد', subject: AGENT_KEY_MAIL_SUBJECT.changed, html: () => agentKeyMail('changed', [['الحساب', 'o***@example.com'], ['الطريقة', 'مفتاح المرور'], ['آخر أربعة قبل', '••••wxyz'], ['آخر أربعة بعد', '••••abcd'], ['الوقت', '15 نوفمبر 2026، 10:20']]) },
   { key: 'ops-alert', family: 'admin', label: 'تنبيه تشغيلي فوري', subject: 'تنبيه: internal في leaders-api', html: () => alertMail('internal', { ref: 'a1b2c3d4', action: 'me', message: 'relation "leaders.x" does not exist' }) },
 ];
 
