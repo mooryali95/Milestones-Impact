@@ -72,7 +72,7 @@ function Dashboard({ user, onUser, onLogout }) {
         {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} isOwner={!!user.is_owner} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
       </Suspense>
 
-      <Palette />
+      <Palette owner={(user.role_id || user.role) === 'super_admin' || !!user.is_owner} />
       <Suspense fallback={null}>
         {settings && <Settings user={user} onUser={onUser} onClose={closeSettings} />}
       </Suspense>

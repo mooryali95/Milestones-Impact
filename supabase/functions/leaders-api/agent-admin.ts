@@ -13,7 +13,7 @@ import { type Env, riyadhDay } from '../agent-chat/handler.ts';
 import { DEFAULT_MODEL, MAX_TOKENS, streamAnswer } from '../agent-chat/model.ts';
 import { estimateTokens, GEO_US_MULTIPLIER, knownModel, ratesFor, worstCaseMicros } from '../agent-chat/pricing.ts';
 import { SYSTEM_BLOCKS } from '../agent-chat/prompt.ts';
-import { readRuntime, envMode, type Runtime } from '../agent-chat/runtime.ts';
+import { readRuntime, envMode, resetRuntime, type Runtime } from '../agent-chat/runtime.ts';
 import { type Store, supabaseStore } from '../agent-chat/store.ts';
 import { versions, type Versions } from '../agent-chat/version.ts';
 import { CASES } from '../agent-chat/evals/cases.ts';
@@ -60,6 +60,8 @@ export interface Repo {
   createRun(row: Partial<Run>): Promise<{ id: string } | { running: string | null }>;
   lease(id: string, seconds: number): Promise<Run | null>;
   updateRun(id: string, patch: Partial<Run>): Promise<void>;
+  // إنهاء التشغيل ما دام جاريًا وحده: لا يكتب «ناجح» فوق إيقاف وصل أثناء الدفعة الأخيرة. يعيد هل كُتب
+  finishRun(id: string, patch: Partial<Run>): Promise<boolean>;
   addCost(id: string, delta: number): Promise<number | null>;
   results(id: string): Promise<Result[]>;
   addResult(row: Result): Promise<void>;
@@ -127,6 +129,11 @@ export const supabaseRepo: Repo = {
   async updateRun(id, patch) {
     const { error } = await db.from('agent_eval_runs').update(patch).eq('id', id);
     check(error, 'agent_eval_runs update');
+  },
+  async finishRun(id, patch) {
+    const { data, error } = await db.from('agent_eval_runs').update(patch).eq('id', id).eq('status', 'running').select('id');
+    check(error, 'agent_eval_runs finish');
+    return !!data?.length;
   },
   async addCost(id, delta) {
     const { data, error } = await db.rpc('agent_eval_add_cost', { p_id: id, p_delta: Math.max(0, Math.round(delta)) });
@@ -256,15 +263,18 @@ export function requireAgentRead(a: Admin) {
 }
 
 // بوابة التفعيل: آخر تشغيل منتهٍ ناجح بالبصمة الحالية وكامل الحالات
+// (الحكم من أحدث تشغيل اكتمل بنتيجة لهذه البصمة: نجاح قديم لا يغطي رسوبًا أحدث منه. الموقوف والمتعذر بلا نتيجة فلا يحكمان)
 export function gateOf(runs: Run[], fingerprint: string, total = CASES.length) {
-  const mine = runs.filter((r) => r.fingerprint === fingerprint && r.status !== 'running');
-  const ok = mine.find((r) => r.status === 'passed' && r.done_cases >= total && r.total_cases >= total);
-  if (ok) return { ok: true, run_id: ok.id, reason: null, run: ok };
-  if (mine.some((r) => r.status === 'failed')) return { ok: false, run_id: null, reason: 'failed', run: null };
+  const latest = [...runs].filter((r) => r.fingerprint === fingerprint && (r.status === 'passed' || r.status === 'failed'))
+    .sort((x, y) => String(y.started_at).localeCompare(String(x.started_at)))[0];
+  if (latest?.status === 'passed' && latest.done_cases >= total && latest.total_cases >= total) return { ok: true, run_id: latest.id, reason: null, run: latest };
+  if (latest?.status === 'failed') return { ok: false, run_id: null, reason: 'failed', run: null };
   if (runs.some((r) => r.status === 'passed')) return { ok: false, run_id: null, reason: 'stale', run: null };
   return { ok: false, run_id: null, reason: 'none', run: null };
 }
 
+// نافذة البوابة: تشغيلات موقوفة كثيرة لا تُخرج التشغيل الحاكم منها
+const GATE_WINDOW = 100;
 const runtimeOf = (env = agentEnv(), v?: Versions): Promise<Runtime> =>
   readRuntime(() => AG.repo.runtime(), { mode: AG.env('LEADERS_AGENT_ENABLED'), envKey: env.envKey, fingerprint: async () => (v ?? await versions(env.model)).fingerprint }, AG.now());
 
@@ -286,7 +296,7 @@ export async function state(a: Admin) {
   await closeStale();
   const env = agentEnv();
   const v = await versions(env.model);
-  const runs = await AG.repo.runs(20);
+  const runs = await AG.repo.runs(GATE_WINDOW);
   const gate = gateOf(runs, v.fingerprint);
   const effective = env.mode !== 'off' && s.enabled && s.enabled_fingerprint === v.fingerprint;
   const reason = env.mode === 'off' ? 'env_off' : !s.enabled ? 'db_off' : s.enabled_fingerprint !== v.fingerprint ? 'stale' : null;
@@ -417,7 +427,7 @@ export async function enable(a: Admin, b: Body) {
     if (env.mode === 'off') throw new Fail('مفتاح الطوارئ LEADERS_AGENT_ENABLED=off في الخادم يغلب اللوحة. أزله أولًا', 409, 'env_off');
     if (!knownModel(env.model)) throw new Fail(`النموذج ${env.model} غير موجود في جدول الأسعار`, 409, 'unknown_model');
     if (!s.has_key && !env.envKey) throw new Fail('لا مفتاح: اضبطه من قسم «المفتاح» أو في أسرار الخادم', 409, 'no_key');
-    const gate = gateOf(await AG.repo.runs(20), v.fingerprint);
+    const gate = gateOf(await AG.repo.runs(GATE_WINDOW), v.fingerprint);
     if (!gate.ok) throw new Fail('لا تقييم ناجح لهذا الإعداد: شغّل التقييم أولًا', 409, 'eval_required', { reason: gate.reason });
     runId = gate.run_id;
   }
@@ -427,6 +437,8 @@ export async function enable(a: Admin, b: Body) {
     : { enabled: false, enabled_by: a.email, enabled_at: at });
   await AG.audit('admin', a.email, want ? 'agent.enable' : 'agent.disable', 'agent_settings', 'enabled',
     { enabled: s.enabled, fingerprint: s.enabled_fingerprint }, { enabled: want, fingerprint: want ? v.fingerprint : s.enabled_fingerprint, run_id: runId });
+  // هذه النسخة تقرأ الحال الجديد فورًا (والنسخ الأخرى خلال دقيقة)
+  resetRuntime();
   await AG.alert(want ? 'agent_enabled' : 'agent_disabled', { by: maskEmail(a.email), fingerprint: v.fingerprint, at }).catch(() => null);
   return { success: true, enabled: want };
 }
@@ -440,7 +452,8 @@ export async function evalStart(a: Admin) {
   const rt = await runtimeOf(env);
   if (!rt.apiKey) throw new Fail('لا مفتاح: اضبطه من قسم «المفتاح» أو في أسرار الخادم', 409, 'no_key');
   const spent = await AG.ledger().spentToday(riyadhDay(AG.now()));
-  if (spent === null || spent + AGENT.startReserveMicros > env.capCents * 1e4) throw new Fail('لا يتسع سقف اليوم للتقييم', 409, 'daily_cap');
+  if (spent === null) throw new Fail('تعذّرت قراءة سجل الإنفاق، حاول بعد قليل', 503, 'ledger');
+  if (spent + AGENT.startReserveMicros > env.capCents * 1e4) throw new Fail('لا يتسع سقف اليوم للتقييم', 409, 'daily_cap');
   const v = await versions(env.model);
   const made = await guard(() => AG.repo.createRun({
     model: env.model, knowledge_version: v.knowledge_version, prompt_version: v.prompt_version, cases_version: v.cases_version, fingerprint: v.fingerprint,
@@ -458,7 +471,10 @@ export async function evalCancel(a: Admin, b: Body) {
   const run = await guard(() => AG.repo.run(id));
   if (!run) throw new Fail('التشغيل غير موجود', 404, 'not_found');
   if (run.status !== 'running') return { success: true, status: run.status };
-  await AG.repo.updateRun(id, { status: 'stopped', stop_reason: 'cancelled', finished_at: new Date(AG.now()).toISOString(), lease_until: null });
+  if (!(await guard(() => AG.repo.finishRun(id, { status: 'stopped', stop_reason: 'cancelled', finished_at: new Date(AG.now()).toISOString(), lease_until: null })))) {
+    const now = await guard(() => AG.repo.run(id));
+    return { success: true, status: now?.status ?? 'stopped' };
+  }
   await AG.audit('admin', a.email, 'agent.eval-cancel', 'agent_eval_runs', id, null, { done: run.done_cases });
   return { success: true, status: 'stopped' };
 }
@@ -485,7 +501,8 @@ export async function evalStep(a: Admin, b: Body) {
   }
   const run = leased;
   const finish = async (status: Run['status'], stop: string | null) => {
-    await AG.repo.updateRun(id, { status, stop_reason: stop, finished_at: new Date(AG.now()).toISOString(), lease_until: null });
+    // إيقاف أو تقادم وصل أثناء الدفعة يبقى كما هو
+    await AG.repo.finishRun(id, { status, stop_reason: stop, finished_at: new Date(AG.now()).toISOString(), lease_until: null });
     const after = (await AG.repo.run(id)) ?? { ...run, status, stop_reason: stop };
     return progress(after as Run);
   };
@@ -501,6 +518,8 @@ export async function evalStep(a: Admin, b: Body) {
     const real = AG.ledger();
     let cost = num(run.cost_micros);
     let stop: { status: Run['status']; reason: string } | null = null;
+    // خطأ عابر من النموذج (429 أو 5xx أو انقطاع): الحالة لا تُحسب راسبة، وتُعاد في الدفعة التالية
+    let transient = 0;
     const queue = [...pending];
     const worker = async () => {
       while (queue.length && !stop) {
@@ -511,7 +530,8 @@ export async function evalStep(a: Admin, b: Body) {
         cost += worst;
         let o: CaseOutcome;
         try {
-          o = await runCase(c, { env: evalEnv, model: AG.model, real });
+          // التنبيه الحقيقي: علامة اليوم تُكتب في السجل الحقيقي، فتنبيه بلا إرسال يكتم تنبيه الزوار في اليوم نفسه
+          o = await runCase(c, { env: evalEnv, model: AG.model, real, alert: (k, d) => AG.alert(k, d) });
         } catch (e) {
           // رقم الحالة ونوع الخطأ وحدهما، لا نص ولا رد
           console.error('agent eval case:', c.id, (e as Error)?.name);
@@ -520,6 +540,8 @@ export async function evalStep(a: Admin, b: Body) {
           return;
         }
         cost += o.costMicros - worst;
+        // التكلفة تُحسب قبل أي إيقاف، فيطابق مجموع التشغيل ما أُنفق فعلًا
+        if (o.costMicros > 0) await AG.repo.addCost(id, o.costMicros);
         if (o.errorStatus === 401 || o.errorStatus === 403) {
           console.error('agent eval case:', c.id, o.errorStatus);
           stop = { status: 'error', reason: 'key' };
@@ -528,8 +550,8 @@ export async function evalStep(a: Admin, b: Body) {
         if (o.ledger === 'refused') { stop = { status: 'stopped', reason: 'daily_cap' }; return; }
         if (o.ledger === 'error') { stop = { status: 'error', reason: 'ledger' }; return; }
         if (o.errorStatus !== null) console.error('agent eval case:', c.id, o.errorStatus);
+        if (o.errorStatus === 0 || o.errorStatus === 429 || (o.errorStatus !== null && o.errorStatus >= 500)) { transient++; continue; }
         await AG.repo.addResult({ run_id: id, case_id: c.id, set_name: c.set, pass: o.pass, reasons: o.reasons.slice(0, 20).map((x) => x.slice(0, 300)), source: o.reply.source, handoff: o.reply.handoff, reply: o.reply.text.slice(0, 6000), cost_micros: o.costMicros });
-        if (o.costMicros > 0) await AG.repo.addCost(id, o.costMicros);
       }
     };
     await Promise.all(Array.from({ length: Math.min(AGENT.parallel, pending.length) }, worker));
@@ -541,6 +563,8 @@ export async function evalStep(a: Admin, b: Body) {
     await AG.repo.updateRun(id, totals);
     const s = stop as { status: Run['status']; reason: string } | null;
     if (s) return await finish(s.status, s.reason);
+    // دفعة بلا أي نتيجة جديدة وكلها أخطاء عابرة: النموذج غير متاح الآن، فلا حلقة بلا تقدم
+    if (transient > 0 && all.length === done.size) return await finish('error', 'model');
     if (all.length >= run.total_cases) {
       const passed = totals.eval_total > 0 && totals.redteam_total > 0 && totals.eval_pass / totals.eval_total >= THRESHOLDS.eval && totals.redteam_pass / totals.redteam_total >= THRESHOLDS.redteam;
       return await finish(passed ? 'passed' : 'failed', null);
@@ -614,12 +638,25 @@ export async function keySet(a: Admin, b: Body) {
     const [msg, st] = KEY_FAIL[c.code];
     throw new Fail(msg, st, c.code);
   }
-  const saved = await guard(() => AG.repo.keySet(key, a.email));
+  let saved: { key_last4: string; key_set_at: string };
+  try {
+    saved = await guard(() => AG.repo.keySet(key, a.email));
+  } catch (e) {
+    // فشل الحفظ بعد قبول Anthropic يُحسب محاولة في حد الساعة كغيره
+    const reason = e instanceof Fail ? e.code : 'not_migrated';
+    await AG.audit('admin', a.email, 'agent.key-rejected', 'agent_settings', 'key', null, { reason, method }).catch(() => null);
+    throw e;
+  }
+  resetRuntime();
   const at = AG.now();
-  await AG.audit('admin', a.email, 'agent.key-set', 'agent_settings', 'key', { last4: before.key_last4 }, { last4: saved.key_last4, method, model_ok: c.model_ok });
   const methodAr = METHOD_AR[method] || method;
-  await AG.alert('agent_key_changed', { by: maskEmail(a.email), method: methodAr, last4_before: before.key_last4 || (env.envKey ? 'سر الخادم' : 'لا مفتاح'), last4_after: saved.key_last4, at: when(at) }).catch(() => null);
-  await notifyOwners('changed', [['الحساب', maskEmail(a.email)], ['الطريقة', methodAr], ['آخر أربعة قبل', before.key_last4 ? `••••${before.key_last4}` : 'سر الخادم'], ['آخر أربعة بعد', `••••${saved.key_last4}`], ['الوقت', when(at)]]);
+  try {
+    await AG.audit('admin', a.email, 'agent.key-set', 'agent_settings', 'key', { last4: before.key_last4 }, { last4: saved.key_last4, method, model_ok: c.model_ok });
+  } finally {
+    // المفتاح تغير فعلًا: التنبيه والبريد يصلان ولو تعذر سطر التدقيق
+    await AG.alert('agent_key_changed', { by: maskEmail(a.email), method: methodAr, last4_before: before.key_last4 || (env.envKey ? 'سر الخادم' : 'لا مفتاح'), last4_after: saved.key_last4, at: when(at) }).catch(() => null);
+    await notifyOwners('changed', [['الحساب', maskEmail(a.email)], ['الطريقة', methodAr], ['آخر أربعة قبل', before.key_last4 ? `••••${before.key_last4}` : 'سر الخادم'], ['آخر أربعة بعد', `••••${saved.key_last4}`], ['الوقت', when(at)]]);
+  }
   return { success: true, key: { source: 'db', last4: saved.key_last4, set_at: saved.key_set_at, set_by: a.email }, model_ok: c.model_ok };
 }
 
@@ -631,11 +668,15 @@ export async function keyClear(a: Admin, b: Body) {
   if (before.enabled && !env.envKey && b.force !== true) throw new Fail('لا سر ANTHROPIC_API_KEY في الخادم، فالرجوع يطفئ المساعد. أكّد الإطفاء صراحة', 409, 'no_env_key');
   const method = await keyGuards(a);
   await guard(() => AG.repo.keyClear(a.email));
+  resetRuntime();
   const forced = before.enabled && !env.envKey;
-  if (forced) await AG.repo.updateSettings({ enabled: false, enabled_by: a.email, enabled_at: new Date(AG.now()).toISOString() });
-  await AG.audit('admin', a.email, 'agent.key-clear', 'agent_settings', 'key', { last4: before.key_last4 }, { source: env.envKey ? 'env' : null, method, disabled: forced });
   const methodAr = METHOD_AR[method] || method;
-  await AG.alert('agent_key_reverted', { by: maskEmail(a.email), method: methodAr, last4_before: before.key_last4, at: when(AG.now()), disabled: forced }).catch(() => null);
-  await notifyOwners('reverted', [['الحساب', maskEmail(a.email)], ['الطريقة', methodAr], ['آخر أربعة قبل', `••••${before.key_last4}`], ['المصدر الآن', env.envKey ? 'سر الخادم' : 'لا مفتاح'], ['الوقت', when(AG.now())]]);
+  try {
+    if (forced) await AG.repo.updateSettings({ enabled: false, enabled_by: a.email, enabled_at: new Date(AG.now()).toISOString() });
+    await AG.audit('admin', a.email, 'agent.key-clear', 'agent_settings', 'key', { last4: before.key_last4 }, { source: env.envKey ? 'env' : null, method, disabled: forced });
+  } finally {
+    await AG.alert('agent_key_reverted', { by: maskEmail(a.email), method: methodAr, last4_before: before.key_last4, at: when(AG.now()), disabled: forced }).catch(() => null);
+    await notifyOwners('reverted', [['الحساب', maskEmail(a.email)], ['الطريقة', methodAr], ['آخر أربعة قبل', `••••${before.key_last4}`], ['المصدر الآن', env.envKey ? 'سر الخادم' : 'لا مفتاح'], ['الوقت', when(AG.now())]]);
+  }
   return { success: true, key: { source: env.envKey ? 'env' : null, last4: null }, disabled: forced };
 }

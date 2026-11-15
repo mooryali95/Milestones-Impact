@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { convSummary, enableBlock, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, ringLevel, runEvalLoop, runSummary, spendSummary, stateSummary, usd, usd2 } from './agent-admin.js';
+import { convSummary, count, orgsSummary, pct, peakDay, systemLine, enableBlock, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, ringLevel, runEvalLoop, runSummary, spendSummary, stateSummary, usd, usd2 } from './agent-admin.js';
 import { companionKnown } from './screens/OrgForm.jsx';
 import { OWNER_TABS, TABS } from './leaders-tabs.js';
 
@@ -38,16 +38,33 @@ describe('خلاصة الأقسام', () => {
     expect(enableBlock({ ...base, gate: { ok: true } })).toBe(null);
     expect(gateText(base).text).toBe('لا تقييم ناجح لهذا الإعداد: شغّل التقييم أولًا');
     expect(gateText({ gate: { ok: true, run: { eval_pass: 40, eval_total: 42, redteam_pass: 21, redteam_total: 21, finished_at: 'x' } } }, () => 'قبل ساعتين').text)
-      .toBe('آخر تقييم ناجح لهذا الإعداد: eval 95.2% وredteam 100%، قبل ساعتين');
+      .toBe('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 95.2% واختبار الحماية 100%، قبل ساعتين');
   });
   it('المفتاح والمحادثات والتقييم', () => {
     expect(keySummary({ source: 'db', last4: 'abcd' }).text).toBe('من اللوحة (••••abcd)');
     expect(keySummary({ source: 'env', env_last4: 'wxyz', ok_at: '2026-11-15T10:00:00Z', error_at: '2026-11-15T11:00:00Z', error: 'http_401' })).toEqual({ level: 'amber', text: 'سر الخادم ANTHROPIC_API_KEY (••••wxyz)، وآخر استدعاء: رفضت Anthropic المفتاح' });
     expect(keySummary({ source: null }).level).toBe('red');
-    expect(convSummary({ total: 128, contacts: 9 }).text).toBe('128 محادثة في المدة، منها 9 طلبت التواصل');
+    expect(convSummary({ total: 128, contacts: 9 }).text).toBe('128 محادثة في المدة، وعدد من طلب التواصل منها: 9');
+    expect(convSummary({ total: 2, contacts: 1 }).text).toBe('محادثتان في المدة، وعدد من طلب التواصل منها: 1');
+    expect(convSummary({ total: 1, contacts: null }).text).toBe('محادثة واحدة في المدة');
+    expect(convSummary({ total: 5, contacts: 0 }).text).toBe('5 محادثات في المدة، وعدد من طلب التواصل منها: 0');
+    expect(convSummary({ total: 0, contacts: 0 }).text).toBe('لا محادثات في المدة');
+    expect(orgsSummary(1).text).toBe('جهة واحدة أوقفت المرافق');
+    expect(orgsSummary(2).text).toBe('جهتان أوقفتا المرافق');
+    expect(orgsSummary(4).text).toBe('4 جهات أوقفت المرافق');
+    expect(orgsSummary(0).text).toBe('كل الجهات تسمح بالمرافق');
+    expect(orgsSummary(null).text).toBe('غير مقروء');
+    expect(count(null)).toBe('غير مقروء');
+    expect(count(0)).toBe('0');
+    expect(pct(null)).toBe('غير مقروء');
+    expect(systemLine('handoff: request')).toBe('حُوّلت المحادثة إلى الفريق (طلب الزائر)');
+    expect(systemLine('capped')).toMatch(/سقف اليوم/);
+    expect(systemLine('شيء آخر')).toBe('حدث في المحادثة');
+    expect(peakDay([{ day: 'a', micros: 1 }, { day: 'b', micros: 9 }]).day).toBe('b');
+    expect(peakDay([{ day: 'a', micros: 0 }])).toBe(null);
     expect(runSummary(null).text).toBe('لم يُشغَّل التقييم بعد');
     expect(runSummary({ status: 'passed', eval_pass: 39, eval_total: 42, redteam_pass: 21, redteam_total: 21, cost_micros: 70_000 }).text)
-      .toBe('آخر تشغيل: ناجح، eval 92.9% (39/42) وredteam 100% (21/21)، 0.07 دولار');
+      .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9% (39/42) واختبار الحماية 100% (21/21)، 0.07 دولار');
   });
   it('خريطة أخطاء المفتاح تغطي كل رمز يقبله القيد في القاعدة', () => {
     const sql = readFileSync(join(__dirname, '../../supabase/migrations/20261115200000_leaders_agent_admin.sql'), 'utf8');

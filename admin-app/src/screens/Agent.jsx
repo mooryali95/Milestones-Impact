@@ -10,8 +10,8 @@ import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
 import { Empty, Spinner, useEscape, useUI } from '../ui.jsx';
 import { dateTime } from '../dates.js';
 import { agoAr } from '../../../supabase/functions/leaders-api/ops-health.js';
-import { convSummary, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, LEVEL_ICON, pct, ringLevel,
-  RUN_STATUS_AR, runEvalLoop, runSummary, seriesScale, short, spendSummary, stateSummary, stopAr, usd, usd2 } from '../agent-admin.js';
+import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, LEVEL_ICON, orgsSummary, peakDay, pct, ringLevel,
+  RUN_STATUS_AR, runEvalLoop, runSummary, seriesScale, SET_AR, short, spendSummary, stateSummary, stopAr, systemLine, usd, usd2 } from '../agent-admin.js';
 import { navigate } from '../route.js';
 import '../agent-admin.css';
 
@@ -35,7 +35,7 @@ function AgentSection({ id, title, summary, open, onToggle, fixed = false, child
           </button>
         )}
       </h3>
-      <p className="ag-sum" role="status"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>
+      <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>
       {open && <div id={`${id}-b`} className="ag-sec-b">{children}</div>}
     </section>
   );
@@ -49,9 +49,12 @@ function StepUp({ onDone, onCancel, title }) {
   const [err, setErr] = useState('');
   const me = session.load()?.user || {};
   useEscape(onCancel);
-  useEffect(() => { call('security-status').then(setSec); }, []);
+  // تعذر القراءة لا يترك النافذة على مؤشر التحميل: يُعرض الخطأ مع إعادة المحاولة
+  const readSec = useCallback(() => { setSec(null); call('security-status').then((r) => setSec(r?.success ? r : { failed: true })).catch(() => setSec({ failed: true })); }, []);
+  useEffect(() => { readSec(); }, [readSec]);
   const hasKey = !!sec?.passkeys?.length && passkeySupported();
-  const canTotp = !!me.totp_enabled && !(sec?.passkey_only ?? me.passkey_only);
+  // حال تطبيق المصادقة الآن من security-status، وجلسة الدخول احتياط لخادم أقدم
+  const canTotp = !!(sec?.totp_enabled ?? me.totp_enabled) && !(sec?.passkey_only ?? me.passkey_only);
   const viaKey = async () => {
     setBusy(true); setErr('');
     try {
@@ -78,7 +81,7 @@ function StepUp({ onDone, onCancel, title }) {
       <div className="mid-box ag-stepup" role="dialog" aria-modal="true" aria-labelledby="ag-su-h">
         <h3 id="ag-su-h">{title}</h3>
         <p className="la-muted">تأكيد لمرة واحدة صالح 5 دقائق لهذه الجلسة وحدها.</p>
-        {!sec ? <Spinner /> : (
+        {!sec ? <Spinner /> : sec.failed ? <div className="la-err" role="alert">تعذّرت قراءة طرق التحقق على حسابك. <button type="button" className="btn-sm ghost" onClick={readSec}>أعد المحاولة</button></div> : (
           <div className="ag-su-opts">
             {hasKey && <button type="button" className="btn-sm primary" disabled={busy} onClick={viaKey}>أكّد بالبصمة (مفتاح المرور)</button>}
             {canTotp && (
@@ -118,7 +121,7 @@ function StatusSection({ s, reload, writable }) {
     <>
       <div className="ag-switch-row">
         <label className="of-switch">
-          <input type="checkbox" checked={!!s.enabled} disabled={busy || !writable || (!s.enabled && !!block)} onChange={(e) => toggle(e.target.checked)} aria-describedby="ag-block" />
+          <input type="checkbox" checked={!!s.enabled} disabled={busy || !writable || (!s.enabled && !!block)} onChange={(e) => toggle(e.target.checked)} aria-describedby={!s.enabled && block ? 'ag-block' : undefined} />
           <span>{s.enabled ? 'مفعّل من اللوحة' : 'مطفأ من اللوحة'}</span>
         </label>
         {!s.enabled && block && <small id="ag-block" className="ag-why">{block}</small>}
@@ -127,10 +130,8 @@ function StatusSection({ s, reload, writable }) {
         <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on">✓ في جدول الأسعار</span> : <span className="ops-flag off">✕ ليس في جدول الأسعار</span>}</Row>
         <Row label="المعرفة"><code dir="ltr">{s.versions?.knowledge_version}</code></Row>
         <Row label="السقف اليومي">{(s.cap_cents / 100).toFixed(2)} دولار</Row>
-        <Row label="مفتاح الطوارئ في الخادم">{s.env_mode === 'off' ? <span className="ops-flag off">✕ off يطفئ كل شيء</span> : <span className="ops-flag on">✓ يترك الحكم للوحة</span>}</Row>
-        <Row label="مصدر المفتاح">{k.source === 'db' ? <>من اللوحة <code dir="ltr">••••{k.last4}</code>{k.set_by && <small> ضبطه {k.set_by} {when(k.set_at)}</small>}</> : k.source === 'env' ? <>سر الخادم <code dir="ltr">ANTHROPIC_API_KEY</code>{k.env_last4 && <code dir="ltr">••••{k.env_last4}</code>}</> : 'لا مفتاح'}</Row>
-        <Row label="آخر نجاح">{when(k.ok_at) || 'لا شيء بعد'}</Row>
-        <Row label="آخر خطأ">{k.error ? <>{KEY_ERROR_AR[k.error] || k.error} {when(k.error_at)} <code dir="ltr" className="ops-code">{k.error}</code></> : 'لا خطأ'}</Row>
+        <Row label="مفتاح الطوارئ في الخادم">{s.env_mode === 'off' ? <span className="ops-flag off">✕ مفعّل: يطفئ المساعد مهما كان في هذه اللوحة</span> : <span className="ops-flag on">✓ غير مفعّل، فالتشغيل والإطفاء من هذه اللوحة</span>}</Row>
+        <Row label="المفتاح">{keySummary(k).text} <small>التفاصيل في قسم «المفتاح»</small></Row>
         <Row label="بوابة التقييم"><span className={gate.ok ? 'ops-flag on' : 'ops-flag off'}>{gate.ok ? '✓' : '✕'} {gate.text}</span></Row>
       </dl>
       {s.enabled_at && <p className="la-muted small">آخر تغيير للتفعيل: {s.enabled_by} {when(s.enabled_at)}.</p>}
@@ -163,6 +164,8 @@ function KeySection({ s, reload, writable }) {
     if (s.enabled && !k.env_present) {
       if (!(await confirm('لا سر ANTHROPIC_API_KEY في الخادم، فالرجوع يطفئ المساعد. المتابعة؟', { danger: true, ok: 'ارجع وأطفئ' }))) return;
       force = true;
+    } else if (!k.env_present) {
+      if (!(await confirm('لا سر ANTHROPIC_API_KEY في الخادم، فيبقى المساعد بلا مفتاح حتى تحفظ مفتاحًا جديدًا، ولا يمكن تفعيله ولا تقييمه. المتابعة؟', { danger: true, ok: 'ارجع بلا مفتاح' }))) return;
     }
     setBusy(true);
     const r = await L('admin.agent-key-clear', { force });
@@ -213,6 +216,7 @@ function Ring({ spent, cap }) {
 }
 function Bars({ series, cap }) {
   const max = seriesScale(series, cap);
+  const peak = peakDay(series);
   const W = 300, H = 80, bw = W / Math.max(series.length, 1);
   const y = (v) => H - (Number(v) / max) * H;
   return (
@@ -226,13 +230,20 @@ function Bars({ series, cap }) {
         ))}
         <line className="ag-cap" x1="0" x2={W} y1={y(cap)} y2={y(cap)} />
       </svg>
-      <figcaption><span className="ag-key-sw spend" aria-hidden="true" /> الإنفاق <span className="ag-key-sw eval" aria-hidden="true" /> منه التقييم <span className="ag-key-sw cap" aria-hidden="true" /> السقف اليومي</figcaption>
+      {/* الأيام من اليسار (الأقدم) إلى اليمين (اليوم)، فطرفا المحور مكتوبان */}
+      <div className="ag-bars-ends" dir="ltr" aria-hidden="true"><span>قبل 30 يومًا</span><span>اليوم</span></div>
+      <figcaption><span className="ag-key-sw spend" aria-hidden="true" /> الإنفاق <span className="ag-key-sw eval" aria-hidden="true" /> منه التقييم <span className="ag-key-sw cap" aria-hidden="true" /> السقف اليومي{peak && <span>أعلى يوم: {peak.day} بـ{usd(peak.micros)}</span>}</figcaption>
+      {/* القيم اليومية للوحة المفاتيح واللمس، لا في تلميح الرسم وحده */}
+      <details className="ag-days"><summary>القيم اليومية</summary>
+        <table className="la-table"><thead><tr><th scope="col">اليوم</th><th scope="col">الإنفاق</th><th scope="col">منه التقييم</th></tr></thead>
+          <tbody>{[...series].reverse().map((d) => <tr key={d.day}><td>{d.day}</td><td>{usd(d.micros)}</td><td>{d.eval_micros ? usd(d.eval_micros) : 'لا شيء'}</td></tr>)}</tbody></table>
+      </details>
     </figure>
   );
 }
-function SpendSection({ u }) {
+function SpendSection({ u, reload }) {
   if (!u) return <Spinner />;
-  if (!u.success) return <div className="la-err" role="alert">{u.message}</div>;
+  if (!u.success) return <div className="la-err" role="alert">{u.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={reload}>أعد المحاولة</button></div>;
   return (
     <>
       <div className="ag-spend">
@@ -240,10 +251,10 @@ function SpendSection({ u }) {
         <Bars series={u.series} cap={u.today.cap_micros} />
       </div>
       <div className="ag-kpis">
-        <div><b>{u.conversations}</b><span>محادثة في 30 يومًا</span></div>
-        <div><b>{u.handoffs}</b><span>تحويل إلى الفريق</span></div>
+        <div><b>{count(u.conversations)}</b><span>محادثة في 30 يومًا</span></div>
+        <div><b>{count(u.handoffs)}</b><span>تحويل إلى الفريق</span></div>
         <div><b>{usd(u.avg_cost_micros)}</b><span>متوسط تكلفة المحادثة</span></div>
-        <div><b>{usd(u.cache.saved_micros)}</b><span>توفير الذاكرة المؤقتة (الإصابة {pct(u.cache.hit_ratio)})</span></div>
+        <div><b>{usd(u.cache?.saved_micros)}</b><span>توفير الذاكرة المؤقتة (الإصابة {pct(u.cache?.hit_ratio)})</span></div>
       </div>
       <p className="la-muted small">الأجوبة الجاهزة {pct(u.canned_share)} من الردود. الأرقام من سجل الخادم، وقد تزيد قليلًا على فاتورة Anthropic لأن الاستدعاء المنقطع يُحسب بأسوأ تكلفته.</p>
     </>
@@ -256,17 +267,18 @@ const STATUS_AR = { bot: 'مع المساعد', waiting: 'محولة', closed: '
 function Transcript({ id, onClose }) {
   const [d, setD] = useState(null);
   useEscape(onClose);
-  useEffect(() => { L('admin.agent-transcript', { id }).then(setD); }, [id]);
+  const read = useCallback(() => { setD(null); L('admin.agent-transcript', { id }).then(setD); }, [id]);
+  useEffect(() => { read(); }, [read]);
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside className="ag-panel" role="dialog" aria-modal="true" aria-labelledby="ag-tr-h">
         <header className="ag-panel-h"><h3 id="ag-tr-h">محادثة #{short(id)}</h3><button type="button" className="modal-close" aria-label="إغلاق" onClick={onClose}>✕</button></header>
         <p className="ag-note">فتح المحادثة يُسجَّل في سجل التدقيق.</p>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message}</div> : (
+        {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={read}>أعد المحاولة</button></div> : (
           <ol className="ag-msgs">
             {d.messages.map((m, i) => (
               <li key={i} className={`ag-msg ${m.role}`}>
-                {m.role === 'system' ? <small>{m.body}</small> : <>
+                {m.role === 'system' ? <small>{systemLine(m.body)}</small> : <>
                   <span className="ag-who">{m.role === 'visitor' ? 'الزائر' : m.role === 'canned' ? 'جواب جاهز' : 'المساعد'}</span>
                   <p>{m.body}</p>
                   {m.role === 'agent' && m.tokens && <small className="ag-cost" dir="rtl">دخل {m.tokens.input} · من الذاكرة {m.tokens.cache_read} · خرج {m.tokens.output} · {usd(m.cost_micros)}</small>}
@@ -296,21 +308,23 @@ function ConversationsSection({ onCount }) {
   }, [f, onCount]);
   useEffect(() => { load(); }, [load]);
   const pages = d?.success ? Math.max(1, Math.ceil(d.total / d.per_page)) : 1;
+  const badRange = !!f.from && !!f.to && f.from > f.to;
   return (
     <>
       <div className="ag-filters" role="group" aria-label="فلاتر المحادثات">
         <label>من<input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value, page: 1 })} /></label>
         <label>إلى<input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value, page: 1 })} /></label>
-        <div className="ag-seg" role="radiogroup" aria-label="من">
+        <div className="ag-seg" role="radiogroup" aria-label="نوع المحادثة">
           {[['all', 'الكل'], ['contact', 'طلبوا التواصل'], ['visitor', 'زوار']].map(([k, t]) => (
             <button key={k} type="button" role="radio" aria-checked={f.who === k} className={f.who === k ? 'on' : ''} onClick={() => setF({ ...f, who: k, page: 1 })}>{t}</button>
           ))}
         </div>
       </div>
-      {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message}<button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div>
+      {badRange ? <p className="la-err" role="alert">تاريخ «من» بعد تاريخ «إلى». صحّح المدة.</p> : !d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message} <button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div>
         : !d.rows.length ? <Empty compact title="لا محادثات في هذه المدة" hint="غيّر المدة أو الفلتر." /> : (
           <>
-            <div className="ag-scroll">
+            <p className="ag-swipe la-muted small">اسحب الجدول أفقيًا لرؤية بقية الأعمدة.</p>
+            <div className="ag-scroll" tabIndex={0} role="region" aria-label="جدول المحادثات">
               <table className="la-table ag-table">
                 <thead><tr><th scope="col">الشخص</th><th scope="col">الصفحة</th><th scope="col">اللغة</th><th scope="col">الرسائل</th><th scope="col">الاستدعاءات</th><th scope="col">التكلفة</th><th scope="col">التقييم</th><th scope="col">الحالة</th><th scope="col">التاريخ</th></tr></thead>
                 <tbody>
@@ -340,16 +354,17 @@ function ConversationsSection({ onCount }) {
 function RunView({ id, onClose }) {
   const [d, setD] = useState(null);
   useEscape(onClose);
-  useEffect(() => { L('admin.agent-eval-run', { run_id: id }).then(setD); }, [id]);
+  const read = useCallback(() => { setD(null); L('admin.agent-eval-run', { run_id: id }).then(setD); }, [id]);
+  useEffect(() => { read(); }, [read]);
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside className="ag-panel" role="dialog" aria-modal="true" aria-labelledby="ag-run-h">
         <header className="ag-panel-h"><h3 id="ag-run-h">تشغيل #{short(id)}</h3><button type="button" className="modal-close" aria-label="إغلاق" onClick={onClose}>✕</button></header>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message}</div> : (
+        {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={read}>أعد المحاولة</button></div> : (
           <ul className="ag-results">
             {d.results.map((r) => (
               <li key={r.case_id} className={r.pass ? 'ok' : 'no'}>
-                <b><span aria-hidden="true">{r.pass ? '✓' : '✕'}</span> {r.case_id} <small>[{r.set}] {r.pass ? 'ناجح' : 'راسب'}</small></b>
+                <b><span aria-hidden="true">{r.pass ? '✓' : '✕'}</span> {r.case_id} <small>[{SET_AR[r.set] || r.set}] {r.pass ? 'ناجح' : 'راسب'}</small></b>
                 {r.message && <small className="la-muted">{r.message}</small>}
                 {!r.pass && <small className="ag-why">{r.reasons.join('؛ ')}</small>}
                 {r.reply && <details><summary>نص الرد</summary><p>{r.reply}</p></details>}
@@ -362,7 +377,9 @@ function RunView({ id, onClose }) {
   );
 }
 function EvalSection({ s, writable, reload, onRuns }) {
+  const { confirm } = useUI();
   const [runs, setRuns] = useState(null);
+  const [starting, setStarting] = useState(false);
   const [live, setLive] = useState(null);
   const [err, setErr] = useState('');
   const [view, setView] = useState(null);
@@ -370,6 +387,8 @@ function EvalSection({ s, writable, reload, onRuns }) {
   const load = useCallback(async () => { const r = await L('admin.agent-eval-runs'); setRuns(r); if (r.success) onRuns(r.runs); }, [onRuns]);
   useEffect(() => { load(); return () => ac.current?.abort(); }, [load]);
   const loop = async (runId) => {
+    // حلقة واحدة في كل وقت: نقرة ثانية لا تبدأ حلقة لا يوقفها «أوقف»
+    if (ac.current) return;
     ac.current = new AbortController();
     setErr('');
     const out = await runEvalLoop(L, runId, (p) => setLive(p), ac.current.signal);
@@ -380,8 +399,12 @@ function EvalSection({ s, writable, reload, onRuns }) {
     reload();
   };
   const start = async () => {
+    if (starting || ac.current) return;
+    if (!(await confirm(`تشغيل التقييم الآن؟ ${s.total_cases} حالة بتكلفة تقديرية أقل من ${usd2(EVAL_ESTIMATE_MICROS)} دولار، والحد 0.50 دولار، وتُحسب من سقف اليوم.`, { ok: 'شغّل' }))) return;
     setErr('');
+    setStarting(true);
     const r = await L('admin.agent-eval-start');
+    setStarting(false);
     if (!r.success) { if (r.code === 'eval_running' && r.run_id) return loop(r.run_id); return setErr(r.message); }
     setLive({ run_id: r.run_id, done_cases: 0, total: r.total, cost_micros: 0 });
     return loop(r.run_id);
@@ -403,17 +426,17 @@ function EvalSection({ s, writable, reload, onRuns }) {
             </>
           ) : (
             <>
-              <button type="button" className="btn-sm primary" onClick={start}>شغّل التقييم الآن</button>
+              <button type="button" className="btn-sm primary" disabled={starting} onClick={start}>شغّل التقييم الآن</button>
               <small className="la-muted">{s.total_cases} حالة، أقل من {usd2(EVAL_ESTIMATE_MICROS)} دولار تقديرًا، والحد 0.50 دولار للتشغيل، ضمن سقف اليوم.</small>
             </>
           )}
         </div>
       )}
       {err && <p className="la-err" role="alert">{err}</p>}
-      {!runs ? <Spinner /> : !runs.success ? <div className="la-err" role="alert">{runs.message}</div> : !runs.runs.length ? <Empty compact title="لم يُشغَّل التقييم بعد" hint="شغّله لهذا الإعداد، فالتفعيل ينتظر نجاحه." /> : (
-        <div className="ag-scroll">
+      {!runs ? <Spinner /> : !runs.success ? <div className="la-err" role="alert">{runs.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div> : !runs.runs.length ? <Empty compact title="لم يُشغَّل التقييم بعد" hint="شغّله لهذا الإعداد، فالتفعيل ينتظر نجاحه." /> : (
+        <div className="ag-scroll" tabIndex={0} role="region" aria-label="جدول تشغيلات التقييم">
           <table className="la-table ag-table">
-            <thead><tr><th scope="col">الحالة</th><th scope="col">eval</th><th scope="col">redteam</th><th scope="col">التكلفة</th><th scope="col">النموذج</th><th scope="col">المعرفة</th><th scope="col">من شغّله</th><th scope="col">متى</th></tr></thead>
+            <thead><tr><th scope="col">الحالة</th><th scope="col">{SET_AR.eval}</th><th scope="col">{SET_AR.redteam}</th><th scope="col">التكلفة</th><th scope="col">النموذج</th><th scope="col">المعرفة</th><th scope="col">من شغّله</th><th scope="col">متى</th></tr></thead>
             <tbody>
               {runs.runs.map((r) => (
                 <tr key={r.id}>
@@ -471,10 +494,10 @@ export default function Agent({ isSuper = false }) {
       {!writable && <p className="la-muted small ag-ro">{isSuper ? 'الكتابة تتطلب الدخول بمفتاح المرور أو تطبيق المصادقة.' : 'الكتابة للمدير الأعلى وحده، وأنت ترى كل شيء للاطلاع.'}</p>}
       <AgentSection id="ag-state" title="الحالة والتحكم" summary={stateSummary(s)} open fixed><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-key" title="المفتاح" summary={keySummary(s.key)} {...sec('ag-key')}><KeySection s={s} reload={load} writable={writable} /></AgentSection>
-      <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} /></AgentSection>
+      <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} reload={load} /></AgentSection>
       <AgentSection id="ag-conv" title="المحادثات" summary={convSummary(conv)} {...sec('ag-conv')}><ConversationsSection onCount={onCount} /></AgentSection>
       <AgentSection id="ag-eval" title="التقييم" summary={runSummary(lastRun)} {...sec('ag-eval')}><EvalSection s={s} writable={writable} reload={load} onRuns={onRuns} /></AgentSection>
-      <AgentSection id="ag-orgs" title="مرافق الجهات" summary={{ level: 'green', text: s.companion_off ? `${s.companion_off} جهة أوقفت المرافق` : 'كل الجهات تسمح بالمرافق' }} {...sec('ag-orgs')}>
+      <AgentSection id="ag-orgs" title="مرافق الجهات" summary={orgsSummary(s.companion_off)} {...sec('ag-orgs')}>
         <p>يُضبط لكل جهة من نموذجها. مساعد الموقع عام ولا يتأثر بالجهة.</p>
         <button type="button" className="btn-sm ghost" onClick={() => navigate({ ctx: 'leaders', tab: 'orgs' })}>افتح الجهات</button>
       </AgentSection>

@@ -168,9 +168,14 @@ async function rt(d: Deps): Promise<Runtime> {
   return { enabled: d.env.enabled, reason: d.env.enabled ? null : 'env_off', apiKey: d.env.apiKey, keySource: d.env.apiKey ? 'env' : null };
 }
 // الإعداد المنشور غير الذي نجح تقييمه: مطفأ، وتنبيه إعداد واحد في اليوم (علامة alerted_config نفسها)
+// مرة في اليوم لكل نسخة قبل القاعدة: بلا هذا كانت كل قراءة حالة من زائر طلب علامة في القاعدة ما دامت البصمة قديمة
+const staleTried = new WeakMap<object, string>();
 function staleAlert(d: Deps, r: Runtime) {
   if (r.reason !== 'stale') return;
-  background(configAlert(d, riyadhDay(d.now?.() ?? Date.now()), 'agent_eval_stale', {}));
+  const day = riyadhDay(d.now?.() ?? Date.now());
+  if (staleTried.get(d.store) === day) return;
+  staleTried.set(d.store, day);
+  background(configAlert(d, day, 'agent_eval_stale', {}));
 }
 
 // ════════ الإجراءات ════════

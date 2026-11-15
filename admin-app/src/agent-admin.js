@@ -10,7 +10,18 @@ export function usd(micros) {
   return `${v.toFixed(Math.abs(v) < 1 && v !== 0 ? 4 : 2)} دولار`;
 }
 export const usd2 = (micros) => `${(Number(micros || 0) / 1e6).toFixed(2)}`;
-export const pct = (x) => `${Math.round(Number(x || 0) * 1000) / 10}%`;
+export const pct = (x) => (x == null || !Number.isFinite(Number(x)) ? 'غير مقروء' : `${Math.round(Number(x) * 1000) / 10}%`);
+// عدد مقروء أو «غير مقروء»، لا فراغ ولا صفر
+export const count = (n) => (n == null || !Number.isFinite(Number(n)) ? 'غير مقروء' : String(n));
+// العدد مع المعدود بالمطابقة العربية: واحد، ومثنى، وجمع من 3 إلى 10، ومفرد منصوب فوقها
+export function countAr(n, [one, two, few, many]) {
+  const v = Number(n);
+  if (v === 1) return one;
+  if (v === 2) return two;
+  if (v >= 3 && v <= 10) return `${v} ${few}`;
+  return `${v} ${many}`;
+}
+export const SET_AR = { eval: 'أسئلة الجودة', redteam: 'اختبار الحماية' };
 export const short = (id) => String(id || '').slice(0, 8);
 
 // حلقة اليوم مقابل السقف: أخضر دون 80%، وكهرماني من 80%، وأحمر عند السقف. الرمز والكلمة مع اللون دائمًا
@@ -49,7 +60,7 @@ const REASON_AR = {
   db_off: 'مطفأ من اللوحة',
   stale: 'مطفأ: تغير الإعداد بعد آخر تقييم',
 };
-const STOP_AR = { max_cost: 'بلغ حد التشغيل', daily_cap: 'امتلأ سقف اليوم', ledger: 'تعذر سجل الإنفاق', key: 'رُفض المفتاح', cancelled: 'أوقفته', stale: 'تغير الإعداد أثناءه' };
+const STOP_AR = { max_cost: 'بلغ حد التشغيل', daily_cap: 'امتلأ سقف اليوم', ledger: 'تعذر سجل الإنفاق', key: 'رُفض المفتاح', cancelled: 'أوقفه مدير', stale: 'تغير الإعداد أثناءه', model: 'النموذج غير متاح مؤقتًا' };
 export const RUN_STATUS_AR = { running: 'جارٍ', passed: 'ناجح', failed: 'راسب', stopped: 'متوقف', error: 'تعذّر' };
 export const stopAr = (r) => (r ? STOP_AR[r] || r : '');
 
@@ -63,7 +74,7 @@ export function gateText(s, ago = (x) => x) {
   const g = s?.gate;
   if (g?.ok && g.run) {
     const r = g.run;
-    return { ok: true, text: `آخر تقييم ناجح لهذا الإعداد: eval ${pct(r.eval_total ? r.eval_pass / r.eval_total : 0)} وredteam ${pct(r.redteam_total ? r.redteam_pass / r.redteam_total : 0)}، ${ago(r.finished_at)}` };
+    return { ok: true, text: `آخر تقييم ناجح لهذا الإعداد: ${SET_AR.eval} ${pct(r.eval_total ? r.eval_pass / r.eval_total : 0)} و${SET_AR.redteam} ${pct(r.redteam_total ? r.redteam_pass / r.redteam_total : 0)}، ${ago(r.finished_at)}` };
   }
   if (g?.reason === 'failed') return { ok: false, text: 'آخر تقييم لهذا الإعداد راسب: راجع الراسب ثم أعد التقييم' };
   if (g?.reason === 'stale') return { ok: false, text: 'نجح تقييم سابق لإعداد آخر: شغّل التقييم لهذا الإعداد' };
@@ -92,17 +103,35 @@ export function spendSummary(u) {
 }
 export function convSummary(c) {
   if (!c) return { level: 'green', text: 'افتح القسم لعرض المحادثات' };
-  return { level: 'green', text: `${c.total} محادثة في المدة${c.contacts != null ? `، منها ${c.contacts} طلبت التواصل` : ''}` };
+  const total = c.total ? `${countAr(c.total, ['محادثة واحدة', 'محادثتان', 'محادثات', 'محادثة'])} في المدة` : 'لا محادثات في المدة';
+  return { level: 'green', text: `${total}${c.total && c.contacts != null ? `، وعدد من طلب التواصل منها: ${c.contacts}` : ''}` };
 }
 export function runSummary(run) {
   if (!run) return { level: 'amber', text: 'لم يُشغَّل التقييم بعد' };
-  const ev = run.eval_total ? `eval ${pct(run.eval_pass / run.eval_total)} (${run.eval_pass}/${run.eval_total})` : 'eval بلا نتيجة';
-  const rt = run.redteam_total ? `redteam ${pct(run.redteam_pass / run.redteam_total)} (${run.redteam_pass}/${run.redteam_total})` : 'redteam بلا نتيجة';
+  const ev = run.eval_total ? `${SET_AR.eval} ${pct(run.eval_pass / run.eval_total)} (${run.eval_pass}/${run.eval_total})` : `${SET_AR.eval} بلا نتيجة`;
+  const rt = run.redteam_total ? `${SET_AR.redteam} ${pct(run.redteam_pass / run.redteam_total)} (${run.redteam_pass}/${run.redteam_total})` : `${SET_AR.redteam} بلا نتيجة`;
   const level = run.status === 'passed' ? 'green' : run.status === 'running' ? 'amber' : 'red';
   const tail = run.stop_reason ? ` (${stopAr(run.stop_reason)})` : '';
   return { level, text: `آخر تشغيل: ${RUN_STATUS_AR[run.status] || run.status}${tail}، ${ev} و${rt}، ${usd2(run.cost_micros)} دولار` };
 }
 export const LEVEL_ICON = { green: '✓', amber: '!', red: '✕' };
+// خلاصة مرافق الجهات بالمطابقة العربية
+export const orgsSummary = (n) => (n == null ? { level: 'amber', text: 'غير مقروء' } : n ? { level: 'green', text: `${countAr(n, ['جهة واحدة أوقفت', 'جهتان أوقفتا', 'جهات أوقفت', 'جهة أوقفت'])} المرافق` } : { level: 'green', text: 'كل الجهات تسمح بالمرافق' });
+// سطور النظام في نص المحادثة (handler.ts) بكلمة عربية، لا النص الخام
+const HANDOFF_AR = { request: 'طلب الزائر', agent: 'اقتراح المساعد', capped: 'السقف اليومي', conv_cap: 'حد المحادثة', refusal: 'امتناع النموذج', error: 'تعذر الرد' };
+export function systemLine(body) {
+  const b = String(body || '');
+  if (b === 'capped') return 'بلغ سقف اليوم، فعُرض على الزائر ترك رسالته';
+  const m = b.match(/^handoff: (\w+)$/);
+  if (m) return `حُوّلت المحادثة إلى الفريق (${HANDOFF_AR[m[1]] || 'سبب آخر'})`;
+  return 'حدث في المحادثة';
+}
+// أعلى يوم في السلسلة للوصف
+export function peakDay(series) {
+  let best = null;
+  for (const d of series || []) if (!best || Number(d.micros) > Number(best.micros)) best = d;
+  return best && Number(best.micros) > 0 ? best : null;
+}
 
 // سلسلة 30 يومًا: أعلى قيمة للمقياس (لا تقل عن السقف فيظهر خطه)
 export function seriesScale(series, cap) {

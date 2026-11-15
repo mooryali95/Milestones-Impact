@@ -87,7 +87,11 @@ describe('ترحيل 20261115200000_leaders_agent_admin', () => {
     expect((await one(d, `select public.admin_step_up_consume($1, $2, 'agent_key') m`, ['b'.repeat(64), admin])).m).toBe(null);
     expect((await one(d, `select public.admin_step_up_consume($1, $2, 'agent_key') m`, [h, admin])).m).toBe('totp');
     expect((await one(d, `select public.admin_step_up_consume($1, $2, 'agent_key') m`, [h, admin])).m).toBe(null);
-    await d.query(`insert into public.webauthn_challenges (purpose) values ('step_up')`);
+    await d.query(`insert into public.webauthn_challenges (purpose) values ('step_up')`);    // الخطوة الزمنية نفسها لا تُقبل مرتين للمدير نفسه (طلبان معًا)
+    const ins = (step) => d.query(`insert into public.admin_step_ups (admin_id, session_hash, purpose, method, totp_step, expires_at) values ($1, $2, 'agent_key', 'totp', $3, now() + interval '5 minutes')`, [admin, h, step]);
+    await ins(1000);
+    await expect(ins(1000)).rejects.toThrow(/admin_step_ups_totp_once|duplicate/);
+    await ins(1001);
   });
 
   it('تشغيل واحد جارٍ، والعقد ذري لا يُؤخذ مرتين، والتكلفة تُجمع', async () => {

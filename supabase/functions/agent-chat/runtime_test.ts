@@ -174,4 +174,10 @@ Deno.test('البصمة ثابتة لنفس المدخلات، وتتغير با
     await computeVersions('claude-sonnet-5-5'), await computeVersions('claude-haiku-5-5', { rules: 'قاعدة أخرى' }),
     await computeVersions('claude-haiku-5-5', { knowledge: 'v2-x' }), await computeVersions('claude-haiku-5-5', { cases: '{"cases":[]}' }),
   ]) assert(other.fingerprint !== a.fingerprint);
+  // معرّف نموذج طويل: البصمة لا تُقص فتُسقط نسخة الحالات، وتبقى ضمن 80 حرفًا
+  const LONG = 'claude-sonnet-5-5-20261101-preview-long';
+  const l1 = await computeVersions(LONG);
+  const l2 = await computeVersions(LONG, { cases: '{"cases":[1]}' });
+  assert(l1.fingerprint.length <= 80 && l2.fingerprint.length <= 80);
+  assert(l1.fingerprint !== l2.fingerprint);
 });

@@ -44,6 +44,7 @@ function memRepo() {
       return { ...r };
     },
     updateRun: async (id, p) => { Object.assign(st.runs.find((x) => x.id === id)!, p); },
+    finishRun: async (id, p) => { const r = st.runs.find((x) => x.id === id); if (!r || r.status !== 'running') return false; Object.assign(r, p); return true; },
     addCost: async (id, d) => { const r = st.runs.find((x) => x.id === id)!; r.cost_micros += d; return r.cost_micros; },
     results: async (id) => st.results.filter((r) => r.run_id === id),
     addResult: async (row) => { if (!st.results.some((r) => r.run_id === row.run_id && r.case_id === row.case_id)) st.results.push(row); },
@@ -329,4 +330,94 @@ Deno.test('الإنفاق: سلسلة 30 يومًا، والتوفير من ال
   assertEquals(u.cache.saved_micros, Math.round(18000 * (0.1 - 0.01) * 1.1));
   assertEquals(u.avg_cost_micros, 1000);
   assertEquals(u.canned_share, 2 / 5);
+});
+
+Deno.test('البوابة: نجاح قديم لا يغطي رسوبًا أحدث لهذه البصمة، والموقوف لا يحكم، ونافذتها تتسع لتشغيلات موقوفة كثيرة', async () => {
+  const t = (m: number) => new Date(Date.now() - m * 6e4).toISOString();
+  const old = passRun({ started_at: t(30) });
+  const failed = passRun({ status: 'failed', started_at: t(20) });
+  assertEquals(AA.gateOf([old, failed], FP).reason, 'failed');
+  const newer = passRun({ started_at: t(10) });
+  assertEquals(AA.gateOf([old, failed, newer], FP).run_id, newer.id);
+  const stopped = passRun({ status: 'stopped', stop_reason: 'cancelled', started_at: t(5) });
+  assertEquals(AA.gateOf([failed, newer, stopped], FP).ok, true);
+  const h = install();
+  h.st.runs.push(passRun({ started_at: t(100) }));
+  for (let i = 0; i < 30; i++) h.st.runs.push(passRun({ status: 'stopped', stop_reason: 'cancelled', started_at: t(50 - i) }));
+  assertEquals((await AA.state(SUPER) as any).gate.ok, true);
+});
+
+Deno.test('التقييم: الإيقاف أثناء الدفعة الأخيرة يبقى «متوقف» ولا يُكتب فوقه «ناجح»', async () => {
+  const h = install();
+  const { run_id } = await AA.evalStart(SUPER);
+  let r: any;
+  for (let i = 0; i < 30; i++) {
+    const left = CASES.length - h.st.results.length;
+    if (left <= 6) {
+      // إيقاف يصل والدفعة الأخيرة تعمل
+      const orig = h.st.runs[0];
+      (AA.AG as any).model = async (_m: unknown, onText: (t: string) => void) => {
+        if (orig.status === 'running') await AA.evalCancel(SUPER, { run_id });
+        onText('لا أملك معلومة مؤكدة عن هذا.');
+        return { text: 'لا أملك معلومة مؤكدة عن هذا.', stopReason: 'end_turn', model: MODEL, usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+      };
+    }
+    r = await AA.evalStep(SUPER, { run_id });
+    if (r.done) break;
+  }
+  assertEquals([h.st.runs[0].status, h.st.runs[0].stop_reason], ['stopped', 'cancelled']);
+  assertEquals(r.status, 'stopped');
+  assertEquals(AA.gateOf(h.st.runs, FP).ok, false);
+});
+
+Deno.test('التقييم: الخطأ العابر (429 و529 والانقطاع) لا يُحسب راسبًا ويُعاد، ودفعة كلها عابرة تنتهي error/model', async () => {
+  let n = 0;
+  const h = install({ model: async (_m: unknown, onText: (t: string) => void) => {
+    // أول ثلاث استدعاءات عابرة، ثم سليمة
+    if (n++ < 3) throw Object.assign(new Error('overloaded'), { status: [429, 529, undefined][n - 1] });
+    onText('لا أملك معلومة مؤكدة عن هذا.');
+    return { text: 'لا أملك معلومة مؤكدة عن هذا.', stopReason: 'end_turn', model: MODEL, usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+  } });
+  const { run_id } = await AA.evalStart(SUPER);
+  let r: any;
+  for (let i = 0; i < 30; i++) { r = await AA.evalStep(SUPER, { run_id }); if (r.done) break; }
+  assertEquals(h.st.results.length, CASES.length);
+  assert(['passed', 'failed'].includes(r.status));
+  const down = install({ model: () => Promise.reject(Object.assign(new Error('overloaded'), { status: 529 })) });
+  const s2 = await AA.evalStart(SUPER);
+  let r2: any;
+  for (let i = 0; i < 30; i++) { r2 = await AA.evalStep(SUPER, { run_id: s2.run_id }); if (r2.done) break; }
+  // الأجوبة الجاهزة بلا نموذج تُحسب، وحالات النموذج لا تُسجل راسبة
+  assertEquals([r2.status, r2.stop_reason], ['error', 'model']);
+  assert(down.st.results.length < CASES.length);
+  assert(down.st.results.every((x) => x.source === 'canned'));
+});
+
+Deno.test('التقييم: تنبيهات الإنفاق والإعداد من التقييم تُرسل فعلًا ولا تُكتم علامتها، والتكلفة تُحسب قبل الإيقاف', async () => {
+  const day = emptyMem();
+  const h = install({ ledger: () => memStore(day), model: () => Promise.reject(Object.assign(new Error('nf'), { status: 404 })) });
+  const { run_id } = await AA.evalStart(SUPER);
+  await AA.evalStep(SUPER, { run_id });
+  await new Promise((r) => setTimeout(r, 20));
+  assert(h.alerts.some(([k]) => k === 'agent_model_config'), JSON.stringify(h.alerts.map((x) => x[0])));
+});
+
+Deno.test('المفتاح: الحفظ يُفرغ خزن الحالة فيرى التقييم المفتاح فورًا، وفشل الحفظ يُحسب محاولة، وتعذر التدقيق لا يكتم التنبيه والبريد', async () => {
+  const h = install({ env: { ANTHROPIC_API_KEY: '' } });
+  assertEquals(await code(AA.evalStart(SUPER)), 'no_key');
+  h.grant();
+  await AA.keySet(SUPER, { key: SECRET });
+  const s = await AA.evalStart(SUPER);
+  assert(s.run_id);
+  h.st.keySetFails = true;
+  h.grant();
+  assertEquals(await code(AA.keySet(SUPER, { key: SECRET })), 'key_save_failed');
+  assert(h.audits.some((x) => x[2] === 'agent.key-rejected' && (x[6] as any)?.reason === 'key_save_failed'));
+  h.st.keySetFails = false;
+  (AA.AG as any).auditFails = true;
+  h.grant();
+  const before = h.mails.length;
+  await assertRejects(() => AA.keySet(SUPER, { key: SECRET }));
+  assert(h.alerts.filter(([k]) => k === 'agent_key_changed').length >= 2);
+  assert(h.mails.length > before);
 });

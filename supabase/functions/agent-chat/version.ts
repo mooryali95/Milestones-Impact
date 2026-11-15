@@ -25,7 +25,10 @@ export async function computeVersions(model: string, src: { rules?: string; know
   const knowledge_version = src.knowledge ?? KNOWLEDGE_VERSION;
   const prompt_version = await sha16(`${src.rules ?? SYSTEM_RULES}\n${requestConstants()}`);
   const cases_version = await sha16(src.cases ?? CASES_SOURCE);
-  return { model, knowledge_version, prompt_version, cases_version, fingerprint: `${model}|${knowledge_version}|${prompt_version}|${cases_version}`.slice(0, 80) };
+  // البصمة مقروءة إن اتسعت لعمود الـ80 حرفًا، وإلا النموذج مع خلاصة الكل: لا قص يُسقط جزءًا منها
+  const full = `${model}|${knowledge_version}|${prompt_version}|${cases_version}`;
+  const fingerprint = full.length <= 80 ? full : `${model.slice(0, 60)}|${await sha16(full)}`;
+  return { model, knowledge_version, prompt_version, cases_version, fingerprint };
 }
 
 const cache = new Map<string, Promise<Versions>>();

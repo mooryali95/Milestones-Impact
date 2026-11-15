@@ -78,7 +78,7 @@ create table if not exists leaders.agent_eval_runs (
   constraint agent_eval_runs_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
   constraint agent_eval_runs_started_by_check CHECK ((char_length(started_by) <= 254)),
   constraint agent_eval_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'passed'::text, 'failed'::text, 'stopped'::text, 'error'::text]))),
-  constraint agent_eval_runs_stop_reason_check CHECK ((stop_reason = ANY (ARRAY['max_cost'::text, 'daily_cap'::text, 'ledger'::text, 'key'::text, 'cancelled'::text, 'stale'::text]))),
+  constraint agent_eval_runs_stop_reason_check CHECK ((stop_reason = ANY (ARRAY['max_cost'::text, 'daily_cap'::text, 'ledger'::text, 'key'::text, 'cancelled'::text, 'stale'::text, 'model'::text]))),
   constraint agent_eval_runs_total_cases_check CHECK ((total_cases > 0)),
   constraint agent_eval_runs_pkey PRIMARY KEY (id)
 );
@@ -3164,6 +3164,8 @@ CREATE INDEX IF NOT EXISTS admin_step_ups_admin_idx ON public.admin_step_ups USI
 
 CREATE INDEX IF NOT EXISTS admin_step_ups_session_idx ON public.admin_step_ups USING btree (session_hash, purpose) WHERE (consumed_at IS NULL);
 
+CREATE UNIQUE INDEX IF NOT EXISTS admin_step_ups_totp_once ON public.admin_step_ups USING btree (admin_id, totp_step) WHERE (totp_step IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS api_sessions_expires_idx ON public.api_sessions USING btree (expires_at);
 
 CREATE INDEX IF NOT EXISTS contact_requests_created_idx ON public.contact_requests USING btree (created_at DESC);
@@ -3536,6 +3538,7 @@ $function$
 CREATE OR REPLACE FUNCTION leaders.agent_eval_add_cost(p_id uuid, p_delta bigint)
  RETURNS bigint
  LANGUAGE sql
+ SET search_path TO ''
 AS $function$
   update leaders.agent_eval_runs set cost_micros = cost_micros + greatest(p_delta, 0) where id = p_id returning cost_micros;
 $function$
@@ -3544,6 +3547,7 @@ $function$
 CREATE OR REPLACE FUNCTION leaders.agent_eval_lease(p_id uuid, p_seconds integer)
  RETURNS SETOF leaders.agent_eval_runs
  LANGUAGE sql
+ SET search_path TO ''
 AS $function$
   update leaders.agent_eval_runs set lease_until = now() + make_interval(secs => least(greatest(p_seconds, 10), 300)), last_step_at = now()
   where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
@@ -3963,6 +3967,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.admin_step_up_consume(p_session_hash text, p_admin uuid, p_purpose text)
  RETURNS text
  LANGUAGE sql
+ SET search_path TO ''
 AS $function$
   update public.admin_step_ups s set consumed_at = now()
   where s.id = (

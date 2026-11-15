@@ -567,8 +567,10 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
 
     if (action === "security-status") {
       const pks = await myPasskeys();
+      // حال تطبيق المصادقة الآن لا من جلسة الدخول، فنافذة التحقق الإضافي لا تعرض طريقة أُطفئت أو تخفي طريقة فُعّلت بعده
+      const { data: mine } = await sb.from("admin_users").select("totp_enabled").eq("id", session.userId).maybeSingle();
       return json({
-        success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method,
+        success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method, totp_enabled: !!mine?.totp_enabled,
         passkeys: pks.map(({ credential_id: _c, ...p }: any) => p),
       });
     }

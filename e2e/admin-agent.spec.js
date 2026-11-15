@@ -93,12 +93,12 @@ test('التبويب في مجموعة «البرامج»، والأقسام ب�
   await setup(page);
   const group = page.getByRole('group', { name: 'البرامج' });
   await expect(group.getByRole('button', { name: 'المساعد الآلي' })).toHaveAttribute('aria-current', 'page');
-  await expect(sec(page, 'الحالة والتحكم').getByRole('status').first()).toHaveText(/مطفأ من اللوحة/);
-  await expect(sec(page, 'الإنفاق').getByRole('status').first()).toHaveText(/اليوم 0.42 من 2.00 دولار \(21%\)/);
+  await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveText(/مطفأ من اللوحة/);
+  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.42 من 2.00 دولار \(21%\)/);
   await expect(sec(page, 'الإنفاق').getByRole('img', { name: /اليوم 0.42 من 2.00 دولار، 21%، ضمن السقف/ })).toBeVisible();
-  await expect(sec(page, 'المفتاح').getByRole('status').first()).toHaveText(/سر الخادم ANTHROPIC_API_KEY \(••••wxyz\)/);
-  await expect(sec(page, 'مرافق الجهات')).toContainText('1 جهة أوقفت المرافق');
-  await expect(sec(page, 'التقييم').getByRole('status').first()).toContainText('لم يُشغَّل التقييم بعد');
+  await expect(sec(page, 'المفتاح').locator('.ag-sum')).toHaveText(/سر الخادم ANTHROPIC_API_KEY \(••••wxyz\)/);
+  await expect(sec(page, 'مرافق الجهات')).toContainText('جهة واحدة أوقفت المرافق');
+  await expect(sec(page, 'التقييم').locator('.ag-sum')).toContainText('لم يُشغَّل التقييم بعد');
   await shot(page, 'agent-desktop');
 });
 
@@ -108,13 +108,14 @@ test('التفعيل معطل حتى ينجح التقييم: ثلاث دفعا�
   await expect(status.getByRole('checkbox')).toBeDisabled();
   await expect(status).toContainText('شغّل التقييم أولًا');
   await sec(page, 'التقييم').getByRole('button', { name: 'شغّل التقييم الآن' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'شغّل' }).click();
   await expect(sec(page, 'التقييم').getByRole('button', { name: /ناجح/ })).toBeVisible();
   expect(calls.filter((c) => c.action === 'admin.agent-eval-step').length).toBe(3);
   await expect(status.getByRole('checkbox')).toBeEnabled();
-  await expect(status).toContainText('آخر تقييم ناجح لهذا الإعداد: eval 90% وredteam 100%');
+  await expect(status).toContainText('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 90% واختبار الحماية 100%');
   await status.getByRole('checkbox').click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'فعّل' }).click();
-  await expect(status.getByRole('status').first()).toHaveText(/مفعّل ويرد الآن/);
+  await expect(status.locator('.ag-sum')).toHaveText(/مفعّل ويرد الآن/);
   expect(calls.find((c) => c.action === 'admin.agent-enable').body.enabled).toBe(true);
 });
 
@@ -123,12 +124,13 @@ test('المحادثات: «زائر #a1b2c3d4» لصف بلا تواصل، وا
   const s = sec(page, 'المحادثات');
   await expect(s.getByRole('button', { name: /زائر #a1b2c3d4/ })).toBeVisible();
   await expect(s.getByRole('button', { name: /سارة الحربي sara@example.com/ })).toBeVisible();
-  await expect(s.getByRole('status').first()).toHaveText(/2 محادثة في المدة، منها 1 طلبت التواصل/);
+  await expect(s.locator('.ag-sum')).toHaveText(/محادثتان في المدة، وعدد من طلب التواصل منها: 1/);
   await s.getByRole('button', { name: /زائر #a1b2c3d4/ }).click();
   const dlg = page.getByRole('dialog', { name: /محادثة #a1b2c3d4/ });
   await expect(dlg).toContainText('فتح المحادثة يُسجَّل في سجل التدقيق');
   await expect(dlg).toContainText('دخل 812 · من الذاكرة 6100 · خرج 140 · 0.0011 دولار');
   await expect(dlg).toContainText('بلا تكلفة');
+  await expect(dlg).toContainText('حُوّلت المحادثة إلى الفريق (طلب الزائر)');
   await shot(page, 'agent-transcript');
   await page.keyboard.press('Escape');
   await expect(dlg).toHaveCount(0);

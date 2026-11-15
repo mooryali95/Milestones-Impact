@@ -59,6 +59,11 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
       admin_id: session.userId, session_hash: d.sessionHash, purpose, method, totp_step: totpStep === null ? null : Number(totpStep), expires_at: expires,
     });
     if (error) {
+      // طلبان معًا بالرمز نفسه: الفهرس الفريد (admin_id, totp_step) يقبل أولهما وحده
+      if (String(error.code) === '23505' && method === 'totp') {
+        await log(false, 'totp', { why: 'replay' });
+        return out({ success: false, code: 'replay', message: 'استُعمل هذا الرمز للتو، انتظر الرمز التالي' }, 409);
+      }
       if (MISSING.has(String(error.code))) return out({ success: false, code: 'step_up_unavailable', message: 'لم يُطبَّق ترحيل التحقق الإضافي بعد' }, 503);
       throw new Error(`admin_step_ups: ${error.code}`);
     }

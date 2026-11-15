@@ -115,3 +115,11 @@ Deno.test('قبل الترحيل: step_up_unavailable لا خطأ داخلي', a
   const r = await stepUp('step-up-totp', { purpose: 'agent_key', code: '123456' }, SESSION, d);
   assertEquals([r.status, r.body.code], [503, 'step_up_unavailable']);
 });
+
+Deno.test('step-up-totp: طلبان معًا بالرمز نفسه، والفهرس الفريد يرد 23505 للثاني فيُرفض replay بلا صف', async () => {
+  const { tables, d } = setup({ fail: { admin_step_ups: { code: '23505' } } });
+  const r = await stepUp('step-up-totp', { purpose: 'agent_key', code: '123456' }, SESSION, d);
+  assertEquals([r.status, r.body.code], [409, 'replay']);
+  assertEquals(tables.admin_step_ups.length, 0);
+  assert(tables.admin_audit_log.some((x) => x.meta.why === 'replay'));
+});

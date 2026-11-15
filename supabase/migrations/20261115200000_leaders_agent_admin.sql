@@ -38,7 +38,7 @@ insert into leaders.agent_settings (id) values (true) on conflict do nothing;
 create table if not exists leaders.agent_eval_runs (
   id uuid primary key default gen_random_uuid(),
   status text not null default 'running' check (status in ('running', 'passed', 'failed', 'stopped', 'error')),
-  stop_reason text check (stop_reason in ('max_cost', 'daily_cap', 'ledger', 'key', 'cancelled', 'stale')),
+  stop_reason text check (stop_reason in ('max_cost', 'daily_cap', 'ledger', 'key', 'cancelled', 'stale', 'model')),
   model text not null check (char_length(model) <= 60),
   knowledge_version text not null check (char_length(knowledge_version) <= 60),
   prompt_version text not null check (char_length(prompt_version) <= 40),
@@ -80,7 +80,7 @@ create table if not exists leaders.agent_eval_results (
 
 -- عقد الإيجار ذريًا بساعة القاعدة: دفعة واحدة في كل وقت لكل تشغيل، ولو فُتحت الشاشة في تبويبين
 create or replace function leaders.agent_eval_lease(p_id uuid, p_seconds integer)
-returns setof leaders.agent_eval_runs language sql as $$
+returns setof leaders.agent_eval_runs language sql set search_path = '' as $$
   update leaders.agent_eval_runs set lease_until = now() + make_interval(secs => least(greatest(p_seconds, 10), 300)), last_step_at = now()
   where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
   returning *;
@@ -88,7 +88,7 @@ $$;
 
 -- تكلفة حالة تُضاف ذريًا (حالات الدفعة تعمل بتوازٍ)
 create or replace function leaders.agent_eval_add_cost(p_id uuid, p_delta bigint)
-returns bigint language sql as $$
+returns bigint language sql set search_path = '' as $$
   update leaders.agent_eval_runs set cost_micros = cost_micros + greatest(p_delta, 0) where id = p_id returning cost_micros;
 $$;
 
@@ -108,13 +108,15 @@ create table if not exists public.admin_step_ups (
 );
 create index if not exists admin_step_ups_session_idx on public.admin_step_ups (session_hash, purpose) where consumed_at is null;
 create index if not exists admin_step_ups_admin_idx on public.admin_step_ups (admin_id, created_at desc);
+-- الخطوة الزمنية للرمز لا تُقبل مرتين للمدير نفسه ولو وصل طلبان معًا (الخطوات تتزايد مع الوقت فلا تعود صالحة)
+create unique index if not exists admin_step_ups_totp_once on public.admin_step_ups (admin_id, totp_step) where totp_step is not null;
 -- القيد باسمه في اللقطة (webauthn_challenges_purpose_check)
 alter table public.webauthn_challenges drop constraint if exists webauthn_challenges_purpose_check;
 alter table public.webauthn_challenges add constraint webauthn_challenges_purpose_check check (purpose in ('register', 'authenticate', 'step_up'));
 
 -- الاستهلاك ذري وبساعة القاعدة: أحدث تحقق صالح لهذه الجلسة وهذا المدير وهذا الغرض، مرة واحدة. يعيد الطريقة أو null
 create or replace function public.admin_step_up_consume(p_session_hash text, p_admin uuid, p_purpose text)
-returns text language sql as $$
+returns text language sql set search_path = '' as $$
   update public.admin_step_ups s set consumed_at = now()
   where s.id = (
     select x.id from public.admin_step_ups x
