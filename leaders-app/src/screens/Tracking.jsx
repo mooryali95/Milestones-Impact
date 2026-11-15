@@ -149,7 +149,7 @@ export default function Tracking({ owner = '' }) {
             <textarea className="input" rows={4} maxLength={2000} value={v.narrative} onChange={(e) => setV({ ...v, narrative: e.target.value })} /></label>
           <div className="tr-two">
             <label className="field"><span>ما يعيقك</span><textarea className="input" rows={2} maxLength={1000} value={v.blockers} onChange={(e) => setV({ ...v, blockers: e.target.value })} /></label>
-            <label className="field"><span>ما تحتاجه من جهتك أو مستشارك</span><textarea className="input" rows={2} maxLength={1000} value={v.support} onChange={(e) => setV({ ...v, support: e.target.value })} /></label>
+            <label className="field"><span>ما تحتاجه من صاحب القرار أو مستشارك</span><textarea className="input" rows={2} maxLength={1000} value={v.support} onChange={(e) => setV({ ...v, support: e.target.value })} /></label>
           </div>
           {msg?.err && <div className="alert err">{msg.err}</div>}
           <div className="row">

@@ -40,6 +40,7 @@ export const VISIBILITY = {
   par_examples_doc: key('participant', 'المبادرات المحلولة كاملة', 'زر «مبادرة محلولة كاملة» في صفحة المبادرة، يفتح الوثيقة الكاملة للمثال.'),
   par_example_gov: key('participant', 'مثال الخدمات الحكومية', '«تجديد الترخيص المهني رقميًا في يوم واحد». بحجبه لا يظهر بجانب الحقل ولا كاملًا.'),
   par_example_health: key('participant', 'مثال الصحة', '«موعد أول أقرب: خفض انتظار العيادات الخارجية». بحجبه لا يظهر بجانب الحقل ولا كاملًا.'),
+  par_example_startup: key('participant', 'مثال ريادة الأعمال', '«سفرة متوازنة: اشتراك وجبات لمرضى السكري»، مبادرة ريادية بلا جهة مستضيفة. يُقدَّم لمن اختار سياقًا رياديًا. بحجبه لا يظهر بجانب الحقل ولا كاملًا.'),
   // مشاركة وثيقة المبادرة برابط خاص (share.ts، اعتمده المالك 2026-11-15). بحجب المشاركة تتوقف الروابط القائمة فورًا،
   // وبحجب الملاحظات لا يكتب القراء ولو فتحها المشارك في رابطه
   par_share: key('participant', 'مشاركة وثيقة المبادرة برابط خاص', 'رابط يعطيه المشارك لمن يشاء ليقرأ وثيقته دون حساب، بمدة يختارها ويلغيه متى شاء.'),
@@ -50,7 +51,7 @@ export const VISIBILITY_DEFAULTS = Object.fromEntries(VISIBILITY_KEYS.map((k) =>
 export const visibilityLabel = (k) => (VISIBILITY[k] ? `${AUDIENCE_AR[VISIBILITY[k].audience]}: ${VISIBILITY[k].label_ar}` : k);
 
 // قطاعات المبادرات المحلولة بترتيب العرض: لكل قطاع مفتاح par_example_<القطاع> (المحتوى في supabase/content/initiative-guide)
-export const EXAMPLE_SECTORS = Object.freeze(['gov', 'health']);
+export const EXAMPLE_SECTORS = Object.freeze(['gov', 'health', 'startup']);
 
 /**
  * ما يُعرض للمشارك من المبادرات المحلولة. يمرّر الخادم مفاتيحه بأسمائها (participant.ts examplesFor)

@@ -174,6 +174,11 @@ function FieldExample({ ex }) {
   );
 }
 
+// تلميح الحقل في سياق المبادرة (أين تُنفَّذ): يظهر حين يختلف الجواب باختلاف السياق (anatomy.json contexts)
+function ContextNote({ c }) {
+  return c ? <p className="mf-ctx"><b>في سياقك ({c.label}):</b> {c.note}</p> : null;
+}
+
 // دليل الحقل بمستوى المشارك: مفتوح للتأسيسي، ومطوي للمتوسط، وسؤال تحدٍّ للمتقدم (guide.js)
 function FieldGuide({ g }) {
   if (!g) return null;
@@ -182,6 +187,7 @@ function FieldGuide({ g }) {
       <div className="mf-guide open" role="note">
         <p><b>المطلوب:</b> {g.meaning}</p>
         <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
+        <ContextNote c={g.context} />
         <FieldExample ex={g.example} />
       </div>
     );
@@ -192,6 +198,7 @@ function FieldGuide({ g }) {
       {g.mode === 'collapsed' && <p><b>المطلوب:</b> {g.meaning}</p>}
       <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
       <p className="mf-q"><b>{g.mode === 'expert' ? 'اختبر جوابك:' : 'ارفع جودته:'}</b> {g.challenge}</p>
+      <ContextNote c={g.context} />
       <FieldExample ex={g.example} />
     </details>
   );
@@ -319,7 +326,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
-                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, d.examples)} />}
+                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
                 <Field f={f} modelKey={m.key} level={m.level} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
                 {!locked && nearExample(m.key, f.key, answers[f.key]) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}

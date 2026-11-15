@@ -49,7 +49,7 @@ describe('مصدر واحد لكل معلومة في بناء المبادرة',
     expect(SOURCES.filter((p) => /from '[^']*anatomy\.json'/.test(read(p)))).toEqual([]);
     expect(read('supabase/content/initiative-guide/v1/anatomy.js')).toContain("import A from './anatomy.json';");
     // master-book-drafts.js نص مسودة مولَّد يذكر الملف اسمًا في جدول فحص التضارب، لا يقرؤه
-    expect(holding('initiative-guide/v1/anatomy.js').filter((p) => !p.endsWith('master-book-drafts.js')).sort()).toEqual(['leaders-app/src/Term.jsx', 'leaders-app/src/screens/InitiativeMap.jsx', 'src/lib/brand/capstone.js']);
+    expect(holding('initiative-guide/v1/anatomy.js').filter((p) => !p.endsWith('master-book-drafts.js')).sort()).toEqual(['leaders-app/src/Term.jsx', 'leaders-app/src/guide.js', 'leaders-app/src/screens/InitiativeMap.jsx', 'src/lib/brand/capstone.js']);
     // المصطلح يُعرَّف في المسرد وحده: لا تعريف مكتوب لخط الأساس في شاشة
     expect(holding('قيمة المؤشر اليوم قبل أن تبدأ')).toEqual([]);
   });

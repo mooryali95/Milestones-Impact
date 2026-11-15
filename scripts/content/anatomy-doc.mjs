@@ -52,6 +52,19 @@ export function render() {
   out.push('| المصطلح | صيغ أخرى يُعرف بها | التعريف |', '|---|---|---|');
   for (const g of A.glossary) out.push(`| **${cell(g.term)}** | ${cell((g.aka || []).join('، ') || '·')} | ${cell(g.def)} |`);
   out.push('');
+  if (A.writing_rules?.length) {
+    out.push('---', '', '## 4. قواعد الكتابة: المبادرة ملك قائدها', '');
+    if (A.meaning.owner_rule) out.push(`> ${A.meaning.owner_rule}`, '');
+    A.writing_rules.forEach((r, i) => out.push(`${i + 1}. ${typeof r === 'string' ? r : `**${r.rule}** ${r.why || ''}`.trim()}`));
+    out.push('');
+  }
+  if (A.contexts) {
+    out.push('---', '', '## 5. سياق التنفيذ: أين تُنفَّذ المبادرة', '', A.contexts.about, '');
+    const opts = A.contexts.options;
+    out.push(`| الحقل | ${opts.map((o) => cell(o.label)).join(' | ')} |`, `|---|${opts.map(() => '---').join('|')}|`);
+    for (const [k, n] of Object.entries(A.contexts.notes)) out.push(`| \`${k}\` | ${opts.map((o) => cell(n[o.key] || '·')).join(' | ')} |`);
+    out.push('', `المثال المحلول الأقرب لكل سياق: ${opts.filter((o) => o.example).map((o) => `«${o.label}» ← \`${o.example}\``).join('، ')}، وما عداها مثال قطاع المشارك.`, '');
+  }
   return out.join('\n');
 }
 
