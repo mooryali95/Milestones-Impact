@@ -412,7 +412,8 @@ function Review({ data, onDone }) {
 // الباب مكتمل بتعريف الرحلة نفسه: قراءة فعلية ثم الاختبار (complete من الخادم). خادم أقدم لا يرسله فيُعدّ بالاختبار كما كان
 const complete = (c) => (c.complete ?? !!c.done);
 
-export default function Handbook({ me, lab, onLab, onBack }) {
+// target: إحالة من فصل في وثيقة المبادرة { dimension, chapter_key, look_for, from }: يُفتح الباب نفسه وفوقه ما يُبحث عنه فيه وطريق العودة
+export default function Handbook({ me, lab, onLab, onBack, target = null, onReturn = null }) {
   const [toc, setToc] = useState(null);
   const [tab, setTab] = useState('read');
   const [error, setError] = useState('');
@@ -423,6 +424,7 @@ export default function Handbook({ me, lab, onLab, onBack }) {
   const [toast, setToast] = useState('');
   const [reading, setReading] = useState(null);
   const [attempt, setAttempt] = useState(0);   // «حاول مرة أخرى» بعد فشل تحميل باب: يعيد الطلب ولو لم يتغير الباب
+  const [seek, setSeek] = useState(null);       // الإحالة الواردة من وثيقة المبادرة، ومعها هل الباب في كتيب المشارك
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   // التمرير إلى رأس الباب بعد رسمه لا قبله: اللوحة تكبر عند الرسم (بعد تحميل الخطوط)، والتمرير قبله كان ينتهي
@@ -434,12 +436,15 @@ export default function Handbook({ me, lab, onLab, onBack }) {
     const r = await call('handbook.toc');
     if (!r.success) return setError(r.message);
     setToc(r);
+    const hit = first && target ? r.chapters.find((c) => c.dimension === target.dimension && c.chapter_key === target.chapter_key) : null;
+    if (first && target) setSeek({ ...target, found: !!hit, title: hit?.title || null });
+    if (hit) { setTab('read'); setCurrent(hit.id); return; }
     if (first && r.chapters.length) {
       const last = lastRead.get();
       const resume = last && r.chapters.find((c) => c.id === last.id);
       setCurrent(resume ? resume.id : r.chapters.some(complete) ? (r.chapters.find((c) => !complete(c)) || r.chapters[0]).id : COVER);
     }
-  }, []);
+  }, [target]);
   const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
 
@@ -631,6 +636,18 @@ export default function Handbook({ me, lab, onLab, onBack }) {
           </nav>
 
           <div className="book-reader" ref={wrapRef}>
+            {seek && (
+              <div className={`book-seek${seek.found ? '' : ' miss'}`} role="status" data-seek={seek.found ? 'found' : 'missing'}>
+                <div className="grow">
+                  <small>من فصل «{seek.from}» في وثيقة مبادرتك</small>
+                  {seek.found
+                    ? <b>اقرأ في هذا الباب قسم «{seek.look_for}»</b>
+                    : <b>الباب الذي يشرح هذا الفصل ليس في كتيبك في مستواك الحالي. اسأل مختصًا من صفحة مبادرتك.</b>}
+                </div>
+                {onReturn && <button type="button" className="btn ghost sm" onClick={onReturn}>عد إلى «{seek.from}»</button>}
+                <button type="button" className="link small" aria-label="إخفاء" onClick={() => setSeek(null)}>×</button>
+              </div>
+            )}
             {current !== COVER && data && idx >= 0 && (
               <div className="page-head">
                 <span>{PART[data.chapter.dimension]} · {dimOf(data.chapter.dimension).title}</span>

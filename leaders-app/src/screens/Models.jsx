@@ -12,6 +12,7 @@ import AskExpert from './AskExpert.jsx';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
+import { Annotated } from '../Term.jsx';
 import logoDark from '../milestone-impact.svg';
 import { rubricLevelAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 
@@ -51,7 +52,7 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
     return (
       <div className="mtable-wrap">
         <table className="mtable" aria-labelledby={labelId}>
-          <thead><tr><th>#</th>{cols.map((c) => <th key={c}>{c}</th>)}{!locked && <th />}</tr></thead>
+          <thead><tr><th>#</th>{cols.map((c) => <th key={c}><Annotated text={c} /></th>)}{!locked && <th />}</tr></thead>
           <tbody>
             {rows.map((r, ri) => (
               <tr key={ri}>
@@ -144,7 +145,8 @@ function FieldGuide({ g }) {
   );
 }
 
-export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج' }) {
+// nav: شريط التنقل بين فصول وثيقة المبادرة حين يُفتح النموذج فصلًا منها (InitiativeMap.jsx)
+export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج', nav = null }) {
   const [d, setD] = useState(null);
   const [answers, setAnswers] = useState({});
   const [busy, setBusy] = useState('');
@@ -214,6 +216,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   return (
     <div className="model">
       <button className="link small" onClick={onBack}>→ {backLabel}</button>
+      {nav}
       {d.capstone && <p className="alert info small">هذا فصل في وثيقة مبادرتك{capLocked ? '، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.' : '. ما تكتبه هنا يظهر في الوثيقة كما هو.'}</p>}
       <ol className="mstepper">
         {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
@@ -263,7 +266,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             const single = f.bind === 'initiative' || !['select', 'table'].includes(f.type);
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
-                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
+                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, d.examples)} />}
                 <Field f={f} modelKey={m.key} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
