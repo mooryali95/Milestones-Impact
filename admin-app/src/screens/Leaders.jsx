@@ -30,9 +30,10 @@ const MailCenter = lazy(() => import('./MailCenter.jsx'));
 const AppSettings = lazy(() => import('./AppSettings.jsx'));
 const Feedback360 = lazy(() => import('./Feedback360.jsx'));
 const Insight = lazy(() => import('./Insight.jsx'));
+const Agent = lazy(() => import('./Agent.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
-import { TABS } from '../leaders-tabs.js';
+import { OWNER_TABS, TABS } from '../leaders-tabs.js';
 
 // الأقسام وأسماؤها في ملف صغير يقرؤه شريط البحث (Palette) دون أن يجرّ الأقسام كلها إلى الحزمة الرئيسية
 export { TABS };
@@ -43,16 +44,18 @@ const TAB_KEYS = new Set(TABS.map(([k]) => k));
 const TAB_GROUPS = [
   ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'handbook', 'katon', 'lab', 'assessment', 'content']],
-  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings']],
+  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent']],
   ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
-export default function Leaders({ canWrite, pending, isSuper = false }) {
+export default function Leaders({ canWrite, pending, isSuper = false, isOwner = false }) {
   const route = useRoute();
-  const tab = TAB_KEYS.has(route.tab) ? route.tab : 'overview';
+  // شاشة المساعد للمدير الأعلى والمالك وحدهما
+  const allowed = (k) => !OWNER_TABS.has(k) || isSuper || isOwner;
+  const tab = TAB_KEYS.has(route.tab) && allowed(route.tab) ? route.tab : 'overview';
   const person = tab === 'participants' ? route.id : null;
   const orgId = tab === 'orgs' ? route.id : null;
   const track = tab === 'tracks' ? route.id : null;
@@ -99,6 +102,7 @@ export default function Leaders({ canWrite, pending, isSuper = false }) {
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
+  else if (tab === 'agent') body = <Agent isSuper={isSuper} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
   else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} payId={payId} onOpen={(id) => { at('payments', id); window.scrollTo({ top: 0 }); }} />;
@@ -136,7 +140,7 @@ export default function Leaders({ canWrite, pending, isSuper = false }) {
             <button type="button" className="la-tab-group-label" aria-label={`مجموعة ${g}`} aria-expanded={!(shut.has(g) && !keys.includes(tab))} onClick={() => toggleGroup(g)}>
               {g}{shut.has(g) && !keys.includes(tab) && groupPending(keys) > 0 && <span className="la-badge">{groupPending(keys)}</span>}
             </button>
-            {keys.map((k) => {
+            {keys.filter(allowed).map((k) => {
               const n = pendingOf(k);
               return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}</button>;
             })}

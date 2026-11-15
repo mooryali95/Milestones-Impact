@@ -159,12 +159,16 @@ function domainHint(email, domains) {
   return `⚠ نطاق البريد «${d}» ليس من نطاقات الجهة (${domains.join('، ')}). تأكد من كتابته، فالدعوة تُرسل إليه.`;
 }
 
-export default function OrgForm({ org, coordinator, onClose }) {
+// مفتاح المرافق الذكي يُرسل بعد ترحيل 20261115200000 وحده: العمود في صف الجهة المقروء (أو في أي جهة للجهة الجديدة)
+export const companionKnown = (org, ready = false) => ready || !!(org && 'companion_allowed' in org);
+
+export default function OrgForm({ org, coordinator, onClose, companionReady = false }) {
   const { toast, confirm } = useUI();
   const initial = useMemo(() => ({
     name: org?.name || '', name_en: org?.name_en || '', logo: org?.logo || null, cert_cobrand: org?.cert_cobrand !== false, cert: org?.cert || {}, short_name: org?.short_name || '', sector: org?.sector || '', status: org?.status || 'active',
     color: org?.color || SWATCHES[0], seats: org?.seats ?? '', contract: org?.contract_cents != null ? String(org.contract_cents / 100) : '', show_value: org?.show_value !== false,
     contract_starts: org?.contract_starts || '', contract_ends: org?.contract_ends || '', invite_code: org?.invite_code || '', domains: domainsOf(org), notes: org?.notes || '',
+    companion_allowed: org?.companion_allowed !== false,
   }), [org]);
   const initialCoord = useMemo(() => ({
     enabled: !!coordinator, email: coordinator?.email || org?.contact_email || '', full_name: coordinator?.full_name || org?.contact_name || '',
@@ -233,6 +237,7 @@ export default function OrgForm({ org, coordinator, onClose }) {
       contract_starts: next.contract_starts || null, contract_ends: next.contract_ends || null, domains: next.domains.join(','), notes: next.notes.trim() || null,
       contact_name: coord.full_name.trim() || null, contact_email: coord.email.trim().toLowerCase() || null, contact_phone: coord.phone.trim() || null,
       ...(next.invite_code || !known ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
+      ...(companionKnown(org, companionReady) ? { companion_allowed: next.companion_allowed } : {}),
     };
     const r = await L('admin.save', { entity: 'organizations', row: { ...(known ? { id: known } : {}), ...row } });
     if (!r.success) { setBusy(false); return setServerErr(r.message || 'تعذّر الحفظ'); }
@@ -305,6 +310,16 @@ export default function OrgForm({ org, coordinator, onClose }) {
               <label className="of-switch"><input type="checkbox" checked={v.cert_cobrand} onChange={(e) => setV({ ...v, cert_cobrand: e.target.checked })} />
                 <span>{v.cert_cobrand ? 'مفعّلة' : 'معطّلة'}</span></label>
             </Field>
+          </section>
+
+          <section className="of-sec">
+            <h4>المرافق الذكي</h4>
+            <Field group label="السماح بالمرافق الذكي لمشاركي الجهة" hint={v.companion_allowed ? 'يظهر المرافق لمشاركي الجهة متى فُعّل في دفعتهم' : 'لا يظهر المرافق لأي مشارك من الجهة، أيًا كان إعداد الدفعة'} wide>
+              <label className="of-switch"><input type="checkbox" checked={v.companion_allowed} onChange={(e) => setV({ ...v, companion_allowed: e.target.checked })} />
+                <span>{v.companion_allowed ? 'مسموح' : 'غير مسموح'}</span></label>
+            </Field>
+            <p className="la-muted small">المرافق الذكي داخل تطبيق القادة يعمل حين تسمح به الجهة ويُفعَّل في الدفعة، والأفراد بلا جهة مسموح لهم افتراضيًا. مساعد الموقع العام متاح لكل زائر ولا يتأثر بهذا الإعداد.</p>
+            {!companionKnown(org, companionReady) && <p className="la-muted small">يُحفظ هذا الإعداد بعد تطبيق ترحيل 20261115200000.</p>}
           </section>
 
           <section className="of-sec">
