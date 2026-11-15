@@ -1,6 +1,6 @@
 // العداد الموحد (D15) في شيفرته الفعلية: قاعدة مزيفة وResend محاكى، بلا شبكة.
 import { assertEquals } from 'jsr:@std/assert@1';
-import { sendCounted } from '../_shared/mail.ts';
+import { mailRows, mailShell, plainText, resetWebhookAlerts, sendCounted, WEBHOOK_ALERT_MS } from '../_shared/mail.ts';
 
 type Row = { kind: string; source: string; status: string; created_at: string };
 
@@ -134,4 +134,30 @@ Deno.test('P1-12: قناة المرسل تتلقى امتلاء السقف ور�
       assertEquals(await sendCounted(fakeDb([]).client, 'a@x.sa', 's', 'x', opts('notify', { alert: boom })), { ok: false, reason: 'mail_failed' });
     });
   } finally { Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('بلا قناة مرسل (admin-api وuser-api وsend-otp): امتلاء السقف رسالة واحدة إلى الرابط في المهلة لا لكل طلب محجوب', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  resetWebhookAlerts();
+  try {
+    await withResend(200, async (calls) => {
+      for (let i = 0; i < 5; i++) {
+        assertEquals((await sendCounted(fakeDb([...sent('code', 10)]).client, `u${i}@x.sa`, 's', 'x', { ...opts('code'), source: 'user-api' })).reason, 'mail_cap');
+      }
+      assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 1);
+    });
+    // رفض المزوّد كذلك مرة في مهلته
+    await withResend(403, async (calls) => {
+      for (let i = 0; i < 3; i++) await sendCounted(fakeDb([]).client, 'a@x.sa', 's', 'x', { ...opts('code'), source: 'admin-api' });
+      assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 1);
+    });
+    assertEquals(WEBHOOK_ALERT_MS.mail_cap, 6 * 36e5);
+  } finally { Deno.env.delete('LEADERS_ALERT_WEBHOOK'); resetWebhookAlerts(); }
+});
+
+Deno.test('النسخة النصية: التسمية وقيمتها في mailRows بفاصل، وتذييل التوقيع على سطره', () => {
+  const t = plainText(mailShell('t', mailRows([['الموعد', 'الأحد 16'], ['الرابط', 'https://x.y/z', true]])));
+  assertEquals(t.split('\n').includes('الموعد: الأحد 16'), true, t);
+  assertEquals(t.split('\n').includes('الرابط: https://x.y/z'), true, t);
+  assertEquals(t.split('\n').includes('من النية… إلى الأثر'), true, t);
 });

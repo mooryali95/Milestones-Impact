@@ -98,6 +98,45 @@ Deno.test('P1-12: رسالة بقيت في الطابور أكثر من ست س�
   } finally { restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });
 
+Deno.test('P1-12: بريد الطابور المتأخر احتياط: لا يُرسل إن وصل الرابط، ومرة في ست ساعات إن لم يصل، وما لم يصل يُعاد', async () => {
+  const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
+  Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const queue = [{ id: 'm1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share' }];
+  const marks = new Set<string>();
+  const restore = install((t, ops) => {
+    if (t === 'mail_queue') return { data: queue.filter((m) => m.created_at < String(arg(ops, 'lt'))), error: null };
+    if (t === 'audit_log' && has(ops, 'insert')) {
+      for (const r of ([] as any[]).concat(arg(ops, 'insert', 0))) if (r.action === 'mail.queue-stuck') marks.add(r.entity_id);
+      return { error: null };
+    }
+    if (t === 'audit_log' && has(ops, 'eq', 'action', 'mail.queue-stuck')) return { data: (arg(ops, 'in') as string[]).filter((id) => marks.has(id)).map((entity_id) => ({ entity_id })), error: null };
+    return { data: [], count: 0, error: null };
+  });
+  try {
+    // الرابط وصل: لا بريد يأخذ من نصيب الرموز
+    await withFetch(async (calls) => {
+      assertEquals(await stuckQueueAlert(), { stuck: 1, alerted: 1 });
+      assertEquals([hooks(calls).length, resend(calls).length], [1, 0]);
+    });
+    // الرابط معطل: بريد واحد، ثم رسائل الساعات التالية لا بريد لها في المهلة ولا تُعلَّم، فتُعاد
+    queue.push({ id: 'm2', created_at: hoursAgo(6.5), kind: 'notify', reason: 'mail_share' });
+    await withFetch(async (calls) => {
+      assertEquals(await stuckQueueAlert(), { stuck: 2, alerted: 1 });
+      assertEquals(resend(calls).length, 1);
+      queue.push({ id: 'm3', created_at: hoursAgo(6.2), kind: 'notify', reason: 'mail_share' });
+      assertEquals(await stuckQueueAlert(), { stuck: 3, alerted: 0 });
+      assertEquals(resend(calls).length, 1);
+    }, { hookStatus: 500 });
+    assertEquals(marks.has('m3'), false);
+    await withFetch(async (calls) => {
+      assertEquals(await stuckQueueAlert(), { stuck: 3, alerted: 1 });
+      assertEquals([hooks(calls).length, resend(calls).length], [1, 0]);
+    });
+    assertEquals(marks.has('m3'), true);
+  } finally { restore(); Object.assign(CONFIG, saved); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
 // قاعدة تقرير الأسبوع: الترحيلات كلها مطبقة، والطابور والسجل بأرقام معروفة
 function weekDb(mailQueueError = false) {
   return (t: string, ops: Op[]): Res => {

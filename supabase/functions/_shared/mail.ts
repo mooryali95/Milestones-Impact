@@ -67,8 +67,17 @@ export const MAIL_FAMILY = {
 export type MailFamily = keyof typeof MAIL_FAMILY;
 
 // preheader: السطر الذي يظهر تحت العنوان في صندوق الوارد، مخفي داخل الرسالة
-export function mailShell(title: string, body: string, { eyebrow = 'MILESTONE IMPACT', family, preheader = '', footnote = 'إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.' }: { eyebrow?: string; family?: MailFamily; preheader?: string; footnote?: string } = {}) {
+// عنوان فيه قيمة متغيرة: mailTitle`طلب تقدير من ${who}` نص للوسم title، وفي العنوان الظاهر تُعزل القيمة بـbdi()
+// فلا تنتقل نقطة اسم لاتيني (Jr. أو Co.) إلى طرف السطر. السلسلة المجردة تُرمّز كما هي
+export type MailTitle = { text: string; html: string };
+export const mailTitle = (parts: TemplateStringsArray, ...vals: unknown[]): MailTitle => ({
+  text: parts.reduce((a, p, i) => a + p + (i < vals.length ? String(vals[i] ?? '') : ''), ''),
+  html: parts.reduce((a, p, i) => a + esc(p) + (i < vals.length ? bdi(vals[i]) : ''), ''),
+});
+export function mailShell(heading: string | MailTitle, body: string, { eyebrow = 'MILESTONE IMPACT', family, preheader = '', footnote = 'إن لم تطلب هذه الرسالة فتجاهلها، ولن يتغير شيء في حسابك.' }: { eyebrow?: string; family?: MailFamily; preheader?: string; footnote?: string } = {}) {
   if (family) eyebrow = MAIL_FAMILY[family];
+  const title = typeof heading === 'string' ? heading : heading.text;
+  const titleHtml = typeof heading === 'string' ? esc(heading) : heading.html;
   const year = new Date().getFullYear();
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><title>${esc(title)}</title></head>
@@ -83,7 +92,7 @@ ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;m
 </td></tr>
 <tr><td ${RTL} bgcolor="${MAIL.paper}" style="background:${MAIL.paper};padding:36px 40px 10px;text-align:right">
   <div style="font-family:${LATIN};font-size:10px;letter-spacing:3.5px;color:${MAIL.gold};text-transform:uppercase;margin:0 0 12px;text-align:right" dir="ltr" align="right">${esc(eyebrow)}</div>
-  <h1 ${RTL} style="font-family:${FONT};font-weight:700;font-size:23px;line-height:1.6;margin:0 0 18px;color:${MAIL.graphite};text-align:right">${esc(title)}</h1>
+  <h1 ${RTL} style="font-family:${FONT};font-weight:700;font-size:23px;line-height:1.6;margin:0 0 18px;color:${MAIL.graphite};text-align:right">${titleHtml}</h1>
   <div ${RTL} style="font-size:15px;line-height:1.9;color:${MAIL.text};text-align:right">${body}</div>
 </td></tr>
 <tr><td bgcolor="${MAIL.paper}" style="background:${MAIL.paper};padding:6px 40px 32px">
@@ -112,6 +121,8 @@ export function plainText(html: string) {
   return html
     .replace(/<(style|head)[\s\S]*?<\/\1>/gi, '')
     .replace(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href, label) => `${label.replace(/<[^>]+>/g, '').trim()}: ${href}`)
+    // خلية التسمية في mailRows تلاصق خلية القيمة: فاصل بينهما في النص، لا «الموعدالأحد»
+    .replace(/<\/td><td/gi, ': </td><td')
     .replace(/<br\s*\/?>|<\/(p|div|tr|h1|li)>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/&#9670;/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
@@ -140,12 +151,14 @@ export const deliver = async (to: string, subject: string, html: string, opts: D
 
 // تنبيه المالك عبر قناة غير البريد (D15): رابط ويب (Slack أو Teams أو Telegram أو غيرها) في LEADERS_ALERT_WEBHOOK.
 // حين يكون العطل في البريد نفسه لا يصل تنبيه بالبريد، فهذه القناة لا تعتمد عليه.
+const WEBHOOK_TIMEOUT_MS = 5000;
 export async function alertWebhook(kind: string, detail: Record<string, unknown>) {
   const url = Deno.env.get('LEADERS_ALERT_WEBHOOK') || '';
   if (!url) { console.error('alert (no webhook):', kind, JSON.stringify(detail)); return false; }
   try {
     const text = `[Milestone Impact] ${kind}: ${JSON.stringify(detail)}`;
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text, kind, detail }) });
+    // مهلة قصيرة: رابط بطيء لا يؤخر رد طلب الرمز المحجوب
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text, kind, detail }), signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS) });
     return r.ok;
   } catch (e) { console.error('alertWebhook:', e); return false; }
 }
@@ -167,6 +180,11 @@ export async function mailCounts(client: Client, since = new Date(Date.now() - 8
 // تنبيه تعذّر العداد مرة كل عشر دقائق لكل نسخة من الدالة، فلا يُغرق الرابط
 const COUNTER_ALERT_MS = 10 * 60e3;
 let counterAlertAt = 0;
+// الدوال التي لا تمرر alert (admin-api وuser-api وsend-otp) تنبّه بالرابط وحده بلا سجل تهدئة، فتُهدَّأ هنا لكل نوع
+// في كل نسخة، وإلا أرسل كل طلب رمز محجوب في يوم ممتلئ رسالة إلى قناة المالك. المهلة كمهلة alertOps للنوع نفسه
+export const WEBHOOK_ALERT_MS: Record<string, number> = { mail_cap: 6 * 36e5, mail_rejected: 36e5 };
+const webhookAlertAt = new Map<string, number>();
+export const resetWebhookAlerts = () => webhookAlertAt.clear();   // للاختبار
 
 // sourceShare: نصيب مصدر واحد من السقف (مصفوفة التأثير مثلًا)، فلا تستنزف بوابة عامة رموز دخول غيرها
 // بصمة العنوان في سجل البريد: يُبحث بها عن بريد يكتبه المدير («لماذا لم يصل؟») ولا يُستخرج منها عنوان.
@@ -192,7 +210,14 @@ export async function sendCounted(client: Client, to: string, subject: string, h
   { kind, source, ref = null, cap, sourceShare, force = false, alert, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert }): Promise<SendOutcome> {
   const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;
   // التنبيه لا يُفشل الإرسال أبدًا
-  const raise = (k: string, d: Record<string, unknown>) => Promise.resolve().then(() => via(k, d)).catch((e) => console.error('mail alert:', k, e));
+  const raise = (k: string, d: Record<string, unknown>) => {
+    const calm = via === alertWebhook ? WEBHOOK_ALERT_MS[k] ?? 0 : 0;
+    if (calm) {
+      if ((webhookAlertAt.get(k) ?? 0) > Date.now() - calm) return Promise.resolve();
+      webhookAlertAt.set(k, Date.now());
+    }
+    return Promise.resolve().then(() => via(k, d)).catch((e) => console.error('mail alert:', k, e));
+  };
   const counts = await mailCounts(client);
   // عنوان رسالة الرمز لا يُحفظ: بعض الدوال تكتب الرمز في عنوانها، والسجل لا يحمل رمزًا أبدًا (D15)
   const extra = { to_hash: await addressHash(to), subject: kind === 'code' ? null : String(subject || '').slice(0, 300) };
@@ -209,7 +234,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     const d = mailDecision(force ? 'code' : kind, counts, cap);
     if (!d.ok) {
       await log('blocked');
-      // امتلاء السقف حدث يُنبَّه إليه (والتهدئة عند القناة)؛ حجب الحصة سير عادي يدخل به الإشعار الطابور.
+      // امتلاء السقف حدث يُنبَّه إليه (والتهدئة عند alertOps، أو في raise للرابط وحده)؛ حجب الحصة سير عادي يدخل به الإشعار الطابور.
       // التنبيه المحجوب بعد احتياطه لا ينبّه عن نفسه: وصل الرابط قبله
       if (d.reason === 'mail_cap' && kind !== 'alert') await raise('mail_cap', { source, kind, sent: counts.sent, cap });
       return { ok: false, reason: d.reason as SendOutcome['reason'] };
