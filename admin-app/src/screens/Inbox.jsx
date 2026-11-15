@@ -53,10 +53,11 @@ export default function Inbox({ contacts = 0, canWrite, onPerson }) {
         <h3 id="inbox-h">ينتظرني <small className="la-muted">· {total}{d.late ? `، منها ${d.late} تجاوزت مهلتها` : ''}</small></h3>
         {ids.length > 0 && (
           <div className="inbox-bulk">
-            <button type="button" className="btn-sm primary" onClick={() => setBulk(ids)} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة لتراجعه من ملفه">
-              اعتمد الجاهزين{ready?.ready ? ` (${ready.ready})` : ''}…
+            {/* لا جاهز في المعاينة: الزر ثانوي يفتح المراجعة، لا وعد باعتماد لا يقع */}
+            <button type="button" className={`btn-sm ${ready && !ready.ready ? 'ghost' : 'primary'}`} onClick={() => setBulk(ids)} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة لتراجعه من ملفه">
+              {ready && !ready.ready ? 'راجع المنتظرين…' : `اعتمد الجاهزين${ready?.ready ? ` (${ready.ready})` : ''}…`}
             </button>
-            <small className="la-muted">{ready ? readyLineAr(ready.ready, ready.held) : `${pendingN} بانتظار الاعتماد`}{pendingN > ids.length ? `، أقدم ${ids.length} في هذه الدفعة` : ''}</small>
+            <small className="la-muted">{ready ? readyLineAr(ready.ready, ready.held) : `${pendingN} بانتظار الاعتماد`}{pendingN > ids.length ? ` · من أقدم ${ids.length} منتظرًا` : ''}</small>
           </div>
         )}
       </div>

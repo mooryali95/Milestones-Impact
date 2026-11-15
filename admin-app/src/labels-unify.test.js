@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, DIM_AR, DIM_ROMAN, DIMENSIONS } from '../../supabase/functions/leaders-api/labels.js';
 import { chaptersAr, modelsAr } from './screens/Handbook.jsx';
 import { tierGroups } from './screens/Methodology.jsx';
+import { SECTION_STATUS_AR } from './screens/Capstones.jsx';
+import { STATUS_TITLES_ADMIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 const ROOT = join(__dirname, '../..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -83,9 +85,11 @@ describe('حالة الجلسة وحالة الفصل من labels.js لا من �
     expect(s).not.toMatch(/const COACH_AR\s*=/);
     expect(COACH_STATUS_ADMIN.attended).toBe('حضر');
   });
-  it('فصول وثيقة المبادرة تأخذ SUBMISSION_STATUS_ADMIN', () => {
+  it('فصول وثيقة المبادرة من labels.js بلسان المستشار، و«أُعيد» بفعل الوثيقة نفسه', () => {
     const s = read('admin-app/src/screens/Capstones.jsx');
-    expect(s).toMatch(/SUBMISSION_STATUS_ADMIN\[s\.status\]/);
+    expect(s).toMatch(/SECTION_STATUS_AR\[s\.status\]/);
     expect(s).not.toMatch(/'قيّمته'/);
+    expect(SECTION_STATUS_AR).toEqual({ draft: 'مسودة', submitted: 'بانتظار تقييم المستشار', returned: STATUS_TITLES_ADMIN.returned, reviewed: 'قيّمه المستشار' });
+    expect(SECTION_STATUS_AR.submitted).not.toMatch(/تقييمك/);
   });
 });

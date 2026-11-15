@@ -1045,7 +1045,7 @@
 
 /* الاعتماد الجماعي بالمستوى المحسوب (BulkApprove.jsx) */
 /* العنوان والتذييل ثابتان، والمحتوى وحده يتمرر بينهما (لا تمرير متداخل في القوائم) فيبقى زر التنفيذ ظاهرًا */
-.mi-form.bulk-approve { max-inline-size: 680px; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.mi-form.bulk-approve { max-inline-size: 680px; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
 .bulk-approve > h3 { padding: 18px 22px 12px; border-bottom: 1px solid var(--line); }
 .bulk-approve .ba-body { flex: 1 1 auto; min-block-size: 0; overflow-y: auto; padding: 12px 22px 16px; display: grid; gap: 12px; align-content: start; }
 .bulk-approve .ba-foot { padding: 12px 22px; border-top: 1px solid var(--line); background: var(--off-white, #fff); }
@@ -1053,6 +1053,7 @@
 .bulk-approve .ba-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
 .bulk-approve .ba-list li { display: grid; gap: 4px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-ok); }
 .bulk-approve .ba-list li.held { border-inline-start-color: var(--st-warn); }
+.bulk-approve .ba-list li > .la-link { justify-self: start; text-align: start; }
 .bulk-approve .ba-list li.bad { border-inline-start-color: var(--st-bad); }
 .bulk-approve .ba-list small { color: var(--ink-mid); font-size: .8rem; }
 .bulk-approve .ba-holds { display: flex; flex-wrap: wrap; gap: 4px; }

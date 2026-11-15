@@ -553,7 +553,7 @@ export async function reviews(b: Body = {}) {
 export async function inbox(_b: Body = {}) {
   const P = 'participants!inner(full_name, is_demo)';
   const q = {
-    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).limit(200),
+    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(200),
     requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
     model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
     capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),

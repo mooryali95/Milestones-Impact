@@ -10,7 +10,10 @@ import { copiedFromExamples } from '../../../supabase/functions/leaders-api/exam
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+// حالة الفصل في صفحة الوثيقة: الفصول يقيّمها المستشار في كتيب القائد لا المالك، فالتسليم والتقييم بلسانه،
+// و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
+export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { refreshPending } from '../pending.js';
 import ExportButton from '../ExportButton.jsx';
@@ -166,7 +169,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
         <section className="la-card">
           <h3>الفصول</h3>
           <ol className="cps-secs">{d.sections.map((s) => (
-            <li key={s.id} className={s.complete ? 'ok' : ''}><span>{s.title}</span><small>{s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SUBMISSION_STATUS_ADMIN[s.status] || SUBMISSION_STATUS_ADMIN.draft}` : ''}</small></li>
+            <li key={s.id} className={s.complete ? 'ok' : ''}><span>{s.title}</span><small>{s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small></li>
           ))}</ol>
           <h3>فحوص الاتساق</h3>
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>

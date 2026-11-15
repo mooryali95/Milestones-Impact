@@ -8,7 +8,7 @@ import { date, L } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
-import { applyFilters, presetCounts, sortRows } from '../filters.js';
+import { applyFilters, presetCounts, recallState, sortRows } from '../filters.js';
 import { RequestsBoard, requestView } from './ExpertMatch.jsx';
 import { readQuery } from '../route.js';
 import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
@@ -228,14 +228,23 @@ const EXPERT_COLS = [
   { key: 'status', label: 'الحالة', width: 14, get: (e) => EXPERT_STATUS[e.status] }, { key: 'joined', label: 'أُضيف', width: 16, get: (e) => date(e.created_at) },
 ];
 
+// الشبكة بعد رابط لعرض اللوحة: عرض اللوحة يُرفع منها، وتعود فلاتر الجلسة التي تركها المدير (وعرضها إن كان للشبكة)
+export function gridAfterBoardLink(state, kept) {
+  const k = kept || {};
+  const back = Object.fromEntries(Object.keys(state).filter((key) => k[key] != null).map((key) => [key, String(k[key])]));
+  return { ...state, ...back, view: PRESETS.some((p) => p.key === k.view) ? k.view : '' };
+}
+
 export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
   const [d, setD] = useState(null);
   const [adding, setAdding] = useState(false);
   // رابط «ينتظرني» (?view=attention) يفتح لوحة طلبات الإسناد على عرضه. يُقرأ قبل شريط الشبكة الذي يقرأ العنوان نفسه
-  const [reqView] = useState(() => requestView(readQuery()));
+  // وما تركه المدير في شبكة الخبراء يُحفظ قبل أن يكتب الشريط حالة الرابط فوقه، فيعود إليها
+  const [entry] = useState(() => { const view = requestView(readQuery()); return { view, kept: view ? recallState('experts') : null }; });
+  const reqView = entry.view;
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'role', 'dim', 'level', 'source', 'committee', 'sort'], {}, { scope: 'experts' });
   // عرض اللوحة ليس عرضًا للشبكة: لا يبقى في شريطها ولا في عنوانها
-  useEffect(() => { if (f.view && !PRESETS.some((p) => p.key === f.view)) setF({ view: '' }); }, []); // eslint-disable-line
+  useEffect(() => { if (f.view && !PRESETS.some((p) => p.key === f.view)) replaceF((s) => gridAfterBoardLink(s, entry.kept)); }, []); // eslint-disable-line
   const load = useCallback(async () => setD(await L('admin.experts')), []);
   useEffect(() => { if (!expertId) load(); }, [load, expertId]);
   const all = d?.experts || [];

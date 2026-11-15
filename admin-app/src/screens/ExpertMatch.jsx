@@ -9,7 +9,7 @@ import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, decodeState, isFiltered, presetCounts, sortRows } from '../filters.js';
-import { DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, DIM_AR, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MATCH_WEIGHTS, OFFER_HOURS } from '../../../supabase/functions/leaders-api/logic.js';
 
 const PART_AR = { fit: 'التخصص والمستوى', capacity: 'السعة المتاحة', quality: 'التقييم', context: 'القطاع', continuity: 'خدمه من قبل' };
@@ -112,6 +112,23 @@ export function attentionRank(x, now = Date.now()) {
   return null;
 }
 export const needsAttention = (x, now = Date.now()) => attentionRank(x, now) != null;
+// سبب ظهور الطلب في «يحتاج تدخلًا» بكلام المالك، فلا يبدو كصف سليم. الرتبة من attentionRank نفسها
+const hoursAr = (n) => countAr(n, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+const daysAr = (n) => countAr(n, 'يوم', 'يومين', 'أيام', 'يومًا');
+export function attentionReason(x, now = Date.now()) {
+  const r = attentionRank(x, now);
+  if (r === 0) return 'لم يُطابق خبير بعد';
+  if (r === 1) {
+    const left = (Date.parse(x.expires_at) - now) / HOUR;
+    return left <= 0 ? 'فاتت مهلة العرض' : left < 1 ? 'تنتهي مهلة العرض خلال أقل من ساعة' : `تنتهي مهلة العرض خلال ${hoursAr(Math.floor(left))}`;
+  }
+  if (r === 2) {
+    const h = ageH(x.created_at, now);
+    return `مفتوح منذ ${h < 48 ? hoursAr(Math.floor(h)) : daysAr(Math.floor(h / 24))} بلا عرض`;
+  }
+  if (r === 3) return `مقبول منذ ${daysAr(Math.floor(ageH(x.accepted_at || x.created_at, now) / 24))} بلا إغلاق`;
+  return '';
+}
 // الأولى بالتدخل أولًا، وفي الرتبة الواحدة الأقدم أولًا (والمعروض: الأقرب انتهاءً)
 export function byAttention(list, now = Date.now()) {
   const key = (x) => (x.status === 'offered' ? x.expires_at : x.status === 'accepted' ? (x.accepted_at || x.created_at) : x.created_at) || '';
@@ -176,7 +193,7 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
               <td data-label="المشارك"><button className="link" onClick={() => onPerson(x.participant_id)}>{x.participants?.full_name}</button></td>
               <td data-label="الخدمة">{roleAr(x.role)}{x.dimension ? <small className="la-muted"> · {DIM_AR[x.dimension]}</small> : null}</td>
               <td data-label="الخبير">{x.experts?.full_name || <span className="la-muted">·</span>}{x.score != null && <small className="la-muted"> · {x.score}</small>}{x.manual_reason && <small className="la-muted" title={x.manual_reason}> · يدوي</small>}</td>
-              <td data-label="الحالة"><span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span>{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}</td>
+              <td data-label="الحالة"><span className={`la-chip ${REQ_TONE[x.status]}`}>{EXPERT_REQUEST_STATUS[x.status]}</span>{x.status === 'offered' && <small className="la-muted"> حتى {date(x.expires_at)}</small>}{f.view === 'attention' && attentionReason(x, now) && <small className="xm-why">{attentionReason(x, now)}</small>}</td>
               <td className="ce-act">{canWrite && <>
                 {x.status === 'accepted' && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-complete', x, 'أُغلق الطلب')}>اكتملت الخدمة</button>}
                 {x.status === 'unmatched' && <button className="btn-sm primary" onClick={() => act('admin.expert-request-retry', x, 'أُعيدت المحاولة')}>أعد المحاولة</button>}
