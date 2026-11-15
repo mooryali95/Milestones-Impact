@@ -76,7 +76,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
         )}
 
         <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">الأعضاء</div><div className="stat-value">{c.members ?? 0}</div><div className="stat-sub">{c.enrolled ? `${c.enrolled} بإلحاق يدوي، والباقي تلقائيًا` : kind === 'individuals' ? 'بالإلحاق اليدوي' : 'كلهم تلقائيًا'}</div></div>
+          <div className="stat-card"><div className="stat-label">الأعضاء</div><div className="stat-value">{c.members ?? 0}{Number(c.capacity) > 0 && <small> / {c.capacity}</small>}</div><div className="stat-sub">{c.enrolled ? `${c.enrolled} بإلحاق يدوي، والباقي تلقائيًا` : kind === 'individuals' ? 'بالإلحاق اليدوي' : 'كلهم تلقائيًا'}</div></div>
           <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className={`stat-value ${c.pending_approval ? 's-new' : ''}`}>{c.pending_approval || 0}</div><div className="stat-sub">{c.pending_approval ? <a href={`${people}&status=pending_approval`}>اعتمدهم</a> : 'لا أحد'}</div></div>
           <div className="stat-card"><div className="stat-label">فريق الخبراء</div><div className="stat-value">{(c.team_expert_ids || []).length + (c.advisor_expert_id ? 1 : 0)}</div><div className="stat-sub">{c.advisor_name || (c.advisor_expert_id ? 'بمستشار أساسي' : 'بلا مستشار أساسي')}</div></div>
           <div className="stat-card"><div className="stat-label">الجاهزية</div><div className={`stat-value ${missing ? 's-new' : 's-replied'}`}>{items.length - missing}<small> / {items.length}</small></div><div className="stat-sub">{hubSummary(hub)}</div></div>

@@ -120,7 +120,7 @@ function Readiness({ items, onTab }) {
 // نفسه لصفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها تقول غير ذلك
 function OrgsReadiness({ orgs, onOrg }) {
   const rows = (orgs || []).filter((o) => o.status === 'active')
-    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, journey: o.cohort_setup || null, members: o.stats?.total || 0, pending: o.stats?.pending_approval || 0 }) }))
+    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, journey: o.cohort_setup || null, members: o.stats?.total || 0, seatsUsed: o.seats_used ?? null, pending: o.stats?.pending_approval || 0 }) }))
     .sort((a, b) => b.r.missing - a.r.missing);
   if (!rows.length) return null;
   const ready = rows.filter((x) => !x.r.missing).length;

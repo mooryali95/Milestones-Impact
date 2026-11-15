@@ -866,6 +866,10 @@ export const MIN_COHORT = 5;
 // فتظهر حالته لا آخر مرحلة كان فيها (تدقيق الجاهزية 2026-11-11، org-1: كان المنسحب يظهر «في التدريب»)
 export const OUT_OF_PROGRAM = ['withdrawn', 'suspended'];
 export const inProgram = (status) => !OUT_OF_PROGRAM.includes(status);
+// حالة المشارك بعد اعتماد مستواه: من ينتظر الاعتماد أو قبله يصير «معتمد المستوى». ومن تجاوزه (في البرنامج أو أنهاه)
+// أو خرج منه (موقوف أو منسحب) تبقى حالته: إعادة اعتماد المستوى لا ترجعه ولا تعيده إلى البرنامج (تدقيق الرحلة 2026-11-14)
+export const BEFORE_PLACEMENT = ['registered', 'profiled', 'assessing', 'pending_approval'];
+export const statusAfterApprove = (current) => (!current || BEFORE_PLACEMENT.includes(current) ? 'placed' : null);
 
 // ما يراه المنسق من المشارك: الاسم والمسمى والمرحلة ونسبة الإنجاز دائمًا،
 // والنشاط (آخر دخول) والتواصل والدرجات فقط إن سمح المدير. لا شيء غيرها يخرج من الخادم.

@@ -4,7 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { all, allFor, approvedMail, audit, CONFIG, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
-import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
@@ -102,11 +102,15 @@ const orgFilter = (q: any, org: unknown) => scopeOrg(forStats(q), org);   // ا�
 const listFilter = (q: any, org: unknown) => scopeOrg(q.eq('is_demo', false), org);   // قائمة المشاركين
 
 export async function orgs() {
-  const [{ data: list }, { data: ps }, { data: coords }] = await Promise.all([
+  const [{ data: list }, { data: ps }, { data: coords }, { data: ents }] = await Promise.all([
     db.from('organizations').select('*').order('created_at'),
     all((f, t) => forStats(db.from('participants').select('id, status, organization_id, organization_name, last_login_at')).order('id').range(f, t)).then((data) => ({ data })),
     db.from('org_coordinators').select('id, organization_id, email, status, expires_at, invited_at, last_login_at'),
+    // المقاعد المستهلكة: من له إعفاء حي من الجهة، كما يعدّها seatsUsed (entitlements.ts) وحارس المقاعد
+    db.from('entitlements').select('participant_id, organization_id').eq('source', 'sponsor').is('revoked_at', null).limit(20000),
   ]);
+  const seated: Record<string, Set<string>> = {};
+  for (const e of ents || []) if (e.organization_id) (seated[e.organization_id] ||= new Set()).add(e.participant_id);
   const weekAgo = Date.now() - 7 * 864e5;
   const stats = (rows: any[]) => ({ ...funnel(rows), total: rows.length, active_week: rows.filter((r) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length });
   const unassigned = (ps || []).filter((p: any) => !p.organization_id);
@@ -120,6 +124,7 @@ export async function orgs() {
     success: true,
     orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)),
       access: orgAccessState(o, (coords || []).filter((c: any) => c.organization_id === o.id)),
+      seats_used: ents ? (seated[o.id]?.size || 0) : null,
       ...(setups && o.id in setups ? { cohort_setup: setups[o.id] || { cohort: null, setup: [], setup_missing: 0 } } : {}) })),
     unassigned: { ...stats(unassigned), typed: Object.entries(typed).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([name, n]) => ({ name, n })) },
   };
@@ -653,7 +658,8 @@ export async function approve(a: Admin, b: Body) {
     };
   });
   must(await db.from('placements').upsert(rows));
-  await db.from('participants').update({ status: 'placed' }).eq('id', id);
+  const to = statusAfterApprove(p.status);
+  if (to) await db.from('participants').update({ status: to }).eq('id', id);
   await audit('admin', a.email, 'placement.approve', 'participants', id, before, rows);
   const pay = await programPaymentDue(id).catch(() => false);
   sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
