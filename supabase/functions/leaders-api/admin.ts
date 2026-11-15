@@ -8,7 +8,7 @@ import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, 
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
-import { hostOf, orgDomainIssue } from './domains.js';
+import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { pinSponsorFor, programPaymentDue } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
 import { trackProject } from './capstone.js';
@@ -1147,7 +1147,7 @@ export async function save(a: Admin, b: Body) {
     // D20: رمز الدعوة عشرة أحرف عشوائية على الأقل، وتفريغ الحقل وحفظه يدوّر الرمز. الرمز القائم يمر بلا فحص حتى يُدوَّر
     if (isNew || ('invite_code' in row && String(row.invite_code || '').trim().toLowerCase() !== String(current?.invite_code || ''))) {
       const code = String(row.invite_code || '').trim().toLowerCase() || inviteCode();
-      if (!/^[a-z0-9-]{10,40}$/.test(code)) throw new Fail('رمز الدعوة: أحرف إنجليزية صغيرة وأرقام وشرطة، من 10 إلى 40. اتركه فارغًا ليُولَّد رمز عشوائي');
+      if (!INVITE_CODE_RE.test(code)) throw new Fail(`رمز الدعوة: ${INVITE_CODE_RULE_AR}. اتركه فارغًا ليُولَّد رمز عشوائي`);
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');

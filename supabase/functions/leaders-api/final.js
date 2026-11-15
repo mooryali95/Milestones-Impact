@@ -125,6 +125,14 @@ export function cleanFinalConfig(raw, previous = null, now = new Date().toISOStr
   const notEmail = listTokens(raw?.committee).filter((e) => !EMAIL_RE.test(e));
   if (notEmail.length) throw new Error(`أعضاء اللجنة يُكتبون بالبريد. ليست بريدًا: ${notEmail.slice(0, 5).join('، ')}`);
   if (c.approval !== 'expert' && c.committee.length && c.committee.length < c.committee_size) throw new Error(`أعضاء اللجنة المسمّون (${c.committee.length}) أقل من حجمها (${c.committee_size})`);
+  // من عدّل التقييم لا يعتمده (voteBlock)، والتعديل الكبير يحتاج توقيعين. فاللجنة المسمّاة يلزمها بعد استبعاد المعدِّل
+  // ما يكفي الاعتماد، وإلا صار مستحيلًا بلا مخرج (تدقيق الرحلة 2026-11-14). اللجنة غير المسمّاة يعتمد فيها أي حساب إدارة
+  if (c.committee.length) {
+    const need = votesNeeded(c);
+    if (c.committee.length - 1 < need) {
+      throw new Error(`أعضاء اللجنة المسمّون (${c.committee.length}) لا يكفون: من يعدّل التقييم لا يعتمده، والاعتماد يحتاج ${need} ${need === 1 ? 'صوتًا' : 'أصوات'}. سمِّ ${need + 1} على الأقل، أو اترك الأسماء ليعتمد أي خبير في الإدارة`);
+    }
+  }
   const g = c.measure.gain_scores;
   if (!(g.up >= g.flat && g.flat >= g.down)) throw new Error('درجات المكسب تنازلية: صاعد ≥ مستقر ≥ هابط');
   const prev = Number.isInteger(num(previous?.version)) ? num(previous.version) : 0;
@@ -276,6 +284,14 @@ export function cleanAdjust(raw, computed, ctx = {}) {
   const decision = out.decision?.value || after.suggested;
   if (NOTES_REQUIRED.includes(decision) && notes.length < 10) throw new Error(`قرار «${FINAL_DECISION_AR[decision]}» يلزمه ملاحظات تصل المشارك: ما الذي ينقصه وكيف يستكمله`);
   return out;
+}
+
+// أكثر ما قد يحتاجه الاعتماد من أصوات بإعداد البرنامج (التعديل الكبير يرفعه إلى اثنين على الأقل). approvalState يحكم بالقاعدة نفسها
+export function votesNeeded(config) {
+  const cfg = finalConfig(config);
+  if (cfg.approval === 'expert') return 2;
+  if (cfg.approval === 'committee_unanimous') return Math.max(cfg.committee_size, 2);
+  return Math.max(Math.floor(cfg.committee_size / 2) + 1, 2);
 }
 
 // هل يحق لهذا الحساب التصويت على هذا التقييم؟ null = نعم، وإلا سبب المنع

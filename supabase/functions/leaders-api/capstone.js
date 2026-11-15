@@ -209,6 +209,8 @@ export function dateAr(v) {
 }
 
 const codeOf = (v) => String(v || '').trim().replace(/\s+/g, '').toUpperCase();
+// رمز في أول الخلية قبل اسم الحزمة («1.1 رحلة المستفيد»)، كما يكتبه المشارك حين يُطلب منه «الرمز أو الاسم»
+const leadCode = (v) => codeOf(String(v || '').trim().split(/\s+/)[0]);
 const listCodes = (v) => String(v || '').split(/[،,;\s]+/).map(codeOf).filter(Boolean);
 
 // تكلفة صف: الإجمالي إن كُتب، وإلا الكمية × سعر الوحدة
@@ -274,7 +276,7 @@ export function capstoneChecks(ctx) {
     const cover = raci ? raci.rows.map((r) => raci.cell(r, 0)) : [];
     const a = raci ? raci.col('المحاسب', 'A') : -1;
     const noA = raci ? raci.rows.filter((r) => !raci.cell(r, a)).map((r) => raci.cell(r, 0)) : [];
-    const uncovered = wbsCodes.filter((c, i) => !cover.some((x) => codeOf(x) === c || (wbsNames[i] && norm(x).includes(wbsNames[i]))));
+    const uncovered = wbsCodes.filter((c, i) => !cover.some((x) => codeOf(x) === c || leadCode(x) === c || (wbsNames[i] && norm(x).includes(wbsNames[i]))));
     add('raci-cover', 'مصفوفة المسؤوليات تغطي حزم العمل', wbsCodes.length && uncovered.length <= Math.floor(wbsCodes.length / 4), `حزم لم تظهر في مصفوفة المسؤوليات: ${uncovered.slice(0, 6).join('، ')}`);
     add('raci-a', 'لكل بند في المصفوفة محاسب واحد', raci && raci.rows.length && !noA.length, `بنود بلا محاسب: ${noA.slice(0, 6).join('، ')}`);
   }

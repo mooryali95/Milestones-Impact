@@ -5,6 +5,9 @@
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
 // للتحسين مرة أو تقبلها فيُطلب تأييد راعيها. الفصول نفسها نماذج تعليمية،
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
+import GOV from '../../../supabase/content/initiative-guide/v1/sectors/gov.json';
+import HEALTH from '../../../supabase/content/initiative-guide/v1/sectors/health.json';
+import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
@@ -28,6 +31,9 @@ async function openDoc(doc, toast) {
   const { meta, body } = capstoneReport(doc);
   if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
+
+// الأمثلة المحلولة نفسها التي يراها المشارك (leaders-app/src/guide.js)
+const EXAMPLES = [GOV, HEALTH];
 
 function Review({ d, canWrite, onSaved, onFailed }) {
   const { toast, confirm } = useUI();
@@ -146,6 +152,18 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
         </div>
       </section>
+
+      {/* حقول قريبة جدًا من المثال المحلول: تنبيه للمستشار لا يمنع (مرافق بناء المبادرة 4ب، example-check.js) */}
+      {(() => {
+        const near = copiedFromExamples(d.doc, EXAMPLES);
+        return near.length ? (
+          <section className="la-card" role="note">
+            <h3>قريبة من المثال المحلول</h3>
+            <p className="la-muted">هذه الحقول تطابق جواب المثال المحلول في أغلب كلماتها. اسأل المشارك عن واقع مبادرته فيها قبل التقييم.</p>
+            <ul>{near.map((x) => <li key={`${x.chapter}-${x.field}`}><b>{x.chapter}:</b> {x.field} <span className="la-muted">(مثال {x.sector})</span></li>)}</ul>
+          </section>
+        ) : null;
+      })()}
 
       <div className="la-grid2">
         <section className="la-card">

@@ -50,7 +50,8 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
   useEffect(() => {
     // اسم الجهة يظهر لرمز رابطها فقط؛ الموقع المُحيل يُرسل للتحليل ولا يربط بجهة
     if (!via.org) return;
-    call('org.info', { org: via.org }).then((r) => { if (r.success) setOrg(r.org); });
+    // الرابط الخاطئ أو لجهة متوقفة يُعلن، فلا يسجّل صاحبه ظانًّا أنه مرتبط بجهته (تدقيق الرحلة 2026-11-14)
+    call('org.info', { org: via.org }).then((r) => { if (r.success) setOrg(r.org); else setOrg({ invalid: true, message: r.message }); });
   }, [via]);
 
   useEffect(() => {
@@ -172,11 +173,14 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
       <div className="auth card stack">
         {roles && <RoleChoice roles={roles.list} busy={busy} onParticipant={roles.go} />}
         {!roles && <>
-        {org && (
+        {org && !org.invalid && (
           <div className="org-ribbon" style={org.color ? { '--org': org.color } : undefined}>
             <span className="org-dot" aria-hidden="true" />
-            <div><small>تسجيل عبر</small><b>{org.name}</b><small>برعاية جهتك: الرسوم مغطاة ضمن مقاعد عقدها ومدته</small></div>
+            <div><small>تسجيل عبر</small><b>{org.name}</b><small>برعاية جهتك: الرسوم مغطاة ضمن مقاعد عقدها ومدته. ولمن له حساب غير مرتبط بجهة: يُربط بها عند دخوله</small></div>
           </div>
+        )}
+        {org?.invalid && (
+          <div className="alert info" role="alert">{org.message || 'رابط الجهة غير صالح أو منتهٍ'}. يمكنك المتابعة، ويربطك منسق جهتك أو الإدارة بها لاحقًا، أو تكتب رمزها في ملفك.</div>
         )}
         {step === 'email' && (
           <form className="stack" data-tour="doors" onSubmit={start}>

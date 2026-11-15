@@ -33,6 +33,32 @@ async function admin(page, replies, role = 'admin') {
   return calls;
 }
 
+test('جهة جديدة تعثّرت دعوة منسقها: إعادة الحفظ تكمل الجهة نفسها ولا تُنشئ جهة ثانية (تدقيق الرحلة 2026-11-14)', async ({ page }) => {
+  let fail = true;
+  const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: null } });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.coordinator-save') return route.fallback();
+    calls.push(b);
+    if (fail) { fail = false; return route.fulfill({ json: { success: false, message: 'تعذّر إرسال الدعوة' } }); }
+    return route.fulfill({ json: { success: true, invited: true } });
+  });
+  await page.getByRole('button', { name: '+ جهة جديدة' }).click();
+  const f = page.getByRole('dialog', { name: 'جهة جديدة' });
+  await f.getByLabel('اسم الجهة *').fill('هيئة الاختبار');
+  await f.getByLabel('البريد').fill('lead@hx.sa');
+  await f.getByRole('button', { name: 'إنشاء الجهة' }).click();
+  await expect(f).toContainText('حُفظت الجهة، لكن حساب المنسق لم يُحفظ');
+  await f.getByRole('button', { name: 'إنشاء الجهة' }).click();
+  await expect(page.getByRole('status')).toContainText('أُرسلت الدعوة إلى lead@hx.sa');
+  const saves = calls.filter((c) => c.action === 'admin.save');
+  expect(saves).toHaveLength(2);
+  expect(saves[0].row).not.toHaveProperty('id');
+  // الحفظ الثاني يحدّث الجهة المنشأة، ولا يطلب رمز دعوة جديدًا
+  expect(saves[1].row).toMatchObject({ id: 'o-new' });
+  expect(saves[1].row).not.toHaveProperty('invite_code');
+});
+
 test('جهة جديدة: تحقق فوري، ثم إنشاء الجهة وحساب المنسق ودعوته', async ({ page }) => {
   const calls = await admin(page, { 'admin.coordinator': { success: true, coordinator: null } });
   await page.getByRole('button', { name: '+ جهة جديدة' }).click();
@@ -43,14 +69,14 @@ test('جهة جديدة: تحقق فوري، ثم إنشاء الجهة وحسا
   await f.getByRole('radio', { name: '#2E7D5B' }).click();
   await f.getByLabel('رمز رابط الدعوة').fill('Bad Code!');
   await expect(f.getByText(/أحرف إنجليزية صغيرة/)).toBeVisible();
-  await f.getByLabel('رمز رابط الدعوة').fill('hx-2026');
-  await expect(f.getByText('https://leaders.sunkvalue.com/j/hx-2026')).toBeVisible();
+  await f.getByLabel('رمز رابط الدعوة').fill('hx-leaders-2026');
+  await expect(f.getByText('https://leaders.sunkvalue.com/j/hx-leaders-2026')).toBeVisible();
   await f.getByLabel('البريد').fill('lead@hx.sa');
   // منذ #261: كتابة بريد المنسق في جهة جديدة تفعّل حسابه ودعوته وحدها، فلا يُضغط المفتاح (الضغط كان يطفئه فيُحفظ بلا دعوة)
   await expect(f.locator('.of-switch', { hasText: 'يرى لوحة الجهة' }).getByRole('checkbox')).toBeChecked();
   await f.getByRole('button', { name: 'إنشاء الجهة' }).click();
   await expect(page.getByRole('status')).toContainText('أُرسلت الدعوة إلى lead@hx.sa');
-  expect(calls.find((c) => c.action === 'admin.save').row).toMatchObject({ name: 'هيئة الاختبار', color: '#2E7D5B', invite_code: 'hx-2026' });
+  expect(calls.find((c) => c.action === 'admin.save').row).toMatchObject({ name: 'هيئة الاختبار', color: '#2E7D5B', invite_code: 'hx-leaders-2026' });
   expect(calls.find((c) => c.action === 'admin.coordinator-save')).toMatchObject({ organization_id: 'o-new', email: 'lead@hx.sa' });
 });
 

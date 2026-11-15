@@ -42,7 +42,8 @@ test('الخروج من لوحة الجهة وفي الجهاز جلسة مشا�
   await expect(dlg).toContainText('بصفة مشارك');
   await dlg.getByRole('button', { name: 'اخرج من كل الأدوار' }).click();
   await expect.poll(() => calls.map((c) => c.action).filter((a) => a.endsWith('logout')).sort()).toEqual(['coord.logout', 'logout']);
-  expect(await page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, null]);
+  // الجلسة تُمحى من المتصفح بعد رد الخادم (signOut في api.js)، والطلب يُسجَّل قبل الرد: يُنتظر المحو ولا يُقرأ مرة واحدة
+  await expect.poll(() => page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, null]);
   await expect(dlg).toHaveCount(0);
 });
 
@@ -53,7 +54,7 @@ test('«اخرج من حساب منسق جهة وحده» يبقي جلسة ال
   await page.getByRole('button', { name: 'خروج' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'اخرج من حساب منسق جهة وحده' }).click();
   await expect.poll(() => calls.filter((c) => c.action.endsWith('logout')).map((c) => c.action)).toEqual(['coord.logout']);
-  expect(await page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, 'p'.repeat(40)]);
+  await expect.poll(() => page.evaluate(() => [localStorage.getItem('mi_leaders_coord_session'), localStorage.getItem('mi_leaders_session')])).toEqual([null, 'p'.repeat(40)]);
 });
 
 test('«تراجع» وEscape لا يُخرجان: الجلستان باقيتان واللوحة كما هي، والتركيز يعود إلى «خروج»', async ({ page }) => {

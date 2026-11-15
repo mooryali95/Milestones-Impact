@@ -211,3 +211,23 @@ describe('حالة المشارك تتبع قرار التقييم الختام�
     expect(fin).toMatch(/statusAfterReopen\(p\.status\)/);
   });
 });
+
+import { cleanFinalConfig as cleanCfg, votesNeeded } from '../../supabase/functions/leaders-api/final.js';
+describe('لجنة التقييم الختامي لا تُحفظ بإعداد يجعل الاعتماد مستحيلًا (تدقيق الرحلة 2026-11-14)', () => {
+  const base = { weights: { continuous: 50, project: 50 }, sources: { attendance: 1 }, thresholds: { pass: 80, pass_notes: 70, extend: 60 } };
+  const mails = (n) => Array.from({ length: n }, (_, i) => `m${i}@x.sa`).join(',');
+  it('الأصوات اللازمة: خبير 2 (التعديل الكبير)، والإجماع حجم اللجنة، والأغلبية نصفها وواحد', () => {
+    expect(votesNeeded({ approval: 'expert' })).toBe(2);
+    expect(votesNeeded({ approval: 'committee_unanimous', committee_size: 3 })).toBe(3);
+    expect(votesNeeded({ approval: 'committee_majority', committee_size: 5 })).toBe(3);
+  });
+  it('الإجماع بعدد الأعضاء نفسه يُرفض (المعدِّل لا يصوّت)، وبعضو زائد يُقبل', () => {
+    expect(() => cleanCfg({ ...base, approval: 'committee_unanimous', committee_size: 3, committee: mails(3) })).toThrow(/لا يكفون/);
+    expect(() => cleanCfg({ ...base, approval: 'committee_unanimous', committee_size: 3, committee: mails(4) })).not.toThrow();
+  });
+  it('الخبير بعضو مسمّى واحد يُرفض، والأسماء الفارغة تبقى مقبولة (يعتمد أي خبير)', () => {
+    expect(() => cleanCfg({ ...base, approval: 'expert', committee: mails(1) })).toThrow(/سمِّ 3 على الأقل/);
+    expect(() => cleanCfg({ ...base, approval: 'expert', committee: mails(3) })).not.toThrow();
+    expect(() => cleanCfg({ ...base, approval: 'expert', committee: '' })).not.toThrow();
+  });
+});
